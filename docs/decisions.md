@@ -79,3 +79,45 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Reasoning:** scrypt is memory-hard (resists GPU/ASIC attacks better than bcrypt for the same wall-clock cost), is in Node's built-in `crypto` module, and `scrypt-kdf` provides a clean encoded format. Spec says "bcrypt or scrypt" — picking scrypt and recording.
 - **Tier:** 1.
 - **V-log:** Phase 3 entry will record the empirical work-factor calibration.
+
+## D-011 — UUID v4 PKs via Postgres `gen_random_uuid()`
+
+- **Decision:** every table uses a `uuid` PK with `gen_random_uuid()` default. No prefix-encoded IDs in the database; the API layer formats them as `acc_…` / `key_…` / `ses_…` etc. for the public contract.
+- **Reasoning:** raw UUIDs in Postgres index more efficiently than prefix-encoded text, and the prefix is a presentation concern, not a storage one. `gen_random_uuid()` (pgcrypto extension, available by default in Postgres 13+) avoids application-level dependence on `crypto.randomUUID()`. Splitting the concern this way means we can change the public prefix scheme without a DB migration.
+- **Tier:** 1.
+- **V-log:** V-002.
+
+## D-012 — `api_keys.scopes` as Postgres enum array (not JSONB)
+
+- **Decision:** `scopes` is `api_key_scope[]` (Postgres native array of enum values), not `jsonb`.
+- **Reasoning:** lets us write `scope = ANY(scopes)` in queries and add a GIN index later if needed; enum constrains to known values at write time; smaller storage footprint than JSONB; trivially typed by Drizzle as `ApiKeyScope[]`. JSONB would be needed only if scopes evolved into objects (e.g., per-resource grants) — and at that point we'd add a separate `permissions` jsonb column rather than overloading `scopes`.
+- **Tier:** 1.
+- **V-log:** V-002.
+
+## D-013 — Public ID format: `<3-char-prefix>_<UUID>`
+
+- **Decision:** all public-API IDs use the format `<prefix>_<uuid>`. Prefixes: `acc` (account), `key` (api key), `ses` (session), `evt` (session event), `use` (usage record). The `PrefixedId(prefix)` helper in `packages/api-types/src/common.ts` returns a Zod string regex schema for each.
+- **Reasoning:** matches the convention used by Stripe (`pi_…`, `cus_…`), OpenAI (`asst_…`, `thread_…`), Vercel (`prj_…`) etc. Lets clients route on prefix without parsing or guessing. Makes logs/grepping unambiguous. The base32 vs hex-UUID question went hex-UUID for now because the database stores UUIDs natively; format conversion can come later if customers ask for shorter IDs.
+- **Tier:** 1.
+- **V-log:** V-002.
+
+## D-014 — Drizzle `db:generate` runs from repo root, not workspace
+
+- **Decision:** `db:generate` and `db:studio` are root-package scripts (not workspace scripts). `db:migrate` and `db:seed` remain workspace scripts because they're tsx-run TS files that import workspace-relative modules.
+- **Reasoning:** drizzle-kit resolves the `schema:` path from `drizzle.config.ts` against the **cwd**, not the config file's directory. Running from a workspace cwd breaks the path. Migration apply (`migrate.ts`) doesn't have this issue because it imports the schema as a TypeScript module, resolved by tsx.
+- **Tier:** 1.
+- **V-log:** V-002.
+
+## D-015 — Live rate-limit counters in Redis; Postgres `rate_limit_buckets` is durability snapshot
+
+- **Decision:** the hot path for rate limiting writes to Redis (token bucket, per-account-per-bucket-key). Postgres `rate_limit_buckets` is a durability snapshot synced periodically (Phase 3 will define the period); it's not read on the hot path.
+- **Reasoning:** Redis gives sub-millisecond INCR/DECR with TTL semantics natural to a token bucket. Postgres gives durability so a Redis flush or eviction doesn't reset all customer rate limits, and gives an SQL-queryable surface for analytics/admin tools. Two-tier storage at this seam is a known-good pattern.
+- **Tier:** 2.
+- **V-log:** V-002.
+
+## D-016 — `packages/api-types` is the public contract; server-internal Zod stays in `apps/server`
+
+- **Decision:** every Zod schema for a request/response shape that crosses the public API boundary lives in `packages/api-types/src/`. Schemas for purely-internal shapes (driver state, internal service inputs, queue messages, etc.) live in `apps/server/src/schemas/` and never get re-exported.
+- **Reasoning:** when we ship a TypeScript SDK in Phase 8+, it depends on `@driftstack/api-types` only — not on the server. Putting public schemas in the api-types package makes the SDK's transitive surface tractable and forces conscious choices when something internal needs to become public.
+- **Tier:** 2.
+- **V-log:** V-002.
