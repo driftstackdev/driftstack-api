@@ -21,6 +21,7 @@ import {
 import type { AccountsAdminService } from '../services/admin-accounts.js';
 import type { AdminAuditService, AdminAuditAction } from '../services/admin-audit.js';
 import type { AccountRow } from '../services/auth.js';
+import type { UsageService, UsageSummary } from '../services/usage.js';
 import { BadRequestError } from '../lib/errors.js';
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
@@ -45,6 +46,17 @@ function publicAccount(row: AccountRow): Record<string, unknown> {
   };
 }
 
+function publicUsage(s: UsageSummary, accountId: string): Record<string, unknown> {
+  return {
+    account_id: `acc_${accountId}`,
+    period_start: s.periodStart.toISOString(),
+    period_end: s.periodEnd.toISOString(),
+    tier: s.tier,
+    totals: s.totals,
+    quotas: s.quotas,
+  };
+}
+
 function clientIp(request: FastifyRequest): string | null {
   const xff = request.headers['x-forwarded-for'];
   if (typeof xff === 'string' && xff.length > 0) {
@@ -57,6 +69,7 @@ function clientIp(request: FastifyRequest): string | null {
 
 export interface AdminAccountsRoutesOptions {
   accountsAdmin: AccountsAdminService;
+  usage: UsageService;
   audit: AdminAuditService;
 }
 
@@ -64,7 +77,7 @@ export function registerAdminAccountsRoutes(
   app: FastifyInstance,
   opts: AdminAccountsRoutesOptions,
 ): void {
-  const { accountsAdmin, audit } = opts;
+  const { accountsAdmin, usage, audit } = opts;
 
   // Helper that wraps a mutation with audit-on-success + audit-on-error.
   // The route logic stays focused on the action; the wrapper enforces
@@ -172,6 +185,27 @@ export function registerAdminAccountsRoutes(
         () => accountsAdmin.unsuspend(ctx, accountId),
       );
       return publicAccount(updated);
+    },
+  );
+
+  // ── GET /v1/admin/accounts/:id/usage ────────────────────────────────────
+  // Period + record_type facets only. "by endpoint" facet deferred per
+  // D-025: requires usage_records.endpoint column (doesn't exist) AND
+  // production paths that write usage_records (don't exist — see V-014
+  // / V-015 amendment for the recordUsage workstream gap).
+  app.get<{ Params: { id: string } }>(
+    '/v1/admin/accounts/:id/usage',
+    {
+      preHandler: [app.requireAuth, app.rateLimit('global')],
+    },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const accountId = uuidFromPrefixedId(request.params.id, 'acc');
+      // getAccount enforces admin scope + 404s on unknown.
+      const target = await accountsAdmin.getAccount(ctx, accountId);
+      const summary = await usage.summaryFor(target.id, target.tier);
+      return publicUsage(summary, target.id);
     },
   );
 }

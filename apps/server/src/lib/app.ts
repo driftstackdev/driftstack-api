@@ -29,6 +29,7 @@ import { registerOpenApiRoutes } from '../routes/openapi.js';
 import { registerWebhookRoutes } from '../routes/webhooks.js';
 import { registerAdminAccountsRoutes } from '../routes/admin-accounts.js';
 import { registerAdminWebhookRoutes } from '../routes/admin-webhooks.js';
+import { registerAdminAuditLogRoutes } from '../routes/admin-audit-log.js';
 
 export interface AppDeps {
   logger: Logger;
@@ -88,12 +89,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerWebhookRoutes(app, { service: deps.webhooksService });
   registerAdminAccountsRoutes(app, {
     accountsAdmin: deps.accountsAdminService,
+    usage: deps.usageService,
     audit: deps.adminAuditService,
   });
   registerAdminWebhookRoutes(app, {
     webhooksAdmin: deps.webhooksAdminService,
     audit: deps.adminAuditService,
   });
+  registerAdminAuditLogRoutes(app, { audit: deps.adminAuditService });
   await registerOpenApiRoutes(app);
 
   // Health endpoint — public, no auth, no rate limit.

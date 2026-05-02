@@ -111,10 +111,23 @@ export class UsageService {
   constructor(private readonly repo: UsageRepo) {}
 
   async currentPeriodSummary(ctx: AccountContext, now: Date = new Date()): Promise<UsageSummary> {
+    return this.summaryFor(ctx.account.id, ctx.account.tier, now);
+  }
+
+  /**
+   * Admin-flavoured summary: look up another account's totals + quotas
+   * by id + tier. The route layer is responsible for permission
+   * enforcement (admin scope) and for fetching the target tier.
+   */
+  async summaryFor(
+    accountId: string,
+    tier: AccountTier,
+    now: Date = new Date(),
+  ): Promise<UsageSummary> {
     const periodStart = monthStartUtc(now);
     const periodEnd = nextMonthStartUtc(periodStart);
 
-    const { totals } = await this.repo.totalsForPeriod(ctx.account.id, periodStart, periodEnd);
+    const { totals } = await this.repo.totalsForPeriod(accountId, periodStart, periodEnd);
 
     const fullTotals: Record<UsageRecordType, number> = {
       session_minute: 0,
@@ -131,9 +144,9 @@ export class UsageService {
     return {
       periodStart,
       periodEnd,
-      tier: ctx.account.tier,
+      tier,
       totals: fullTotals,
-      quotas: TIER_QUOTAS[ctx.account.tier],
+      quotas: TIER_QUOTAS[tier],
     };
   }
 }

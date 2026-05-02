@@ -66,6 +66,18 @@ export const AdminAuditActionSchema = z.enum([
 ]);
 export type AdminAuditAction = z.infer<typeof AdminAuditActionSchema>;
 
+export const ListAuditLogQuerySchema = z.object({
+  admin_id: z.string().optional(),
+  target_id: z.string().optional(),
+  action: AdminAuditActionSchema.optional(),
+  from: Iso8601Schema.optional(),
+  to: Iso8601Schema.optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().optional(),
+});
+export type ListAuditLogQuery = z.infer<typeof ListAuditLogQuerySchema>;
+export type ListAuditLogQueryInput = z.input<typeof ListAuditLogQuerySchema>;
+
 export const AdminAuditLogEntrySchema = z.object({
   id: z.string().uuid(),
   admin_account_id: z.string(),

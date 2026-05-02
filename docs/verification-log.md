@@ -982,3 +982,52 @@ No new D-entries — all Tier 1 inside the D-025 contract.
 Four OT endpoints landed. 262/262 tests green; lint clean; format clean; typecheck green.
 
 **Next OT commit:** audit-log query endpoint (`GET /v1/admin/audit-log`) + rate-limit override (`POST /v1/admin/accounts/:id/quota-override` + clear) + `GET /v1/admin/accounts/:id/usage` (period + record_type facets only). Then OpenAPI tagging + e2e cross-account flow test.
+
+---
+
+## V-019 — Operational tooling: admin read endpoints (usage + audit-log)
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Operational tooling. Fourth commit of the workstream.
+
+### What was built
+
+Two read-only admin endpoints — no audit rows written for reads (D-025: audits are for mutations).
+
+- `GET /v1/admin/accounts/:id/usage` — period summary for a target account. Returns `{ account_id, period_start, period_end, tier, totals, quotas }`. Period + record_type facets only (D-025 deferred "by endpoint" to the recordUsage workstream).
+- `GET /v1/admin/audit-log?admin_id=&target_id=&action=&from=&to=&limit=&cursor=` — paginated read of `admin_audit_log` with optional filters. `admin_id` and `target_id` accept either prefixed (`acc_<uuid>`) or raw UUID — same pattern as the rest of the public surface. Returns `{ data, next_cursor }` with each entry's admin/target ids prefixed.
+
+Implementation:
+
+- **`UsageService.summaryFor(accountId, tier, now?)`** — admin-flavoured method that takes account id + tier directly instead of an `AccountContext`. The existing `currentPeriodSummary(ctx)` now delegates to `summaryFor(ctx.account.id, ctx.account.tier)` so both paths share one implementation.
+- **Route extension on `admin-accounts.ts`** — added `usage` to `AdminAccountsRoutesOptions` and a fifth route at the bottom. The route does `accountsAdmin.getAccount(ctx, accountId)` first (which enforces admin scope and 404s on unknown), then calls `usage.summaryFor(target.id, target.tier)`. Reusing `getAccount` keeps the scope/404 contract uniform with the mutating endpoints.
+- **`apps/server/src/routes/admin-audit-log.ts`** — new route file. Inline `requireScope` check (no `withAudit` wrapper because reads aren't audited). `maybeUuidFromInput()` accepts both `acc_<uuid>` and raw UUID for the filter params, matching the public-surface convention.
+- **`packages/api-types/src/admin.ts`** extended with `ListAuditLogQuerySchema` (`admin_id?`, `target_id?`, `action?`, `from?`, `to?`, `limit`, `cursor?`) plus `ListAuditLogQueryInput` (per the D-022 z.input pattern).
+
+### What tests verify it
+
+**Total test surface: 262 → 274 green** (+12 integration). New: `tests/integration/admin-reads.test.ts`.
+
+- 5 GET usage tests: 200 happy path, target-tier-not-caller-tier, 403 without admin, 404 unknown account, no audit row written.
+- 7 GET audit-log tests: 200 with timestamp DESC ordering, filter by action, filter by target_id (both prefixed and raw uuid), cursor pagination round-trip, 400 for malformed admin_id, 403 without admin scope, no audit row written.
+
+### Empirical findings
+
+1. **The single-account fixture limitation strikes again.** The original audit-log test design called `performMutations(fx)` — three sequential admin mutations — to seed audit rows. After `suspend`, the admin's own account is suspended, so `unsuspend` (the third call) fails at the auth boundary with 403. Subsequent reads also 403. **Fix:** seed the audit-log directly via `fx.adminAuditRepo.insert(...)` instead. This decouples the read-endpoint test from the cross-cutting auth-suspend concern. Same finding as V-017 finding 2 — multi-account fixtures would solve both, queued for a future commit.
+
+2. **Reads are not audited, on purpose.** Auditing a read of the audit log would recurse forever; auditing a usage read is overkill (no state change). The contract is "audits are for mutations." Test assertions pin this — the read tests check `fx.adminAuditRepo.getAll().length === 0` to catch a future regression that adds audit-on-read.
+
+3. **`maybeUuidFromInput` accepts both prefixed and raw forms** because admin tooling tends to copy/paste from logs (raw UUIDs) AND from API responses (prefixed). Forcing one form would create needless friction. The implementation is permissive: 36-char hex-with-dashes → use as-is; otherwise expect `xxx_<uuid>` and extract.
+
+4. **`UsageService.summaryFor(id, tier, now?)` factor-out** keeps the customer-facing `currentPeriodSummary(ctx)` unchanged while letting the admin path supply different ids. The customer-facing path still delegates to `summaryFor`, so the period-window computation stays in one place.
+
+### Decisions made (cross-link)
+
+No new D-entries — all Tier 1 inside the D-025 contract.
+
+### Status
+
+Two read endpoints landed. 274/274 tests green; lint clean; format clean; typecheck green.
+
+**Next OT commit:** rate-limit override endpoints (`POST /v1/admin/accounts/:id/quota-override` + clear) — biggest remaining piece since it requires consume-path integration. Then OpenAPI tagging + e2e cross-account flow test.

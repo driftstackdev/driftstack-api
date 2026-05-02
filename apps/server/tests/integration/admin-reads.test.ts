@@ -1,0 +1,231 @@
+// Integration tests for the admin read-only endpoints:
+// GET /v1/admin/accounts/:id/usage and GET /v1/admin/audit-log.
+
+import { afterEach, describe, expect, it } from 'vitest';
+import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+
+let fx: TestAppFixture;
+
+afterEach(async () => {
+  if (fx) await fx.cleanup();
+});
+
+const auth = (fixture: TestAppFixture): { authorization: string } => ({
+  authorization: `Bearer ${fixture.plaintext}`,
+});
+
+describe('GET /v1/admin/accounts/:id/usage', () => {
+  it('200 returns the period summary for the target account', async () => {
+    fx = await buildTestApp({ tier: 'builder' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/accounts/acc_${fx.accountId}/usage`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.account_id).toBe(`acc_${fx.accountId}`);
+    expect(body.tier).toBe('builder');
+    expect(body.totals).toEqual({
+      session_minute: 0,
+      navigate: 0,
+      interact: 0,
+      wait: 0,
+      state_capture: 0,
+      screenshot_capture: 0,
+    });
+    // Period boundaries are full ISO strings.
+    expect(typeof body.period_start).toBe('string');
+    expect(typeof body.period_end).toBe('string');
+  });
+
+  it('uses the TARGET account tier (not the caller tier) for quotas', async () => {
+    // Caller tier doesn't matter — admin endpoint reflects target.
+    fx = await buildTestApp({ tier: 'free' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/accounts/acc_${fx.accountId}/usage`,
+      headers: auth(fx),
+    });
+    const body = res.json<{ tier: string; quotas: Record<string, number | null> }>();
+    expect(body.tier).toBe('free');
+    expect(body.quotas.navigate).toBe(100); // free tier quota
+  });
+
+  it('403 without admin scope', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/accounts/acc_${fx.accountId}/usage`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('404 unknown account', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/accounts/acc_00000000-0000-4000-8000-000000000999/usage',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('does NOT write an audit row (reads are not audited)', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/accounts/acc_${fx.accountId}/usage`,
+      headers: auth(fx),
+    });
+    expect(fx.adminAuditRepo.getAll()).toHaveLength(0);
+  });
+});
+
+describe('GET /v1/admin/audit-log', () => {
+  // We seed the audit-log directly via the in-memory repo rather than
+  // by performing mutations via HTTP. The single-account fixture can't
+  // suspend itself and then keep calling admin endpoints (the auth-
+  // boundary 403 fires before the route runs) — so we'd lose
+  // the third row anyway. Direct seeding keeps the read-endpoint
+  // contract under test without the cross-cutting auth complication.
+  async function seedThreeAuditRows(fixture: TestAppFixture): Promise<void> {
+    await fixture.adminAuditRepo.insert({
+      adminAccountId: fixture.accountId,
+      adminKeyId: fixture.apiKeyId,
+      action: 'account.tier_changed',
+      targetAccountId: fixture.accountId,
+      inputPayload: { tier: 'scale' },
+      result: 'success',
+    });
+    await new Promise((r) => setTimeout(r, 5));
+    await fixture.adminAuditRepo.insert({
+      adminAccountId: fixture.accountId,
+      adminKeyId: fixture.apiKeyId,
+      action: 'account.suspended',
+      targetAccountId: fixture.accountId,
+      result: 'success',
+    });
+    await new Promise((r) => setTimeout(r, 5));
+    await fixture.adminAuditRepo.insert({
+      adminAccountId: fixture.accountId,
+      adminKeyId: fixture.apiKeyId,
+      action: 'account.unsuspended',
+      targetAccountId: fixture.accountId,
+      result: 'success',
+    });
+  }
+
+  it('200 returns the audit log ordered by timestamp DESC', async () => {
+    fx = await buildTestApp();
+    await seedThreeAuditRows(fx);
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/audit-log',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{
+      data: Array<{ action: string; admin_account_id: string }>;
+      next_cursor: string | null;
+    }>();
+    expect(body.data).toHaveLength(3);
+    // Most-recent first: unsuspend, suspend, tier_changed.
+    expect(body.data[0]?.action).toBe('account.unsuspended');
+    expect(body.data[1]?.action).toBe('account.suspended');
+    expect(body.data[2]?.action).toBe('account.tier_changed');
+    // admin_account_id is prefixed.
+    expect(body.data[0]?.admin_account_id).toBe(`acc_${fx.accountId}`);
+  });
+
+  it('filters by action', async () => {
+    fx = await buildTestApp();
+    await seedThreeAuditRows(fx);
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/audit-log?action=account.suspended',
+      headers: auth(fx),
+    });
+    const body = res.json<{ data: unknown[] }>();
+    expect(body.data).toHaveLength(1);
+  });
+
+  it('filters by target_id (accepts both prefixed and raw uuid)', async () => {
+    fx = await buildTestApp();
+    await seedThreeAuditRows(fx);
+
+    // Prefixed.
+    const r1 = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/audit-log?target_id=acc_${fx.accountId}`,
+      headers: auth(fx),
+    });
+    expect(r1.json<{ data: unknown[] }>().data).toHaveLength(3);
+
+    // Raw uuid.
+    const r2 = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/audit-log?target_id=${fx.accountId}`,
+      headers: auth(fx),
+    });
+    expect(r2.json<{ data: unknown[] }>().data).toHaveLength(3);
+  });
+
+  it('respects limit + cursor', async () => {
+    fx = await buildTestApp();
+    await seedThreeAuditRows(fx);
+
+    const r1 = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/audit-log?limit=2',
+      headers: auth(fx),
+    });
+    const p1 = r1.json<{ data: unknown[]; next_cursor: string | null }>();
+    expect(p1.data).toHaveLength(2);
+    expect(p1.next_cursor).not.toBeNull();
+
+    const r2 = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/audit-log?limit=2&cursor=${encodeURIComponent(p1.next_cursor ?? '')}`,
+      headers: auth(fx),
+    });
+    const p2 = r2.json<{ data: unknown[]; next_cursor: string | null }>();
+    expect(p2.data).toHaveLength(1);
+    expect(p2.next_cursor).toBeNull();
+  });
+
+  it('400 for malformed admin_id', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/audit-log?admin_id=not-an-id',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('403 without admin scope', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/audit-log',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('does NOT write an audit row for the read itself', async () => {
+    fx = await buildTestApp();
+    await seedThreeAuditRows(fx);
+    const before = fx.adminAuditRepo.getAll().length;
+    await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/audit-log',
+      headers: auth(fx),
+    });
+    expect(fx.adminAuditRepo.getAll().length).toBe(before);
+  });
+});
