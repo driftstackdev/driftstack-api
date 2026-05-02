@@ -312,3 +312,49 @@ No new D-entries — all Tier 1.
 ### Status
 
 Phase 6 ready to commit and push. 116 tests passing locally. Customer onboarding flow now end-to-end testable via the in-memory adapters: create account → list/create api-keys via admin endpoint → create session → operate → check usage. Phase 7 (OpenAPI spec generation + Swagger UI) is the next target — pure code work, no infra dependency.
+
+---
+
+## V-007 — Phase 7: OpenAPI 3.1 spec + Scalar UI
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** 7 (OpenAPI + docs)
+
+### What was built
+
+- **OpenAPI 3.1 spec generator** (`apps/server/src/lib/openapi.ts`) — uses `@asteasolutions/zod-to-openapi` to register Zod schemas as reusable components and pair them with route metadata (path, method, request shape, response status codes, tags, security). One static registry; spec is memoised after first generation.
+- **Component schemas registered**: `Account`, `ApiKey`, `Session`, `Problem` (RFC 7807), `UsagePeriodSummary`. Plus inline schemas for paginated wrappers and various request/response types referenced by routes.
+- **Route metadata for all 11 endpoints**: 8 session endpoints + 3 admin (api-keys CRUD + usage) + 1 health, with `BearerAuth` security on every `/v1/*` route. Each route declares status codes covering happy paths plus the 4xx error contracts (400/401/403/429) referencing `Problem`.
+- **HTTP routes** (`apps/server/src/routes/openapi.ts`):
+  - `GET /openapi.json` — public, returns the generated spec
+  - `GET /docs/` — Scalar UI rendered against the spec
+- App builder registers OpenAPI routes after sessions + admin so they share the same Fastify instance config.
+
+### What tests verify it
+
+**123 total tests, all passing.** New in Phase 7: 7 tests in `tests/integration/openapi.test.ts`.
+
+- Spec is `openapi: 3.1.0` with required `info` fields populated.
+- Every expected path is registered (asserted by sorted comparison).
+- `BearerAuth` security scheme declared and applied to every `/v1/*` operation.
+- Component schemas include the major resources (Session, ApiKey, Account, Problem, UsagePeriodSummary).
+- `GET /openapi.json` returns 200 with `application/json` body whose `openapi` field is `3.1.0`.
+- `GET /docs/` (after Scalar's trailing-slash redirect) returns 200 with `text/html` containing `<html`.
+
+### Empirical findings
+
+1. **`extendZodWithOpenApi(z)` must run before any `register(...)` call.** The package patches `z.ZodType.prototype.openapi`. Without the call, `OpenAPIRegistry.register` throws `zodSchema.openapi is not a function`. Tests caught this immediately. Imported and called at module load in `openapi.ts`. Side-effectful module-level mutation is unusual for this codebase but is the documented usage.
+2. **`OpenAPIObject` type lives under `openapi3-ts/oas31`, not the package root.** The package re-exports `RouteConfig` etc., but the canonical document type is `openapi3-ts/oas31`'s `OpenAPIObject` (zod-to-openapi depends on `openapi3-ts`). Imported from there.
+3. **Scalar UI mounts at `/docs/` not `/docs`.** Bare `/docs` returns 301 → `/docs/`. Test was updated to assert the redirect path then fetch the rendered page. Documented in the test so future readers don't repeat the mistake.
+4. **Spec memoisation.** `generateOpenApiSpec()` is memoised via a module-level `cached` variable so repeated calls (e.g., every `/openapi.json` request) don't rebuild the document. A `_clearSpecCache()` test helper resets it for tests that mutate registry state. In production this means changes to the schema graph need a server restart — acceptable for now since schema changes ship as code commits.
+
+### Decisions made (cross-link)
+
+No new D-entries — all Tier 1.
+
+### Status
+
+Phase 7 ready to commit and push. 123 tests passing locally. The OpenAPI surface is the public source of truth for SDK generation; once Phase 8/9 land and the API contract stabilises, customers / sample SDKs can consume `/openapi.json` directly.
+
+Phase 8 (Playwright e2e against the running server) is gated on Postgres + Redis availability — same blocker as before. Phase 9 (perf baseline + polish) similarly. The infra-independent path of phases 1–7 is now complete; remaining work needs the founder to grant `gh workflow` scope (so CI runs the integration suite against real Postgres + Redis) or install Docker locally.

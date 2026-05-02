@@ -20,6 +20,7 @@ import requestIdPlugin from '../middleware/request-id.js';
 import { registerErrorHandler } from '../middleware/error-handler.js';
 import { registerSessionRoutes } from '../routes/sessions.js';
 import { registerAdminRoutes } from '../routes/admin.js';
+import { registerOpenApiRoutes } from '../routes/openapi.js';
 
 export interface AppDeps {
   logger: Logger;
@@ -66,6 +67,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     apiKeysService: deps.apiKeysService,
     usageService: deps.usageService,
   });
+  await registerOpenApiRoutes(app);
 
   // Health endpoint — public, no auth, no rate limit.
   app.get('/health', () => ({ ok: true }));
