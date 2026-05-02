@@ -18,6 +18,7 @@ import { SessionsService } from '../../src/services/sessions.js';
 import { ApiKeysService } from '../../src/services/api-keys.js';
 import { UsageService } from '../../src/services/usage.js';
 import { InMemoryAuthCache, sha256Hex, type AuthCache } from '../../src/services/auth-cache.js';
+import { AuthCoalescer } from '../../src/services/auth-coalescer.js';
 import type { AccountContext } from '../../src/services/auth.js';
 import { WebhooksService } from '../../src/services/webhooks.js';
 import { InMemoryAuthRepo } from './_helpers/in-memory-auth-repo.js';
@@ -189,6 +190,7 @@ describe('auth cache — graceful degradation', () => {
       logger: createTestLogger(),
       authRepo,
       authCache: brokenCache,
+      authCoalescer: new AuthCoalescer(),
       rateLimitStore,
       sessionsService,
       apiKeysService,
@@ -264,6 +266,7 @@ describe('auth cache — graceful degradation', () => {
       logger: createTestLogger(),
       authRepo,
       authCache: null,
+      authCoalescer: new AuthCoalescer(),
       rateLimitStore: new MemoryRateLimitStore(),
       sessionsService,
       apiKeysService,

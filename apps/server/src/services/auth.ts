@@ -14,6 +14,7 @@ import {
 import { keyPrefixFromPlaintext, verifyApiKey } from '../lib/api-keys.js';
 import type { AuthCache } from './auth-cache.js';
 import { sha256Hex } from './auth-cache.js';
+import type { AuthCoalescer } from './auth-coalescer.js';
 import type { ApiKeyScope } from '@driftstack/api-types';
 import type { AccountTier } from '@driftstack/api-types';
 
@@ -83,6 +84,7 @@ export async function authenticate(
   plaintext: string,
   cache: AuthCache | null = null,
   now: Date = new Date(),
+  coalescer: AuthCoalescer | null = null,
 ): Promise<AccountContext> {
   if (plaintext.length < 24) throw new InvalidKeyError();
 
@@ -113,47 +115,55 @@ export async function authenticate(
     }
   }
 
-  const prefix = keyPrefixFromPlaintext(plaintext);
-  const apiKey = await repo.findApiKeyByPrefix(prefix);
-  if (!apiKey) throw new InvalidKeyError();
+  // Slow path: prefix lookup + scrypt verification + account fetch +
+  // touch + cache write. Coalesce concurrent misses for the same sha
+  // through one execution — see auth-coalescer.ts for the why.
+  const slowPath = async (): Promise<AccountContext> => {
+    const prefix = keyPrefixFromPlaintext(plaintext);
+    const apiKey = await repo.findApiKeyByPrefix(prefix);
+    if (!apiKey) throw new InvalidKeyError();
 
-  const matches = await verifyApiKey(plaintext, apiKey.keyHash);
-  if (!matches) throw new InvalidKeyError();
+    const matches = await verifyApiKey(plaintext, apiKey.keyHash);
+    if (!matches) throw new InvalidKeyError();
 
-  if (apiKey.revokedAt !== null) throw new RevokedKeyError();
-  if (apiKey.expiresAt !== null && apiKey.expiresAt.getTime() <= now.getTime()) {
-    throw new ExpiredKeyError();
-  }
-
-  const account = await repo.getAccount(apiKey.accountId);
-  if (!account) throw new InvalidKeyError(); // FK invariant — treat as invalid
-  if (account.status === 'suspended') {
-    throw new ForbiddenError('Account is suspended.');
-  }
-  if (account.status === 'deleted') {
-    throw new InvalidKeyError();
-  }
-
-  await repo.touchApiKeyLastUsed(apiKey.id, now);
-
-  const ctx: AccountContext = { account, apiKey };
-
-  // Cap TTL at expiresAt so the cache entry can never outlive the key.
-  if (cache) {
-    let ttl = CACHE_TTL_SEC;
-    if (apiKey.expiresAt !== null) {
-      const remaining = Math.floor((apiKey.expiresAt.getTime() - now.getTime()) / 1000);
-      if (remaining < ttl) ttl = Math.max(1, remaining);
+    if (apiKey.revokedAt !== null) throw new RevokedKeyError();
+    if (apiKey.expiresAt !== null && apiKey.expiresAt.getTime() <= now.getTime()) {
+      throw new ExpiredKeyError();
     }
-    try {
-      await cache.set(sha, apiKey.id, account.id, ctx, ttl);
-    } catch {
-      // Cache write failed — auth still completed via scrypt path. Drop on
-      // the floor; next request will retry the cache write.
-    }
-  }
 
-  return ctx;
+    const account = await repo.getAccount(apiKey.accountId);
+    if (!account) throw new InvalidKeyError(); // FK invariant — treat as invalid
+    if (account.status === 'suspended') {
+      throw new ForbiddenError('Account is suspended.');
+    }
+    if (account.status === 'deleted') {
+      throw new InvalidKeyError();
+    }
+
+    await repo.touchApiKeyLastUsed(apiKey.id, now);
+
+    const ctx: AccountContext = { account, apiKey };
+
+    // Cap TTL at expiresAt so the cache entry can never outlive the key.
+    if (cache) {
+      let ttl = CACHE_TTL_SEC;
+      if (apiKey.expiresAt !== null) {
+        const remaining = Math.floor((apiKey.expiresAt.getTime() - now.getTime()) / 1000);
+        if (remaining < ttl) ttl = Math.max(1, remaining);
+      }
+      try {
+        await cache.set(sha, apiKey.id, account.id, ctx, ttl);
+      } catch {
+        // Cache write failed — auth still completed via scrypt path. Drop on
+        // the floor; next request will retry the cache write.
+      }
+    }
+
+    return ctx;
+  };
+
+  if (coalescer) return coalescer.coalesce(sha, slowPath);
+  return slowPath();
 }
 
 // ───────────────────────────────────────────────────────────────────────────

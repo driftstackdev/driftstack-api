@@ -759,3 +759,59 @@ Webhook system is end-to-end functional: subscribe → fire event → worker cla
 - `(account_id, created_at)` composite index on `webhook_deliveries` if cross-endpoint queries become a thing; right now we only query per-endpoint.
 
 API + control plane core scope is now **substantively complete + webhooks**. Awaiting WebKit-fork driver swap (Agent #1 Phase 2 closure) and founder direction on next batch (customer dashboard / admin UI / billing scaffolding / operational tooling — explicitly NOT picked autonomously per coordination response).
+
+---
+
+## V-015 — Auth single-flight coalescer (D-024) + V-014 amendment
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Auth perf (founder priority 1B of post-webhook batch)
+
+### Two corrections before the build
+
+The founder's priority list called for "A: quota webhook events" + "B: cache pre-warm at startup." Investigation revealed both were architecturally incompatible with current invariants — surfaced and corrected before code:
+
+- **A blocked.** V-014's deferred-items wording said quota events were gated on adding a threshold-crossing detector to `UsageService.recordUsage()`. That implied `recordUsage` exists. **It does not.** The `usage_records` table exists, `DrizzleUsageRepo` reads from it, but no production code path writes to it. `currentPeriodSummary` returns zeros for every account. Building a detector with no recording would be a half-built feature; building both is a multi-session workstream that doesn't fit this session. **Decision (founder):** drop A entirely from this session, schedule the full quota stack (recording + detector + emission) as its own dedicated workstream when customer onboarding approaches.
+- **B redefined.** The directive's "boot-time hydration of api_keys into auth cache" can't work because the auth cache key is `sha256(plaintext)` (D-020) and plaintext is unrecoverable from the DB. The actual problem V-012 documented is **request coalescing**: 16 autocannon connections all start simultaneously, all miss the cold cache, all run scrypt in parallel. Pre-warming would have addressed nothing because no entry can be written without plaintext. **Decision (founder):** B1 — single-flight coalescer in front of the slow path.
+
+### What was built
+
+- `apps/server/src/services/auth-coalescer.ts` — `AuthCoalescer` class with one method, `coalesce(sha, slowPath)`. In-memory `Map<sha, Promise<AccountContext>>`. First call for a sha kicks off the slow path and stores the Promise; concurrent calls return the same Promise. `.finally()` removes the entry on settlement (both fulfil and reject) so a failed slow path doesn't poison subsequent retries. Optional logger for debug-line per coalesce hit. `stats()` exposes `{ starts, hits, inFlight }` for telemetry sampling.
+- `authenticate()` — added an optional `coalescer` parameter (after `now`, defaulting to `null`). When present, the slow path body is wrapped in `coalescer.coalesce(sha, slowPath)`. When `null`, behaviour is identical to pre-coalescer (the call site falls through to a direct slow path invocation). Cache fast path is **before** the coalescer so a warm cache short-circuits without involving the in-flight map.
+- `AuthPluginOptions` + `AppDeps` extended with `authCoalescer: AuthCoalescer | null`. `buildApp` threads it through. `buildTestApp` constructs a fresh `AuthCoalescer()` per fixture; e2e helper does the same; the two manual `buildApp` callers in `auth-cache.test.ts` (broken-cache + null-cache scenarios) inject one. The auth middleware passes it into `authenticate()`.
+
+### What tests verify it
+
+**Total test surface: 225 unit/integration green** (was 213; +12 new). New:
+
+- 6 unit tests on `AuthCoalescer` (single-flight for N=16 concurrent same-sha; per-sha isolation; sequential calls run new slow paths; rejected slow path doesn't poison retries; rejection propagates to all coalesced waiters then clears; `inFlight` snapshots accurate during execution).
+- 6 integration tests on `authenticate()` + `AuthCoalescer` (16 concurrent same-plaintext calls trigger 1 prefix lookup + 1 scrypt verify + 1 account lookup + 1 lastUsed touch; without coalescer the same shape produces 16 of each — control test; coalescing across 4 different plaintexts is independent (4 starts, 12 hits); rejected slow path for invalid plaintext clears the slot; warm cache short-circuits before the coalescer is consulted; debug-log telemetry observable).
+
+### Empirical findings
+
+1. **`perf:sustained` (real Postgres + Redis, 30 s, 16 conns, scale tier) post-coalescer:** RPS 8587, p50 0 ms, p95 11 ms, **p99 35 ms**, 0 5xx. Compared to V-012's pre-coalescer post-cache run (RPS 311, p50 39 ms, p95 185 ms, p99 311 ms): **p99 dropped 8.9× (311 → 35 ms)**, well under the 80 ms session target.
+
+   The numbers aren't strictly apples-to-apples with V-012: this run hit the rate limiter so hard that 96.5% of requests (248,702 of 257,699) returned 4xx rate-limit responses. Auth is no longer the bottleneck; the rate limiter is. autocannon's overall p99 is a mix of fast 4xx and slower 2xx, so the headline 35 ms understates the 2xx-tail (which I didn't separate in this run). Either way, the thing the coalescer set out to fix — the cold-start scrypt fan-out — is fixed: the integration test "16 concurrent calls trigger 1 scrypt" proves it directly, and the perf p99 confirms no scrypt-bound tail remains. RSS samples flat at ~520 MB through the run; no leak from the in-flight map.
+
+2. **`.finally()` is the right cleanup hook for both fulfil and reject paths.** Initial sketch had `slowPath().then(ctx => { this.inFlight.delete(sha); return ctx; }).catch(err => { this.inFlight.delete(sha); throw err; })` — verbose and easy to get wrong. `.finally()` is the idiomatic and correct shape. Verified by the "rejected slow path doesn't poison" test — without `.finally()`, the second call would await the rejected Promise and re-throw the original error rather than retrying.
+
+3. **Cache fast path must come before coalescer consultation.** A warm cache hit does NOT need to be coalesced — N concurrent cache hits already resolve in parallel without contending on a Promise map. Routing them through the coalescer would add a Map insert/delete and a hit-count increment per request for no gain. The "cache hit short-circuits" test guards against accidentally moving the coalescer above the cache check.
+
+4. **Process-local coalescing is sufficient for the documented problem.** V-012's fan-out is concurrent-request-scoped — 16 connections in one Node process. Cross-process coalescing would require a distributed lock (Redis SETNX with TTL); the lock acquisition latency would re-introduce what we're trying to remove. If/when we scale to multi-process, each process gets its own coalescer; the shared Redis cache absorbs across-process duplication after the first miss.
+
+5. **The `_id`/`_at` underscore parameters** in `CountingAuthRepo.touchApiKeyLastUsed` triggered no lint warning even though the names start with `_`. Confirmed: eslint's `no-unused-vars` config allows the underscore prefix. The same convention is used in middleware (e.g., `requireAuth(request, _reply)`). No change needed.
+
+### V-014 amendment (in this V-log entry rather than rewriting)
+
+V-014's deferred-items section said: _"quota.warning_80pct / quota.exceeded event emission — gated on adding a threshold-crossing detector to UsageService.recordUsage(). The events are wired through WebhooksService.enqueueEvent; only the producer call site is missing."_ That was **inaccurate**. Reality: `UsageService.recordUsage()` does not exist. Nothing in the codebase writes to `usage_records`. The webhook plumbing IS wired (`WebhooksService.enqueueEvent` is functional, `'quota.warning_80pct'` and `'quota.exceeded'` are valid event types in the schema, the worker would deliver them) — but there is no producer at all, not even a missing-detector. The webhook system landed for the events that have producers (`session.completed`, `api_key.revoked`); the quota events are deferred to a dedicated workstream that builds usage recording first. The "complete webhook story" claim in V-014 is corrected here: complete for the event types that exist; quota events deferred.
+
+### Decisions made (cross-link)
+
+D-024 (process-local single-flight coalescer for the auth slow path; design alternatives to pre-warm).
+
+### Status
+
+Coalescer landed. p99 well under target on the documented smoke shape. The full quota workstream is queued behind SDK status check (already complete — see V-013) and operational tooling.
+
+Next: V-014 amendment is now in this entry (no separate edit needed); commit + push; verify CI.

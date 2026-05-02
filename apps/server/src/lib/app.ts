@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import type { Logger } from './logger.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import type { AuthCache } from '../services/auth-cache.js';
+import type { AuthCoalescer } from '../services/auth-coalescer.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
 import type { SessionsService } from '../services/sessions.js';
 import type { ApiKeysService } from '../services/api-keys.js';
@@ -29,6 +30,7 @@ export interface AppDeps {
   logger: Logger;
   authRepo: AccountAuthRepo;
   authCache: AuthCache | null;
+  authCoalescer: AuthCoalescer | null;
   rateLimitStore: RateLimitStore;
   sessionsService: SessionsService;
   apiKeysService: ApiKeysService;
@@ -62,7 +64,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   await app.register(requestIdPlugin);
-  await app.register(authPlugin, { authRepo: deps.authRepo, authCache: deps.authCache });
+  await app.register(authPlugin, {
+    authRepo: deps.authRepo,
+    authCache: deps.authCache,
+    authCoalescer: deps.authCoalescer,
+  });
   await app.register(rateLimitPlugin, { store: deps.rateLimitStore });
 
   registerErrorHandler(app);

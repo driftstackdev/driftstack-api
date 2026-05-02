@@ -129,6 +129,19 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Tier:** 2 (vendor / structural choice; matches founder direction in coordination response).
 - **V-log:** V-013.
 
+## D-024 — Process-local single-flight coalescer for the auth slow path
+
+- **Decision:** add an `AuthCoalescer` (`apps/server/src/services/auth-coalescer.ts`) that wraps the `authenticate()` slow path in a `Map<sha256(plaintext), Promise<AccountContext>>`. First miss for a sha runs the prefix lookup + scrypt verify + account fetch; concurrent misses for the same sha share the in-flight Promise. Map entry removed on settlement (both fulfil and reject) via `.finally()`. Process-local only — no distributed lock.
+- **Reasoning:** V-012's residual cold-start blip was 16 concurrent autocannon connections all running scrypt simultaneously on the smoke's first wave. Three alternatives were considered:
+  - **Pre-warm the cache at boot.** Architecturally impossible: the auth cache key is `sha256(plaintext)` (D-020) and plaintext is unrecoverable from the persisted `api_keys.key_hash`. No entry can be written without plaintext.
+  - **Change the cache key to `api_key_id` or to a server-secret-HMAC fingerprint.** Would require an extra column + migration, change the security model (a per-server-secret HMAC index is reversible if the server secret leaks), and re-introduce a lookup-from-plaintext step on every miss. Founder rejected.
+  - **Single-flight coalescing.** No security model change, no schema change, ~80 LOC, directly addresses the documented problem. Founder approved as B1.
+
+  Cross-process coalescing was deliberately not implemented: a Redis-backed lock adds latency comparable to the scrypt run itself and reintroduces the bottleneck. When scaling to multi-process, each process gets its own coalescer; the shared Redis cache absorbs across-process duplication after the first per-process miss.
+
+- **Tier:** 2 (perf-critical structural choice; founder approved).
+- **V-log:** V-015.
+
 ## D-023 — Webhook signing secret stored plaintext at rest (Stripe posture)
 
 - **Decision:** the `webhook_endpoints.secret` column holds the plaintext signing secret (`whsec_<32 base32>`). The `secret_prefix` column stores the first 12 chars for display/debug. There is no separate scrypt-hashed field; the signing worker reads the plaintext directly to compute `HMAC-SHA256(<unix>.<body>, secret)` per delivery.

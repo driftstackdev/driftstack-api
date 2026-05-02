@@ -25,6 +25,7 @@ import { UsageService } from '../../../src/services/usage.js';
 import { WebhooksService } from '../../../src/services/webhooks.js';
 import { WebhookDeliveryWorker } from '../../../src/services/webhook-worker.js';
 import { RedisAuthCache } from '../../../src/services/auth-cache.js';
+import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { DrizzleAccountAuthRepo } from '../../../src/db/auth-repo.js';
 import { DrizzleSessionRepo } from '../../../src/db/sessions-repo.js';
 import { DrizzleApiKeysRepo } from '../../../src/db/api-keys-repo.js';
@@ -114,10 +115,12 @@ export async function startTestServer(): Promise<TestServer> {
     deliveryTimeoutMs: 5_000,
   });
 
+  const authCoalescer = new AuthCoalescer(logger);
   const app = await buildApp({
     logger,
     authRepo,
     authCache,
+    authCoalescer,
     sessionsService,
     apiKeysService,
     usageService,

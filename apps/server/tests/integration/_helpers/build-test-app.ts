@@ -16,6 +16,7 @@ import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
 import { WebhooksService } from '../../../src/services/webhooks.js';
 import { InMemoryAuthCache } from '../../../src/services/auth-cache.js';
+import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { InMemoryAuthRepo } from './in-memory-auth-repo.js';
 import { InMemorySessionsRepo } from './in-memory-sessions-repo.js';
 import { InMemoryApiKeysRepo } from './in-memory-api-keys-repo.js';
@@ -35,6 +36,7 @@ export interface TestAppFixture {
   app: Awaited<ReturnType<typeof buildApp>>;
   authRepo: InMemoryAuthRepo;
   authCache: InMemoryAuthCache;
+  authCoalescer: AuthCoalescer;
   sessionsRepo: InMemorySessionsRepo;
   apiKeysRepo: InMemoryApiKeysRepo;
   usageRepo: InMemoryUsageRepo;
@@ -105,6 +107,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     createdAt: new Date('2026-01-01T00:00:00Z'),
   });
   const authCache = new InMemoryAuthCache();
+  const authCoalescer = new AuthCoalescer();
 
   const usageRepo = new InMemoryUsageRepo();
   const usageService = new UsageService(usageRepo);
@@ -123,6 +126,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     logger: createTestLogger(),
     authRepo,
     authCache,
+    authCoalescer,
     rateLimitStore,
     sessionsService,
     apiKeysService,
@@ -135,6 +139,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     app,
     authRepo,
     authCache,
+    authCoalescer,
     webhooksRepo,
     sessionsRepo,
     apiKeysRepo,
