@@ -58,6 +58,17 @@ jobs:
       - name: Install
         run: npm ci
 
+      # SDK examples import from `@driftstack/sdk`, which resolves through
+      # the workspace symlink to packages/sdk-typescript/dist/. Building the
+      # SDK before typecheck ensures dist/ exists when the examples are
+      # checked. Same goes for the workspace build of api-types — the SDK
+      # depends on its compiled output.
+      - name: Build (api-types + sdk + server)
+        run: npm run build
+
+      - name: Build SDK (tsup ESM + CJS + .d.ts)
+        run: npm run build --workspace packages/sdk-typescript
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -66,12 +77,6 @@ jobs:
 
       - name: Format check
         run: npm run format:check
-
-      - name: Build
-        run: npm run build
-
-      - name: Build SDK (tsup, ESM + CJS + .d.ts)
-        run: npm run build --workspace packages/sdk-typescript
 
       - name: Test (unit + integration)
         run: npm test
