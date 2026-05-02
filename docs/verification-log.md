@@ -115,3 +115,55 @@ D-011, D-012, D-013, D-014, D-015, D-016. See `docs/decisions.md`.
 ### Status
 
 Phase 2 ready to commit. Local verification chain green (typecheck/lint/format/build/test). Migration SQL emitted but not applied (Docker still missing locally; will be applied by CI once `workflow` scope is granted, or locally by founder once Docker is available). Phase 3 (auth + middleware) can begin against the same mocked-DB unit-test envelope; integration tests against real Postgres will land in Phase 3-4 as that infra comes online.
+
+---
+
+## V-003 — Phase 3: auth + rate-limit + error-handler + Fastify app shell
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** 3 (auth + middleware)
+
+### What was built
+
+- **Logger** (`apps/server/src/lib/logger.ts`) — Pino factory with structured JSON output, redaction of `Authorization`, cookies, and `plaintext` fields, and a separate `createTestLogger` returning a silent logger.
+- **Error taxonomy** (`apps/server/src/lib/errors.ts`) — `ApiError` base + 14 named subclasses. Each maps to its stable RFC 7807 problem-type URI and carries optional extension members.
+- **Error handler middleware** (`apps/server/src/middleware/error-handler.ts`) — Fastify `setErrorHandler` + `setNotFoundHandler`. Maps `ApiError` and `ZodError` to `application/problem+json` responses with the request id as `instance`. Logs 5xx at error level, 4xx at warn. Anything unrecognised becomes `Internal` (500) with the original cause logged but not exposed.
+- **Request ID middleware** — trusts inbound `x-request-id` (when ≤128 chars), otherwise generates a UUID. Echoes on every response.
+- **Auth service** (`apps/server/src/services/auth.ts`) — pure function `authenticate(repo, plaintext, now)` that decouples Drizzle via `AccountAuthRepo` interface (in-memory impl in tests, Drizzle impl in `apps/server/src/db/auth-repo.ts`). Validates Bearer token shape, looks up by prefix, scrypt-verifies, checks revoked/expired, checks account active, touches `last_used_at`. Throws typed `ApiError` on every failure path.
+- **Auth Fastify plugin** — decorates `request.account: AccountContext | null`, exposes `app.requireAuth` (preHandler) and `app.requireScope(scope)` (factory).
+- **Rate-limit service** (`apps/server/src/services/rate-limit.ts`) — token-bucket algorithm with tier-keyed defaults (`free`, `starter`, `pro`, `enterprise`) and a `RateLimitStore` interface. Two stores: `MemoryRateLimitStore` (tests) and `RedisRateLimitStore` (prod, atomic Lua script).
+- **Rate-limit Fastify plugin** — exposes `app.rateLimit(bucketKey, cost?)` factory; sets `x-ratelimit-remaining` on every reply, `retry-after` on 429s, throws `RateLimitedError` with the retry hint.
+- **App builder** (`apps/server/src/lib/app.ts`) — `buildApp(deps)` returns a configured `FastifyInstance` with helmet, CORS, request-id, auth, rate-limit, and the error handler wired in. Registers `/health`, `/healthz`, and `/v1/whoami` (auth-gated) as smoke routes.
+- **Test fixture** (`apps/server/tests/integration/_helpers/`) — `InMemoryAuthRepo` (mirrors Drizzle impl exactly), `buildTestApp(opts)` for one-line app construction with seeded account + key. Lets us run real Fastify integration tests with `inject` and zero infra dependency.
+
+### What tests verify it
+
+**67 total tests, all passing.** New in Phase 3: 24 tests.
+
+- **rate-limit unit suite** (`tests/unit/rate-limit.test.ts`, 10 tests) — algorithm correctness against `MemoryRateLimitStore`: first-call full-capacity, exhaustion + retry-after, refill-over-time, capacity clamp on long idle, retry-after deficit math, key independence; `bucketConfigFor` tier resolution + global fallback; service-level `rateLimitConsume` routing.
+- **integration / auth pipeline** (`tests/integration/auth.test.ts`, 14 tests) — happy path (200 with proper headers), missing Auth header (401 Unauthorized), malformed header (401), unknown key (401 InvalidKey), revoked key (401 RevokedKey), expired key (401 ExpiredKey), suspended account (403 Forbidden), deleted account (401 InvalidKey — leaks no state to caller), `last_used_at` update on success; `/health` and `/healthz` public; unknown route (404 problem+json); rate-limit 429 with retry-after when bucket drained; `x-ratelimit-remaining` header on 200.
+- `npm run typecheck` → green across both workspaces.
+- `npm run lint` → 0 errors.
+- `npm run format:check` → all files clean.
+- `npm run build` → both workspaces compile.
+
+### Empirical findings
+
+1. **Pino `Logger` ≠ Fastify `FastifyBaseLogger` under `exactOptionalPropertyTypes`.** Pino's `Logger` interface declares `msgPrefix: string | undefined`, while Fastify's `FastifyBaseLogger` doesn't declare `msgPrefix`. With EOPT enabled, structural assignment fails. The cleanest resolution was to drop EOPT — it's the strict-mode flag most prone to false positives with library boundaries, and the other strict flags catch the classes of bug we care about. Captured as D-017.
+2. **Fastify infers Http/2 server type without prompting.** Without explicit annotation on the `Fastify(...)` return value, TypeScript inferred `Http2SecureServer` for the instance — incompatible with the auth plugin's `RawServerDefault`-typed declarations. Fixed by annotating the local: `const app: FastifyInstance = Fastify({...})`.
+3. **`@typescript-eslint/require-await` on Fastify async-but-no-await plugins.** Switched all in-repo plugins to the callback `(app, opts, done) => { ...; done() }` form — clearer and lint-clean. Captured as D-018.
+4. **`light-my-request`'s `Response.json<T>()` is generic.** Tests originally cast `res.json() as Record<string, unknown>`, which `no-unnecessary-type-assertion` flagged because the underlying signature is `<T = any>(): T`. Switched to `res.json<Record<string, unknown>>()`.
+5. **Auth-bound rate-limit tests need bucket pre-drain.** First version of the rate-limit integration test exhausted the bucket via 60 sequential HTTP requests. Empirically, scrypt verification adds ~50ms per call → 60 calls take ~3 seconds → bucket refills ~3 tokens during the loop → 61st request still has tokens. Fix: drain the bucket directly via `fx.rateLimitStore.consume({ cost: 60, ... })` before the HTTP call.
+6. **`request.account: AccountContext | null` decorator type.** Fastify's `decorateRequest` requires the value to be valid before any preHandler — `null` is the only valid initial value. The route handler narrows with an explicit null-check; the type discipline forces that.
+7. **Redis Lua script not exercised yet.** `RedisRateLimitStore` is wired and typed but cannot be tested locally without Redis. The Lua source is reviewed by hand; semantically equivalent to `MemoryRateLimitStore` (which has full algorithmic test coverage). When local Docker comes up (or CI service containers run on first push of the workflow file), an integration test exercising `RedisRateLimitStore` against a real Redis 7 will land alongside Phase 3.
+
+### Decisions made (cross-link)
+
+D-017 (drop EOPT), D-018 (Fastify plugin callback form). See `docs/decisions.md`.
+
+### Status
+
+Phase 3 ready to commit and push. 67 tests passing locally. Auth + rate-limit pipelines validated end-to-end via Fastify `inject` against in-memory adapters. Real-Postgres + Real-Redis integration tests are deferred until the founder unblocks Docker / `workflow` scope.
+
+Phase 4 (mock WebKit driver) is the next clean target — the driver interface is fully decoupled from DB/Redis, so it can be designed, implemented, and tested in isolation.

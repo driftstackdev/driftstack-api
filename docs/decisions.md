@@ -115,6 +115,20 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Tier:** 2.
 - **V-log:** V-002.
 
+## D-017 — Disable `exactOptionalPropertyTypes` due to Fastify/Pino type-boundary friction
+
+- **Decision:** removed `exactOptionalPropertyTypes: true` from `tsconfig.base.json` while keeping every other strict-mode flag (`strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `verbatimModuleSyntax`, etc.).
+- **Reasoning:** EOPT exposes mismatches between Fastify's `FastifyBaseLogger` and Pino's `Logger` that aren't real bugs — Fastify accepts a wider logger type than Pino's, and EOPT refuses the structural subtyping. Forcing EOPT compatibility would require either casting at every plugin boundary or wrapping the logger. The other strict flags catch the classes of bug we actually care about (undefined index access, missing return paths, implicit any, override mismatch). Re-enabling EOPT is a future task once the core Fastify deps mature their typings.
+- **Tier:** 1.
+- **V-log:** V-003.
+
+## D-018 — Driftstack-internal Fastify plugins use the callback `done` form, not async
+
+- **Decision:** plugins authored in this repo (auth, rate-limit, request-id) accept `(app, opts, done)` and call `done()` once setup is complete; they are not declared `async`. External plugins (`@fastify/cors`, `@fastify/helmet`) keep their published signatures.
+- **Reasoning:** Fastify accepts both forms, but `eslint`'s `@typescript-eslint/require-await` flags an async function with no `await`. The plugins do synchronous decoration only — no awaits. Switching to the callback form is the documented Fastify pattern for sync setup, and reads more clearly than `async (...) => {}` + an unused await.
+- **Tier:** 1.
+- **V-log:** V-003.
+
 ## D-016 — `packages/api-types` is the public contract; server-internal Zod stays in `apps/server`
 
 - **Decision:** every Zod schema for a request/response shape that crosses the public API boundary lives in `packages/api-types/src/`. Schemas for purely-internal shapes (driver state, internal service inputs, queue messages, etc.) live in `apps/server/src/schemas/` and never get re-exported.
