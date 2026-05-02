@@ -122,6 +122,20 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Tier:** 1.
 - **V-log:** V-003.
 
+## D-021 — TypeScript SDK package (`@driftstack/sdk`)
+
+- **Decision:** ship a hand-written TypeScript SDK as `packages/sdk-typescript/`. Imports types directly from `@driftstack/api-types` (the single source of truth for the API contract), NOT from a code-generated artifact. Builds dual ESM + CJS via `tsup`. Public surface: `Driftstack` class with `sessions` / `apiKeys` / `usage` resource accessors, 17 typed error classes mirroring the server's RFC 7807 problem-types, `withRetry` policy with exponential backoff + jitter + Retry-After honouring, and a `verifyWebhookSignature` helper for forthcoming webhooks.
+- **Reasoning:** code-gen tools (`openapi-typescript-codegen`, `@hey-api/openapi-ts`) produce opinionated SDK shapes that don't match the resource/action ergonomics customers expect (Stripe-style `client.sessions.create()` rather than `SessionsApi.createSession(input)`). Hand-writing the client is ~500 lines and gives exact control over retry, error mapping, and header injection. Since `@driftstack/api-types` already exports every Zod-derived TS type the SDK needs, no codegen step is required for TypeScript — the schemas flow through directly. (Python and Go SDKs in future will likely consume the OpenAPI spec since they can't import `@driftstack/api-types`.)
+- **Tier:** 2 (vendor / structural choice; matches founder direction in coordination response).
+- **V-log:** V-013.
+
+## D-022 — `*Input` type variants for request shapes with server-side defaults
+
+- **Decision:** schemas in `@driftstack/api-types` that use Zod `.default(...)` (e.g. `NavigateRequestSchema.wait_until`, `CaptureRequestSchema.full_page`, `PaginationQuerySchema.limit`) export TWO type aliases: `NavigateRequest` (the inferred output type, fields with defaults are non-optional) and `NavigateRequestInput` (the `z.input` type, fields with defaults are optional). The server consumes `*Request`. SDKs and route handlers consume `*RequestInput`.
+- **Reasoning:** without this split, a customer calling `client.sessions.navigate(id, { url })` got a TS error because `wait_until` was inferred as required even though the server applies `'load'` as a default. Forcing every customer to spell out fields the server defaults breaks the ergonomics the SDK exists to provide. The `z.input`/`z.output` distinction in Zod is exactly designed for this case.
+- **Tier:** 1.
+- **V-log:** V-013.
+
 ## D-020 — Auth cache (Redis-backed, 30 s TTL) — security model
 
 - **Decision:** introduce a Redis-backed auth cache that maps `sha256(plaintext)` → `AccountContext`, TTL 30 s, with explicit invalidation on revocation and account-level changes. **At-rest hash strength is not weakened** — `scrypt-kdf` at `logN=15` stays in `lib/api-keys.ts` for the persisted `api_keys.key_hash`. The cache is a pure performance optimisation.
