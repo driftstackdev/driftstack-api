@@ -6,6 +6,7 @@ import { HttpClient, type HttpClientConfig } from './http.js';
 import { SessionsResource } from './resources/sessions.js';
 import { ApiKeysResource } from './resources/api-keys.js';
 import { UsageResource } from './resources/usage.js';
+import { WebhooksResource } from './resources/webhooks.js';
 import type { RetryConfig } from './retry.js';
 
 export interface DriftstackOptions {
@@ -27,6 +28,7 @@ export class Driftstack {
   readonly sessions: SessionsResource;
   readonly apiKeys: ApiKeysResource;
   readonly usage: UsageResource;
+  readonly webhooks: WebhooksResource;
 
   private readonly http: HttpClient;
 
@@ -47,5 +49,6 @@ export class Driftstack {
     this.sessions = new SessionsResource(this.http);
     this.apiKeys = new ApiKeysResource(this.http);
     this.usage = new UsageResource(this.http);
+    this.webhooks = new WebhooksResource(this.http);
   }
 }

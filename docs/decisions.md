@@ -129,6 +129,13 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Tier:** 2 (vendor / structural choice; matches founder direction in coordination response).
 - **V-log:** V-013.
 
+## D-023 — Webhook signing secret stored plaintext at rest (Stripe posture)
+
+- **Decision:** the `webhook_endpoints.secret` column holds the plaintext signing secret (`whsec_<32 base32>`). The `secret_prefix` column stores the first 12 chars for display/debug. There is no separate scrypt-hashed field; the signing worker reads the plaintext directly to compute `HMAC-SHA256(<unix>.<body>, secret)` per delivery.
+- **Reasoning:** the worker MUST sign every outbound delivery, so the plaintext has to be available at sign-time. Hashing-at-rest while still being able to sign requires either (a) re-deriving signing material from a hash on every delivery (operationally awful, breaks customer rotation flow) or (b) a KMS-style envelope (per-account encryption key — adds operational complexity without solving the root leak problem, since the per-account key has to live somewhere). The threat model for a leaked webhook secret is "attacker can forge webhook deliveries to the customer's endpoint" — phishing-grade, not takeover-grade. API key plaintext leaks remain takeover-grade because they let the attacker call our API as the customer; webhook secret leaks let the attacker impersonate us to the customer's endpoint, which the customer can mitigate by rotating the secret. Stripe takes the same posture (plaintext signing secret at rest, customers rotate on suspicion of leak). Documented as a customer-facing rotation flow, not as a security gap to solve in a future iteration.
+- **Tier:** 3 (security model; founder-aware via the WH1 design doc that captured this as the proposed decision).
+- **V-log:** V-014.
+
 ## D-022 — `*Input` type variants for request shapes with server-side defaults
 
 - **Decision:** schemas in `@driftstack/api-types` that use Zod `.default(...)` (e.g. `NavigateRequestSchema.wait_until`, `CaptureRequestSchema.full_page`, `PaginationQuerySchema.limit`) export TWO type aliases: `NavigateRequest` (the inferred output type, fields with defaults are non-optional) and `NavigateRequestInput` (the `z.input` type, fields with defaults are optional). The server consumes `*Request`. SDKs and route handlers consume `*RequestInput`.

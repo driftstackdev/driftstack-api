@@ -692,3 +692,70 @@ D-021 (hand-written SDK over codegen). D-022 (`*Input` type variants).
 `@driftstack/sdk` is build-verified, type-clean, and integration-tested against the real server. The package is publish-ready but **NOT yet pushed to npm** — gated on the founder's KvK closure + entity setup for the `@driftstack` scope. `package.json.private = true` until then; `publishConfig.access: public` is in place for when the gate clears.
 
 Webhook System (Priority 2) is the next workstream. The signature-verification helper is already in this SDK release so customers can integrate the verifier as soon as webhook delivery lands.
+
+---
+
+## V-014 — Webhook System (WH1–WH8): subscriptions, delivery worker, signing, fan-out, SDK, e2e
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Webhooks (founder priority 2 of next batch)
+
+### What was built
+
+Eight commits (WH1–WH8) landing the full webhook delivery system end-to-end.
+
+- **Schema (WH2 — `0002_webhook_tables.sql`):** two new tables + two new pg-enums.
+  - `webhook_endpoints`: id, account_id (FK CASCADE), url, secret (plaintext, see D-023), secret_prefix, events (`webhook_event_type[]`), description, active, consecutive_failures, last_success_at, last_failure_at, disabled_at, created_at, updated_at. Indexes on `(account_id)` and `(account_id, active)`.
+  - `webhook_deliveries`: id, webhook_id (FK CASCADE), event_id, event_type, payload (jsonb), status (`webhook_delivery_status`), attempts, next_attempt_at, last_response_status, last_response_excerpt, last_error, delivered_at, created_at, updated_at. Indexes on `(status, next_attempt_at)` (worker-poll) and `(webhook_id, created_at)` (per-endpoint history).
+  - 5 event types: `session.completed`, `session.failed`, `quota.warning_80pct`, `quota.exceeded`, `api_key.revoked`. 5 delivery statuses: `pending` / `in_flight` / `delivered` / `failed` / `dlq`.
+- **Service + repos (WH3):** `WebhooksService` (mgmt + `enqueueEvent` fan-out, account-scoped, `MAX_ENDPOINTS_PER_ACCOUNT = 10`, HTTPS-only via `parseHttpsUrl`). `WebhooksRepo` interface + `DrizzleWebhooksRepo` (transactional `recordDelivered/recordRetry/recordDlq` that updates endpoint counters in the same tx) + `InMemoryWebhooksRepo` for tests. Signing: `lib/webhook-signing.ts` (`generateWebhookSecret` → `whsec_<32 base32>`, `signWebhookPayload` → `t=<unix>,v1=<hex>` matching the SDK's `verifyWebhookSignature`).
+- **Worker (WH4 — `services/webhook-worker.ts`):** loop polls `repo.claim({ batchSize: 25 })` which runs `WITH claimed AS (SELECT ... FOR UPDATE SKIP LOCKED) UPDATE ... RETURNING *`. Per-attempt backoff `{1: 1m, 2: 5m, 3: 15m, 4: 30m, 5: 60m}`. `MAX_ATTEMPTS = 5` then DLQ. `AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES = 50` flips `active = false`. 10 s `AbortController` per delivery. Headers: `x-driftstack-signature`, `x-driftstack-event-id`, `x-driftstack-event-type`, `user-agent`. `tickOnce()` exposed for deterministic test stepping.
+- **Routes (WH5 — `routes/webhooks.ts`):** `POST /v1/webhooks` (admin), `GET /v1/webhooks` (read), `GET /v1/webhooks/:id` (read), `DELETE /v1/webhooks/:id` (admin, idempotent — second delete still 204), `GET /v1/webhooks/:id/deliveries` (read, cursor-paginated, optional `?status=`). All wrapped in `app.requireAuth + app.rateLimit('global')`. Wire format (`whk_<uuid>`, `wdl_<uuid>`) translated through `publicEndpoint() / publicDelivery()` helpers.
+- **Zod schemas (WH5 — `packages/api-types/src/webhooks.ts`):** `WebhookEndpointSchema`, `CreateWebhookRequestSchema` (URL must `startsWith('https://')`, events `min(1).max(10)`), `CreateWebhookResponseSchema = WebhookEndpointSchema.extend({ secret })`, `WebhookDeliverySchema`, `ListDeliveriesQuerySchema` (+ `ListDeliveriesQueryInput` per D-022 pattern).
+- **Event emission (WH6):** `SessionsService.destroy()` emits `session.completed` with `{ session_id, duration_ms }` after the DB update; `ApiKeysService.revoke()` emits `api_key.revoked` with `{ api_key_id, name, revoked_at }` after the cache invalidation. Both wrapped in try/catch — webhook fan-out failures must never break the underlying operation. `quota.warning_80pct` / `quota.exceeded` are deferred (no `recordUsage` hook in `UsageService` yet — picked up in a follow-up commit when the threshold-crossing detection lands).
+- **SDK (WH7 — `packages/sdk-typescript/src/resources/webhooks.ts`):** `client.webhooks.create / list / get / delete / listDeliveries`. Re-exports of all webhook types from `@driftstack/api-types`. New example `examples/webhook-receiver.ts` using only `node:http` stdlib (no express dependency) — reads raw body via async iterator, dispatches by `x-driftstack-event-type`, verifies via `verifyWebhookSignature`.
+- **E2E (WH8 — `apps/server/tests/e2e/webhooks.spec.ts`):** the complete customer journey against real Postgres + Redis: spin up a `node:http` receiver on `127.0.0.1:0`, subscribe via `POST /v1/webhooks` (with a placeholder https URL because the API rejects http://), `UPDATE webhook_endpoints SET url = ${receiverUrl}` to redirect to the test receiver, `POST /v1/sessions` + `DELETE /v1/sessions/:id` to fire `session.completed`, `worker.tickOnce()` to claim+deliver, then assert the receiver got the signed POST, run `verifyWebhookSignature` on the body, and check the DB row is `delivered`.
+
+### What tests verify it
+
+**Total test surface: 213 unit/integration + 60 e2e = 273 green.** New: 31 (12 integration + 9 worker unit + 9 signing unit + 1 e2e).
+
+- 9 unit tests on `webhook-signing` (round-trip with the SDK verifier, prefix shape, distinct-secret entropy, header format)
+- 9 unit tests on `webhook-worker` (2xx → delivered, 4xx/5xx/network/timeout → retry with correct `next_attempt_at`, max attempts → dlq, missing endpoint → dlq, idle batch tick, signature header presence)
+- 12 integration tests on the routes (`POST` happy path + 403/400/400, list never returns plaintext, idempotent `DELETE`, `GET :id/deliveries` returns enqueued rows, `session.completed` fires on session destroy, `api_key.revoked` fires on key revoke, no fan-out for unsubscribed event types, account scoping (`B` cannot see `A`'s endpoint))
+- 1 e2e Playwright test exercising the full journey against real infra
+
+### Empirical findings
+
+1. **`postgres-js`'s tagged-template binder rejects raw `Date` in identifier-shaped positions.** The first `claim()` implementation tried `WHERE next_attempt_at <= ${opts.now}` and got `TypeError: The "string" argument must be of type string or an instance of Buffer, ArrayBuffer, or Uint8Array. Received an instance of Date`. Fixed by ISO-stringing the timestamp + casting in SQL: `const nowIso = opts.now.toISOString(); ... <= ${nowIso}::timestamptz`. Drizzle's query builder handles Date objects fine; the raw client doesn't.
+
+2. **The worker originally had `listEndpointsSubscribedTo('', ...)` as a placeholder** to look up the endpoint for a given delivery row (which has only `webhookId`, not `accountId`). That always returned `[]`, so every delivery would silently DLQ. Fixed by adding a worker-only `findEndpointById(id)` repo method. The placeholder was never reached in unit tests because they pre-populated the endpoint, masked by the `InMemoryWebhooksRepo` happily serving the row regardless of the `accountId === ''` filter. The bug only surfaced in the e2e test where the real Drizzle repo enforced the filter and the worker DLQ'd everything. Test expectations + a real second consumer caught what the unit tests missed.
+
+3. **Postgres enum types are not schema-scoped, but DROP SCHEMA CASCADE doesn't drop them either.** The e2e helper drops `public` and `drizzle` schemas at startup, but the enum types `webhook_event_type` and `webhook_delivery_status` survived from a previous run (they're owned by neither schema in pg's default config — they're owned by the role). Fix: the truncate-between-tests path uses `TRUNCATE webhook_deliveries, webhook_endpoints CASCADE` instead of dropping/re-creating; the schemas only get blown away on first-server-start.
+
+4. **`Response` body for 204 forbidden in WHATWG fetch — same constraint that bit V-013.** The test `fakeFetch` initially returned `new Response('ok', { status: 204 })`; the constructor threw. Fixed with `status === 204 ? null : 'ok'`. (Already documented in V-013; recurring because `fetch` mocks are easy to write naively.)
+
+5. **`InMemoryWebhooksRepo.claim()` and the Drizzle one diverged on what `nextAttemptAt: undefined` meant for a freshly-enqueued row.** In-memory: defaults to `now`, so the worker can claim immediately. Drizzle: column has a `DEFAULT NOW()` so same effective behaviour. The unit test for "worker delivers a 2xx" originally passed `nextAttemptAt: undefined` and used a fixed `constNow()` of `2026-05-02T12:00:00Z` to drive the worker. The wall-clock `now` from `Date.now()` (the real `now` in May 2026 was after `constNow`) made the row's `nextAttemptAt > constNow`, so `claim()` filtered it out and the test asserted "0 outcomes" — looked passing-but-vacuous. Fix: pass an explicit `nextAttemptAt: NOW` (where NOW = `constNow()`) so the worker's `now <= nextAttemptAt` filter is exercised meaningfully. Same class of "test silently passes because the assertion short-circuits" bug as V-009's autocannon `path` vs `url`.
+
+6. **Webhook secret-at-rest plaintext storage was the only viable option** without forcing customers into a re-supply-on-every-edit dance or building a KMS envelope abstraction we don't otherwise need. Captured as D-023; threat model is "leaked secret = attacker can forge deliveries to the customer's endpoint", which is rotation-recoverable, not takeover-grade. Stripe takes the same posture.
+
+7. **`@driftstack/sdk` import from server tests requires the package alias, not relative paths.** First pass of `tests/unit/webhook-signing.test.ts` imported `verifyWebhookSignature` from `../../../../packages/sdk-typescript/src/webhook-signature.js`, which TS rejects with `TS6059: File … is not under 'rootDir'`. Fixed by importing from `@driftstack/sdk` (already a workspace devDependency on `apps/server`). The e2e spec already used the package import — the unit test was the outlier.
+
+8. **`WebhooksService` integration into `buildApp` made two pre-existing tests fall over** (`auth-cache.test.ts` direct `buildApp` calls, lines 185 and 258) because they bypass `buildTestApp` to construct a custom auth cache. They now wire a fresh `WebhooksService` from an `InMemoryWebhooksRepo`. The `buildTestApp` helper itself was already updated.
+
+### Decisions made (cross-link)
+
+D-023 (webhook signing secret plaintext at rest, Stripe posture).
+
+### Status
+
+Webhook system is end-to-end functional: subscribe → fire event → worker claims atomically → POST signed delivery → customer receives + verifies → delivery row marked `delivered`. Real Postgres + Redis exercised by the Playwright spec. The SDK and server agree on the signature scheme via the round-trip test in `webhook-signing.test.ts`.
+
+**Deferred to follow-up commits (not blocking webhook system claim):**
+
+- `quota.warning_80pct` / `quota.exceeded` event emission — gated on adding a threshold-crossing detector to `UsageService.recordUsage()`. The events are wired through `WebhooksService.enqueueEvent`; only the producer call site is missing.
+- Cache pre-warm at startup for known seeded keys (mentioned in V-012) — not webhook-specific but would close the cold-start p99 gap.
+- `(account_id, created_at)` composite index on `webhook_deliveries` if cross-endpoint queries become a thing; right now we only query per-endpoint.
+
+API + control plane core scope is now **substantively complete + webhooks**. Awaiting WebKit-fork driver swap (Agent #1 Phase 2 closure) and founder direction on next batch (customer dashboard / admin UI / billing scaffolding / operational tooling — explicitly NOT picked autonomously per coordination response).

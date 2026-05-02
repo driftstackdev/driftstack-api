@@ -4,7 +4,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { createTestLogger } from '../../src/lib/logger.js';
-import { WebhookDeliveryWorker } from '../../src/services/webhook-worker.ts';
+import { WebhookDeliveryWorker } from '../../src/services/webhook-worker.js';
 import { InMemoryWebhooksRepo } from '../integration/_helpers/in-memory-webhooks-repo.js';
 import type { WebhookEndpointRow } from '../../src/services/webhooks.js';
 

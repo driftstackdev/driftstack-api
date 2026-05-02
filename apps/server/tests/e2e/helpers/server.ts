@@ -22,11 +22,14 @@ import { MockDriver } from '../../../src/drivers/mock.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
+import { WebhooksService } from '../../../src/services/webhooks.js';
+import { WebhookDeliveryWorker } from '../../../src/services/webhook-worker.js';
 import { RedisAuthCache } from '../../../src/services/auth-cache.js';
 import { DrizzleAccountAuthRepo } from '../../../src/db/auth-repo.js';
 import { DrizzleSessionRepo } from '../../../src/db/sessions-repo.js';
 import { DrizzleApiKeysRepo } from '../../../src/db/api-keys-repo.js';
 import { DrizzleUsageRepo } from '../../../src/db/usage-repo.js';
+import { DrizzleWebhooksRepo } from '../../../src/db/webhooks-repo.js';
 import { RedisRateLimitStore } from '../../../src/lib/redis-rate-limit-store.js';
 import * as schema from '../../../src/db/schema.js';
 
@@ -34,6 +37,7 @@ export interface TestServer {
   baseUrl: string;
   client: ReturnType<typeof postgres>;
   redis: Redis;
+  webhookWorker: WebhookDeliveryWorker;
   cleanup: () => Promise<void>;
   resetState: () => Promise<void>;
 }
@@ -47,6 +51,8 @@ const TRUNCATE_SQL = `
     "sessions",
     "usage_records",
     "rate_limit_buckets",
+    "webhook_deliveries",
+    "webhook_endpoints",
     "api_keys",
     "accounts"
   RESTART IDENTITY CASCADE
@@ -91,9 +97,22 @@ export async function startTestServer(): Promise<TestServer> {
     interactLatencyMs: 10,
   });
 
-  const sessionsService = new SessionsService({ repo: sessionsRepo, driver });
-  const apiKeysService = new ApiKeysService(apiKeysRepo, authCache);
+  const webhooksRepo = new DrizzleWebhooksRepo(database);
+  const webhooksService = new WebhooksService(webhooksRepo);
+
+  const sessionsService = new SessionsService({
+    repo: sessionsRepo,
+    driver,
+    webhooks: webhooksService,
+  });
+  const apiKeysService = new ApiKeysService(apiKeysRepo, authCache, webhooksService);
   const usageService = new UsageService(usageRepo);
+
+  const webhookWorker = new WebhookDeliveryWorker({
+    repo: webhooksRepo,
+    logger,
+    deliveryTimeoutMs: 5_000,
+  });
 
   const app = await buildApp({
     logger,
@@ -102,6 +121,7 @@ export async function startTestServer(): Promise<TestServer> {
     sessionsService,
     apiKeysService,
     usageService,
+    webhooksService,
     rateLimitStore,
     permissiveCors: true,
   });
@@ -122,5 +142,5 @@ export async function startTestServer(): Promise<TestServer> {
     await client.end({ timeout: 5 });
   };
 
-  return { baseUrl, client, redis, cleanup, resetState };
+  return { baseUrl, client, redis, webhookWorker, cleanup, resetState };
 }

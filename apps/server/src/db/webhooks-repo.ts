@@ -106,11 +106,13 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
 
   async claim(opts: { batchSize: number; now: Date }): Promise<WebhookDeliveryRow[]> {
     // Atomic claim: SELECT ... FOR UPDATE SKIP LOCKED → UPDATE status = in_flight
-    // → RETURNING. Done in one round-trip via a CTE.
+    // → RETURNING. ISO-string the timestamp because postgres-js's
+    // tagged-template binder rejects raw Date in this position.
+    const nowIso = opts.now.toISOString();
     const rows = await this.database.client<Record<string, unknown>[]>`
       WITH claimed AS (
         SELECT id FROM webhook_deliveries
-        WHERE status = 'pending' AND next_attempt_at <= ${opts.now}
+        WHERE status = 'pending' AND next_attempt_at <= ${nowIso}::timestamptz
         ORDER BY next_attempt_at ASC
         LIMIT ${opts.batchSize}
         FOR UPDATE SKIP LOCKED

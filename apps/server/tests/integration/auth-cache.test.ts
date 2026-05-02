@@ -19,10 +19,12 @@ import { ApiKeysService } from '../../src/services/api-keys.js';
 import { UsageService } from '../../src/services/usage.js';
 import { InMemoryAuthCache, sha256Hex, type AuthCache } from '../../src/services/auth-cache.js';
 import type { AccountContext } from '../../src/services/auth.js';
+import { WebhooksService } from '../../src/services/webhooks.js';
 import { InMemoryAuthRepo } from './_helpers/in-memory-auth-repo.js';
 import { InMemorySessionsRepo } from './_helpers/in-memory-sessions-repo.js';
 import { InMemoryApiKeysRepo } from './_helpers/in-memory-api-keys-repo.js';
 import { InMemoryUsageRepo } from './_helpers/in-memory-usage-repo.js';
+import { InMemoryWebhooksRepo } from './_helpers/in-memory-webhooks-repo.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
@@ -182,6 +184,7 @@ describe('auth cache — graceful degradation', () => {
     const usageService = new UsageService(usageRepo);
     const rateLimitStore = new MemoryRateLimitStore();
 
+    const webhooksService = new WebhooksService(new InMemoryWebhooksRepo());
     const app = await buildApp({
       logger: createTestLogger(),
       authRepo,
@@ -190,6 +193,7 @@ describe('auth cache — graceful degradation', () => {
       sessionsService,
       apiKeysService,
       usageService,
+      webhooksService,
       permissiveCors: true,
     });
 
@@ -255,6 +259,7 @@ describe('auth cache — graceful degradation', () => {
     const apiKeysService = new ApiKeysService(new InMemoryApiKeysRepo(), null);
     const usageService = new UsageService(new InMemoryUsageRepo());
 
+    const webhooksService = new WebhooksService(new InMemoryWebhooksRepo());
     const app = await buildApp({
       logger: createTestLogger(),
       authRepo,
@@ -263,6 +268,7 @@ describe('auth cache — graceful degradation', () => {
       sessionsService,
       apiKeysService,
       usageService,
+      webhooksService,
       permissiveCors: true,
     });
 

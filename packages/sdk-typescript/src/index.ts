@@ -5,6 +5,7 @@ export type { RetryConfig } from './retry.js';
 export type { HttpClientConfig, RequestOptions } from './http.js';
 export type { SessionsListPage } from './resources/sessions.js';
 export type { ApiKeyList } from './resources/api-keys.js';
+export type { WebhookEndpointList, WebhookDeliveryListPage } from './resources/webhooks.js';
 
 // Errors
 export {
@@ -43,17 +44,24 @@ export type {
   ApiKeyScope,
   CaptureKind,
   CaptureRequest,
+  CaptureRequestInput,
   CaptureResponse,
   CreateApiKeyRequest,
   CreateApiKeyResponse,
   CreateSessionRequest,
   CreateSessionResponse,
+  CreateWebhookRequest,
+  CreateWebhookResponse,
   InteractAction,
   InteractRequest,
   InteractResponse,
+  ListDeliveriesQuery,
+  ListDeliveriesQueryInput,
   NavigateRequest,
+  NavigateRequestInput,
   NavigateResponse,
   PaginationQuery,
+  PaginationQueryInput,
   Problem,
   ProblemType,
   Session,
@@ -65,4 +73,9 @@ export type {
   WaitCondition,
   WaitRequest,
   WaitResponse,
+  WebhookDelivery,
+  WebhookDeliveryStatus,
+  WebhookEndpoint,
+  WebhookEndpointId,
+  WebhookEventType,
 } from '@driftstack/api-types';

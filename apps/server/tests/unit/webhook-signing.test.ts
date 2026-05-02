@@ -3,7 +3,7 @@
 // packages/sdk-typescript/tests/unit/webhook-signature.test.ts.)
 
 import { describe, expect, it } from 'vitest';
-import { verifyWebhookSignature } from '../../../../packages/sdk-typescript/src/webhook-signature.js';
+import { verifyWebhookSignature } from '@driftstack/sdk';
 import {
   generateWebhookSecret,
   signWebhookPayload,
