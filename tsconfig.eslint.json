@@ -16,7 +16,8 @@
     "apps/**/playwright.config.ts",
     "apps/**/src/**/*.ts",
     "apps/**/tests/**/*.ts",
-    "packages/**/src/**/*.ts"
+    "packages/**/src/**/*.ts",
+    "perf/**/*.ts"
   ],
   "exclude": ["node_modules", "dist", "build", "coverage"]
 }
