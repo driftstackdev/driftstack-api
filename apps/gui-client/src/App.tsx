@@ -6,9 +6,10 @@
 // single-window desktop app, and Tauri's window doesn't have a real
 // history stack to integrate with.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
+import { ConnectivityView } from './views/ConnectivityView';
 import { LiveSessionView } from './views/LiveSessionView';
 import { ProxiesView } from './views/ProxiesView';
 import { RecordingPlayerView } from './views/RecordingPlayerView';
@@ -39,6 +40,19 @@ export function App(): JSX.Element {
 
 function Shell(): JSX.Element {
   const [view, setView] = useState<View>({ kind: 'sessions' });
+
+  // Cmd+, → Settings (macOS convention).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (e.metaKey && e.key === ',') {
+        e.preventDefault();
+        setView({ kind: 'settings' });
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   return (
     <div className="flex h-screen w-screen flex-col bg-surface-base">
       <TitleBar />
@@ -89,8 +103,9 @@ function CurrentView({
           onBack={() => onNavigate({ kind: 'recordings' })}
         />
       );
-    case 'sessions-history':
     case 'connectivity':
+      return <ConnectivityView />;
+    case 'sessions-history':
     case 'fleet':
       return <NotYet label={view.kind} />;
   }
@@ -242,6 +257,11 @@ function StatusFooter(): JSX.Element {
       <div className="flex items-center gap-2">
         <span className={`status-pip ${connected ? 'bg-status-ready' : 'bg-status-idle'}`} />
         <span>{connected ? 'connected' : 'not connected'}</span>
+        {settings.apiKey !== null && (
+          <span className="mono">
+            {settings.apiKey.slice(0, 8)}…{settings.apiKey.slice(-4)}
+          </span>
+        )}
       </div>
       <div className="mono">{redactBaseUrl(settings.baseUrl)}</div>
     </footer>

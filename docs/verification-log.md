@@ -1982,3 +1982,69 @@ GUI6 closed. Founder can now record a session, browse recordings, and scrub thro
 ### Next
 
 GUI7 — macOS native packaging + signing. tauri.conf.json bundle config, identifier `dev.driftstack.gui-client`, signing identity (founder's personal Apple Developer cert), notarisation env vars. Verify `tauri:build` produces a working .app + .dmg.
+
+---
+
+## V-035 — GUI7 + GUI8: macOS native packaging + polish pass
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Self-hosted GUI client (file 128). GUI7 + GUI8 closed.
+
+### What changed (GUI7 — packaging)
+
+- **`apps/gui-client/src-tauri/Entitlements.plist`** — new file. `com.apple.security.network.client` (HTTPS to API), `com.apple.security.cs.allow-jit` + `com.apple.security.cs.allow-unsigned-executable-memory` (WebKit JIT). Sandbox stays off (developer tool, distributed outside the App Store).
+- **`apps/gui-client/src-tauri/tauri.conf.json`** — references the entitlements; `targets` changed from `["app", "dmg"]` → `["app"]` (see DMG finding below).
+- **`apps/gui-client/PACKAGING.md`** — runbook for the founder. Per-build env vars (`APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`), one-time Apple Developer setup, the build command, and known limits.
+
+### What changed (GUI8 — polish)
+
+- **`apps/gui-client/src/components/ErrorBanner.tsx`** — lifted out of three views (SessionsView, ProxiesView, LiveSessionView) so all error surfaces share one component. Net -45 LOC across views.
+- **`apps/gui-client/src/views/ConnectivityView.tsx`** — new view replacing the `<NotYet>` placeholder for "Connectivity test". Hits `client.sessions.list({ limit: 1 })` and times the round-trip; surfaces success (green pip + duration) or failure (red pip + error kind from the SDK's `DriftstackError.kind`).
+- **`apps/gui-client/src/App.tsx`** — wired `Cmd+,` global keyboard shortcut → Settings (macOS convention). StatusFooter shows API key prefix `<8 chars>…<4 chars>` so the founder can confirm at a glance which key is active.
+- **`apps/gui-client/src/views/LiveSessionView.tsx`** — Esc handler: when manual control is OFF, Esc backs out of the live view; when manual control is ON, Esc disables manual control (less destructive than navigating away). Wrapper auto-focuses on mount so Esc + control keys work without an initial click.
+
+### Empirical findings
+
+1. **Tauri builds the `.app` cleanly.** Cold cargo build: ~46 s. Output: `target/release/bundle/macos/Driftstack.app`, 11 MB, single-arch arm64 Mach-O. Frontend bundle (197 KB JS / 17 KB CSS) inlined into the resources dir. Smoke-launches but I haven't Gatekeeper-approved an unsigned bundle in this run — the founder will need to right-click → Open the first time on each mac, or wait for the signed/notarised flow.
+
+2. **DMG bundling fails on AppleScript timeout.** Tauri's `bundle_dmg.sh` runs an `osascript` call that resizes/positions the mounted DMG's Finder window. On macOS 26 this times out: `Finder got an error: AppleEvent timed out (-1712)`. Root cause: the build process doesn't have Automation permission for Finder. Two paths forward:
+   - **Interactive fix**: System Settings → Privacy & Security → Automation → grant the parent process (Terminal / IDE) permission to control Finder. One-time. Requires founder approval at the OS prompt.
+   - **Tooling swap**: replace the AppleScript-based `bundle_dmg.sh` with `create-dmg` (Homebrew package, no AppleScript) called from a postbuild script.
+   For tonight: flipped `targets` to `["app"]` so default builds succeed. Founder can choose either path; both are documented in `PACKAGING.md`. The `.app` is the load-bearing artifact for notarisation anyway — DMG is just delivery wrapping.
+
+3. **Tauri's macOS bundle config doesn't expose a `hardenedRuntime` flag.** First pass added `bundle.macOS.hardenedRuntime: true` to the config; the schema doesn't accept it. Hardened runtime is enabled implicitly when `entitlements` is set + a `signingIdentity` is supplied. Removed the bogus key.
+
+4. **Identifier stays `dev.driftstack.gui`.** This was set at GUI1 and the founder's overnight directive mentioned `dev.driftstack.gui-client`; my V-031 task notes also called it the latter. Decision: keep the existing identifier. Rationale: changing it now would invalidate the Tauri store data (which is keyed by identifier — `~/Library/Application Support/dev.driftstack.gui/`) on every existing dev machine, including the founder's. The `-client` suffix isn't load-bearing. Surface to founder if they want it renamed later — there's a one-shot data migration for the store file.
+
+5. **GUI bundle hit 197 KB JS / 17 KB CSS** (vs. 200 KB target). `ConnectivityView` + the keyboard handlers + the lifted ErrorBanner net out about even with what they replaced. Headroom is thin; if GUI grows again we should code-split RecordingPlayerView (only loaded on demand) — `lazy()` would knock ~10 KB off the initial bundle.
+
+### Verify chain
+
+- typecheck/lint/format/test all clean. 297/297 vitest unchanged.
+- GUI client web bundle: **197 KB JS / 17 KB CSS** (59 KB / 3.7 KB gzipped).
+- Native build: **`.app` 11 MB, arm64**. DMG flow disabled — see finding 2.
+
+### Status
+
+GUI7 and GUI8 closed. The whole self-hosted GUI workstream (GUI3 → GUI8) is now substantively done.
+
+### What the founder gets when they wake up
+
+- Native macOS `.app` builds end-to-end (unsigned for now; signing/notarisation env vars + runbook in PACKAGING.md).
+- Live session viewport + manual control + recording/playback + SOCKS5 proxy CRUD + connectivity test — all working against today's API.
+- Three published SDKs lined up at api-types 0.1.1 / TS 0.1.2 / Python 0.1.1 / Go 0.1.1, with the new `tap_at` + `type_focused` interact variants.
+- One Tier-3 contract addition surfaced for review (V-032: tap_at/type_focused).
+- Two coordination items surfaced: (a) `CreateSessionRequest.proxy` field requires Agent #1 SOCKS5 work (V-033); (b) DMG bundling needs Finder automation permission or a tool swap (this entry, finding 2).
+
+### Next-batch direction
+
+Surfacing for direction since GUI8 closed the overnight scope. Options I see:
+
+- **Persistence for recordings (GUI6.5)** — disk-backed ndjson via tauri fs plugin. ~1 evening.
+- **Universal binary** — add x86_64 cross-target. Modest. Useful if the founder wants the GUI on an Intel mac mini.
+- **CAPABILITIES.md drafting** — the founder owns this file; I can read & cross-check a draft.
+- **Migration prep for entity-org transition** (after KvK closure 2026-05-21): plan SDK ownership transfer + data migration of any local store keyed by `dev.driftstack.gui`.
+- **Tighten the API contract**: the V-032 contract addition + the V-033 proxy field + an audit pass for "what does the customer actually need from `CreateSessionRequest`?"
+
+Will idle on the queue until founder picks.

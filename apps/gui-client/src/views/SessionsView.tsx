@@ -6,6 +6,7 @@
 // founder can debug API issues without losing context.
 
 import { useCallback, useEffect, useState } from 'react';
+import { ErrorBanner } from '../components/ErrorBanner';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError, type Session } from '../lib/client';
 
@@ -272,26 +273,6 @@ function Th({ children }: { children: React.ReactNode }): JSX.Element {
 
 function Td({ children }: { children: React.ReactNode }): JSX.Element {
   return <td className="px-3 py-2 align-middle text-sm">{children}</td>;
-}
-
-function ErrorBanner({
-  message,
-  onDismiss,
-}: {
-  message: string;
-  onDismiss: () => void;
-}): JSX.Element {
-  return (
-    <div className="flex items-start justify-between gap-3 rounded border border-status-error/30 bg-status-error/10 px-3 py-2">
-      <div className="flex flex-col gap-0.5">
-        <span className="section-label text-status-error/80">Error</span>
-        <span className="text-sm text-ink-primary">{message}</span>
-      </div>
-      <button type="button" className="btn-secondary" onClick={onDismiss}>
-        Dismiss
-      </button>
-    </div>
-  );
 }
 
 // ─── helpers ──────────────────────────────────────────────────────

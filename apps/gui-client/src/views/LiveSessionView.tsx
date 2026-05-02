@@ -29,6 +29,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Driftstack } from '@driftstack/sdk';
+import { ErrorBanner } from '../components/ErrorBanner';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError } from '../lib/client';
 import { useRecordings } from '../lib/recordings';
@@ -251,7 +252,20 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>): void => {
+      // Esc always backs out of the live view, even when manual control is on.
+      if (!manualControlRef.current && e.key === 'Escape') {
+        e.preventDefault();
+        onBack();
+        return;
+      }
       if (!manualControlRef.current) return;
+      // Esc inside manual control turns control off (less destructive than navigating away).
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        manualControlRef.current = false;
+        setState((s) => ({ ...s, manualControl: false }));
+        return;
+      }
       // Ignore modifier-only events.
       if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') return;
       // Don't hijack copy/paste/devtools shortcuts.
@@ -267,8 +281,14 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
         void interact({ kind: 'type_focused', text: e.key });
       }
     },
-    [interact],
+    [interact, onBack],
   );
+
+  // Auto-focus the wrapper on mount so Esc + manual-control keys
+  // route to it without needing an initial click.
+  useEffect(() => {
+    wrapperRef.current?.focus();
+  }, []);
 
   if (!client) {
     return (
@@ -528,26 +548,6 @@ function Footer({
         </div>
       )}
     </footer>
-  );
-}
-
-function ErrorBanner({
-  message,
-  onDismiss,
-}: {
-  message: string;
-  onDismiss: () => void;
-}): JSX.Element {
-  return (
-    <div className="flex items-start justify-between gap-3 rounded border border-status-error/30 bg-status-error/10 px-3 py-2">
-      <div className="flex flex-col gap-0.5 min-w-0">
-        <span className="section-label text-status-error/80">Error</span>
-        <span className="text-sm text-ink-primary truncate">{message}</span>
-      </div>
-      <button type="button" className="btn-secondary" onClick={onDismiss}>
-        Dismiss
-      </button>
-    </div>
   );
 }
 

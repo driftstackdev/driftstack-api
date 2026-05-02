@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hardened runtime is required for notarisation. -->
+    <!-- The app's WebView fetches over HTTPS to the customer's
+         configured Driftstack API. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- WebKit's JIT needs this to JIT JavaScript inside the WebView. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <!-- The WebView creates writable executable memory pages. -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <!-- App Sandbox is OFF for now: the self-hosted GUI is a
+         developer tool that needs to talk to localhost servers, and
+         the App Store gating for sandboxing isn't relevant since we
+         distribute outside the App Store. Notarisation does not
+         require sandboxing. -->
+</dict>
+</plist>
