@@ -64,6 +64,8 @@ export const NavigateRequestSchema = z.object({
 });
 
 export type NavigateRequest = z.infer<typeof NavigateRequestSchema>;
+/** Caller-side shape: fields with server-side defaults are optional. */
+export type NavigateRequestInput = z.input<typeof NavigateRequestSchema>;
 
 export const NavigateResponseSchema = z.object({
   url: z.string().url(),
@@ -178,6 +180,8 @@ export const CaptureRequestSchema = z.object({
 });
 
 export type CaptureRequest = z.infer<typeof CaptureRequestSchema>;
+/** Caller-side shape: fields with server-side defaults are optional. */
+export type CaptureRequestInput = z.input<typeof CaptureRequestSchema>;
 
 export const CaptureResponseSchema = z.object({
   kind: CaptureKindSchema,

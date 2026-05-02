@@ -17,6 +17,9 @@
     "apps/**/src/**/*.ts",
     "apps/**/tests/**/*.ts",
     "packages/**/src/**/*.ts",
+    "packages/**/tests/**/*.ts",
+    "packages/**/examples/**/*.ts",
+    "packages/**/tsup.config.ts",
     "perf/**/*.ts"
   ],
   "exclude": ["node_modules", "dist", "build", "coverage"]

@@ -1,4 +1,8 @@
 {
   "files": [],
-  "references": [{ "path": "./apps/server" }, { "path": "./packages/api-types" }]
+  "references": [
+    { "path": "./apps/server" },
+    { "path": "./packages/api-types" },
+    { "path": "./packages/sdk-typescript" }
+  ]
 }

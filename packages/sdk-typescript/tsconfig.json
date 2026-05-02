@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../..",
+    "outDir": "dist",
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "examples/**/*",
+    "tsup.config.ts",
+    "../../apps/server/tests/integration/_helpers/**/*",
+    "../../apps/server/src/**/*",
+    "../api-types/src/**/*"
+  ],
+  "exclude": ["dist", "node_modules"]
+}

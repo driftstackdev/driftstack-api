@@ -19,6 +19,8 @@ export const PaginationQuerySchema = z.object({
 });
 
 export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;
+/** Caller-side shape — `limit` is optional (server defaults to 50). */
+export type PaginationQueryInput = z.input<typeof PaginationQuerySchema>;
 
 export const PaginatedListSchema = <T extends z.ZodTypeAny>(item: T) =>
   z.object({
