@@ -215,6 +215,54 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     });
   }
 
+  async findDeliveryById(deliveryId: string): Promise<WebhookDeliveryRow | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(webhookDeliveries)
+      .where(eq(webhookDeliveries.id, deliveryId))
+      .limit(1);
+    return row ? toDeliveryRow(row) : null;
+  }
+
+  async listDlqDeliveries(opts: { limit: number; cursor?: string }): Promise<ListDeliveriesPage> {
+    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
+    const filters = [eq(webhookDeliveries.status, 'dlq' as WebhookDeliveryStatus)];
+    if (cursorDate) filters.push(lt(webhookDeliveries.createdAt, cursorDate));
+
+    const rows = await this.database.db
+      .select()
+      .from(webhookDeliveries)
+      .where(and(...filters))
+      .orderBy(desc(webhookDeliveries.createdAt))
+      .limit(opts.limit + 1);
+
+    const hasMore = rows.length > opts.limit;
+    const items = hasMore ? rows.slice(0, opts.limit) : rows;
+    const last = items[items.length - 1];
+    return {
+      items: items.map(toDeliveryRow),
+      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+    };
+  }
+
+  async resetDeliveryToPending(deliveryId: string, at: Date): Promise<WebhookDeliveryRow | null> {
+    const [row] = await this.database.db
+      .update(webhookDeliveries)
+      .set({
+        status: 'pending',
+        attempts: 0,
+        nextAttemptAt: at,
+        lastResponseStatus: null,
+        lastResponseExcerpt: null,
+        lastError: null,
+        deliveredAt: null,
+        updatedAt: at,
+      })
+      .where(eq(webhookDeliveries.id, deliveryId))
+      .returning();
+    return row ? toDeliveryRow(row) : null;
+  }
+
   async listDeliveriesForEndpoint(
     endpointId: string,
     accountId: string,

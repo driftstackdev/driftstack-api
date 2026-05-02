@@ -195,6 +195,43 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     return Promise.resolve();
   }
 
+  findDeliveryById(deliveryId: string): Promise<WebhookDeliveryRow | null> {
+    return Promise.resolve(this.deliveries.get(deliveryId) ?? null);
+  }
+
+  listDlqDeliveries(opts: { limit: number; cursor?: string }): Promise<ListDeliveriesPage> {
+    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
+    const all = Array.from(this.deliveries.values())
+      .filter((r) => r.status === 'dlq')
+      .filter((r) => (cursorDate ? r.createdAt < cursorDate : true))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const items = all.slice(0, opts.limit);
+    const last = items[items.length - 1];
+    const hasMore = all.length > opts.limit;
+    return Promise.resolve({
+      items,
+      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+    });
+  }
+
+  resetDeliveryToPending(deliveryId: string, at: Date): Promise<WebhookDeliveryRow | null> {
+    const row = this.deliveries.get(deliveryId);
+    if (!row) return Promise.resolve(null);
+    const updated: WebhookDeliveryRow = {
+      ...row,
+      status: 'pending',
+      attempts: 0,
+      nextAttemptAt: at,
+      lastResponseStatus: null,
+      lastResponseExcerpt: null,
+      lastError: null,
+      deliveredAt: null,
+      updatedAt: at,
+    };
+    this.deliveries.set(deliveryId, updated);
+    return Promise.resolve(updated);
+  }
+
   listDeliveriesForEndpoint(
     endpointId: string,
     accountId: string,

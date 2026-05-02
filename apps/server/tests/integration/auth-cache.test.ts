@@ -20,7 +20,7 @@ import { UsageService } from '../../src/services/usage.js';
 import { InMemoryAuthCache, sha256Hex, type AuthCache } from '../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../src/services/auth-coalescer.js';
 import type { AccountContext } from '../../src/services/auth.js';
-import { WebhooksService } from '../../src/services/webhooks.js';
+import { WebhooksService, WebhooksAdminService } from '../../src/services/webhooks.js';
 import { AdminAuditService } from '../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../src/services/admin-accounts.js';
 import { InMemoryAuthRepo } from './_helpers/in-memory-auth-repo.js';
@@ -189,7 +189,9 @@ describe('auth cache — graceful degradation', () => {
     const usageService = new UsageService(usageRepo);
     const rateLimitStore = new MemoryRateLimitStore();
 
-    const webhooksService = new WebhooksService(new InMemoryWebhooksRepo());
+    const sharedWebhooksRepo = new InMemoryWebhooksRepo();
+    const webhooksService = new WebhooksService(sharedWebhooksRepo);
+    const webhooksAdminService = new WebhooksAdminService(sharedWebhooksRepo);
     const adminAuditService = new AdminAuditService(new InMemoryAdminAuditLogRepo());
     const accountsAdminService = new AccountsAdminService(
       new InMemoryAccountsAdminRepo(authRepo),
@@ -205,6 +207,7 @@ describe('auth cache — graceful degradation', () => {
       apiKeysService,
       usageService,
       webhooksService,
+      webhooksAdminService,
       adminAuditService,
       accountsAdminService,
       permissiveCors: true,
@@ -272,7 +275,9 @@ describe('auth cache — graceful degradation', () => {
     const apiKeysService = new ApiKeysService(new InMemoryApiKeysRepo(), null);
     const usageService = new UsageService(new InMemoryUsageRepo());
 
-    const webhooksService = new WebhooksService(new InMemoryWebhooksRepo());
+    const sharedWebhooksRepo = new InMemoryWebhooksRepo();
+    const webhooksService = new WebhooksService(sharedWebhooksRepo);
+    const webhooksAdminService = new WebhooksAdminService(sharedWebhooksRepo);
     const adminAuditService = new AdminAuditService(new InMemoryAdminAuditLogRepo());
     const accountsAdminService = new AccountsAdminService(
       new InMemoryAccountsAdminRepo(authRepo),
@@ -288,6 +293,7 @@ describe('auth cache — graceful degradation', () => {
       apiKeysService,
       usageService,
       webhooksService,
+      webhooksAdminService,
       adminAuditService,
       accountsAdminService,
       permissiveCors: true,

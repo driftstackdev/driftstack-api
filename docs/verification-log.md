@@ -926,3 +926,59 @@ No new D-entries — all Tier 1 inside the D-025 contract.
 Three OT endpoints landed. 248/248 tests green; lint clean; format clean; typecheck green.
 
 **Next OT commit:** webhook ops endpoints (`GET /v1/admin/webhook-deliveries/:id`, `POST :id/replay`, `GET /v1/admin/webhook-dlq`, `POST /v1/admin/webhook-dlq/:id/requeue`). Then audit-log query endpoint + rate-limit override + `GET /v1/admin/accounts/:id/usage` (period + record_type facets only). Then OpenAPI tagging + e2e cross-account suspend/unsuspend test.
+
+---
+
+## V-018 — Operational tooling: webhook admin endpoints (replay / requeue / get / DLQ list)
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Operational tooling. Third commit of the workstream.
+
+### What was built
+
+Four admin webhook endpoints under `/v1/admin/webhook-{deliveries,dlq}`:
+
+- `GET /v1/admin/webhook-deliveries/:id` — fetches one delivery row by id, no account-scoping (admin can see any account's deliveries).
+- `POST /v1/admin/webhook-deliveries/:id/replay` — resets a delivery to `status='pending'`, `attempts=0`, `next_attempt_at=now`, clears all error/last_response fields. Works for any current status (delivered, dlq, failed, etc.). Audit action `webhook_delivery.replayed`.
+- `GET /v1/admin/webhook-dlq?limit=&cursor=` — cursor-paginated cross-account list of DLQ deliveries, ordered by `created_at DESC`.
+- `POST /v1/admin/webhook-dlq/:id/requeue` — same DB op as replay BUT 409s if the target isn't in DLQ. Audit action `webhook_delivery.requeued` — distinct from replay so the audit log can answer "which DLQ items did we recover this month."
+
+Implementation:
+
+- **`WebhooksRepo` extended** with three new methods: `findDeliveryById(id)`, `listDlqDeliveries({limit, cursor?})`, `resetDeliveryToPending(id, at)`. Added to both `DrizzleWebhooksRepo` (idiomatic Drizzle UPDATE/SELECT) and `InMemoryWebhooksRepo`.
+- **`WebhooksAdminService`** in the same `services/webhooks.ts` file — `getDelivery`, `replayDelivery`, `requeueFromDlq`, `listDlq`. Each method runs `requireScope(ctx, 'admin')`. `requeueFromDlq` does a pre-check (`findDeliveryById` → assert `status === 'dlq'` → throw `ConflictError` if not) so the replay/requeue distinction is enforced even though the underlying op is identical.
+- **`apps/server/src/routes/admin-webhooks.ts`** — new route file with the same `withAudit()` wrapper pattern from `admin-accounts.ts`. The wrapper records both success and error attempts. `targetResourceId` is the public-prefixed `wdl_<uuid>` id (matches what the admin sees in the request URL).
+- **`packages/api-types/src/admin.ts`** extended with `ListDlqQuerySchema` (`limit`/`cursor`) + `ListDlqQueryInput` (per the D-022 z.input pattern).
+- **`AppDeps` gains `webhooksAdminService`.** Threaded through `buildApp`, `buildTestApp`, e2e helper, and the manual `auth-cache.test.ts` callers. The test fixture wires both `WebhooksService` and `WebhooksAdminService` against a single shared `InMemoryWebhooksRepo` so admin and customer code paths see the same delivery rows.
+
+### What tests verify it
+
+**Total test surface: 248 → 262 green** (+14 integration). New: `tests/integration/admin-webhooks.test.ts`.
+
+- 3 GET tests (200 happy path; 404 unknown id; 403 without admin scope).
+- 4 POST replay tests (delivered → pending; dlq → pending; audit row with `action=webhook_delivery.replayed`; 404 + audit-on-error).
+- 3 GET DLQ tests (returns DLQ-only rows; cursor pagination round-trip; 403 without admin scope).
+- 4 POST requeue tests (200 from DLQ; audit row with `action=webhook_delivery.requeued` distinct from replayed; 409 when target isn't in DLQ + audit-on-conflict; 404 unknown id).
+
+### Empirical findings
+
+1. **The first version of `seedDelivery` returned the wrong row on the second call.** The helper queried `getAllDeliveries()` and picked `all[0]` — when a test seeded multiple deliveries, every call returned the FIRST row, and subsequent `recordDlq` / `recordDelivered` mutations all overwrote one row's status. Fix: pick `all[all.length - 1]` (the most recently enqueued). Same class of "fixture helper has hidden state shared across calls" as V-014's worker `findEndpointById('')` placeholder bug — caught by tests that exercise multi-call shapes the helper wasn't designed for.
+
+2. **`replay` and `requeue` deliberately wrap the same DB mutation but emit different audit actions.** Treating them as one endpoint and inferring the action from current status would lose the distinction in the audit log (e.g., "did the admin requeue 5 DLQ items, or were those just normal replays?"). Two endpoints + two enum values + a single repo method is the cleanest factoring; the 409 branch in `requeueFromDlq` is the only behavioural difference at the service layer.
+
+3. **`request.ip` always returns a string in Fastify 5** (it falls back to the socket peer when `X-Forwarded-For` is absent), so the `clientIp` helper doesn't need a null guard. ESLint catches the unnecessary `?? null` — same finding as V-017.
+
+4. **`satisfies` clauses on the public-shape mapping** (`event_type: row.eventType satisfies WebhookEventType`) gave us the type assertion benefit (TS rejects an unsupported event type slipping through) without the `as` cast that ESLint's `no-unnecessary-type-assertion` rule would flag. Worth using elsewhere in the public-mapping helpers as a pattern.
+
+5. **Cross-account DLQ visibility is correct** but worth recording: an admin sees DLQ entries from EVERY account, not just their own. This is the intended posture for ops tooling — the founder needs to debug a customer's webhook problem without owning their account. The audit log captures every DLQ access; the route doesn't filter by `ctx.account.id`.
+
+### Decisions made (cross-link)
+
+No new D-entries — all Tier 1 inside the D-025 contract.
+
+### Status
+
+Four OT endpoints landed. 262/262 tests green; lint clean; format clean; typecheck green.
+
+**Next OT commit:** audit-log query endpoint (`GET /v1/admin/audit-log`) + rate-limit override (`POST /v1/admin/accounts/:id/quota-override` + clear) + `GET /v1/admin/accounts/:id/usage` (period + record_type facets only). Then OpenAPI tagging + e2e cross-account flow test.

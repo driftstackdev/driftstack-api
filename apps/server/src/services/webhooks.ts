@@ -129,6 +129,18 @@ export interface WebhooksRepo {
     accountId: string,
     opts: { limit: number; cursor?: string; status?: WebhookDeliveryStatus },
   ): Promise<ListDeliveriesPage>;
+
+  // Admin / operational tooling
+  /** Look up a delivery by id WITHOUT account-scope. Admin-only callers. */
+  findDeliveryById(deliveryId: string): Promise<WebhookDeliveryRow | null>;
+  /** List dlq deliveries across all accounts, paginated by createdAt DESC. */
+  listDlqDeliveries(opts: { limit: number; cursor?: string }): Promise<ListDeliveriesPage>;
+  /**
+   * Reset a delivery to status='pending' so the worker picks it up.
+   * Resets attempts to 0 and nextAttemptAt to `at`. Returns the updated
+   * row, or null if the delivery doesn't exist.
+   */
+  resetDeliveryToPending(deliveryId: string, at: Date): Promise<WebhookDeliveryRow | null>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -238,6 +250,66 @@ export class WebhooksService {
     }
 
     return endpoints.length;
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Admin / operational tooling service. Admin-only callers; bypasses
+// account-scoping (an admin can replay any account's delivery and list
+// the cross-account DLQ). Audit logging is the route's responsibility.
+// ───────────────────────────────────────────────────────────────────────────
+
+export class WebhooksAdminService {
+  constructor(private readonly repo: WebhooksRepo) {}
+
+  async getDelivery(ctx: AccountContext, deliveryId: string): Promise<WebhookDeliveryRow> {
+    throwIfMissingScope(ctx, 'admin');
+    const row = await this.repo.findDeliveryById(deliveryId);
+    if (!row) throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
+    return row;
+  }
+
+  /**
+   * Replay any delivery (regardless of current status) — sets it back
+   * to 'pending' with attempts=0 and nextAttemptAt=now. Used for
+   * /webhook-deliveries/:id/replay.
+   */
+  async replayDelivery(ctx: AccountContext, deliveryId: string): Promise<WebhookDeliveryRow> {
+    throwIfMissingScope(ctx, 'admin');
+    const updated = await this.repo.resetDeliveryToPending(deliveryId, new Date());
+    if (!updated) throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
+    return updated;
+  }
+
+  /**
+   * Requeue a DLQ delivery. Same DB op as replayDelivery, but rejects
+   * if the target isn't currently in DLQ — the audit-log distinction
+   * matters even though the underlying mutation is identical.
+   */
+  async requeueFromDlq(ctx: AccountContext, deliveryId: string): Promise<WebhookDeliveryRow> {
+    throwIfMissingScope(ctx, 'admin');
+    const current = await this.repo.findDeliveryById(deliveryId);
+    if (!current) throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
+    if (current.status !== 'dlq') {
+      throw new ConflictError(
+        `Webhook delivery "${deliveryId}" is not in DLQ (status=${current.status}). Use /webhook-deliveries/:id/replay to re-fire deliveries that aren't in DLQ.`,
+      );
+    }
+    const updated = await this.repo.resetDeliveryToPending(deliveryId, new Date());
+    // updated is guaranteed non-null because we just found the row above —
+    // but the type narrows here, so guard explicitly for the noUncheckedIndexedAccess
+    // family of strict checks.
+    if (!updated)
+      throw new NotFoundError(`Webhook delivery "${deliveryId}" disappeared mid-requeue.`);
+    return updated;
+  }
+
+  listDlq(
+    ctx: AccountContext,
+    opts: { limit: number; cursor?: string },
+  ): Promise<ListDeliveriesPage> {
+    throwIfMissingScope(ctx, 'admin');
+    return this.repo.listDlqDeliveries(opts);
   }
 }
 

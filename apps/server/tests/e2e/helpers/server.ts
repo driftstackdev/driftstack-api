@@ -22,7 +22,7 @@ import { MockDriver } from '../../../src/drivers/mock.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
-import { WebhooksService } from '../../../src/services/webhooks.js';
+import { WebhooksService, WebhooksAdminService } from '../../../src/services/webhooks.js';
 import { WebhookDeliveryWorker } from '../../../src/services/webhook-worker.js';
 import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
@@ -106,6 +106,7 @@ export async function startTestServer(): Promise<TestServer> {
 
   const webhooksRepo = new DrizzleWebhooksRepo(database);
   const webhooksService = new WebhooksService(webhooksRepo);
+  const webhooksAdminService = new WebhooksAdminService(webhooksRepo);
 
   const adminAuditRepo = new DrizzleAdminAuditLogRepo(database);
   const adminAuditService = new AdminAuditService(adminAuditRepo);
@@ -137,6 +138,7 @@ export async function startTestServer(): Promise<TestServer> {
     apiKeysService,
     usageService,
     webhooksService,
+    webhooksAdminService,
     adminAuditService,
     accountsAdminService,
     rateLimitStore,

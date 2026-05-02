@@ -14,7 +14,7 @@ import { MockDriver } from '../../../src/drivers/mock.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
-import { WebhooksService } from '../../../src/services/webhooks.js';
+import { WebhooksService, WebhooksAdminService } from '../../../src/services/webhooks.js';
 import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
 import { InMemoryAuthCache } from '../../../src/services/auth-cache.js';
@@ -119,6 +119,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
 
   const webhooksRepo = new InMemoryWebhooksRepo();
   const webhooksService = new WebhooksService(webhooksRepo);
+  const webhooksAdminService = new WebhooksAdminService(webhooksRepo);
 
   const adminAuditRepo = new InMemoryAdminAuditLogRepo();
   const adminAuditService = new AdminAuditService(adminAuditRepo);
@@ -143,6 +144,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     apiKeysService,
     usageService,
     webhooksService,
+    webhooksAdminService,
     adminAuditService,
     accountsAdminService,
     permissiveCors: true,

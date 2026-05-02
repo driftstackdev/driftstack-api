@@ -41,6 +41,17 @@ export const AdminAccountResponseSchema = AccountSchema;
 export type AdminAccountResponse = z.infer<typeof AdminAccountResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
+// Webhook admin (replay / requeue / dlq list)
+// ───────────────────────────────────────────────────────────────────────────
+
+export const ListDlqQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().optional(),
+});
+export type ListDlqQuery = z.infer<typeof ListDlqQuerySchema>;
+export type ListDlqQueryInput = z.input<typeof ListDlqQuerySchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
 // Admin audit log
 // ───────────────────────────────────────────────────────────────────────────
 

@@ -16,7 +16,7 @@ import type { RateLimitStore } from '../services/rate-limit.js';
 import type { SessionsService } from '../services/sessions.js';
 import type { ApiKeysService } from '../services/api-keys.js';
 import type { UsageService } from '../services/usage.js';
-import type { WebhooksService } from '../services/webhooks.js';
+import type { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
 import type { AdminAuditService } from '../services/admin-audit.js';
 import type { AccountsAdminService } from '../services/admin-accounts.js';
 import authPlugin from '../middleware/auth.js';
@@ -28,6 +28,7 @@ import { registerAdminRoutes } from '../routes/admin.js';
 import { registerOpenApiRoutes } from '../routes/openapi.js';
 import { registerWebhookRoutes } from '../routes/webhooks.js';
 import { registerAdminAccountsRoutes } from '../routes/admin-accounts.js';
+import { registerAdminWebhookRoutes } from '../routes/admin-webhooks.js';
 
 export interface AppDeps {
   logger: Logger;
@@ -39,6 +40,7 @@ export interface AppDeps {
   apiKeysService: ApiKeysService;
   usageService: UsageService;
   webhooksService: WebhooksService;
+  webhooksAdminService: WebhooksAdminService;
   adminAuditService: AdminAuditService;
   accountsAdminService: AccountsAdminService;
   /** When true, register a permissive CORS policy. Production locks this down. */
@@ -86,6 +88,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerWebhookRoutes(app, { service: deps.webhooksService });
   registerAdminAccountsRoutes(app, {
     accountsAdmin: deps.accountsAdminService,
+    audit: deps.adminAuditService,
+  });
+  registerAdminWebhookRoutes(app, {
+    webhooksAdmin: deps.webhooksAdminService,
     audit: deps.adminAuditService,
   });
   await registerOpenApiRoutes(app);
