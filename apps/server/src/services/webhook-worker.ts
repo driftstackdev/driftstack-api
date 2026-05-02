@@ -1,0 +1,260 @@
+// Webhook delivery worker.
+//
+// Long-running loop:
+//   1. Claim a batch of pending deliveries whose nextAttemptAt is past
+//   2. For each: build the signed POST, send via fetch, observe response
+//   3. On 2xx → recordDelivered (resets endpoint.consecutiveFailures)
+//   4. On non-2xx / network / timeout → recordRetry (if attempts < MAX) or
+//      recordDlq (if attempts == MAX). Both bump endpoint.consecutiveFailures.
+//   5. If endpoint.consecutiveFailures crosses the auto-disable threshold,
+//      mark the endpoint disabled.
+//
+// The loop is process-local; in production we'd run one worker per app
+// instance and rely on SELECT...FOR UPDATE SKIP LOCKED to coordinate
+// (already in DrizzleWebhooksRepo.claim).
+
+import type { Logger } from '../lib/logger.js';
+import { signWebhookPayload } from '../lib/webhook-signing.js';
+import type { WebhookDeliveryRow, WebhookEndpointRow, WebhooksRepo } from './webhooks.js';
+
+export interface WebhookWorkerConfig {
+  repo: WebhooksRepo;
+  logger: Logger;
+  /** Override the global fetch (test seam). */
+  fetch?: typeof fetch;
+  /** Override sleep — useful for tight test loops. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Override "now" — useful for deterministic backoff tests. */
+  now?: () => Date;
+  /** Per-attempt delivery timeout (ms). Default 10s. */
+  deliveryTimeoutMs?: number;
+  /** Empty-claim sleep (ms). Default 2s. */
+  idleSleepMs?: number;
+  /** Batch size per claim. Default 25. */
+  batchSize?: number;
+}
+
+const MAX_ATTEMPTS = 5; // 0..5 inclusive (initial + 5 retries) → 6 total tries
+
+/**
+ * Backoff schedule per attempt-index AFTER a failure. Index = the next
+ * attempt number (1 = first retry, 5 = sixth attempt = DLQ boundary).
+ *   1: 1 min
+ *   2: 5 min
+ *   3: 15 min
+ *   4: 30 min
+ *   5: 60 min
+ */
+const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = {
+  1: 60_000,
+  2: 5 * 60_000,
+  3: 15 * 60_000,
+  4: 30 * 60_000,
+  5: 60 * 60_000,
+};
+
+const AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES = 50;
+
+const DEFAULT_TIMEOUT_MS = 10_000;
+const DEFAULT_IDLE_SLEEP_MS = 2_000;
+const DEFAULT_BATCH_SIZE = 25;
+
+export class WebhookDeliveryWorker {
+  private running = false;
+
+  constructor(private readonly config: WebhookWorkerConfig) {}
+
+  /** Start the loop. Returns when stop() is called. */
+  async run(): Promise<void> {
+    if (this.running) return;
+    this.running = true;
+    const sleep = this.config.sleep ?? defaultSleep;
+    const idleSleepMs = this.config.idleSleepMs ?? DEFAULT_IDLE_SLEEP_MS;
+
+    while (this.running) {
+      const claimed = await this.config.repo.claim({
+        batchSize: this.config.batchSize ?? DEFAULT_BATCH_SIZE,
+        now: this.now(),
+      });
+      if (claimed.length === 0) {
+        await sleep(idleSleepMs);
+        continue;
+      }
+      await Promise.all(claimed.map((d) => this.deliver(d)));
+    }
+  }
+
+  stop(): void {
+    this.running = false;
+  }
+
+  /** Tick once: claim + deliver one batch synchronously. Used in tests. */
+  async tickOnce(): Promise<{ claimed: number; outcomes: DeliveryOutcome[] }> {
+    const claimed = await this.config.repo.claim({
+      batchSize: this.config.batchSize ?? DEFAULT_BATCH_SIZE,
+      now: this.now(),
+    });
+    const outcomes = await Promise.all(claimed.map((d) => this.deliver(d)));
+    return { claimed: claimed.length, outcomes };
+  }
+
+  private async deliver(delivery: WebhookDeliveryRow): Promise<DeliveryOutcome> {
+    const fetchImpl = this.config.fetch ?? fetch;
+    const timeout = this.config.deliveryTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+    // Look up the endpoint to get the current secret + active flag.
+    // claim returns the delivery row but not the endpoint; we fetch the
+    // endpoint by id (worker-only path, not account-scoped). Single SELECT
+    // per delivery — could be batched in a future optimisation.
+    const endpoint = await this.config.repo.findEndpointById(delivery.webhookId);
+
+    // Fallback: endpoint not in subscriber set (might have been deleted /
+    // disabled between enqueue and claim). Treat as DLQ — there's no
+    // recoverable path.
+    if (!endpoint || !endpoint.active || endpoint.disabledAt !== null) {
+      await this.config.repo.recordDlq(delivery.id, {
+        responseStatus: null,
+        lastError: 'endpoint disabled or deleted between enqueue and claim',
+        at: this.now(),
+      });
+      this.config.logger.warn(
+        { deliveryId: delivery.id, webhookId: delivery.webhookId },
+        'webhook delivery → DLQ (endpoint missing/disabled)',
+      );
+      return { kind: 'dlq', delivery };
+    }
+
+    const body = JSON.stringify(delivery.payload);
+    const sigHeader = signWebhookPayload({ body, secret: endpoint.secret });
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+
+    let response: Response | null = null;
+    let networkError: Error | null = null;
+    try {
+      response = await fetchImpl(endpoint.url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-driftstack-signature': sigHeader,
+          'x-driftstack-event-id': delivery.eventId,
+          'x-driftstack-event-type': delivery.eventType,
+          'user-agent': 'driftstack-webhooks/1.0',
+        },
+        body,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      networkError = err instanceof Error ? err : new Error(String(err));
+    } finally {
+      clearTimeout(timer);
+    }
+
+    return this.handleOutcome(delivery, endpoint, response, networkError);
+  }
+
+  private async handleOutcome(
+    delivery: WebhookDeliveryRow,
+    endpoint: WebhookEndpointRow,
+    response: Response | null,
+    networkError: Error | null,
+  ): Promise<DeliveryOutcome> {
+    const at = this.now();
+
+    if (response && response.ok) {
+      await this.config.repo.recordDelivered(delivery.id, {
+        responseStatus: response.status,
+        at,
+      });
+      this.config.logger.info(
+        {
+          deliveryId: delivery.id,
+          webhookId: endpoint.id,
+          status: response.status,
+          attempt: delivery.attempts + 1,
+        },
+        'webhook delivered',
+      );
+      return { kind: 'delivered', delivery, status: response.status };
+    }
+
+    const responseStatus = response?.status ?? null;
+    const responseExcerpt = response ? await readExcerpt(response) : null;
+    const lastError = networkError
+      ? networkError.name === 'AbortError'
+        ? 'timeout'
+        : networkError.message
+      : null;
+
+    const nextAttemptIndex = delivery.attempts + 1;
+
+    if (nextAttemptIndex >= MAX_ATTEMPTS) {
+      await this.config.repo.recordDlq(delivery.id, {
+        responseStatus,
+        lastError,
+        at,
+      });
+      this.config.logger.warn(
+        {
+          deliveryId: delivery.id,
+          webhookId: endpoint.id,
+          status: responseStatus,
+          attempts: nextAttemptIndex,
+          lastError,
+        },
+        'webhook delivery → DLQ (max attempts)',
+      );
+      // Auto-disable check
+      if (endpoint.consecutiveFailures + 1 >= AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES) {
+        await this.config.repo.disableEndpoint(endpoint.id, at);
+      }
+      return { kind: 'dlq', delivery };
+    }
+
+    const backoffMs = BACKOFF_MS_BY_ATTEMPT[nextAttemptIndex] ?? 60_000;
+    const jitterMs = Math.floor(Math.random() * backoffMs * 0.15);
+    const nextAttemptAt = new Date(at.getTime() + backoffMs + jitterMs);
+
+    await this.config.repo.recordRetry(delivery.id, {
+      responseStatus,
+      responseExcerpt,
+      lastError,
+      attempts: nextAttemptIndex,
+      nextAttemptAt,
+    });
+    this.config.logger.warn(
+      {
+        deliveryId: delivery.id,
+        webhookId: endpoint.id,
+        status: responseStatus,
+        attempts: nextAttemptIndex,
+        nextAttemptAt: nextAttemptAt.toISOString(),
+      },
+      'webhook delivery scheduled for retry',
+    );
+    return { kind: 'retry', delivery, nextAttemptAt };
+  }
+
+  private now(): Date {
+    return this.config.now ? this.config.now() : new Date();
+  }
+}
+
+export type DeliveryOutcome =
+  | { kind: 'delivered'; delivery: WebhookDeliveryRow; status: number }
+  | { kind: 'retry'; delivery: WebhookDeliveryRow; nextAttemptAt: Date }
+  | { kind: 'dlq'; delivery: WebhookDeliveryRow };
+
+async function readExcerpt(response: Response): Promise<string | null> {
+  try {
+    const text = await response.text();
+    return text.slice(0, 4096);
+  } catch {
+    return null;
+  }
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
