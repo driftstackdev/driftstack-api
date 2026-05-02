@@ -131,3 +131,11 @@ If any step fails, fix root cause — don't paper over with `// eslint-disable`,
 WebKit Agent #1 and you are independent. Different repos, different stacks, no shared files. The mock WebKit driver abstracts the eventual integration. When the WebKit fork closes Phase 2, the founder will coordinate the swap of mock driver for real driver.
 
 If you're tempted to look at WebKit fork details: don't. Mock driver is the contract.
+
+The founder triages both agents' work via a separate coordinating chat. Anything the founder needs to review or paste into that chat — milestone summaries, blocker write-ups, decision asks, end-of-session reports — must also be copied to the macOS clipboard via `pbcopy`, with the first line tagged:
+
+```
+[Agent 2 — Driftstack API + control plane]
+```
+
+This is non-optional — the chat agent triages outputs from both agents and tagging avoids attribution confusion. The clipboard content must be self-contained: the chat agent can't see prior turns from this session, so recap the relevant context rather than referring to earlier work. Print the same content to the chat too; `pbcopy` is additive, not a replacement.
