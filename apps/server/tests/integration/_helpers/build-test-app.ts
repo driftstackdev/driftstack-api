@@ -54,7 +54,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     id: accountId,
     email: 'tester@driftstack.local',
     name: 'Tester',
-    tier: opts.tier ?? 'pro',
+    tier: opts.tier ?? 'builder',
     status: opts.accountStatus ?? 'active',
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),

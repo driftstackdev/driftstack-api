@@ -17,7 +17,14 @@ import {
 // Enums
 // ───────────────────────────────────────────────────────────────────────────
 
-export const accountTier = pgEnum('account_tier', ['free', 'starter', 'pro', 'enterprise']);
+export const accountTier = pgEnum('account_tier', [
+  'free',
+  'starter',
+  'solo',
+  'builder',
+  'scale',
+  'enterprise',
+]);
 
 export const accountStatus = pgEnum('account_status', ['active', 'suspended', 'deleted']);
 

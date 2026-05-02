@@ -30,6 +30,8 @@ const ALL_TYPES: UsageRecordType[] = [
 // Tier quotas. null = unmetered (enterprise-only by default).
 // ───────────────────────────────────────────────────────────────────────────
 
+// Locked pricing model — see D-019. Numbers scale roughly with the
+// monthly price + concurrency limit per tier; enterprise is unmetered.
 const TIER_QUOTAS: Record<AccountTier, Record<UsageRecordType, number | null>> = {
   free: {
     session_minute: 60,
@@ -40,6 +42,14 @@ const TIER_QUOTAS: Record<AccountTier, Record<UsageRecordType, number | null>> =
     screenshot_capture: 50,
   },
   starter: {
+    session_minute: 200,
+    navigate: 500,
+    interact: 1_000,
+    wait: 1_000,
+    state_capture: 500,
+    screenshot_capture: 250,
+  },
+  solo: {
     session_minute: 1_500,
     navigate: 5_000,
     interact: 10_000,
@@ -47,7 +57,15 @@ const TIER_QUOTAS: Record<AccountTier, Record<UsageRecordType, number | null>> =
     state_capture: 5_000,
     screenshot_capture: 2_500,
   },
-  pro: {
+  builder: {
+    session_minute: 6_000,
+    navigate: 25_000,
+    interact: 50_000,
+    wait: 50_000,
+    state_capture: 25_000,
+    screenshot_capture: 12_500,
+  },
+  scale: {
     session_minute: 30_000,
     navigate: 100_000,
     interact: 200_000,

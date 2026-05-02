@@ -112,7 +112,7 @@ describe('GET /v1/sessions', () => {
   });
 
   it('lists created sessions in reverse-chrono order', async () => {
-    fx = await buildTestApp({ tier: 'pro' });
+    fx = await buildTestApp({ tier: 'builder' });
     await createSession(fx, { label: 'a' });
     await createSession(fx, { label: 'b' });
     await createSession(fx, { label: 'c' });
@@ -297,8 +297,8 @@ describe('DELETE /v1/sessions/:id', () => {
 
 describe('account scoping', () => {
   it('a session created by one account is invisible to another', async () => {
-    const a = await buildTestApp({ tier: 'pro' });
-    const b = await buildTestApp({ tier: 'pro' });
+    const a = await buildTestApp({ tier: 'builder' });
+    const b = await buildTestApp({ tier: 'builder' });
     try {
       const sessionA = await createSession(a);
       // B tries to navigate A's session id — should 404 (not 403, to avoid

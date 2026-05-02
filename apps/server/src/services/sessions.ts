@@ -23,10 +23,13 @@ import { ConcurrencyLimitError, NotFoundError, SessionDestroyedError } from '../
 // Concurrent session limits per tier
 // ───────────────────────────────────────────────────────────────────────────
 
+// Locked pricing model — see D-019.
 const TIER_CONCURRENT_SESSION_LIMITS: Record<AccountTier, number> = {
   free: 1,
-  starter: 5,
-  pro: 20,
+  starter: 2,
+  solo: 5,
+  builder: 15,
+  scale: 50,
   enterprise: 100,
 };
 

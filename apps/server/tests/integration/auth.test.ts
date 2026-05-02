@@ -26,7 +26,7 @@ describe('auth pipeline (GET /v1/whoami)', () => {
     expect(res.headers['x-ratelimit-remaining']).toBeTruthy();
 
     const body = res.json<Record<string, unknown>>();
-    expect(body.tier).toBe('pro');
+    expect(body.tier).toBe('builder');
     expect(body.scopes).toEqual(['read', 'write', 'admin']);
   });
 

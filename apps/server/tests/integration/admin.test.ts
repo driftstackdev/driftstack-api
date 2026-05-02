@@ -142,7 +142,7 @@ describe('DELETE /v1/api-keys/:id', () => {
 
 describe('GET /v1/usage', () => {
   it('200 returns current-period summary with zero totals + tier quotas', async () => {
-    fx = await buildTestApp({ tier: 'pro' });
+    fx = await buildTestApp({ tier: 'scale' });
     const res = await fx.app.inject({
       method: 'GET',
       url: '/v1/usage',
@@ -150,8 +150,9 @@ describe('GET /v1/usage', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<Record<string, unknown>>();
-    expect(body.tier).toBe('pro');
+    expect(body.tier).toBe('scale');
     expect((body.totals as Record<string, number>).navigate).toBe(0);
+    // 'scale' tier inherited the quota numbers the old 'pro' had (D-019).
     expect((body.quotas as Record<string, number>).navigate).toBe(100_000);
   });
 

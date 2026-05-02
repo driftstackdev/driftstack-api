@@ -243,7 +243,7 @@ describe('UsagePeriodSummarySchema', () => {
     const r = UsagePeriodSummarySchema.parse({
       period_start: '2026-05-01T00:00:00Z',
       period_end: '2026-06-01T00:00:00Z',
-      tier: 'pro',
+      tier: 'builder',
       totals: { navigate: 12, interact: 4 },
       quotas: { navigate: 1000, interact: null },
     });

@@ -136,22 +136,25 @@ describe('MemoryRateLimitStore.consume', () => {
 
 describe('bucketConfigFor', () => {
   it('returns tier-specific bucket when defined', () => {
-    const cfg = bucketConfigFor('pro', 'sessions:create');
+    const cfg = bucketConfigFor('scale', 'sessions:create');
     expect(cfg.capacity).toBe(120);
     expect(cfg.refillPerSecond).toBeCloseTo(2);
   });
 
   it('falls back to the tier global bucket for unknown bucket keys', () => {
-    const cfg = bucketConfigFor('starter', 'unknown:bucket');
+    const cfg = bucketConfigFor('solo', 'unknown:bucket');
     expect(cfg.capacity).toBe(600);
     expect(cfg.refillPerSecond).toBe(10);
   });
 
-  it('enterprise tier scales above pro', () => {
-    const pro = bucketConfigFor('pro', 'global');
-    const ent = bucketConfigFor('enterprise', 'global');
-    expect(ent.capacity).toBeGreaterThan(pro.capacity);
-    expect(ent.refillPerSecond).toBeGreaterThan(pro.refillPerSecond);
+  it('tiers scale monotonically up to enterprise', () => {
+    const tiers = ['free', 'starter', 'solo', 'builder', 'scale', 'enterprise'] as const;
+    let prev = 0;
+    for (const t of tiers) {
+      const cfg = bucketConfigFor(t, 'global');
+      expect(cfg.capacity).toBeGreaterThan(prev);
+      prev = cfg.capacity;
+    }
   });
 });
 

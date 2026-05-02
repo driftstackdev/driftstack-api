@@ -122,6 +122,27 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Tier:** 1.
 - **V-log:** V-003.
 
+## D-019 — Six-tier locked pricing model
+
+- **Decision:** AccountTier moves from a 4-value enum (`free / starter / pro / enterprise`) to the 6-value locked-pricing model: `free / starter / solo / builder / scale / enterprise`. Concurrency limits, monthly quotas, and rate-limit defaults are scaled per tier:
+
+  | tier       | $/mo  | concurrent   | global RL capacity / refill | navigate quota |
+  | ---------- | ----- | ------------ | --------------------------- | -------------- |
+  | free       | trial | 1            | 60 / 1 rps                  | 100            |
+  | starter    | $39   | 2            | 120 / 2 rps                 | 500            |
+  | solo       | $99   | 5            | 600 / 10 rps                | 5,000          |
+  | builder    | $299  | 15           | 1,800 / 30 rps              | 25,000         |
+  | scale      | $999  | 50           | 6,000 / 100 rps             | 100,000        |
+  | enterprise | $3k+  | 100 (custom) | 60,000 / 1000 rps           | unmetered      |
+
+  Other quota types (session_minute, interact, wait, state_capture, screenshot_capture) follow the same proportional scaling — see `apps/server/src/services/usage.ts`.
+
+  Old `pro` rows are mapped to `builder` in the migration as the closest equivalent (15 concurrent vs old pro's 20). `scale` tier inherited the old `pro` quota numbers (navigate=100k, etc.) since those were already calibrated for an upper-tier load.
+
+- **Reasoning:** founder-set locked pricing — the four-tier model in V-001 to V-007 was a placeholder; the actual pricing matrix has six tiers with specific concurrency caps. Without correct tier semantics every rate-limit and quota test was asserting against the wrong contract; without a migration any DB carrying old `pro` rows would break on first `tier::account_tier` cast.
+- **Tier:** 3 (founder-set business model).
+- **V-log:** V-008.
+
 ## D-018 — Driftstack-internal Fastify plugins use the callback `done` form, not async
 
 - **Decision:** plugins authored in this repo (auth, rate-limit, request-id) accept `(app, opts, done)` and call `done()` once setup is complete; they are not declared `async`. External plugins (`@fastify/cors`, `@fastify/helmet`) keep their published signatures.

@@ -55,7 +55,21 @@ export type SessionId = z.infer<typeof SessionIdSchema>;
 // are tier-keyed.
 // ───────────────────────────────────────────────────────────────────────────
 
-export const AccountTierSchema = z.enum(['free', 'starter', 'pro', 'enterprise']);
+// Locked pricing model (six tiers):
+//   - free      trial / sandbox
+//   - starter   $39/mo
+//   - solo      $99/mo
+//   - builder   $299/mo
+//   - scale     $999/mo
+//   - enterprise  $3k+/mo, custom
+export const AccountTierSchema = z.enum([
+  'free',
+  'starter',
+  'solo',
+  'builder',
+  'scale',
+  'enterprise',
+]);
 export type AccountTier = z.infer<typeof AccountTierSchema>;
 
 export const ApiKeyScopeSchema = z.enum(['read', 'write', 'admin']);

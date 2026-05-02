@@ -25,16 +25,26 @@ export interface BucketConfig {
   refillPerSecond: number;
 }
 
+// Locked pricing model — see D-019. Capacities + refill rates scale roughly
+// with $/mo and concurrency limit per tier.
 const TIER_DEFAULTS: Record<AccountTier, Record<string, BucketConfig>> = {
   free: {
     global: { capacity: 60, refillPerSecond: 1 },
     'sessions:create': { capacity: 5, refillPerSecond: 1 / 60 }, // 1/min
   },
   starter: {
+    global: { capacity: 120, refillPerSecond: 2 },
+    'sessions:create': { capacity: 10, refillPerSecond: 1 / 30 }, // 2/min
+  },
+  solo: {
     global: { capacity: 600, refillPerSecond: 10 },
     'sessions:create': { capacity: 30, refillPerSecond: 1 / 6 }, // 10/min
   },
-  pro: {
+  builder: {
+    global: { capacity: 1_800, refillPerSecond: 30 },
+    'sessions:create': { capacity: 60, refillPerSecond: 1 }, // 60/min
+  },
+  scale: {
     global: { capacity: 6_000, refillPerSecond: 100 },
     'sessions:create': { capacity: 120, refillPerSecond: 2 }, // 120/min
   },
