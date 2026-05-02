@@ -15,12 +15,18 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   ChangeTierRequestSchema,
+  ClearQuotaOverrideQuerySchema,
+  SetQuotaOverrideRequestSchema,
   SuspendAccountRequestSchema,
   UnsuspendAccountRequestSchema,
 } from '@driftstack/api-types';
 import type { AccountsAdminService } from '../services/admin-accounts.js';
 import type { AdminAuditService, AdminAuditAction } from '../services/admin-audit.js';
 import type { AccountRow } from '../services/auth.js';
+import type {
+  RateLimitOverrideRecord,
+  RateLimitOverridesService,
+} from '../services/rate-limit-overrides.js';
 import type { UsageService, UsageSummary } from '../services/usage.js';
 import { BadRequestError } from '../lib/errors.js';
 
@@ -43,6 +49,19 @@ function publicAccount(row: AccountRow): Record<string, unknown> {
     status: row.status,
     created_at: row.createdAt.toISOString(),
     updated_at: row.updatedAt.toISOString(),
+  };
+}
+
+function publicQuotaOverride(r: RateLimitOverrideRecord): Record<string, unknown> {
+  return {
+    account_id: `acc_${r.accountId}`,
+    bucket_key: r.bucketKey,
+    capacity: r.capacity,
+    refill_per_second: r.refillPerSecond,
+    reason: r.reason,
+    expires_at: r.expiresAt.toISOString(),
+    created_at: r.createdAt.toISOString(),
+    updated_at: r.updatedAt.toISOString(),
   };
 }
 
@@ -70,6 +89,7 @@ function clientIp(request: FastifyRequest): string | null {
 export interface AdminAccountsRoutesOptions {
   accountsAdmin: AccountsAdminService;
   usage: UsageService;
+  rateLimitOverrides: RateLimitOverridesService;
   audit: AdminAuditService;
 }
 
@@ -77,7 +97,7 @@ export function registerAdminAccountsRoutes(
   app: FastifyInstance,
   opts: AdminAccountsRoutesOptions,
 ): void {
-  const { accountsAdmin, usage, audit } = opts;
+  const { accountsAdmin, usage, rateLimitOverrides, audit } = opts;
 
   // Helper that wraps a mutation with audit-on-success + audit-on-error.
   // The route logic stays focused on the action; the wrapper enforces
@@ -208,4 +228,153 @@ export function registerAdminAccountsRoutes(
       return publicUsage(summary, target.id);
     },
   );
+
+  // ── POST /v1/admin/accounts/:id/quota-override ─────────────────────────
+  // Set or replace a per-account, per-bucket rate-limit override with a
+  // duration (seconds). Override is loaded into AccountContext at auth
+  // time and consulted by rateLimitConsume; D-020 cache invalidation
+  // makes the change effective on the next auth read.
+  app.post<{ Params: { id: string } }>(
+    '/v1/admin/accounts/:id/quota-override',
+    {
+      preHandler: [app.requireAuth, app.rateLimit('global')],
+    },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const accountId = uuidFromPrefixedId(request.params.id, 'acc');
+      const body = SetQuotaOverrideRequestSchema.parse(request.body ?? {});
+
+      // Confirm target exists before recording. (RateLimitOverridesService
+      // would write fine without the existence check, but a clean 404
+      // on unknown account matches the rest of the admin surface.)
+      await accountsAdmin.getAccount(ctx, accountId);
+
+      const expiresAt = new Date(Date.now() + body.duration_seconds * 1000);
+
+      const inputPayload: Record<string, unknown> = {
+        bucket_key: body.bucket_key,
+        capacity: body.capacity,
+        refill_per_second: body.refill_per_second,
+        duration_seconds: body.duration_seconds,
+        ...(body.reason ? { reason: body.reason } : {}),
+      };
+
+      const record = await withAuditOverride(
+        request,
+        'rate_limit_override.set',
+        accountId,
+        body.bucket_key,
+        inputPayload,
+        () =>
+          rateLimitOverrides.set(ctx, {
+            accountId,
+            bucketKey: body.bucket_key,
+            capacity: body.capacity,
+            refillPerSecond: body.refill_per_second,
+            expiresAt,
+            ...(body.reason ? { reason: body.reason } : {}),
+          }),
+      );
+      return publicQuotaOverride(record);
+    },
+  );
+
+  // ── DELETE /v1/admin/accounts/:id/quota-override ───────────────────────
+  app.delete<{ Params: { id: string } }>(
+    '/v1/admin/accounts/:id/quota-override',
+    {
+      preHandler: [app.requireAuth, app.rateLimit('global')],
+    },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const accountId = uuidFromPrefixedId(request.params.id, 'acc');
+      const query = ClearQuotaOverrideQuerySchema.parse(request.query ?? {});
+
+      await withAuditOverrideClear(request, accountId, query.bucket_key, () =>
+        rateLimitOverrides.clear(ctx, accountId, query.bucket_key),
+      );
+      return reply.code(204).send();
+    },
+  );
+
+  // ─── helpers for override-specific audit shape ──────────────────────────
+
+  async function withAuditOverride(
+    request: FastifyRequest,
+    action: AdminAuditAction,
+    targetAccountId: string,
+    bucketKey: string,
+    inputPayload: Record<string, unknown>,
+    perform: () => Promise<RateLimitOverrideRecord>,
+  ): Promise<RateLimitOverrideRecord> {
+    const ctx = request.account;
+    if (!ctx) throw new Error('account context missing after requireAuth');
+    try {
+      const record = await perform();
+      await audit.record({
+        adminAccountId: ctx.account.id,
+        adminKeyId: ctx.apiKey.id,
+        action,
+        targetAccountId,
+        targetResourceId: bucketKey,
+        inputPayload,
+        result: 'success',
+        ipAddress: clientIp(request),
+      });
+      return record;
+    } catch (err) {
+      const code =
+        err instanceof Error && err.name ? err.name.toLowerCase().replace(/error$/, '') : 'unknown';
+      await audit.record({
+        adminAccountId: ctx.account.id,
+        adminKeyId: ctx.apiKey.id,
+        action,
+        targetAccountId,
+        targetResourceId: bucketKey,
+        inputPayload,
+        result: `error: ${code}`,
+        ipAddress: clientIp(request),
+      });
+      throw err;
+    }
+  }
+
+  async function withAuditOverrideClear(
+    request: FastifyRequest,
+    targetAccountId: string,
+    bucketKey: string,
+    perform: () => Promise<void>,
+  ): Promise<void> {
+    const ctx = request.account;
+    if (!ctx) throw new Error('account context missing after requireAuth');
+    try {
+      await perform();
+      await audit.record({
+        adminAccountId: ctx.account.id,
+        adminKeyId: ctx.apiKey.id,
+        action: 'rate_limit_override.cleared',
+        targetAccountId,
+        targetResourceId: bucketKey,
+        inputPayload: { bucket_key: bucketKey },
+        result: 'success',
+        ipAddress: clientIp(request),
+      });
+    } catch (err) {
+      const code =
+        err instanceof Error && err.name ? err.name.toLowerCase().replace(/error$/, '') : 'unknown';
+      await audit.record({
+        adminAccountId: ctx.account.id,
+        adminKeyId: ctx.apiKey.id,
+        action: 'rate_limit_override.cleared',
+        targetAccountId,
+        targetResourceId: bucketKey,
+        inputPayload: { bucket_key: bucketKey },
+        result: `error: ${code}`,
+        ipAddress: clientIp(request),
+      });
+      throw err;
+    }
+  }
 }

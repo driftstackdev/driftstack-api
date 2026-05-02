@@ -2,12 +2,18 @@
 // they can run without a real Postgres. Mirrors DrizzleAccountAuthRepo
 // behaviour exactly.
 
-import type { AccountAuthRepo, AccountRow, ApiKeyRow } from '../../../src/services/auth.js';
+import type {
+  AccountAuthRepo,
+  AccountRow,
+  ApiKeyRow,
+  RateLimitOverride,
+} from '../../../src/services/auth.js';
 
 export class InMemoryAuthRepo implements AccountAuthRepo {
   private readonly accounts = new Map<string, AccountRow>();
   private readonly keysById = new Map<string, ApiKeyRow>();
   private readonly keysByPrefix = new Map<string, ApiKeyRow>();
+  private readonly overrides = new Map<string, Map<string, RateLimitOverride>>();
 
   upsertAccount(row: AccountRow): void {
     this.accounts.set(row.id, row);
@@ -34,5 +40,30 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
       this.keysByPrefix.set(updated.keyPrefix, updated);
     }
     return Promise.resolve();
+  }
+
+  findActiveRateLimitOverrides(accountId: string, now: Date): Promise<RateLimitOverride[]> {
+    const buckets = this.overrides.get(accountId);
+    if (!buckets) return Promise.resolve([]);
+    const out: RateLimitOverride[] = [];
+    for (const o of buckets.values()) {
+      if (o.expiresAt.getTime() > now.getTime()) out.push(o);
+    }
+    return Promise.resolve(out);
+  }
+
+  /** Test helper: set/clear overrides for an account. Mirrors what the
+   * RateLimitOverridesService does via its repo in production. */
+  setRateLimitOverride(accountId: string, override: RateLimitOverride): void {
+    let buckets = this.overrides.get(accountId);
+    if (!buckets) {
+      buckets = new Map();
+      this.overrides.set(accountId, buckets);
+    }
+    buckets.set(override.bucketKey, override);
+  }
+
+  clearRateLimitOverride(accountId: string, bucketKey: string): void {
+    this.overrides.get(accountId)?.delete(bucketKey);
   }
 }

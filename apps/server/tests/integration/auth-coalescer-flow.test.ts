@@ -36,6 +36,9 @@ class CountingAuthRepo implements AccountAuthRepo {
     this.touches += 1;
     return Promise.resolve();
   }
+  findActiveRateLimitOverrides(): Promise<never[]> {
+    return Promise.resolve([]);
+  }
 }
 
 async function seed(repo: CountingAuthRepo): Promise<{ plaintext: string; accountId: string }> {

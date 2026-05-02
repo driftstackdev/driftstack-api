@@ -26,6 +26,7 @@ import { WebhooksService, WebhooksAdminService } from '../../../src/services/web
 import { WebhookDeliveryWorker } from '../../../src/services/webhook-worker.js';
 import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
+import { RateLimitOverridesService } from '../../../src/services/rate-limit-overrides.js';
 import { RedisAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { DrizzleAccountAuthRepo } from '../../../src/db/auth-repo.js';
@@ -35,6 +36,7 @@ import { DrizzleUsageRepo } from '../../../src/db/usage-repo.js';
 import { DrizzleWebhooksRepo } from '../../../src/db/webhooks-repo.js';
 import { DrizzleAdminAuditLogRepo } from '../../../src/db/admin-audit-repo.js';
 import { DrizzleAccountsAdminRepo } from '../../../src/db/admin-accounts-repo.js';
+import { DrizzleRateLimitOverridesRepo } from '../../../src/db/rate-limit-overrides-repo.js';
 import { RedisRateLimitStore } from '../../../src/lib/redis-rate-limit-store.js';
 import * as schema from '../../../src/db/schema.js';
 
@@ -114,6 +116,12 @@ export async function startTestServer(): Promise<TestServer> {
   const accountsAdminRepo = new DrizzleAccountsAdminRepo(database);
   const accountsAdminService = new AccountsAdminService(accountsAdminRepo, authCache);
 
+  const rateLimitOverridesRepo = new DrizzleRateLimitOverridesRepo(database);
+  const rateLimitOverridesService = new RateLimitOverridesService(
+    rateLimitOverridesRepo,
+    authCache,
+  );
+
   const sessionsService = new SessionsService({
     repo: sessionsRepo,
     driver,
@@ -141,6 +149,7 @@ export async function startTestServer(): Promise<TestServer> {
     webhooksAdminService,
     adminAuditService,
     accountsAdminService,
+    rateLimitOverridesService,
     rateLimitStore,
     permissiveCors: true,
   });

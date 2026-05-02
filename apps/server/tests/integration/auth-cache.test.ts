@@ -23,6 +23,7 @@ import type { AccountContext } from '../../src/services/auth.js';
 import { WebhooksService, WebhooksAdminService } from '../../src/services/webhooks.js';
 import { AdminAuditService } from '../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../src/services/admin-accounts.js';
+import { RateLimitOverridesService } from '../../src/services/rate-limit-overrides.js';
 import { InMemoryAuthRepo } from './_helpers/in-memory-auth-repo.js';
 import { InMemorySessionsRepo } from './_helpers/in-memory-sessions-repo.js';
 import { InMemoryApiKeysRepo } from './_helpers/in-memory-api-keys-repo.js';
@@ -30,6 +31,7 @@ import { InMemoryUsageRepo } from './_helpers/in-memory-usage-repo.js';
 import { InMemoryWebhooksRepo } from './_helpers/in-memory-webhooks-repo.js';
 import { InMemoryAdminAuditLogRepo } from './_helpers/in-memory-admin-audit-repo.js';
 import { InMemoryAccountsAdminRepo } from './_helpers/in-memory-admin-accounts-repo.js';
+import { InMemoryRateLimitOverridesRepo } from './_helpers/in-memory-rate-limit-overrides-repo.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
@@ -197,6 +199,10 @@ describe('auth cache — graceful degradation', () => {
       new InMemoryAccountsAdminRepo(authRepo),
       null,
     );
+    const rateLimitOverridesService = new RateLimitOverridesService(
+      new InMemoryRateLimitOverridesRepo(authRepo),
+      null,
+    );
     const app = await buildApp({
       logger: createTestLogger(),
       authRepo,
@@ -210,6 +216,7 @@ describe('auth cache — graceful degradation', () => {
       webhooksAdminService,
       adminAuditService,
       accountsAdminService,
+      rateLimitOverridesService,
       permissiveCors: true,
     });
 
@@ -283,6 +290,10 @@ describe('auth cache — graceful degradation', () => {
       new InMemoryAccountsAdminRepo(authRepo),
       null,
     );
+    const rateLimitOverridesService = new RateLimitOverridesService(
+      new InMemoryRateLimitOverridesRepo(authRepo),
+      null,
+    );
     const app = await buildApp({
       logger: createTestLogger(),
       authRepo,
@@ -296,6 +307,7 @@ describe('auth cache — graceful degradation', () => {
       webhooksAdminService,
       adminAuditService,
       accountsAdminService,
+      rateLimitOverridesService,
       permissiveCors: true,
     });
 

@@ -1031,3 +1031,74 @@ No new D-entries — all Tier 1 inside the D-025 contract.
 Two read endpoints landed. 274/274 tests green; lint clean; format clean; typecheck green.
 
 **Next OT commit:** rate-limit override endpoints (`POST /v1/admin/accounts/:id/quota-override` + clear) — biggest remaining piece since it requires consume-path integration. Then OpenAPI tagging + e2e cross-account flow test.
+
+---
+
+## V-020 — Operational tooling: rate-limit override (R2 consume-path) + quota-override endpoints
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Operational tooling. Fifth commit of the workstream.
+
+### What was built
+
+R2 consume-path integration as approved by the founder. Override storage was already in place (V-016 schema); this commit wires it through the auth → rate-limit → consume path.
+
+**Endpoints:**
+
+- `POST /v1/admin/accounts/:id/quota-override` — body `{ bucket_key, capacity, refill_per_second, duration_seconds, reason? }`. Upserts on `(account_id, bucket_key)`. Audit action `rate_limit_override.set`.
+- `DELETE /v1/admin/accounts/:id/quota-override?bucket_key=...` — clears the override. 404 + audit row when no override exists. Audit action `rate_limit_override.cleared`.
+
+**R2 implementation — load into `AccountContext`:**
+
+- `AccountContext` extended with `rateLimitOverrides: Record<string, RateLimitOverride>` keyed by `bucketKey`. Each override carries `capacity`, `refillPerSecond`, `expiresAt`. Empty `{}` when no overrides apply.
+- `AccountAuthRepo.findActiveRateLimitOverrides(accountId, now)` — new method. Drizzle impl filters by `account_id = ? AND expires_at > now()`. In-memory impl filters in-process. Returns rows with `refillPerSecond = refill_per_second_centi / 100` (centi quantization documented in V-016).
+- `authenticate()` calls `findActiveRateLimitOverrides` after `getAccount`/`touchApiKeyLastUsed` and before constructing the final `ctx`. Overrides are then carried through to the auth-cache write.
+- `auth-cache.ts` `serialize`/`deserialize` extended to round-trip `rateLimitOverrides`. Backwards-compatible: old serialised entries (pre-OT7) without the field deserialise as empty `{}`.
+- `rateLimitConsume(input)` gained an optional `overrides?: Record<string, RateLimitOverride>` parameter. New helper `effectiveBucketConfig` checks for an unexpired override at consume time; expired or missing falls through to `bucketConfigFor(tier, bucketKey)`. **Lazy expiry** — an expired override row in the cached context still falls through correctly without requiring the cache to be re-loaded.
+- Rate-limit middleware passes `ctx.rateLimitOverrides` through.
+
+**Service:**
+
+- `RateLimitOverridesService` (`apps/server/src/services/rate-limit-overrides.ts`): `set(ctx, input)` + `clear(ctx, accountId, bucketKey)`. Each method runs `requireScope(ctx, 'admin')`, calls the repo, and invalidates the auth cache via `authCache.invalidateAccount(targetAccountId)`. Cache failures swallowed (override is committed; cache TTLs out within 30 s).
+- Validation: `capacity ≥ 1`, `0.01 ≤ refill_per_second ≤ 100_000`, `expires_at > now`. The Zod schema at the route layer also caps `duration_seconds ≤ 30 days` and the bucket_key to the closed enum `['global', 'sessions:create']`.
+- `RateLimitOverridesRepo`: `upsert(input)` + `clear(accountId, bucketKey)`. `DrizzleRateLimitOverridesRepo` uses Drizzle's `onConflictDoUpdate` keyed on the unique `(account_id, bucket_key)` index. `InMemoryRateLimitOverridesRepo` mirrors writes into the `InMemoryAuthRepo` so the auth path sees them — same pattern as `InMemoryApiKeysRepo` from V-012's fixture fix.
+
+**Routes (extending `admin-accounts.ts`):**
+
+- Two helper closures `withAuditOverride` and `withAuditOverrideClear` capture override-specific audit shape (`targetAccountId` + `targetResourceId = bucket_key` + the input payload). Same try/catch + audit-on-error contract as `withAudit` for the account-state mutators.
+- Existence check on the target account before recording, via `accountsAdmin.getAccount(ctx, accountId)` — keeps 404 behaviour uniform with the rest of the admin surface.
+
+### What tests verify it
+
+**Total test surface: 274 → 290 green** (+16 integration). New: `tests/integration/admin-rate-limit-overrides.test.ts`.
+
+- 7 POST tests (200 happy path + public shape; audit row capture; upsert replaces capacity/refill; 400 unknown bucket_key; 400 capacity must be positive; 403 without admin; 404 unknown account).
+- 5 DELETE tests (204 clears; audit row; 404 + audit when no override; 400 missing query param; 403 without admin).
+- 4 R2 consume-path tests (override capacity wins over tier default; expired override falls through to tier; per-bucket isolation — override on one bucket leaves another at tier defaults; end-to-end via HTTP — set override, trigger fresh auth cache fill, verify cached context now carries the override at the expected capacity).
+
+The HTTP end-to-end test is the proof that the full chain — `set` → cache invalidate → next request triggers re-auth → `findActiveRateLimitOverrides` reads → `serialize` → cache write → `deserialize` — round-trips correctly.
+
+### Empirical findings
+
+1. **Centi-rate quantization documented in V-016 plays out exactly as predicted at the boundary.** `refill_per_second: 0.001` (the test's "no refill during window" value) rounds to `Math.max(1, Math.round(0.001 * 100)) = 1` at the Drizzle write site, which means the persisted override actually allows ~1 token per 100 seconds rather than the requested 1 per 1000 seconds. For the consume path test the difference is irrelevant (the bucket is sized so tokens won't refill anyway), but worth pinning: **sub-centi rates are silently rounded UP to centi 1**. The validation min is `0.01` (matches centi 1) so this isn't reachable through the public API — only through direct service calls, which is what the unit test does. If a future requirement needs sub-centi rates, the column type changes to `numeric(10,4)` per the V-016 plan.
+
+2. **`RateLimitOverride` lives in `services/auth.ts`** not `services/rate-limit-overrides.ts` even though the latter would seem more natural. Reason: it's a property of `AccountContext` (loaded at auth time, carried in cache), and the auth module is where the AccountContext shape is defined. Moving the type out would create a circular import (rate-limit-overrides.ts depends on auth's AccountContext; auth depends on the override type). Keeping it in auth.ts and re-exporting from there is the simpler factoring.
+
+3. **`InMemoryRateLimitOverridesRepo` mirrors writes into `InMemoryAuthRepo`** so a single test fixture sees consistent state across the override path AND the auth path. Same fix as V-012's `InMemoryApiKeysRepo`+`InMemoryAuthRepo` pattern. In production both paths read the same Postgres row; in tests the in-memory shadow needs explicit propagation.
+
+4. **The HTTP end-to-end test validates the cache round-trip**, which is the hardest-to-spot regression source: a future commit that breaks `rateLimitOverrides` serialisation in `auth-cache.ts` would silently make every override invisible from the second request onward (the first request misses the cache and rebuilds the ctx; subsequent requests deserialise a cached ctx that's missing the field). The test computes the cache key (`sha256(plaintext)`) directly via `node:crypto` and asserts the deserialised override entry's `capacity` matches what was set.
+
+5. **`onConflictDoUpdate`** with multi-column conflict targets in Drizzle requires the columns to match the unique index exactly. The `rate_limit_overrides_account_bucket_unique` index (V-016) is `(account_id, bucket_key)` in that order; the `target` array must mirror it. Using `[rateLimitOverrides.bucketKey, rateLimitOverrides.accountId]` would fail at runtime with a Postgres "no unique or exclusion constraint" error.
+
+### Decisions made (cross-link)
+
+No new D-entries — the R2 design choice was approved in the founder's coordination response (referenced in D-025 reasoning).
+
+### Status
+
+Five OT endpoints landed. R2 consume-path integration verified end-to-end. 290/290 tests green; lint clean; format clean; typecheck green.
+
+**Next OT commit (OT8):** M1 + M2 fixture extension (`buildTestApp({ accountId? })` + `seedAdditionalAccount(fx, opts)`) + the suspend→revoked→unsuspend round-trip integration test that V-017 had to drop.
+
+**After OT8 (OT9):** OpenAPI tagging for admin endpoints + one e2e admin action (recommend tier-change since it touches auth, cache, rate-limit, audit). When OT9 lands, the operational tooling workstream is complete.

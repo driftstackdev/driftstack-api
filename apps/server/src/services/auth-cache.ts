@@ -79,9 +79,17 @@ interface SerializedApiKey {
   createdAt: string;
 }
 
+interface SerializedRateLimitOverride {
+  bucketKey: string;
+  capacity: number;
+  refillPerSecond: number;
+  expiresAt: string;
+}
+
 interface SerializedContext {
   account: SerializedAccount;
   apiKey: SerializedApiKey;
+  rateLimitOverrides: Record<string, SerializedRateLimitOverride>;
 }
 
 interface CachedEntry {
@@ -90,6 +98,15 @@ interface CachedEntry {
 }
 
 function serialize(ctx: AccountContext): SerializedContext {
+  const overrides: Record<string, SerializedRateLimitOverride> = {};
+  for (const [bucket, o] of Object.entries(ctx.rateLimitOverrides)) {
+    overrides[bucket] = {
+      bucketKey: o.bucketKey,
+      capacity: o.capacity,
+      refillPerSecond: o.refillPerSecond,
+      expiresAt: o.expiresAt.toISOString(),
+    };
+  }
   return {
     account: {
       id: ctx.account.id,
@@ -112,10 +129,24 @@ function serialize(ctx: AccountContext): SerializedContext {
       expiresAt: ctx.apiKey.expiresAt ? ctx.apiKey.expiresAt.toISOString() : null,
       createdAt: ctx.apiKey.createdAt.toISOString(),
     },
+    rateLimitOverrides: overrides,
   };
 }
 
 function deserialize(s: SerializedContext): AccountContext {
+  const overrides: Record<string, AccountContext['rateLimitOverrides'][string]> = {};
+  // Older serialised entries (pre-OT7) may not carry the rateLimitOverrides
+  // field — treat absence as empty rather than throwing.
+  if (s.rateLimitOverrides) {
+    for (const [bucket, o] of Object.entries(s.rateLimitOverrides)) {
+      overrides[bucket] = {
+        bucketKey: o.bucketKey,
+        capacity: o.capacity,
+        refillPerSecond: o.refillPerSecond,
+        expiresAt: new Date(o.expiresAt),
+      };
+    }
+  }
   return {
     account: {
       id: s.account.id,
@@ -138,6 +169,7 @@ function deserialize(s: SerializedContext): AccountContext {
       expiresAt: s.apiKey.expiresAt ? new Date(s.apiKey.expiresAt) : null,
       createdAt: new Date(s.apiKey.createdAt),
     },
+    rateLimitOverrides: overrides,
   };
 }
 

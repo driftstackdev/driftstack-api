@@ -51,15 +51,35 @@ export interface AccountAuthRepo {
   findApiKeyByPrefix(prefix: string): Promise<ApiKeyRow | null>;
   getAccount(id: string): Promise<AccountRow | null>;
   touchApiKeyLastUsed(id: string, at: Date): Promise<void>;
+  /**
+   * Load the active (unexpired) rate-limit overrides for an account.
+   * Called once per auth-cache miss; the overrides are then cached
+   * inside the AccountContext until the next invalidation.
+   */
+  findActiveRateLimitOverrides(accountId: string, now: Date): Promise<RateLimitOverride[]>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
 // Context attached to authenticated requests
 // ───────────────────────────────────────────────────────────────────────────
 
+export interface RateLimitOverride {
+  bucketKey: string;
+  capacity: number;
+  refillPerSecond: number;
+  expiresAt: Date;
+}
+
 export interface AccountContext {
   account: AccountRow;
   apiKey: ApiKeyRow;
+  /**
+   * Active (unexpired) rate-limit overrides for this account, keyed by
+   * bucketKey. Loaded once on auth-cache miss; subsequent reads come
+   * from the cache. When an override expires, `rateLimitConsume` falls
+   * through to the tier default (lazy expiry — no background sweep).
+   */
+  rateLimitOverrides: Record<string, RateLimitOverride>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -142,7 +162,12 @@ export async function authenticate(
 
     await repo.touchApiKeyLastUsed(apiKey.id, now);
 
-    const ctx: AccountContext = { account, apiKey };
+    const overrideRows = await repo.findActiveRateLimitOverrides(account.id, now);
+    const rateLimitOverrides: Record<string, RateLimitOverride> = {};
+    for (const o of overrideRows) {
+      rateLimitOverrides[o.bucketKey] = o;
+    }
+    const ctx: AccountContext = { account, apiKey, rateLimitOverrides };
 
     // Cap TTL at expiresAt so the cache entry can never outlive the key.
     if (cache) {

@@ -40,6 +40,7 @@ function rateLimitPlugin(
         tier: ctx.account.tier,
         bucketKey,
         cost,
+        overrides: ctx.rateLimitOverrides,
       });
 
       reply.header('x-ratelimit-remaining', Math.floor(result.remaining).toString());

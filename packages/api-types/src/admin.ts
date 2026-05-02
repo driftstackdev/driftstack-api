@@ -41,6 +41,40 @@ export const AdminAccountResponseSchema = AccountSchema;
 export type AdminAccountResponse = z.infer<typeof AdminAccountResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
+// Rate-limit override (admin)
+// ───────────────────────────────────────────────────────────────────────────
+
+export const SetQuotaOverrideRequestSchema = z.object({
+  bucket_key: z.enum(['global', 'sessions:create']),
+  capacity: z.number().int().min(1).max(1_000_000),
+  refill_per_second: z.number().min(0.01).max(100_000),
+  duration_seconds: z
+    .number()
+    .int()
+    .min(1)
+    .max(86_400 * 30), // up to 30 days
+  reason: z.string().max(500).optional(),
+});
+export type SetQuotaOverrideRequest = z.infer<typeof SetQuotaOverrideRequestSchema>;
+
+export const ClearQuotaOverrideQuerySchema = z.object({
+  bucket_key: z.enum(['global', 'sessions:create']),
+});
+export type ClearQuotaOverrideQuery = z.infer<typeof ClearQuotaOverrideQuerySchema>;
+
+export const QuotaOverrideResponseSchema = z.object({
+  account_id: z.string(),
+  bucket_key: z.string(),
+  capacity: z.number().int(),
+  refill_per_second: z.number(),
+  reason: z.string().nullable(),
+  expires_at: Iso8601Schema,
+  created_at: Iso8601Schema,
+  updated_at: Iso8601Schema,
+});
+export type QuotaOverrideResponse = z.infer<typeof QuotaOverrideResponseSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
 // Webhook admin (replay / requeue / dlq list)
 // ───────────────────────────────────────────────────────────────────────────
 

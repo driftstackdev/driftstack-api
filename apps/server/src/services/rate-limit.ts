@@ -13,6 +13,7 @@
 // test suite in tests/unit/rate-limit.test.ts.
 
 import type { AccountTier } from '@driftstack/api-types';
+import type { RateLimitOverride } from './auth.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Tier defaults — coarse limits for Phase 3. Per-bucket overrides come later.
@@ -101,13 +102,18 @@ export interface RateLimitInput {
   bucketKey: string;
   cost?: number;
   now?: number;
+  /**
+   * Active overrides keyed by bucketKey, loaded from AccountContext.
+   * Override is consulted first; expired or missing → tier default.
+   */
+  overrides?: Record<string, RateLimitOverride>;
 }
 
 export async function rateLimitConsume(
   store: RateLimitStore,
   input: RateLimitInput,
 ): Promise<ConsumeResult> {
-  const cfg = bucketConfigFor(input.tier, input.bucketKey);
+  const cfg = effectiveBucketConfig(input);
   return store.consume({
     key: storeKey(input.accountId, input.bucketKey),
     capacity: cfg.capacity,
@@ -115,6 +121,21 @@ export async function rateLimitConsume(
     cost: input.cost ?? 1,
     now: input.now ?? Date.now(),
   });
+}
+
+/**
+ * Resolve the bucket config: override (when present + unexpired) wins
+ * over the tier default. Lazy expiry — an expired override row in the
+ * cached context falls through to the tier default without requiring
+ * the cache to have been re-loaded.
+ */
+function effectiveBucketConfig(input: RateLimitInput): BucketConfig {
+  const now = input.now ?? Date.now();
+  const override = input.overrides?.[input.bucketKey];
+  if (override && override.expiresAt.getTime() > now) {
+    return { capacity: override.capacity, refillPerSecond: override.refillPerSecond };
+  }
+  return bucketConfigFor(input.tier, input.bucketKey);
 }
 
 function storeKey(accountId: string, bucketKey: string): string {

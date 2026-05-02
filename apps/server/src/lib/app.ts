@@ -19,6 +19,7 @@ import type { UsageService } from '../services/usage.js';
 import type { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
 import type { AdminAuditService } from '../services/admin-audit.js';
 import type { AccountsAdminService } from '../services/admin-accounts.js';
+import type { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -44,6 +45,7 @@ export interface AppDeps {
   webhooksAdminService: WebhooksAdminService;
   adminAuditService: AdminAuditService;
   accountsAdminService: AccountsAdminService;
+  rateLimitOverridesService: RateLimitOverridesService;
   /** When true, register a permissive CORS policy. Production locks this down. */
   permissiveCors?: boolean;
 }
@@ -90,6 +92,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerAdminAccountsRoutes(app, {
     accountsAdmin: deps.accountsAdminService,
     usage: deps.usageService,
+    rateLimitOverrides: deps.rateLimitOverridesService,
     audit: deps.adminAuditService,
   });
   registerAdminWebhookRoutes(app, {

@@ -1,9 +1,14 @@
 // Drizzle-backed implementation of AccountAuthRepo.
 
-import { and, eq, isNull, or } from 'drizzle-orm';
-import type { AccountAuthRepo, AccountRow, ApiKeyRow } from '../services/auth.js';
+import { and, eq, gt, isNull, or } from 'drizzle-orm';
+import type {
+  AccountAuthRepo,
+  AccountRow,
+  ApiKeyRow,
+  RateLimitOverride,
+} from '../services/auth.js';
 import type { Database } from './client.js';
-import { accounts, apiKeys } from './schema.js';
+import { accounts, apiKeys, rateLimitOverrides } from './schema.js';
 
 export class DrizzleAccountAuthRepo implements AccountAuthRepo {
   constructor(private readonly database: Database) {}
@@ -24,6 +29,24 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
       .where(eq(accounts.id, id))
       .limit(1);
     return row ? toAccountRow(row) : null;
+  }
+
+  async findActiveRateLimitOverrides(accountId: string, now: Date): Promise<RateLimitOverride[]> {
+    const rows = await this.database.db
+      .select()
+      .from(rateLimitOverrides)
+      .where(
+        and(eq(rateLimitOverrides.accountId, accountId), gt(rateLimitOverrides.expiresAt, now)),
+      );
+    return rows.map((r) => ({
+      bucketKey: r.bucketKey,
+      capacity: r.capacity,
+      // Centi-rate stored as 100x; multiply back. See V-016 for the
+      // quantization caveat (1/60 → 2 → 1/50 effective). Acceptable
+      // until/unless an exact-match requirement emerges.
+      refillPerSecond: r.refillPerSecondCenti / 100,
+      expiresAt: r.expiresAt,
+    }));
   }
 
   async touchApiKeyLastUsed(id: string, at: Date): Promise<void> {
