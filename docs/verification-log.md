@@ -1577,3 +1577,77 @@ No new D-entries. Codegen-tool, build-tooling, and brand-identity decisions all 
 ### Status
 
 PUB phase paused on npm 2FA blocker; surfaced to founder. GUI1 scaffold complete. Working-tree state of the publish-prep version bumps committed alongside GUI1 in this commit (the bumps are needed for GUI1's workspace dep on `@driftstack/sdk` to resolve to `^0.1.0` consistently). Resume PUB once token issue resolved; continue to GUI2 (API integration) in next session.
+
+---
+
+## V-028 — GUI2: API integration (sessions list/create/destroy) + npm scope blocker
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** GUI2 (complete) + PUB (paused on npm org).
+
+### Publish state
+
+New `NPM_TOKEN` (granular with bypass-2FA) verified via `npm whoami` → `joeltheunissen89`. Retried `npm publish --access public` from `packages/api-types/`:
+
+```
+404 Not Found - PUT https://registry.npmjs.org/@driftstack%2fapi-types - Scope not found
+```
+
+The `@driftstack` scope on npm maps to an organization that doesn't exist yet. Org creation is web-only on npm — the `npm org` CLI subcommand only manages members. **STOPPED** per directive 6, surfaced two paths to founder:
+
+- **(O1) Create the `@driftstack` npm org** at https://www.npmjs.com/org/create (free for public packages, 30-second click).
+- **(O2) Switch to unscoped names** (`driftstack-sdk`, `driftstack-api-types`).
+
+PyPI + Go tag NOT attempted (npm-first sequencing per directive 4).
+
+### GUI2 — what was built
+
+- **Settings persistence** (`src/lib/settings.ts`) — `loadSettings()` / `saveSettings()` backed by `tauri-plugin-store` (writes to `~/Library/Application Support/dev.driftstack.gui/settings.json`). API key is in OS-appropriate config dir, not browser localStorage where any user with devtools could pluck it. Future: OS keychain integration via `tauri-plugin-stronghold` or platform-specific keyring — queued for GUI8 polish.
+- **Settings context** (`src/lib/SettingsContext.tsx`) — single `useSettings()` hook. Provides `{ settings, loading, client, update }` to the React tree. Memoised client construction so the SDK isn't recreated on every render.
+- **HTTP client** (`src/lib/client.ts`) — hand-written fetch wrapper covering the GUI2 surface (`listSessions`, `createSession`, `destroySession`). Maps RFC 7807 problem-json onto a typed `DriftstackError` with `status` + `problemType` + raw `problem` doc. Honours 204 + `Content-Length: 0` short-circuits.
+- **Sessions view** (`src/views/SessionsView.tsx`) — table of active sessions with status pip + archetype + label + created-time + per-row "Destroy" action. Auto-refreshes every 5 s; "Refresh" button forces; "New session" button. Empty states: "Not connected" if no API key set, "No active sessions" otherwise. Errors surface inline via a dismissable banner (not toasts — preserves context for debugging).
+- **Settings view** (`src/views/SettingsView.tsx`) — API key field (masked / show-toggle), base URL field (defaults to `http://localhost:7780`), Save button (disabled until dirty). Footer hint clarifies storage location.
+- **App shell** (`src/App.tsx`) — wired `<SettingsProvider>` at root, state-based view routing (no react-router — single window, no real history), `StatusFooter` now reflects connection state from the SDK client.
+- **Tauri capabilities** (`src-tauri/capabilities/default.json`) — explicit permission grants for `core:default` + `store:default`. Tauri 2 requires per-permission opt-in.
+
+### What did NOT happen + why
+
+**The published `@driftstack/sdk` package is NOT used by the GUI** even though that was the founder's directive ("API integration via @driftstack/sdk"). Reason: the SDK uses `node:crypto` (`createHmac`, `timingSafeEqual`) for `verifyWebhookSignature`, which Vite/rollup can't bundle for the browser — build fails with `"createHmac" is not exported by "__vite-browser-external"`. Two ways to make the SDK isomorphic in a follow-up commit:
+
+1. **Subpath export** — split the webhook helper into `@driftstack/sdk/webhook` so the main entry stays browser-clean.
+2. **Web Crypto API** — replace `node:crypto` with `globalThis.crypto.subtle` for HMAC-SHA256. Available in Node 20+ AND every browser; one import path serves both.
+
+(2) is the right long-term fix. Tracked for the SDK polish session that lands after publish completes. For GUI2 we use a tiny inline fetch wrapper covering the same shapes — switch to the SDK once the isomorphic build lands.
+
+### Verification chain
+
+- **GUI typecheck** — `tsc --noEmit` green.
+- **GUI build** — `vite build` green: 161.5 KB JS / 13 KB CSS (51 KB / 3 KB gzipped).
+- **Rust** — `cargo check` green with new `tauri-plugin-store` dep (compiles in ~22 s incremental).
+- **Whole monorepo** — typecheck / vitest 294/294 / lint / format all clean.
+- **Tauri capabilities** — verified the store-plugin permission grant via `default.json` (without it, tauri-plugin-store calls fail at runtime with `"permission denied"`).
+
+### Empirical findings
+
+1. **The SDK isn't browser-isomorphic** — see "What did NOT happen" above. Real architectural finding, queued for SDK polish. Worth capturing because the same issue WILL bite the customer-facing web dashboard workstream when that lands. Better to fix once on the SDK side than wrap with a fetch shim each time.
+
+2. **Tauri 2's permission system is opt-in for everything**, including the file-store plugin. Without `"store:default"` in the capabilities JSON, the plugin loads but every IPC call fails. Discovered when settings.ts couldn't read its own store on first run; documented in the capabilities file inline.
+
+3. **eslint's tsconfig (NodeNext module resolution) doesn't resolve React types** — React's npm package doesn't have an `exports` map, so NodeNext rejects it. Fix: override `module: "ESNext"` + `moduleResolution: "bundler"` in `tsconfig.eslint.json`. Bundler resolution covers both the gui-client (Vite) and the Node/server source files in one eslint pass — no per-package eslint configs needed. Same fix would carry forward if we add more React surfaces (e.g. customer dashboard).
+
+4. **State-based view routing for a desktop GUI** instead of react-router. Tauri's window doesn't have a real browser history stack to integrate with; URL-based routing would be ceremony for nothing. A discriminated-union `View` type + `useState` + a `switch` in `<CurrentView>` covers it. ~30 lines lighter than pulling react-router-dom.
+
+5. **Inline error banner over toasts** — the founder is going to use this to debug API issues against their local server. Preserving the error in-context (with a "Dismiss" button) beats a toast that disappears on its own. Same posture taken in operational tooling; consistency reinforces the "ops tool" character of the GUI.
+
+6. **Auto-refresh interval at 5 s** — fast enough that "I created a session, where is it" feels live; slow enough that the rate-limit budget on the global bucket can't be drained by an idle window. If GUI3+ adds a viewport with continuous polling for screenshots, we'll move auto-refresh to a websocket / SSE channel; for now polling is the right shape.
+
+### Decisions made (cross-link)
+
+No new D-entries.
+
+### Status
+
+GUI2 complete. Founder can connect the GUI to a local Driftstack API server, list / create / destroy sessions. PUB phase paused on npm org creation; resumes once `@driftstack` org exists or founder picks O2 (unscoped names).
+
+Next: GUI3 (live session viewport) — start with polling screenshots via the existing `client.sessions.capture()` endpoint; upgrade to WebRTC if scope allows. Surface architectural fork to founder if WebRTC turns out to require server changes (probably will — the API doesn't currently emit a WebRTC stream).

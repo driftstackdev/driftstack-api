@@ -9,7 +9,13 @@
     "allowJs": true,
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
-    "types": ["node", "vitest/globals"]
+    // Override the base's NodeNext for the eslint pass — React's types
+    // ship without `exports` maps, which NodeNext rejects. Bundler
+    // resolution covers both the React/Vite source files (gui-client)
+    // and the Node/server source files in one pass.
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node", "vitest/globals", "react", "react-dom"]
   },
   "include": [
     "eslint.config.js",

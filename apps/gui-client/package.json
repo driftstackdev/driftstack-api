@@ -14,8 +14,8 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
-    "@driftstack/sdk": "*",
     "@tauri-apps/api": "^2.1.0",
+    "@tauri-apps/plugin-store": "^2.1.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0"
   },
