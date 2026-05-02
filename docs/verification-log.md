@@ -1830,6 +1830,7 @@ GUI4 — manual control / input event forwarding. The img element receives mouse
 ### What changed
 
 **Contract (additive — no breaking changes):**
+
 - `InteractActionSchema` (in `packages/api-types/src/sessions.ts`) gained two new discriminated-union variants:
   - `{ kind: 'tap_at', x, y }` — tap at viewport pixel coordinates (origin top-left).
   - `{ kind: 'type_focused', text, delay_ms? }` — type into the currently-focused element (no selector).
@@ -1838,12 +1839,14 @@ GUI4 — manual control / input event forwarding. The img element receives mouse
 - 3 new server integration tests in `apps/server/tests/integration/sessions.test.ts`: 200-OK `tap_at`, 200-OK `type_focused`, 400 for negative `tap_at` coords. 297/297 vitest green.
 
 **SDK republish — bumped in lockstep:**
+
 - `@driftstack/api-types` 0.1.0 → **0.1.1** (npm).
 - `@driftstack/sdk` 0.1.1 → **0.1.2** (npm). Types regenerated; new variants are accessible via the existing `InteractAction` discriminated-union type.
 - `driftstack-sdk` (Python) 0.1.0 → **0.1.1** (PyPI). Pydantic models regenerated from the dumped OpenAPI spec — `Action1` (tap_at), `Action3` (type_focused) appear in the union. `_version.py` bumped. The pre-existing test pinning `__version__ == "0.0.1"` was wrong (should have been 0.1.0); fixed it to assert SemVer-shape rather than an exact pin.
 - Go SDK: types extended in `packages/sdk-go/types.go`, new `NewTapAtAction(x, y)` and `NewTypeFocusedAction(text)` constructors. Tag pending below.
 
 **GUI4 — input forwarding in `LiveSessionView.tsx`:**
+
 - New "Control: on/off" toggle in the header. Off by default for safety — accidental clicks while reading must not trigger taps.
 - When on:
   - Click on the `<img>` → `tap_at(x, y)` in viewport pixels (translation: `clientX - rect.left` over `rect.width` × `naturalWidth`). The `object-contain` CSS guarantees `rect` matches the rendered image area, so the linear map is exact.
@@ -1895,3 +1898,46 @@ GUI4 closed. Self-hosted GUI now has full manual control over running sessions: 
 ### Next
 
 GUI5 — SOCKS5 proxy management UI + storage. CRUD for proxy configs (host, port, optional auth, label). Persist via tauri-plugin-store. Wire the selected proxy to the session-creation flow once the session-create payload supports it (currently `CreateSessionRequest` only takes `archetype` + `metadata`; surfacing as next dependency since this might need a small Tier-3 additive contract bump to add a `proxy` field).
+
+---
+
+## V-033 — GUI5: SOCKS5 proxy management (local-only)
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Self-hosted GUI client (file 128).
+
+### What changed
+
+- **`apps/gui-client/src/lib/proxies.ts`** — new module. CRUD over `tauri-plugin-store` (same store file as settings, separate key `proxies`). Functions: `listProxies`, `addProxy`, `updateProxy`, `removeProxy`, `validateDraft`. IDs are `crypto.randomUUID()` with a hex-fallback for environments without it.
+- **`apps/gui-client/src/views/ProxiesView.tsx`** — new view. Table of saved proxies (label, endpoint, auth presence, created), inline add/edit form with validation, remove button per row.
+- **`apps/gui-client/src/styles/index.css`** — new `.form-input` component class lifted from the inline pattern in SettingsView so the new form stays terse.
+- **`apps/gui-client/src/App.tsx`** — `proxies` route wired to `ProxiesView` (was `<NotYet>`). The sidebar item already existed; now it goes somewhere.
+
+### Empirical findings
+
+1. **`CreateSessionRequest` has no `proxy` field today.** The SOCKS5 list is local-only; the proxy isn't sent to the server on session create. Wiring it requires:
+   - A Tier-3 additive contract change adding `proxy: { host, port, username?, password? } | null` to `CreateSessionRequest` (api-types).
+   - Mock-driver implementation that records the proxy and exposes it for assertions in tests.
+   - WebKit-fork (Agent #1) actual SOCKS5 routing — that's the real work.
+   The contract addition is straightforward; the WebKit-fork side is not. Surfacing as a coordination item with Agent #1 — not landing autonomously tonight because the GUI side without the driver side gives the user no actual proxy routing, just a UI that pretends to work.
+
+2. **No GUI test infrastructure exists yet.** `apps/gui-client` has no vitest config. Adding one just for `validateDraft` would be scope creep tonight; the function is small enough to read. If GUI8 polish lands a vitest config, fold validateDraft tests in then. Marked as a follow-up.
+
+3. **Storage posture matches API key.** SOCKS5 passwords land in the same `~/Library/Application Support/dev.driftstack.gui/settings.json` as the API key. Same threat model: a user with local file-system access can read them. The `keyring` upgrade for genuinely secure secret storage was queued at GUI8 (or beyond) for the API key — extending it to proxy passwords at the same time is the right call.
+
+4. **Form keeps password in plain `<input type="password">`** rather than reusing the SettingsView's reveal toggle — proxy passwords are configured once, not paste-checked, so the reveal isn't carrying its weight here.
+
+### Verify chain
+
+- typecheck/lint/format/build all clean.
+- GUI client bundle: **185 KB JS / 16.6 KB CSS** (57 KB / 3.6 KB gzipped). +11 KB JS, +3 KB CSS over V-032 — entirely the new view + form-input component class. Under 200 KB target.
+- Server tests unchanged: 297/297.
+
+### Status
+
+GUI5 closed (local-only). Founder can now curate the proxy roster from the GUI. Wiring into session creation depends on Agent #1's SOCKS5 work + a coordination call.
+
+### Next
+
+GUI6 — session recording + playback. Buffer the polled frames into a session-scoped ring (configurable cap), expose a Recordings view with a timeline scrubber + play/pause. Optional ndjson manifest persisted to disk via the tauri fs plugin.

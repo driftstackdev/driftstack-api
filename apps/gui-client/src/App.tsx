@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { LiveSessionView } from './views/LiveSessionView';
+import { ProxiesView } from './views/ProxiesView';
 import { SessionsView } from './views/SessionsView';
 import { SettingsView } from './views/SettingsView';
 
@@ -67,9 +68,10 @@ function CurrentView({
       );
     case 'settings':
       return <SettingsView />;
+    case 'proxies':
+      return <ProxiesView />;
     case 'sessions-history':
     case 'recordings':
-    case 'proxies':
     case 'connectivity':
     case 'fleet':
       return <NotYet label={view.kind} />;

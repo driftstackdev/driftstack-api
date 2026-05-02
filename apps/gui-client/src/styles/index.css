@@ -76,4 +76,15 @@
     @apply text-2xs font-medium tracking-widest uppercase
            text-ink-muted;
   }
+
+  /* Standard form input — matches the inline styling SettingsView
+     uses, lifted into a class so other forms (proxies, etc.) can
+     stay terse. */
+  .form-input {
+    @apply w-full rounded bg-surface-inset px-2.5 py-1.5 text-sm
+           text-ink-primary placeholder:text-ink-muted
+           border border-surface-divider
+           focus-visible:border-accent
+           focus-visible:ring-1 focus-visible:ring-accent-ring;
+  }
 }
