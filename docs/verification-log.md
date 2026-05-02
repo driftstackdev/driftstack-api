@@ -401,3 +401,56 @@ Phase 8 (Playwright e2e against the running server) is gated on Postgres + Redis
 ### Status
 
 Three blockers cleared. CI green. Migration empirically validated against real Postgres. Tier model now matches founder's locked pricing. Ready to author Phase 8 design doc (P4 in the priority list).
+
+---
+
+## V-009 — Phase 8: end-to-end Playwright suite against real Postgres + Redis
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** 8 (e2e tests)
+
+### What was built
+
+- **Playwright config** (`apps/server/playwright.config.ts`) — workers=1 (single-DB sequential), retries=1 in CI, list reporter locally + html in CI, 30s test timeout.
+- **Server boot helper** (`apps/server/tests/e2e/helpers/server.ts`) — boots the same Fastify `buildApp(...)` as production, but wired with the Drizzle repos and `RedisRateLimitStore`. Per worker startup: drops `public` and `drizzle` schemas, recreates `public`, runs all migrations from scratch, flushes Redis. Listens on `127.0.0.1:0` (dynamic port). `resetState()` truncates the FK-aware row set + flushes Redis between tests.
+- **Seed helper** (`apps/server/tests/e2e/helpers/seed.ts`) — `seedAccount(client, opts)` inserts an account + admin API key via Drizzle and returns `{ accountId, apiKeyId, plaintext, tier }`. Plaintext used for `Authorization: Bearer …` headers.
+- **Seven spec files**:
+  - `smoke.spec.ts` (4 tests) — wire-up smoke
+  - `auth.spec.ts` (9 tests) — every documented auth-pipeline error
+  - `sessions.spec.ts` (17 tests) — all 8 session endpoints × happy + every documented error
+  - `admin.spec.ts` (10 tests) — POST/GET/DELETE /v1/api-keys + GET /v1/usage
+  - `customer-journey.spec.ts` (1 test) — full create-account → admin key → app key (scoped) → session ops → destroy → revoke → 401, with DB assertions on `session_events` row sequence
+  - `rate-limit.spec.ts` (3 tests) — Redis Lua atomicity under 100 concurrent calls; per-account bucket isolation
+  - `concurrency-limit.spec.ts` (6 tests) — every tier (free/starter/solo/builder × loop, scale spot-check, free-with-destroy-frees-slot)
+  - `openapi-contract.spec.ts` (5 tests) — every happy-path response validated against the schema declared in `/openapi.json` via Ajv
+- **CI workflow extended** (`.github/workflows/ci.yml`) — second job `e2e` that depends on `build-test`, runs against the same Postgres 17 + Redis 7 service containers, uploads Playwright HTML report on failure.
+
+### What tests verify it
+
+- **Vitest:** 123 still green.
+- **Playwright e2e:** 57 passing locally in 14.7s (combined wall-clock; parallel inside file, sequential across files since workers=1).
+- **`npm run lint`:** 0 errors.
+- **`npm run format:check`:** all clean.
+
+### Empirical findings
+
+1. **Postgres enum types are not schema-scoped.** First Phase 8 helper attempted `workers: 2` with per-worker schemas (`test_w0`, `test_w1`). Migration into the second worker's schema failed with `type "account_status" already exists` — `CREATE TYPE` is a database-level operation in Postgres, not schema-scoped, even with `"public"."account_status"` in the SQL. Multi-worker isolation would require per-worker DATABASEs (not just schemas), which adds significant boot overhead. Decision: workers=1 with shared DB + truncate-between-tests. Trade-off documented in playwright.config.ts inline.
+
+2. **`__drizzle_migrations` survives `DROP SCHEMA public CASCADE`.** Drizzle's migration log lives in a separate `drizzle` schema. Dropping `public` schema externally (e.g. via `psql -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public"`) leaves the migration log behind. Next `migrate()` call sees both migrations marked applied, skips them, and the test fails with `relation "session_events" does not exist`. Fix: `helpers/server.ts` drops both `drizzle` and `public` schemas at boot, then recreates `public`, then runs migrations from scratch. Documented inline.
+
+3. **postgres-js raw queries return timestamps as ISO strings, not Date.** The `last_used_at` assertion in `auth.spec.ts` originally used `toBeInstanceOf(Date)` against a value from `server.client\`SELECT last_used_at...\``. That value is a string (Drizzle is what attaches type parsers; raw postgres-js doesn't). Fixed by parsing with `new Date(value)`and asserting on`.getTime()`. Documented inline.
+
+4. **Ajv typing not resolvable in typescript-eslint's parser context (workspace ajv hoisting).** The repo has `ajv@8` in `apps/server/node_modules/ajv` and an older `ajv@6` hoisted to root `node_modules/ajv` (transitive via something). `tsc` resolves the workspace's v8 correctly, but `@typescript-eslint/parser` resolves the root v6 (which has a CommonJS-style `declare var ajv` that doesn't surface the class API). Result: lint-only false-positive `no-unsafe-call` errors on `ajv.compile(...)`. Pragmatic fix: file-level `eslint-disable` for the affected unsafe-\* rules in `openapi-contract.spec.ts` only, with a comment explaining why. Type-level safety is still verified by `tsc`.
+
+5. **System npm 10.5 incompatible with Node v25 — workaround now permanent.** Even after the founder fixed `~/.npm` ownership, the brew-installed npm 10.5 still hits `TypeError: minimatch is not a function` on every install against Node v25. `npx -y npm@11 install` works as a per-command override. Captured in `local_toolchain.md` memory; not a blocker — agent + founder both should keep `npx -y npm@11 install` as the working invocation.
+
+### Decisions made (cross-link)
+
+No new D-entries — implementation choices within the design doc.
+
+### Status
+
+Phase 8 ready to commit and push. Total test surface: 123 unit/integration + 57 e2e = 180 tests, all green locally. CI on the previous commit (workflow file restored) ran green for build-test only; this commit adds the `e2e` job that will exercise Drizzle + Redis Lua against real images on every push from now on.
+
+Phase 9 (perf baseline + memory leak detection) is the only remaining substantive workstream before the final V-log handoff entry.

@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   build-test:
-    name: Build, typecheck, lint, test
+    name: Build, typecheck, lint, unit + integration tests
     runs-on: ubuntu-latest
 
     services:
@@ -72,3 +72,67 @@ jobs:
 
       - name: Test (unit + integration)
         run: npm test
+
+  e2e:
+    name: End-to-end (Playwright against real Postgres + Redis)
+    needs: build-test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: driftstack
+          POSTGRES_PASSWORD: driftstack
+          POSTGRES_DB: driftstack
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U driftstack -d driftstack"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://driftstack:driftstack@localhost:5432/driftstack
+      REDIS_URL: redis://localhost:6379
+      DRIVER: mock
+      CI: 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run e2e suite
+        working-directory: apps/server
+        run: npm run test:e2e
+
+      - name: Upload Playwright HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/server/playwright-report/
+          retention-days: 7
