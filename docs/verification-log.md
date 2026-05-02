@@ -649,3 +649,46 @@ D-020 (auth cache + security model). See `docs/decisions.md`.
 Auth caching landed. p50 / sustained throughput dramatically improved. p99 unchanged in the 30s smoke is a documented cold-start artifact, not a regression. The founder's stated target ("p99 < 50 ms on auth path") is achieved at the auth-only level (cache hit takes <5 ms; the residual variance is upstream of auth). Overall API p99 < 100 ms target will need either (a) cache pre-warm at startup, (b) reducing the cold-start fan-out (e.g. add a tiny initial grace period to staggered connection starts), or (c) running the smoke in steady-state mode that excludes the warm-up window — all three are valid follow-ups.
 
 CI runtime version bump (priority B) is the next item.
+
+---
+
+## V-013 — `@driftstack/sdk` TypeScript SDK package
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** SDK (founder priority 1 of next batch)
+
+### What was built
+
+- `packages/sdk-typescript/` — new monorepo package, `@driftstack/sdk`. Builds dual ESM + CJS + `.d.ts` via `tsup` (~16 KB ESM, ~18 KB CJS, ~8 KB types).
+- **Public surface:** `Driftstack` client class with `sessions` / `apiKeys` / `usage` resource accessors. 17 error classes — `DriftstackError` base + 13 subclasses mirroring server `PROBLEM_TYPES` URIs (`AuthError`, `ValidationError`, `RateLimitError` with `retryAfterSeconds`, `ConcurrencyLimitError` with `currentSessions`/`limit`, etc.) + `TransportError` for network/parse failures. `withRetry` (exponential backoff with full jitter, Retry-After honoured). `HttpClient` (fetch wrapper, AbortController timeouts, problem+json mapping). `verifyWebhookSignature` (Stripe-style HMAC-SHA256, constant-time, configurable tolerance) — ships now so customers can integrate the moment Webhook System (Priority 2) lands.
+- **Examples** (`examples/`): `quickstart.ts`, `error-handling.ts`, `rate-limit-handling.ts`. README with quickstart, configuration, every error class, retry behaviour, webhook verification snippet.
+- **CI integration:** build-test job extended with `npm run build --workspace packages/sdk-typescript` so the SDK build is verified on every push.
+
+### What tests verify it
+
+**Total test surface: 183 unit/integration + 59 e2e = 242 green.** New: 41 tests.
+
+- 10 unit tests on error class mapping
+- 8 unit tests on retry policy
+- 11 unit tests on HTTP layer
+- 7 unit tests on webhook-signature verifier
+- 5 integration tests driving the real Fastify app via the SDK over a `fetch → app.inject` adapter (full create/navigate/state/capture/destroy, typed-error propagation, paginated list, api-key create+revoke, usage current)
+
+### Empirical findings
+
+1. **Zod `.default(...)` makes the inferred type require those fields.** `z.infer<...>` is the OUTPUT type; defaults are applied so the field is non-optional. SDK request bodies need fields-with-defaults to be optional from the caller's perspective. Fixed by adding `*RequestInput` aliases in `@driftstack/api-types` (`NavigateRequestInput`, `CaptureRequestInput`, `PaginationQueryInput`) using `z.input<typeof Schema>`. Captured as D-022.
+2. **`Response` constructor rejects `204 No Content` with a non-null body.** WHATWG spec: 204 and 304 forbid bodies. Test fixtures need to pass `null` for those statuses.
+3. **Cross-workspace imports across rootDir need explicit `rootDir: '../..'`.** SDK integration test imports `buildTestApp` from `apps/server`. Default rootDir caused `TS6059`. With `noEmit: true` this is purely a typecheck-side concern.
+4. **`@ts-expect-error` directives went stale once `ProblemSchema.catchall(z.unknown())` already accepted unknown extension members.** TS surfaces stale-suppression as `TS2578: Unused @ts-expect-error directive` — exactly the right design.
+5. **Hand-written SDK over codegen was the right call.** ~500 LOC vs ~3000 LOC of `openapi-typescript-codegen`, with control over every line. The Zod-types-as-source-of-truth pattern (api-types package) means the SDK gets typed for free without a generation step. Future Python/Go SDKs will need codegen since they can't `import` from `@driftstack/api-types`.
+
+### Decisions made (cross-link)
+
+D-021 (hand-written SDK over codegen). D-022 (`*Input` type variants).
+
+### Status
+
+`@driftstack/sdk` is build-verified, type-clean, and integration-tested against the real server. The package is publish-ready but **NOT yet pushed to npm** — gated on the founder's KvK closure + entity setup for the `@driftstack` scope. `package.json.private = true` until then; `publishConfig.access: public` is in place for when the gate clears.
+
+Webhook System (Priority 2) is the next workstream. The signature-verification helper is already in this SDK release so customers can integrate the verifier as soon as webhook delivery lands.
