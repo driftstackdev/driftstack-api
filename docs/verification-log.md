@@ -1423,3 +1423,83 @@ No new D-entries — PY4 is build polish, not architecture.
 | PY4    | V-025 | README polish + CHANGELOG + wheel build + CI smoke             |
 
 **Next workstream (per founder coordination):** Go SDK, same scope as Python (codegen via oapi-codegen, typed client with retry + error types + webhook helper, examples + tests, publishable but not actually published — gated on KvK).
+
+---
+
+## V-026 — Go SDK landed (GO1 → GO4) + publish-vs-commercial-activation gate clarified
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Go SDK + coordination update.
+
+### Coordination update logged here
+
+The founder revised the SDK-publishing gate: **technical publish to npm / PyPI / Go module registries is NOT gated on KvK** — it's a neutral artifact, not commercial activity. **Commercial activation** (signups, billing, paid customer onboarding) IS gated on KvK closure (May 21). **Advertise** (marketing site live) gates on commercial activation. CLAUDE.md updated; auto-memory entry `publish_vs_commercial.md` saved so future sessions inherit the rule.
+
+`CLAUDE.md` also relaxed the GUI-client out-of-scope entry per the file-128 directive: self-hosted GUI moves to active scope as the upcoming workstream after SDKs publish.
+
+### What was built (Go SDK, GO1 → GO4 in one session)
+
+**`packages/sdk-go/`** — first Go module in the monorepo. Module path `github.com/driftstackdev/driftstack-api/packages/sdk-go`. Zero non-stdlib runtime dependencies. Package layout: flat at module root with `package driftstack` (Stripe-Go convention), customers `import "...sdk-go"` and use `driftstack.New(...)`.
+
+- **`doc.go`, `version.go`** — package overview + `const Version = "0.1.0"`.
+- **`errors.go`** — typed error hierarchy: `apiError` base (private; embedded by every typed error to avoid the field-vs-method shadow that would happen if we named the base `Error`). 14 typed error structs + sentinel `ErrAuth`/`ErrRateLimit`/etc. for `errors.Is` matching, plus `*RateLimitError`/`*ConcurrencyLimitError`/`*QuotaExceededError` carrying the relevant payload fields for `errors.As`. `*UnknownError` catches unmapped problem types (forward-compat for new server errors).
+- **`error_mapping.go`** — `errorFromResponse(status, body, retryAfterHeader)` parses RFC 7807 problem-json and maps to the right typed error via the `problemTypeToFactory` table (single source of truth for "URI → type"). Falls back to `*TransportError` for non-problem bodies.
+- **`retry.go`** — `RetryConfig` + `withRetry(ctx, cfg, fn)`. Exponential backoff with full jitter, honours `Retry-After` from rate-limit responses, retries `*TransportError` + `*RateLimitError` only. `context.Cancel` aborts the retry loop between attempts.
+- **`webhook_signature.go`** — `VerifyWebhookSignature(body, header, secret, ...opts)`. Stripe-style HMAC-SHA256, `hmac.Equal` for constant-time, default 5-min tolerance, order-independent header parsing. Same wire format as the TS + Python SDKs.
+- **`client.go`** — `Client` struct + `New(apiKey, ...Option)` constructor. Functional options: `WithBaseURL`, `WithHTTPClient`, `WithRetry`, `WithTimeout`. Internal `do(ctx, requestOptions)` runs the request + parses response (success → JSON-decoded into `out`; non-2xx → typed error via `errorFromResponse`). Drains response bodies under an 8 MB cap so a hostile server can't OOM the SDK.
+- **`types.go`** — hand-maintained Go structs mirroring the Zod-derived OpenAPI 3.1 schemas: `Account`, `APIKey`, `Session`, `SessionState`, `CreateSessionRequest`, `NavigateRequest`, `InteractRequest` (with `InteractAction` discriminated-union builder helpers `NewTapAction`/`NewTypeAction`/`NewScrollAction`/`NewPressAction`), `WaitRequest` (with `WaitCondition` builder helpers), `CaptureRequest`, `WebhookEndpoint`, `WebhookDelivery`, `Event` envelope, etc. Closed enums use Go `string` aliases + named constants (`TierBuilder`, `SessionReady`, etc.).
+- **Resources** (`sessions.go`, `api_keys.go`, `usage.go`, `webhooks.go`) — typed methods, every one takes `context.Context` first. `*SessionsResource` has 9 methods, `*APIKeysResource` has 3, `*UsageResource` has 1, `*WebhooksResource` has 5. URL paths use `url.PathEscape` so weird ids can't break parsing.
+- **5 examples** (`examples/{quickstart,error_handling,webhook_receiver,goroutine_pool,scraping_pipeline}/main.go`) — each is a `main` package and runs with `go run ./examples/<name>` after setting `DRIFTSTACK_API_KEY`. The webhook receiver is stdlib-only (no Gin/Echo/etc. dep).
+- **`README.md` + `CHANGELOG.md`** — quickstart, resource matrix, error catch patterns, retry config, webhook receiver, examples index, dev workflow.
+- **CI integration** — new `go-sdk` job in `.github/workflows/ci.yml`: `go vet` + `go test -v ./...` + `go build ./examples/...`. No `go.sum` so `cache: false` on setup-go.
+
+### What tests verify it
+
+**33 Go tests**, all passing locally:
+
+- **Errors (6 tests):** problem-type → typed-error mapping (parametrized over every URI in the table), `Retry-After` extraction, `ConcurrencyLimitError` + `QuotaExceededError` field extraction, `UnknownError` fallback for new types, `*TransportError` for non-problem bodies, sentinel-error distinctness via `errors.Is`.
+- **Retry (7 tests):** success path skips retry; transport-error retry-then-succeed; max-retries-then-give-up; non-retryable error not retried (`*InvalidKeyError` propagates immediately); `Disabled: true` skips retries entirely; rate-limit honours `Retry-After`; `context.Cancel` aborts between attempts.
+- **Webhook signature (8 tests):** round-trip valid signature; tampered body / wrong secret / out-of-tolerance timestamps rejected; field-order-independent parsing; malformed-header rejection; custom tolerance.
+- **Client (12 tests):** sessions create/list-with-query/navigate-with-body/destroy-204; URL path escaping (weird session ids); problem-json mapping in real `httptest.Server`; api-keys create returns plaintext; usage current period; webhooks create + list-deliveries with status filter; transient network blip recovers via retry (forced via `Hijacker.Hijack()` + `Conn.Close()` on first attempt).
+
+`go vet ./...` clean. `go build ./examples/...` clean.
+
+Server-side TS + Python surfaces unchanged: 294/294 vitest, 85/85 pytest, all lint/format/typecheck/mypy clean.
+
+### Empirical findings
+
+1. **`oapi-codegen` doesn't yet support OpenAPI 3.1 nullable shorthand** (`type: [string, null]`). Tried it; got "unhandled Schema type: &[string null]" on the first generation. The spec is 3.1 because that's what `@asteasolutions/zod-to-openapi` emits by default; downgrading the spec to 3.0 to satisfy oapi-codegen would either lose schema fidelity or require server-side Zod tweaks. **Decision: hand-write the types**, mirroring D-021's call for the TypeScript SDK ("hand-written over codegen"). The schema is small enough (~40 named types) that hand-writing produces cleaner output; regeneration trigger is "schema changed" rather than "code generator changed."
+
+2. **Go embedding shadow:** naming the base error struct `Error` makes the embedded field name `Error`, which Go's embedding rules say shadows the interface method `Error() string` from the same struct. `*RateLimitError` then doesn't satisfy `error`. **Fix:** rename the base to `apiError` (private) so the embedded field name doesn't clash, and add `*UnknownError` as the public catch-all for unmapped problem types. Compile-time checks at the bottom of `error_mapping.go` (`var _ error = (*RateLimitError)(nil)` etc.) catch any future regression where a typed error stops implementing `error`.
+
+3. **`url.PathEscape` does encode `/`**, but `r.URL.Path` returns the DECODED path. Test that wanted to assert "session id with slash got encoded to %2F" was checking the wrong field — `r.URL.Path` is `"ses_with/slash"`, `r.URL.EscapedPath()` is `"ses_with%2Fslash"`. Same class of "test silently passes the wrong thing" pattern as V-009's autocannon `path` vs `url`, V-014's worker `findEndpointById('')`, and V-018's `seedDelivery` `all[0]` — fixture assertion pinning the wrong half of the round-trip.
+
+4. **Forcing a transient connection failure in `httptest.Server`** is `hj := w.(http.Hijacker); conn, _, _ := hj.Hijack(); conn.Close()`. That returns a `connection refused`-shaped error to the client, which the SDK maps to `*TransportError`, which the retry loop retries. Cleaner than spinning up a second TCP listener that drops connections.
+
+5. **Zero non-stdlib runtime deps** is a genuine win. Customers don't transitively pull pseudo-conflicting versions of httpx-style libraries, and `go.sum` doesn't exist (skip the cache key in CI). Same posture as Stripe-Go and most well-loved Go SDKs.
+
+6. **Module path is the monorepo subdirectory** (`...driftstack-api/packages/sdk-go`), not a separate `driftstack-go` repo. Trade-off: longer customer import path but no second repo to maintain. A separate repo could be split out later if customer feedback prefers shorter imports — `git filter-repo` + module-path bump is a clean migration.
+
+### Decisions made (cross-link)
+
+No new D-entries — codegen-vs-hand-written is the same call as D-021 (TypeScript SDK), applied to Go.
+
+### Workstream summary (GO1 → GO4)
+
+One commit, four V-026 sub-phases:
+
+| phase | scope                                                                                            |
+| ----- | ------------------------------------------------------------------------------------------------ |
+| GO1   | scaffolding + errors + retry + webhook + HTTP client + 21 unit tests                             |
+| GO2   | resource clients (sessions / api_keys / usage / webhooks) + 12 tests                             |
+| GO3   | 5 examples (quickstart / error_handling / webhook_receiver / goroutine_pool / scraping_pipeline) |
+| GO4   | README + CHANGELOG + CI integration                                                              |
+
+Total: **33 Go tests**, ~1900 LOC of Go (production + test + examples).
+
+### Status
+
+Three SDKs landed: TypeScript (V-013), Python (V-023 → V-025), Go (V-026). All publish-ready. Per founder coordination, **all three publish to registries this batch** (TypeScript → npm, Python → PyPI, Go → git tag). Pre-flight name-availability checks first; surface to founder if any package name is taken.
+
+After publish: self-hosted GUI client per file 128 (Tauri scaffold → React + Tailwind brand identity → API integration → live viewport → manual control → SOCKS5 proxy management → session recording → macOS native packaging → polish). 30-50 sessions, multi-week. CLAUDE.md updated to reflect the active scope shift.

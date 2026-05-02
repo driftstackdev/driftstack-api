@@ -204,3 +204,29 @@ jobs:
           assert hasattr(client, 'webhooks')
           print('wheel smoke ok')
           "
+
+  go-sdk:
+    name: Go SDK (vet + tests + examples build)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.22'
+          cache: false # no go.sum yet — zero non-stdlib runtime deps
+
+      - name: go vet
+        working-directory: packages/sdk-go
+        run: go vet ./...
+
+      - name: go test
+        working-directory: packages/sdk-go
+        run: go test -v ./...
+
+      - name: Build examples
+        working-directory: packages/sdk-go
+        run: go build ./examples/...

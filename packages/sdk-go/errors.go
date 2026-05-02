@@ -1,0 +1,159 @@
+package driftstack
+
+import (
+	"errors"
+	"fmt"
+)
+
+// apiError is the base error payload embedded by every typed error
+// returned by the SDK. Renamed from "Error" so the embedded field
+// name doesn't shadow Go's `error` interface's Error() method.
+//
+// Callers don't construct apiError directly — switch on the typed
+// errors below with errors.As:
+//
+//	var rl *driftstack.RateLimitError
+//	if errors.As(err, &rl) {
+//	    time.Sleep(time.Duration(rl.RetryAfterSeconds) * time.Second)
+//	}
+type apiError struct {
+	// Status is the HTTP status code, or 0 for transport-level failures
+	// (network error, timeout, parse error) that didn't reach the server.
+	Status int
+	// ProblemType is the stable RFC 7807 type URI from the server. Empty
+	// for transport-level failures.
+	ProblemType string
+	// Message is the human-readable error detail.
+	Message string
+	// Problem is the full parsed problem document so callers can read
+	// fields the SDK didn't lift to typed properties.
+	Problem map[string]any
+	// Cause is the underlying error (e.g., a net.OpError) when one exists.
+	Cause error
+}
+
+func (e *apiError) Error() string {
+	if e.Cause != nil {
+		return fmt.Sprintf("driftstack: %s (status=%d, cause=%v)", e.Message, e.Status, e.Cause)
+	}
+	return fmt.Sprintf("driftstack: %s (status=%d)", e.Message, e.Status)
+}
+
+func (e *apiError) Unwrap() error { return e.Cause }
+
+// Sentinel errors so callers can use errors.Is for category matching
+// without unwrapping to the typed shape. errors.As is still the right
+// path when the typed payload (RetryAfterSeconds, etc.) matters.
+var (
+	ErrAuth             = errors.New("authentication failed")
+	ErrForbidden        = errors.New("forbidden")
+	ErrInvalidKey       = errors.New("invalid api key")
+	ErrExpiredKey       = errors.New("api key expired")
+	ErrRevokedKey       = errors.New("api key revoked")
+	ErrValidation       = errors.New("validation failed")
+	ErrNotFound         = errors.New("not found")
+	ErrConflict         = errors.New("conflict")
+	ErrRateLimit        = errors.New("rate limited")
+	ErrConcurrencyLimit = errors.New("concurrency limit hit")
+	ErrQuotaExceeded    = errors.New("quota exceeded")
+	ErrSessionDestroyed = errors.New("session destroyed")
+	ErrDriverError      = errors.New("driver error")
+	ErrTransport        = errors.New("transport-level failure")
+)
+
+// AuthError covers any of the auth-related problem types. Use the
+// sentinel siblings (ErrInvalidKey, ErrExpiredKey, ErrRevokedKey) for
+// finer-grained discrimination via errors.Is.
+type AuthError struct {
+	apiError
+}
+
+func (e *AuthError) Is(target error) bool { return target == ErrAuth }
+
+type InvalidKeyError struct{ apiError }
+
+func (e *InvalidKeyError) Is(target error) bool { return target == ErrInvalidKey || target == ErrAuth }
+
+type ExpiredKeyError struct{ apiError }
+
+func (e *ExpiredKeyError) Is(target error) bool { return target == ErrExpiredKey || target == ErrAuth }
+
+type RevokedKeyError struct{ apiError }
+
+func (e *RevokedKeyError) Is(target error) bool { return target == ErrRevokedKey || target == ErrAuth }
+
+type ForbiddenError struct{ apiError }
+
+func (e *ForbiddenError) Is(target error) bool { return target == ErrForbidden || target == ErrAuth }
+
+// ValidationError — 400 with the validation-failed problem type.
+type ValidationError struct{ apiError }
+
+func (e *ValidationError) Is(target error) bool { return target == ErrValidation }
+
+// NotFoundError — 404.
+type NotFoundError struct{ apiError }
+
+func (e *NotFoundError) Is(target error) bool { return target == ErrNotFound }
+
+// ConflictError — 409.
+type ConflictError struct{ apiError }
+
+func (e *ConflictError) Is(target error) bool { return target == ErrConflict }
+
+// RateLimitError — 429 token-bucket. RetryAfterSeconds is the server's
+// hint; the SDK's retry policy already honours it automatically, so most
+// callers don't need to read this field.
+type RateLimitError struct {
+	apiError
+	RetryAfterSeconds int
+}
+
+func (e *RateLimitError) Is(target error) bool { return target == ErrRateLimit }
+
+// ConcurrencyLimitError — 429 because the active-session count would
+// exceed the tier's concurrent ceiling. CurrentSessions and Limit are
+// the values reported in the problem document.
+type ConcurrencyLimitError struct {
+	apiError
+	CurrentSessions int
+	Limit           int
+}
+
+func (e *ConcurrencyLimitError) Is(target error) bool { return target == ErrConcurrencyLimit }
+
+// QuotaExceededError — 429 because a per-period usage quota is
+// exhausted. Current/Limit/RecordType describe which quota.
+type QuotaExceededError struct {
+	apiError
+	Current    int
+	Limit      int
+	RecordType string
+}
+
+func (e *QuotaExceededError) Is(target error) bool { return target == ErrQuotaExceeded }
+
+// SessionDestroyedError — 410 when an op targets a destroyed session.
+type SessionDestroyedError struct{ apiError }
+
+func (e *SessionDestroyedError) Is(target error) bool { return target == ErrSessionDestroyed }
+
+// DriverError — 502 when the underlying driver (mock or real WebKit)
+// returns an unrecoverable error.
+type DriverError struct{ apiError }
+
+func (e *DriverError) Is(target error) bool { return target == ErrDriverError }
+
+// TransportError — network failure, parse failure, or any condition
+// that didn't reach the server with a problem-json body. Status will
+// be 0 for true transport failures (no response received) and the HTTP
+// status for "got a response but it's not parseable as a problem doc".
+type TransportError struct{ apiError }
+
+func (e *TransportError) Is(target error) bool { return target == ErrTransport }
+
+// UnknownError is the catch-all for problem-json responses whose
+// `type` URI isn't in our mapping table. Future server-added problem
+// types surface here until the SDK is updated; callers can still read
+// the .Message and .Problem map.
+type UnknownError struct{ apiError }

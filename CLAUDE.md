@@ -14,17 +14,29 @@ If a technical decision genuinely depends on something outside the agent's scope
 
 **Out of scope (separate workstreams or future phases):**
 
-- GUI client (Electron/Tauri)
-- WebRTC streaming layer
+- ~~GUI client (Electron/Tauri)~~ — **moved to active scope** (see file 128 / GUI workstream below). Self-hosted GUI is the higher-tier ($3k+) product surface and the founder's immediate dev tool for debugging WebKit-fork sessions + SOCKS5 proxy management.
+- WebRTC streaming layer — may land inside the GUI workstream if scope allows; otherwise polling-based screenshots for the first iteration.
 - Behavioural simulation library (file 64) — Phase 3
 - Recipe library — Phase 3
 - Mac mini fleet provisioning — gated on first customer
 - Marketing website
-- Billing integration (Stripe/Mollie) — gated on KvK closure
-- Customer dashboard frontend
+- Billing integration (Stripe/Mollie) — gated on commercial-activation gate (see "Publishing vs commercial activation" below).
+- Customer dashboard frontend (`app.driftstack.dev` for cloud-tier customers) — separate workstream, after the self-hosted GUI client substantively closes.
 - Behavioural data collection
 
 If a request implies any of these, surface to founder rather than expanding scope.
+
+## ⚠️ Publishing vs commercial activation
+
+Three distinct gates — only the second and third are blocked on KvK / entity setup:
+
+1. **Technical publish** (npm, PyPI, Go module registries, GitHub releases). **Not gated.** Public packages on registries are neutral artifacts, not commercial activity. Land them when the SDK is publish-ready.
+2. **Commercial activation** (signups, billing, customer onboarding, paid tiers active). **Gated on KvK closure.**
+3. **Advertise** (marketing site live, soliciting signups). **Gated on commercial activation.**
+
+Initial publish uses the founder's personal account (`joeltheunissen89`). When the entity is registered, ownership transfers — V-log captures the transition. Pre-flight checks before each publish: package name available on the registry, version not already taken, LICENSE present, README publish-quality, no secrets / personal info beyond standard package metadata.
+
+If a package name is taken on a registry, surface for an alternative-naming decision rather than picking one autonomously.
 
 ## ⚠️ The standard
 
