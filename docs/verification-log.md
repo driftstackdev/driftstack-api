@@ -1651,3 +1651,74 @@ No new D-entries.
 GUI2 complete. Founder can connect the GUI to a local Driftstack API server, list / create / destroy sessions. PUB phase paused on npm org creation; resumes once `@driftstack` org exists or founder picks O2 (unscoped names).
 
 Next: GUI3 (live session viewport) — start with polling screenshots via the existing `client.sessions.capture()` endpoint; upgrade to WebRTC if scope allows. Surface architectural fork to founder if WebRTC turns out to require server changes (probably will — the API doesn't currently emit a WebRTC stream).
+
+---
+
+## V-029 — All three SDKs published to public registries (PUB phase complete)
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** PUB (complete).
+
+After two prior blockers — token-without-bypass-2FA (V-027) and scope-doesn't-exist (V-028) — both resolved by founder. Org `@driftstack` created on the npm free plan. All three SDKs published in one go.
+
+### Published versions + SHAs
+
+| package                 | registry | version | SHA at publish                                                                                         |
+| ----------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------ |
+| `@driftstack/api-types` | npm      | 0.1.0   | tarball sha512 starts `mGhdAxeC6Gp5Z…eQ0od3LJ5NYuA==`                                                  |
+| `@driftstack/sdk`       | npm      | 0.1.0   | tarball sha512 starts `tNb8oMrHPSv5s…ICJYlz+mkNUnA==`                                                  |
+| `driftstack-sdk`        | PyPI     | 0.1.0   | wheel `driftstack_sdk-0.1.0-py3-none-any.whl` (33.7 KB), sdist `driftstack_sdk-0.1.0.tar.gz` (28.4 KB) |
+| Go SDK                  | git tag  | v0.1.0  | tag `packages/sdk-go/v0.1.0` → commit `a7d906045a66833c84db1bb018b8a2a0b4266752`                       |
+
+### Verification (post-publish smoke tests)
+
+- **`npm view @driftstack/api-types version`** → `0.1.0` ✓
+- **`npm view @driftstack/sdk dependencies`** → `{ '@driftstack/api-types': '^0.1.0' }` resolves cleanly through the registry (no workspace shim needed) ✓
+- **PyPI install in fresh venv** — `python3.10 -m venv && pip install driftstack-sdk` succeeded; `from driftstack import Driftstack, AsyncDriftstack, verify_webhook_signature, __version__` worked, `__version__ == '0.1.0'`, all four resource accessors mounted on the client. ✓
+- **Go module discovery** — `proxy.golang.org` returned the tag info within seconds; smoke `go get github.com/driftstackdev/driftstack-api/packages/sdk-go@v0.1.0` + a tiny `main.go` that imports the package, instantiates a client, prints `driftstack.Version` ran clean. ✓
+
+### Account / ownership
+
+Initial publish under founder's personal `joeltheunissen89` account on both npm and PyPI. **Ownership transition queued for KvK closure (May 21, 2026):**
+
+- **npm:** `npm org` flow lets owners transfer organisations between accounts; `@driftstack` org migrates from joeltheunissen89's personal account to the entity-owned account once it exists. Documented at https://docs.npmjs.com/transferring-an-org-to-another-user.
+- **PyPI:** project ownership transfers via the project's "Collaborators" page. Add the entity-owned PyPI user as Owner, then remove the personal account. Records the audit trail in PyPI's project history.
+- **Go:** module path is repo-derived; ownership transition follows the GitHub repo (already on the `driftstackdev` GitHub org).
+
+### Empirical findings
+
+1. **The `^0.1.0` dep on `@driftstack/api-types` from `@driftstack/sdk` resolved cleanly through the public registry on the first install.** Verified via `npm view` post-publish. Means the workspace `*` → registry `^0.1.0` swap that V-027 made was correct — no fallback to local symlink for end customers.
+
+2. **PyPI dist name is `driftstack-sdk`, import name is `driftstack`.** PyPI/PEP 503 normalises hyphens and underscores; `driftstack_sdk` and `driftstack-sdk` resolve the same way. The wheel filename uses underscores (`driftstack_sdk-0.1.0-py3-none-any.whl`); customers `pip install driftstack-sdk` and `import driftstack`. Documented in the README.
+
+3. **Go module proxy discovered the tag within seconds** — no manual `GOPROXY=direct` invocation needed. Tag prefix `packages/sdk-go/` is the canonical Go monorepo subdirectory tagging convention; `proxy.golang.org` parsed it correctly out of the box.
+
+4. **Total time from "create the org" to "all three SDKs verified live"**: ~3 minutes. The slow part was waiting for the founder to click through the org creation flow; once unblocked the actual publish + verify chain is fast.
+
+### Decisions made (cross-link)
+
+No new D-entries. `joeltheunissen89` initial-account decision is per founder coordination; documented here for the audit trail.
+
+### Status
+
+PUB workstream complete. All three SDKs are publicly installable with one command apiece. Customers can do this today:
+
+```bash
+# TypeScript / JavaScript
+npm install @driftstack/sdk
+
+# Python
+pip install driftstack-sdk
+
+# Go
+go get github.com/driftstackdev/driftstack-api/packages/sdk-go@v0.1.0
+```
+
+### Queued follow-up: SDK-B (Web Crypto API for browser-isomorphism)
+
+Per founder coordination after V-028: replace `node:crypto` (`createHmac` / `timingSafeEqual`) in `packages/sdk-typescript/src/webhook-signature.ts` with `globalThis.crypto.subtle` (HMAC-SHA256 import + sign + constant-time compare via XOR-difference accumulator). Works in Node 20+ AND every browser. ~50 LOC change. Bump TypeScript SDK to `0.1.1`, republish. After SDK-B lands, swap `apps/gui-client/src/lib/client.ts` (the hand-written fetch wrapper) back to using `@driftstack/sdk` directly — the resource shapes are identical, only the bundling concern blocked the import.
+
+### Next phase
+
+GUI3 — live session viewport via polling against `client.sessions.capture()` at ~500 ms per frame. WebRTC defers to a later phase when server-side streaming infrastructure exists. Polling works against today's API; lets us exercise input event forwarding (GUI4) + session control + recording architecture (GUI6) before committing to the bigger WebRTC investment.
