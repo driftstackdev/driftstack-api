@@ -1102,3 +1102,48 @@ Five OT endpoints landed. R2 consume-path integration verified end-to-end. 290/2
 **Next OT commit (OT8):** M1 + M2 fixture extension (`buildTestApp({ accountId? })` + `seedAdditionalAccount(fx, opts)`) + the suspend→revoked→unsuspend round-trip integration test that V-017 had to drop.
 
 **After OT8 (OT9):** OpenAPI tagging for admin endpoints + one e2e admin action (recommend tier-change since it touches auth, cache, rate-limit, audit). When OT9 lands, the operational tooling workstream is complete.
+
+---
+
+## V-021 — Operational tooling: M1+M2 fixture extension + cross-account suspend round-trip
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Operational tooling. Sixth commit of the workstream.
+
+### What was built
+
+The fixture work the founder approved (M1 + M2), and the round-trip test that motivated it.
+
+- **M1 — `buildTestApp({ accountId?, apiKeyId?, email? })`.** Three new optional overrides on `TestAppOptions`. Backwards-compatible defaults (the historical hardcoded values). Tests that need two distinct accounts pass these to keep their fixtures from sharing ids.
+- **M2 — `seedAdditionalAccount(fx, opts)`.** New exported helper that adds an extra account+key to an existing fixture. Writes to BOTH `InMemoryAuthRepo` (account row + key row) and `InMemoryApiKeysRepo` (key row) — the same constructor-paired propagation set up in V-012. Returns `{ accountId, apiKeyId, plaintext }`.
+- **`apps/server/tests/integration/admin-suspend-roundtrip.test.ts`** — three integration tests exercising cross-account admin actions that the single-account fixture couldn't model:
+  1. Admin A suspends B → B's keys 403 → A unsuspends B → B's keys 200, with both audit rows captured under `targetAccountId = B`.
+  2. Cache-invalidation propagation: B's context warm-cached pre-suspend → suspend → next request from B 403s (the cached entry was invalidated; re-load saw `status='suspended'`).
+  3. Cross-account isolation: tier change on B leaves A's tier unchanged; B sees the new tier on the next request.
+
+### What tests verify it
+
+**Total test surface: 290 → 293 green** (+3 integration). New: `tests/integration/admin-suspend-roundtrip.test.ts`.
+
+The tests are small but high-leverage — they're the regression catch for D-025's cache-invalidation contract and the cross-account isolation property of `requireScope` + `getAccount`.
+
+### Empirical findings
+
+1. **The fixture hardcoded ids weren't accidentally cross-cutting; they were a deliberate simplicity that became a constraint.** V-002 set the pattern (one fixture, one account, one key). It worked through Phase 6 because no test needed two accounts simultaneously. V-014's account-scoping test sidestepped by building two fixtures (different in-memory repos, no state-sharing concern). V-017's suspend round-trip test exposed the real shape of the constraint: the test needed cross-account interaction WITHIN a single repo. M1 + M2 are the minimum addition to support that shape; they don't change anything for the existing fixtures.
+
+2. **`seedAdditionalAccount` writes to two repos.** `InMemoryApiKeysRepo` was constructor-paired with `InMemoryAuthRepo` in V-012's fixture-fix (so revocations propagate to both). `seedAdditionalAccount` mirrors that — every helper that adds a key has to write to both, otherwise the admin endpoints (which read through `apiKeysRepo`) and the auth path (which reads through `authRepo`) see different data. Test infrastructure mirroring production's "single Postgres row read by two paths" remains the right invariant.
+
+3. **The cache-invalidation propagation test is the strongest D-025 regression catch in the codebase.** It walks the full chain: cache warm → admin mutation → `authCache.invalidateAccount` → next request → cache miss → fresh ctx with the new state → blocked. A future commit that breaks any link in that chain (e.g. forgets to call `invalidateAccount` in a new admin mutation) will fail this test loudly.
+
+4. **`/v1/whoami` was the right endpoint to verify cross-account tier change** — it returns the tier directly from the AccountContext, so the test can check that A's request returns A's tier and B's request returns B's tier with no ambiguity. Other endpoints would have worked but required indirection (e.g. checking that A's rate limit still uses A's tier capacity, which requires inspecting headers).
+
+### Decisions made (cross-link)
+
+No new D-entries — fixture work is Tier 1 inside the test infrastructure.
+
+### Status
+
+Multi-account fixtures landed. Cross-account suspend round-trip + cache-invalidation propagation tests passing. 293/293 tests green; lint clean; format clean; typecheck green.
+
+**Next OT commit (OT9 — workstream finale):** OpenAPI tagging for admin endpoints (so `/v1/admin/*` can be filtered out of customer-facing docs at generation time) + one e2e admin action via Playwright (recommend tier-change since it exercises auth, cache, rate-limit, audit in one shot). When OT9 lands, the operational tooling workstream is complete and surface for the founder's next-batch direction.

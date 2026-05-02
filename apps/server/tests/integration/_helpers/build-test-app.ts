@@ -36,6 +36,32 @@ export interface TestAppOptions {
   accountStatus?: 'active' | 'suspended' | 'deleted';
   keyRevoked?: boolean;
   keyExpired?: boolean;
+  /**
+   * Optional override for the seeded account id. Default is the
+   * historical hardcoded value. Tests that need two distinct accounts
+   * pass this to keep the second fixture from clobbering the first.
+   */
+  accountId?: string;
+  /** Optional override for the seeded api-key id. */
+  apiKeyId?: string;
+  /** Optional override for the seeded email (must be unique per fixture). */
+  email?: string;
+}
+
+export interface SeedAdditionalOpts {
+  accountId?: string;
+  apiKeyId?: string;
+  tier?: AccountTier;
+  scopes?: ApiKeyScope[];
+  accountStatus?: 'active' | 'suspended' | 'deleted';
+  email?: string;
+  name?: string;
+}
+
+export interface AdditionalAccount {
+  accountId: string;
+  apiKeyId: string;
+  plaintext: string;
 }
 
 export interface TestAppFixture {
@@ -62,12 +88,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const authRepo = new InMemoryAuthRepo();
   const rateLimitStore = new MemoryRateLimitStore();
 
-  const accountId = '00000000-0000-4000-8000-000000000001';
-  const apiKeyId = '00000000-0000-4000-8000-000000000a01';
+  const accountId = opts.accountId ?? '00000000-0000-4000-8000-000000000001';
+  const apiKeyId = opts.apiKeyId ?? '00000000-0000-4000-8000-000000000a01';
 
   authRepo.upsertAccount({
     id: accountId,
-    email: 'tester@driftstack.local',
+    email: opts.email ?? 'tester@driftstack.local',
     name: 'Tester',
     tier: opts.tier ?? 'builder',
     status: opts.accountStatus ?? 'active',
@@ -180,4 +206,54 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       await app.close();
     },
   };
+}
+
+/**
+ * Seed a second (or third, etc.) account on an existing test fixture.
+ * Used by tests that need cross-account interaction — e.g. admin A
+ * suspending account B then verifying B's keys 403 while A's keys
+ * still work.
+ *
+ * The new account/key are written to BOTH `authRepo` and `apiKeysRepo`
+ * (via the constructor-paired propagation set up in V-012). Returns
+ * the new ids and plaintext key.
+ */
+export async function seedAdditionalAccount(
+  fx: TestAppFixture,
+  opts: SeedAdditionalOpts = {},
+): Promise<AdditionalAccount> {
+  const accountId = opts.accountId ?? '00000000-0000-4000-8000-0000000000a2';
+  const apiKeyId = opts.apiKeyId ?? '00000000-0000-4000-8000-000000000a02';
+
+  fx.authRepo.upsertAccount({
+    id: accountId,
+    email: opts.email ?? `tester-${accountId.slice(-4)}@driftstack.local`,
+    name: opts.name ?? 'Tester-2',
+    tier: opts.tier ?? 'builder',
+    status: opts.accountStatus ?? 'active',
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date('2026-01-01T00:00:00Z'),
+  });
+
+  const plaintext = generateApiKey('test');
+  const keyHash = await hashApiKey(plaintext);
+  const keyPrefix = keyPrefixFromPlaintext(plaintext);
+
+  const keyRow = {
+    id: apiKeyId,
+    accountId,
+    name: 'second-account-key',
+    keyPrefix,
+    keyHash,
+    scopes: opts.scopes ?? (['read', 'write', 'admin'] as ApiKeyScope[]),
+    lastUsedAt: null,
+    revokedAt: null,
+    expiresAt: null,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+  };
+
+  fx.authRepo.upsertApiKey(keyRow);
+  fx.apiKeysRepo.upsert(keyRow);
+
+  return { accountId, apiKeyId, plaintext };
 }
