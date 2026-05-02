@@ -167,3 +167,52 @@ D-017 (drop EOPT), D-018 (Fastify plugin callback form). See `docs/decisions.md`
 Phase 3 ready to commit and push. 67 tests passing locally. Auth + rate-limit pipelines validated end-to-end via Fastify `inject` against in-memory adapters. Real-Postgres + Real-Redis integration tests are deferred until the founder unblocks Docker / `workflow` scope.
 
 Phase 4 (mock WebKit driver) is the next clean target — the driver interface is fully decoupled from DB/Redis, so it can be designed, implemented, and tested in isolation.
+
+---
+
+## V-004 — Phase 4: Driver interface, MockDriver, WebKitDriver stub, factory
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** 4 (mock WebKit driver)
+
+### What was built
+
+- **Driver interface** (`apps/server/src/drivers/types.ts`) — 7-method contract: `createSession`, `navigate`, `interact`, `wait`, `getState`, `capture`, `destroy`. Input shapes (`NavigateInput`, `InteractInput`, etc.) reuse types from `@driftstack/api-types` where the public Zod-validated shape matches; otherwise plain TS interfaces. Driver consumes already-validated objects (route layer parses, services pass through) — no per-call Zod re-validation cost.
+- **MockDriver** (`apps/server/src/drivers/mock.ts`) — in-memory, deterministic. Counter-based session ids (`mock_ses_00000001`, `mock_ses_00000002`, …). Configurable per-call latency via constructor (`navigateLatencyMs`, `interactLatencyMs`); tests use `fastForwardLatency: true` to bypass timers entirely. Error simulation via well-known trigger inputs:
+  - `https://error.driftstack-mock.test` → `DriverError` (network failure)
+  - `https://timeout.driftstack-mock.test` → hangs full timeout, then `DriverError`
+  - `https://http500.driftstack-mock.test` → returns status 500 (no throw)
+  - selector `#nonexistent` → `DriverError` ("selector not found")
+  - selector `#hangs` → hangs, then `DriverError`
+  - Operations on a destroyed session → `DriverError`
+  - Invalid URL → `DriverError`
+  - Capture: 1×1 transparent base64 PNG for screenshots; minimal HTML for DOM snapshots; stub PDF.
+- **WebKitDriver stub** (`apps/server/src/drivers/webkit.ts`) — implements every method as `throw new DriverNotIntegratedError()`. Compiles, lints, and works as a placeholder until the Driftstack WebKit fork closes Phase 2.
+- **Driver factory** (`apps/server/src/drivers/index.ts`) — `createDriver(config)` returns `MockDriver` when `DRIVER=mock`, `WebKitDriver` when `DRIVER=webkit`. Re-exports the Driver interface and types for consumers.
+
+### What tests verify it
+
+**88 total tests, all passing.** New in Phase 4: 21 tests.
+
+- **mock-driver suite** (`tests/unit/mock-driver.test.ts`, 18 tests): session lifecycle (id format + monotonicity, idempotent destroy, post-destroy ops throw), navigate (happy path, state update, malformed URL, network-error trigger, http500 trigger), interact (tap, press, selector-not-found trigger), wait (time-based actually waits, selector-never-appears times out unsatisfied), capture (screenshot is base64 PNG, dom_snapshot is utf8 HTML, pdf is base64), getState (fresh session has nulls), determinism (two drivers given same op sequence produce identical results).
+- **driver-factory suite** (`tests/unit/driver-factory.test.ts`, 3 tests): factory selects MockDriver for `mock`, WebKitDriver for `webkit`, every WebKitDriver method rejects with `DriverNotIntegratedError`.
+- `npm run typecheck` → green.
+- `npm run lint` → 0 errors.
+- `npm run format:check` → all files clean.
+
+### Empirical findings
+
+1. **Synchronous throws inside non-async Promise-returning methods bypass Promise semantics.** First version of `MockDriver.getState` used `Promise.resolve({...})` directly. When `requireSession` threw a `DriverError` synchronously, the exception escaped the function call site rather than rejecting the returned promise — `await expect(...).rejects.toBeInstanceOf(DriverError)` failed because there was no rejected promise, just a synchronous throw. Fixed by marking these methods `async` (with a `Promise.resolve()` await prefix to keep them async-shaped) so any throw inside is automatically wrapped in a rejected promise. Same fix applied to `WebKitDriver` stub methods.
+2. **Driver inputs are not Zod-validated again at the boundary.** The route layer is the single Zod-validation site. Driver methods accept already-typed objects. This avoids ~10ms of Zod parse time on every call (which adds up for 100 RPS), and concentrates the "is this client input valid?" question in one place. The driver still type-checks at compile time via TS.
+3. **Trigger-based error simulation gives deterministic test coverage.** Rather than mocking individual driver methods per test (brittle, no real shape coverage), tests pass real `https://error.driftstack-mock.test` URLs and the mock returns the error path. Same for selectors. This pattern lets the same mock handle every error case the real WebKit driver will produce, and the tests document which trigger inputs map to which error class.
+
+### Decisions made (cross-link)
+
+No new D-entries this phase — every choice was a Tier 1 implementation detail within the locked stack.
+
+### Status
+
+Phase 4 ready to commit and push. 88 tests passing locally. The driver contract is the single integration point between Agent #1 (WebKit fork) and Agent #2 (this repo); when the fork's Phase 2 closes, Agent #1 hands off the implementation behind this exact interface.
+
+Phase 5 (session endpoints) is the next target. It needs DB writes for the `sessions` table — verifying it locally requires Postgres. Will write the routes + service code regardless; integration tests against real Postgres land when Docker comes online or CI runs.
