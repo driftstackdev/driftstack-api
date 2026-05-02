@@ -1,8 +1,7 @@
 {
   "name": "@driftstack/sdk",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Official TypeScript SDK for the Driftstack API",
-  "private": true,
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -27,7 +26,12 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@driftstack/api-types": "*"
+    "@driftstack/api-types": "^0.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/driftstackdev/driftstack-api.git",
+    "directory": "packages/sdk-typescript"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

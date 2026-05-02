@@ -36,3 +36,10 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 packages/sdk-python/dist/
+.npmrc
+
+# GUI client (Tauri)
+apps/gui-client/dist/
+apps/gui-client/src-tauri/target/
+apps/gui-client/src-tauri/gen/
+# Cargo.lock SHOULD be committed for binaries (Tauri app is a binary).

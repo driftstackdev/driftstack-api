@@ -7,6 +7,8 @@
     "declarationMap": false,
     "sourceMap": false,
     "allowJs": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
     "types": ["node", "vitest/globals"]
   },
   "include": [
@@ -15,12 +17,23 @@
     "drizzle.config.ts",
     "apps/**/playwright.config.ts",
     "apps/**/src/**/*.ts",
+    "apps/**/src/**/*.tsx",
     "apps/**/tests/**/*.ts",
+    "apps/**/vite.config.ts",
+    "apps/**/tailwind.config.ts",
+    "apps/**/postcss.config.js",
     "packages/**/src/**/*.ts",
     "packages/**/tests/**/*.ts",
     "packages/**/examples/**/*.ts",
     "packages/**/tsup.config.ts",
     "perf/**/*.ts"
   ],
-  "exclude": ["node_modules", "dist", "build", "coverage"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "coverage",
+    "apps/gui-client/src-tauri",
+    "apps/gui-client/dist"
+  ]
 }

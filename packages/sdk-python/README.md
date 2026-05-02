@@ -7,8 +7,10 @@ Stealth iPhone Safari automation, called from Python. Sync (`Driftstack`) and as
 ## Install
 
 ```bash
-pip install driftstack
+pip install driftstack-sdk
 ```
+
+The dist name on PyPI is `driftstack-sdk`; the import name is `driftstack`.
 
 Requires Python 3.10+.
 

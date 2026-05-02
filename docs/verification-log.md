@@ -1503,3 +1503,77 @@ Total: **33 Go tests**, ~1900 LOC of Go (production + test + examples).
 Three SDKs landed: TypeScript (V-013), Python (V-023 → V-025), Go (V-026). All publish-ready. Per founder coordination, **all three publish to registries this batch** (TypeScript → npm, Python → PyPI, Go → git tag). Pre-flight name-availability checks first; surface to founder if any package name is taken.
 
 After publish: self-hosted GUI client per file 128 (Tauri scaffold → React + Tailwind brand identity → API integration → live viewport → manual control → SOCKS5 proxy management → session recording → macOS native packaging → polish). 30-50 sessions, multi-week. CLAUDE.md updated to reflect the active scope shift.
+
+---
+
+## V-027 — Publish attempt (npm 2FA blocker) + GUI1 scaffold landed in parallel
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** PUB (paused on auth) + GUI1 (complete).
+
+### Publish attempt
+
+Per founder's full-auto authorization with `NPM_TOKEN`, `TWINE_USERNAME`, `TWINE_PASSWORD` in `~/.zshenv`. Pre-flight all green: both npm scope names (`@driftstack/api-types`, `@driftstack/sdk`) returned 404, both PyPI names (`driftstack`, `driftstack-sdk`) returned 404, `npm whoami` confirmed `joeltheunissen89`.
+
+Bumped versions to `0.1.0` across the publishable packages:
+
+- `packages/api-types/package.json`: 0.0.1 → 0.1.0, removed `private:true`, added `publishConfig.access: public` + `repository` + `license` + `description`.
+- `packages/sdk-typescript/package.json`: 0.0.1 → 0.1.0, removed `private:true`, dep on api-types `*` → `^0.1.0`, added `repository`.
+- `packages/sdk-python/pyproject.toml`: name `driftstack` → `driftstack-sdk` (per founder directive), version 0.0.1 → 0.1.0.
+- `packages/sdk-python/src/driftstack/_version.py`: 0.1.0.
+- Wrote `packages/api-types/README.md` (newly publishable; was missing).
+- Set up `.npmrc` with `${NPM_TOKEN}` reference, gitignored. Verified `npm whoami` returns `joeltheunissen89`.
+- Re-built TS chain clean: `dist/` for api-types (39 files, 28.8 KB tarball) + sdk (8 files, 30.6 KB tarball). Inspected via `npm pack --dry-run` — no test fixtures, no `node_modules` cruft, no secrets.
+
+`npm publish --access public` from `packages/api-types/` returned **403**:
+
+```
+403 Forbidden - PUT https://registry.npmjs.org/@driftstack%2fapi-types
+       Two-factor authentication or granular access token with bypass 2fa
+       enabled is required to publish packages.
+```
+
+**STOPPED** per directive 6 ("npm publish or twine upload returns ANY error — don't retry blindly; surface for review"). Token is granular but doesn't have "Allow publishing without two-factor authentication" enabled. Three remediation paths surfaced ([N1] new granular token with bypass-2FA, [N2] classic Automation token, [N3] manual `--otp=` per publish). PyPI publish + Go tag NOT attempted (sequencing per directive 4: npm first). Will resume once token issue resolved.
+
+### GUI1 scaffold (parallel work per directive)
+
+Tauri 2.x + React 18 + TypeScript strict + Tailwind. Brand identity tokens locked per file 128. macOS-first packaging targets.
+
+- **Module path:** `apps/gui-client/`. JS workspace package `@driftstack/gui-client` (private — never published as a package; ships as a `.app`/`.dmg`).
+- **Frontend:** Vite + React 18 + TypeScript 5 strict, Tailwind with the locked brand palette.
+- **Brand identity** (`apps/gui-client/tailwind.config.ts`): semantic surface tokens (`surface-base #0b0f14`, `surface-raised #111722`, `surface-elevated #1a2230`); ink tokens (`ink-primary #e5e7eb`, `ink-secondary`, `ink-muted`); single accent (`accent #722f37` oxblood + hover/active/subtle/ring); status colours (ready/busy/error/idle); fonts (`Geist Sans` body + `Berkeley Mono` technical accents, both with credible OS fallback stacks). Component atoms (`btn-primary`, `btn-secondary`, `btn-danger`, `mono`, `status-pip`, `section-label`) live in `src/styles/index.css` `@layer components`.
+- **Window shell** (`src/App.tsx`): `TitleBar` with Tauri `data-tauri-drag-region`, `Sidebar` (Sessions / Network / Cluster sections), main panel with a `PlaceholderPanel`, `StatusFooter`. Disabled buttons indicate the GUI2+ work that fills them in.
+- **Tauri backend** (`src-tauri/`): minimal — `lib.rs` with a single `ping` command for the React shell to verify the Rust backend is alive; `tauri.conf.json` with macOS overlay titlebar, dark `backgroundColor`, app+dmg bundle targets, `dev.driftstack.gui` identifier.
+- **Icons:** placeholder oxblood-coloured PNGs generated programmatically (32x32, 128x128, 128x128@2x, 256x256), then `npx tauri icon` produced the platform-format derivatives (`.icns`, `.ico`, Android mipmaps). Real brand assets replace these in GUI7 (native packaging phase).
+- **CI integration deferred** to GUI2 — the Rust toolchain bumps each commit's CI runtime by ~3 minutes (cold), so we'll add the `gui-client` job once there's actual logic worth verifying beyond "it compiles."
+
+### Verification chain
+
+- Frontend: `npm run typecheck` green, `npm run build` green (146 KB JS, 10 KB CSS, gzip 47 KB / 2.5 KB).
+- Rust: `cargo check` green on macOS arm64 with Rust 1.95.0 (installed via brew `rustup` + `rustup-init -y --profile minimal`).
+- Whole-monorepo: `npm run typecheck` / `npm test` / `npm run lint` / `npm run format:check` all clean. 294/294 vitest unchanged.
+
+### Empirical findings
+
+1. **npm 10.5.0 + node v25.9 has a `minimatch is not a function` bug** when reloading a stale lockfile relative to current `package.json` (specifically: workspace package metadata changed since the lockfile was written). Triggered by my version-bump on `packages/api-types/package.json`. Fix: `rm -rf node_modules package-lock.json && npm install`. Logged because future workspace changes that invalidate the lockfile will hit this on this Mac. The bug is in `@npmcli/map-workspaces` shipped with npm 10.5.0; npm 10.6+ fixes it, but homebrew's pinned to 10.5.0 right now.
+
+2. **Vite 5 + Tauri 2 dev recipe still works at the latest versions**, but the official guide's `defineConfig(async () => ({...}))` shape didn't typecheck — tsc complained the async-returning function isn't assignable to `UserConfigFnObject`. Switched to plain `defineConfig({...})`. envPrefix `'TAURI_ENV_*'` (with the glob) was also rejected; corrected to `'TAURI_ENV_'` (prefix match).
+
+3. **`@layer components` for brand atoms** keeps the React tree readable (`<button className="btn-primary">` not 12 atomic classes). Names match the brand-identity vocabulary directly so adding a new variant is a one-line CSS addition + zero JS changes.
+
+4. **Tauri requires actual icon files at compile time** (the proc-macro `tauri::generate_context!()` opens `icons/32x32.png` etc. and panics if missing). Stub icons via Python's `struct`+`zlib` PNG-from-scratch worked for 32x32 / 128x128 / 256x256; `npx tauri icon` then produced `.icns` and `.ico` from the largest stub. GUI7 replaces with real brand assets.
+
+5. **Cargo.lock SHOULD be committed for binaries** (Tauri app is a binary, not a library). Initially gitignored Cargo.lock by reflex; corrected before commit.
+
+6. **Rustup install timing:** brew `rustup` + non-interactive `rustup-init -y --profile minimal` took ~30 s on this Mac; the first `cargo check` for the full Tauri 2 dependency graph took ~90 s (compiles `tauri 2.11`, `wry`, `tao`, `objc2-web-kit`, ~140 transitive crates).
+
+7. **eslint `tsconfig.eslint.json` needed `lib: [DOM, DOM.Iterable]` + `jsx: react-jsx`** to type-check the GUI's React/TSX files. Without it, `document.getElementById` failed type-aware lint with "type cannot be resolved." Added globally rather than per-package since eslint covers the whole monorepo.
+
+### Decisions made (cross-link)
+
+No new D-entries. Codegen-tool, build-tooling, and brand-identity decisions all follow founder coordination directly.
+
+### Status
+
+PUB phase paused on npm 2FA blocker; surfaced to founder. GUI1 scaffold complete. Working-tree state of the publish-prep version bumps committed alongside GUI1 in this commit (the bumps are needed for GUI1's workspace dep on `@driftstack/sdk` to resolve to `^0.1.0` consistently). Resume PUB once token issue resolved; continue to GUI2 (API integration) in next session.

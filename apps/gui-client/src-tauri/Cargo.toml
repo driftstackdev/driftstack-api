@@ -1,0 +1,27 @@
+[package]
+name = "driftstack-gui"
+version = "0.0.1"
+description = "Driftstack self-hosted GUI client"
+authors = ["Driftstack"]
+edition = "2021"
+license = "MIT"
+publish = false  # binary, not a library; never published to crates.io
+
+[lib]
+name = "driftstack_gui_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = [] }
+tauri-plugin-shell = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[features]
+# Customer-facing build defaults to no devtools; opens up by passing
+# `--features devtools` during `cargo tauri dev`.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

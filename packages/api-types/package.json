@@ -1,7 +1,8 @@
 {
   "name": "@driftstack/api-types",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Public API contract types (Zod schemas) for the Driftstack API.",
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,6 +11,18 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/driftstackdev/driftstack-api.git",
+    "directory": "packages/api-types"
   },
   "scripts": {
     "build": "tsc --build",
