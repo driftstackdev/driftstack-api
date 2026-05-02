@@ -1,8 +1,8 @@
 # Driftstack Python SDK
 
-Stealth iPhone Safari automation, called from Python. Sync (`requests`/`httpx.Client`) and async (`asyncio`/`httpx.AsyncClient`) clients in one package.
+Stealth iPhone Safari automation, called from Python. Sync (`Driftstack`) and async (`AsyncDriftstack`) clients in one package, sharing the same typed resources, error hierarchy, and retry policy.
 
-> **Status:** alpha. The SDK is built and tested but not yet published to PyPI — gated on entity setup. `pyproject.toml.private` is `false` because the standard tooling will publish straight from `hatch build` once the gate clears.
+> **Status:** alpha. The SDK is built, tested, and wheel-buildable, but **not yet published to PyPI** — gated on entity setup. Until then, install from a local checkout or a tagged commit.
 
 ## Install
 
@@ -18,9 +18,11 @@ Requires Python 3.10+.
 from driftstack import Driftstack
 
 with Driftstack(api_key="ds_live_…") as client:
-    # PY2 lands the resource methods. The constructor + auth + transport
-    # path is shipped in PY1 (V-023).
-    pass
+    session = client.sessions.create({"label": "ci-run"})
+    client.sessions.navigate(str(session.id), {"url": "https://example.com/"})
+    state = client.sessions.get_state(str(session.id))
+    print(state.url, state.title)
+    client.sessions.destroy(str(session.id))
 ```
 
 ## Quickstart (async)
@@ -31,46 +33,64 @@ from driftstack import AsyncDriftstack
 
 async def main():
     async with AsyncDriftstack(api_key="ds_live_…") as client:
-        pass
+        s = await client.sessions.create()
+        await client.sessions.navigate(str(s.id), {"url": "https://example.com/"})
+        await client.sessions.destroy(str(s.id))
 
 asyncio.run(main())
 ```
 
-## Webhook signature verification
+## Resources
 
-Already shipped in PY1 — customers can verify Driftstack webhook deliveries today regardless of whether the resource methods have landed:
+Every public API endpoint is a typed method on a resource accessor:
+
+| Accessor          | Methods                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------ |
+| `client.sessions` | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `destroy` |
+| `client.api_keys` | `create`, `list`, `revoke`                                                                 |
+| `client.usage`    | `current_period`                                                                           |
+| `client.webhooks` | `create`, `list`, `get`, `delete`, `list_deliveries`                                       |
+
+Inputs accept either a Pydantic model OR a plain `dict` (both serialize identically on the wire). Outputs are typed Pydantic models — IDEs autocomplete every field.
 
 ```python
-from driftstack import verify_webhook_signature
-
-@app.post("/driftstack-webhook")
-def receive():
-    raw_body = request.get_data()  # Flask; framework-specific raw-body access
-    ok = verify_webhook_signature(
-        body=raw_body,
-        header=request.headers.get("x-driftstack-signature"),
-        secret=os.environ["DRIFTSTACK_WEBHOOK_SECRET"],
-    )
-    if not ok:
-        return ("", 401)
-    # ... process event ...
-    return ("", 204)
+# Either of these works:
+from driftstack._generated.models import CreateSessionRequest
+client.sessions.create(CreateSessionRequest(label="ci"))
+client.sessions.create({"label": "ci"})
 ```
 
-## Errors
+## Error handling
 
-The SDK maps every server `application/problem+json` response onto a typed exception. The base class is `DriftstackError`; subclasses cover the documented problem types.
+Every server `application/problem+json` response is mapped to a typed exception. The base class is `DriftstackError`; subclasses cover the documented problem types.
 
 ```python
-from driftstack import RateLimitError, DriftstackError
+from driftstack import (
+    AuthError,
+    ConcurrencyLimitError,
+    DriftstackError,
+    QuotaExceededError,
+    RateLimitError,
+    ValidationError,
+)
 
 try:
-    client.sessions.create()  # PY2
+    session = client.sessions.create()
+except AuthError:
+    ...                                    # invalid / expired / revoked key
+except ConcurrencyLimitError as e:
+    ...                                    # e.current_sessions / e.limit
+except QuotaExceededError as e:
+    ...                                    # e.current / e.limit / e.record_type
 except RateLimitError as e:
     time.sleep(e.retry_after_seconds or 1)
+except ValidationError as e:
+    ...                                    # e.message has the server's detail
 except DriftstackError as e:
-    log.error("driftstack call failed: %s", e)
+    ...                                    # catch-all for anything else
 ```
+
+The full hierarchy lives in `driftstack/errors.py`; the URI → exception mapping is in `PROBLEM_TYPE_TO_ERROR`.
 
 ## Retry
 
@@ -82,24 +102,88 @@ from driftstack.retry import RetryConfig
 
 client = Driftstack(
     api_key="ds_live_…",
-    retry=RetryConfig(max_retries=5, initial_delay_ms=500),
+    retry=RetryConfig(max_retries=5, initial_delay_ms=500, max_delay_ms=10_000),
+)
+
+# Disable entirely for predictable testing:
+client = Driftstack(api_key="…", retry=RetryConfig(enabled=False))
+```
+
+Retryable errors by default: `TransportError` (network / timeout / parse) + `RateLimitError`. Other typed errors (auth, validation, quota, concurrency) propagate immediately.
+
+## Webhook signature verification
+
+Stripe-style HMAC-SHA256 over `<unix_seconds>.<raw_body>`. Constant-time comparison via `hmac.compare_digest`. 5-minute default tolerance.
+
+```python
+from driftstack import verify_webhook_signature
+
+@app.post("/driftstack-webhook")
+def receive():
+    raw = request.get_data()                   # framework-specific raw body
+    ok = verify_webhook_signature(
+        body=raw,
+        header=request.headers.get("x-driftstack-signature"),
+        secret=os.environ["DRIFTSTACK_WEBHOOK_SECRET"],
+    )
+    if not ok:
+        return ("", 401)
+    # ... process event ...
+    return ("", 204)
+```
+
+A complete stdlib-only receiver lives in [`examples/webhook_receiver.py`](examples/webhook_receiver.py).
+
+## Examples
+
+- [`quickstart.py`](examples/quickstart.py) — minimal create/navigate/capture/destroy.
+- [`error_handling.py`](examples/error_handling.py) — granular catch + custom retry loop.
+- [`webhook_receiver.py`](examples/webhook_receiver.py) — stdlib HTTP receiver with signature verify + dispatch.
+- [`langchain_tool.py`](examples/langchain_tool.py) — LangChain `Tool` adapter for AI-agent QA pipelines.
+- [`pytest_fixture.py`](examples/pytest_fixture.py) — drop-in `mock_driftstack` fixture for customer test suites.
+
+## Configuration
+
+```python
+client = Driftstack(
+    api_key="ds_live_…",          # required
+    base_url="https://api.driftstack.dev",   # default; override for self-host or test
+    timeout_s=30.0,               # per-request timeout
+    retry=RetryConfig(...),       # see above
+    http_client=httpx.Client(...) # advanced: BYO httpx.Client
 )
 ```
+
+The async client takes the same arguments; pass `httpx.AsyncClient(...)` instead of `httpx.Client(...)`.
 
 ## Development
 
 ```bash
-cd packages/sdk-python
-python3 -m venv .venv
+# from packages/sdk-python/
+python3.10 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
 pytest
+ruff check . && ruff format --check .
+mypy src
 ```
 
 Re-generate Pydantic models from a fresh OpenAPI spec:
 
 ```bash
 # from the repo root
-npm run sdk:python:dump-spec       # writes packages/sdk-python/openapi.json
-npm run sdk:python:generate         # runs datamodel-codegen
+npm run sdk:python:dump-spec     # writes packages/sdk-python/openapi.json
+npm run sdk:python:generate      # runs datamodel-codegen
 ```
+
+Build the wheel:
+
+```bash
+# from packages/sdk-python/
+python -m pip install build
+python -m build       # → dist/driftstack-X.Y.Z-py3-none-any.whl + sdist
+```
+
+## License
+
+MIT.

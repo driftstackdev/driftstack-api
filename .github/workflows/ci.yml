@@ -181,3 +181,26 @@ jobs:
       - name: Pytest
         working-directory: packages/sdk-python
         run: pytest -v
+
+      - name: Build wheel + sdist
+        working-directory: packages/sdk-python
+        run: |
+          pip install build
+          python -m build
+
+      - name: Smoke-test wheel install in a fresh venv
+        working-directory: packages/sdk-python
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install dist/driftstack-*.whl
+          /tmp/smoke/bin/python -c "
+          from driftstack import Driftstack, AsyncDriftstack, verify_webhook_signature
+          from driftstack import DriftstackError, RateLimitError, AuthError
+          from driftstack._generated.models import Session, ApiKey, WebhookEndpoint
+          client = Driftstack(api_key='ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+          assert hasattr(client, 'sessions')
+          assert hasattr(client, 'api_keys')
+          assert hasattr(client, 'usage')
+          assert hasattr(client, 'webhooks')
+          print('wheel smoke ok')
+          "

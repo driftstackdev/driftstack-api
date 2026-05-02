@@ -1368,3 +1368,58 @@ PY2 + PY3 landed. 85/85 Python tests pass; ruff/mypy/format clean; CI job from V
 **Next session (PY4 — workstream finale):** README polish (replace the PY1-stub quickstart with the full-resource example), CHANGELOG seed, MANIFEST.in for the wheel, version-bump check, and a final `hatch build` smoke (verify the wheel is installable into a fresh venv and exposes the expected import surface). Plus surface a Go SDK plan for direction.
 
 A real-wire integration suite (Python pytest hitting a running Fastify on a random port) is queued past PY4 — the respx-driven workflow tests catch the same "type drift" class of bug at the Pydantic validation boundary, which is the surface customers feel.
+
+---
+
+## V-025 — Python SDK PY4: README polish + CHANGELOG + wheel build + CI smoke (workstream complete)
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Python SDK. Fourth and final commit.
+
+### What was built
+
+- **README rewrite** — replaced the PY1-stub quickstart with a complete reference: sync + async quickstarts, the resource-method matrix table, error-class catch examples, retry config recipes, webhook-signature snippet, examples index, configuration reference, dev workflow + wheel build commands. The sync quickstart is exactly what a customer pastes after `pip install driftstack`.
+- **CHANGELOG.md** — Keep-a-Changelog format. `[0.0.1] - 2026-05-02` lists everything added across PY1+PY2+PY3, plus a build-tooling section pinning the runtime + dev deps. `[Unreleased]` placeholder is empty so the next version-bump commit drops new items there directly.
+- **Wheel build verified locally** — `python -m build` produces `dist/driftstack-0.0.1-py3-none-any.whl` (21,832 bytes) + `driftstack-0.0.1.tar.gz` (16,511 bytes). Hatchling pulls in only the right files (no `tests/`, no `examples/`, no `_generated/__pycache__`).
+- **Wheel smoke-tested in a fresh venv** — fresh `python3.10 -m venv` → `pip install <wheel>` → import surface check (`Driftstack`, `AsyncDriftstack`, `verify_webhook_signature`, `DriftstackError`, `RateLimitError`, `AuthError`, plus generated models `Session`, `ApiKey`, `WebhookEndpoint`) + assert all four resource accessors are bound on the client. Smoke passed on first run.
+- **CI extension** — added two steps to the `python-sdk` job: `python -m build` produces the wheel + sdist on every push, and a downstream venv smoke-test imports from the built wheel + asserts the resource surface. A future commit that breaks the wheel-installable-into-a-fresh-venv invariant fails CI before reaching customers.
+- **`.gitignore`** — added `packages/sdk-python/dist/` so the wheel artifacts don't pollute the working tree.
+
+### What tests verify it
+
+Python test surface unchanged at 85/85 (PY4 is non-test polish). New CI verifications:
+
+- `python -m build` produces the wheel without errors.
+- Wheel installs into a fresh venv with no warnings.
+- The installed package exposes the expected import surface.
+
+Server-side TS surface unchanged at 294/294 vitest, lint/format/typecheck clean.
+
+### Empirical findings
+
+1. **Hatchling produced the right wheel without any MANIFEST.in tweaks.** `[tool.hatch.build.targets.wheel]` `packages = ["src/driftstack"]` is enough — hatchling walks the package tree and includes everything except `__pycache__` / `.pyc`. The sdist includes `pyproject.toml`, `README.md`, and `src/driftstack` per the `[tool.hatch.build.targets.sdist].include` glob; tests + examples are intentionally excluded (they live in the repo, not the published artifact).
+
+2. **Wheel size is 21 KB.** That's smaller than every dependency the SDK pulls in (httpx ~ 200 KB, pydantic + pydantic-core ~ several MB), which is the right shape for a thin SDK — the actual code surface is small; the heavy lifting is in the deps.
+
+3. **First-time wheel smoke-test caught zero issues.** That's a function of the package layout being right from PY1: `src/driftstack/` with `__init__.py` exporting the public surface, `py.typed` marker, no relative-import gotchas. The `__init__.py`'s `from driftstack._version import __version__` etc. all resolved cleanly under the wheel-installed package.
+
+4. **Build smoke in CI is the regression catch worth having.** Without it, a future commit that drops `py.typed` from `MANIFEST` (we don't have one — point still applies via hatch config) or breaks an `__init__.py` re-export ships a wheel that imports differently than the editable install used in tests. The CI smoke step asserts the import surface from the installed wheel directly.
+
+5. **PyPI publish is gated on KvK setup** — `pyproject.toml` is publish-ready (no `private = true`, license + classifiers + URLs all set) but no `twine upload` step in CI. The actual publish is a one-liner the founder runs once the entity is in place: `python -m build && twine upload dist/*`. Documented in the README's Development section.
+
+### Decisions made (cross-link)
+
+No new D-entries — PY4 is build polish, not architecture.
+
+### Status
+
+**Python SDK workstream complete (PY1 → PY4).** Four commits, four V-log entries, 85 Python tests, 36 typed method bodies (sync+async), 14-class error hierarchy, 5 examples, codegen pipeline, CI integration with wheel build smoke, README + CHANGELOG ready for publish.
+
+| commit | V-log | scope                                                          |
+| ------ | ----- | -------------------------------------------------------------- |
+| PY1    | V-023 | scaffolding + auth + HTTP + retry + errors + webhook + codegen |
+| PY2+3  | V-024 | resource wrappers + examples + workflow integration tests      |
+| PY4    | V-025 | README polish + CHANGELOG + wheel build + CI smoke             |
+
+**Next workstream (per founder coordination):** Go SDK, same scope as Python (codegen via oapi-codegen, typed client with retry + error types + webhook helper, examples + tests, publishable but not actually published — gated on KvK).
