@@ -15,6 +15,13 @@
       "when": 1777717947976,
       "tag": "0001_yielding_prima",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777725110340,
+      "tag": "0002_webhook_tables",
+      "breakpoints": true
     }
   ]
 }

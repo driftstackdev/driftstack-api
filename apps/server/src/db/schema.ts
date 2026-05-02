@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  boolean,
   index,
   integer,
   jsonb,
@@ -56,6 +57,22 @@ export const usageRecordType = pgEnum('usage_record_type', [
   'wait',
   'state_capture',
   'screenshot_capture',
+]);
+
+export const webhookEventType = pgEnum('webhook_event_type', [
+  'session.completed',
+  'session.failed',
+  'quota.warning_80pct',
+  'quota.exceeded',
+  'api_key.revoked',
+]);
+
+export const webhookDeliveryStatus = pgEnum('webhook_delivery_status', [
+  'pending',
+  'in_flight',
+  'delivered',
+  'failed',
+  'dlq',
 ]);
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -224,6 +241,83 @@ export const rateLimitBuckets = pgTable(
   (t) => [primaryKey({ columns: [t.accountId, t.bucketKey] })],
 );
 
+export const webhookEndpoints = pgTable(
+  'webhook_endpoints',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    // Secret stored in plaintext (D-023): the worker needs the plaintext on
+    // every signing call, and webhook-signature forgery is a phishing-grade
+    // not auth-grade risk. Same posture as Stripe.
+    secret: text('secret').notNull(),
+    // First 12 chars of the plaintext, for display in lists / logs.
+    secretPrefix: text('secret_prefix').notNull(),
+    events: webhookEventType('events').array().notNull(),
+    description: text('description'),
+    active: boolean('active').notNull().default(true),
+    consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+    lastSuccessAt: timestamp('last_success_at', { withTimezone: true }),
+    lastFailureAt: timestamp('last_failure_at', { withTimezone: true }),
+    disabledAt: timestamp('disabled_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index('webhook_endpoints_account_idx').on(t.accountId),
+    index('webhook_endpoints_active_idx').on(t.accountId, t.active),
+  ],
+);
+
+export const webhookDeliveries = pgTable(
+  'webhook_deliveries',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    webhookId: uuid('webhook_id')
+      .notNull()
+      .references(() => webhookEndpoints.id, { onDelete: 'cascade' }),
+    // Logical event id — same across all deliveries spawned from one event.
+    eventId: uuid('event_id').notNull(),
+    eventType: webhookEventType('event_type').notNull(),
+    payload: jsonb('payload').notNull().$type<Record<string, unknown>>(),
+    status: webhookDeliveryStatus('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    lastResponseStatus: integer('last_response_status'),
+    // First 4 KB of the response body for debugging. Worker truncates.
+    lastResponseExcerpt: text('last_response_excerpt'),
+    // Non-HTTP failure reason (timeout, DNS, connection refused, etc.).
+    lastError: text('last_error'),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    // Worker poll: claim oldest pending deliveries whose time has come.
+    index('webhook_deliveries_worker_idx').on(t.status, t.nextAttemptAt),
+    // Per-endpoint history listing.
+    index('webhook_deliveries_endpoint_idx').on(t.webhookId, t.createdAt),
+    // Event id lookup for dedup / debugging.
+    index('webhook_deliveries_event_idx').on(t.eventId),
+  ],
+);
+
 // ───────────────────────────────────────────────────────────────────────────
 // Inferred types (for service / route layers)
 // ───────────────────────────────────────────────────────────────────────────
@@ -245,3 +339,9 @@ export type NewUsageRecord = typeof usageRecords.$inferInsert;
 
 export type RateLimitBucket = typeof rateLimitBuckets.$inferSelect;
 export type NewRateLimitBucket = typeof rateLimitBuckets.$inferInsert;
+
+export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
+export type NewWebhookEndpoint = typeof webhookEndpoints.$inferInsert;
+
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+export type NewWebhookDelivery = typeof webhookDeliveries.$inferInsert;
