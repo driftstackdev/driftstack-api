@@ -18,7 +18,11 @@ interface SessionsState {
   error: string | null;
 }
 
-export function SessionsView(): JSX.Element {
+export interface SessionsViewProps {
+  onView: (sessionId: string) => void;
+}
+
+export function SessionsView({ onView }: SessionsViewProps): JSX.Element {
   const { client, settings } = useSettings();
   const [state, setState] = useState<SessionsState>({
     sessions: [],
@@ -131,6 +135,7 @@ export function SessionsView(): JSX.Element {
         <SessionsTable
           sessions={state.sessions}
           busyId={busyId}
+          onView={onView}
           onDestroy={(id) => void handleDestroy(id)}
         />
       )}
@@ -177,10 +182,12 @@ function EmptyList({ loading }: { loading: boolean }): JSX.Element {
 function SessionsTable({
   sessions,
   busyId,
+  onView,
   onDestroy,
 }: {
   sessions: Session[];
   busyId: string | null;
+  onView: (id: string) => void;
   onDestroy: (id: string) => void;
 }): JSX.Element {
   return (
@@ -220,14 +227,19 @@ function SessionsTable({
                 </span>
               </Td>
               <Td>
-                <button
-                  type="button"
-                  className="btn-danger"
-                  onClick={() => onDestroy(s.id)}
-                  disabled={busyId === s.id}
-                >
-                  {busyId === s.id ? 'Destroying…' : 'Destroy'}
-                </button>
+                <div className="flex justify-end gap-2">
+                  <button type="button" className="btn-secondary" onClick={() => onView(s.id)}>
+                    View
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-danger"
+                    onClick={() => onDestroy(s.id)}
+                    disabled={busyId === s.id}
+                  >
+                    {busyId === s.id ? 'Destroying…' : 'Destroy'}
+                  </button>
+                </div>
               </Td>
             </tr>
           ))}

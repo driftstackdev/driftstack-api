@@ -1770,3 +1770,51 @@ No new D-entries. Web Crypto API is the right cross-runtime choice; was queued f
 ### Next
 
 GUI3 — live session viewport. Polling-based via `client.sessions.capture()` at ~500 ms per frame per founder coordination; WebRTC defers until server-side streaming infra exists.
+
+---
+
+## V-031 — GUI3: live session viewport via 500 ms polling
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Self-hosted GUI client (file 128).
+
+Per V-030 next-step. Polling-based live viewport — WebRTC defers until server-side streaming infra exists.
+
+### What changed
+
+- **`apps/gui-client/src/views/LiveSessionView.tsx`** — new component. Polls `client.sessions.capture(sessionId, { kind: 'screenshot' })` every `FRAME_INTERVAL_MS = 500` ms via `setInterval`. Renders the base64 PNG into an `<img>` with a `data:image/png;base64,...` URL. Header shows session id, current title + URL (from `getState`). Footer shows polling rate, fps moving average (last 4 frame timestamps), bytes per frame, capture duration. Controls: Refresh (one-shot capture), Pause/Resume (sets a ref-driven gate so the interval keeps running but skips work), Destroy (calls `sessions.destroy()` then `onBack()`). Polling stops on unmount via the cleanup function.
+- **`apps/gui-client/src/views/SessionsView.tsx`** — accepts `onView(sessionId)` prop; each row now has a "View" button that navigates to the live viewport.
+- **`apps/gui-client/src/App.tsx`** — `View` discriminated union extended with `{ kind: 'live-session'; sessionId }`. `CurrentView` routes to `LiveSessionView` with `onBack: () => onNavigate({ kind: 'sessions' })`.
+
+### Empirical findings
+
+1. **The SDK has no `client.sessions.get()`.** First pass of `LiveSessionView` called `client.sessions.get(sessionId)` to fetch the `Session` shape (for the status pip). Typecheck flagged it: `SessionsResource` only exposes `create`, `list`, `navigate`, `interact`, `wait`, `getState`, `capture`, `destroy`. The server route table confirms: only `GET /v1/sessions` (list), `GET /v1/sessions/:id/state` (state snapshot) — no `GET /v1/sessions/:id` for a single session lookup. **Fix:** dropped the status pip from the live viewport and rely solely on `getState` for url + title. The status field is already visible on the parent SessionsView (which auto-refreshes every 5 s). Adding a single-session GET to the API would be a Tier 3 contract change — not worth it for one cosmetic pip; the back-arrow gives instant access to the status view.
+
+2. **Polling cadence math.** At 500 ms / frame: ~2 fps wall-clock, ~50–200 KB per frame on the wire (base64 over HTTP), ~1 s end-to-end input → visible-effect lag (RTT + capture compute + 500 ms polling cap). Bearable for debugging; painful for real interactive control. The trade-offs are documented inline at the top of the component, so when GUI4 lands and exposes how clunky 1 s feedback is, the WebRTC justification is right there in the comment.
+
+3. **fps moving-average chosen over instantaneous.** A 1-frame-on-1-frame ratio jitters wildly because per-capture latency varies (mock driver: ~80–250 ms; real driver will vary more). 4-frame moving average smooths the readout without lagging by a noticeable amount. Resets when the view remounts.
+
+4. **No `loading="lazy"` on the `<img>`.** Lazy loading prevents the displayed frame from updating while off-screen, which would cause a "stuck" UI when the user scrolls or alt-tabs and back. Comment pinned at the `<img>` site so a future drive-by lint fix doesn't add it.
+
+5. **Destroy from LiveSessionView calls `onBack()` after success.** The user expectation is "this session is gone, take me back to the list" rather than "show me a destroyed-session viewport that 404s every 500 ms." Errors during destroy surface as the inline ErrorBanner without navigating away.
+
+### Verify chain
+
+- `npm run typecheck`: clean across all 4 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `npm run format` applied).
+- `npm test`: 294/294 passing in 4.5 s.
+- `npm run build`: GUI client bundle now 174 KB JS / 13.5 KB CSS (54 KB / 3 KB gzipped) — up from 169 KB at V-030, the delta is the new view component. Still well under the 200 KB target.
+
+### Decisions made
+
+No new D-entries. Polling-vs-WebRTC was decided in V-029 founder coordination; this implements the polling side.
+
+### Status
+
+GUI3 closed. Live viewport works against today's API; ready to be exercised the moment GUI4 lands and forwards taps/keystrokes through `client.sessions.interact()`.
+
+### Next
+
+GUI4 — manual control / input event forwarding. The img element receives mouse + keyboard events, translates to the session's coordinate space, dispatches via `client.sessions.interact()`. Coordinate mapping needs the displayed-img ↔ viewport pixel ratio (img is rendered at `object-contain` against a `flex-1` container, so the actual rendered size depends on the container size at render time — `getBoundingClientRect()` against the loaded image is the cleanest read). Will land next.

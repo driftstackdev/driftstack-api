@@ -8,11 +8,13 @@
 
 import { useState } from 'react';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
+import { LiveSessionView } from './views/LiveSessionView';
 import { SessionsView } from './views/SessionsView';
 import { SettingsView } from './views/SettingsView';
 
 type View =
   | { kind: 'sessions' }
+  | { kind: 'live-session'; sessionId: string }
   | { kind: 'sessions-history' }
   | { kind: 'recordings' }
   | { kind: 'proxies' }
@@ -36,7 +38,7 @@ function Shell(): JSX.Element {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar current={view} onNavigate={setView} />
         <main className="flex-1 overflow-auto bg-surface-base">
-          <CurrentView view={view} />
+          <CurrentView view={view} onNavigate={setView} />
         </main>
       </div>
       <StatusFooter />
@@ -44,10 +46,25 @@ function Shell(): JSX.Element {
   );
 }
 
-function CurrentView({ view }: { view: View }): JSX.Element {
+function CurrentView({
+  view,
+  onNavigate,
+}: {
+  view: View;
+  onNavigate: (v: View) => void;
+}): JSX.Element {
   switch (view.kind) {
     case 'sessions':
-      return <SessionsView />;
+      return (
+        <SessionsView onView={(sessionId) => onNavigate({ kind: 'live-session', sessionId })} />
+      );
+    case 'live-session':
+      return (
+        <LiveSessionView
+          sessionId={view.sessionId}
+          onBack={() => onNavigate({ kind: 'sessions' })}
+        />
+      );
     case 'settings':
       return <SettingsView />;
     case 'sessions-history':
