@@ -1237,3 +1237,62 @@ Surfacing for next-batch direction. Per prior coordination, options at this poin
 - Billing scaffolding (gated on KvK May 21)
 - Documentation site / API reference cleanup (housekeeping)
 - Wait for WebKit fork Phase 2 closure for driver swap
+
+---
+
+## V-023 — Python SDK foundation: package + auth + HTTP + retry + errors + webhook helper + codegen
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Python SDK (founder priority 1 of post-OT batch). First commit of a 3–5-session workstream.
+
+### What was built
+
+`packages/sdk-python/` — first Python package in the monorepo. Sync (`Driftstack`) + async (`AsyncDriftstack`) clients sharing one HTTP layer + error mapping + retry policy. Pydantic v2 models generated from the OpenAPI spec.
+
+- **Package layout** (`pyproject.toml`, `src/driftstack/`, `tests/`, `scripts/`). Hatchling build backend, dual-export of sync/async clients from the package root, `py.typed` marker for PEP 561.
+- **Dependencies (runtime):** `httpx>=0.27,<1.0` (one HTTP impl powering both sync and async), `pydantic[email]>=2.5,<3.0` (the `[email]` extra brings `email-validator` for the EmailStr fields the codegen produces).
+- **Dev tooling:** `pytest` + `pytest-asyncio` + `respx`, `ruff` for lint+format, `mypy` strict on hand-written code (relaxed on `_generated`), `datamodel-code-generator` for codegen.
+- **Error hierarchy** (`driftstack/errors.py`) — `DriftstackError` base + 14 subclasses mirroring the server's RFC 7807 problem-types. `PROBLEM_TYPE_TO_ERROR` is the single source of truth for "URI → exception class". Specialized payload extraction for `RateLimitError.retry_after_seconds`, `ConcurrencyLimitError.{current_sessions, limit}`, `QuotaExceededError.{current, limit, record_type}`.
+- **HTTP client** (`driftstack/http.py`) — `HttpClient` (sync) + `AsyncHttpClient` (async), each wrapping the corresponding `httpx` client. Shared response-handling logic so a future shape change to the server's error envelope updates both paths in one place. Bearer auth + `User-Agent` (`driftstack-sdk-python/<version>`) + JSON content-type injected on every request.
+- **Retry policy** (`driftstack/retry.py`) — `RetryConfig` dataclass + `with_retry` (sync) + `with_retry_async`. Exponential backoff with full jitter; honours `Retry-After`. Default retryable errors: `TransportError` + `RateLimitError`. Non-retryable `DriftstackError` subclasses propagate immediately.
+- **Webhook signature verification** (`driftstack/webhook_signature.py`) — Stripe-style `t=...,v1=...` parsing + HMAC-SHA256 verification using `hmac.compare_digest`. Order-independent, rejects malformed/missing parts, default 300 s tolerance. Mirrors `verifyWebhookSignature` in the TS SDK.
+- **Codegen** (`scripts/generate.sh`, npm scripts `sdk:python:dump-spec` + `sdk:python:generate`) — pipeline is `dump openapi.json from server → datamodel-code-generator → src/driftstack/_generated/models.py`. Pydantic v2 models with `Literal[...]` for closed enums, `constr(pattern=...)` for prefixed-id formats, `AwareDatetime` for timestamps, `EmailStr` for emails. 208 lines of generated models for the current spec.
+- **CI integration** — new `python-sdk` job in `.github/workflows/ci.yml` running ruff check + format check + mypy + pytest on every push.
+- **Server-side:** `apps/server/src/lib/dump-openapi.ts` — small tsx script that calls `generateOpenApiSpec()` and writes to disk. Also serves future Go SDK / docs-site use cases.
+
+### What tests verify it
+
+**52 Python tests** in `packages/sdk-python/tests/`, all passing:
+
+- 6 client tests: surface (`__all__` matches what's exported), version sanity, sync/async constructor + close, api-key validation.
+- 21 error tests: subclass relationships, problem-type → class mapping (parametrized over every URI), `Retry-After` extraction, `ConcurrencyLimitError`/`QuotaExceededError` field extraction, fallback to base for unknown problem types, `TransportError` for non-problem bodies.
+- 8 retry tests: success path skips retry; transport-error retry-then-succeed; max-retries-then-give-up; non-retryable error not retried; disabled config not retried; rate-limit honours Retry-After; unexpected exceptions propagate; non-retryable DriftstackError doesn't retry.
+- 13 webhook signature tests: round-trip valid; tampered/wrong-secret/out-of-tolerance rejected; bytes/str equivalent; malformed-header parametrized rejection; field-order independence.
+- 4 generated-model tests: well-formed Account validates; unknown tier rejected; malformed prefixed id rejected; expected schemas present.
+
+**Server-side TS surface unchanged at 294/294.**
+
+### Empirical findings
+
+1. **Local Python 3.11 + 3.14 builds have a broken `pyexpat` shared library** on this Mac (`Symbol not found: _XML_SetAllocTrackerActivationThreshold`). Homebrew's Python was linked against a newer libexpat than ships with macOS. Python 3.10 works because it predates the affected ABI. Fell back for the local venv; CI on Ubuntu doesn't reproduce. Local-dev annoyance, not a release blocker.
+
+2. **`pydantic[email]` extra is required for the codegen output.** Without it, `from driftstack._generated import models` fails at import time. Pinned in runtime deps.
+
+3. **Test emails like `tester@driftstack.local` fail `EmailStr` validation** because `.local` is on `email-validator`'s reserved-TLD list. Switched fixtures to `@driftstack.dev` and `@example.com`. Server tests use `@driftstack.local` because Zod is more permissive — asymmetry surfaces once the SDK's models validate server-shaped payloads in tests. Future spec-level decision: tighten server validator or relax SDK's.
+
+4. **`datamodel-code-generator` warns about a future formatter swap** (black/isort → ruff). Tolerated for now; functional today.
+
+5. **The package-surface reflection test pattern from V-016** ports cleanly to Python: `test_package_exposes_expected_surface` enumerates `driftstack.__all__` and asserts every name reaches the package root.
+
+### Decisions made (cross-link)
+
+No new D-entries — codegen-tool choice (datamodel-code-generator) and dual sync/async architecture follow the founder's coordination directive directly.
+
+### Status
+
+Foundation green. 52/52 Python tests pass; ruff clean; mypy strict pass; CI job added. Server-side TS chain unchanged.
+
+**Next session (PY2):** Resource wrappers — `client.sessions` (create/list/get/destroy/navigate/interact/wait/state/capture), `client.api_keys`, `client.usage`, `client.webhooks`. Each method maps to one route, takes typed input, returns the typed Pydantic model. Both sync and async paths.
+
+After PY2: PY3 = examples + integration tests. PY4 = README polish + publish-ready check (no actual publish — gated on KvK).

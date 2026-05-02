@@ -27,7 +27,11 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "npm run db:migrate --workspace apps/server",
     "db:seed": "npm run db:seed --workspace apps/server",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "sdk:python:dump-spec": "tsx apps/server/src/lib/dump-openapi.ts packages/sdk-python/openapi.json",
+    "sdk:python:generate": "bash packages/sdk-python/scripts/generate.sh",
+    "sdk:python:test": "cd packages/sdk-python && .venv/bin/pytest",
+    "sdk:python:lint": "cd packages/sdk-python && .venv/bin/ruff check . && .venv/bin/ruff format --check ."
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",

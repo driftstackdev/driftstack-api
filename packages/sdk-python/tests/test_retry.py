@@ -1,0 +1,121 @@
+"""Retry policy unit tests. Sync only — async path uses identical logic."""
+
+from __future__ import annotations
+
+from unittest.mock import patch
+
+import pytest
+
+from driftstack.errors import (
+    DriftstackError,
+    InvalidKeyError,
+    RateLimitError,
+    TransportError,
+)
+from driftstack.retry import RetryConfig, with_retry
+
+
+def test_returns_immediately_when_fn_succeeds() -> None:
+    calls = {"n": 0}
+
+    def fn() -> str:
+        calls["n"] += 1
+        return "ok"
+
+    assert with_retry(fn) == "ok"
+    assert calls["n"] == 1
+
+
+def test_retries_on_transport_error_then_succeeds() -> None:
+    attempts: list[int] = []
+
+    def fn() -> str:
+        attempts.append(len(attempts))
+        if len(attempts) < 3:
+            raise TransportError("blip", status=0)
+        return "recovered"
+
+    cfg = RetryConfig(max_retries=3, initial_delay_ms=1, backoff_multiplier=1.0, max_delay_ms=2)
+    with patch("time.sleep"):  # don't actually wait in tests
+        assert with_retry(fn, cfg) == "recovered"
+    assert len(attempts) == 3
+
+
+def test_gives_up_after_max_retries() -> None:
+    def fn() -> None:
+        raise TransportError("persistent", status=0)
+
+    cfg = RetryConfig(max_retries=2, initial_delay_ms=1, max_delay_ms=2)
+    with patch("time.sleep"), pytest.raises(TransportError):
+        with_retry(fn, cfg)
+
+
+def test_does_not_retry_non_retryable_error() -> None:
+    """InvalidKeyError → AuthError → don't retry; surface immediately."""
+    calls = {"n": 0}
+
+    def fn() -> None:
+        calls["n"] += 1
+        raise InvalidKeyError("bad", status=401)
+
+    with pytest.raises(InvalidKeyError):
+        with_retry(fn)
+    assert calls["n"] == 1
+
+
+def test_does_not_retry_when_disabled() -> None:
+    calls = {"n": 0}
+
+    def fn() -> None:
+        calls["n"] += 1
+        raise TransportError("retryable but disabled", status=0)
+
+    cfg = RetryConfig(enabled=False)
+    with pytest.raises(TransportError):
+        with_retry(fn, cfg)
+    assert calls["n"] == 1
+
+
+def test_rate_limit_honours_retry_after_header() -> None:
+    """RateLimitError carries retry_after_seconds; the loop sleeps that long."""
+    sleeps: list[float] = []
+
+    def fn() -> str:
+        if len(sleeps) == 0:
+            raise RateLimitError("slow", retry_after_seconds=2, status=429)
+        return "ok"
+
+    def fake_sleep(secs: float) -> None:
+        sleeps.append(secs)
+
+    with patch("time.sleep", side_effect=fake_sleep):
+        assert with_retry(fn, RetryConfig(max_retries=2)) == "ok"
+    # The sleep was 2 seconds (per Retry-After), not exponential math.
+    assert sleeps == [2.0]
+
+
+def test_propagates_unexpected_exceptions_unchanged() -> None:
+    """Non-Driftstack exceptions are not caught — they bubble up untouched."""
+
+    class CustomError(Exception):
+        pass
+
+    def fn() -> None:
+        raise CustomError("not ours")
+
+    with pytest.raises(CustomError):
+        with_retry(fn)
+
+
+def test_does_not_swallow_driftstack_subclass_that_isnt_retryable() -> None:
+    """A non-retryable DriftstackError raises with no retry attempts."""
+    calls = {"n": 0}
+
+    def fn() -> None:
+        calls["n"] += 1
+        raise DriftstackError("generic", status=400)
+
+    cfg = RetryConfig(max_retries=5)
+    with pytest.raises(DriftstackError):
+        with_retry(fn, cfg)
+    assert calls["n"] == 1

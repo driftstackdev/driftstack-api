@@ -144,3 +144,40 @@ jobs:
           name: playwright-report
           path: apps/server/playwright-report/
           retention-days: 7
+
+  python-sdk:
+    name: Python SDK (lint + tests)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: 'packages/sdk-python/pyproject.toml'
+
+      - name: Install package + dev deps
+        working-directory: packages/sdk-python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+
+      - name: Ruff check
+        working-directory: packages/sdk-python
+        run: ruff check .
+
+      - name: Ruff format check
+        working-directory: packages/sdk-python
+        run: ruff format --check .
+
+      - name: Mypy (strict on hand-written code)
+        working-directory: packages/sdk-python
+        run: mypy src
+
+      - name: Pytest
+        working-directory: packages/sdk-python
+        run: pytest -v
