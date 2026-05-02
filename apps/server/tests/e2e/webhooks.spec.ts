@@ -125,7 +125,7 @@ test('full webhook flow: subscribe → event → worker delivers signed POST →
     expect(got.eventType).toBe('session.completed');
 
     // 5. Verify signature with the SDK helper.
-    const ok = verifyWebhookSignature({
+    const ok = await verifyWebhookSignature({
       body: got.body,
       header: got.signature,
       secret: sub.secret,

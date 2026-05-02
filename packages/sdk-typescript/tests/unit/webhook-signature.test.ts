@@ -10,11 +10,11 @@ function sign(body: string, timestamp: number, secret = SECRET): string {
 }
 
 describe('verifyWebhookSignature', () => {
-  it('accepts a valid signature with current timestamp', () => {
+  it('accepts a valid signature with current timestamp', async () => {
     const now = Date.now();
     const t = Math.floor(now / 1000);
     const body = '{"event":"session.completed"}';
-    const ok = verifyWebhookSignature({
+    const ok = await verifyWebhookSignature({
       body,
       header: sign(body, t),
       secret: SECRET,
@@ -23,11 +23,11 @@ describe('verifyWebhookSignature', () => {
     expect(ok).toBe(true);
   });
 
-  it('rejects when secret differs', () => {
+  it('rejects when secret differs', async () => {
     const now = Date.now();
     const t = Math.floor(now / 1000);
     const body = 'x';
-    const ok = verifyWebhookSignature({
+    const ok = await verifyWebhookSignature({
       body,
       header: sign(body, t, 'wrong-secret'),
       secret: SECRET,
@@ -36,10 +36,10 @@ describe('verifyWebhookSignature', () => {
     expect(ok).toBe(false);
   });
 
-  it('rejects when body is tampered', () => {
+  it('rejects when body is tampered', async () => {
     const now = Date.now();
     const t = Math.floor(now / 1000);
-    const ok = verifyWebhookSignature({
+    const ok = await verifyWebhookSignature({
       body: 'tampered',
       header: sign('original', t),
       secret: SECRET,
@@ -48,11 +48,11 @@ describe('verifyWebhookSignature', () => {
     expect(ok).toBe(false);
   });
 
-  it('rejects timestamps outside tolerance window', () => {
+  it('rejects timestamps outside tolerance window', async () => {
     const now = Date.now();
     const t = Math.floor(now / 1000) - 600; // 10 minutes old
     const body = 'x';
-    const ok = verifyWebhookSignature({
+    const ok = await verifyWebhookSignature({
       body,
       header: sign(body, t),
       secret: SECRET,
@@ -61,11 +61,11 @@ describe('verifyWebhookSignature', () => {
     expect(ok).toBe(false);
   });
 
-  it('accepts timestamps within configured tolerance', () => {
+  it('accepts timestamps within configured tolerance', async () => {
     const now = Date.now();
     const t = Math.floor(now / 1000) - 200; // ~3 minutes old (within default 5 min)
     const body = 'x';
-    const ok = verifyWebhookSignature({
+    const ok = await verifyWebhookSignature({
       body,
       header: sign(body, t),
       secret: SECRET,
@@ -74,22 +74,29 @@ describe('verifyWebhookSignature', () => {
     expect(ok).toBe(true);
   });
 
-  it('rejects malformed header', () => {
+  it('rejects malformed header', async () => {
     expect(
-      verifyWebhookSignature({ body: 'x', header: 'not-a-valid-header', secret: SECRET }),
+      await verifyWebhookSignature({ body: 'x', header: 'not-a-valid-header', secret: SECRET }),
     ).toBe(false);
-    expect(verifyWebhookSignature({ body: 'x', header: 't=12345', secret: SECRET })).toBe(false);
-    expect(verifyWebhookSignature({ body: 'x', header: 'v1=abc', secret: SECRET })).toBe(false);
-    expect(verifyWebhookSignature({ body: 'x', header: undefined, secret: SECRET })).toBe(false);
+    expect(await verifyWebhookSignature({ body: 'x', header: 't=12345', secret: SECRET })).toBe(
+      false,
+    );
+    expect(await verifyWebhookSignature({ body: 'x', header: 'v1=abc', secret: SECRET })).toBe(
+      false,
+    );
+    expect(await verifyWebhookSignature({ body: 'x', header: undefined, secret: SECRET })).toBe(
+      false,
+    );
   });
 
-  it('accepts Buffer body', () => {
+  it('accepts Uint8Array body', async () => {
     const now = Date.now();
     const t = Math.floor(now / 1000);
-    const body = Buffer.from('{"x":1}', 'utf8');
-    const ok = verifyWebhookSignature({
+    const bodyText = '{"x":1}';
+    const body = new TextEncoder().encode(bodyText);
+    const ok = await verifyWebhookSignature({
       body,
-      header: sign('{"x":1}', t),
+      header: sign(bodyText, t),
       secret: SECRET,
       nowMs: now,
     });

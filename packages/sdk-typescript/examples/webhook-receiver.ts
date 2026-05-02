@@ -28,7 +28,7 @@ const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const body = await readBody(req);
     const sig = req.headers['x-driftstack-signature'];
 
-    const ok = verifyWebhookSignature({
+    const ok = await verifyWebhookSignature({
       body,
       header: typeof sig === 'string' ? sig : undefined,
       secret: SECRET,

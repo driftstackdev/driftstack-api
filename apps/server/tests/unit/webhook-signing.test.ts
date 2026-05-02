@@ -55,7 +55,7 @@ describe('signWebhookPayload', () => {
 });
 
 describe('round-trip with SDK verifier', () => {
-  it('SDK verifyWebhookSignature accepts a server-signed payload', () => {
+  it('SDK verifyWebhookSignature accepts a server-signed payload', async () => {
     const secret = generateWebhookSecret();
     const body = JSON.stringify({ id: 'evt_123', type: 'session.completed' });
     const now = Date.now();
@@ -64,25 +64,25 @@ describe('round-trip with SDK verifier', () => {
       secret,
       timestampSec: Math.floor(now / 1000),
     });
-    const ok = verifyWebhookSignature({ body, header, secret, nowMs: now });
+    const ok = await verifyWebhookSignature({ body, header, secret, nowMs: now });
     expect(ok).toBe(true);
   });
 
-  it('SDK rejects when secret differs', () => {
+  it('SDK rejects when secret differs', async () => {
     const realSecret = generateWebhookSecret();
     const wrongSecret = generateWebhookSecret();
     const body = '{"x":1}';
     const t = Math.floor(Date.now() / 1000);
     const header = signWebhookPayload({ body, secret: realSecret, timestampSec: t });
-    const ok = verifyWebhookSignature({ body, header, secret: wrongSecret });
+    const ok = await verifyWebhookSignature({ body, header, secret: wrongSecret });
     expect(ok).toBe(false);
   });
 
-  it('SDK rejects when body is tampered', () => {
+  it('SDK rejects when body is tampered', async () => {
     const secret = generateWebhookSecret();
     const t = Math.floor(Date.now() / 1000);
     const header = signWebhookPayload({ body: 'original', secret, timestampSec: t });
-    const ok = verifyWebhookSignature({ body: 'tampered', header, secret });
+    const ok = await verifyWebhookSignature({ body: 'tampered', header, secret });
     expect(ok).toBe(false);
   });
 });

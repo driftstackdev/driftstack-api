@@ -114,8 +114,8 @@ When you wire up Driftstack webhooks, verify each delivery before processing:
 ```ts
 import { verifyWebhookSignature } from '@driftstack/sdk';
 
-app.post('/driftstack-webhook', express.raw({ type: 'application/json' }), (req, res) => {
-  const ok = verifyWebhookSignature({
+app.post('/driftstack-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const ok = await verifyWebhookSignature({
     body: req.body, // raw bytes — DO NOT use a parsed body
     header: req.headers['x-driftstack-signature'],
     secret: process.env.DRIFTSTACK_WEBHOOK_SECRET!,
@@ -126,7 +126,7 @@ app.post('/driftstack-webhook', express.raw({ type: 'application/json' }), (req,
 });
 ```
 
-The verifier uses HMAC-SHA256 with constant-time comparison and rejects timestamps older than 5 minutes (configurable via `toleranceSec`). The webhook delivery semantics ship in a follow-up release.
+The verifier uses HMAC-SHA256 with constant-time comparison and rejects timestamps older than 5 minutes (configurable via `toleranceSec`). It's browser-isomorphic — `verifyWebhookSignature` works the same way in Node 20+, every modern browser, Tauri WebViews, Cloudflare Workers, Deno, and Bun (uses Web Crypto API under the hood, hence the `await`).
 
 ## Examples
 

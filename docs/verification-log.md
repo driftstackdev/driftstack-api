@@ -1722,3 +1722,51 @@ Per founder coordination after V-028: replace `node:crypto` (`createHmac` / `tim
 ### Next phase
 
 GUI3 — live session viewport via polling against `client.sessions.capture()` at ~500 ms per frame. WebRTC defers to a later phase when server-side streaming infrastructure exists. Polling works against today's API; lets us exercise input event forwarding (GUI4) + session control + recording architecture (GUI6) before committing to the bigger WebRTC investment.
+
+---
+
+## V-030 — SDK-B: Web Crypto API isomorphic webhook helper (`@driftstack/sdk@0.1.1` published)
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** SDK polish (post-PUB).
+
+Per V-029 queued follow-up. The TS SDK's `verifyWebhookSignature` was using `node:crypto` (`createHmac`, `timingSafeEqual`), which Vite/rollup couldn't bundle for browser environments — V-028 documented this as the reason GUI2 used a hand-written fetch wrapper instead of importing the SDK directly.
+
+### What changed
+
+- **`packages/sdk-typescript/src/webhook-signature.ts`** rewritten to use the Web Crypto API (`globalThis.crypto.subtle`) — works the same way in Node 20+, every modern browser, Tauri WebViews, Cloudflare Workers, Deno, and Bun. Constant-time hex comparison via XOR-difference accumulator on the parsed bytes (no `timingSafeEqual` equivalent in WebCrypto, so we hand-roll one). Body input now accepts `string | Uint8Array | ArrayBuffer` rather than the Node-specific `Buffer`.
+- **API change:** `verifyWebhookSignature` is now `async` (returns `Promise<boolean>`) because WebCrypto's HMAC API is async. Callers must `await` the result. Sub-millisecond runtime cost; doesn't affect throughput.
+- **`packages/sdk-typescript/tsconfig.json`** gained `lib: ["ES2023", "DOM"]` so `SubtleCrypto` resolves at compile time. The runtime still feature-detects `globalThis.crypto?.subtle` and returns false (not crash) on environments without it.
+- **`packages/sdk-typescript/package.json`** bumped to `0.1.1`.
+- All callers updated to `await`: SDK unit tests (7), server-side `apps/server/tests/unit/webhook-signing.test.ts` (3 round-trip tests), e2e `apps/server/tests/e2e/webhooks.spec.ts`, and the SDK README example.
+- **`@driftstack/sdk@0.1.1`** published to npm: `npm view @driftstack/sdk version` returns `0.1.1` ✓.
+- **`api-types` unchanged** — stayed at `0.1.0`. The SDK's dep on `^0.1.0` resolves through the registry untouched.
+
+### GUI2 swap-back
+
+With the SDK now browser-isomorphic, the GUI's hand-written fetch wrapper is gone. `apps/gui-client/src/lib/client.ts` is now ~10 lines: import `Driftstack` from `@driftstack/sdk`, instantiate it, re-export the `Session` type and `DriftstackError` for downstream views. `SessionsView` swapped from `client.listSessions()` / `client.createSession()` / `client.destroySession()` (the old wrapper shape) back to `client.sessions.list()` / `client.sessions.create()` / `client.sessions.destroy()` (the SDK's resource accessors). GUI bundle size: 169 KB JS / 13 KB CSS (53 KB / 3 KB gzipped) — slightly larger than V-028's 162 KB (the SDK pulls in error mapping + retry + webhook helper that the hand-written wrapper didn't), still under the 200 KB target.
+
+### Empirical findings
+
+1. **`SubtleCrypto` lives in `lib.dom.d.ts`, not `lib.es2023.d.ts`.** The SDK's tsconfig was Node-only (`lib: ["ES2023"]` from the base) which made `SubtleCrypto` unresolvable. Adding `DOM` is the right fix even though the SDK is server-shaped — DOM types are well-curated for cross-runtime APIs (`fetch`, `Response`, `Request`, `crypto.subtle`, `URL`) that exist in Node + browsers + Workers. Doesn't change runtime behaviour; just makes the type checker happy.
+
+2. **`BufferSource` differentiates `ArrayBuffer` from `SharedArrayBuffer`-backed buffers in newer lib types.** First pass passed `Uint8Array.buffer` directly to `subtle.sign(...)`; tsc rejected it because `.buffer` resolves to `ArrayBufferLike` (the union). Fix: a `toArrayBuffer(bytes)` helper that copies into a fresh `ArrayBuffer`. WebCrypto rejects SAB at runtime anyway, so the copy is the right semantic — and the byte cost is negligible against the actual HMAC compute.
+
+3. **TextEncoder + Uint8Array works identically in Node, browsers, Workers, and Deno** — no shim needed. The signature-verification hot path is now ~3 lines of platform code (`new TextEncoder().encode(secret)`, `subtle.importKey(...)`, `subtle.sign(...)`) plus the constant-time hex compare.
+
+4. **Constant-time comparison written by hand** because WebCrypto doesn't expose a primitive for it. The pattern (XOR each pair of bytes, accumulate into `diff`, return `diff === 0`) is the canonical isomorphic implementation; Stripe's TS SDK uses the same shape. Worth pinning explicitly because a careless future refactor that short-circuits on first mismatch would re-introduce a timing oracle.
+
+5. **The `async`-API change is the only customer-facing breaking call site change.** Callers on `0.1.0` who run `verifyWebhookSignature(...)` without `await` now get a `Promise<boolean>` (always truthy in the if-statement) — silent wrong-result bug. Documented in CHANGELOG; will surface during the publish notes once we have any real customers.
+
+### Decisions made
+
+No new D-entries. Web Crypto API is the right cross-runtime choice; was queued from V-027/V-028 surfaces.
+
+### Status
+
+`@driftstack/sdk@0.1.1` live on npm. GUI2 uses the SDK directly — no more hand-written fetch wrapper. Whole monorepo verify chain green: 294/294 vitest, 85/85 pytest, 33 Go tests, lint/format/typecheck clean.
+
+### Next
+
+GUI3 — live session viewport. Polling-based via `client.sessions.capture()` at ~500 ms per frame per founder coordination; WebRTC defers until server-side streaming infra exists.

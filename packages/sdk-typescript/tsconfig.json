@@ -7,7 +7,13 @@
     "composite": false,
     "declaration": false,
     "declarationMap": false,
-    "sourceMap": false
+    "sourceMap": false,
+    // SDK-B: webhook-signature.ts now uses Web Crypto API (SubtleCrypto)
+    // for browser-isomorphism. SubtleCrypto is in the DOM lib in older
+    // TS releases; pulling DOM in here so the type resolves on Node-only
+    // builds too. The runtime check inside the helper handles browsers
+    // without crypto.subtle.
+    "lib": ["ES2023", "DOM"]
   },
   "include": [
     "src/**/*",

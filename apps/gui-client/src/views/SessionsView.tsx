@@ -35,7 +35,7 @@ export function SessionsView(): JSX.Element {
     }
     setState((s) => ({ ...s, loading: true }));
     try {
-      const page = await client.listSessions();
+      const page = await client.sessions.list();
       setState({
         sessions: page.data,
         refreshedAt: Date.now(),
@@ -62,7 +62,7 @@ export function SessionsView(): JSX.Element {
     if (!client) return;
     setBusyId('__create__');
     try {
-      await client.createSession();
+      await client.sessions.create();
       await refresh();
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err) }));
@@ -75,7 +75,7 @@ export function SessionsView(): JSX.Element {
     if (!client) return;
     setBusyId(id);
     try {
-      await client.destroySession(id);
+      await client.sessions.destroy(id);
       await refresh();
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err) }));

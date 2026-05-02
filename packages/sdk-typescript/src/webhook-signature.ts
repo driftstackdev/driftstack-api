@@ -3,14 +3,21 @@
 // Signature header format (Stripe-style): `t=<unix-seconds>,v1=<hex hmac>`.
 // HMAC = SHA256(`<unix-seconds>.<raw body>`, `<webhook secret>`).
 //
+// Browser-isomorphic: uses `globalThis.crypto.subtle` (Web Crypto API)
+// rather than Node's `crypto` module. Works in:
+//   - Node.js 20+    (subtle exposed on globalThis.crypto)
+//   - Modern browsers (Chrome 92+, Firefox 90+, Safari 15.4+, Edge 92+)
+//   - Tauri / Electron WebViews
+//   - Cloudflare Workers / Deno / Bun
+//
 // Customers verify inbound webhook deliveries with this helper:
 //
 //   import { verifyWebhookSignature } from '@driftstack/sdk';
 //
-//   app.post('/driftstack-webhook', (req, res) => {
+//   app.post('/driftstack-webhook', async (req, res) => {
 //     const sig = req.headers['x-driftstack-signature'];
-//     const ok = verifyWebhookSignature({
-//       body: req.rawBody,           // string or Buffer
+//     const ok = await verifyWebhookSignature({
+//       body: req.rawBody,           // string, Uint8Array, or ArrayBuffer
 //       header: sig,
 //       secret: process.env.DRIFTSTACK_WEBHOOK_SECRET!,
 //     });
@@ -18,14 +25,14 @@
 //     // ... process event ...
 //   });
 //
-// The full delivery + retry semantics land in the Webhook System work
-// (Priority 2). This helper ships now so customers can integrate as soon as
-// webhooks arrive.
-
-import { createHmac, timingSafeEqual } from 'node:crypto';
+// NOTE: in 0.1.0 this function was sync (used Node's crypto). In
+// 0.1.1 it became async because Web Crypto's HMAC API is async.
+// Callers must `await` the result. The signature verification cost is
+// negligible (sub-millisecond on any modern hardware) so async-on-the-
+// wire doesn't affect throughput.
 
 export interface VerifySignatureInput {
-  body: string | Buffer | Uint8Array;
+  body: string | Uint8Array | ArrayBuffer;
   header: string | string[] | undefined;
   secret: string;
   /** Reject signatures with timestamps older than this many seconds. Default 300 (5 min). */
@@ -36,7 +43,7 @@ export interface VerifySignatureInput {
 
 const DEFAULT_TOLERANCE_SEC = 300;
 
-export function verifyWebhookSignature(input: VerifySignatureInput): boolean {
+export async function verifyWebhookSignature(input: VerifySignatureInput): Promise<boolean> {
   const headerValue = Array.isArray(input.header) ? input.header[0] : input.header;
   if (!headerValue || typeof headerValue !== 'string') return false;
 
@@ -49,11 +56,26 @@ export function verifyWebhookSignature(input: VerifySignatureInput): boolean {
     return false;
   }
 
-  const bodyStr =
-    typeof input.body === 'string' ? input.body : Buffer.from(input.body).toString('utf8');
-  const expectedHex = createHmac('sha256', input.secret)
-    .update(`${parsed.timestamp.toString()}.${bodyStr}`)
-    .digest('hex');
+  const subtle = getSubtleCrypto();
+  if (!subtle) return false;
+
+  const enc = new TextEncoder();
+  const bodyBytes = toBodyBytes(input.body);
+  const payload = concatBytes(enc.encode(`${parsed.timestamp.toString()}.`), bodyBytes);
+
+  // BufferSource accepts an ArrayBuffer (not the union with
+  // SharedArrayBuffer that `.buffer` may resolve to). Copy each input
+  // into a fresh ArrayBuffer-backed Uint8Array so the type aligns and
+  // we don't risk passing a SAB into WebCrypto (which rejects it).
+  const key = await subtle.importKey(
+    'raw',
+    toArrayBuffer(enc.encode(input.secret)),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sigBuffer = await subtle.sign('HMAC', key, toArrayBuffer(payload));
+  const expectedHex = bytesToHex(new Uint8Array(sigBuffer));
 
   return constantTimeHexEq(expectedHex, parsed.signatureHex);
 }
@@ -79,11 +101,81 @@ function parseSignatureHeader(
   return { timestamp, timestampMs: timestamp * 1000, signatureHex: signature };
 }
 
+function toBodyBytes(body: string | Uint8Array | ArrayBuffer): Uint8Array {
+  if (typeof body === 'string') return new TextEncoder().encode(body);
+  if (body instanceof Uint8Array) return body;
+  return new Uint8Array(body);
+}
+
+function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
+}
+
+/** Copy a Uint8Array's contents into a fresh ArrayBuffer. WebCrypto
+ *  rejects SharedArrayBuffer-backed inputs and the TS lib types
+ *  differentiate them from ArrayBuffer; this normalises both. */
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const out = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(out).set(bytes);
+  return out;
+}
+
+const HEX_LOOKUP = '0123456789abcdef';
+
+function bytesToHex(bytes: Uint8Array): string {
+  // Manual hex encoding — both `Buffer.from(...).toString('hex')`
+  // (Node-only) and `bytes.toHex()` (Stage 3 proposal, not in Tauri's
+  // WebView) would have wider browser-compat caveats. This loop is
+  // ~10 ns per byte and fine for the ~32-byte HMAC output.
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i] as number;
+    out += HEX_LOOKUP[b >> 4];
+    out += HEX_LOOKUP[b & 0xf];
+  }
+  return out;
+}
+
+function hexToBytes(hex: string): Uint8Array | null {
+  if (hex.length % 2 !== 0) return null;
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    const high = parseHexNibble(hex.charCodeAt(i * 2));
+    const low = parseHexNibble(hex.charCodeAt(i * 2 + 1));
+    if (high < 0 || low < 0) return null;
+    out[i] = (high << 4) | low;
+  }
+  return out;
+}
+
+function parseHexNibble(code: number): number {
+  if (code >= 48 && code <= 57) return code - 48; // 0-9
+  if (code >= 97 && code <= 102) return code - 87; // a-f
+  if (code >= 65 && code <= 70) return code - 55; // A-F
+  return -1;
+}
+
 function constantTimeHexEq(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
-  try {
-    return timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
-  } catch {
-    return false;
+  const ab = hexToBytes(a);
+  const bb = hexToBytes(b);
+  if (ab === null || bb === null) return false;
+  if (ab.length !== bb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ab.length; i++) {
+    diff |= (ab[i] as number) ^ (bb[i] as number);
   }
+  return diff === 0;
+}
+
+function getSubtleCrypto(): SubtleCrypto | null {
+  // `globalThis.crypto` exists in Node 20+ (still gated by Node-version
+  // policies) and every browser environment we ship into. Defensively
+  // probe rather than assume.
+  const c = globalThis.crypto;
+  if (!c || !c.subtle) return null;
+  return c.subtle;
 }
