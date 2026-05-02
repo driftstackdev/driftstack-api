@@ -1,0 +1,29 @@
+node_modules/
+dist/
+build/
+coverage/
+.tsbuildinfo
+*.tsbuildinfo
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test artifacts
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Drizzle
+drizzle/.migrations-applied

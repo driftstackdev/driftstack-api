@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "allowJs": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "eslint.config.js",
+    "vitest.config.ts",
+    "drizzle.config.ts",
+    "apps/**/src/**/*.ts",
+    "apps/**/tests/**/*.ts",
+    "packages/**/src/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "build", "coverage"]
+}

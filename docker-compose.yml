@@ -1,0 +1,42 @@
+# Driftstack API — local dev infra.
+# Postgres 17 + Redis 7. Server itself runs on host (npm run dev) so it can
+# attach a debugger and reload via tsx watch.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: driftstack-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: driftstack
+      POSTGRES_PASSWORD: driftstack
+      POSTGRES_DB: driftstack
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U driftstack -d driftstack']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: driftstack-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
