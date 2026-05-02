@@ -17,6 +17,7 @@ import type { SessionsService } from '../services/sessions.js';
 import type { ApiKeysService } from '../services/api-keys.js';
 import type { UsageService } from '../services/usage.js';
 import type { WebhooksService } from '../services/webhooks.js';
+import type { AdminAuditService } from '../services/admin-audit.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -36,6 +37,7 @@ export interface AppDeps {
   apiKeysService: ApiKeysService;
   usageService: UsageService;
   webhooksService: WebhooksService;
+  adminAuditService: AdminAuditService;
   /** When true, register a permissive CORS policy. Production locks this down. */
   permissiveCors?: boolean;
 }

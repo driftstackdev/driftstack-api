@@ -75,6 +75,19 @@ export const webhookDeliveryStatus = pgEnum('webhook_delivery_status', [
   'dlq',
 ]);
 
+// admin_audit_log.action — closed enum so the schema reflects the
+// supported admin operations. Adding a new admin endpoint is a
+// migration-bearing change. See D-025.
+export const adminAuditAction = pgEnum('admin_audit_action', [
+  'account.tier_changed',
+  'account.suspended',
+  'account.unsuspended',
+  'webhook_delivery.replayed',
+  'webhook_delivery.requeued',
+  'rate_limit_override.set',
+  'rate_limit_override.cleared',
+]);
+
 // ───────────────────────────────────────────────────────────────────────────
 // Tables
 // ───────────────────────────────────────────────────────────────────────────
@@ -318,6 +331,103 @@ export const webhookDeliveries = pgTable(
   ],
 );
 
+// admin_audit_log records every admin action (tier change, suspend,
+// webhook delivery replay/requeue, rate-limit override). Append-only:
+// the service exposes only an insert path and a paginated read; there
+// is no UPDATE or DELETE method. Schema enforces nothing here — the
+// "no mutate" invariant is upheld by code, not the DB. See D-025.
+export const adminAuditLog = pgTable(
+  'admin_audit_log',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    // The admin who performed the action.
+    adminAccountId: uuid('admin_account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'restrict' }),
+    adminKeyId: uuid('admin_key_id')
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: 'restrict' }),
+    action: adminAuditAction('action').notNull(),
+    // Account the action was performed against. Nullable for actions
+    // that don't target a single account (none today; reserved).
+    targetAccountId: uuid('target_account_id').references(() => accounts.id, {
+      onDelete: 'set null',
+    }),
+    // Free-form id of the target resource (e.g., webhook_delivery uuid).
+    // Not an FK — the targeted row may be from any table.
+    targetResourceId: text('target_resource_id'),
+    // Sanitised request body or query — captured by the route handler
+    // so the audit row records exactly what the admin asked for.
+    inputPayload: jsonb('input_payload').$type<Record<string, unknown>>(),
+    // 'success' on the happy path; 'error: <code>' on failures that
+    // still produced an audit row (e.g., a 404 when retrying a delivery
+    // that no longer exists is still worth recording).
+    result: text('result').notNull(),
+    // Best-effort client IP (X-Forwarded-For or socket peer). Stored as
+    // text so v4/v6/cidr/proxied-list all fit.
+    ipAddress: text('ip_address'),
+    timestamp: timestamp('timestamp', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    // Filter by admin (who).
+    index('admin_audit_log_admin_idx').on(t.adminAccountId, t.timestamp),
+    // Filter by target (what was changed).
+    index('admin_audit_log_target_idx').on(t.targetAccountId, t.timestamp),
+    // Filter by action (what kind of change).
+    index('admin_audit_log_action_idx').on(t.action, t.timestamp),
+  ],
+);
+
+// rate_limit_overrides — temporary per-account rate-limit adjustments
+// keyed by bucketKey (e.g., 'global', 'sessions:create'). When present
+// and unexpired, supersede the tier defaults at consume time. Set/
+// cleared by admin endpoints; auth-cache.invalidateAccount() runs on
+// every set/clear so the next auth read picks up the change. See D-025.
+export const rateLimitOverrides = pgTable(
+  'rate_limit_overrides',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    bucketKey: text('bucket_key').notNull(),
+    capacity: integer('capacity').notNull(),
+    // Stored as a fixed-point centi-rate so 1/60 (one per minute) and
+    // similar fractional values round-trip without float drift. The
+    // service multiplies by 0.01 when constructing the bucket config.
+    refillPerSecondCenti: integer('refill_per_second_centi').notNull(),
+    // Optional human-readable reason captured at set time.
+    reason: text('reason'),
+    // Override expires when this is in the past; the service treats
+    // expired rows as absent. Cleanup is lazy (no cron); rows hang
+    // around until an admin re-sets or a periodic sweep removes them.
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    setByKeyId: uuid('set_by_key_id')
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    // One override per (account, bucket) — re-setting upserts.
+    uniqueIndex('rate_limit_overrides_account_bucket_unique').on(t.accountId, t.bucketKey),
+    // Filter by account (the consume path).
+    index('rate_limit_overrides_account_idx').on(t.accountId),
+    // For the sweep query (find expired rows).
+    index('rate_limit_overrides_expires_idx').on(t.expiresAt),
+  ],
+);
+
 // ───────────────────────────────────────────────────────────────────────────
 // Inferred types (for service / route layers)
 // ───────────────────────────────────────────────────────────────────────────
@@ -345,3 +455,9 @@ export type NewWebhookEndpoint = typeof webhookEndpoints.$inferInsert;
 
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 export type NewWebhookDelivery = typeof webhookDeliveries.$inferInsert;
+
+export type AdminAuditLogRow = typeof adminAuditLog.$inferSelect;
+export type NewAdminAuditLogRow = typeof adminAuditLog.$inferInsert;
+
+export type RateLimitOverrideRow = typeof rateLimitOverrides.$inferSelect;
+export type NewRateLimitOverrideRow = typeof rateLimitOverrides.$inferInsert;

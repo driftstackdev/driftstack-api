@@ -15,6 +15,7 @@ import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
 import { WebhooksService } from '../../../src/services/webhooks.js';
+import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { InMemoryAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { InMemoryAuthRepo } from './in-memory-auth-repo.js';
@@ -22,6 +23,7 @@ import { InMemorySessionsRepo } from './in-memory-sessions-repo.js';
 import { InMemoryApiKeysRepo } from './in-memory-api-keys-repo.js';
 import { InMemoryUsageRepo } from './in-memory-usage-repo.js';
 import { InMemoryWebhooksRepo } from './in-memory-webhooks-repo.js';
+import { InMemoryAdminAuditLogRepo } from './in-memory-admin-audit-repo.js';
 import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
 
 export interface TestAppOptions {
@@ -41,6 +43,7 @@ export interface TestAppFixture {
   apiKeysRepo: InMemoryApiKeysRepo;
   usageRepo: InMemoryUsageRepo;
   webhooksRepo: InMemoryWebhooksRepo;
+  adminAuditRepo: InMemoryAdminAuditLogRepo;
   rateLimitStore: MemoryRateLimitStore;
   driver: MockDriver;
   /** Plaintext API key — pass as `Authorization: Bearer <plaintext>`. */
@@ -114,6 +117,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
 
   const webhooksRepo = new InMemoryWebhooksRepo();
   const webhooksService = new WebhooksService(webhooksRepo);
+
+  const adminAuditRepo = new InMemoryAdminAuditLogRepo();
+  const adminAuditService = new AdminAuditService(adminAuditRepo);
   // Wire webhooks INTO sessions + api-keys services for event emission.
   const sessionsService = new SessionsService({
     repo: sessionsRepo,
@@ -132,6 +138,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     apiKeysService,
     usageService,
     webhooksService,
+    adminAuditService,
     permissiveCors: true,
   });
 
@@ -141,6 +148,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     authCache,
     authCoalescer,
     webhooksRepo,
+    adminAuditRepo,
     sessionsRepo,
     apiKeysRepo,
     usageRepo,

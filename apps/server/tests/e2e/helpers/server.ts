@@ -24,6 +24,7 @@ import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
 import { WebhooksService } from '../../../src/services/webhooks.js';
 import { WebhookDeliveryWorker } from '../../../src/services/webhook-worker.js';
+import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { RedisAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { DrizzleAccountAuthRepo } from '../../../src/db/auth-repo.js';
@@ -31,6 +32,7 @@ import { DrizzleSessionRepo } from '../../../src/db/sessions-repo.js';
 import { DrizzleApiKeysRepo } from '../../../src/db/api-keys-repo.js';
 import { DrizzleUsageRepo } from '../../../src/db/usage-repo.js';
 import { DrizzleWebhooksRepo } from '../../../src/db/webhooks-repo.js';
+import { DrizzleAdminAuditLogRepo } from '../../../src/db/admin-audit-repo.js';
 import { RedisRateLimitStore } from '../../../src/lib/redis-rate-limit-store.js';
 import * as schema from '../../../src/db/schema.js';
 
@@ -52,8 +54,10 @@ const TRUNCATE_SQL = `
     "sessions",
     "usage_records",
     "rate_limit_buckets",
+    "rate_limit_overrides",
     "webhook_deliveries",
     "webhook_endpoints",
+    "admin_audit_log",
     "api_keys",
     "accounts"
   RESTART IDENTITY CASCADE
@@ -101,6 +105,9 @@ export async function startTestServer(): Promise<TestServer> {
   const webhooksRepo = new DrizzleWebhooksRepo(database);
   const webhooksService = new WebhooksService(webhooksRepo);
 
+  const adminAuditRepo = new DrizzleAdminAuditLogRepo(database);
+  const adminAuditService = new AdminAuditService(adminAuditRepo);
+
   const sessionsService = new SessionsService({
     repo: sessionsRepo,
     driver,
@@ -125,6 +132,7 @@ export async function startTestServer(): Promise<TestServer> {
     apiKeysService,
     usageService,
     webhooksService,
+    adminAuditService,
     rateLimitStore,
     permissiveCors: true,
   });
