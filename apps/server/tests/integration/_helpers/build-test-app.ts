@@ -16,6 +16,7 @@ import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
 import { WebhooksService } from '../../../src/services/webhooks.js';
 import { AdminAuditService } from '../../../src/services/admin-audit.js';
+import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
 import { InMemoryAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { InMemoryAuthRepo } from './in-memory-auth-repo.js';
@@ -24,6 +25,7 @@ import { InMemoryApiKeysRepo } from './in-memory-api-keys-repo.js';
 import { InMemoryUsageRepo } from './in-memory-usage-repo.js';
 import { InMemoryWebhooksRepo } from './in-memory-webhooks-repo.js';
 import { InMemoryAdminAuditLogRepo } from './in-memory-admin-audit-repo.js';
+import { InMemoryAccountsAdminRepo } from './in-memory-admin-accounts-repo.js';
 import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
 
 export interface TestAppOptions {
@@ -120,6 +122,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
 
   const adminAuditRepo = new InMemoryAdminAuditLogRepo();
   const adminAuditService = new AdminAuditService(adminAuditRepo);
+
+  const accountsAdminRepo = new InMemoryAccountsAdminRepo(authRepo);
+  const accountsAdminService = new AccountsAdminService(accountsAdminRepo, authCache);
   // Wire webhooks INTO sessions + api-keys services for event emission.
   const sessionsService = new SessionsService({
     repo: sessionsRepo,
@@ -139,6 +144,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     usageService,
     webhooksService,
     adminAuditService,
+    accountsAdminService,
     permissiveCors: true,
   });
 

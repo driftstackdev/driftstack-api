@@ -25,6 +25,7 @@ import { UsageService } from '../../../src/services/usage.js';
 import { WebhooksService } from '../../../src/services/webhooks.js';
 import { WebhookDeliveryWorker } from '../../../src/services/webhook-worker.js';
 import { AdminAuditService } from '../../../src/services/admin-audit.js';
+import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
 import { RedisAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { DrizzleAccountAuthRepo } from '../../../src/db/auth-repo.js';
@@ -33,6 +34,7 @@ import { DrizzleApiKeysRepo } from '../../../src/db/api-keys-repo.js';
 import { DrizzleUsageRepo } from '../../../src/db/usage-repo.js';
 import { DrizzleWebhooksRepo } from '../../../src/db/webhooks-repo.js';
 import { DrizzleAdminAuditLogRepo } from '../../../src/db/admin-audit-repo.js';
+import { DrizzleAccountsAdminRepo } from '../../../src/db/admin-accounts-repo.js';
 import { RedisRateLimitStore } from '../../../src/lib/redis-rate-limit-store.js';
 import * as schema from '../../../src/db/schema.js';
 
@@ -108,6 +110,9 @@ export async function startTestServer(): Promise<TestServer> {
   const adminAuditRepo = new DrizzleAdminAuditLogRepo(database);
   const adminAuditService = new AdminAuditService(adminAuditRepo);
 
+  const accountsAdminRepo = new DrizzleAccountsAdminRepo(database);
+  const accountsAdminService = new AccountsAdminService(accountsAdminRepo, authCache);
+
   const sessionsService = new SessionsService({
     repo: sessionsRepo,
     driver,
@@ -133,6 +138,7 @@ export async function startTestServer(): Promise<TestServer> {
     usageService,
     webhooksService,
     adminAuditService,
+    accountsAdminService,
     rateLimitStore,
     permissiveCors: true,
   });
