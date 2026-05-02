@@ -29,6 +29,16 @@ describe('OpenAPI spec generation', () => {
     expect(paths).toEqual(
       [
         '/health',
+        '/v1/admin/accounts/{id}/quota-override',
+        '/v1/admin/accounts/{id}/suspend',
+        '/v1/admin/accounts/{id}/tier',
+        '/v1/admin/accounts/{id}/unsuspend',
+        '/v1/admin/accounts/{id}/usage',
+        '/v1/admin/audit-log',
+        '/v1/admin/webhook-deliveries/{id}',
+        '/v1/admin/webhook-deliveries/{id}/replay',
+        '/v1/admin/webhook-dlq',
+        '/v1/admin/webhook-dlq/{id}/requeue',
         '/v1/api-keys',
         '/v1/api-keys/{id}',
         '/v1/sessions',
@@ -41,6 +51,19 @@ describe('OpenAPI spec generation', () => {
         '/v1/usage',
       ].sort(),
     );
+  });
+
+  it('all admin endpoints carry the "admin" tag (for docs filtering)', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    for (const [path, methods] of Object.entries(spec.paths ?? {})) {
+      if (!path.startsWith('/v1/admin/')) continue;
+      const ops = methods as Record<string, { tags?: string[] }>;
+      for (const [method, op] of Object.entries(ops)) {
+        if (!['get', 'post', 'delete', 'put', 'patch'].includes(method)) continue;
+        expect(op.tags).toContain('admin');
+      }
+    }
   });
 
   it('declares BearerAuth security scheme', () => {

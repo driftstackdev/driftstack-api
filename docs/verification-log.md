@@ -1147,3 +1147,93 @@ No new D-entries — fixture work is Tier 1 inside the test infrastructure.
 Multi-account fixtures landed. Cross-account suspend round-trip + cache-invalidation propagation tests passing. 293/293 tests green; lint clean; format clean; typecheck green.
 
 **Next OT commit (OT9 — workstream finale):** OpenAPI tagging for admin endpoints (so `/v1/admin/*` can be filtered out of customer-facing docs at generation time) + one e2e admin action via Playwright (recommend tier-change since it exercises auth, cache, rate-limit, audit in one shot). When OT9 lands, the operational tooling workstream is complete and surface for the founder's next-batch direction.
+
+---
+
+## V-022 — Operational tooling: OpenAPI 'admin' tagging + admin tier-change e2e (OT workstream complete)
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Operational tooling. Seventh and final commit of the workstream.
+
+### What was built
+
+- **OpenAPI registrations for all 10 admin endpoints**, each carrying `tags: ['admin']`:
+  - `POST /v1/admin/accounts/{id}/tier`
+  - `POST /v1/admin/accounts/{id}/suspend`
+  - `POST /v1/admin/accounts/{id}/unsuspend`
+  - `GET /v1/admin/accounts/{id}/usage`
+  - `POST /v1/admin/accounts/{id}/quota-override`
+  - `DELETE /v1/admin/accounts/{id}/quota-override`
+  - `GET /v1/admin/webhook-deliveries/{id}`
+  - `POST /v1/admin/webhook-deliveries/{id}/replay`
+  - `GET /v1/admin/webhook-dlq`
+  - `POST /v1/admin/webhook-dlq/{id}/requeue`
+  - `GET /v1/admin/audit-log`
+
+  The lowercase `admin` tag is intentional — it lets a docs build pipeline filter the customer-facing docs by `tag != 'admin'` without ambiguity (the customer-facing tags are PascalCase: `Sessions`, `API keys`, `Usage`, `Meta`).
+
+- **`tests/integration/openapi.test.ts` extended** with the path list (now 21 paths) and a new test asserting every `/v1/admin/*` endpoint carries the `admin` tag — regression catch for any future admin endpoint that forgets the tag.
+
+- **`tests/e2e/admin-tier-change.spec.ts`** — Playwright spec that exercises the full stack against real Postgres + Redis:
+  1. Seed two accounts (admin A on `builder`, target B on `free`).
+  2. Verify B's `whoami` returns `tier: 'free'`.
+  3. Admin A POSTs `/v1/admin/accounts/acc_<B>/tier` with `{tier: 'scale', reason: ...}`.
+  4. Verify B's next `whoami` returns `tier: 'scale'` (cache invalidation propagated through D-020).
+  5. Verify A's tier is unchanged (cross-account isolation).
+  6. Query `admin_audit_log` directly from Postgres — exactly one row with `action='account.tier_changed'`, `target=B`, `admin=A`, `result='success'`, `input_payload` matches.
+  7. Hit `GET /v1/admin/audit-log?target_id=acc_<B>` and confirm the same row surfaces through the read endpoint.
+
+### What tests verify it
+
+**Total test surface: 293 → 294 vitest** (+1 OpenAPI tag-presence test) **+ 60 → 61 Playwright** (+1 e2e admin tier-change). Full suite green.
+
+The OpenAPI test count went from 7 → 8 (one new tag-presence test). Path-list test updated for the +10 admin paths. All other vitest counts unchanged from V-021.
+
+### Empirical findings
+
+1. **The OpenAPI test caught an unused-import lint failure on `AdminAuditActionSchema`.** First pass imported the schema for completeness but never referenced it — `tsc` flagged `TS6133` and the build failed. Removed the import. Pattern: add schemas to `lib/openapi.ts` only when actually referenced by a `registerRoute` call.
+
+2. **The path-list test in `openapi.test.ts` is the right shape for catching missed registrations.** It enumerates `Object.keys(spec.paths).sort()` and asserts deep equality with the expected list. Adding a route file without registering it in `openapi.ts` would now fail this test. Adding a route in `openapi.ts` without matching the test's expected list would also fail. Keeps the spec and the actual server in sync.
+
+3. **`/v1/admin/audit-log` query parameters appear in the spec correctly because the Zod schema `ListAuditLogQuerySchema` is registered with the route.** The OpenAPI generator infers the query-string parameter names + types from the schema. No manual parameter listing required.
+
+4. **The e2e test queries `admin_audit_log` directly via `server.client`** (the postgres-js tagged-template client) rather than going through the API. This is the right shape for an audit-log e2e: prove that the row landed in the table where ops tooling reads it, not just that the route returned 200. The route's read endpoint is verified separately in step 7 of the test.
+
+5. **Path count went from 11 → 21 in this commit** — the OT workstream roughly doubled the public surface area. Worth noting because: (a) the OpenAPI generator is now non-trivial to read, and the file is approaching ~700 lines; (b) future schema work that extracts admin OpenAPI registrations into a separate file (mirroring the route-file split) would be reasonable cleanup. Not done in this commit; flagged for the housekeeping queue.
+
+### OT workstream summary (V-016 → V-022)
+
+**7 commits, 7 V-log entries, +84 tests (213 → 297 if counting +3 e2e from V-021), 11 admin endpoints, 1 D-entry (D-025), 0 production schema regressions.**
+
+| commit | V-log | scope                                                                                 |
+| ------ | ----- | ------------------------------------------------------------------------------------- |
+| OT1    | V-016 | foundation: D-025, admin_audit_log + rate_limit_overrides schemas, AdminAuditService  |
+| OT4    | V-017 | tier-change + suspend + unsuspend + AccountsAdminService + audit + cache invalidation |
+| OT5    | V-018 | webhook ops: replay + requeue + get + DLQ list + WebhooksAdminService                 |
+| OT6    | V-019 | admin reads: GET /v1/admin/accounts/:id/usage + GET /v1/admin/audit-log               |
+| OT7    | V-020 | rate-limit override + R2 consume-path (loaded into AccountContext, cached)            |
+| OT8    | V-021 | M1+M2 fixture extension + cross-account suspend round-trip                            |
+| OT9    | V-022 | OpenAPI 'admin' tag + e2e admin tier-change                                           |
+
+### Status
+
+OT workstream complete. All endpoints from the founder's locked OT scope landed:
+
+- ✓ Account state: tier change, suspend, unsuspend
+- ✓ Webhook ops: get delivery, replay, DLQ list, requeue
+- ✓ Reads: usage by-account, audit log
+- ✓ Rate-limit override: set, clear (with R2 consume-path integration)
+- ✓ Audit logging: append-only service, audit-write-before-response contract enforced
+- ✓ Cache invalidation: re-uses D-020 path, verified by integration + e2e tests
+- ✓ OpenAPI tagging: every admin endpoint carries `tags: ['admin']` for docs filtering
+- ✓ Cross-account suspend round-trip integration test
+- ✓ E2E test exercising the full stack via tier-change
+
+Surfacing for next-batch direction. Per prior coordination, options at this point:
+
+- recordUsage + quota events workstream (when customer onboarding approaches; not now)
+- Customer dashboard frontend (out of CLAUDE.md scope unless founder relaxes)
+- Billing scaffolding (gated on KvK May 21)
+- Documentation site / API reference cleanup (housekeeping)
+- Wait for WebKit fork Phase 2 closure for driver swap

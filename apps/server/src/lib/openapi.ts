@@ -26,23 +26,33 @@ import { z } from 'zod';
 extendZodWithOpenApi(z);
 import {
   AccountSchema,
+  AdminAccountResponseSchema,
+  AdminAuditLogEntrySchema,
   ApiKeySchema,
   CaptureRequestSchema,
   CaptureResponseSchema,
+  ChangeTierRequestSchema,
   CreateApiKeyRequestSchema,
   CreateApiKeyResponseSchema,
   CreateSessionRequestSchema,
   CreateSessionResponseSchema,
   InteractRequestSchema,
   InteractResponseSchema,
+  ListAuditLogQuerySchema,
+  ListDlqQuerySchema,
   NavigateRequestSchema,
   NavigateResponseSchema,
   PaginationQuerySchema,
   ProblemSchema,
+  QuotaOverrideResponseSchema,
   SessionSchema,
+  SetQuotaOverrideRequestSchema,
+  SuspendAccountRequestSchema,
+  UnsuspendAccountRequestSchema,
   UsagePeriodSummarySchema,
   WaitRequestSchema,
   WaitResponseSchema,
+  WebhookDeliverySchema,
   SessionStateSchema,
 } from '@driftstack/api-types';
 
@@ -317,6 +327,235 @@ function buildRegistry(): OpenAPIRegistry {
           'application/json': { schema: z.object({ ok: z.boolean() }) },
         },
       },
+    },
+  });
+
+  // ── Admin (operational tooling) ────────────────────────────────────────
+  // All routes under this section require the 'admin' scope (D-012, D-025).
+  // Tagged 'admin' so customer-facing docs can filter them out at
+  // generation time. See V-022.
+
+  r.register('AdminAccount', AdminAccountResponseSchema);
+  r.register('AdminAuditLogEntry', AdminAuditLogEntrySchema);
+  r.register('WebhookDelivery', WebhookDeliverySchema);
+
+  const PaginatedDlqSchema = z.object({
+    data: z.array(WebhookDeliverySchema),
+    next_cursor: z.string().nullable(),
+  });
+
+  const PaginatedAuditLogSchema = z.object({
+    data: z.array(AdminAuditLogEntrySchema),
+    next_cursor: z.string().nullable(),
+  });
+
+  // Account state
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/accounts/{id}/tier',
+    summary: 'Change account tier (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string().describe('Prefixed account id (acc_<uuid>)') }),
+      body: { content: { 'application/json': { schema: ChangeTierRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Updated account row.',
+        content: { 'application/json': { schema: AdminAccountResponseSchema } },
+      },
+      404: { description: 'Account not found.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/accounts/{id}/suspend',
+    summary: 'Suspend an account (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: { content: { 'application/json': { schema: SuspendAccountRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Account suspended.',
+        content: { 'application/json': { schema: AdminAccountResponseSchema } },
+      },
+      404: { description: 'Account not found.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/accounts/{id}/unsuspend',
+    summary: 'Restore a suspended account (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: { content: { 'application/json': { schema: UnsuspendAccountRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Account active.',
+        content: { 'application/json': { schema: AdminAccountResponseSchema } },
+      },
+      404: { description: 'Account not found.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/accounts/{id}/usage',
+    summary: 'Usage period summary for any account (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description: 'Period summary for the target account.',
+        content: { 'application/json': { schema: UsagePeriodSummarySchema } },
+      },
+      404: { description: 'Account not found.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+
+  // Rate-limit override
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/accounts/{id}/quota-override',
+    summary: 'Set a temporary rate-limit override on a bucket (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: { content: { 'application/json': { schema: SetQuotaOverrideRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Override stored. Effective on the next auth-cache miss for the target.',
+        content: { 'application/json': { schema: QuotaOverrideResponseSchema } },
+      },
+      404: { description: 'Account not found.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/admin/accounts/{id}/quota-override',
+    summary: 'Clear a rate-limit override (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      query: z.object({
+        bucket_key: z.enum(['global', 'sessions:create']),
+      }),
+    },
+    responses: {
+      204: { description: 'Override cleared.' },
+      404: {
+        description: 'No active override for that bucket.',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
+  // Webhook ops
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/webhook-deliveries/{id}',
+    summary: 'Fetch one webhook delivery (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: { params: z.object({ id: z.string().describe('Prefixed delivery id (wdl_<uuid>)') }) },
+    responses: {
+      200: {
+        description: 'Delivery row.',
+        content: { 'application/json': { schema: WebhookDeliverySchema } },
+      },
+      404: { description: 'Delivery not found.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/webhook-deliveries/{id}/replay',
+    summary: 'Replay a webhook delivery (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description: 'Delivery reset to pending; worker will retry.',
+        content: { 'application/json': { schema: WebhookDeliverySchema } },
+      },
+      404: { description: 'Delivery not found.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/webhook-dlq',
+    summary: 'List dead-lettered webhook deliveries across accounts (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: { query: ListDlqQuerySchema },
+    responses: {
+      200: {
+        description: 'Paginated DLQ list.',
+        content: { 'application/json': { schema: PaginatedDlqSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/webhook-dlq/{id}/requeue',
+    summary: 'Requeue a DLQ webhook delivery (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description: 'DLQ entry reset to pending.',
+        content: { 'application/json': { schema: WebhookDeliverySchema } },
+      },
+      404: { description: 'Delivery not found.', content: problemContent },
+      409: {
+        description: 'Delivery is not in DLQ — use /webhook-deliveries/:id/replay instead.',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
+  // Audit log
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/audit-log',
+    summary: 'Query the admin audit log (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: { query: ListAuditLogQuerySchema },
+    responses: {
+      200: {
+        description: 'Paginated audit log entries.',
+        content: { 'application/json': { schema: PaginatedAuditLogSchema } },
+      },
+      ...errors4xx,
     },
   });
 
