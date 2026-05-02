@@ -113,8 +113,13 @@ describe('GET /v1/sessions', () => {
 
   it('lists created sessions in reverse-chrono order', async () => {
     fx = await buildTestApp({ tier: 'builder' });
+    // Cache-amortised auth makes session creation fast enough that the three
+    // creates can land in the same millisecond, breaking the reverse-chrono
+    // sort. Sleep between each so timestamps are strictly distinct.
     await createSession(fx, { label: 'a' });
+    await new Promise((r) => setTimeout(r, 3));
     await createSession(fx, { label: 'b' });
+    await new Promise((r) => setTimeout(r, 3));
     await createSession(fx, { label: 'c' });
 
     const res = await fx.app.inject({

@@ -12,8 +12,12 @@ import {
   UnauthorizedError,
 } from '../lib/errors.js';
 import { keyPrefixFromPlaintext, verifyApiKey } from '../lib/api-keys.js';
+import type { AuthCache } from './auth-cache.js';
+import { sha256Hex } from './auth-cache.js';
 import type { ApiKeyScope } from '@driftstack/api-types';
 import type { AccountTier } from '@driftstack/api-types';
+
+const CACHE_TTL_SEC = 30;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Repository interface (implemented by Drizzle in prod, by a Map in tests)
@@ -77,9 +81,37 @@ export function extractBearerToken(authorizationHeader: string | undefined): str
 export async function authenticate(
   repo: AccountAuthRepo,
   plaintext: string,
+  cache: AuthCache | null = null,
   now: Date = new Date(),
 ): Promise<AccountContext> {
   if (plaintext.length < 24) throw new InvalidKeyError();
+
+  // Cache fast path: if Redis has a fresh entry for sha256(plaintext), skip
+  // the prefix lookup + scrypt verification entirely. The cache may also
+  // throw (broken Redis, network blip, etc.) — graceful degradation is
+  // belt-and-suspenders: the cache impl swallows internally AND we wrap
+  // here in case a future impl forgets.
+  const sha = sha256Hex(plaintext);
+  if (cache) {
+    let cached: AccountContext | null = null;
+    try {
+      cached = await cache.get(sha);
+    } catch {
+      cached = null;
+    }
+    if (cached) {
+      // expiresAt is the only clock-bound condition that can change inside
+      // the TTL window — re-check on every cache read so an expiry doesn't
+      // leak past its deadline.
+      if (cached.apiKey.expiresAt !== null && cached.apiKey.expiresAt.getTime() <= now.getTime()) {
+        throw new ExpiredKeyError();
+      }
+      // Skip the last_used_at touch on cache hits — sampled at TTL granularity
+      // (once per 30s in the worst case), which is the acceptable trade for
+      // amortising scrypt across the burst window.
+      return cached;
+    }
+  }
 
   const prefix = keyPrefixFromPlaintext(plaintext);
   const apiKey = await repo.findApiKeyByPrefix(prefix);
@@ -104,7 +136,24 @@ export async function authenticate(
 
   await repo.touchApiKeyLastUsed(apiKey.id, now);
 
-  return { account, apiKey };
+  const ctx: AccountContext = { account, apiKey };
+
+  // Cap TTL at expiresAt so the cache entry can never outlive the key.
+  if (cache) {
+    let ttl = CACHE_TTL_SEC;
+    if (apiKey.expiresAt !== null) {
+      const remaining = Math.floor((apiKey.expiresAt.getTime() - now.getTime()) / 1000);
+      if (remaining < ttl) ttl = Math.max(1, remaining);
+    }
+    try {
+      await cache.set(sha, apiKey.id, account.id, ctx, ttl);
+    } catch {
+      // Cache write failed — auth still completed via scrypt path. Drop on
+      // the floor; next request will retry the cache write.
+    }
+  }
+
+  return ctx;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

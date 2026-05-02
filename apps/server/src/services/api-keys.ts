@@ -13,6 +13,7 @@
 import type { ApiKeyScope } from '@driftstack/api-types';
 import type { AccountContext } from './auth.js';
 import type { ApiKeyRow } from './auth.js';
+import type { AuthCache } from './auth-cache.js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../lib/api-keys.js';
 import { NotFoundError, requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
 
@@ -44,7 +45,10 @@ export interface CreatedApiKey {
 }
 
 export class ApiKeysService {
-  constructor(private readonly repo: ApiKeysRepo) {}
+  constructor(
+    private readonly repo: ApiKeysRepo,
+    private readonly authCache: AuthCache | null = null,
+  ) {}
 
   async create(ctx: AccountContext, input: CreateApiKeyServiceInput): Promise<CreatedApiKey> {
     throwIfMissingScope(ctx, 'admin');
@@ -78,5 +82,17 @@ export class ApiKeysService {
     if (key.revokedAt !== null) return; // idempotent
 
     await this.repo.markRevoked(keyId, new Date());
+    // Pop the cache entry so the revoked key stops authenticating
+    // immediately, not after the 30s TTL. Wrap in try/catch — a cache
+    // failure must not propagate as a revoke failure.
+    if (this.authCache) {
+      try {
+        await this.authCache.invalidateKey(keyId);
+      } catch {
+        // Logged inside the cache impl; auth correctness is preserved by
+        // the DB-level revokedAt flag (the next scrypt-path lookup catches
+        // the revocation when the cache TTLs out).
+      }
+    }
   }
 }

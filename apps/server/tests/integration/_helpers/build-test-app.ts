@@ -14,6 +14,7 @@ import { MockDriver } from '../../../src/drivers/mock.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
+import { InMemoryAuthCache } from '../../../src/services/auth-cache.js';
 import { InMemoryAuthRepo } from './in-memory-auth-repo.js';
 import { InMemorySessionsRepo } from './in-memory-sessions-repo.js';
 import { InMemoryApiKeysRepo } from './in-memory-api-keys-repo.js';
@@ -31,6 +32,7 @@ export interface TestAppOptions {
 export interface TestAppFixture {
   app: Awaited<ReturnType<typeof buildApp>>;
   authRepo: InMemoryAuthRepo;
+  authCache: InMemoryAuthCache;
   sessionsRepo: InMemorySessionsRepo;
   apiKeysRepo: InMemoryApiKeysRepo;
   usageRepo: InMemoryUsageRepo;
@@ -85,9 +87,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   });
   const sessionsService = new SessionsService({ repo: sessionsRepo, driver });
 
-  const apiKeysRepo = new InMemoryApiKeysRepo();
-  // Mirror the seeded auth-key in api-keys repo so the same key can be
-  // listed / revoked through admin endpoints in tests.
+  // Pass authRepo so revocations / inserts propagate to both repos in the
+  // same way they would share a single DB row in production.
+  const apiKeysRepo = new InMemoryApiKeysRepo(authRepo);
   apiKeysRepo.upsert({
     id: apiKeyId,
     accountId,
@@ -100,7 +102,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     expiresAt: opts.keyExpired === true ? new Date('2026-01-15T00:00:00Z') : null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
   });
-  const apiKeysService = new ApiKeysService(apiKeysRepo);
+  const authCache = new InMemoryAuthCache();
+  const apiKeysService = new ApiKeysService(apiKeysRepo, authCache);
 
   const usageRepo = new InMemoryUsageRepo();
   const usageService = new UsageService(usageRepo);
@@ -108,6 +111,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const app = await buildApp({
     logger: createTestLogger(),
     authRepo,
+    authCache,
     rateLimitStore,
     sessionsService,
     apiKeysService,
@@ -118,6 +122,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   return {
     app,
     authRepo,
+    authCache,
     sessionsRepo,
     apiKeysRepo,
     usageRepo,

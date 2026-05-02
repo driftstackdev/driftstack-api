@@ -6,6 +6,7 @@ import fp from 'fastify-plugin';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { AccountAuthRepo, AccountContext } from '../services/auth.js';
 import { authenticate, extractBearerToken, requireScope } from '../services/auth.js';
+import type { AuthCache } from '../services/auth-cache.js';
 import type { ApiKeyScope } from '@driftstack/api-types';
 
 declare module 'fastify' {
@@ -22,6 +23,7 @@ declare module 'fastify' {
 
 export interface AuthPluginOptions {
   authRepo: AccountAuthRepo;
+  authCache: AuthCache | null;
 }
 
 function authPlugin(
@@ -33,7 +35,7 @@ function authPlugin(
 
   const requireAuth = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
     const token = extractBearerToken(request.headers.authorization);
-    const ctx = await authenticate(opts.authRepo, token);
+    const ctx = await authenticate(opts.authRepo, token, opts.authCache);
     request.account = ctx;
   };
 

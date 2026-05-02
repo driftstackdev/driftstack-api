@@ -122,6 +122,24 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Tier:** 1.
 - **V-log:** V-003.
 
+## D-020 — Auth cache (Redis-backed, 30 s TTL) — security model
+
+- **Decision:** introduce a Redis-backed auth cache that maps `sha256(plaintext)` → `AccountContext`, TTL 30 s, with explicit invalidation on revocation and account-level changes. **At-rest hash strength is not weakened** — `scrypt-kdf` at `logN=15` stays in `lib/api-keys.ts` for the persisted `api_keys.key_hash`. The cache is a pure performance optimisation.
+- **Reasoning:** V-010 found scrypt verification dominates p50/p99 on every authenticated request. Two ways out: (a) cache the verified-key→context mapping for some seconds, (b) lower the scrypt work factor. (a) preserves the at-rest security posture (a Redis dump alone yields no usable plaintext keys, only sha256 hashes that are non-reversible without rainbow-tabling 32-char base32 alphabets). (b) would make a stolen `api_keys` table trivially crackable. Founder accepted (a) per coordination response.
+
+  Security properties:
+  - **Cache key is `sha256(plaintext)`** — non-reversible. A Redis dump doesn't yield plaintext keys.
+  - **TTL is 30 s.** Worst-case revocation propagation is documented as 30 s in the API docs (forthcoming customer-facing change).
+  - **Explicit invalidation on revocation** via reverse-index `auth:keyid:<keyId>` → `<sha>`. DELETE /v1/api-keys/:id is immediate, not 30 s.
+  - **Account-level invalidation** via per-account version counter `auth:account:<accountId>:v`. INCRing the version makes ALL cached entries for that account miss on next read; cleanup is via natural TTL expiry. Used for tier changes, account suspension, account deletion (admin tooling, not yet exposed via API but the path is in place).
+  - **`expiresAt` re-checked on every cache read** so an expiry can never leak past its deadline (the cache could otherwise outlive a keys's expiry by up to TTL).
+  - **TTL capped at expiresAt** at cache write time, so a key with 5 s left to live gets cached for 5 s (not 30 s).
+  - **Graceful degradation:** any Redis failure (network, slow query, malformed entry) is caught at both the impl level (RedisAuthCache logs + returns null/no-op) and the call site (authenticate() wraps in try/catch as belt-and-suspenders). Auth still works; just slower.
+  - **No plaintext in cache value.** The cached `AccountContext` contains the hashed key, account info, scopes, etc. — no plaintext. The plaintext lives only in the request, in transit, and in the customer's secret store.
+
+- **Tier:** 3 (security model decision; founder approved per coordination response).
+- **V-log:** V-012 (perf delta + behaviour verification).
+
 ## D-019 — Six-tier locked pricing model
 
 - **Decision:** AccountTier moves from a 4-value enum (`free / starter / pro / enterprise`) to the 6-value locked-pricing model: `free / starter / solo / builder / scale / enterprise`. Concurrency limits, monthly quotas, and rate-limit defaults are scaled per tier:

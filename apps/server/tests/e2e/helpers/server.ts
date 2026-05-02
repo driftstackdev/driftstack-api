@@ -22,6 +22,7 @@ import { MockDriver } from '../../../src/drivers/mock.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
+import { RedisAuthCache } from '../../../src/services/auth-cache.js';
 import { DrizzleAccountAuthRepo } from '../../../src/db/auth-repo.js';
 import { DrizzleSessionRepo } from '../../../src/db/sessions-repo.js';
 import { DrizzleApiKeysRepo } from '../../../src/db/api-keys-repo.js';
@@ -76,11 +77,13 @@ export async function startTestServer(): Promise<TestServer> {
 
   const database = { client, db, close: async () => client.end({ timeout: 5 }) };
 
+  const logger = createTestLogger();
   const authRepo = new DrizzleAccountAuthRepo(database);
   const sessionsRepo = new DrizzleSessionRepo(database);
   const apiKeysRepo = new DrizzleApiKeysRepo(database);
   const usageRepo = new DrizzleUsageRepo(database);
   const rateLimitStore = new RedisRateLimitStore(redis);
+  const authCache = new RedisAuthCache(redis, logger);
 
   const driver = new MockDriver({
     fastForwardLatency: false,
@@ -89,12 +92,13 @@ export async function startTestServer(): Promise<TestServer> {
   });
 
   const sessionsService = new SessionsService({ repo: sessionsRepo, driver });
-  const apiKeysService = new ApiKeysService(apiKeysRepo);
+  const apiKeysService = new ApiKeysService(apiKeysRepo, authCache);
   const usageService = new UsageService(usageRepo);
 
   const app = await buildApp({
-    logger: createTestLogger(),
+    logger,
     authRepo,
+    authCache,
     sessionsService,
     apiKeysService,
     usageService,
