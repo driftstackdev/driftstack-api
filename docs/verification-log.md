@@ -267,3 +267,48 @@ No new D-entries — all Phase 5 choices are Tier 1 implementation details insid
 Phase 5 ready to commit and push. All 8 endpoints implemented, integration-tested via Fastify `inject` against in-memory adapters. The Drizzle-backed repo is wired but not exercised against a real Postgres yet — same blocker as Phase 1-4 (Docker / `workflow` scope). The first time a real Postgres comes online, the existing integration tests will be re-runnable against it by swapping `InMemorySessionsRepo` for `DrizzleSessionRepo` in the fixture; that's a one-line change.
 
 Phase 6 (admin endpoints — POST /v1/api-keys, DELETE /v1/api-keys/:id, GET /v1/usage) is the next clean target, and unblocks customer onboarding flows.
+
+---
+
+## V-006 — Phase 6: admin endpoints (api-keys CRUD + usage summary)
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** 6 (admin endpoints)
+
+### What was built
+
+- **ApiKeysService** + `ApiKeysRepo` interface — create/list/revoke. Create generates the plaintext (`ds_live_…` for paid tiers, `ds_test_…` for free), hashes via scrypt-kdf, stores prefix+hash, returns plaintext ONCE in the response. Revoke is admin-scoped and idempotent (revoking an already-revoked key is a no-op; revoking a non-existent key is 404). Both create and revoke require the `admin` scope on the calling key, enforced via a new `requireScope` helper in `lib/errors-helpers.ts` that throws `ForbiddenError` when the scope is missing.
+- **DrizzleApiKeysRepo** + **InMemoryApiKeysRepo** — production + test impls. The test fixture upserts the seeded auth-key into the api-keys repo too, so tests can list/revoke it through the admin endpoints.
+- **UsageService** + `UsageRepo` interface — aggregates `usage_records` for the current calendar-month UTC period and pairs the totals with tier quotas. Tier quotas defined for `session_minute`, `navigate`, `interact`, `wait`, `state_capture`, `screenshot_capture`; enterprise tier returns `null` quotas (unmetered).
+- **DrizzleUsageRepo** — uses `count(*)` group-by `record_type` over the period window. **InMemoryUsageRepo** — accepts test events, filters by account + period.
+- **Four admin routes** (`apps/server/src/routes/admin.ts`):
+  - `POST /v1/api-keys` (admin scope) — create
+  - `GET /v1/api-keys` — list (any authenticated key on the account, no scope check; never returns plaintext)
+  - `DELETE /v1/api-keys/:id` (admin scope) — revoke
+  - `GET /v1/usage` — period summary
+- **App builder + test fixture** updated to wire the new services.
+
+### What tests verify it
+
+**116 total tests, all passing.** New in Phase 6: 11 tests in `tests/integration/admin.test.ts`.
+
+- POST /v1/api-keys: 201 with plaintext + key shape; 403 when admin scope missing; 400 with empty scopes; ds*test* prefix for free tier.
+- GET /v1/api-keys: lists keys, never returns plaintext.
+- DELETE /v1/api-keys/:id: 204 + idempotent re-delete; 404 for unknown id; 403 without admin scope.
+- GET /v1/usage: 200 with zero totals + tier quotas; aggregates totals from recorded usage events; enterprise tier returns null quotas.
+
+### Empirical findings
+
+1. **`requireScope` was duplicated between auth service and a new helper.** First sketch had auth service export `requireScope(ctx, scope)`. ApiKeysService needs it but importing from auth would create a cycle (auth-service → repo abstractions; api-keys-service → auth → …). Resolved by extracting the helper to `lib/errors-helpers.ts`. Same `requireScope` is now used by both services without coupling them.
+2. **Test fixture's seeded key needed to live in the api-keys repo too.** The seeded auth-key (registered in `InMemoryAuthRepo`) was invisible to admin routes because the api-keys repo was empty. Added `apiKeysRepo.upsert({...})` in `buildTestApp` mirroring the same row data. Documented inline so a future Drizzle-backed integration test can use the same pattern (seed via a single test helper that writes to both repos).
+3. **`row.recordType` from Drizzle is already the typed enum.** A leftover `row.recordType as UsageRecordType` cast triggered `no-unnecessary-type-assertion`. Removed; Drizzle's pgEnum typing is enough.
+4. **Idempotent revoke vs idempotent destroy.** Sessions destroy is fully idempotent (returns 204 even for unknown ids — see Phase 5). Api-key revoke is idempotent for already-revoked keys but 404 for unknown ids. The reasoning: destroying a session that was never created is benign (driver state already absent); revoking a key that doesn't exist is more likely a client mistake worth surfacing. Documented via test cases.
+
+### Decisions made (cross-link)
+
+No new D-entries — all Tier 1.
+
+### Status
+
+Phase 6 ready to commit and push. 116 tests passing locally. Customer onboarding flow now end-to-end testable via the in-memory adapters: create account → list/create api-keys via admin endpoint → create session → operate → check usage. Phase 7 (OpenAPI spec generation + Swagger UI) is the next target — pure code work, no infra dependency.

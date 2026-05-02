@@ -12,17 +12,22 @@ import type { Logger } from './logger.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
 import type { SessionsService } from '../services/sessions.js';
+import type { ApiKeysService } from '../services/api-keys.js';
+import type { UsageService } from '../services/usage.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
 import { registerErrorHandler } from '../middleware/error-handler.js';
 import { registerSessionRoutes } from '../routes/sessions.js';
+import { registerAdminRoutes } from '../routes/admin.js';
 
 export interface AppDeps {
   logger: Logger;
   authRepo: AccountAuthRepo;
   rateLimitStore: RateLimitStore;
   sessionsService: SessionsService;
+  apiKeysService: ApiKeysService;
+  usageService: UsageService;
   /** When true, register a permissive CORS policy. Production locks this down. */
   permissiveCors?: boolean;
 }
@@ -57,6 +62,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerErrorHandler(app);
 
   registerSessionRoutes(app, { service: deps.sessionsService });
+  registerAdminRoutes(app, {
+    apiKeysService: deps.apiKeysService,
+    usageService: deps.usageService,
+  });
 
   // Health endpoint — public, no auth, no rate limit.
   app.get('/health', () => ({ ok: true }));
