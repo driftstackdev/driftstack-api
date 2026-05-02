@@ -31,6 +31,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Driftstack } from '@driftstack/sdk';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError } from '../lib/client';
+import { useRecordings } from '../lib/recordings';
 
 const FRAME_INTERVAL_MS = 500;
 
@@ -80,6 +81,10 @@ export interface LiveSessionViewProps {
 
 export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JSX.Element {
   const { client } = useSettings();
+  const { startRecording, stopRecording, addFrame, activeRecordingFor } = useRecordings();
+  const recordingId = activeRecordingFor(sessionId);
+  const recordingIdRef = useRef<string | null>(recordingId);
+  recordingIdRef.current = recordingId;
   const [state, setState] = useState<ViewportState>({
     currentUrl: null,
     currentTitle: null,
@@ -126,6 +131,12 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
           durationMs: cap.duration_ms,
         },
       }));
+
+      // If recording is active for this session, append the frame.
+      const recId = recordingIdRef.current;
+      if (recId !== null) {
+        addFrame(recId, { at: now, dataUrl, bytes: cap.byte_size });
+      }
     } catch (err) {
       setState((s) => ({
         ...s,
@@ -133,7 +144,7 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
         error: friendlyError(err),
       }));
     }
-  }, [client, sessionId]);
+  }, [client, sessionId, addFrame]);
 
   const fetchSessionMeta = useCallback(async (): Promise<void> => {
     if (!client) return;
@@ -175,6 +186,14 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
     // Focus the wrapper so keyboard events route to it.
     if (manualControlRef.current && wrapperRef.current !== null) {
       wrapperRef.current.focus();
+    }
+  }
+
+  function toggleRecording(): void {
+    if (recordingId === null) {
+      startRecording(sessionId);
+    } else {
+      stopRecording(recordingId);
     }
   }
 
@@ -278,10 +297,12 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
         currentTitle={state.currentTitle}
         paused={state.paused}
         manualControl={state.manualControl}
+        recording={recordingId !== null}
         fps={state.fpsActual}
         onBack={onBack}
         onTogglePause={togglePause}
         onToggleManualControl={toggleManualControl}
+        onToggleRecording={toggleRecording}
         onRefresh={() => void fetchFrame()}
         onDestroy={() => void handleDestroy()}
       />
@@ -327,10 +348,12 @@ interface HeaderProps {
   currentTitle: string | null;
   paused: boolean;
   manualControl: boolean;
+  recording: boolean;
   fps: number;
   onBack: () => void;
   onTogglePause: () => void;
   onToggleManualControl: () => void;
+  onToggleRecording: () => void;
   onRefresh: () => void;
   onDestroy: () => void;
 }
@@ -370,6 +393,14 @@ function Header(props: HeaderProps): JSX.Element {
           title="Forward clicks/scroll/keystrokes to the session"
         >
           {props.manualControl ? 'Control: on' : 'Control: off'}
+        </button>
+        <button
+          type="button"
+          className={props.recording ? 'btn-primary' : 'btn-secondary'}
+          onClick={props.onToggleRecording}
+          title="Capture polled frames into a recording"
+        >
+          {props.recording ? '● Recording' : 'Record'}
         </button>
         <button type="button" className="btn-danger" onClick={props.onDestroy}>
           Destroy

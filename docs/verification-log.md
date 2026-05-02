@@ -1920,7 +1920,7 @@ GUI5 — SOCKS5 proxy management UI + storage. CRUD for proxy configs (host, por
    - A Tier-3 additive contract change adding `proxy: { host, port, username?, password? } | null` to `CreateSessionRequest` (api-types).
    - Mock-driver implementation that records the proxy and exposes it for assertions in tests.
    - WebKit-fork (Agent #1) actual SOCKS5 routing — that's the real work.
-   The contract addition is straightforward; the WebKit-fork side is not. Surfacing as a coordination item with Agent #1 — not landing autonomously tonight because the GUI side without the driver side gives the user no actual proxy routing, just a UI that pretends to work.
+     The contract addition is straightforward; the WebKit-fork side is not. Surfacing as a coordination item with Agent #1 — not landing autonomously tonight because the GUI side without the driver side gives the user no actual proxy routing, just a UI that pretends to work.
 
 2. **No GUI test infrastructure exists yet.** `apps/gui-client` has no vitest config. Adding one just for `validateDraft` would be scope creep tonight; the function is small enough to read. If GUI8 polish lands a vitest config, fold validateDraft tests in then. Marked as a follow-up.
 
@@ -1941,3 +1941,44 @@ GUI5 closed (local-only). Founder can now curate the proxy roster from the GUI. 
 ### Next
 
 GUI6 — session recording + playback. Buffer the polled frames into a session-scoped ring (configurable cap), expose a Recordings view with a timeline scrubber + play/pause. Optional ndjson manifest persisted to disk via the tauri fs plugin.
+
+---
+
+## V-034 — GUI6: session recording + playback (in-memory)
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Self-hosted GUI client (file 128).
+
+### What changed
+
+- **`apps/gui-client/src/lib/recordings.tsx`** — new context. In-memory `Map<id, Recording>` with start/stop/addFrame/delete + a `useRecordings()` hook. Each recording is a session-scoped buffer of `{at, dataUrl, bytes}` frames capped at 1200 (drops oldest first). `RecordingsProvider` mounts in `App.tsx` between `SettingsProvider` and `Shell`.
+- **`apps/gui-client/src/views/RecordingsView.tsx`** — list of recordings with start time, duration, frame count (current vs. total captured), size MB, and Open/Delete actions. Live recordings show a "live" badge and disable Delete until stopped.
+- **`apps/gui-client/src/views/RecordingPlayerView.tsx`** — playback view with a range-input timeline scrubber and Play/Pause/Replay button. Cursor advances at 10 Hz; the rendered frame is the latest captured frame whose `at <= startedAt + cursor`.
+- **`apps/gui-client/src/views/LiveSessionView.tsx`** — gained a "Record" button that toggles the active recording for the session. While recording, every successful `fetchFrame()` calls `addFrame()` so the same base64 PNG that just rendered is also banked into the recording.
+- **`apps/gui-client/src/App.tsx`** — `recordings` route wired to `RecordingsView`, new `recording-player` route to `RecordingPlayerView`. Sidebar already had the "Recordings" item.
+
+### Empirical findings
+
+1. **Recordings are in-memory only this iteration.** Persistence to disk via the tauri fs plugin (ndjson, one base64-png per line, written into the app data dir) is queued for GUI6.5. The empirical question to answer first — "is replaying 2-fps PNGs in an `<img>` good enough for the founder's debugging needs?" — is the load-bearing one. If the answer is no (e.g. need scrubbing-without-rebuffer or sub-second granularity), we'd switch to MediaRecorder + WebM and the persistence shape would change anyway.
+
+2. **Memory ceiling: 1200 frames per recording (~10 minutes at 2 fps).** At ~150 KB per frame that's ~180 MB per recording max. Beyond that, oldest frames drop. The UI surfaces both "frames currently held" and "total ever captured" so the founder can see when the buffer's been wrapped.
+
+3. **Recordings tied to session by sessionId, only one active per session.** `activeRecordingFor(sessionId)` returns the active recording's id (or null), which `LiveSessionView` uses to drive the Record button label. Rationale: it would be confusing to record one session into two parallel buffers.
+
+4. **Playback cursor uses a wall-clock anchor (`{wallStart, cursorBase}` ref)** rather than incrementing `cursor += TICK_MS` in the interval. The increment approach drifts when `setInterval` fires late or skips ticks (which it does under load). Anchoring against `Date.now()` self-corrects: each tick computes `now - wallStart` which is exact regardless of tick jitter. Re-anchored on scrub.
+
+5. **Frame lookup is linear scan.** With 1200 frames the worst-case scan is 1200 comparisons at every tick — that's 12k comparisons per second during playback, fine for the GUI. A binary search is a pre-optimisation; if recordings ever grow past ~10k frames or playback cadence past 60 Hz, swap it in.
+
+### Verify chain
+
+- typecheck/lint/format all clean. 297/297 vitest unchanged.
+- GUI client bundle: **194 KB JS / 16.7 KB CSS** (59 KB / 3.6 KB gzipped). +9 KB JS over V-033. Approaching the 200 KB target — GUI7 (native packaging) won't add to this; GUI8 polish should mostly slim CSS, not grow JS. If the bundle pushes past 200 KB, code-splitting the recording player (it's only loaded on demand) is a one-line `lazy()` away.
+
+### Status
+
+GUI6 closed. Founder can now record a session, browse recordings, and scrub through them. In-memory only — disappears on app restart. Persistence queued.
+
+### Next
+
+GUI7 — macOS native packaging + signing. tauri.conf.json bundle config, identifier `dev.driftstack.gui-client`, signing identity (founder's personal Apple Developer cert), notarisation env vars. Verify `tauri:build` produces a working .app + .dmg.

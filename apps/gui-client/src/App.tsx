@@ -7,9 +7,12 @@
 // history stack to integrate with.
 
 import { useState } from 'react';
+import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { LiveSessionView } from './views/LiveSessionView';
 import { ProxiesView } from './views/ProxiesView';
+import { RecordingPlayerView } from './views/RecordingPlayerView';
+import { RecordingsView } from './views/RecordingsView';
 import { SessionsView } from './views/SessionsView';
 import { SettingsView } from './views/SettingsView';
 
@@ -18,6 +21,7 @@ type View =
   | { kind: 'live-session'; sessionId: string }
   | { kind: 'sessions-history' }
   | { kind: 'recordings' }
+  | { kind: 'recording-player'; recordingId: string }
   | { kind: 'proxies' }
   | { kind: 'connectivity' }
   | { kind: 'fleet' }
@@ -26,7 +30,9 @@ type View =
 export function App(): JSX.Element {
   return (
     <SettingsProvider>
-      <Shell />
+      <RecordingsProvider>
+        <Shell />
+      </RecordingsProvider>
     </SettingsProvider>
   );
 }
@@ -70,8 +76,20 @@ function CurrentView({
       return <SettingsView />;
     case 'proxies':
       return <ProxiesView />;
-    case 'sessions-history':
     case 'recordings':
+      return (
+        <RecordingsView
+          onOpen={(recordingId) => onNavigate({ kind: 'recording-player', recordingId })}
+        />
+      );
+    case 'recording-player':
+      return (
+        <RecordingPlayerView
+          recordingId={view.recordingId}
+          onBack={() => onNavigate({ kind: 'recordings' })}
+        />
+      );
+    case 'sessions-history':
     case 'connectivity':
     case 'fleet':
       return <NotYet label={view.kind} />;
