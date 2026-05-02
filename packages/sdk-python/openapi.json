@@ -496,6 +496,24 @@
                 "properties": {
                   "kind": {
                     "type": "string",
+                    "enum": ["tap_at"]
+                  },
+                  "x": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "y": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": ["kind", "x", "y"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
                     "enum": ["type"]
                   },
                   "selector": {
@@ -513,6 +531,25 @@
                   }
                 },
                 "required": ["kind", "selector", "text"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["type_focused"]
+                  },
+                  "text": {
+                    "type": "string",
+                    "maxLength": 10000
+                  },
+                  "delay_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 500
+                  }
+                },
+                "required": ["kind", "text"]
               },
               {
                 "type": "object",
@@ -1670,6 +1707,24 @@
                         "properties": {
                           "kind": {
                             "type": "string",
+                            "enum": ["tap_at"]
+                          },
+                          "x": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "y": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": ["kind", "x", "y"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
                             "enum": ["type"]
                           },
                           "selector": {
@@ -1687,6 +1742,25 @@
                           }
                         },
                         "required": ["kind", "selector", "text"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": ["type_focused"]
+                          },
+                          "text": {
+                            "type": "string",
+                            "maxLength": 10000
+                          },
+                          "delay_ms": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 500
+                          }
+                        },
+                        "required": ["kind", "text"]
                       },
                       {
                         "type": "object",

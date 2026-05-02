@@ -88,11 +88,28 @@ export const InteractActionSchema = z.discriminatedUnion('kind', [
     // Optional offset within the element (px).
     offset: z.object({ x: z.number().int(), y: z.number().int() }).optional(),
   }),
+  // Tap at viewport pixel coordinates. Used by the self-hosted GUI's
+  // live viewport (file 128) where the input device is a screenshot,
+  // not a CSS selector. Coordinates are in viewport pixels (CSS px),
+  // origin top-left, and the driver translates to native taps.
+  z.object({
+    kind: z.literal('tap_at'),
+    x: z.number().int().min(0),
+    y: z.number().int().min(0),
+  }),
   z.object({
     kind: z.literal('type'),
     selector: z.string().min(1),
     text: z.string().max(10_000),
     // ms between keystrokes; mock driver respects bounds, real driver clamps.
+    delay_ms: z.number().int().min(0).max(500).optional(),
+  }),
+  // Type into the currently-focused element (no selector). Pairs with
+  // tap_at — tap focuses, type_focused enters text. Same delay_ms bounds
+  // as `type`.
+  z.object({
+    kind: z.literal('type_focused'),
+    text: z.string().max(10_000),
     delay_ms: z.number().int().min(0).max(500).optional(),
   }),
   z.object({

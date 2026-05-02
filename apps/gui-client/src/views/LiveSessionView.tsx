@@ -1,11 +1,21 @@
-// Live session viewport — polling-based.
+// Live session viewport — polling-based, with input forwarding.
 //
 // Polls `client.sessions.capture({kind:'screenshot'})` at ~500ms per
-// frame and renders the base64 PNG in an <img>. Architecturally this
-// is the right place to start before committing to WebRTC: it lets us
-// exercise the input event forwarding (GUI4) + session control loop +
-// recording architecture (GUI6) against today's API surface, with no
-// server-side streaming dependency.
+// frame and renders the base64 PNG in an <img>. When manual control
+// is on, clicks/scrolls/keystrokes on the viewport translate to
+// `client.sessions.interact()` calls so the founder can drive a real
+// session through the GUI without the WebKit-fork dev tools.
+//
+// GUI4 input mapping:
+//   - click on img            → { kind: 'tap_at', x, y } in viewport px
+//   - wheel on img            → { kind: 'scroll', delta_x, delta_y }
+//   - non-printable keys      → { kind: 'press', key }
+//   - printable chars         → { kind: 'type_focused', text }
+//
+// Coord translation: img is rendered with `object-contain` against a
+// flex container, so its bounding rect IS the rendered image area
+// (width/height match natural × scale). Click x within the rect maps
+// linearly to viewport px via `naturalWidth / rect.width`.
 //
 // Trade-offs we're accepting at 2 fps over HTTP/JSON-base64:
 //   - ~50-200 KB per frame on the wire (base64 over HTTP).
@@ -24,6 +34,26 @@ import { DriftstackError } from '../lib/client';
 
 const FRAME_INTERVAL_MS = 500;
 
+// Keys we forward as `press` (non-printable). Anything else printable
+// goes through `type_focused`. This mirrors the InteractActionSchema in
+// @driftstack/api-types — the union of {press,type_focused} covers
+// every keyboard input.
+const PRESS_KEYS = new Set([
+  'Enter',
+  'Escape',
+  'Backspace',
+  'Tab',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'Home',
+  'End',
+  'PageUp',
+  'PageDown',
+  'Delete',
+]);
+
 interface FrameState {
   pngDataUrl: string | null;
   bytes: number;
@@ -39,6 +69,8 @@ interface ViewportState {
   loading: boolean;
   error: string | null;
   fpsActual: number; // measured from the last 4 frame intervals
+  manualControl: boolean;
+  lastTap: { x: number; y: number; at: number } | null;
 }
 
 export interface LiveSessionViewProps {
@@ -56,11 +88,15 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
     loading: false,
     error: null,
     fpsActual: 0,
+    manualControl: false,
+    lastTap: null,
   });
   // Refs avoid restarting the interval every state mutation.
   const pausedRef = useRef(false);
   const intervalIdRef = useRef<number | null>(null);
   const frameTimestampsRef = useRef<number[]>([]);
+  const manualControlRef = useRef(false);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   const fetchFrame = useCallback(async (): Promise<void> => {
     if (!client) return;
@@ -133,6 +169,15 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
     setState((s) => ({ ...s, paused: pausedRef.current }));
   }
 
+  function toggleManualControl(): void {
+    manualControlRef.current = !manualControlRef.current;
+    setState((s) => ({ ...s, manualControl: manualControlRef.current }));
+    // Focus the wrapper so keyboard events route to it.
+    if (manualControlRef.current && wrapperRef.current !== null) {
+      wrapperRef.current.focus();
+    }
+  }
+
   async function handleDestroy(): Promise<void> {
     if (!client) return;
     try {
@@ -142,6 +187,69 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
       setState((s) => ({ ...s, error: friendlyError(err) }));
     }
   }
+
+  // ─── input forwarding ─────────────────────────────────────────────
+
+  const interact = useCallback(
+    async (action: InteractActionPayload): Promise<void> => {
+      if (!client) return;
+      try {
+        await client.sessions.interact(sessionId, { action });
+      } catch (err) {
+        setState((s) => ({ ...s, error: friendlyError(err) }));
+      }
+    },
+    [client, sessionId],
+  );
+
+  const handleImgClick = useCallback(
+    (e: React.MouseEvent<HTMLImageElement>): void => {
+      if (!manualControlRef.current) return;
+      const img = e.currentTarget;
+      const rect = img.getBoundingClientRect();
+      const naturalW = img.naturalWidth;
+      const naturalH = img.naturalHeight;
+      if (naturalW === 0 || naturalH === 0 || rect.width === 0 || rect.height === 0) return;
+      const x = Math.round(((e.clientX - rect.left) / rect.width) * naturalW);
+      const y = Math.round(((e.clientY - rect.top) / rect.height) * naturalH);
+      setState((s) => ({ ...s, lastTap: { x, y, at: Date.now() } }));
+      void interact({ kind: 'tap_at', x, y });
+    },
+    [interact],
+  );
+
+  const handleImgWheel = useCallback(
+    (e: React.WheelEvent<HTMLImageElement>): void => {
+      if (!manualControlRef.current) return;
+      e.preventDefault();
+      const dx = Math.round(e.deltaX);
+      const dy = Math.round(e.deltaY);
+      if (dx === 0 && dy === 0) return;
+      void interact({ kind: 'scroll', delta_x: dx, delta_y: dy });
+    },
+    [interact],
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>): void => {
+      if (!manualControlRef.current) return;
+      // Ignore modifier-only events.
+      if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') return;
+      // Don't hijack copy/paste/devtools shortcuts.
+      if (e.metaKey || e.ctrlKey) return;
+      if (PRESS_KEYS.has(e.key)) {
+        e.preventDefault();
+        void interact({ kind: 'press', key: e.key });
+        return;
+      }
+      // Single printable character → type_focused.
+      if (e.key.length === 1) {
+        e.preventDefault();
+        void interact({ kind: 'type_focused', text: e.key });
+      }
+    },
+    [interact],
+  );
 
   if (!client) {
     return (
@@ -158,15 +266,22 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
   }
 
   return (
-    <div className="flex h-full flex-col gap-3 p-6">
+    <div
+      ref={wrapperRef}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      className="flex h-full flex-col gap-3 p-6 outline-none"
+    >
       <Header
         sessionId={sessionId}
         currentUrl={state.currentUrl}
         currentTitle={state.currentTitle}
         paused={state.paused}
+        manualControl={state.manualControl}
         fps={state.fpsActual}
         onBack={onBack}
         onTogglePause={togglePause}
+        onToggleManualControl={toggleManualControl}
         onRefresh={() => void fetchFrame()}
         onDestroy={() => void handleDestroy()}
       />
@@ -178,12 +293,31 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
         />
       )}
 
-      <Viewport frame={state.frame} loading={state.loading} />
+      <Viewport
+        frame={state.frame}
+        loading={state.loading}
+        manualControl={state.manualControl}
+        lastTap={state.lastTap}
+        onImgClick={handleImgClick}
+        onImgWheel={handleImgWheel}
+      />
 
-      <Footer frame={state.frame} fps={state.fpsActual} paused={state.paused} />
+      <Footer
+        frame={state.frame}
+        fps={state.fpsActual}
+        paused={state.paused}
+        manualControl={state.manualControl}
+        lastTap={state.lastTap}
+      />
     </div>
   );
 }
+
+type InteractActionPayload =
+  | { kind: 'tap_at'; x: number; y: number }
+  | { kind: 'type_focused'; text: string; delay_ms?: number }
+  | { kind: 'scroll'; delta_x: number; delta_y: number }
+  | { kind: 'press'; key: string };
 
 // ─── subcomponents ────────────────────────────────────────────────
 
@@ -192,9 +326,11 @@ interface HeaderProps {
   currentUrl: string | null;
   currentTitle: string | null;
   paused: boolean;
+  manualControl: boolean;
   fps: number;
   onBack: () => void;
   onTogglePause: () => void;
+  onToggleManualControl: () => void;
   onRefresh: () => void;
   onDestroy: () => void;
 }
@@ -227,6 +363,14 @@ function Header(props: HeaderProps): JSX.Element {
         <button type="button" className="btn-secondary" onClick={props.onTogglePause}>
           {props.paused ? 'Resume' : 'Pause'}
         </button>
+        <button
+          type="button"
+          className={props.manualControl ? 'btn-primary' : 'btn-secondary'}
+          onClick={props.onToggleManualControl}
+          title="Forward clicks/scroll/keystrokes to the session"
+        >
+          {props.manualControl ? 'Control: on' : 'Control: off'}
+        </button>
         <button type="button" className="btn-danger" onClick={props.onDestroy}>
           Destroy
         </button>
@@ -235,9 +379,31 @@ function Header(props: HeaderProps): JSX.Element {
   );
 }
 
-function Viewport({ frame, loading }: { frame: FrameState | null; loading: boolean }): JSX.Element {
+function Viewport({
+  frame,
+  loading,
+  manualControl,
+  lastTap,
+  onImgClick,
+  onImgWheel,
+}: {
+  frame: FrameState | null;
+  loading: boolean;
+  manualControl: boolean;
+  lastTap: { x: number; y: number; at: number } | null;
+  onImgClick: (e: React.MouseEvent<HTMLImageElement>) => void;
+  onImgWheel: (e: React.WheelEvent<HTMLImageElement>) => void;
+}): JSX.Element {
+  // Highlight the most recent tap for ~600 ms so the founder sees the
+  // input registered even before the next frame paints over it.
+  const tapAgeMs = lastTap !== null ? Date.now() - lastTap.at : Infinity;
+  const showTapMarker = lastTap !== null && tapAgeMs < 600;
   return (
-    <div className="flex flex-1 items-center justify-center overflow-hidden rounded border border-surface-divider bg-black">
+    <div
+      className={`relative flex flex-1 items-center justify-center overflow-hidden rounded border bg-black ${
+        manualControl ? 'border-accent' : 'border-surface-divider'
+      }`}
+    >
       {frame === null ? (
         <div className="flex flex-col items-center gap-2 text-ink-muted">
           <span className="section-label">
@@ -249,13 +415,46 @@ function Viewport({ frame, loading }: { frame: FrameState | null; loading: boole
         <img
           src={frame.pngDataUrl ?? undefined}
           alt={`session viewport at ${new Date(frame.capturedAt).toLocaleTimeString()}`}
-          className="max-h-full max-w-full object-contain"
+          className={`max-h-full max-w-full object-contain ${
+            manualControl ? 'cursor-crosshair' : ''
+          }`}
+          onClick={onImgClick}
+          onWheel={onImgWheel}
+          draggable={false}
           // No `loading="lazy"` — we always want the latest frame
           // visible, and lazy loading would prevent the displayed
           // frame from updating off-screen.
         />
       )}
+      {showTapMarker && lastTap !== null && <TapMarker x={lastTap.x} y={lastTap.y} />}
     </div>
+  );
+}
+
+// Renders a small ring at the last tap location, projecting from
+// natural-px (what we sent to the server) back to display-px (where it
+// actually appeared on screen). We re-read the img's bounding rect at
+// effect time so the marker tracks resizes between renders.
+function TapMarker({ x, y }: { x: number; y: number }): JSX.Element | null {
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  useEffect(() => {
+    const img = document.querySelector<HTMLImageElement>('img[alt^="session viewport at"]');
+    if (img === null) return;
+    if (img.naturalWidth === 0 || img.naturalHeight === 0) return;
+    const rect = img.getBoundingClientRect();
+    const parent = img.parentElement?.getBoundingClientRect();
+    if (parent === undefined) return;
+    setPos({
+      left: rect.left - parent.left + (x / img.naturalWidth) * rect.width,
+      top: rect.top - parent.top + (y / img.naturalHeight) * rect.height,
+    });
+  }, [x, y]);
+  if (pos === null) return null;
+  return (
+    <span
+      className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-accent"
+      style={{ left: pos.left, top: pos.top }}
+    />
   );
 }
 
@@ -263,10 +462,14 @@ function Footer({
   frame,
   fps,
   paused,
+  manualControl,
+  lastTap,
 }: {
   frame: FrameState | null;
   fps: number;
   paused: boolean;
+  manualControl: boolean;
+  lastTap: { x: number; y: number; at: number } | null;
 }): JSX.Element {
   return (
     <footer className="flex items-center justify-between text-2xs text-ink-muted">
@@ -276,6 +479,16 @@ function Footer({
           <span className="text-status-busy">paused</span>
         ) : (
           <span className="mono">{fps.toFixed(1)} fps</span>
+        )}
+        {manualControl && (
+          <span className="text-accent">
+            control on
+            {lastTap !== null && (
+              <span className="mono ml-1 text-ink-muted">
+                last tap ({lastTap.x}, {lastTap.y})
+              </span>
+            )}
+          </span>
         )}
       </div>
       {frame !== null && (

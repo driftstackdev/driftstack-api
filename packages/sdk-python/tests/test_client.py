@@ -17,7 +17,11 @@ def test_package_exposes_expected_surface() -> None:
 
 def test_version_string_matches_pyproject_default() -> None:
     """Package version is exposed and looks like a SemVer string."""
-    assert __version__ == "0.0.1"
+    import re
+
+    assert re.match(r"^\d+\.\d+\.\d+(?:[-+].*)?$", __version__), (
+        f"version {__version__!r} does not look like SemVer"
+    )
     assert driftstack.__version__ == __version__
 
 

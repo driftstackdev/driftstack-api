@@ -216,6 +216,44 @@ describe('POST /v1/sessions/:id/interact', () => {
     });
     expect(res.statusCode).toBe(502);
   });
+
+  it('200 for tap_at with viewport coordinates', async () => {
+    fx = await buildTestApp();
+    const session = await createSession(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/sessions/${session.id}/interact`,
+      headers: auth(fx),
+      payload: { action: { kind: 'tap_at', x: 120, y: 240 } },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<Record<string, unknown>>().ok).toBe(true);
+  });
+
+  it('200 for type_focused into focused element', async () => {
+    fx = await buildTestApp();
+    const session = await createSession(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/sessions/${session.id}/interact`,
+      headers: auth(fx),
+      payload: { action: { kind: 'type_focused', text: 'hello' } },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<Record<string, unknown>>().ok).toBe(true);
+  });
+
+  it('400 when tap_at coordinates are negative', async () => {
+    fx = await buildTestApp();
+    const session = await createSession(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/sessions/${session.id}/interact`,
+      headers: auth(fx),
+      payload: { action: { kind: 'tap_at', x: -1, y: 0 } },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });
 
 describe('POST /v1/sessions/:id/wait', () => {
