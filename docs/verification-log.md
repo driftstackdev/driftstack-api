@@ -216,3 +216,54 @@ No new D-entries this phase — every choice was a Tier 1 implementation detail 
 Phase 4 ready to commit and push. 88 tests passing locally. The driver contract is the single integration point between Agent #1 (WebKit fork) and Agent #2 (this repo); when the fork's Phase 2 closes, Agent #1 hands off the implementation behind this exact interface.
 
 Phase 5 (session endpoints) is the next target. It needs DB writes for the `sessions` table — verifying it locally requires Postgres. Will write the routes + service code regardless; integration tests against real Postgres land when Docker comes online or CI runs.
+
+---
+
+## V-005 — Phase 5: session endpoints (8 routes), service, repo, ownership, concurrency limits
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** 5 (session endpoints)
+
+### What was built
+
+- **SessionRepo interface** (`apps/server/src/services/sessions.ts`) — 6 methods: `insertSession`, `findSession` (account-scoped), `updateSessionStatus`, `countActiveSessions`, `listSessions` (cursor-paginated, descending createdAt), `recordEvent`. The interface is the seam between business logic and persistence; `SessionRecord` and `SessionEventInput` types are the contract.
+- **DrizzleSessionRepo** (`apps/server/src/db/sessions-repo.ts`) — production implementation. Uses Drizzle's typed query builder; cursor pagination via `< createdAt` predicate; count uses `count(*)::int` SQL fragment. Maps internal Drizzle row shapes to `SessionRecord` at the boundary.
+- **InMemorySessionsRepo** (`apps/server/tests/integration/_helpers/`) — test fixture that mirrors DrizzleSessionRepo behaviour exactly. Records all events for assertion in tests.
+- **SessionsService** (`apps/server/src/services/sessions.ts`) — orchestration logic for all 8 operations: pre-create concurrency check (tier-keyed limit: free=1, starter=5, pro=20, enterprise=100); driver session creation paired with DB row; ownership-scoped lookup helper (`requireOwned`) that returns 404 (not 403) for cross-account attempts so we don't leak existence; idempotent destroy; event recording on every operation. State capture also updates `lastStateAt`.
+- **Session routes** (`apps/server/src/routes/sessions.ts`) — 8 endpoints: POST /v1/sessions, GET /v1/sessions, POST /:id/navigate, POST /:id/interact, POST /:id/wait, GET /:id/state, POST /:id/capture, DELETE /:id. All auth-gated; create has its own rate-limit bucket (`sessions:create`), the rest share `global`. Public ID prefixing/de-prefixing happens at the route boundary; service + DB use raw UUIDs.
+- **App wiring** — `buildApp` now takes a `sessionsService` dep and registers the routes. Test fixture builds a SessionsService over the in-memory repo + a `fastForwardLatency` MockDriver.
+
+### What tests verify it
+
+**105 total tests, all passing.** New in Phase 5: 17 tests in `tests/integration/sessions.test.ts`.
+
+Coverage by endpoint:
+
+- **POST /v1/sessions**: happy path 201 with full session shape; "created" event recorded; 429 ConcurrencyLimit on free-tier (1 active limit hit on 2nd call); 400 ValidationFailed on bad archetype slug.
+- **GET /v1/sessions**: empty list initially; reverse-chrono order with three sessions.
+- **POST /v1/sessions/:id/navigate**: 200 happy path with `final_url`/`status`/`duration_ms`; 502 DriverError for trigger error host; 404 NotFound for missing session id; 400 BadRequest for wrong-prefix id.
+- **POST /v1/sessions/:id/interact**: 200 happy path; 502 DriverError for selector trigger.
+- **POST /v1/sessions/:id/wait**: 200 with satisfied=true for time condition.
+- **GET /v1/sessions/:id/state**: 200 with state shape after a navigation.
+- **POST /v1/sessions/:id/capture**: 200 returns base64 screenshot data, encoding/byte_size present.
+- **DELETE /v1/sessions/:id**: 204 first call, 410 SessionDestroyed on subsequent ops.
+- **Account scoping**: a session created by account A is invisible to account B (404, not 403).
+
+### Empirical findings
+
+1. **Fastify route generic propagation requires the `<{ Params }>` syntax on the route helper, not on the handler signature.** First version typed handlers as `async (request: FastifyRequest<{ Params: { id: string } }>) => ...`; TypeScript rejected the assignment because Fastify's `app.post` signature doesn't accept the narrowed handler type. Switching to `app.post<{ Params: { id: string } }>(path, opts, handler)` lets Fastify infer the request type from the route generic and pass it into the handler implicitly. Pattern applied uniformly across all 5 :id routes.
+2. **`r.metadata` from Drizzle is already typed `Record<string, unknown> | null`.** Initial repo mapper had `(r.metadata ?? null) as Record<string, unknown> | null`, which `no-unnecessary-type-assertion` flagged. Drizzle's `$type<Record<string, unknown>>()` annotation on the column already gives us the right type. Removed the assertion.
+3. **404, not 403, for cross-account session access.** A session id leaking to another account is information disclosure — confirming "this session exists but isn't yours" is worse than "we have nothing under that id." `requireOwned` returns 404 for both not-found and cross-account-not-found. Test verifies both paths produce 404.
+4. **Capture endpoint kind→event mapping.** `screenshot` and `pdf` captures record `screenshot_captured` events; `dom_snapshot` records `state_captured` (since it's effectively a state snapshot). Documented inline.
+5. **Driver-side timeouts default at the service layer.** Routes pass `timeout_ms` through if supplied; service applies sane defaults (navigate=30s, interact=10s, wait=30s) when the client doesn't specify. Means the API contract has a single optional field rather than always-required values, and the defaults are testable.
+
+### Decisions made (cross-link)
+
+No new D-entries — all Phase 5 choices are Tier 1 implementation details inside the locked stack. Concurrency limits per tier are recorded inline in `services/sessions.ts` as `TIER_CONCURRENT_SESSION_LIMITS`; if the founder wants to change the numbers, that's a Tier 3 conversation.
+
+### Status
+
+Phase 5 ready to commit and push. All 8 endpoints implemented, integration-tested via Fastify `inject` against in-memory adapters. The Drizzle-backed repo is wired but not exercised against a real Postgres yet — same blocker as Phase 1-4 (Docker / `workflow` scope). The first time a real Postgres comes online, the existing integration tests will be re-runnable against it by swapping `InMemorySessionsRepo` for `DrizzleSessionRepo` in the fixture; that's a one-line change.
+
+Phase 6 (admin endpoints — POST /v1/api-keys, DELETE /v1/api-keys/:id, GET /v1/usage) is the next clean target, and unblocks customer onboarding flows.

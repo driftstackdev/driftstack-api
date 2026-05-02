@@ -10,7 +10,10 @@ import { buildApp } from '../../../src/lib/app.js';
 import { createTestLogger } from '../../../src/lib/logger.js';
 import { MemoryRateLimitStore } from '../../../src/lib/memory-rate-limit-store.js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../../../src/lib/api-keys.js';
+import { MockDriver } from '../../../src/drivers/mock.js';
+import { SessionsService } from '../../../src/services/sessions.js';
 import { InMemoryAuthRepo } from './in-memory-auth-repo.js';
+import { InMemorySessionsRepo } from './in-memory-sessions-repo.js';
 import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
 
 export interface TestAppOptions {
@@ -24,7 +27,9 @@ export interface TestAppOptions {
 export interface TestAppFixture {
   app: Awaited<ReturnType<typeof buildApp>>;
   authRepo: InMemoryAuthRepo;
+  sessionsRepo: InMemorySessionsRepo;
   rateLimitStore: MemoryRateLimitStore;
+  driver: MockDriver;
   /** Plaintext API key — pass as `Authorization: Bearer <plaintext>`. */
   plaintext: string;
   accountId: string;
@@ -66,17 +71,28 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     createdAt: new Date('2026-01-01T00:00:00Z'),
   });
 
+  const sessionsRepo = new InMemorySessionsRepo();
+  const driver = new MockDriver({
+    fastForwardLatency: true,
+    navigateLatencyMs: 0,
+    interactLatencyMs: 0,
+  });
+  const sessionsService = new SessionsService({ repo: sessionsRepo, driver });
+
   const app = await buildApp({
     logger: createTestLogger(),
     authRepo,
     rateLimitStore,
+    sessionsService,
     permissiveCors: true,
   });
 
   return {
     app,
     authRepo,
+    sessionsRepo,
     rateLimitStore,
+    driver,
     plaintext,
     accountId,
     apiKeyId,
