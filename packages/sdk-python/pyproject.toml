@@ -103,8 +103,10 @@ exclude = ["build/", "dist/"]
 
 [[tool.mypy.overrides]]
 module = "driftstack._generated.*"
-# Codegen output isn't always strict-clean; relax checks for it. The
-# wrapper layer that customers actually touch stays strict.
-disallow_untyped_defs = false
-disallow_untyped_calls = false
-warn_return_any = false
+# Codegen output isn't always strict-clean — `conint(...)` /
+# `constr(...)` factory calls aren't valid type annotations to mypy
+# even though Pydantic v2 accepts them at runtime. Skip type-checking
+# for the codegen module entirely; the wrapper layer that customers
+# actually touch stays strict, and the generated models are runtime-
+# tested via tests/test_generated_models.py.
+ignore_errors = true

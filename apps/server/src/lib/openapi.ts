@@ -36,9 +36,12 @@ import {
   CreateApiKeyResponseSchema,
   CreateSessionRequestSchema,
   CreateSessionResponseSchema,
+  CreateWebhookRequestSchema,
+  CreateWebhookResponseSchema,
   InteractRequestSchema,
   InteractResponseSchema,
   ListAuditLogQuerySchema,
+  ListDeliveriesQuerySchema,
   ListDlqQuerySchema,
   NavigateRequestSchema,
   NavigateResponseSchema,
@@ -53,6 +56,7 @@ import {
   WaitRequestSchema,
   WaitResponseSchema,
   WebhookDeliverySchema,
+  WebhookEndpointSchema,
   SessionStateSchema,
 } from '@driftstack/api-types';
 
@@ -80,12 +84,41 @@ function buildRegistry(): OpenAPIRegistry {
     bearerFormat: 'API key',
   });
 
-  // Reusable schemas
+  // Reusable schemas — promote to components.schemas so codegen
+  // produces named types (Pydantic, Go structs, etc.) instead of
+  // inline anonymous shapes. Anything referenced from a route's
+  // request/response is registered here.
   r.register('Account', AccountSchema);
   r.register('ApiKey', ApiKeySchema);
   r.register('Session', SessionSchema);
+  r.register('SessionState', SessionStateSchema);
   r.register('Problem', ProblemSchema);
   r.register('UsagePeriodSummary', UsagePeriodSummarySchema);
+  r.register('PaginationQuery', PaginationQuerySchema);
+  // Sessions resource
+  r.register('CreateSessionRequest', CreateSessionRequestSchema);
+  r.register('CreateSessionResponse', CreateSessionResponseSchema);
+  r.register('NavigateRequest', NavigateRequestSchema);
+  r.register('NavigateResponse', NavigateResponseSchema);
+  r.register('InteractRequest', InteractRequestSchema);
+  r.register('InteractResponse', InteractResponseSchema);
+  r.register('WaitRequest', WaitRequestSchema);
+  r.register('WaitResponse', WaitResponseSchema);
+  r.register('CaptureRequest', CaptureRequestSchema);
+  r.register('CaptureResponse', CaptureResponseSchema);
+  // API keys resource
+  r.register('CreateApiKeyRequest', CreateApiKeyRequestSchema);
+  r.register('CreateApiKeyResponse', CreateApiKeyResponseSchema);
+  // Webhooks resource
+  r.register('WebhookEndpoint', WebhookEndpointSchema);
+  r.register('CreateWebhookRequest', CreateWebhookRequestSchema);
+  r.register('CreateWebhookResponse', CreateWebhookResponseSchema);
+  r.register('WebhookDelivery', WebhookDeliverySchema);
+  r.register('ListDeliveriesQuery', ListDeliveriesQuerySchema);
+  // Admin (already registered below for the admin section, but having
+  // them once at the top keeps the codegen output deterministic).
+  r.register('AdminAccount', AdminAccountResponseSchema);
+  r.register('AdminAuditLogEntry', AdminAuditLogEntrySchema);
 
   const auth = [{ BearerAuth: [] }];
 

@@ -1,0 +1,123 @@
+"""Webhooks resource tests."""
+
+from __future__ import annotations
+
+import httpx
+import pytest
+import respx
+
+from driftstack import AsyncDriftstack, Driftstack
+from driftstack._generated.models import (
+    CreateWebhookResponse,
+    WebhookDelivery,
+    WebhookEndpoint,
+)
+from driftstack.resources.webhooks import WebhookDeliveryListPage, WebhookEndpointList
+
+API_KEY = "ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+BASE = "https://api.test"
+
+ENDPOINT: dict = {
+    "id": "whk_00000000-0000-4000-8000-000000000001",
+    "url": "https://customer.test/hook",
+    "secret_prefix": "whsec_aaaaaa",
+    "events": ["session.completed"],
+    "description": None,
+    "active": True,
+    "consecutive_failures": 0,
+    "last_success_at": None,
+    "last_failure_at": None,
+    "disabled_at": None,
+    "created_at": "2026-05-02T10:00:00Z",
+}
+
+DELIVERY: dict = {
+    "id": "wdl_00000000-0000-4000-8000-000000000001",
+    "webhook_id": "whk_00000000-0000-4000-8000-000000000001",
+    "event_id": "11111111-2222-3333-4444-555555555555",
+    "event_type": "session.completed",
+    "status": "delivered",
+    "attempts": 1,
+    "next_attempt_at": "2026-05-02T10:00:00Z",
+    "last_response_status": 200,
+    "last_response_excerpt": None,
+    "last_error": None,
+    "delivered_at": "2026-05-02T10:00:00Z",
+    "created_at": "2026-05-02T10:00:00Z",
+}
+
+
+def test_sync_create_returns_secret_once() -> None:
+    response = {**ENDPOINT, "secret": "whsec_secretsecretsecretsecretsecretsec"}
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/webhooks").mock(return_value=httpx.Response(201, json=response))
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.webhooks.create(
+                {"url": "https://customer.test/hook", "events": ["session.completed"]}
+            )
+        assert isinstance(result, CreateWebhookResponse)
+        assert result.secret.startswith("whsec_")
+
+
+def test_sync_list() -> None:
+    page = {"data": [ENDPOINT, ENDPOINT]}
+    with respx.mock(base_url=BASE) as mock:
+        mock.get("/v1/webhooks").mock(return_value=httpx.Response(200, json=page))
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.webhooks.list()
+        assert isinstance(result, WebhookEndpointList)
+        assert len(result.data) == 2
+
+
+def test_sync_get() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        mock.get("/v1/webhooks/whk_xx").mock(return_value=httpx.Response(200, json=ENDPOINT))
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.webhooks.get("whk_xx")
+        assert isinstance(result, WebhookEndpoint)
+
+
+def test_sync_delete() -> None:
+    with respx.mock(base_url=BASE) as mock:
+        mock.delete("/v1/webhooks/whk_xx").mock(return_value=httpx.Response(204))
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.webhooks.delete("whk_xx")
+        assert result is None
+
+
+def test_sync_list_deliveries_with_status_filter() -> None:
+    page = {"data": [DELIVERY], "has_more": False, "next_cursor": None}
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.get("/v1/webhooks/whk_xx/deliveries").mock(
+            return_value=httpx.Response(200, json=page)
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.webhooks.list_deliveries("whk_xx", {"status": "delivered", "limit": 25})
+        assert isinstance(result, WebhookDeliveryListPage)
+        assert isinstance(result.data[0], WebhookDelivery)
+        # The status filter is on the wire.
+        q = route.calls[0].request.url.query.decode()
+        assert "status=delivered" in q
+        assert "limit=25" in q
+
+
+@pytest.mark.asyncio
+async def test_async_create() -> None:
+    response = {**ENDPOINT, "secret": "whsec_secretsecretsecretsecretsecretsec"}
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/webhooks").mock(return_value=httpx.Response(201, json=response))
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = await client.webhooks.create(
+                {"url": "https://customer.test/hook", "events": ["session.completed"]}
+            )
+        assert isinstance(result, CreateWebhookResponse)
+
+
+@pytest.mark.asyncio
+async def test_async_list_deliveries() -> None:
+    page = {"data": [DELIVERY], "has_more": False, "next_cursor": None}
+    with respx.mock(base_url=BASE) as mock:
+        mock.get("/v1/webhooks/whk_xx/deliveries").mock(return_value=httpx.Response(200, json=page))
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = await client.webhooks.list_deliveries("whk_xx")
+        assert isinstance(result, WebhookDeliveryListPage)

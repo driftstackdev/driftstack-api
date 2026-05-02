@@ -181,6 +181,37 @@
           "destroyed_at"
         ]
       },
+      "SessionState": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": ["string", "null"],
+            "format": "uri"
+          },
+          "title": {
+            "type": ["string", "null"]
+          },
+          "cookies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {}
+            }
+          },
+          "local_storage": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "captured_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          }
+        },
+        "required": ["url", "title", "cookies", "local_storage", "captured_at"]
+      },
       "Problem": {
         "type": "object",
         "properties": {
@@ -286,6 +317,738 @@
         },
         "required": ["period_start", "period_end", "tier", "totals", "quotas"]
       },
+      "PaginationQuery": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          },
+          "cursor": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateSessionRequest": {
+        "type": "object",
+        "properties": {
+          "archetype": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 60,
+            "pattern": "^[a-z0-9_]+$"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        }
+      },
+      "CreateSessionResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "account_id": {
+            "type": "string",
+            "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "api_key_id": {
+            "type": "string",
+            "pattern": "^key_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["creating", "ready", "busy", "destroyed", "errored"]
+          },
+          "archetype": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 60,
+            "pattern": "^[a-z0-9_]+$"
+          },
+          "label": {
+            "type": ["string", "null"]
+          },
+          "metadata": {
+            "type": ["object", "null"],
+            "additionalProperties": {}
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "last_state_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "destroyed_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "api_key_id",
+          "status",
+          "archetype",
+          "label",
+          "metadata",
+          "created_at",
+          "updated_at",
+          "last_state_at",
+          "destroyed_at"
+        ]
+      },
+      "NavigateRequest": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 120000
+          },
+          "wait_until": {
+            "type": "string",
+            "enum": ["load", "domcontentloaded", "networkidle"],
+            "default": "load"
+          }
+        },
+        "required": ["url"]
+      },
+      "NavigateResponse": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "final_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["url", "status", "final_url", "duration_ms"]
+      },
+      "InteractRequest": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["tap"]
+                  },
+                  "selector": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "offset": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["x", "y"]
+                  }
+                },
+                "required": ["kind", "selector"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["type"]
+                  },
+                  "selector": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "text": {
+                    "type": "string",
+                    "maxLength": 10000
+                  },
+                  "delay_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 500
+                  }
+                },
+                "required": ["kind", "selector", "text"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["scroll"]
+                  },
+                  "selector": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "delta_x": {
+                    "type": "integer",
+                    "default": 0
+                  },
+                  "delta_y": {
+                    "type": "integer",
+                    "default": 0
+                  }
+                },
+                "required": ["kind"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["press"]
+                  },
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20
+                  }
+                },
+                "required": ["kind", "key"]
+              }
+            ]
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 60000
+          }
+        },
+        "required": ["action"]
+      },
+      "InteractResponse": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["ok", "duration_ms"]
+      },
+      "WaitRequest": {
+        "type": "object",
+        "properties": {
+          "condition": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["selector"]
+                  },
+                  "selector": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["kind", "selector"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["selector_hidden"]
+                  },
+                  "selector": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["kind", "selector"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["url_matches"]
+                  },
+                  "pattern": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["kind", "pattern"]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["time"]
+                  },
+                  "ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 60000
+                  }
+                },
+                "required": ["kind", "ms"]
+              }
+            ]
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 120000
+          }
+        },
+        "required": ["condition"]
+      },
+      "WaitResponse": {
+        "type": "object",
+        "properties": {
+          "satisfied": {
+            "type": "boolean"
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["satisfied", "duration_ms"]
+      },
+      "CaptureRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["screenshot", "dom_snapshot", "pdf"]
+          },
+          "full_page": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": ["kind"]
+      },
+      "CaptureResponse": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["screenshot", "dom_snapshot", "pdf"]
+          },
+          "data": {
+            "type": "string"
+          },
+          "encoding": {
+            "type": "string",
+            "enum": ["base64", "utf8"]
+          },
+          "byte_size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["kind", "data", "encoding", "byte_size", "duration_ms"]
+      },
+      "CreateApiKeyRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["read", "write", "admin"]
+            },
+            "minItems": 1
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          }
+        },
+        "required": ["name", "scopes"]
+      },
+      "CreateApiKeyResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^key_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "name": {
+            "type": "string"
+          },
+          "key_prefix": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["read", "write", "admin"]
+            }
+          },
+          "last_used_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "revoked_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "expires_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "plaintext": {
+            "type": "string",
+            "description": "The plaintext key. Shown once at creation; not retrievable later."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "key_prefix",
+          "scopes",
+          "last_used_at",
+          "revoked_at",
+          "expires_at",
+          "created_at",
+          "plaintext"
+        ]
+      },
+      "WebhookEndpoint": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "secret_prefix": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "session.completed",
+                "session.failed",
+                "quota.warning_80pct",
+                "quota.exceeded",
+                "api_key.revoked"
+              ]
+            }
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "consecutive_failures": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "last_success_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "last_failure_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "disabled_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "secret_prefix",
+          "events",
+          "description",
+          "active",
+          "consecutive_failures",
+          "last_success_at",
+          "last_failure_at",
+          "disabled_at",
+          "created_at"
+        ]
+      },
+      "CreateWebhookRequest": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "session.completed",
+                "session.failed",
+                "quota.warning_80pct",
+                "quota.exceeded",
+                "api_key.revoked"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": ["url", "events"]
+      },
+      "CreateWebhookResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "secret_prefix": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "session.completed",
+                "session.failed",
+                "quota.warning_80pct",
+                "quota.exceeded",
+                "api_key.revoked"
+              ]
+            }
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "consecutive_failures": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "last_success_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "last_failure_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "disabled_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "secret": {
+            "type": "string",
+            "description": "Plaintext signing secret. Returned ONCE; not retrievable later."
+          }
+        },
+        "required": [
+          "id",
+          "url",
+          "secret_prefix",
+          "events",
+          "description",
+          "active",
+          "consecutive_failures",
+          "last_success_at",
+          "last_failure_at",
+          "disabled_at",
+          "created_at",
+          "secret"
+        ]
+      },
+      "WebhookDelivery": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^wdl_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "webhook_id": {
+            "type": "string",
+            "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "session.completed",
+              "session.failed",
+              "quota.warning_80pct",
+              "quota.exceeded",
+              "api_key.revoked"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_flight", "delivered", "failed", "dlq"]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "next_attempt_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "last_response_status": {
+            "type": ["integer", "null"]
+          },
+          "last_response_excerpt": {
+            "type": ["string", "null"]
+          },
+          "last_error": {
+            "type": ["string", "null"]
+          },
+          "delivered_at": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+          }
+        },
+        "required": [
+          "id",
+          "webhook_id",
+          "event_id",
+          "event_type",
+          "status",
+          "attempts",
+          "next_attempt_at",
+          "last_response_status",
+          "last_response_excerpt",
+          "last_error",
+          "delivered_at",
+          "created_at"
+        ]
+      },
+      "ListDeliveriesQuery": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          },
+          "cursor": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_flight", "delivered", "failed", "dlq"]
+          }
+        }
+      },
       "AdminAccount": {
         "type": "object",
         "properties": {
@@ -379,79 +1142,6 @@
           "result",
           "ip_address",
           "timestamp"
-        ]
-      },
-      "WebhookDelivery": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^wdl_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-          },
-          "webhook_id": {
-            "type": "string",
-            "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-          },
-          "event_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "event_type": {
-            "type": "string",
-            "enum": [
-              "session.completed",
-              "session.failed",
-              "quota.warning_80pct",
-              "quota.exceeded",
-              "api_key.revoked"
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": ["pending", "in_flight", "delivered", "failed", "dlq"]
-          },
-          "attempts": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "next_attempt_at": {
-            "type": "string",
-            "format": "date-time",
-            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
-          },
-          "last_response_status": {
-            "type": ["integer", "null"]
-          },
-          "last_response_excerpt": {
-            "type": ["string", "null"]
-          },
-          "last_error": {
-            "type": ["string", "null"]
-          },
-          "delivered_at": {
-            "type": ["string", "null"],
-            "format": "date-time",
-            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
-          }
-        },
-        "required": [
-          "id",
-          "webhook_id",
-          "event_id",
-          "event_type",
-          "status",
-          "attempts",
-          "next_attempt_at",
-          "last_response_status",
-          "last_response_excerpt",
-          "last_error",
-          "delivered_at",
-          "created_at"
         ]
       }
     },

@@ -1296,3 +1296,75 @@ Foundation green. 52/52 Python tests pass; ruff clean; mypy strict pass; CI job 
 **Next session (PY2):** Resource wrappers — `client.sessions` (create/list/get/destroy/navigate/interact/wait/state/capture), `client.api_keys`, `client.usage`, `client.webhooks`. Each method maps to one route, takes typed input, returns the typed Pydantic model. Both sync and async paths.
 
 After PY2: PY3 = examples + integration tests. PY4 = README polish + publish-ready check (no actual publish — gated on KvK).
+
+---
+
+## V-024 — Python SDK: resource wrappers (PY2) + examples + workflow integration tests (PY3)
+
+**Date:** 2026-05-02
+**Author:** Driftstack Agent #2
+**Phase:** Python SDK. Second + third commit of the workstream, landed together.
+
+### What was built
+
+**PY2 — resource wrappers** mounted on `Driftstack` / `AsyncDriftstack`.
+
+- `src/driftstack/resources/sessions.py` — `SessionsResource` (sync) + `AsyncSessionsResource`. 9 methods each: `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `destroy`. URL paths use `urllib.parse.quote(safe='')` so weird session ids can't break the path.
+- `src/driftstack/resources/api_keys.py` — `ApiKeysResource` + async. `create`, `list`, `revoke`. The create response's `plaintext` field is exposed as a typed string on the codegen `CreateApiKeyResponse` model.
+- `src/driftstack/resources/usage.py` — `UsageResource` + async. `current_period()` returns the typed `UsagePeriodSummary`.
+- `src/driftstack/resources/webhooks.py` — `WebhooksResource` + async. `create`, `list`, `get`, `delete`, `list_deliveries`. The status filter on `list_deliveries` is passed as a query string param.
+- `src/driftstack/resources/_common.py` — shared `coerce_body` + `coerce_query` helpers. Customers can pass either a Pydantic model OR a dict to mutating methods; both serialize the same JSON shape on the wire (`exclude_none=True` so optional unset fields don't pollute the payload).
+- `Driftstack.__init__` and `AsyncDriftstack.__init__` instantiate all four resource accessors as instance attributes (`client.sessions`, `client.api_keys`, etc.) — same shape as the TS SDK.
+
+**Server-side OpenAPI registry expansion** — `apps/server/src/lib/openapi.ts` now registers every request/response schema (`r.register('CreateSessionRequest', ...)` etc.) so they appear under `components.schemas` in the dumped spec. Without this, datamodel-code-generator emitted models only for the explicitly-registered shapes, leaving the SDK's resource methods with no typed counterparts. The codegen output grew from 208 → ~700 lines (now 36 named classes including action/condition variants).
+
+**PY3 — examples + workflow tests.**
+
+- `examples/quickstart.py` — minimal create/navigate/capture/destroy sequence.
+- `examples/error_handling.py` — granular catch-on-typed-subclass + custom retry loop pattern.
+- `examples/webhook_receiver.py` — stdlib-only HTTP receiver (no Flask/FastAPI dep) that verifies signatures and dispatches by event type.
+- `examples/langchain_tool.py` — sketch of a LangChain `Tool` adapter for AI-agent workflows; deferred-import so the SDK doesn't pull `langchain-core` as a hard dep.
+- `examples/pytest_fixture.py` — drop-in `mock_driftstack` fixture customers can paste into their `conftest.py` to mock the SDK in their tests.
+- `tests/test_integration_workflow.py` — multi-call workflow tests through respx. Covers the full customer journey (create → navigate → capture → destroy), typed error mapping (rate-limit + validation-failed surface as the right exception with the right fields), async path parity, and transient-network retry recovery.
+
+### What tests verify it
+
+**Total Python test surface: 52 → 85 green** (+33 new). Breakdown:
+
+- **Sessions resource:** 14 tests (create+empty body, create+explicit body, list+pagination, get, navigate (asserts body-on-wire), interact, wait, get_state, capture, destroy 204→None, URL-encoding of weird session ids, async create, async destroy, async list).
+- **API keys resource:** 5 tests (create returns plaintext, list, revoke 204, async create, async revoke).
+- **Usage resource:** 2 tests (sync, async).
+- **Webhooks resource:** 7 tests (create returns secret, list, get, delete 204, list_deliveries with status filter (asserts query string), async create, async list_deliveries).
+- **Workflow integration:** 5 tests (full customer journey, rate-limit retry-after extraction with retries disabled, validation-failed problem mapping, async customer journey, transient-network-failure retry recovery).
+
+All examples pass `python -m py_compile`.
+
+ruff clean; ruff format clean; mypy strict pass on hand-written code; server-side TS surface unchanged at 294/294 vitest.
+
+### Empirical findings
+
+1. **The OpenAPI generator only emitted Pydantic models for explicitly-registered schemas.** First pass of PY1 only registered `Account`, `ApiKey`, `Session`, `Problem`, `UsagePeriodSummary` at the top of `lib/openapi.ts`. Every other route schema was inline in the `registerRoute(...)` body, so the generated spec didn't have them under `components.schemas`. Result: `from driftstack._generated import models` → no `CreateSessionRequest`, no `NavigateResponse`, no `WebhookEndpoint`. **Fix:** register every request/response schema explicitly. The TS SDK didn't hit this because it imports types directly from `@driftstack/api-types`, bypassing the OpenAPI layer. Future Go SDK will benefit too.
+
+2. **datamodel-code-generator names discriminated-union variants `Action`, `Action1`, `Action2`, ...** when the OpenAPI schema lacks a `discriminator: { propertyName: ... }` clue. Functional but ugly. Adding `discriminator` annotations to the Zod schemas in `@driftstack/api-types` would produce `TapAction`, `TypeAction`, etc. — surface for a future spec-polish commit.
+
+3. **Pydantic v2 EmailStr is strict about reserved TLDs.** `tester@driftstack.local` fails because `.local` is reserved (mDNS). SDK test fixtures use `@example.com` and `@driftstack.dev` instead. Same V-023 finding; ported to PY2/PY3 fixtures consistently.
+
+4. **The Session model has `last_state_at` and `destroyed_at` fields** — first-pass test fixtures missed them, every session-shaped test failed with "Field required." Lesson: always pull the full required-field list from the codegen output before writing test fixtures, even for "obvious" shapes. Same shape as V-018's `seedDelivery` fixture bug — fixture author assumed they knew the schema; reality differed; tests caught it loudly.
+
+5. **mypy-strict on `_generated`** (`conint(...)` / `constr(...)` factory calls) chokes on the function-call-as-type-annotation pattern Pydantic v2 still allows at runtime. Marked the `_generated` module with `ignore_errors = true` in `pyproject.toml` so the customer-facing surface stays strict-checked while the codegen output passes through unchanged.
+
+6. **respx + httpx + side_effect lists for retry simulation** — the cleanest way to test "fail then succeed" without sleep() in tests. `mock.post(...).mock(side_effect=[ConnectError(...), Response(201, ...)])` raises on the first call, returns the response on the second. The retry policy's exponential-backoff sleep is patched out via `RetryConfig(initial_delay_ms=1, max_delay_ms=2)` for sub-millisecond test runtime.
+
+7. **Examples are reference code, not executed tests.** `python -m py_compile examples/*.py` is the bar — they parse and import-check. Customers run them with their own credentials. Using a different bar (e.g., respx-mocked execution) would make the examples less idiomatic to copy/paste.
+
+### Decisions made (cross-link)
+
+No new D-entries — codegen-tool, sync/async architecture, and OpenAPI-registration approach all follow the founder's coordination directive directly.
+
+### Status
+
+PY2 + PY3 landed. 85/85 Python tests pass; ruff/mypy/format clean; CI job from V-023 picks up the new tests automatically. Server-side TS surface unchanged.
+
+**Next session (PY4 — workstream finale):** README polish (replace the PY1-stub quickstart with the full-resource example), CHANGELOG seed, MANIFEST.in for the wheel, version-bump check, and a final `hatch build` smoke (verify the wheel is installable into a fresh venv and exposes the expected import surface). Plus surface a Go SDK plan for direction.
+
+A real-wire integration suite (Python pytest hitting a running Fastify on a random port) is queued past PY4 — the respx-driven workflow tests catch the same "type drift" class of bug at the Pydantic validation boundary, which is the surface customers feel.

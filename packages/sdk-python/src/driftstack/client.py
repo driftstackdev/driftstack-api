@@ -16,6 +16,10 @@ from typing import Any
 import httpx
 
 from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
+from driftstack.resources.sessions import AsyncSessionsResource, SessionsResource
+from driftstack.resources.usage import AsyncUsageResource, UsageResource
+from driftstack.resources.webhooks import AsyncWebhooksResource, WebhooksResource
 from driftstack.retry import RetryConfig
 
 DEFAULT_BASE_URL = "https://api.driftstack.dev"
@@ -39,9 +43,9 @@ class Driftstack:
         from driftstack import Driftstack
 
         client = Driftstack(api_key="ds_live_…")
-        # PY2 will land:
-        #   session = client.sessions.create()
-        #   client.sessions.navigate(session.id, url="https://example.com")
+        session = client.sessions.create()
+        client.sessions.navigate(session.id, {"url": "https://example.com"})
+        client.sessions.destroy(session.id)
     """
 
     def __init__(
@@ -61,6 +65,10 @@ class Driftstack:
             retry=retry,
             client=http_client,
         )
+        self.sessions = SessionsResource(self._http)
+        self.api_keys = ApiKeysResource(self._http)
+        self.usage = UsageResource(self._http)
+        self.webhooks = WebhooksResource(self._http)
 
     def close(self) -> None:
         self._http.close()
@@ -97,6 +105,10 @@ class AsyncDriftstack:
             retry=retry,
             client=http_client,
         )
+        self.sessions = AsyncSessionsResource(self._http)
+        self.api_keys = AsyncApiKeysResource(self._http)
+        self.usage = AsyncUsageResource(self._http)
+        self.webhooks = AsyncWebhooksResource(self._http)
 
     async def aclose(self) -> None:
         await self._http.aclose()
