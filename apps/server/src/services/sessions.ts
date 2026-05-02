@@ -110,6 +110,14 @@ export interface SessionRepo {
 export interface SessionsServiceDeps {
   repo: SessionRepo;
   driver: Driver;
+  /** Optional: when wired, emits session.completed / session.failed events. */
+  webhooks?: {
+    enqueueEvent: (
+      accountId: string,
+      eventType: 'session.completed' | 'session.failed',
+      data: Record<string, unknown>,
+    ) => Promise<number>;
+  } | null;
 }
 
 export class SessionsService {
@@ -266,16 +274,29 @@ export class SessionsService {
   async destroy(ctx: AccountContext, sessionId: string): Promise<void> {
     const session = await this.requireOwned(ctx, sessionId);
     if (session.status === 'destroyed') return; // idempotent
+    const destroyedAt = new Date();
     await this.deps.driver.destroy(session.driverSessionId);
-    await this.deps.repo.updateSessionStatus(session.id, 'destroyed', {
-      destroyedAt: new Date(),
-    });
+    await this.deps.repo.updateSessionStatus(session.id, 'destroyed', { destroyedAt });
     await this.deps.repo.recordEvent({
       sessionId: session.id,
       type: 'destroyed',
       payload: null,
       durationMs: null,
     });
+
+    // Emit session.completed webhook event (best-effort; failures here
+    // never affect destroy correctness).
+    if (this.deps.webhooks) {
+      const durationMs = destroyedAt.getTime() - session.createdAt.getTime();
+      try {
+        await this.deps.webhooks.enqueueEvent(ctx.account.id, 'session.completed', {
+          session_id: `ses_${session.id}`,
+          duration_ms: durationMs,
+        });
+      } catch {
+        // Webhook enqueue is best-effort; never break the user-facing op.
+      }
+    }
   }
 
   async list(

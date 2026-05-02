@@ -44,10 +44,19 @@ export interface CreatedApiKey {
   plaintext: string;
 }
 
+export interface RevocationWebhookEmitter {
+  enqueueEvent: (
+    accountId: string,
+    eventType: 'api_key.revoked',
+    data: Record<string, unknown>,
+  ) => Promise<number>;
+}
+
 export class ApiKeysService {
   constructor(
     private readonly repo: ApiKeysRepo,
     private readonly authCache: AuthCache | null = null,
+    private readonly webhooks: RevocationWebhookEmitter | null = null,
   ) {}
 
   async create(ctx: AccountContext, input: CreateApiKeyServiceInput): Promise<CreatedApiKey> {
@@ -81,7 +90,8 @@ export class ApiKeysService {
     if (!key) throw new NotFoundError(`API key "${keyId}" not found.`);
     if (key.revokedAt !== null) return; // idempotent
 
-    await this.repo.markRevoked(keyId, new Date());
+    const revokedAt = new Date();
+    await this.repo.markRevoked(keyId, revokedAt);
     // Pop the cache entry so the revoked key stops authenticating
     // immediately, not after the 30s TTL. Wrap in try/catch — a cache
     // failure must not propagate as a revoke failure.
@@ -92,6 +102,20 @@ export class ApiKeysService {
         // Logged inside the cache impl; auth correctness is preserved by
         // the DB-level revokedAt flag (the next scrypt-path lookup catches
         // the revocation when the cache TTLs out).
+      }
+    }
+
+    // Emit api_key.revoked webhook event. Best-effort — failures here
+    // never break revoke correctness.
+    if (this.webhooks) {
+      try {
+        await this.webhooks.enqueueEvent(ctx.account.id, 'api_key.revoked', {
+          api_key_id: `key_${keyId}`,
+          name: key.name,
+          revoked_at: revokedAt.toISOString(),
+        });
+      } catch {
+        // Swallow.
       }
     }
   }

@@ -14,11 +14,13 @@ import { MockDriver } from '../../../src/drivers/mock.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
+import { WebhooksService } from '../../../src/services/webhooks.js';
 import { InMemoryAuthCache } from '../../../src/services/auth-cache.js';
 import { InMemoryAuthRepo } from './in-memory-auth-repo.js';
 import { InMemorySessionsRepo } from './in-memory-sessions-repo.js';
 import { InMemoryApiKeysRepo } from './in-memory-api-keys-repo.js';
 import { InMemoryUsageRepo } from './in-memory-usage-repo.js';
+import { InMemoryWebhooksRepo } from './in-memory-webhooks-repo.js';
 import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
 
 export interface TestAppOptions {
@@ -36,6 +38,7 @@ export interface TestAppFixture {
   sessionsRepo: InMemorySessionsRepo;
   apiKeysRepo: InMemoryApiKeysRepo;
   usageRepo: InMemoryUsageRepo;
+  webhooksRepo: InMemoryWebhooksRepo;
   rateLimitStore: MemoryRateLimitStore;
   driver: MockDriver;
   /** Plaintext API key — pass as `Authorization: Bearer <plaintext>`. */
@@ -85,7 +88,6 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     navigateLatencyMs: 0,
     interactLatencyMs: 0,
   });
-  const sessionsService = new SessionsService({ repo: sessionsRepo, driver });
 
   // Pass authRepo so revocations / inserts propagate to both repos in the
   // same way they would share a single DB row in production.
@@ -103,10 +105,19 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     createdAt: new Date('2026-01-01T00:00:00Z'),
   });
   const authCache = new InMemoryAuthCache();
-  const apiKeysService = new ApiKeysService(apiKeysRepo, authCache);
 
   const usageRepo = new InMemoryUsageRepo();
   const usageService = new UsageService(usageRepo);
+
+  const webhooksRepo = new InMemoryWebhooksRepo();
+  const webhooksService = new WebhooksService(webhooksRepo);
+  // Wire webhooks INTO sessions + api-keys services for event emission.
+  const sessionsService = new SessionsService({
+    repo: sessionsRepo,
+    driver,
+    webhooks: webhooksService,
+  });
+  const apiKeysService = new ApiKeysService(apiKeysRepo, authCache, webhooksService);
 
   const app = await buildApp({
     logger: createTestLogger(),
@@ -116,6 +127,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     sessionsService,
     apiKeysService,
     usageService,
+    webhooksService,
     permissiveCors: true,
   });
 
@@ -123,6 +135,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     app,
     authRepo,
     authCache,
+    webhooksRepo,
     sessionsRepo,
     apiKeysRepo,
     usageRepo,

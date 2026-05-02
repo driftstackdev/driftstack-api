@@ -15,6 +15,7 @@ import type { RateLimitStore } from '../services/rate-limit.js';
 import type { SessionsService } from '../services/sessions.js';
 import type { ApiKeysService } from '../services/api-keys.js';
 import type { UsageService } from '../services/usage.js';
+import type { WebhooksService } from '../services/webhooks.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -22,6 +23,7 @@ import { registerErrorHandler } from '../middleware/error-handler.js';
 import { registerSessionRoutes } from '../routes/sessions.js';
 import { registerAdminRoutes } from '../routes/admin.js';
 import { registerOpenApiRoutes } from '../routes/openapi.js';
+import { registerWebhookRoutes } from '../routes/webhooks.js';
 
 export interface AppDeps {
   logger: Logger;
@@ -31,6 +33,7 @@ export interface AppDeps {
   sessionsService: SessionsService;
   apiKeysService: ApiKeysService;
   usageService: UsageService;
+  webhooksService: WebhooksService;
   /** When true, register a permissive CORS policy. Production locks this down. */
   permissiveCors?: boolean;
 }
@@ -69,6 +72,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     apiKeysService: deps.apiKeysService,
     usageService: deps.usageService,
   });
+  registerWebhookRoutes(app, { service: deps.webhooksService });
   await registerOpenApiRoutes(app);
 
   // Health endpoint — public, no auth, no rate limit.
