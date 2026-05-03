@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-03
-**Tier:** 2 (founder-approved deviation; vendor / structural)
+**Tier:** Architectural (approved deviation; vendor / structural)
 **Related V-entry:** V-052 (Coinbase Commerce dropped from sub-processor list + legal docs), V-060 (this ADR + D-027 entry).
 **Related D-entry:** D-027 — Stripe-only payment rail at launch.
 
@@ -10,7 +10,7 @@
 
 Earlier planning artifacts in the parent driftstack repo (file 00, file 11 milestone 2.5, file 116) specced a **dual-processor billing architecture**:
 
-- **Mollie primary** (Dutch payment processor; iDEAL-native; EU-friendly underwriting; founder familiarity from prior projects).
+- **Mollie primary** (Dutch payment processor; iDEAL-native; EU-friendly underwriting; team familiarity from prior projects).
 - **Stripe backup** (international card coverage; metered billing primitives; webhook + API maturity).
 
 The dual-processor design was driven by Mollie's strength in EU consumer payment methods (iDEAL, Bancontact, SOFORT, SEPA Direct Debit) plus Mollie's friendlier underwriting posture for Dutch entities at small scale. Stripe was held in reserve as the "if Mollie can't handle a customer's card / region" fallback.
@@ -28,7 +28,7 @@ Coinbase Commerce was earlier in the rail mix; dropped 2026-05-03 (V-052) due to
 
 ## Decision
 
-**Use Stripe as the sole payment processor at launch.** Drop Mollie from the active rail list. The earlier "dual-processor with Mollie primary" design (file 116) is **deferred to the revisit triggers below**, not abandoned: if Stripe's underwriting flow declines the BV at KvK-onboarding time, Mollie reactivates per the deferred dual-processor spec.
+**Use Stripe as the sole payment processor at launch.** Drop Mollie from the active rail list. The earlier "dual-processor with Mollie primary" design (file 116) is **deferred to the revisit triggers below**, not abandoned: if Stripe's underwriting flow declines the legal entity at KvK-onboarding time, Mollie reactivates per the deferred dual-processor spec.
 
 Concretely:
 
@@ -52,7 +52,7 @@ Concretely:
 **Rules out:**
 
 - iDEAL / Bancontact / SEPA Direct Debit support that's specifically Mollie-routed. Stripe's native handling of these methods covers the same customer surface, but at slightly higher per-transaction fees than Mollie's NL-domestic rates.
-- Mollie's friendlier solo-entrepreneur underwriting posture at sub-€10K monthly revenue. If Stripe declines underwriting at BV onboarding, the revisit trigger fires.
+- Mollie's friendlier small-team underwriting posture at sub-€10K monthly revenue. If Stripe declines underwriting at company onboarding, the revisit trigger fires.
 
 **Operational cost accepted:**
 
@@ -63,9 +63,9 @@ Concretely:
 
 ### Mollie-primary + Stripe-backup (the planned design — files 00 / 11 / 116)
 
-- **Pro:** Mollie's NL-domestic iDEAL fees are competitive; Mollie's underwriting is friendlier for solo entrepreneurs at small scale; the parent driftstack planning artifacts had this in the spec.
+- **Pro:** Mollie's NL-domestic iDEAL fees are competitive; Mollie's underwriting is friendlier for small teams at small scale; the parent driftstack planning artifacts had this in the spec.
 - **Con:** dual webhook + reconciliation flow doubles maintenance; Mollie does not handle BTW reverse-charge natively; Mollie has no equivalent of Stripe Meters for BYOK LLM line-item billing; the EU-payment-method advantage that Mollie historically had has narrowed substantially as Stripe's EU coverage matured.
-- **Why rejected:** the operational doubling cost is real for a solo engineering team, and Stripe's coverage closes the gap that justified Mollie-primary in the first place. Holding Mollie in reserve via the revisit trigger preserves the option without paying the day-zero cost.
+- **Why rejected:** the operational doubling cost is real for a small engineering team, and Stripe's coverage closes the gap that justified Mollie-primary in the first place. Holding Mollie in reserve via the revisit trigger preserves the option without paying the day-zero cost.
 
 ### Mollie-only (no Stripe)
 
@@ -76,14 +76,14 @@ Concretely:
 ### Adyen / Braintree / Checkout.com
 
 - **Pro:** enterprise-grade, EU-native (Adyen is NL).
-- **Con:** higher minimum-volume requirements + harder underwriting than Stripe at solo-entrepreneur stage; less developer-friendly API + docs; no metered-billing primitive comparable to Stripe Meters; more upfront integration work.
+- **Con:** higher minimum-volume requirements + harder underwriting than Stripe at small-team stage; less developer-friendly API + docs; no metered-billing primitive comparable to Stripe Meters; more upfront integration work.
 - **Why rejected:** all three target enterprise scale; not a fit for v1.
 
 ## Revisit triggers
 
 Re-evaluate this decision if **any** of the following fires:
 
-- **Stripe declines underwriting at BV KvK-onboarding.** Trigger event: Stripe `account.application.declined` event during the BV's account creation flow (post-KvK, when live keys are provisioned). If Stripe declines, Mollie reactivates per the deferred file-116 dual-processor spec; customer-facing legal text updates per the DPA Art 28(2) sub-processor amendment mechanism with appropriate notice period.
+- **Stripe declines underwriting at company onboarding.** Trigger event: Stripe `account.application.declined` event during the legal entity's account creation flow (post-KvK, when live keys are provisioned). If Stripe declines, Mollie reactivates per the deferred file-116 dual-processor spec; customer-facing legal text updates per the DPA Art 28(2) sub-processor amendment mechanism with appropriate notice period.
 - **Stripe Tax fails to handle a regulatory edge case** (e.g., new EU member state with non-standard VAT rules; Brexit-style post-Brexit recalibration). Trigger event: a tax authority audit query that Stripe Tax cannot answer correctly + counsel sign-off that the gap is material.
 - **BYOK LLM billing volume warrants direct Anthropic billing relationship.** Trigger metric: monthly BYOK volume above the threshold where Anthropic offers direct enterprise pricing better than reseller markup via Stripe Meters.
 - **Stripe per-transaction fee structure changes adversely.** Trigger event: Stripe price increase >10% on the EU per-card or iDEAL rate.

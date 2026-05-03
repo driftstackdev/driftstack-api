@@ -105,8 +105,9 @@ on the gui-control plane (separate endpoint gated behind the
 
 ### Added
 
-- Inaugural PyPI publish (under `joeltheunissen89` personal account
-  pre-entity; will transfer to BV-owned account post-KvK closure).
+- Inaugural PyPI publish (under a maintainer account pre-entity;
+  will transfer to a company-owned account once the legal entity
+  is registered).
 - Pydantic models regenerated from updated OpenAPI spec.
 
 ## [0.0.1] - 2026-05-02

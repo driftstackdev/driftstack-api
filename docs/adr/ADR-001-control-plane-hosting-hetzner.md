@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-03
-**Tier:** 2 (founder-approved deviation; vendor / structural)
+**Tier:** Architectural (approved deviation; vendor / structural)
 **Related V-entry:** V-051 (network architecture doc + deploy pipeline targeting Hetzner), V-054 (revocation + JWT rotation pinned against Hetzner-side mTLS termination).
 
 ## Context
@@ -11,11 +11,11 @@ Initial planning specced **Railway** or **Fly.io** as the control-plane
 host — both PaaS providers, Postgres + Redis available as managed
 add-ons or via marketplace, Dockerfile-driven deploys, minimal sysadmin
 surface. That plan reflected a "ship fast, optimise later" instinct: a
-PaaS reduces founder operational load to near-zero in exchange for
+PaaS reduces operational load to near-zero in exchange for
 higher per-resource cost and weaker control over the runtime
 environment.
 
-The founder reconsidered before Workstream A (hosting integration
+The team reconsidered before Workstream A (hosting integration
 scaffolding) landed and selected **Hetzner Cloud** (CCX13 VMs,
 Falkenstein region, Germany) instead. Two CCX13 instances at ~€25/mo
 each = ~€50/mo total for staging + production, vs Railway / Fly.io
@@ -63,8 +63,8 @@ Deploy pipeline (`.github/workflows/deploy.yml`, V-051) builds the
 container image, pushes to GitHub Container Registry (`ghcr.io`),
 SSHes to Hetzner, runs `docker compose pull && docker compose up -d`,
 polls `/health`. Production deploy is gated on the `production` GitHub
-environment's manual-approval policy (founder is the required
-approver).
+environment's manual-approval policy (the configured approver gates
+production deploys).
 
 ## Consequences
 
@@ -103,7 +103,7 @@ approver).
 
 **Cost accepted:**
 
-- Higher founder time-on-ops than a PaaS would impose. Mitigated by
+- Higher operator time-on-ops than a PaaS would impose. Mitigated by
   the bare-bones host posture (the only non-Docker thing on the box
   is Cloudflare Tunnel + the unattended-upgrades agent).
 
@@ -131,10 +131,10 @@ approver).
   (would have simplified V-054 v2).
 - **Con:** US corporate entity; primary support relationship is in
   English over GH issues / Slack rather than EU business hours;
-  reliability incidents over 2024-25 created some founder concern
+  reliability incidents over 2024-25 created some team concern
   about stake-our-business-on-it posture; per-VM pricing is
   competitive but stacks add-ons.
-- **Why rejected:** founder weighed the corporate-entity factor +
+- **Why rejected:** the team weighed the corporate-entity factor +
   reliability track record + the Hetzner cost-predictability
   advantage and chose Hetzner. Fly.io's WireGuard primitive is a real
   consideration for V-054 v2 (mesh between control plane and fleet);
@@ -164,10 +164,10 @@ Re-evaluate this decision if **any** of the following fires:
 - **Founder operational load exceeds 4h/month on host ops.** If SSH
   hygiene, patching, monitoring tasks consume more than 4h/month
   measured over a quarter, the PaaS-zero-ops argument re-enters.
-  Trigger metric: founder self-report at quarterly review.
+  Trigger metric: internal review at quarterly review.
 - **Hetzner adverse event** affecting EU-jurisdiction posture (e.g.,
   acquisition by a US entity, datacenter migration that crosses an
-  EU border). Trigger event: founder + counsel review on any change
+  EU border). Trigger event: legal + counsel review on any change
   to Hetzner's corporate or jurisdictional status.
 - **Compliance requirement requiring SOC 2 / ISO 27001 of the host.**
   Hetzner has ISO 27001 for its datacenters but not the PaaS-style
@@ -183,7 +183,7 @@ Re-evaluate this decision if **any** of the following fires:
 ## Notes
 
 This ADR is the first in the directory; the pattern itself is also
-new (ADR README explains the format). Future Tier 2 deviations and
+new (ADR README explains the format). Future architectural deviations and
 load-bearing contextual decisions land here; routine decisions
 continue to use the one-paragraph `D-NNN` entries in
 `docs/decisions.md`.

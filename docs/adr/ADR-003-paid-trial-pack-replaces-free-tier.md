@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-03
-**Tier:** 3 (founder-explicit; commercial-commitment shape)
+**Tier:** Contractual (explicit; commercial-commitment shape)
 **Related V-entry:** V-061 (file-127 sweep that initially carried forward the "free trial" framing — withdrawn here), V-063 (this ADR + memory + scaffolding annotations).
 **Related D-entry:** none yet — the file-127 §6 deviation lives in this ADR; if a one-line summary becomes necessary it adds as a future `D-NNN`.
 
@@ -18,7 +18,7 @@ Two constraints reshaped the decision before Workstream B (marketing site) shipp
 
 2. **Self-funding fleet costs at first session.** Each browser-hour costs Driftstack ~$0.04 in MacStadium time at planned utilisation. A 25-hour free trial costs ~$1.00 of fleet time per signup; abuse + sock-puppet accounts make the actual unit cost higher. A paid trial that funds its own fleet usage from cent zero eliminates the asymmetry.
 
-The trade-off the founder accepted: **$2.99 is invisible friction for a B2B technical buyer audience**. iPhone Safari fidelity is the premium positioning per file 127's overage-pricing rationale; the same audience that pays $0.18/hr in overage will not balk at $2.99 to start. For consumer or hobbyist audiences a free trial would be load-bearing for funnel; Driftstack's audience is not that.
+The trade-off accepted: **$2.99 is invisible friction for a B2B technical buyer audience**. iPhone Safari fidelity is the premium positioning per file 127's overage-pricing rationale; the same audience that pays $0.18/hr in overage will not balk at $2.99 to start. For consumer or hobbyist audiences a free trial would be load-bearing for funnel; Driftstack's audience is not that.
 
 ## Decision
 
@@ -87,7 +87,7 @@ Accounts that purchase the trial pack and want to continue beyond it must subscr
 Re-evaluate this decision if **any** of the following fires:
 
 - **Trial-pack-to-paid conversion rate drops below 8%.** Trigger metric: `subscriptions_created_within_14d_of_trial_pack / trial_pack_purchases`, computed monthly, rolling 90-day window. If below 8%, the $2.99 friction is filtering too aggressively (or the product isn't converting evaluators); reconsider price + window.
-- **Competitor pricing pressure forces a free trial.** Trigger event: a peer service in iPhone Safari emulation introduces a generous free trial that is observably acquiring customers Driftstack would otherwise win. Counsel + founder review on whether to match.
+- **Competitor pricing pressure forces a free trial.** Trigger event: a peer service in iPhone Safari emulation introduces a generous free trial that is observably acquiring customers Driftstack would otherwise win. Counsel + review on whether to match.
 - **Anti-abuse infrastructure becomes "free" via a third-party.** Trigger event: a SaaS abuse-defence service (e.g., Stytch, Castle, Sift) drops to a price point + maturity where the file-127 §6 free trial becomes operationally feasible without months of in-house engineering.
 - **MacStadium fleet utilisation drops below the level where trial-pack revenue meaningfully self-funds.** Trigger metric: trial-pack revenue / MacStadium spend < 0.5 over rolling 90 days. If the self-funding argument no longer holds, the $2.99 has lost a load-bearing reason and the price + framing should be re-derived.
 - **Audience composition shifts.** Trigger event: customer mix moves from B2B technical buyer (current target) to consumer / hobbyist / educational. The "$2.99 is invisible friction for the audience" argument depends on the audience; a different audience changes the math.

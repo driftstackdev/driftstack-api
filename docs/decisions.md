@@ -2,26 +2,26 @@
 
 Chronological record of decisions affecting the `driftstack-api` repo. Each entry is summary-level; full rationale lives in the V-log entry (when evidence-based) or in a planning doc (when strategic).
 
-Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the decision, the reasoning, and the autonomy tier per `CLAUDE.md`:
+Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the decision, the reasoning, and the decision-authority level per `CLAUDE.md`:
 
-- **Tier 1** — implementation detail inside locked stack; agent decides
-- **Tier 2** — vendor / dependency / structural; agent proposes, founder confirms
-- **Tier 3** — affects API contract, CAPABILITIES.md, or WebKit-fork integration; founder decides
+- **Routine** — implementation detail inside the locked stack; landed and recorded
+- **Architectural** — vendor / dependency / structural; surface for review before commit
+- **Contractual** — affects API contract, CAPABILITIES.md, or WebKit-fork integration; explicit approval required
 
 ---
 
 ## D-001 — Locked stack baseline
 
 - **Decision:** Node 22 LTS, TypeScript 5.x strict, Fastify, Drizzle on Postgres 17, ioredis on Redis 7, Zod (single source of truth, OpenAPI 3.1 generated), Vitest + Supertest + Playwright, Pino, Docker Compose, GitHub Actions.
-- **Reasoning:** founder-set; chosen for tight TS ergonomics, codegen-friendly schemas, mature ecosystems, single-source validation/types.
-- **Tier:** 3 (founder set; agent does not change without surfacing).
+- **Reasoning:** locked; chosen for tight TS ergonomics, codegen-friendly schemas, mature ecosystems, single-source validation/types.
+- **Tier:** 3 (set in spec; agent does not change without surfacing).
 - **V-log:** V-001 captures the verified install + green typecheck/lint/test on this stack.
 
 ## D-002 — Workspace layout: `apps/server` + `packages/api-types`
 
 - **Decision:** monorepo with two TypeScript project references — `apps/server` (the Fastify app) and `packages/api-types` (shared types/schemas exported for SDK consumers).
-- **Reasoning:** matches the spec founder issued. `api-types` carves out the externalisable surface so a future TypeScript SDK can depend on it without pulling in the server. TS project references give incremental builds and prevent leaks across boundaries.
-- **Tier:** 2 (structural; founder spec already implied this).
+- **Reasoning:** matches the spec issued. `api-types` carves out the externalisable surface so a future TypeScript SDK can depend on it without pulling in the server. TS project references give incremental builds and prevent leaks across boundaries.
+- **Tier:** 2 (structural; spec already implied this).
 - **V-log:** V-001.
 
 ## D-003 — Strict TS configuration
@@ -48,14 +48,14 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 ## D-006 — `engines: ">=22"` instead of pinning exactly to 22
 
 - **Decision:** `package.json` requires Node `>=22`. Local dev machine has Node v25; CI pins to 22 LTS via `.nvmrc` and `actions/setup-node@v4`.
-- **Reasoning:** founder's local Mac runs v25, locked stack says v22 LTS. The runtime artifacts are produced and tested against 22 in CI (the source of truth for shippability), and the `>=22` floor lets v25 dev work without warnings. Tightening to `=22` would require nvm dance for every local command and provide no real benefit until v26 ships breaking changes.
+- **Reasoning:** local dev machine runs v25, locked stack says v22 LTS. The runtime artifacts are produced and tested against 22 in CI (the source of truth for shippability), and the `>=22` floor lets v25 dev work without warnings. Tightening to `=22` would require nvm dance for every local command and provide no real benefit until v26 ships breaking changes.
 - **Tier:** 1.
 - **V-log:** V-001.
 
 ## D-007 — Push-to-main, no PR workflow (mirrors WebKit agent)
 
 - **Decision:** every commit is pushed directly to main. No PRs, no branches, no review workflow. Verification log + decision log capture the why.
-- **Reasoning:** mirrors WebKit Agent #1's `D-12` pattern. Single founder, no other reviewers, two parallel agents — the per-feature PR ceremony has zero value and adds friction to autonomous work. The discipline is enforced by the V-log + decisions.md, not by gatekeeping.
+- **Reasoning:** mirrors the WebKit fork repo's `D-12` pattern. Small team, no other reviewers, two parallel agents — the per-feature PR ceremony has zero value and adds friction to autonomous work. The discipline is enforced by the V-log + decisions.md, not by gatekeeping.
 - **Tier:** 2 (process; mirrors WebKit repo precedent).
 - **V-log:** V-001.
 
@@ -63,12 +63,12 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 
 - **Decision:** repo licensed MIT.
 - **Reasoning:** matches WebKit fork repo policy stated in agent brief. Permissive enough that future SDK / customer integrations don't need a special license carve-out.
-- **Tier:** 2 (founder confirmed in brief).
+- **Tier:** 2 (confirmed in brief).
 - **V-log:** V-001.
 
 ## D-009 — Phase 1 scope split: write everything; verify what we can; flag what we can't
 
-- **Decision:** ship `docker-compose.yml` and the GitHub Actions CI workflow as part of Phase 1 even though Docker is not installed locally yet. End-to-end verification of the compose stack is deferred until founder installs Docker Desktop; CI verification of the same Postgres/Redis services happens automatically on first push (CI runs Postgres 17 and Redis 7 service containers in the same versions).
+- **Decision:** ship `docker-compose.yml` and the GitHub Actions CI workflow as part of Phase 1 even though Docker is not installed locally yet. End-to-end verification of the compose stack is deferred until installs Docker Desktop; CI verification of the same Postgres/Redis services happens automatically on first push (CI runs Postgres 17 and Redis 7 service containers in the same versions).
 - **Reasoning:** the compose file is plain config, not code; mistakes in it surface the moment Docker is available. CI's service containers exercise the same image+config, so the first green CI run validates that the schema migrations and integration tests work against the real images. Holding the file back until local Docker is installed would block shipping the rest of Phase 1.
 - **Tier:** 1.
 - **V-log:** V-001 (verification deferred sub-section).
@@ -126,22 +126,22 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 
 - **Decision:** ship a hand-written TypeScript SDK as `packages/sdk-typescript/`. Imports types directly from `@driftstack/api-types` (the single source of truth for the API contract), NOT from a code-generated artifact. Builds dual ESM + CJS via `tsup`. Public surface: `Driftstack` class with `sessions` / `apiKeys` / `usage` resource accessors, 17 typed error classes mirroring the server's RFC 7807 problem-types, `withRetry` policy with exponential backoff + jitter + Retry-After honouring, and a `verifyWebhookSignature` helper for forthcoming webhooks.
 - **Reasoning:** code-gen tools (`openapi-typescript-codegen`, `@hey-api/openapi-ts`) produce opinionated SDK shapes that don't match the resource/action ergonomics customers expect (Stripe-style `client.sessions.create()` rather than `SessionsApi.createSession(input)`). Hand-writing the client is ~500 lines and gives exact control over retry, error mapping, and header injection. Since `@driftstack/api-types` already exports every Zod-derived TS type the SDK needs, no codegen step is required for TypeScript — the schemas flow through directly. (Python and Go SDKs in future will likely consume the OpenAPI spec since they can't import `@driftstack/api-types`.)
-- **Tier:** 2 (vendor / structural choice; matches founder direction in coordination response).
+- **Tier:** 2 (vendor / structural choice; matches spec direction in coordination response).
 - **V-log:** V-013.
 
-## D-027 — Stripe-only payment processing at launch (Tier 2 deviation from Mollie-primary plan)
+## D-027 — Stripe-only payment processing at launch (Architectural deviation from Mollie-primary plan)
 
 - **Decision:** use Stripe as the sole payment processor at launch. Drop Mollie from the active rail list. The earlier "dual-processor with Mollie primary" design (parent driftstack repo file 116) is deferred to the revisit triggers, not abandoned.
-- **Reasoning:** Stripe's EU payment-method coverage (iDEAL, Bancontact, SEPA Direct Debit, SOFORT, region-cards) closes the historical gap that justified Mollie-primary; Stripe Tax handles BTW reverse-charge natively (Mollie does not); Stripe Meters is required for BYOK LLM line-item billing (no Mollie equivalent); operational doubling cost (dual webhooks + dual reconciliation + dual sub-processor amendment surface) is meaningful for a solo engineering team. Founder-approved Tier 2 deviation. If Stripe declines underwriting at BV KvK-onboarding, Mollie reactivates per the deferred dual-processor spec with proper Art 28(2) amendment notice.
-- **Tier:** 2 (vendor / structural; founder-approved deviation from the planned dual-processor design).
+- **Reasoning:** Stripe's EU payment-method coverage (iDEAL, Bancontact, SEPA Direct Debit, SOFORT, region-cards) closes the historical gap that justified Mollie-primary; Stripe Tax handles BTW reverse-charge natively (Mollie does not); Stripe Meters is required for BYOK LLM line-item billing (no Mollie equivalent); operational doubling cost (dual webhooks + dual reconciliation + dual sub-processor amendment surface) is meaningful for a small engineering team. Approved architectural deviation. If Stripe declines underwriting at company-onboarding, Mollie reactivates per the deferred dual-processor spec with proper Art 28(2) amendment notice.
+- **Tier:** 2 (vendor / structural; approved deviation from the planned dual-processor design).
 - **ADR:** [ADR-002](adr/ADR-002-stripe-only-payment-processing.md) — full context + alternatives + revisit triggers.
 - **V-log:** V-052 (Coinbase Commerce dropped — single-rail posture follow-on), V-060 (this entry + ADR-002 landing).
 
-## D-026 — Control-plane hosting on Hetzner Cloud (Tier 2 deviation from PaaS plan)
+## D-026 — Control-plane hosting on Hetzner Cloud (Architectural deviation from PaaS plan)
 
 - **Decision:** host the control plane on Hetzner Cloud (two CCX13 VMs, Falkenstein region, ~€50/mo total) rather than a PaaS (Railway / Fly.io were the planned candidates).
-- **Reasoning:** EU-jurisdiction posture for the privacy-policy sub-processor list is materially simpler with a German hyperscaler-adjacent provider; cost predictability at low scale; VM-level control for future co-tenant infrastructure (CI runner, WireGuard concentrator per V-054 v2); direct mTLS termination on the VM (V-054 decision 1A) without depending on a paid Cloudflare API Shield plan. Datastore decoupling (Neon Postgres + Upstash Redis + Cloudflare R2) neutralises the "managed-add-ons" PaaS advantage. Tradeoff accepted: more founder ops surface (SSH key hygiene, OS patching, monitoring) than a PaaS would impose. Mitigated by the bare-bones host posture (only Cloudflare Tunnel + unattended-upgrades alongside the application container).
-- **Tier:** 2 (vendor / structural; founder-approved deviation from the originally-planned PaaS).
+- **Reasoning:** EU-jurisdiction posture for the privacy-policy sub-processor list is materially simpler with a German hyperscaler-adjacent provider; cost predictability at low scale; VM-level control for future co-tenant infrastructure (CI runner, WireGuard concentrator per V-054 v2); direct mTLS termination on the VM (V-054 decision 1A) without depending on a paid Cloudflare API Shield plan. Datastore decoupling (Neon Postgres + Upstash Redis + Cloudflare R2) neutralises the "managed-add-ons" PaaS advantage. Tradeoff accepted: more ops surface (SSH key hygiene, OS patching, monitoring) than a PaaS would impose. Mitigated by the bare-bones host posture (only Cloudflare Tunnel + unattended-upgrades alongside the application container).
+- **Tier:** 2 (vendor / structural; approved deviation from the originally-planned PaaS).
 - **ADR:** [ADR-001](adr/ADR-001-control-plane-hosting-hetzner.md) — full context + alternatives + revisit triggers.
 - **V-log:** V-051 (network architecture doc + deploy pipeline targeting Hetzner), V-055 (ADR pattern + this entry).
 
@@ -160,7 +160,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
   - **Rate-limit override storage.** `rate_limit_overrides` table holds `(account_id, bucket_key, capacity, refill_per_second_centi, reason, expires_at, set_by_key_id)`. Unique index on `(account_id, bucket_key)` enforces "one override per bucket"; re-setting upserts. `refill_per_second_centi` stores the rate as 100× the actual rate to avoid float drift (the existing tier defaults include `1/60` per second; centi-rate stores it as `2` rounded, accepting that off-by-one until/unless overrides need sub-centi precision). Override is read at `rateLimitConsume()` time alongside the tier default; if present and unexpired, supersedes the default.
   - **Closed admin /usage facets.** The directive's `GET /v1/admin/accounts/:id/usage` calls for "by record type" + "by period" + "by endpoint." First two work today via the existing `currentPeriodSummary`; "by endpoint" requires both a `usage_records.endpoint` column (doesn't exist) AND production code paths that write to `usage_records` (doesn't happen — see V-014/V-015 amendment). Decision for this workstream: implement period + record_type facets; defer "by endpoint" to the future quota workstream that builds usage recording. Documented in the response shape.
 - **Reasoning:** admin tooling is security-critical. The discipline that pays for itself: forced enum so the action set is explicit; mandatory audit rows that aren't best-effort; closed override vocabulary; cache invalidation reuses the proven D-020 path. The "no UPDATE/DELETE" enforcement via missing methods (rather than DB triggers) is consistent with the rest of this codebase — services own correctness, the DB is a store. Override storage in a dedicated table (rather than overloading `accounts`) keeps the override path orthogonal to account state, simplifies the sweep query, and lets us delete an override without touching the account row.
-- **Tier:** 2 (security-critical structural pattern; founder-approved scope per coordination response).
+- **Tier:** 2 (security-critical structural pattern; approved scope per coordination response).
 - **V-log:** V-016.
 
 ## D-024 — Process-local single-flight coalescer for the auth slow path
@@ -173,14 +173,14 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 
   Cross-process coalescing was deliberately not implemented: a Redis-backed lock adds latency comparable to the scrypt run itself and reintroduces the bottleneck. When scaling to multi-process, each process gets its own coalescer; the shared Redis cache absorbs across-process duplication after the first per-process miss.
 
-- **Tier:** 2 (perf-critical structural choice; founder approved).
+- **Tier:** 2 (perf-critical structural choice; approved).
 - **V-log:** V-015.
 
 ## D-023 — Webhook signing secret stored plaintext at rest (Stripe posture)
 
 - **Decision:** the `webhook_endpoints.secret` column holds the plaintext signing secret (`whsec_<32 base32>`). The `secret_prefix` column stores the first 12 chars for display/debug. There is no separate scrypt-hashed field; the signing worker reads the plaintext directly to compute `HMAC-SHA256(<unix>.<body>, secret)` per delivery.
 - **Reasoning:** the worker MUST sign every outbound delivery, so the plaintext has to be available at sign-time. Hashing-at-rest while still being able to sign requires either (a) re-deriving signing material from a hash on every delivery (operationally awful, breaks customer rotation flow) or (b) a KMS-style envelope (per-account encryption key — adds operational complexity without solving the root leak problem, since the per-account key has to live somewhere). The threat model for a leaked webhook secret is "attacker can forge webhook deliveries to the customer's endpoint" — phishing-grade, not takeover-grade. API key plaintext leaks remain takeover-grade because they let the attacker call our API as the customer; webhook secret leaks let the attacker impersonate us to the customer's endpoint, which the customer can mitigate by rotating the secret. Stripe takes the same posture (plaintext signing secret at rest, customers rotate on suspicion of leak). Documented as a customer-facing rotation flow, not as a security gap to solve in a future iteration.
-- **Tier:** 3 (security model; founder-aware via the WH1 design doc that captured this as the proposed decision).
+- **Tier:** Contractual (security model; reviewed via the WH1 design doc that captured this as the proposed decision).
 - **V-log:** V-014.
 
 ## D-022 — `*Input` type variants for request shapes with server-side defaults
@@ -205,7 +205,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
   - **Graceful degradation:** any Redis failure (network, slow query, malformed entry) is caught at both the impl level (RedisAuthCache logs + returns null/no-op) and the call site (authenticate() wraps in try/catch as belt-and-suspenders). Auth still works; just slower.
   - **No plaintext in cache value.** The cached `AccountContext` contains the hashed key, account info, scopes, etc. — no plaintext. The plaintext lives only in the request, in transit, and in the customer's secret store.
 
-- **Tier:** 3 (security model decision; founder approved per coordination response).
+- **Tier:** 3 (security model decision; approved per coordination response).
 - **V-log:** V-012 (perf delta + behaviour verification).
 
 ## D-019 — Six-tier locked pricing model
@@ -225,8 +225,8 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 
   Old `pro` rows are mapped to `builder` in the migration as the closest equivalent (15 concurrent vs old pro's 20). `scale` tier inherited the old `pro` quota numbers (navigate=100k, etc.) since those were already calibrated for an upper-tier load.
 
-- **Reasoning:** founder-set locked pricing — the four-tier model in V-001 to V-007 was a placeholder; the actual pricing matrix has six tiers with specific concurrency caps. Without correct tier semantics every rate-limit and quota test was asserting against the wrong contract; without a migration any DB carrying old `pro` rows would break on first `tier::account_tier` cast.
-- **Tier:** 3 (founder-set business model).
+- **Reasoning:** locked locked pricing — the four-tier model in V-001 to V-007 was a placeholder; the actual pricing matrix has six tiers with specific concurrency caps. Without correct tier semantics every rate-limit and quota test was asserting against the wrong contract; without a migration any DB carrying old `pro` rows would break on first `tier::account_tier` cast.
+- **Tier:** 3 (locked business model).
 - **V-log:** V-008.
 
 ## D-018 — Driftstack-internal Fastify plugins use the callback `done` form, not async

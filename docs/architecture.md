@@ -8,7 +8,7 @@
 ┌─────────────────┐         ┌──────────────────────────┐         ┌─────────────────┐
 │  Customer       │  HTTPS  │  Driftstack API          │   ◀──   │  Mac mini fleet │
 │  (AI agent /    │  ────▶  │  (Fastify, this repo)    │         │  (WebKit fork,  │
-│   QA bot /      │         │                          │   ────▶ │   Agent #1)     │
+│   QA bot /      │         │                          │   ────▶ │   the WebKit fork)     │
 │   scraper)      │         │  ┌────────────────────┐  │         │                 │
 └─────────────────┘         │  │ Auth (API key)     │  │         └─────────────────┘
                             │  │ Rate limit (Redis) │  │
@@ -46,7 +46,7 @@ interface Driver {
 }
 ```
 
-The factory (`src/drivers/index.ts`, Phase 4) returns `mock` when `DRIVER=mock` and `webkit` otherwise. The `webkit` implementation throws `NotYetIntegratedError` until Agent #1 hands off the real driver.
+The factory (`src/drivers/index.ts`, Phase 4) returns `mock` when `DRIVER=mock` and `webkit` otherwise. The `webkit` implementation throws `NotYetIntegratedError` until the WebKit fork hands off the real driver.
 
 ## Persistence
 

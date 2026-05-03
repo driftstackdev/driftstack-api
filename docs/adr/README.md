@@ -9,7 +9,7 @@ one-paragraph `D-NNN` entries in `docs/decisions.md`.
 Write an ADR when:
 
 - The decision is a **deviation from a planned approach** documented
-  elsewhere (e.g., a Tier 2 founder-approved swap from a previously
+  elsewhere (e.g., a architectural approved swap from a previously
   planned vendor / dependency / structural choice).
 - The decision has **non-obvious tradeoffs** that future-you or a
   reviewer will need to reconstruct ("why did we pick X over Y when Y
@@ -70,14 +70,14 @@ header. The history matters; the number is part of the record.
 ## Index
 
 - [ADR-001](ADR-001-control-plane-hosting-hetzner.md) — Control-plane
-  hosting on Hetzner Cloud (Tier 2 deviation from PaaS plan).
+  hosting on Hetzner Cloud (architectural deviation from PaaS plan).
 - [ADR-002](ADR-002-stripe-only-payment-processing.md) — Stripe-only
-  payment processing at launch (Tier 2 deviation from Mollie-primary
+  payment processing at launch (architectural deviation from Mollie-primary
   - Stripe-backup plan).
 - [ADR-003](ADR-003-paid-trial-pack-replaces-free-tier.md) — $2.99
-  paid trial pack replaces the free tier (Tier 3 deviation from
+  paid trial pack replaces the free tier (explicit deviation from
   parent driftstack repo file 127 §6).
 - [ADR-004](ADR-004-pricing-restructure-two-ladder.md) — Pricing
-  restructure to two-ladder concurrent-only (Tier 3 deviation from
+  restructure to two-ladder concurrent-only (explicit deviation from
   parent driftstack repo file 127 single-ladder hours-with-overage
   design).

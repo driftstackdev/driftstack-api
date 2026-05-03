@@ -34,6 +34,6 @@ Each script prints a JSON summary at the end and exits non-zero if its pass crit
 
 ## What's NOT measured
 
-- Real WebKit driver latency — Phase 9 still runs the mock driver. Real-driver perf is a Phase-after-Phase-9 question once Agent #1 ships.
+- Real WebKit driver latency — Phase 9 still runs the mock driver. Real-driver perf is a Phase-after-Phase-9 question once the WebKit fork ships.
 - Multi-instance Redis cluster behaviour — single-instance Redis is what Phase 9 exercises.
 - Postgres replication lag, etc. — single-instance Postgres.

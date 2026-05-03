@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-03
-**Tier:** 3 (founder-explicit; commercial-commitment shape)
+**Tier:** Contractual (explicit; commercial-commitment shape)
 **Related V-entry:** V-061 (file-127 sweep that landed the previous single-ladder values), V-071 (this ADR), V-072 (data-layer rewrite that codifies the new structure).
 **Related ADR:** ADR-003 (paid trial pack — unchanged by this restructure; trial-pack mechanics survive intact).
 **Related D-entry:** none new — D-019 ("Six-tier locked pricing model") still references the prior structure and is now superseded by this ADR; future revision of D-019 may add a pointer to ADR-004 when convenient.
@@ -137,10 +137,10 @@ Concrete enforcement implications (handled in V-072 / V-073):
 Re-evaluate this decision if **any** of the following fires:
 
 1. **First MacStadium fleet provisioning under real production load reveals N differs from estimate by ±2 sessions per M4 16GB.** Trigger metric: measured concurrent-session capacity per fleet node in the first month of paying-customer fleet utilisation. If `N=6` (more capacity than estimated), Solo Manual could drop to $49 with positive margin. If `N=2` (less capacity than estimated), Solo Manual must rise or the cap must drop.
-2. **Provider arbitrage qualifies a Mac fleet provider at <$150/mo that meets quality bar.** Trigger event: founder evaluates an alternative Mac fleet provider (currently MacStadium-equivalent at $200-280) and confirms it meets the operational quality bar. Provider cost reduction directly reduces the fleet-cost floor on Solo Manual; could enable the $49 entry tier.
+2. **Provider arbitrage qualifies a Mac fleet provider at <$150/mo that meets quality bar.** Trigger event: the team evaluates an alternative Mac fleet provider (currently MacStadium-equivalent at $200-280) and confirms it meets the operational quality bar. Provider cost reduction directly reduces the fleet-cost floor on Solo Manual; could enable the $49 entry tier.
 3. **Customer feedback consistently signals Solo Manual is mispriced.** Trigger metric: post-Manual-tier-launch customer survey responses, support tickets explicitly about Solo Manual pricing, churn patterns at the Solo Manual tier specifically. Two patterns to watch: too-low (customers convert easily but don't generate revenue cushion) or too-high (customers evaluate then drop without converting from trial pack).
 4. **Competitive pricing pressure: Browserbase / Steel / Multilogin restructure to a directly comparable tier.** Trigger event: a peer service in cloud-browser or browser-anti-detect ships a directly comparable two-ladder structure. If their entry pricing undercuts Driftstack meaningfully, comparison-shopping conversion drops; reconsider entry pricing.
-5. **BYOK markup multiplier locks (still Tier 3 founder-pending).** Trigger event: founder commits a specific markup ratio for the bundled-LLM rate. Locking the BYOK markup may shift the relative attractiveness of paid tiers (BYOK on Builder/Scale/Enterprise becomes a more concrete value proposition); could warrant tier-pricing revisions if BYOK customers cluster at a specific tier.
+5. **BYOK markup multiplier locks (still explicit pending value).** Trigger event: the team commits a specific markup ratio for the bundled-LLM rate. Locking the BYOK markup may shift the relative attractiveness of paid tiers (BYOK on Builder/Scale/Enterprise becomes a more concrete value proposition); could warrant tier-pricing revisions if BYOK customers cluster at a specific tier.
 
 ## Notes
 
@@ -150,4 +150,4 @@ The trial pack survives ADR-004 unchanged. ADR-003's schema (`accounts.trial_pac
 
 Old Stripe price IDs from V-061 era (`driftstack_starter_monthly` etc.) are deprecated. Founder action: archive in Stripe (don't delete — audit trail). New SKU naming convention `driftstack_<tier_id>_<period>` produces 19 price IDs total (8 paid tiers × 2 periods + 3 self-hosted × 2 periods + 2 annual-only enterprise tiers + trial-pack one-time, with Self-Hosted Enterprise and API Enterprise both annual-only).
 
-The N=4 fleet capacity assumption is the load-bearing pre-launch unknown. Phase 2.5 multi-tenancy stress test was deferred to first paying customer per D-2026-04-30-13 (founder MacBook unavailable for stress-test, V-141 POC in flight). When real fleet measurements land, revisit trigger #1 fires and ADR-004 reopens.
+The N=4 fleet capacity assumption is the load-bearing pre-launch unknown. Phase 2.5 multi-tenancy stress test was deferred to first paying customer per D-2026-04-30-13 (local dev machine unavailable for stress-test, V-141 POC in flight). When real fleet measurements land, revisit trigger #1 fires and ADR-004 reopens.

@@ -119,7 +119,7 @@ API keys are long-lived, scoped, revocable. Pass as `Authorization: Bearer <key>
 
 ## Contributing
 
-This is a single-founder project. Agent #2 (this codebase) and Agent #1 (WebKit fork) push directly to main; verification log + decisions log capture the why. See `CLAUDE.md` for the operational discipline.
+This is a small project with direct push-to-main on internal commits; the verification log (`docs/verification-log.md`) and decisions log (`docs/decisions.md`) capture the rationale behind every substantive change. External contributions go through standard pull-request flow on GitHub. See `CLAUDE.md` for the full operational discipline (test standards, marketing-copy review cadence, decision-authority levels).
 
 ## License
 

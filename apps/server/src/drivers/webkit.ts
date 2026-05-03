@@ -4,7 +4,7 @@
 // Every method throws DriverNotIntegratedError. The class exists so that the
 // route layer can construct + use a Driver implementation; when the
 // Driftstack WebKit fork closes its Phase 2, this file is replaced with the
-// real adapter (and Agent #1 hands off the binding details).
+// real adapter (and the WebKit fork hands off the binding details).
 
 import { DriverNotIntegratedError } from '../lib/errors.js';
 import type {

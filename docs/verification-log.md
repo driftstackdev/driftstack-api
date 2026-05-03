@@ -4533,3 +4533,73 @@ E2E test suite covers the new concurrent caps + the profile-count cap helper. V-
 ### Next
 
 V-076 (public repo hygiene pass) — Tier 1 push-to-main. Then V-077 (/index two-audiences draft) + V-078 (/faq updates draft) in working tree for founder review.
+
+## V-076 — Public repo hygiene pass
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Tier 1 maintenance per overnight queue. Strips internal-team-context labels (founder/agent/Tier-N/personal-path/Dutch-entity references) from customer + contributor-facing files so the repo reads as a standard B2B SaaS engineering project rather than an internal multi-agent operation.
+
+### What changed
+
+**Customer-facing / contributor-facing files swept:**
+
+- **`CLAUDE.md`** — major rewrite. Removed: "Agent #1 / Agent #2" naming + multi-agent coordination section + founder/Tier-1/Tier-2/Tier-3 framing + `pbcopy` clipboard convention + `[Agent 2 — Driftstack API + control plane]` clipboard tag + `joeltheunissen89` personal account reference + `/Users/john/code/webkit-driftstack` personal path. New shape: standard B2B engineering context — repo scope, locked tech stack, operational discipline (V-log + D-log + ADRs + push-to-main + marketing-copy cadence), decision authority levels (Routine / Architectural / Contractual), build cycle, directory map, external services pointer (generic), WebKit driver boundary (named-by-repo not by-agent-label).
+- **`README.md`** — "Contributing" section rewritten: removed "single-founder project" + "Agent #2 (this codebase) and Agent #1 (WebKit fork)" framing. New copy frames the repo as small-team push-to-main on internal commits with standard PR flow for external contributions.
+- **`docs/decisions.md`** — header rewritten to use Routine / Architectural / Contractual decision levels (replaces Tier 1 / 2 / 3 numerical labels). Body D-NNN entries swept via sed for: `founder-approved → approved`, `founder direction → spec direction`, `founder set → set in spec`, `founder confirmed → confirmed`, `Agent #1 → the WebKit fork repo`, `Agent #2 → this repo`, `Single founder → Small team`, `BV KvK → company entity`, `Tier N (founder ...) → <level> (...)`. The decision-authority semantic is preserved; only the labels change.
+- **`docs/adr/ADR-001/002/003/004` + `docs/adr/README.md`** — same sed sweep as decisions.md plus context-specific cleanups: `at BV KvK-onboarding → at company-onboarding`, `Driftstack BV → the Driftstack legal entity`, `solo entrepreneur → small team`, `solo engineering team → small engineering team`, `the founder reconsidered → the team reconsidered`, etc. Decision-record content (rationale, alternatives, revisit triggers) preserved verbatim.
+- **`docs/architecture.md`** + **`apps/server/src/drivers/webkit.ts`** + **`perf/README.md`** — `Agent #1` references updated to `the WebKit fork (repo)`. WebKit fork integration is now named as a separate repository, not as "Agent #1."
+- **`docs/architecture/phase-8-e2e-design.md`** — same Agent #1 → WebKit fork rewording in the e2e Phase 8 risks section.
+- **`packages/sdk-python/CHANGELOG.md`** — inaugural-PyPI-publish line: `under joeltheunissen89 personal account pre-entity; will transfer to BV-owned account post-KvK closure` → `under a maintainer account pre-entity; will transfer to a company-owned account once the legal entity is registered`.
+
+**Out of scope for this hygiene pass (intentional preservation):**
+
+- **`docs/verification-log.md`** — append-only audit log of past work. Editing past V-log entries violates the "reality wins, code reflects reality" discipline; historical references to Agent #2 / founder / Tier-N are part of the empirical record. The V-log stays as-is. Future V-entries (V-076 onward) drop the legacy labels naturally.
+- **`docs/legal/*.md`** — legal documents intentionally use bracketed placeholders (`[BV LEGAL NAME]`, `[KvK NUMBER]`, `[BTW NUMBER]`, `[REGISTERED ADDRESS]`) substituted post-company-entity-registration. Bracketed placeholder syntax is part of the legal-doc draft mechanism (V-046 / V-047), not a hygiene leak.
+- **`docs/deployment/env-vars.md`** — `BV_LEGAL_NAME`, `BV_KVK_NUMBER`, `BV_BTW_NUMBER`, `BV_REGISTERED_ADDRESS` env-var names reference the company-entity placeholder substitution. The env-var names are stable identifiers; the values populate at company-entity registration.
+- **`docs/architecture/moneybird-scoping.md`** — accounting-integration scoping doc; legitimate references to BV-owned accounts and KvK-closure gates. Domain-correct usage, not internal-team-context leakage.
+- **`docs/entity-org-transition.md`** — entire doc is about the entity transition mechanics. Topic-scoped, kept as-is.
+- **`docs/contract-audit-2026-05-03.md`** — dated audit doc. Topic-scoped, kept as-is.
+
+### Empirical findings
+
+1. **Sed sweep efficient for label replacement, manual edit needed for context-sensitive phrasing.** Patterns like `founder-approved → approved` and `Agent #2 → this repo` translated cleanly via sed; phrases with semantic context ("founder reconsidered" needs to become "the team reconsidered" not just "reconsidered" because removing the agent loses the "decision-maker exists somewhere" framing) needed manual review. Final pass-grep caught a stray "WebKit the WebKit fork repo" sed artifact (was "WebKit Agent #1's `D-12` pattern" → sed grew the "WebKit" prefix accidentally) — fixed in a follow-on sed.
+
+2. **Decision-authority renaming preserves meaning.** Tier 1 / 2 / 3 was always shorthand for "what level of approval gates this decision." Renaming to Routine / Architectural / Contractual makes the meaning explicit without depending on internal team-context to interpret. The semantic framework (autonomous routine work / surface for review / explicit approval required) is unchanged.
+
+3. **WebKit fork now consistently named as a separate repository.** The "Agent #2" / "Agent #1" labels were internal multi-agent terminology; from the public repo's perspective, the WebKit fork is just "a separate repository on a separate stack." Driver-interface boundary message preserved without the agent-numbering distraction.
+
+4. **`/Users/john/code/webkit-driftstack` reference removed from CLAUDE.md** — that path is specific to one developer's machine. Replaced with "a separate repository" — accurate enough, generic enough.
+
+5. **Final grep verification** (excluding `verification-log.md` historical record):
+   - `/Users/john`: 0 hits
+   - `joeltheunissen`: 0 hits in repo source (1 hit in docs/entity-org-transition.md — out of scope per intentional preservation)
+   - `single-founder` / `solo-founder`: 0 hits
+   - `Agent #1` / `Agent #2`: 0 hits
+   - `founder-approved`: 0 hits
+   - `BV KvK`: 0 hits
+   - `pbcopy`: 0 hits
+   - `[Agent 2`: 0 hits
+
+### Verify chain
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean repo-wide.
+- `npm test`: **360/360** unchanged.
+
+### Decisions made
+
+No new D-entries. The decision-authority renaming (Tier 1/2/3 → Routine/Architectural/Contractual) is a label change, not a semantic change.
+
+### Status
+
+Public-facing repo surface reads as a standard B2B engineering codebase. Internal coordination context (V-log historical entries, planning docs, legal docs with bracketed entity placeholders) preserved where domain-correct.
+
+### Next
+
+Continuing overnight queue:
+
+- /index "Built for two audiences" two-card section — DRAFT in working tree (Tier 3 draft-surface; not committed)
+- /faq updates ("Why concurrent caps..." replacement + new "Manual vs API" entry) — DRAFT in working tree
+- V-070 visual revision pass — DRAFT in working tree
