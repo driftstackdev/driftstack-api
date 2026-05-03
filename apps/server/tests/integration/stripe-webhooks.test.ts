@@ -223,6 +223,51 @@ describe('POST /v1/webhooks/stripe — dispatch', () => {
   });
 });
 
+describe('POST /v1/webhooks/stripe — concurrent delivery race (V-085)', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('two concurrent deliveries of the same event end with exactly one ledger row', async () => {
+    fx = await buildTestApp();
+    const raw = makeEvent('evt_concurrent_001', 'customer.subscription.created');
+    const { signature } = signWithFixture(fx, raw);
+
+    // Fire the same event twice in parallel — both should pass signature
+    // verification, but only one should win the recordEvent insert
+    // (ON CONFLICT DO NOTHING in Drizzle; first-writer-wins in
+    // InMemoryStripeWebhooksRepo).
+    const [first, second] = await Promise.all([
+      fx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/stripe',
+        headers: { 'stripe-signature': signature, 'content-type': 'application/json' },
+        payload: raw,
+      }),
+      fx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/stripe',
+        headers: { 'stripe-signature': signature, 'content-type': 'application/json' },
+        payload: raw,
+      }),
+    ]);
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+
+    const outcomes = [
+      first.json<{ outcome: string }>().outcome,
+      second.json<{ outcome: string }>().outcome,
+    ];
+    // One should be 'handled' (the winner) and the other should be
+    // 'duplicate' (the loser saw the row in hasEvent OR lost the
+    // ON CONFLICT race in recordEvent).
+    expect(outcomes.sort()).toEqual(['duplicate', 'handled']);
+    expect(fx.stripeWebhooksRepo.list()).toHaveLength(1);
+  });
+});
+
 describe('POST /v1/webhooks/stripe — malformed payloads', () => {
   let fx: TestAppFixture;
 

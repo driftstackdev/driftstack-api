@@ -5099,7 +5099,7 @@ The "leads" surface (signup-intent leads from the marketing site) is out of scop
 
 **Drizzle repo (`apps/server/src/db/admin-accounts-repo.ts`):**
 
-- `list(args)` builds a filter chain (status / tier / `ilike` email substring) + cursor pagination (created_at desc + id desc tie-break), reads `limit + 1` to compute `hasMore`. Cursor format mirrors the V-081 profiles convention — `acc_<uuid>` parsed at the route boundary, raw UUID inside the repo.
+- `list(args)` builds a filter chain (status / tier / `ilike` email substring) + cursor pagination (created*at desc + id desc tie-break), reads `limit + 1` to compute `hasMore`. Cursor format mirrors the V-081 profiles convention — `acc*<uuid>` parsed at the route boundary, raw UUID inside the repo.
 
 **Route (`apps/server/src/routes/admin-accounts.ts`):**
 
@@ -5191,3 +5191,49 @@ The proposal is for founder review. No code changes; no test surface affected. P
 ### Next
 
 Per the never-stop rule: continuing to V-085 (webhook event tests + Postmark integration tests) per Priority 8 of the overnight queue. V-070-visual remains uncommitted in working tree pending founder review.
+
+---
+
+## V-085 — Webhook event tests + Postmark integration tests (Routine — coverage)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Two test-coverage additions identified in the overnight queue:
+
+1. Auth-flow → Postmark integration: the existing `tests/unit/email.test.ts` covers `EmailService` in isolation (template rendering + send-error swallowing). The actual wiring of `AuthFlowsService.signup` / `requestMagicLink` / `requestPasswordReset` → `EmailService.sendXyz` was not exercised end-to-end. New file `auth-flows-email.test.ts` constructs a parallel flow against a stub Postmark client and verifies (a) signup fires `sendSignupVerification` with the verify URL containing the plaintext token, (b) magic-link request fires only when the email matches an account, (c) password-reset request fires only when the email matches an account, (d) email-send rejection does NOT break the auth flow (fire-and-forget contract holds).
+
+2. Stripe webhook concurrent-delivery race: V-080 covered sequential duplicate delivery via `hasEvent` short-circuit. The `recordEvent` `ON CONFLICT DO NOTHING` race resolution was not directly tested. New test in `stripe-webhooks.test.ts` fires two parallel `Promise.all` deliveries of the same `event.id` and asserts: both return 200, the outcomes are exactly `['duplicate', 'handled']` after sorting, and the ledger has exactly one row.
+
+### What changed
+
+- New file: `apps/server/tests/integration/auth-flows-email.test.ts` (6 tests).
+- Updated: `apps/server/tests/integration/stripe-webhooks.test.ts` (+1 concurrent-delivery test).
+
+### Out of scope (logged for future V-NNN)
+
+- **`session.failed` webhook event is in the type contract but never emitted** (`apps/server/src/services/sessions.ts` line 148 declares the type but no `enqueueEvent('session.failed', ...)` call exists). Adding the emission is a separate V-NNN — needs a clear definition of "what counts as session failure" (driver crash, supervised timeout, manual destroy with `reason='error'`?). Not blocking; flagged for the next pass.
+- **Webhook signing-secret rotation tests**: requires multi-secret-per-endpoint schema (a `webhook_signing_secrets` join table or similar) that doesn't exist yet. Single-secret rotation = "create new secret + update endpoint + customer updates their verifier" — no test to write at the in-memory layer.
+- **Postmark template snapshot tests**: low-value; templates are simple inline HTML/text with `${var}` substitution. The unit tests in `email.test.ts` already cover the substitution path.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after applying prettier to two files).
+- `npm test`: 430/430 passing (was 423; +7 new tests — 6 in auth-flows-email.test.ts + 1 in stripe-webhooks.test.ts).
+
+### Files added
+
+- `apps/server/tests/integration/auth-flows-email.test.ts`
+
+### Files modified
+
+- `apps/server/tests/integration/stripe-webhooks.test.ts` (concurrent-delivery race test)
+
+### Next
+
+Per the never-stop rule: continuing to V-086 (test coverage audit per `npm test --coverage`) per Priority 9 of the overnight queue. V-070-visual remains uncommitted in working tree pending founder review.
