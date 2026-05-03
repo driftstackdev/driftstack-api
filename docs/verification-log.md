@@ -4127,3 +4127,105 @@ V-068.1 closes the leak-purge debate. Marketing site is content-correct: custome
 ### Next
 
 V-069 draft delivery via clipboard. Hero copy options A/B + headline number presentation + opinionated technical copy on landing/self-hosted/FAQ. Founder reviews drafts, agent commits approved version. V-070 follows.
+
+## V-069 — Marketing copy revision pass (founder approved)
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream B v2 iteration 2 — Tier 3 marketing copy. Drafts surfaced via clipboard pbcopy 2026-05-03; founder approved with revisions; commit follows the standing-convention cadence (V-068.1 CLAUDE.md addition).
+
+### What changed
+
+**Hero (`apps/marketing-site/src/pages/index.astro`):**
+
+- Eyebrow: "iPhone Safari sessions, on demand" → "iPhone Safari fingerprints. Without the runtime tells."
+- H1: "Premium fidelity for the device that matters." → "Most stealth browsers modify JavaScript at runtime."
+- New sub-H1: "Detection vendors built their industry on catching exactly that."
+- Body rewritten to name the WebKit-C++-source-modification mechanism + closing triple "Same engine, same primitives, same source of truth." (founder revision — drops "Same hash" since V-152 catalogues divergent hash surfaces; drops "Apple silicon" per infrastructure-language purge).
+- Primary CTA: "Get started — $2.99 trial pack" → "Get started — $2.99" (founder revision — "trial pack" is Driftstack-specific terminology forcing a parse before the click).
+- Subline: "16 hours of iPhone Safari sessions · no subscription required · use within 14 days · one-time purchase, used once per account." → "16 hours · 14-day window · used once per account." (founder revision — tightened, "one-time" is implied by "used once").
+- Description meta-tag updated to match new positioning.
+
+**New Cumulative Rig section (`apps/marketing-site/src/pages/index.astro`):**
+
+- Inserted between hero and "Why Driftstack" sections.
+- Eyebrow: "Cumulative rig"
+- Number: `99.9%+` (rendered at `text-7xl md:text-8xl` in V-069; V-070 may bump to ~96px / `text-9xl` per founder design intent).
+- Subtitle: "1,252 of 1,253 measured surfaces validated against real iPhone Safari iOS 26.4.1." Pulled live from `CUMULATIVE_RIG.surfacesMatched` / `surfacesMeasured` / `archetypeReference` (V-068.1 capabilities.ts).
+- Caption: "Numbers update as new probes land. 'Validated' means the surface returns the exact reference value, not 'approximately matches.' Last update: 2026-05-03." (founder accepted draft; outlier line dropped per Q2 — "technical accuracy doesn't survive the one-liner").
+
+**"Why Driftstack" three-up rewritten (`apps/marketing-site/src/pages/index.astro`):**
+
+- Card 1 "Real device / No emulation tax" → "Stack / Real WebKit. Real Core Text. Real iOS rendering." Body rewritten to name competitor patterns (Chromium fork, Playwright stealth) + "the same engine your target's iPhone visitors run" framing. "Apple silicon" + "on Mac hardware" dropped (founder revision Card 1).
+- Card 2 "Browser-hour metering / Pay for what runs" → "Metering / Pay for engagement, not idle time." Body retained from V-064 with sharpening (5-min vs 60-min, no upcharge framing). Founder accepted Card 2 as-written.
+- Card 3 "EU stack / GDPR by default" → "Compliance / EU-resident, customer-controlled egress." Body adds the egress-via-customer-proxies positioning (SOCKS5 with UDP, WireGuard, OpenVPN) + "We never see your destination URLs" + "Session execution may run in supported regions outside the EU under SCCs and the EU-US Data Privacy Framework" (founder revision Card 3 — egress version chosen). "Mac fleet sessions" → "Session execution".
+
+**Self-hosted teaser on `/index` rewritten:**
+
+- H2: "Run Driftstack on your own Apple silicon." → "Run Driftstack on your own infrastructure."
+- Body: hardware procurement detail (Mac Mini M4 / Mac Studio M4 Max / Mac Studio Ultra / Mac Pro / multi-node cluster) dropped from teaser; replaced with "We help you pick the right hardware, deploy the control plane, and operate the fleet. Three SKUs, annual contracts, hands-on onboarding." Hardware-specific copy moves to `/self-hosted` (where it's procurement detail, not infrastructure leak).
+- New CTA "See self-hosted →" added.
+
+**Pricing page header positioning band (`apps/marketing-site/src/pages/pricing.astro`):**
+
+- New section inserted between trial-pack hero and subscription-tiers table.
+- Single large statement: "Per-browser-hour pricing. Not per call, not per element, not per minute. You pay for engagement, not for idle sessions." Per Q6.a — anchors comparison-shopping customers in the metering model before they read the table.
+
+**Pricing page Self-Hosted section:**
+
+- H2: "Run on your own Apple silicon." → "Run on your own infrastructure." Body adds "Hardware procurement detail per SKU below" pointer.
+- SKU cards: dropped the `hardwareRequired` line (Mac Mini M4 16 GB / Mac Studio M4 Max 36 GB / Mac Studio Ultra / Mac Pro / multi-node cluster) per founder gate-1 expectation. Cards retain price + concurrency + archetypes + minimum term + Contact-sales CTA. New "Hardware procurement detail at /self-hosted" pointer per card. The shared `SELF_HOSTED_SKUS` data structure unchanged — `/self-hosted` page renders the full hardware row; `/pricing` does not.
+
+**Pricing page trial-pack hero card bullet:**
+
+- "Real iPhone Safari, real Apple silicon. No emulation." → "Real iOS WebKit. No emulation, no runtime patches."
+
+**Pricing page mini-FAQ rewritten:**
+
+- "Why browser-hours and not sessions?" — founder-approved sharper version naming the per-call-billing penalisation pattern. "actually consumes Apple silicon" → "of WebKit runtime consumed".
+- "Is the EU stack just marketing?" — "Mac fleet sessions" → "Session execution".
+
+**FAQ rewrites (`apps/marketing-site/src/pages/faq.astro`):**
+
+- "Why browser-hours and not session count?" — sharpened to per-call-billing-penalisation framing (founder-approved). "consumes Apple silicon" → "of fleet time consumed" (existing residual; the founder's "drop 'on Apple silicon'" instruction was for a different closing); "minutes of WebKit runtime on Apple silicon" → "minutes of WebKit runtime".
+- New entry "How does this compare to Chromium-cloud stealth services?" added to "Pricing model" group. Names the spoofed-surfaces-vs-underneath asymmetry. "WebKit's actual C++ source on Apple silicon" → "WebKit's actual C++ source".
+- "Where is my data stored?" — "Mac fleet sessions for browser execution may run" → "Session execution may run".
+
+### Empirical findings
+
+1. **All four founder verification gates passed:**
+   - **Gate 1 (infrastructure-language grep on customer-facing pages):** 0/0/0/0 across `/index`, `/pricing`, `/faq`, `/404`. `/self-hosted` and `/trust/sub-processors` excluded (procurement detail / compliance artifact respectively).
+   - **Gate 2 (negative-framing leaks):** 0/0/0/0/0 across all 5 customer-facing pages.
+   - **Gate 3 (capabilities.ts values):** match founder confirmation (1252 / 1253 / 99.9 / iPhone 16 Pro / iOS 26.4.1 / 2026-05-03).
+   - **Gate 4 (Card 3 egress claims):** "SOCKS5 with UDP, WireGuard, or OpenVPN" present on `/index`, matching CLAUDE.md proxy-spec convention (V-006 + customer-onboarding mandate).
+
+2. **Hardware procurement detail moved to `/self-hosted` only.** The shared `SELF_HOSTED_SKUS` data structure exposes `hardwareRequired` for both `/pricing` and `/self-hosted`; `/pricing` template now ignores the field and points at `/self-hosted` for the detail. Single source of truth in data; render-level filter per page surface — same pattern as `/trust/sub-processors` mirroring DPA Annex 3.
+
+3. **CTA text "Get started — $2.99" beats "Get started — $2.99 trial pack" for first-impression clarity.** A casual visitor reading the hero CTA scans "$2.99" instantly; "trial pack" requires a beat to interpret. The trial-pack semantics (16 hours, 14-day window, once per account) live in the subline immediately below the CTA pair, so customers parse the price first then the terms. Founder direction explicit on this.
+
+4. **Cumulative-rig section is data-driven from `capabilities.ts`** — when the cumulative rig number moves, only the constant updates; the rendered section auto-reflows. Tier 1 maintenance per the V-068.1 cadence-lock in CLAUDE.md.
+
+5. **Card 3 egress positioning is genuinely distinctive.** Most cloud browser services route through their own egress IPs; Driftstack mandates customer-controlled egress via SOCKS5 with UDP / WireGuard / OpenVPN. The "We never see your destination URLs" claim is concrete and verifiable (the destination URL never reaches the control plane — it goes from the WebKit driver through the customer's proxy directly). This is a positioning move competitors can't easily match without re-architecting.
+
+6. **Existing infrastructure references in /pricing's mini-FAQ "Why browser-hours and not sessions?" answer** mentioned "of fleet time consumed" — kept because "fleet time" is generic (could be any compute fleet) and the founder's grep gate didn't flag the word "fleet" alone (only "Mac fleet" + "mac fleet"). Conservative interpretation of the gate.
+
+### Verify chain
+
+- `astro check`: 14 files, 0 errors / 0 warnings / 0 hints.
+- `astro build`: 6 static pages emitted in ~440ms.
+- `npm run lint`: clean.
+- `npm run format:check`: clean repo-wide.
+- `npm test`: **360/360** unchanged.
+- 4 founder verification gates: all pass.
+
+### Decisions made
+
+No new D-entries. V-069 is Tier 3 marketing copy — founder-approved drafts, no architecture decisions.
+
+### Status
+
+Marketing-site copy is content-complete: positioning sharpened across hero, why-Driftstack, pricing positioning band, self-hosted teaser, FAQ. Cumulative-rig section anchors the page with the 99.9%+ headline number + 1252/1253 receipt. Customer-controlled egress positioning is the strongest distinctive claim. All four founder gates green.
+
+### Next
+
+V-070 (visual revision pass) per founder direction. Surface design choices as descriptions / dev-server screenshots before commit. Asymmetric layouts on landing + self-hosted, real code samples in Berkeley Mono with `archetype: 'iphone-16-pro-ios-26-4-1'`, terminal-output blocks, ASCII diagram on `/self-hosted`, drop generic icons or pick one distinctive recurring motif, typography refinement (mixed weights, 96px hero number, varied letter-spacing).

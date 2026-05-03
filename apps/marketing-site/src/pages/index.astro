@@ -1,10 +1,11 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { CUMULATIVE_RIG } from '../data/capabilities.ts';
 ---
 
 <BaseLayout
   title="Driftstack"
-  description="iPhone Safari sessions, on demand. Premium fidelity for the device that matters. $2.99 trial pack — 16 hours, no subscription required."
+  description="iPhone Safari fingerprints. Without the runtime tells. We modify WebKit's C++ source instead of patching JavaScript. $2.99 trial pack — 16 hours, used once per account."
 >
   <!-- Hero -->
   <section class="bg-gradient-to-b from-white to-slate-50">
@@ -12,25 +13,29 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <div class="grid gap-12 md:grid-cols-2 md:items-center">
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
-            iPhone Safari sessions, on demand
+            iPhone Safari fingerprints. Without the runtime tells.
           </p>
           <h1 class="mt-4 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
-            Premium fidelity for the device that matters.
+            Most stealth browsers modify JavaScript at runtime.
           </h1>
-          <p class="mt-6 max-w-prose text-lg text-slate-600">
-            Driftstack runs real iPhone Safari, on Apple silicon, billed by the
-            browser-hour. No emulation. No fingerprint compromises. The same
-            fidelity the device delivers, callable from your code.
+          <p class="mt-3 max-w-prose text-lg text-slate-700">
+            Detection vendors built their industry on catching exactly that.
+          </p>
+          <p class="mt-6 max-w-prose text-base text-slate-600">
+            We modify WebKit's C++ source instead. There's nothing at the
+            JavaScript layer for detection to find — because nothing was
+            changed there. The fingerprint your code reads is the
+            fingerprint a real iPhone reads. Same engine, same primitives,
+            same source of truth.
           </p>
           <div class="mt-8 flex flex-wrap items-center gap-4">
-            <a href="/pricing#trial-pack" class="btn-primary">Get started — $2.99 trial pack</a>
+            <a href="/pricing#trial-pack" class="btn-primary">Get started — $2.99</a>
             <a href="https://github.com/driftstackdev/driftstack-gui/releases" class="btn-secondary"
               >Download GUI client</a
             >
           </div>
           <p class="mt-3 text-xs text-slate-500">
-            16 hours of iPhone Safari sessions · no subscription required · use within 14 days · one-time
-            purchase, used once per account.
+            16 hours · 14-day window · used once per account.
           </p>
         </div>
 
@@ -61,40 +66,69 @@ await session.destroy();`}</code></pre>
     </div>
   </section>
 
+  <!-- Cumulative rig -->
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Cumulative rig</p>
+      <p class="mt-4 text-7xl font-semibold tracking-tight text-slate-900 md:text-8xl">
+        {CUMULATIVE_RIG.matchRatePercentage}%+
+      </p>
+      <p class="mt-6 max-w-prose text-lg text-slate-700">
+        {CUMULATIVE_RIG.surfacesMatched.toLocaleString('en-US')} of {CUMULATIVE_RIG.surfacesMeasured.toLocaleString('en-US')}
+        measured surfaces validated against real iPhone Safari iOS 26.4.1.
+      </p>
+      <p class="mt-3 max-w-prose text-sm text-slate-500">
+        Numbers update as new probes land. "Validated" means the surface returns the exact
+        reference value, not "approximately matches." Last update: {CUMULATIVE_RIG.lastUpdated}.
+      </p>
+    </div>
+  </section>
+
   <!-- Why Driftstack -->
   <section class="border-t border-slate-200 bg-white">
     <div class="mx-auto max-w-6xl px-6 py-20">
       <div class="grid gap-10 md:grid-cols-3">
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Real device</p>
-          <h2 class="mt-3 text-xl font-semibold text-slate-900">No emulation tax</h2>
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Stack</p>
+          <h2 class="mt-3 text-xl font-semibold text-slate-900">
+            Real WebKit. Real Core Text. Real iOS rendering.
+          </h2>
           <p class="mt-3 max-w-prose text-sm text-slate-600">
-            Driftstack runs WebKit on real Apple silicon, not a chromium fork
-            with a user-agent swap. The fingerprint, layout quirks, and
-            JavaScript engine all match the device because they are the
-            device.
+            Not a Chromium fork with a user-agent swap. Not Playwright with
+            stealth plugins layered on. Driftstack runs Apple's WebKit C++
+            source — the same engine your target's iPhone visitors run. The
+            fingerprint primitives your code reads are computed by the same
+            code an iPhone runs.
           </p>
         </div>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
-            Browser-hour metering
-          </p>
-          <h2 class="mt-3 text-xl font-semibold text-slate-900">Pay for what runs</h2>
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Metering</p>
+          <h2 class="mt-3 text-xl font-semibold text-slate-900">
+            Pay for engagement, not idle time.
+          </h2>
           <p class="mt-3 max-w-prose text-sm text-slate-600">
-            Sessions meter by the browser-hour, not by call count. Read 50 elements,
-            navigate 20 pages, take 100 screenshots — same hour, same line item.
-            Concurrency caps are hard limits at session creation; nothing else
-            counts against you.
+            Browser-hours are the meter. A 5-minute session costs less than
+            a 60-minute one. Read 50 elements, navigate 20 pages, capture
+            100 screenshots — same hour, same line item. Concurrency caps
+            stay tier-defining at session creation; everything else flows
+            through the per-hour meter without upcharge.
           </p>
         </div>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">EU stack</p>
-          <h2 class="mt-3 text-xl font-semibold text-slate-900">GDPR by default</h2>
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Compliance</p>
+          <h2 class="mt-3 text-xl font-semibold text-slate-900">
+            EU-resident, customer-controlled egress.
+          </h2>
           <p class="mt-3 max-w-prose text-sm text-slate-600">
-            Customer data is hosted in the EU — compute, database, and object
-            storage all EU-resident. Mac fleet sessions may run in supported
+            Customer data hosted in the EU — compute, database, object
+            storage. Session traffic egresses through proxies you control,
+            not ours: SOCKS5 with UDP, WireGuard, or OpenVPN. We never see
+            your destination URLs. Session execution may run in supported
             regions outside the EU under SCCs and the EU-US Data Privacy
-            Framework. Full sub-processor list at <a href="/trust/sub-processors" class="text-oxblood-700 underline">/trust/sub-processors</a>.
+            Framework. Full sub-processor list at
+            <a href="/trust/sub-processors" class="text-oxblood-700 underline"
+              >/trust/sub-processors</a
+            >.
           </p>
         </div>
       </div>
@@ -128,29 +162,37 @@ await session.destroy();`}</code></pre>
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Self-hosted</p>
           <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-            Run Driftstack on your own Apple silicon.
+            Run Driftstack on your own infrastructure.
           </h2>
           <p class="mt-3 max-w-prose text-slate-600">
-            For teams with privacy requirements, high-volume workloads, or
-            full data-sovereignty needs. Bring your own Mac Mini M4 (Solo),
-            Mac Studio M4 Max (Pro), or Mac Studio Ultra / Mac Pro / multi-node
-            cluster (Enterprise). GA within 6 months of API public launch.
+            For privacy, sovereignty, or sustained high-volume use. We help
+            you pick the right hardware, deploy the control plane, and
+            operate the fleet. Three SKUs, annual contracts, hands-on
+            onboarding.
           </p>
+          <a href="/self-hosted" class="btn-secondary mt-6 inline-flex">See self-hosted →</a>
         </div>
         <div class="rounded-lg border border-slate-200 bg-slate-50 p-6">
           <h3 class="font-medium text-slate-900">When self-hosted makes sense</h3>
           <ul class="mt-4 space-y-3 text-sm text-slate-600">
             <li class="flex gap-3">
               <span class="text-oxblood-700">→</span>
-              <span>Privacy-required workloads where session content must not leave your perimeter.</span>
+              <span
+                >Privacy-required workloads where session content must not leave your perimeter.</span
+              >
             </li>
             <li class="flex gap-3">
               <span class="text-oxblood-700">→</span>
-              <span>Sustained &gt;5,000 browser-hours per month where unit economics favour owned hardware.</span>
+              <span
+                >Sustained &gt;5,000 browser-hours per month where unit economics favour owned
+                hardware.</span
+              >
             </li>
             <li class="flex gap-3">
               <span class="text-oxblood-700">→</span>
-              <span>Full data sovereignty over recordings, screenshots, and request artefacts.</span>
+              <span
+                >Full data sovereignty over recordings, screenshots, and request artefacts.</span
+              >
             </li>
           </ul>
           <a href="/self-hosted" class="btn-secondary mt-6">Contact sales</a>

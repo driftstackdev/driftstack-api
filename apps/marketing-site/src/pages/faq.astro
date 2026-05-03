@@ -17,7 +17,11 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'Why browser-hours and not session count?',
-        a: 'A session is what your code starts; a browser-hour is what actually consumes Apple silicon. Metering by the hour means you pay for engagement, not for spinning idle sessions. A 5-minute session costs less than an hour-long one. Concurrency caps remain tier-defining hard limits at session creation; everything else flows through the per-hour meter.',
+        a: 'Per-call billing penalises good engineering. If you check 50 elements per page, you\'d pay 50× the customer who checks 1 — for the same hour of fleet time consumed. Browser-hour metering aligns the bill with what actually costs us money: minutes of WebKit runtime. A 5-minute session costs less than a 60-minute one regardless of how dense your interaction is. Concurrency caps stay as tier-defining hard limits at session creation; nothing else surcharges.',
+      },
+      {
+        q: 'How does this compare to Chromium-cloud stealth services?',
+        a: 'Chromium-cloud services run a Chromium fork with stealth plugins — user-agent strings, JavaScript Proxy traps over canvas / WebGL / navigator, monkeypatched Object.getOwnPropertyDescriptor calls. The fingerprint matches an iPhone if a detector only checks the spoofed surfaces; it doesn\'t match if the detector inspects what\'s underneath (timing, prototype chain, error stacks, GPU primitives). Driftstack runs WebKit\'s actual C++ source — there\'s no underneath. The fingerprint your code reads is the fingerprint a real iPhone reads. Same primitives, all the way down.',
       },
       {
         q: 'What\'s the difference between concurrent sessions and total sessions per month?',
@@ -118,7 +122,7 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'Where is my data stored?',
-        a: 'Customer data is hosted in the EU. Compute, database, and object storage are all EU-resident. Mac fleet sessions for browser execution may run in supported regions outside the EU under standard contractual clauses (SCCs) and the EU-US Data Privacy Framework. Our complete sub-processor list, with locations and contractual basis, is published at <a href="/trust/sub-processors" class="text-oxblood-700 underline">/trust/sub-processors</a> and in the <a href="/legal/dpa" class="text-oxblood-700 underline">Data Processing Agreement</a>.',
+        a: 'Customer data is hosted in the EU. Compute, database, and object storage are all EU-resident. Session execution may run in supported regions outside the EU under standard contractual clauses (SCCs) and the EU-US Data Privacy Framework. Our complete sub-processor list, with locations and contractual basis, is published at <a href="/trust/sub-processors" class="text-oxblood-700 underline">/trust/sub-processors</a> and in the <a href="/legal/dpa" class="text-oxblood-700 underline">Data Processing Agreement</a>.',
       },
       {
         q: 'Are you GDPR-compliant?',

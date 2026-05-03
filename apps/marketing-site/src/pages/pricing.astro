@@ -47,7 +47,7 @@ function fmtUsd(value: number | null | undefined): string {
             window from purchase, one-time purchase used once per account.
           </p>
           <ul class="mt-4 space-y-1 text-sm text-slate-600">
-            <li class="flex gap-2"><span class="text-oxblood-700">•</span> Real iPhone Safari, real Apple silicon. No emulation.</li>
+            <li class="flex gap-2"><span class="text-oxblood-700">•</span> Real iOS WebKit. No emulation, no runtime patches.</li>
             <li class="flex gap-2"><span class="text-oxblood-700">•</span> Same SDK + API surface as paid tiers — switch tiers without code changes.</li>
             <li class="flex gap-2"><span class="text-oxblood-700">•</span> Unused credit expires after {TRIAL_PACK.windowDays} days; subscribe to a tier to continue.</li>
           </ul>
@@ -57,6 +57,18 @@ function fmtUsd(value: number | null | undefined): string {
           <a href="https://docs.driftstack.dev" class="btn-secondary w-full md:w-auto">Read the docs</a>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- Positioning band -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-4xl px-6 py-16">
+      <p class="text-2xl font-medium tracking-tight text-slate-900 md:text-3xl">
+        Per-browser-hour pricing.
+        <span class="text-slate-500"
+          >Not per call, not per element, not per minute.</span
+        > You pay for engagement, not for idle sessions.
+      </p>
     </div>
   </section>
 
@@ -306,12 +318,13 @@ function fmtUsd(value: number | null | undefined): string {
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Self-hosted</p>
           <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-            Run on your own Apple silicon.
+            Run on your own infrastructure.
           </h2>
           <p class="mt-3 max-w-prose text-slate-600">
             For privacy-required workloads, sustained &gt;5,000 hr/mo volume,
             or full data-sovereignty needs. Contact Sales from day 0; GA
-            within 6 months of API public launch.
+            within 6 months of API public launch. Hardware procurement
+            detail per SKU below.
           </p>
         </div>
         <a href="/self-hosted" class="btn-secondary">See self-hosted details</a>
@@ -338,11 +351,16 @@ function fmtUsd(value: number | null | undefined): string {
               )}
             </div>
             <ul class="mt-4 space-y-2 text-sm text-slate-600">
-              <li><strong class="text-slate-900">{sku.hardwareRequired}</strong></li>
               <li>{sku.concurrent}</li>
               <li>{sku.archetypeAccess}</li>
               <li>{sku.minimumTerm}</li>
             </ul>
+            <p class="mt-3 text-xs text-slate-500">
+              Hardware procurement detail at <a
+                href="/self-hosted"
+                class="text-oxblood-700 underline">/self-hosted</a
+              >.
+            </p>
             <a href={sku.ctaHref} class="btn-secondary mt-6 w-full">Contact sales</a>
           </div>
         ))}
@@ -358,11 +376,13 @@ function fmtUsd(value: number | null | undefined): string {
         <div>
           <h3 class="font-medium text-slate-900">Why browser-hours and not sessions?</h3>
           <p class="mt-2 text-sm text-slate-600">
-            A session is what your code starts; a browser-hour is what
-            actually consumes Apple silicon. Metering by the hour means you
-            pay for engagement, not for spinning idle sessions. A
-            5-minute session costs less than an hour-long one. Concurrency
-            caps stay tier-defining at session creation.
+            Per-call billing penalises good engineering. If you check 50
+            elements per page, you'd pay 50× the customer who checks 1 — for
+            the same hour of WebKit runtime consumed. Browser-hour metering
+            aligns the bill with what actually costs us money: minutes of
+            WebKit runtime. A 5-minute session costs less than a 60-minute
+            one regardless of interaction density. Concurrency caps stay
+            tier-defining at session creation.
           </p>
         </div>
         <div>
@@ -385,7 +405,7 @@ function fmtUsd(value: number | null | undefined): string {
           <h3 class="font-medium text-slate-900">Is the EU stack just marketing?</h3>
           <p class="mt-2 text-sm text-slate-600">
             No. Customer data is hosted in the EU — compute, database, and
-            object storage all EU-resident. Mac fleet sessions may run in
+            object storage all EU-resident. Session execution may run in
             supported regions outside the EU under SCCs and the EU-US Data
             Privacy Framework. Full sub-processor list with locations and
             contractual basis at <a href="/trust/sub-processors" class="text-oxblood-700 underline">/trust/sub-processors</a>.
