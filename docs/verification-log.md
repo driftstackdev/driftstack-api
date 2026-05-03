@@ -6048,7 +6048,7 @@ Coverage:
 4. Force-destroy malformed id → 400.
 5. Force-destroy without admin scope → 403.
 6. Force-destroy session owned by a different account → admin can act cross-account; audit row records the correct target_account_id.
-7-10. Same shape for force-revoke API key (active, idempotent, 404, 403).
+   7-10. Same shape for force-revoke API key (active, idempotent, 404, 403).
 
 ### Decisions made (no new D-entries; follows D-025 admin audit pattern)
 
@@ -6079,3 +6079,51 @@ Coverage:
 ### Next
 
 Status update batch via clipboard, then continuing per never-stop rule into Phase 5 admin-panel UI scaffolding (apps/admin-panel/) or Phase 6 GUI client foundation (Tauri scaffolding).
+
+---
+
+## V-101 — SDK resource accessors for profiles + billing + auth (Routine — SDK expansion)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Add resource accessors for V-079 (auth flow), V-081 (profiles), V-082 (billing) to the TypeScript SDK so customers don't have to hand-roll HTTP calls for those surfaces.
+
+### What changed
+
+- `packages/sdk-typescript/src/resources/profiles.ts` — `ProfilesResource` (create / list / get / update / delete).
+- `packages/sdk-typescript/src/resources/billing.ts` — `BillingResource` (getState / createCheckoutSession / startTrialPack / createPortalSession).
+- `packages/sdk-typescript/src/resources/auth.ts` — `AuthResource` (all 9 V-079 auth-flow methods).
+- `client.ts` — `Driftstack` extended with `profiles`, `billing`, `auth` accessors.
+- `index.ts` — re-exports `ProfilesListPage` + auth-flow / profile / billing types from `@driftstack/api-types`.
+
+### How verified
+
+- `npm run typecheck`: clean across all 6 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 478/478 (was 475; +3 new SDK integration tests for profiles round-trip + billing.getState + billing.createCheckoutSession).
+
+### Decisions made (no new D-entries)
+
+- **AuthResource is included** despite API-key Bearer auth not applying to `/v1/auth/*` endpoints. The SDK's HTTP layer always adds the Authorization header; the server ignores it on public auth-flow routes. The resource exists for ergonomics + type safety.
+- **Trial-pack body defaults to `{}`** so `sdk.billing.startTrialPack()` works without arguments.
+
+### Files added
+
+- `packages/sdk-typescript/src/resources/profiles.ts`
+- `packages/sdk-typescript/src/resources/billing.ts`
+- `packages/sdk-typescript/src/resources/auth.ts`
+
+### Files modified
+
+- `packages/sdk-typescript/src/client.ts`
+- `packages/sdk-typescript/src/index.ts`
+- `packages/sdk-typescript/tests/integration/sdk-against-server.test.ts`
+
+### Next
+
+Continuing per never-stop rule.

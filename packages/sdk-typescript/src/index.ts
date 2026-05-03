@@ -6,6 +6,7 @@ export type { HttpClientConfig, RequestOptions } from './http.js';
 export type { SessionsListPage } from './resources/sessions.js';
 export type { ApiKeyList } from './resources/api-keys.js';
 export type { WebhookEndpointList, WebhookDeliveryListPage } from './resources/webhooks.js';
+export type { ProfilesListPage } from './resources/profiles.js';
 
 // Errors
 export {
@@ -78,4 +79,40 @@ export type {
   WebhookEndpoint,
   WebhookEndpointId,
   WebhookEventType,
+  // V-079 auth flow
+  LoginRequest,
+  LoginResponse,
+  LogoutRequest,
+  LogoutResponse,
+  MagicLinkRequest,
+  MagicLinkRequestResponse,
+  MagicLinkConsumeRequest,
+  MagicLinkConsumeResponse,
+  PasswordResetRequest,
+  PasswordResetRequestResponse,
+  PasswordResetConfirmRequest,
+  PasswordResetConfirmResponse,
+  RefreshSessionRequest,
+  RefreshSessionResponse,
+  SignupRequest,
+  SignupResponse,
+  VerifyEmailRequest,
+  VerifyEmailResponse,
+  WebSession,
+  // V-081 profiles
+  Profile,
+  ProfileId,
+  CreateProfileRequest,
+  UpdateProfileRequest,
+  // V-082 billing
+  BillingPeriod,
+  CreateCheckoutSessionRequest,
+  CreateCheckoutSessionResponse,
+  CreatePortalSessionResponse,
+  GetBillingStateResponse,
+  StartTrialPackRequest,
+  StartTrialPackResponse,
+  Subscription,
+  SubscriptionStatus,
+  TrialPackState,
 } from '@driftstack/api-types';

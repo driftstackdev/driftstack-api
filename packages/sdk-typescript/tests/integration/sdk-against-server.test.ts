@@ -249,4 +249,59 @@ describe('@driftstack/sdk against real server', () => {
       }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
+
+  // ── V-101: profiles + billing resources ───────────────────────────────
+
+  it('profiles.create + list + get + delete round-trips', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+
+    const created = await sdk.profiles.create({ name: 'sdk-test-profile' });
+    expect(created.id).toMatch(/^prof_/);
+    expect(created.name).toBe('sdk-test-profile');
+
+    const list = await sdk.profiles.list();
+    expect(list.data.length).toBe(1);
+
+    const got = await sdk.profiles.get(created.id);
+    expect(got.id).toBe(created.id);
+
+    await expect(sdk.profiles.delete(created.id)).resolves.toBeUndefined();
+  });
+
+  it('billing.getState returns null subscription on a fresh account', async () => {
+    fx = await buildTestApp();
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+
+    const state = await sdk.billing.getState();
+    expect(state.subscription).toBeNull();
+    expect(state.trial_pack.active).toBe(false);
+  });
+
+  it('billing.createCheckoutSession returns a Stripe URL', async () => {
+    fx = await buildTestApp();
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+
+    const result = await sdk.billing.createCheckoutSession({
+      tier: 'api_builder',
+      billing_period: 'monthly',
+    });
+    expect(result.checkout_url).toMatch(/^https:\/\//);
+    expect(result.checkout_session_id).toMatch(/^cs_test_/);
+  });
 });

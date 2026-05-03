@@ -7,6 +7,9 @@ import { SessionsResource } from './resources/sessions.js';
 import { ApiKeysResource } from './resources/api-keys.js';
 import { UsageResource } from './resources/usage.js';
 import { WebhooksResource } from './resources/webhooks.js';
+import { ProfilesResource } from './resources/profiles.js';
+import { BillingResource } from './resources/billing.js';
+import { AuthResource } from './resources/auth.js';
 import type { RetryConfig } from './retry.js';
 
 export interface DriftstackOptions {
@@ -29,6 +32,9 @@ export class Driftstack {
   readonly apiKeys: ApiKeysResource;
   readonly usage: UsageResource;
   readonly webhooks: WebhooksResource;
+  readonly profiles: ProfilesResource;
+  readonly billing: BillingResource;
+  readonly auth: AuthResource;
 
   private readonly http: HttpClient;
 
@@ -50,5 +56,8 @@ export class Driftstack {
     this.apiKeys = new ApiKeysResource(this.http);
     this.usage = new UsageResource(this.http);
     this.webhooks = new WebhooksResource(this.http);
+    this.profiles = new ProfilesResource(this.http);
+    this.billing = new BillingResource(this.http);
+    this.auth = new AuthResource(this.http);
   }
 }
