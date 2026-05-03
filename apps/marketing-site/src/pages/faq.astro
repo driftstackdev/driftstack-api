@@ -1,0 +1,194 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+interface FaqEntry {
+  q: string;
+  a: string; // markdown-ish (anchors only) — Astro renders raw
+}
+
+interface FaqGroup {
+  title: string;
+  entries: FaqEntry[];
+}
+
+const groups: FaqGroup[] = [
+  {
+    title: 'Pricing model',
+    entries: [
+      {
+        q: 'Why browser-hours and not session count?',
+        a: 'A session is what your code starts; a browser-hour is what actually consumes Apple silicon. Metering by the hour means you pay for engagement, not for spinning idle sessions. A 5-minute session costs less than an hour-long one. Concurrency caps remain tier-defining hard limits at session creation; everything else flows through the per-hour meter.',
+      },
+      {
+        q: 'What\'s the difference between concurrent sessions and total sessions per month?',
+        a: 'Concurrency cap = how many sessions you can have running at the same instant (Starter 2, Solo 4, Builder 8, Scale 24, Enterprise custom). Browser-hour cap = your monthly meter, measured across the calendar month UTC. You can run the same number of sessions in a month under either a 2-concurrent or 24-concurrent tier; the concurrency cap controls peak parallelism, not monthly throughput.',
+      },
+      {
+        q: 'What happens when I exceed my monthly browser-hours?',
+        a: 'Sessions don\'t block — overage charges apply automatically per Stripe metered line item at your tier\'s overage rate ($0.18/hr Starter, $0.16/hr Solo, $0.14/hr Builder, $0.12/hr Scale; Enterprise custom). The next monthly invoice itemises the overage. If you want a hard ceiling, set a usage alert in the Stripe Customer Portal.',
+      },
+      {
+        q: 'Are there setup fees on any tier?',
+        a: 'No. No setup fees, no implementation fees, no minimum-monthly-volume commitments on any subscription tier. The trial pack is one-time $2.99; subscriptions bill monthly or annually with the listed price + applicable BTW.',
+      },
+      {
+        q: 'How does annual billing work?',
+        a: 'Annual contracts are billed up front for 12 months at 20% off the monthly equivalent. Switching from monthly to annual or vice versa is prorated by Stripe at the changeover date. Annual contracts auto-renew unless cancelled at least 30 days before renewal.',
+      },
+    ],
+  },
+  {
+    title: 'Trial pack',
+    entries: [
+      {
+        q: 'Why $2.99 and not free?',
+        a: 'Two reasons. First, the $2.99 charge funds the fleet time the trial consumes — each session decrements pre-paid credit at the Starter overage rate. Second, the price is itself the anti-abuse mechanism: low-friction for technical buyers, effective filter against sock-puppet signups. A zero-cost entry would need signup-fingerprinting, IP rate limits, OAuth-quality gates, and CAPTCHA layers; the $2.99 price tag does the same job in one line.',
+      },
+      {
+        q: 'How many hours do I actually get from the trial pack?',
+        a: 'About 16 hours of session time. The trial pack credits 299¢ to your account; sessions decrement at $0.18/hr (Starter rate). 299 ÷ 18 ≈ 16.6 hours of usage. Unused credit expires 14 days after purchase.',
+      },
+      {
+        q: 'Can I extend the trial pack?',
+        a: 'No. The trial pack is once per account, no reset on downgrade or churn. To continue beyond it, subscribe to a paid tier. Stripe Checkout handles the conversion — your existing Stripe customer record carries over.',
+      },
+      {
+        q: 'What happens when the trial pack runs out?',
+        a: 'Either the credit hits zero or 14 days pass. New session attempts return 402 Payment Required pointing at Stripe Checkout for a paid tier. You can subscribe at any tier; existing API keys keep working once the subscription activates.',
+      },
+      {
+        q: 'Can I get a refund on the trial pack?',
+        a: 'Yes — within the 14-day window if no sessions have been started. Once a session runs and decrements credit, the trial pack is consumed. Email <a href="mailto:support@driftstack.dev" class="text-oxblood-700 underline">support@driftstack.dev</a> for refund requests.',
+      },
+    ],
+  },
+  {
+    title: 'Tiers + upgrades',
+    entries: [
+      {
+        q: 'Can I upgrade or downgrade mid-month?',
+        a: 'Yes. Stripe prorates the change at the changeover date. New limits apply immediately on the next session-creation gate; the new browser-hour cap kicks in for the remainder of the calendar month.',
+      },
+      {
+        q: 'What if I cancel?',
+        a: 'Service continues through the end of your current billing period. After that, API keys 401 with a message pointing at billing-renewal. No data is deleted at cancellation; your account stays in a "suspended" state with recordings and audit logs intact for 90 days, then archived per the DPA retention schedule.',
+      },
+      {
+        q: 'How does Enterprise pricing work?',
+        a: 'Enterprise is custom — from $2,500/mo on annual contracts only. The "from" reflects baseline; actual pricing depends on monthly browser-hour commitment, concurrency requirements, archetype customisation, SLA, and any compliance requirements. Email <a href="mailto:sales@driftstack.dev" class="text-oxblood-700 underline">sales@driftstack.dev</a> with workload shape and your team\'s context.',
+      },
+    ],
+  },
+  {
+    title: 'Bundled LLM + BYOK',
+    entries: [
+      {
+        q: 'What is the bundled LLM?',
+        a: 'Driftstack\'s optional AI agent feature drives sessions with a large language model — useful for natural-language test specifications, automated screenshot diffing, or LLM-driven flow exploration. On Builder / Scale / Enterprise, you can either bring your own Anthropic API key (BYOK, billed by Anthropic directly) or use the bundled rate (billed by Driftstack at a markup over Anthropic\'s published price).',
+      },
+      {
+        q: 'What\'s the BYOK markup?',
+        a: 'Per-token pricing for the bundled rate is announced at launch. BYOK incurs no Driftstack markup — your Anthropic key, your bill, your control. Toggle BYOK ↔ bundled per-account in the dashboard.',
+      },
+      {
+        q: 'Is BYOK secret-handling secure?',
+        a: 'Yes. Your Anthropic API key is encrypted at rest with envelope encryption, decrypted in-memory only at session execution time, and never logged. The DPA covers the handling shape. Self-hosted customers can use their own KMS for the envelope key.',
+      },
+    ],
+  },
+  {
+    title: 'EU stack + compliance',
+    entries: [
+      {
+        q: 'Where is my data stored?',
+        a: 'Compute on Hetzner Cloud, Falkenstein region (Germany). Postgres on Neon EU (Frankfurt). Redis on Upstash EU (Frankfurt). Object storage on Cloudflare R2 EU jurisdiction. Mac mini fleet for session execution at MacStadium (Las Vegas, US — covered by 2021 SCCs + EU-US Data Privacy Framework). Every sub-processor listed in the DPA, no footnotes.',
+      },
+      {
+        q: 'Are you GDPR-compliant?',
+        a: 'Yes. Privacy Policy + DPA + Acceptable Use Policy are linked in the footer. Sub-processor list is documented in the DPA Annex 3. Customer-controlled retention defaults to 30 days, settable 1–365 or disable. Right-to-erasure requests honoured within 30 days. The legal documents are AI-generated baseline drafts under counsel review; first paying customer onboards only after counsel review completes.',
+      },
+      {
+        q: 'Do you have a SOC 2 / ISO 27001 audit?',
+        a: 'Not at v1. SOC 2 / ISO 27001 are roadmap items for post-first-paying-customer; the relevant compliance posture for v1 is GDPR + the standard EU SCCs + DPF transfers. Self-hosted is the immediate path for customers requiring host-level certification beyond what the cloud SKU provides.',
+      },
+      {
+        q: 'Where do I read the Terms / Privacy / DPA / AUP?',
+        a: 'Footer of every page links to the four documents at /legal/*. Customer acceptance is recorded at API key issuance time with a versioned content hash; document version bumps trigger re-acceptance per the DPA Art 28 sub-processor amendment mechanism.',
+      },
+    ],
+  },
+  {
+    title: 'Support + reliability',
+    entries: [
+      {
+        q: 'How do I contact support?',
+        a: 'Email <a href="mailto:support@driftstack.dev" class="text-oxblood-700 underline">support@driftstack.dev</a>. Response SLA depends on tier: 48h Starter, 24h Solo, 12h Builder + Slack Connect, 4h Scale + Slack Connect, 1h Enterprise + dedicated CSM.',
+      },
+      {
+        q: 'What if a session fails?',
+        a: 'Session lifecycle is observable end-to-end via the SDK and the dashboard. Failed sessions return structured error responses (RFC 7807 problem-types); recordings + state captures up to the failure point are still available. We do not bill for sessions that fail in the orchestration layer (driver crashes, fleet unavailability, etc.) — those credit back to your monthly browser-hour cap automatically.',
+      },
+      {
+        q: 'What\'s the uptime SLA?',
+        a: 'Uptime SLA scales with tier: 99% Starter / Solo, 99.5% Builder / Scale, 99.9% Enterprise. Status page coming alongside first paying customer onboarding. SLA credits applied automatically against the next invoice.',
+      },
+    ],
+  },
+];
+---
+
+<BaseLayout
+  title="FAQ"
+  description="Common questions about Driftstack pricing, the $2.99 trial pack, tier upgrades, the bundled LLM, EU data residency, and support."
+>
+  <section class="bg-gradient-to-b from-white to-slate-50">
+    <div class="mx-auto max-w-4xl px-6 py-20">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">FAQ</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+        Frequently asked.
+      </h1>
+      <p class="mt-6 max-w-prose text-lg text-slate-600">
+        If your question isn't answered here, email
+        <a href="mailto:support@driftstack.dev" class="text-oxblood-700 underline"
+          >support@driftstack.dev</a
+        > or
+        <a href="mailto:sales@driftstack.dev" class="text-oxblood-700 underline"
+          >sales@driftstack.dev</a
+        > — we answer everything in writing.
+      </p>
+    </div>
+  </section>
+
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-4xl px-6 py-16">
+      {
+        groups.map((group) => (
+          <div class="mb-16">
+            <h2 class="text-2xl font-semibold text-slate-900">{group.title}</h2>
+            <div class="mt-6 space-y-6">
+              {group.entries.map((entry) => (
+                <details
+                  class="group rounded-lg border border-slate-200 bg-white p-5 open:border-oxblood-700 open:shadow-sm"
+                >
+                  <summary class="flex cursor-pointer items-center justify-between gap-4 text-left">
+                    <span class="font-medium text-slate-900">{entry.q}</span>
+                    <span
+                      class="font-mono text-xs text-oxblood-700 group-open:rotate-180 transition-transform"
+                      aria-hidden="true"
+                    >
+                      ▼
+                    </span>
+                  </summary>
+                  <div
+                    class="mt-3 text-sm leading-relaxed text-slate-600"
+                    set:html={entry.a}
+                  />
+                </details>
+              ))}
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  </section>
+</BaseLayout>

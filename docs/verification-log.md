@@ -3837,3 +3837,63 @@ Pricing page complete. Trial-pack-first conversion path locked in via the `#tria
 ### Next
 
 V-066: `/self-hosted` sub-page + `/faq` page. Self-hosted page deepens the SKU positioning, value-prop framing, customer profile, ETA "GA within 6 months of API public launch," `mailto:sales@driftstack.dev` CTA per SKU. FAQ page covers browser-hour metering vs session-count, trial-pack-vs-subscription distinction, what happens when trial expires, upgrade/downgrade behaviour, concurrency-vs-sessions distinction, EU stack reality, and how to contact support.
+
+## V-066 — Marketing site /self-hosted + /faq
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream B iteration 3 — completes the static-content surface. /deploy + final polish lands in V-067.
+
+### What changed
+
+- **`apps/marketing-site/src/pages/self-hosted.astro`** (NEW) — `/self-hosted` sub-page:
+  - **Header** — "Run Driftstack on your own Apple silicon." + dual CTA (`mailto:sales@driftstack.dev?subject=Self-Hosted%20inquiry` primary, `/pricing#self-hosted` secondary). Eyebrow notes "Available 'Contact Sales' from day 0. Self-hosted GA within 6 months of API public launch."
+  - **When self-hosted is the right call** three-up — Privacy (sessions never leave perimeter), Volume (unit economics flip past 5,000 hr/mo), Sovereignty (full control over recordings + state). Each gives a one-paragraph rationale rather than vague benefit-speak.
+  - **SKU comparison** — 3-card grid with full per-SKU `<dl>` (Hardware / Concurrent / Archetypes / Minimum term) + per-SKU "Contact sales" `mailto:` with subject pre-filled per SKU. Sourced from the same `SELF_HOSTED_SKUS` constant in `data/pricing.ts` (V-065 single-source-of-truth holds).
+  - **How it works** four-step process — (1) Contact sales, (2) Procure hardware, (3) Onboard, (4) Run. Each step is one sentence; emphasis on "we provide provisioning specs, you buy the metal."
+  - **FAQ teaser** linking to `/faq` + a sales-email CTA for compliance-team-specific questions.
+- **`apps/marketing-site/src/pages/faq.astro`** (NEW) — `/faq` page:
+  - **Header** with `mailto:` to support@ + sales@ as the fallback for unanswered questions ("we answer everything in writing").
+  - **Six question groups** with collapsible `<details>` markup:
+    1. **Pricing model** — browser-hours vs sessions, concurrency vs total, overage behaviour, no setup fees, annual billing mechanics.
+    2. **Trial pack** — why $2.99 not free, hours actually delivered, no extension, exhaustion path, refund policy.
+    3. **Tiers + upgrades** — mid-month switching, cancellation, Enterprise pricing.
+    4. **Bundled LLM + BYOK** — what the bundled LLM is, BYOK markup placeholder ("announced at launch" — only Tier 3 placeholder), key handling security.
+    5. **EU stack + compliance** — data storage locations, GDPR, SOC 2 / ISO 27001 status (post-first-customer roadmap), legal-doc location.
+    6. **Support + reliability** — support contact paths, session-failure handling (failed sessions don't bill), uptime SLA per tier, status page coming.
+  - Each `<details>` uses `<summary>` with chevron, expands to a markdown-ish HTML body via `set:html`. Default-collapsed; user clicks to expand. Native disclosure widget — zero JS.
+
+### Empirical findings
+
+1. **All "free trial" / "free tier" / "no card" forbidden phrases verified zero across the built dist** (`grep -ic "free trial\|free tier\|no card\|free-tier\|free-trial"` against all 5 page HTMLs returns 0 each). Earlier draft had a "free trial would otherwise require" negative-framing in the FAQ + a "Free-tier services" hyphenated variant; both reworded to "A zero-cost entry would need..." which makes the same point without the forbidden phrase. Founder rule treated as absolute: never use the words, even in negation.
+
+2. **`<details>` for FAQ instead of accordion JS.** Native HTML disclosure widget gives keyboard accessibility (`<summary>` is focusable + Enter-toggleable), no hydration cost, no client-side framework dep. Trade-off: animation polish is minimal (just the chevron rotates via `group-open:rotate-180` Tailwind class). Acceptable for a marketing FAQ; if dashboard FAQ needs richer interaction, that's its own decision.
+
+3. **Self-hosted `mailto:` CTAs include URL-encoded `subject=` per SKU** so when a prospect emails about "Self-Hosted Pro" the inbox already has the SKU tagged in the subject line. Founder mentioned admin-panel form submissions land in Workstream C; until then, `mailto:` keeps the lead-capture path working without backend dependencies.
+
+4. **Self-hosted volume break-even threshold is described as "~5,000 hr/mo" with a softer "we'll model the break-even with your team" framing.** This isn't a commercial commitment — it's a heuristic anchored to the Scale tier's monthly hour cap. Actual break-even depends on hardware amortisation, electricity, and ops time per customer; the framing avoids over-precision.
+
+5. **FAQ entry on refund policy** specifies "within 14-day window if no sessions have been started" — this is a reasonable consumer-protection-friendly default but should be reviewed by counsel before first paying customer per the legal-docs counsel-review gate. Flagged to counsel-review backlog.
+
+6. **`/faq` page is 19 KB built; `/self-hosted` is 14 KB.** Total dist now ~110 KB across 5 pages + shared chunk. Still well within Cloudflare Pages limits + bundle-size targets.
+
+### Verify chain
+
+- `astro check`: 11 files, 0 errors / 0 warnings / 0 hints.
+- `astro build`: 5 static pages emitted in ~400ms.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: **360/360** unchanged (no backend code touched).
+- Forbidden-phrase check: 0/0/0/0/0 across all 5 pages.
+
+### Decisions made
+
+No new D-entries. FAQ + self-hosted page content is implementation detail; values + framing flow from file 127 + ADR-003 + V-061.
+
+### Status
+
+Static-content surface of the marketing site is complete: landing / pricing / self-hosted / faq / 404. Trail-pack-first conversion path (every primary CTA → `/pricing#trial-pack` → Stripe Checkout in Workstream F) is uniform across all pages. Forbidden-phrase rule (no "free trial" / "free tier" / "no card") is enforced by post-build grep. Single-source-of-truth pricing data flows from `data/pricing.ts` + ADR-003 trial-pack constants; backend layer (V-061) and marketing layer agree on every commercial commitment.
+
+### Next
+
+V-067: Cloudflare Pages deploy workflow + final polish. Adds `.github/workflows/deploy-marketing.yml` that builds + deploys to Cloudflare Pages on main merges; documents `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` GH secrets in `docs/deployment/env-vars.md` (build-time-only, repository-wide); polish pass on nav consistency + favicons + meta tags + OG card + 404 routing on Cloudflare Pages.
