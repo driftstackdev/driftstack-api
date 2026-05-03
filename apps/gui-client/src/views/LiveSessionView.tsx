@@ -32,6 +32,7 @@ import type { Driftstack } from '@driftstack/sdk';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError } from '../lib/client';
+import { GUIInputError, sendGUIInput, type GUIInputAction } from '../lib/gui-input';
 import { useRecordings } from '../lib/recordings';
 
 const FRAME_INTERVAL_MS = 500;
@@ -81,7 +82,7 @@ export interface LiveSessionViewProps {
 }
 
 export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JSX.Element {
-  const { client } = useSettings();
+  const { client, settings } = useSettings();
   const { startRecording, stopRecording, addFrame, activeRecordingFor } = useRecordings();
   const recordingId = activeRecordingFor(sessionId);
   const recordingIdRef = useRef<string | null>(recordingId);
@@ -209,9 +210,16 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
   }
 
   // ─── input forwarding ─────────────────────────────────────────────
+  //
+  // Two planes per L-001 (docs/locked-decisions.md):
+  //   - intent-only (scroll, press) → customer SDK `interact`
+  //   - coordinate (tap_at, type_focused) → gui-control endpoint via
+  //     sendGUIInput. The user's API key needs the `gui_control` scope
+  //     for this to succeed; otherwise the server responds 403 and
+  //     we surface that in the inline error banner.
 
   const interact = useCallback(
-    async (action: InteractActionPayload): Promise<void> => {
+    async (action: IntentActionPayload): Promise<void> => {
       if (!client) return;
       try {
         await client.sessions.interact(sessionId, { action });
@@ -220,6 +228,17 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
       }
     },
     [client, sessionId],
+  );
+
+  const guiInput = useCallback(
+    async (action: GUIInputAction): Promise<void> => {
+      try {
+        await sendGUIInput(settings, sessionId, action);
+      } catch (err) {
+        setState((s) => ({ ...s, error: friendlyError(err) }));
+      }
+    },
+    [settings, sessionId],
   );
 
   const handleImgClick = useCallback(
@@ -233,9 +252,9 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
       const x = Math.round(((e.clientX - rect.left) / rect.width) * naturalW);
       const y = Math.round(((e.clientY - rect.top) / rect.height) * naturalH);
       setState((s) => ({ ...s, lastTap: { x, y, at: Date.now() } }));
-      void interact({ kind: 'tap_at', x, y });
+      void guiInput({ kind: 'tap_at', x, y });
     },
-    [interact],
+    [guiInput],
   );
 
   const handleImgWheel = useCallback(
@@ -275,13 +294,13 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
         void interact({ kind: 'press', key: e.key });
         return;
       }
-      // Single printable character → type_focused.
+      // Single printable character → type_focused (gui-control plane).
       if (e.key.length === 1) {
         e.preventDefault();
-        void interact({ kind: 'type_focused', text: e.key });
+        void guiInput({ kind: 'type_focused', text: e.key });
       }
     },
-    [interact, onBack],
+    [interact, guiInput, onBack],
   );
 
   // Auto-focus the wrapper on mount so Esc + manual-control keys
@@ -354,9 +373,9 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
   );
 }
 
-type InteractActionPayload =
-  | { kind: 'tap_at'; x: number; y: number }
-  | { kind: 'type_focused'; text: string; delay_ms?: number }
+// Intent-only interact payloads — coordinate primitives are on the
+// gui-control plane (see GUIInputAction in lib/gui-input.ts).
+type IntentActionPayload =
   | { kind: 'scroll'; delta_x: number; delta_y: number }
   | { kind: 'press'; key: string };
 
@@ -568,6 +587,12 @@ function computeFps(timestamps: number[]): number {
 }
 
 function friendlyError(err: unknown): string {
+  if (err instanceof GUIInputError) {
+    if (err.status === 403) {
+      return 'API key lacks gui_control scope — manual control is unavailable on this key.';
+    }
+    return err.message;
+  }
   if (err instanceof DriftstackError) return err.message;
   if (err instanceof Error) return err.message;
   return 'unknown error';

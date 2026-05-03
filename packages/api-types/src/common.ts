@@ -74,5 +74,10 @@ export const AccountTierSchema = z.enum([
 ]);
 export type AccountTier = z.infer<typeof AccountTierSchema>;
 
-export const ApiKeyScopeSchema = z.enum(['read', 'write', 'admin']);
+// `gui_control` is the scope that gates the manual-control plane
+// (tap_at, type_focused, etc.) — bypasses the behavioral simulation
+// layer, only granted to keys for the self-hosted GUI workflow per
+// L-001 in docs/locked-decisions.md. Default key creation does not
+// include this scope; enterprise-tier accounts get it explicitly.
+export const ApiKeyScopeSchema = z.enum(['read', 'write', 'admin', 'gui_control']);
 export type ApiKeyScope = z.infer<typeof ApiKeyScopeSchema>;

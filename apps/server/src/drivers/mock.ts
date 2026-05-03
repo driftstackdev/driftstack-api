@@ -25,6 +25,8 @@ import type {
   CreateSessionResult,
   Driver,
   DriverSessionId,
+  GUIInputInput,
+  GUIInputResult,
   InteractInput,
   InteractResult,
   NavigateInput,
@@ -172,6 +174,14 @@ export class MockDriver implements Driver {
       });
     }
 
+    const start = Date.now();
+    await this.sleep(this.interactLatencyMs);
+    session.opSeq += 1;
+    return { durationMs: Date.now() - start };
+  }
+
+  async guiInput(sessionId: DriverSessionId, _input: GUIInputInput): Promise<GUIInputResult> {
+    const session = this.requireSession(sessionId);
     const start = Date.now();
     await this.sleep(this.interactLatencyMs);
     session.opSeq += 1;

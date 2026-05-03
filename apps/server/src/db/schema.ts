@@ -29,7 +29,7 @@ export const accountTier = pgEnum('account_tier', [
 
 export const accountStatus = pgEnum('account_status', ['active', 'suspended', 'deleted']);
 
-export const apiKeyScope = pgEnum('api_key_scope', ['read', 'write', 'admin']);
+export const apiKeyScope = pgEnum('api_key_scope', ['read', 'write', 'admin', 'gui_control']);
 
 export const sessionStatus = pgEnum('session_status', [
   'creating',
@@ -43,6 +43,7 @@ export const sessionEventType = pgEnum('session_event_type', [
   'created',
   'navigated',
   'interacted',
+  'gui_input',
   'waited',
   'state_captured',
   'screenshot_captured',

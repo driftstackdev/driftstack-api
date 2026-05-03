@@ -14,6 +14,8 @@ import type {
   CreateSessionResult,
   Driver,
   DriverSessionId,
+  GUIInputInput,
+  GUIInputResult,
   InteractInput,
   InteractResult,
   NavigateInput,
@@ -33,6 +35,10 @@ export class WebKitDriver implements Driver {
     throw new DriverNotIntegratedError();
   }
   async interact(_sessionId: DriverSessionId, _input: InteractInput): Promise<InteractResult> {
+    await Promise.resolve();
+    throw new DriverNotIntegratedError();
+  }
+  async guiInput(_sessionId: DriverSessionId, _input: GUIInputInput): Promise<GUIInputResult> {
     await Promise.resolve();
     throw new DriverNotIntegratedError();
   }

@@ -217,7 +217,7 @@ describe('POST /v1/sessions/:id/interact', () => {
     expect(res.statusCode).toBe(502);
   });
 
-  it('200 for tap_at with viewport coordinates', async () => {
+  it('400 when /interact rejects coordinate primitives (L-001 — gui plane only)', async () => {
     fx = await buildTestApp();
     const session = await createSession(fx);
     const res = await fx.app.inject({
@@ -226,16 +226,31 @@ describe('POST /v1/sessions/:id/interact', () => {
       headers: auth(fx),
       payload: { action: { kind: 'tap_at', x: 120, y: 240 } },
     });
+    // The Zod discriminated union has no `tap_at` variant, so parse fails.
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('POST /v1/sessions/:id/gui-input (gui_control plane)', () => {
+  it('200 for tap_at when key has gui_control scope', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write', 'gui_control'] });
+    const session = await createSession(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/sessions/${session.id}/gui-input`,
+      headers: auth(fx),
+      payload: { action: { kind: 'tap_at', x: 120, y: 240 } },
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json<Record<string, unknown>>().ok).toBe(true);
   });
 
-  it('200 for type_focused into focused element', async () => {
-    fx = await buildTestApp();
+  it('200 for type_focused when key has gui_control scope', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write', 'gui_control'] });
     const session = await createSession(fx);
     const res = await fx.app.inject({
       method: 'POST',
-      url: `/v1/sessions/${session.id}/interact`,
+      url: `/v1/sessions/${session.id}/gui-input`,
       headers: auth(fx),
       payload: { action: { kind: 'type_focused', text: 'hello' } },
     });
@@ -243,12 +258,24 @@ describe('POST /v1/sessions/:id/interact', () => {
     expect(res.json<Record<string, unknown>>().ok).toBe(true);
   });
 
-  it('400 when tap_at coordinates are negative', async () => {
-    fx = await buildTestApp();
+  it('403 when key lacks gui_control scope (default customer key)', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
     const session = await createSession(fx);
     const res = await fx.app.inject({
       method: 'POST',
-      url: `/v1/sessions/${session.id}/interact`,
+      url: `/v1/sessions/${session.id}/gui-input`,
+      headers: auth(fx),
+      payload: { action: { kind: 'tap_at', x: 100, y: 100 } },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('400 when tap_at coordinates are negative', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write', 'gui_control'] });
+    const session = await createSession(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/sessions/${session.id}/gui-input`,
       headers: auth(fx),
       payload: { action: { kind: 'tap_at', x: -1, y: 0 } },
     });

@@ -186,13 +186,16 @@ type NavigateResponse struct {
 
 // InteractAction is a discriminated-union of action kinds. Use the
 // constructors (NewTapAction, NewTypeAction, ...) to build one.
+//
+// This is the customer-facing intent-only surface (L-001). Coordinate
+// primitives (tap_at / type_focused) live on the gui-control plane
+// and are NOT part of this SDK — they're internal to the self-hosted
+// GUI workflow and gated behind the `gui_control` API-key scope.
 type InteractAction struct {
-	Kind     string  `json:"kind"`               // tap | tap_at | type | type_focused | scroll | press
+	Kind     string  `json:"kind"`               // tap | type | scroll | press
 	Selector string  `json:"selector,omitempty"` // tap, type, scroll
-	Text     string  `json:"text,omitempty"`     // type, type_focused
-	DelayMs  *int    `json:"delay_ms,omitempty"` // type, type_focused
-	X        int     `json:"x,omitempty"`        // tap_at
-	Y        int     `json:"y,omitempty"`        // tap_at
+	Text     string  `json:"text,omitempty"`     // type
+	DelayMs  *int    `json:"delay_ms,omitempty"` // type
 	DeltaX   int     `json:"delta_x,omitempty"`  // scroll
 	DeltaY   int     `json:"delta_y,omitempty"`  // scroll
 	Key      string  `json:"key,omitempty"`      // press
@@ -209,22 +212,8 @@ func NewTapAction(selector string) InteractAction {
 	return InteractAction{Kind: "tap", Selector: selector}
 }
 
-// NewTapAtAction taps at viewport pixel coordinates (origin top-left).
-// Used when the caller has a screenshot but not a selector — e.g. the
-// self-hosted GUI's live viewport.
-func NewTapAtAction(x, y int) InteractAction {
-	return InteractAction{Kind: "tap_at", X: x, Y: y}
-}
-
 func NewTypeAction(selector, text string) InteractAction {
 	return InteractAction{Kind: "type", Selector: selector, Text: text}
-}
-
-// NewTypeFocusedAction types into the currently-focused element (no
-// selector). Pair with NewTapAtAction to focus an input first, then
-// type into it.
-func NewTypeFocusedAction(text string) InteractAction {
-	return InteractAction{Kind: "type_focused", Text: text}
 }
 
 // NewScrollAction scrolls the viewport (or selected element) by the

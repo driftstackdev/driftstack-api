@@ -22,6 +22,7 @@ import {
   WaitRequestSchema,
 } from '@driftstack/api-types';
 import type { SessionRecord, SessionsService } from '../services/sessions.js';
+import { GUIInputRequestSchema } from '../schemas/gui-input.js';
 import { BadRequestError } from '../lib/errors.js';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -143,6 +144,25 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = InteractRequestSchema.parse(request.body ?? {});
       const result = await service.interact(ctx, id, body);
+      return { ok: true as const, duration_ms: result.durationMs };
+    },
+  );
+
+  // ── POST /v1/sessions/:id/gui-input ────────────────────────────────────
+  // GUI-control plane (L-001). Coordinate-level primitives that bypass
+  // the behavioral simulation layer. Gated behind `gui_control` scope —
+  // customer keys never carry this; only enterprise self-hosted GUI
+  // keys do. See docs/locked-decisions.md.
+  app.post<{ Params: { id: string } }>(
+    '/v1/sessions/:id/gui-input',
+    {
+      preHandler: [app.requireAuth, app.requireScope('gui_control'), app.rateLimit('global')],
+    },
+    async (request) => {
+      const ctx = requireCtx(request);
+      const id = uuidFromPrefixedId(request.params.id, 'ses');
+      const body = GUIInputRequestSchema.parse(request.body ?? {});
+      const result = await service.guiInput(ctx, id, body);
       return { ok: true as const, duration_ms: result.durationMs };
     },
   );

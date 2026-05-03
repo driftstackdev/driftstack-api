@@ -85,7 +85,7 @@ right-click → Open → Open bypasses the warning for local QA.
      back to `["app", "dmg"]`; or
   2. Swap to a non-AppleScript DMG tool (e.g. `create-dmg` via
      Homebrew, called from a postbuild script).
-  V-035 captures the empirical detail.
+     V-035 captures the empirical detail.
 - **Universal binary not configured.** Current build is single-arch
   (`aarch64-apple-darwin`). Adding `x86_64-apple-darwin` requires
   installing the cross-target via `rustup target add` and configuring

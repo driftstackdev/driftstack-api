@@ -17,6 +17,7 @@ import type {
 } from '@driftstack/api-types';
 import type { AccountContext } from './auth.js';
 import type { Driver } from '../drivers/types.js';
+import type { GUIInputRequest } from '../schemas/gui-input.js';
 import { ConcurrencyLimitError, NotFoundError, SessionDestroyedError } from '../lib/errors.js';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -71,6 +72,7 @@ export interface SessionEventInput {
     | 'created'
     | 'navigated'
     | 'interacted'
+    | 'gui_input'
     | 'waited'
     | 'state_captured'
     | 'screenshot_captured'
@@ -194,6 +196,25 @@ export class SessionsService {
     await this.deps.repo.recordEvent({
       sessionId: session.id,
       type: 'interacted',
+      payload: { action: body.action },
+      durationMs: result.durationMs,
+    });
+    return result;
+  }
+
+  async guiInput(
+    ctx: AccountContext,
+    sessionId: string,
+    body: GUIInputRequest,
+  ): Promise<{ durationMs: number }> {
+    const session = await this.requireOwned(ctx, sessionId);
+    const result = await this.deps.driver.guiInput(session.driverSessionId, {
+      action: body.action,
+      timeoutMs: body.timeout_ms ?? 10_000,
+    });
+    await this.deps.repo.recordEvent({
+      sessionId: session.id,
+      type: 'gui_input',
       payload: { action: body.action },
       durationMs: result.durationMs,
     });

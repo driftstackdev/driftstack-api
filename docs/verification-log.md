@@ -2011,7 +2011,7 @@ GUI7 — macOS native packaging + signing. tauri.conf.json bundle config, identi
 2. **DMG bundling fails on AppleScript timeout.** Tauri's `bundle_dmg.sh` runs an `osascript` call that resizes/positions the mounted DMG's Finder window. On macOS 26 this times out: `Finder got an error: AppleEvent timed out (-1712)`. Root cause: the build process doesn't have Automation permission for Finder. Two paths forward:
    - **Interactive fix**: System Settings → Privacy & Security → Automation → grant the parent process (Terminal / IDE) permission to control Finder. One-time. Requires founder approval at the OS prompt.
    - **Tooling swap**: replace the AppleScript-based `bundle_dmg.sh` with `create-dmg` (Homebrew package, no AppleScript) called from a postbuild script.
-   For tonight: flipped `targets` to `["app"]` so default builds succeed. Founder can choose either path; both are documented in `PACKAGING.md`. The `.app` is the load-bearing artifact for notarisation anyway — DMG is just delivery wrapping.
+     For tonight: flipped `targets` to `["app"]` so default builds succeed. Founder can choose either path; both are documented in `PACKAGING.md`. The `.app` is the load-bearing artifact for notarisation anyway — DMG is just delivery wrapping.
 
 3. **Tauri's macOS bundle config doesn't expose a `hardenedRuntime` flag.** First pass added `bundle.macOS.hardenedRuntime: true` to the config; the schema doesn't accept it. Hardened runtime is enabled implicitly when `entitlements` is set + a `signingIdentity` is supplied. Removed the bogus key.
 
@@ -2048,3 +2048,93 @@ Surfacing for direction since GUI8 closed the overnight scope. Options I see:
 - **Tighten the API contract**: the V-032 contract addition + the V-033 proxy field + an audit pass for "what does the customer actually need from `CreateSessionRequest`?"
 
 Will idle on the queue until founder picks.
+
+---
+
+## V-036 — Re-cut V-032: split coordinate primitives onto gui_control plane
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Contract correction (founder direction).
+
+V-032 added `tap_at` + `type_focused` to the customer-facing `InteractActionSchema` to support the GUI's manual-control input forwarding. The founder flagged this as **drift against the intent-only API lock** (now formalised as L-001 in `docs/locked-decisions.md`): the moment a customer can write `tap_at(245, 100)`, the behavioral simulation layer becomes optional rather than mandatory, and the moat erodes. This entry re-cuts the change.
+
+### What changed
+
+**Locked decisions** (new file):
+- **`docs/locked-decisions.md`** — created. Captures L-001 ("the customer-facing API is intent-only") with the full rationale, drift-detection checklist, and the carve-out for the GUI's manual-control plane. Going forward, any change to public schemas is checked against this file; violations get flagged as drift, not as shape questions.
+
+**Customer-facing surface (api-types) — reverted:**
+- **`packages/api-types/src/sessions.ts`**: removed `tap_at` and `type_focused` from `InteractActionSchema`. Back to the original four-variant intent-only union.
+- **`packages/api-types/src/common.ts`**: added `gui_control` to `ApiKeyScopeSchema` (additive enum). Customer keys never carry this scope by default; only enterprise self-hosted GUI keys do.
+- **`@driftstack/api-types@0.1.2`** published to npm.
+
+**Server-internal gui-control plane (NEW):**
+- **`apps/server/src/schemas/gui-input.ts`** — new file, server-internal only. `GUIInputActionSchema` with `tap_at` + `type_focused` variants, `GUIInputRequestSchema`, `GUIInputResponseSchema`. Not exported from any SDK package.
+- **`apps/server/src/drivers/types.ts`** — `Driver` interface gains a `guiInput()` method alongside `interact()`. Mock driver implements it (sleeps + opSeq++); WebKit stub throws `DriverNotIntegratedError` like every other unimplemented method.
+- **`apps/server/src/services/sessions.ts`** — `SessionsService.guiInput()` mirrors `interact()`. New `gui_input` event type added to `SessionEventInput`.
+- **`apps/server/src/db/schema.ts`** — `session_event_type` pgEnum gained `'gui_input'`; `api_key_scope` pgEnum gained `'gui_control'`. Migration `0004_gui_input_event_type.sql` does both `ALTER TYPE … ADD VALUE`. Snapshot + journal updated.
+- **`apps/server/src/routes/sessions.ts`** — new route `POST /v1/sessions/:id/gui-input`, `requireScope('gui_control')` in the preHandler chain. Returns 403 for keys without the scope.
+
+**Tests:**
+- The 3 GUI4 integration tests against `/interact` were rewritten:
+  - one regression test that `/interact` rejects `tap_at` with 400 (Zod parse failure) — locks in the intent-only contract.
+  - 4 new tests against `/gui-input`: 200 happy path for `tap_at` and `type_focused` when the key has `gui_control`; 403 when it doesn't; 400 on negative coordinates.
+- `npm test`: 299/299 (was 297; net +2 — replaced 3 with 5).
+
+**SDKs — coordinate primitives removed across all four:**
+- **TypeScript** (`@driftstack/sdk@0.1.3`): types regenerated from cleaned api-types. Customer surface has no `tap_at` / `type_focused`. Published.
+- **Python** (`driftstack-sdk@0.1.2`): Pydantic models regenerated; `_version.py` bumped. Published to PyPI.
+- **Go** (`packages/sdk-go/v0.1.2`): `InteractAction` struct fields dropped (`X`, `Y` for tap_at), constructors removed (`NewTapAtAction`, `NewTypeFocusedAction`). The pre-existing scroll bug fix from V-032 (renamed `X/Y` → `DeltaX/DeltaY` for scroll, with proper `delta_x/delta_y` JSON tags) is **kept** — it's an unrelated correctness fix and the marshalling round-trip tests guard it. Tag pushed.
+
+**GUI:**
+- **`apps/gui-client/src/lib/gui-input.ts`** — new helper. Direct fetch to `/v1/sessions/:id/gui-input` (the SDK's `HttpClient` is private; no backdoor). `GUIInputError` carries the HTTP status + RFC 7807 error type for clean error mapping.
+- **`apps/gui-client/src/views/LiveSessionView.tsx`** — split `interact` (intent-only: `scroll`, `press`) from `guiInput` (coordinate: `tap_at`, `type_focused`). Click handler + printable-key handler call `guiInput`; wheel + non-printable-key handlers call `interact`. Errors from either surface in the inline ErrorBanner. The 403 case (key lacks `gui_control` scope) gets a friendly message: "API key lacks gui_control scope — manual control is unavailable on this key."
+
+### Empirical findings
+
+1. **`requireScope('gui_control')` works out of the box.** The auth middleware was already scope-aware (`app.requireScope` decorator + `requireScope()` in `services/auth.ts`); adding a new scope value just required updating the Zod enum + the DB pgEnum. No middleware changes.
+
+2. **DB migration is `ALTER TYPE … ADD VALUE` only.** Postgres allows adding values to an existing enum without a downtime-incurring rewrite. The migration is forward-only (cannot drop enum values without a full type swap), but that's the right shape — we won't be removing `gui_control` later. Drizzle's snapshot tracks the new values.
+
+3. **Drizzle-kit version mismatch blocked auto-generation.** `drizzle-kit@0.30.6` errored out with "Please install latest version of drizzle-orm" when I tried to regenerate the migration. Wrote `0004_gui_input_event_type.sql` + the snapshot/journal updates by hand instead. Same shape drizzle would have produced. Surface for follow-up: bump drizzle-kit when there's a clean window — not now, as it would also touch how migrations land in CI.
+
+4. **GUI bundle stayed flat.** 197.6 KB JS / 17.1 KB CSS — basically identical to V-035 (197 KB / 17 KB). The `lib/gui-input.ts` helper is small (~70 LOC, ~2 KB minified) and replaces inline logic in LiveSessionView, not an addition.
+
+5. **No-customers-yet revert pattern.** Each SDK got a clean version bump, none broke the previous public surface (because `tap_at` was only in 0.1.x for ~17 hours and the registries don't yet have any documented downloads). The revert across 4 SDKs took less time than the original V-032 add, validating the founder's "revert is one commit + four republishes" framing.
+
+### What stays from V-032
+
+- Go SDK scroll bug fix (`X/Y` → `DeltaX/DeltaY` rename + proper JSON tags) — kept. Unrelated to L-001.
+- Go SDK marshalling round-trip tests (`types_test.go`) — kept, with `tap_at` + `type_focused` cases removed. The remaining 4 cases lock in the public contract.
+- Python SDK `__version__` test fix (assert SemVer-shape, not exact pin) — kept.
+
+### Verify chain
+
+- typecheck/lint/format: all clean.
+- `npm test`: 299/299 passing in 5.5 s.
+- Python pytest: 85/85.
+- Go: round-trip tests pass.
+- GUI build: 197.6 KB JS / 17.1 KB CSS.
+- Native `.app` build: not re-run this session (no Tauri config changes).
+
+### Publish
+
+- `@driftstack/api-types@0.1.2` ✓ npm.
+- `@driftstack/sdk@0.1.3` ✓ npm.
+- `driftstack-sdk@0.1.2` ✓ PyPI (https://pypi.org/project/driftstack-sdk/0.1.2/).
+- Go tag `packages/sdk-go/v0.1.2` pushed alongside the commit below.
+
+### Decisions made
+
+**D-?? Tier 3 (locked):** L-001 — customer-facing API is intent-only. Recorded in `docs/locked-decisions.md`. Founder-decided; this V-log entry captures the implementation. Going forward, all schema changes get checked against this doc.
+
+### Status
+
+Re-cut complete. Customer SDK surfaces are clean. The `gui_control` plane is server-internal and scope-gated. The GUI works against the gated endpoint with the same UX as before, and surfaces a clear error if the key lacks the scope.
+
+### Next
+
+(a) Contract audit pass — first, per founder direction. Read every public schema in api-types + every customer-facing SDK method across TS/Python/Go. Flag intent-vs-mechanic violations, required-vs-optional correctness, deprecation paths, version-bump rules. Confirm marshalling round-trip tests in all four SDKs.
+(b) Entity-org transition prep (KvK 2026-05-21).
+(c) CAPABILITIES.md cross-check (when founder drafts).

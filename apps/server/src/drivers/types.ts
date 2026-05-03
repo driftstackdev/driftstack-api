@@ -11,6 +11,7 @@
 // on every driver call and keeps the driver pure of HTTP concerns.
 
 import type { CaptureKind, InteractAction, WaitCondition } from '@driftstack/api-types';
+import type { GUIInputAction } from '../schemas/gui-input.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Identity
@@ -55,6 +56,17 @@ export interface InteractResult {
   durationMs: number;
 }
 
+// GUI-control plane (L-001): coordinate primitives for the manual-
+// control GUI, separate from intent-only InteractInput.
+export interface GUIInputInput {
+  action: GUIInputAction;
+  timeoutMs: number;
+}
+
+export interface GUIInputResult {
+  durationMs: number;
+}
+
 export interface WaitInput {
   condition: WaitCondition;
   timeoutMs: number;
@@ -94,6 +106,8 @@ export interface Driver {
   createSession(input: CreateSessionInput): Promise<CreateSessionResult>;
   navigate(sessionId: DriverSessionId, input: NavigateInput): Promise<NavigateResult>;
   interact(sessionId: DriverSessionId, input: InteractInput): Promise<InteractResult>;
+  /** GUI-control plane (L-001) — coordinate-level input. */
+  guiInput(sessionId: DriverSessionId, input: GUIInputInput): Promise<GUIInputResult>;
   wait(sessionId: DriverSessionId, input: WaitInput): Promise<WaitResult>;
   getState(sessionId: DriverSessionId): Promise<SessionStateResult>;
   capture(sessionId: DriverSessionId, input: CaptureInput): Promise<CaptureResult>;
