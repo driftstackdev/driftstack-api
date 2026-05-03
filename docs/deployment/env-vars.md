@@ -181,6 +181,15 @@ not by env / secrets:
 - `www.driftstack.dev` — CNAME alias to the Pages project
 - DNS records live in Cloudflare DNS for the `driftstack.dev` zone
 
+### User-facing auth flow (V-079)
+
+| Name                          | Required           | Per-env? | Example                                              | Notes                                                                                                                                                                                                                              |
+| ----------------------------- | ------------------ | -------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AUTH_VERIFY_EMAIL_URL`       | required at deploy | per-env  | `https://app.driftstack.dev/auth/verify-email`       | Customer dashboard URL the signup-verification email links to. Plaintext token appended as `?token=<...>`. Default in dev: `http://localhost:5173/auth/verify-email`.                                                              |
+| `AUTH_MAGIC_LINK_URL`         | required at deploy | per-env  | `https://app.driftstack.dev/auth/magic-link`         | Customer dashboard URL the magic-link email points at. Plaintext token appended as `?token=<...>`. Default in dev: `http://localhost:5173/auth/magic-link`.                                                                        |
+| `AUTH_PASSWORD_RESET_URL`     | required at deploy | per-env  | `https://app.driftstack.dev/auth/password-reset`     | Customer dashboard URL the password-reset email points at. Plaintext token appended as `?token=<...>`. Default in dev: `http://localhost:5173/auth/password-reset`.                                                                |
+| `AUTH_EXPOSE_DEBUG_TOKEN`     | optional (dev/test only) | per-env  | `true`                                                | When `true`, signup / magic-link / password-reset responses include the plaintext token as `debug_token`. Production MUST leave this `false` (default) — leaks the token via the response body, making integration tests cheap but auth dangerous. |
+
 ### Future Workstream slots (placeholder — not yet wired)
 
 | Name                                      | Notes                                                                                                                            |
@@ -226,6 +235,12 @@ DRIFTSTACK_TIER_PRICE_IDS={"starter":"price_xxx","solo":"price_xxx","builder":"p
 
 MONEYBIRD_API_TOKEN=...
 MONEYBIRD_ADMINISTRATION_ID=...
+
+AUTH_VERIFY_EMAIL_URL=https://app.driftstack.dev/auth/verify-email
+AUTH_MAGIC_LINK_URL=https://app.driftstack.dev/auth/magic-link
+AUTH_PASSWORD_RESET_URL=https://app.driftstack.dev/auth/password-reset
+# AUTH_EXPOSE_DEBUG_TOKEN must remain unset in staging + production —
+# only ever set to `true` in local dev / CI.
 ```
 
 Production `.env` is structurally identical with environment-tagged

@@ -40,6 +40,11 @@ export const PROBLEM_TYPES = {
   DriverNotIntegrated: 'https://errors.driftstack.dev/driver-not-integrated',
   ValidationFailed: 'https://errors.driftstack.dev/validation-failed',
   Internal: 'https://errors.driftstack.dev/internal',
+  // Auth-flow problem types (V-079).
+  EmailAlreadyRegistered: 'https://errors.driftstack.dev/email-already-registered',
+  InvalidCredentials: 'https://errors.driftstack.dev/invalid-credentials',
+  InvalidAuthToken: 'https://errors.driftstack.dev/invalid-auth-token',
+  EmailNotVerified: 'https://errors.driftstack.dev/email-not-verified',
 } as const;
 
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES];

@@ -4686,3 +4686,110 @@ No new D-entries. The Manual-vs-API framing is a copy decision; the underlying s
 ### Next
 
 V-070-visual (architecture diagram on /self-hosted + asymmetric Why-Driftstack restructure on /index + hero SDK code refresh) stays in working tree per founder direction "stays in working tree. Founder reviews when awake." Per the standing never-stop rule (memory: never_stop_rule.md), V-070-visual draft does NOT block engineering forward motion — moving immediately to V-079 (auth endpoints scaffolding) per Priority 2 of the overnight queue.
+
+---
+
+## V-079 — User-facing auth-flow scaffolding (Routine — Workstream F P2)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Land the user-facing auth-flow surface (signup → email verification → password login → magic-link → password-reset → web-session refresh / logout). Workstream F task #116 ("onboarding flow: signup → email verify → legal accept → tier → payment → first key") starts here — auth is the first hop.
+
+### What changed
+
+**Schema (Drizzle + migration 0007_auth_flow_tokens):**
+
+- `accounts.password_hash` (text, nullable) — scrypt-kdf encoded, same primitive as `api_keys.key_hash`. Nullable because magic-link-only flow accounts have no password until the user adds one via password-reset.
+- `accounts.email_verified_at` (timestamp w/ timezone, nullable) — set when the account holder consumes a single-use email_verify_token. Login gates require non-null.
+- `email_verify_tokens` — single-use, 30-min TTL.
+- `magic_link_tokens` — single-use, 15-min TTL.
+- `password_reset_tokens` — single-use, 1-hour TTL.
+- `web_sessions` — long-lived (30-day default) sha256-hashed opaque tokens for the customer dashboard / admin panel. Distinct from API keys (which are for code).
+
+All four token tables share the same shape (`token_hash`, `expires_at`, `consumed_at`, `requested_from_ip`, `created_at`) plus a unique index on `token_hash`. The plaintext is sent ONCE (via Postmark for email-bearing flows, in the response body for web-session login) — only the sha256 hash is stored.
+
+**API contract (`packages/api-types/src/auth.ts`):**
+
+Zod schemas + inferred types for SignupRequest/Response, VerifyEmailRequest/Response, LoginRequest/Response, MagicLinkRequest/Response (request + consume), PasswordResetRequest/Response (request + confirm), RefreshSessionRequest/Response, LogoutRequest/Response. Email normalised lowercase server-side; passwords 12-128 chars with no composition rules per NIST 800-63B-3 (length is the lever that matters).
+
+Four new RFC 7807 problem types:
+
+- `EmailAlreadyRegistered` (409)
+- `InvalidCredentials` (401)
+- `InvalidAuthToken` (400)
+- `EmailNotVerified` (403)
+
+**Service (`apps/server/src/services/auth-flows.ts`):**
+
+`AuthFlowsService` is repo-driven (`AuthFlowsRepo` interface) so tests can swap an in-memory implementation for the Drizzle one. Same boundary pattern as `auth.ts` / `sessions.ts` / `webhooks.ts`. Email sends fan out to the existing `EmailService` (Postmark, V-057) — fire-and-forget; failure logged at warn, never thrown.
+
+Key behaviour:
+
+- `signup`: rejects duplicate emails, hashes password (scrypt), creates account, issues + emails verification token.
+- `verifyEmail`: consumes token (single-use), marks `email_verified_at`, issues web session.
+- `login`: verifies password, gates on `email_verified_at IS NOT NULL`, issues web session. Returns `invalid_credentials` for both unknown email AND wrong password (no email-existence enumeration).
+- `requestMagicLink` / `requestPasswordReset`: shape-stable response regardless of whether the email matched an account (no enumeration leak).
+- `consumeMagicLink`: implicitly verifies the email (clicking the link demonstrates inbox ownership).
+- `refreshSession`: rotates the token (revoke old, issue new in same operation).
+- `logout`: revokes web session; idempotent (already-revoked → 200 ok).
+
+**Routes (`apps/server/src/routes/auth.ts`):**
+
+Nine endpoints under `/v1/auth/*`. Public (no `requireAuth`) — these ARE the auth gate. Rate limiting NOT wired at scaffolding time: the existing `app.rateLimit()` middleware is account-keyed and requires an authenticated request, which doesn't exist for public flows. IP-based rate limiting (anti-abuse) is the right fit and lands as a follow-on V-NNN once abuse patterns are observable in staging logs.
+
+**Production wiring (`bootstrap.ts`):**
+
+`DrizzleAuthFlowsRepo` constructed against the Postgres pool, fed into `AuthFlowsService` with the email URL config + debug-token-exposure flag. `authFlowsService` added to `AppDeps`; routes registered when present (optional during the migration window).
+
+**Config (`apps/server/src/lib/config.ts`):**
+
+New `authFlowUrls` block with four env vars: `AUTH_VERIFY_EMAIL_URL`, `AUTH_MAGIC_LINK_URL`, `AUTH_PASSWORD_RESET_URL`, `AUTH_EXPOSE_DEBUG_TOKEN`. Documented in `docs/deployment/env-vars.md` under a new "User-facing auth flow (V-079)" section. `AUTH_EXPOSE_DEBUG_TOKEN` defaults `false` and is explicitly noted as dev/test-only — production MUST leave it unset to avoid leaking plaintext tokens via the response body.
+
+### How verified
+
+- `npm run typecheck`: 0 errors across all 5 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 377/377 passing (was 360; +17 new auth-flow integration tests). New tests cover happy paths for signup / verify / login / magic-link / password-reset / refresh / logout, plus error paths for duplicate email (409), wrong password (401), unverified email (403), bogus / re-used / expired tokens (400). The `debug_token` path is exercised on the in-memory fixture so tests don't depend on Postmark deliverability.
+
+### Decisions made (no new D-entries; documented inline)
+
+- **Password hashing**: scrypt-kdf with the same parameters as the API-key path (logN=15, r=8, p=1). One primitive, one storage format, one verification function — both `accounts.password_hash` and `api_keys.key_hash` round-trip through `scrypt-kdf`'s standard-format encoded string.
+- **Token primitive**: 32 random bytes encoded as URL-safe base64; sha256-hashed at rest. scrypt is reserved for low-entropy user-chosen passwords. The plaintext has 256 bits of entropy, so sha256 is sufficient for at-rest equality lookups.
+- **Web session model**: Long-lived opaque tokens (30-day default), revocable by db delete. NOT JWT — opaque tokens are revocable without the JWT secret-rotation complexity, which fits a B2B product not aiming to be a federated auth provider.
+- **Email enumeration resistance**: magic-link request and password-reset request return shape-stable responses regardless of whether the email matches an account. Login uses `invalid_credentials` for both unknown email AND wrong password.
+- **Rate limiting deferred**: existing middleware is account-keyed and requires `request.account`. Public auth flows need IP-based rate limiting; landing as a follow-on once the abuse surface is observable.
+- **drizzle-kit version mismatch (known caveat)**: drizzle-kit 0.30 expects drizzle-orm < 0.38; we run 0.38.4. Manual snapshot generation skipped for migration 0007 — the migration applies fine via the journal + SQL files (which is what `migrate.ts` reads). The snapshot is only consumed by drizzle-kit's `generate --diff` for future migrations; cleanup of this tooling debt is a separate V-NNN.
+
+### Files added
+
+- `apps/server/src/db/migrations/0007_auth_flow_tokens.sql`
+- `apps/server/src/db/auth-flows-repo.ts`
+- `apps/server/src/services/auth-flows.ts`
+- `apps/server/src/lib/auth-tokens.ts`
+- `apps/server/src/routes/auth.ts`
+- `apps/server/tests/integration/auth-flows.test.ts`
+- `apps/server/tests/integration/_helpers/in-memory-auth-flows-repo.ts`
+- `packages/api-types/src/auth.ts`
+
+### Files modified
+
+- `apps/server/src/db/schema.ts` (accounts password+email_verified columns + 4 new tables + 4 new inferred types)
+- `apps/server/src/db/migrations/meta/_journal.json` (entry 7)
+- `apps/server/src/lib/app.ts` (AuthFlowsService AppDeps + route registration)
+- `apps/server/src/lib/bootstrap.ts` (production wiring)
+- `apps/server/src/lib/config.ts` (authFlowUrls config)
+- `apps/server/src/lib/errors.ts` (4 new ApiError subclasses)
+- `apps/server/tests/integration/_helpers/build-test-app.ts` (fixture wiring)
+- `apps/server/tests/e2e/helpers/server.ts` (TRUNCATE_SQL adds 4 token tables)
+- `packages/api-types/src/index.ts` (re-export auth.ts)
+- `packages/api-types/src/problem.ts` (4 new PROBLEM_TYPES URIs)
+- `docs/deployment/env-vars.md` (new "User-facing auth flow (V-079)" section + per-env baseline)
+
+### Next
+
+Per the never-stop rule: continuing immediately to V-080 (Stripe webhook handler scaffolding) per Priority 3 of the overnight queue. V-070-visual remains uncommitted in working tree pending founder review.

@@ -13,3 +13,4 @@ export * from './accounts.js';
 export * from './usage.js';
 export * from './webhooks.js';
 export * from './admin.js';
+export * from './auth.js';

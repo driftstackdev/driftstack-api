@@ -65,6 +65,10 @@ const TRUNCATE_SQL = `
     "webhook_deliveries",
     "webhook_endpoints",
     "admin_audit_log",
+    "email_verify_tokens",
+    "magic_link_tokens",
+    "password_reset_tokens",
+    "web_sessions",
     "api_keys",
     "accounts"
   RESTART IDENTITY CASCADE

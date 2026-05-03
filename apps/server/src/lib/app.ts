@@ -21,6 +21,7 @@ import type { AdminAuditService } from '../services/admin-audit.js';
 import type { AccountsAdminService } from '../services/admin-accounts.js';
 import type { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import type { LegalService } from '../services/legal.js';
+import type { AuthFlowsService } from '../services/auth-flows.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -33,6 +34,7 @@ import { registerAdminAccountsRoutes } from '../routes/admin-accounts.js';
 import { registerAdminWebhookRoutes } from '../routes/admin-webhooks.js';
 import { registerAdminAuditLogRoutes } from '../routes/admin-audit-log.js';
 import { registerLegalRoutes } from '../routes/legal.js';
+import { registerAuthRoutes } from '../routes/auth.js';
 
 export interface ReadinessCheck {
   /** Display name surfaced in the /ready response (e.g. "postgres", "redis", "r2"). */
@@ -72,6 +74,12 @@ export interface AppDeps {
   accountsAdminService: AccountsAdminService;
   rateLimitOverridesService: RateLimitOverridesService;
   legalService: LegalService;
+  /**
+   * V-079: user-facing auth flows. Optional during the migration window —
+   * when omitted, the /v1/auth/* routes are not registered. Once the
+   * onboarding flow lands in production this becomes required.
+   */
+  authFlowsService?: AuthFlowsService;
   /**
    * Readiness checks executed by `/ready`. Each runs with the
    * supplied (or default 1500ms) timeout; aggregate result drives
@@ -134,6 +142,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   registerAdminAuditLogRoutes(app, { audit: deps.adminAuditService });
   registerLegalRoutes(app, deps.legalService);
+  if (deps.authFlowsService !== undefined) {
+    registerAuthRoutes(app, { service: deps.authFlowsService });
+  }
   await registerOpenApiRoutes(app);
 
   // Health endpoint — public, no auth, no rate limit. Liveness only:

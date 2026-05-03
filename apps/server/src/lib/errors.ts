@@ -275,6 +275,56 @@ export class LegalAcceptanceRequiredError extends ApiError {
   }
 }
 
+// Auth-flow errors (V-079).
+
+export class EmailAlreadyRegisteredError extends ApiError {
+  constructor() {
+    super({
+      type: PROBLEM_TYPES.EmailAlreadyRegistered,
+      title: 'Email already registered',
+      status: 409,
+      detail: 'An account with this email already exists.',
+    });
+    this.name = 'EmailAlreadyRegisteredError';
+  }
+}
+
+export class InvalidCredentialsError extends ApiError {
+  constructor() {
+    super({
+      type: PROBLEM_TYPES.InvalidCredentials,
+      title: 'Invalid credentials',
+      status: 401,
+      detail: 'Email or password is incorrect.',
+    });
+    this.name = 'InvalidCredentialsError';
+  }
+}
+
+export class InvalidAuthTokenError extends ApiError {
+  constructor(detail = 'Token is invalid, expired, or already used.') {
+    super({
+      type: PROBLEM_TYPES.InvalidAuthToken,
+      title: 'Invalid auth token',
+      status: 400,
+      detail,
+    });
+    this.name = 'InvalidAuthTokenError';
+  }
+}
+
+export class EmailNotVerifiedError extends ApiError {
+  constructor() {
+    super({
+      type: PROBLEM_TYPES.EmailNotVerified,
+      title: 'Email not verified',
+      status: 403,
+      detail: 'Verify your email address before logging in.',
+    });
+    this.name = 'EmailNotVerifiedError';
+  }
+}
+
 export class InternalError extends ApiError {
   constructor(detail = 'An unexpected error occurred.', cause?: unknown) {
     super({

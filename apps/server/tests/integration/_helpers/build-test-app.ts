@@ -31,6 +31,9 @@ import { InMemoryAdminAuditLogRepo } from './in-memory-admin-audit-repo.js';
 import { InMemoryAccountsAdminRepo } from './in-memory-admin-accounts-repo.js';
 import { InMemoryRateLimitOverridesRepo } from './in-memory-rate-limit-overrides-repo.js';
 import { InMemoryLegalRepo } from './in-memory-legal-repo.js';
+import { InMemoryAuthFlowsRepo } from './in-memory-auth-flows-repo.js';
+import { AuthFlowsService } from '../../../src/services/auth-flows.js';
+import { createEmailService } from '../../../src/services/email.js';
 import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
 
 export interface TestAppOptions {
@@ -86,6 +89,7 @@ export interface TestAppFixture {
   adminAuditRepo: InMemoryAdminAuditLogRepo;
   rateLimitOverridesRepo: InMemoryRateLimitOverridesRepo;
   rateLimitStore: MemoryRateLimitStore;
+  authFlowsRepo: InMemoryAuthFlowsRepo;
   driver: MockDriver;
   /** Plaintext API key — pass as `Authorization: Bearer <plaintext>`. */
   plaintext: string;
@@ -233,8 +237,21 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
 
   const apiKeysService = new ApiKeysService(apiKeysRepo, authCache, webhooksService, legalService);
 
+  // V-079: auth-flow service. Uses a no-op email service (Postmark
+  // unconfigured) and exposes debug tokens so tests can read the
+  // plaintext from the response without scraping email.
+  const testLogger = createTestLogger();
+  const authFlowsRepo = new InMemoryAuthFlowsRepo();
+  const noopEmail = createEmailService({ config: null, logger: testLogger });
+  const authFlowsService = new AuthFlowsService(authFlowsRepo, noopEmail, testLogger, {
+    verifyEmailUrl: 'http://localhost:5173/auth/verify-email',
+    magicLinkUrl: 'http://localhost:5173/auth/magic-link',
+    passwordResetUrl: 'http://localhost:5173/auth/password-reset',
+    exposeDebugToken: true,
+  });
+
   const app = await buildApp({
-    logger: createTestLogger(),
+    logger: testLogger,
     authRepo,
     authCache,
     authCoalescer,
@@ -248,6 +265,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountsAdminService,
     rateLimitOverridesService,
     legalService,
+    authFlowsService,
     permissiveCors: true,
   });
 
@@ -263,6 +281,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     apiKeysRepo,
     usageRepo,
     rateLimitStore,
+    authFlowsRepo,
     driver,
     plaintext,
     accountId,

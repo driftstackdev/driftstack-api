@@ -103,6 +103,14 @@ export const accounts = pgTable(
       .default(sql`gen_random_uuid()`),
     email: text('email').notNull(),
     name: text('name'),
+    // scrypt-kdf encoded hash of the account password. Nullable: accounts
+    // created via magic-link-only flow have no password set until the user
+    // chooses to add one. Set via signup or password-reset confirm.
+    passwordHash: text('password_hash'),
+    // Set when the account holder confirms ownership of `email` by
+    // consuming a single-use email_verify_token. Auth gates that require
+    // a verified email check `email_verified_at IS NOT NULL`.
+    emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
     tier: accountTier('tier').notNull().default('trial_pack'),
     status: accountStatus('status').notNull().default('active'),
     createdAt: timestamp('created_at', { withTimezone: true })
@@ -113,6 +121,134 @@ export const accounts = pgTable(
       .default(sql`now()`),
   },
   (t) => [uniqueIndex('accounts_email_unique').on(t.email)],
+);
+
+// Single-use tokens for the user-facing auth flow.
+//
+// All four token tables share the same shape:
+//   - `token_hash`: sha256 of the plaintext token. The plaintext is sent
+//     once via Postmark, never stored. Lookup-by-hash is constant-time
+//     equality and adequate for opaque random tokens (scrypt is reserved
+//     for passwords + API keys where the input is user-chosen).
+//   - `expires_at`: short TTL (15-30 min for signup verify, 15 min for
+//     magic-link, 1h for password reset). Service-layer enforces.
+//   - `consumed_at`: set when the token is redeemed; non-null = used.
+//     Re-use is rejected at the service boundary.
+//   - `requested_from_ip`: best-effort client IP captured at request time
+//     for forensic value (rate limiting + abuse review).
+//
+// Tokens are NOT shared across flows: a magic-link token cannot stand in
+// for a password-reset token even if the bytes coincide. Each flow has
+// its own table so the verify path checks the right intent.
+
+export const emailVerifyTokens = pgTable(
+  'email_verify_tokens',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    requestedFromIp: text('requested_from_ip'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('email_verify_tokens_hash_unique').on(t.tokenHash),
+    index('email_verify_tokens_account_idx').on(t.accountId),
+    index('email_verify_tokens_expires_idx').on(t.expiresAt),
+  ],
+);
+
+export const magicLinkTokens = pgTable(
+  'magic_link_tokens',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    requestedFromIp: text('requested_from_ip'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('magic_link_tokens_hash_unique').on(t.tokenHash),
+    index('magic_link_tokens_account_idx').on(t.accountId),
+    index('magic_link_tokens_expires_idx').on(t.expiresAt),
+  ],
+);
+
+export const passwordResetTokens = pgTable(
+  'password_reset_tokens',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    requestedFromIp: text('requested_from_ip'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('password_reset_tokens_hash_unique').on(t.tokenHash),
+    index('password_reset_tokens_account_idx').on(t.accountId),
+    index('password_reset_tokens_expires_idx').on(t.expiresAt),
+  ],
+);
+
+// Long-lived browser session tokens — used by the customer dashboard
+// + admin panel (when those land). Distinct from API keys: API keys are
+// for code; web sessions are for humans in a browser. Same hash pattern
+// (sha256 of the opaque random token), TTL controlled by `expires_at`,
+// revocation via `revoked_at`.
+//
+// The session-cookie value is the plaintext token (returned once on
+// login / verify-email / magic-link consume / password-reset confirm).
+// Re-issued on /v1/auth/refresh: old session row gets `revoked_at`,
+// new row issued. `last_used_at` tracked for idle-timeout enforcement.
+export const webSessions = pgTable(
+  'web_sessions',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    issuedFromIp: text('issued_from_ip'),
+    userAgent: text('user_agent'),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('web_sessions_hash_unique').on(t.tokenHash),
+    index('web_sessions_account_idx').on(t.accountId),
+    index('web_sessions_expires_idx').on(t.expiresAt),
+  ],
 );
 
 export const apiKeys = pgTable(
@@ -512,3 +648,15 @@ export type NewAdminAuditLogRow = typeof adminAuditLog.$inferInsert;
 
 export type RateLimitOverrideRow = typeof rateLimitOverrides.$inferSelect;
 export type NewRateLimitOverrideRow = typeof rateLimitOverrides.$inferInsert;
+
+export type EmailVerifyToken = typeof emailVerifyTokens.$inferSelect;
+export type NewEmailVerifyToken = typeof emailVerifyTokens.$inferInsert;
+
+export type MagicLinkToken = typeof magicLinkTokens.$inferSelect;
+export type NewMagicLinkToken = typeof magicLinkTokens.$inferInsert;
+
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+
+export type WebSession = typeof webSessions.$inferSelect;
+export type NewWebSession = typeof webSessions.$inferInsert;

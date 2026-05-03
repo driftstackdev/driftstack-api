@@ -50,6 +50,22 @@ const ConfigSchema = z.object({
       tracesSampleRate: z.coerce.number().min(0).max(1).default(0),
     })
     .nullable(),
+  // V-079: where the user-facing auth-flow links point. The plaintext
+  // single-use token gets appended as `?token=<...>` to each. Defaults
+  // are dev-friendly localhost URLs; production sets these to the real
+  // dashboard origin.
+  authFlowUrls: z.object({
+    verifyEmail: z.string().url().default('http://localhost:5173/auth/verify-email'),
+    magicLink: z.string().url().default('http://localhost:5173/auth/magic-link'),
+    passwordReset: z.string().url().default('http://localhost:5173/auth/password-reset'),
+    /**
+     * When true, signup / magic-link / password-reset responses include
+     * a `debug_token` field containing the plaintext token. ENABLE ONLY
+     * in dev / test — production must never leak these tokens via the
+     * response body. Default false.
+     */
+    exposeDebugToken: z.coerce.boolean().default(false),
+  }),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -109,5 +125,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     r2: readR2Config(env),
     postmark: readPostmarkConfig(env),
     sentry: readSentryConfig(env),
+    authFlowUrls: {
+      verifyEmail: env.AUTH_VERIFY_EMAIL_URL,
+      magicLink: env.AUTH_MAGIC_LINK_URL,
+      passwordReset: env.AUTH_PASSWORD_RESET_URL,
+      exposeDebugToken: env.AUTH_EXPOSE_DEBUG_TOKEN,
+    },
   });
 }

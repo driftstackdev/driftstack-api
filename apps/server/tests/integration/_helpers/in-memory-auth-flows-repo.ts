@@ -1,0 +1,177 @@
+// In-memory AuthFlowsRepo for integration tests.
+//
+// Stores accounts + the four single-use token kinds + web_sessions in
+// plain Maps keyed by id. Behavioural fidelity:
+//   - email lookup is case-insensitive (canonical lowercased email)
+//   - tokens are stored by their pre-hashed token value
+//   - findActiveAuthToken filters by kind + tokenHash + expires_at + consumed_at
+//   - revoke / consume mutations follow the same atomicity boundary as Drizzle's
+//
+// No FK enforcement; tests that exercise account-cascade-delete shapes
+// should use the Drizzle repo against real Postgres.
+
+import { randomUUID } from 'node:crypto';
+import type {
+  AuthFlowAccountRow,
+  AuthFlowKind,
+  AuthFlowTokenRow,
+  AuthFlowsRepo,
+  WebSessionRow,
+} from '../../../src/services/auth-flows.js';
+
+interface Storage {
+  account: AuthFlowAccountRow;
+}
+
+export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
+  private accounts = new Map<string, Storage>();
+  private tokensByKind: Record<AuthFlowKind, Map<string, AuthFlowTokenRow>> = {
+    email_verify: new Map(),
+    magic_link: new Map(),
+    password_reset: new Map(),
+  };
+  private webSessions = new Map<string, WebSessionRow>();
+
+  /**
+   * Test-only seam for seeding existing accounts (e.g. legacy migration
+   * scenarios where accounts pre-date the password column).
+   */
+  seedAccount(row: AuthFlowAccountRow): void {
+    this.accounts.set(row.id, { account: row });
+  }
+
+  findAccountByEmail(email: string): Promise<AuthFlowAccountRow | null> {
+    const wanted = email.trim().toLowerCase();
+    for (const { account } of this.accounts.values()) {
+      if (account.email === wanted) return Promise.resolve(account);
+    }
+    return Promise.resolve(null);
+  }
+
+  findAccountById(id: string): Promise<AuthFlowAccountRow | null> {
+    return Promise.resolve(this.accounts.get(id)?.account ?? null);
+  }
+
+  createAccount(args: {
+    email: string;
+    name: string | null;
+    passwordHash: string;
+    initialTier: AuthFlowAccountRow['tier'];
+  }): Promise<AuthFlowAccountRow> {
+    const now = new Date();
+    const row: AuthFlowAccountRow = {
+      id: randomUUID(),
+      email: args.email.trim().toLowerCase(),
+      name: args.name,
+      passwordHash: args.passwordHash,
+      emailVerifiedAt: null,
+      tier: args.initialTier,
+      status: 'active',
+      createdAt: now,
+    };
+    this.accounts.set(row.id, { account: row });
+    return Promise.resolve(row);
+  }
+
+  setPassword(accountId: string, passwordHash: string): Promise<void> {
+    const slot = this.accounts.get(accountId);
+    if (!slot) return Promise.resolve();
+    slot.account = { ...slot.account, passwordHash };
+    return Promise.resolve();
+  }
+
+  markEmailVerified(accountId: string, at: Date): Promise<void> {
+    const slot = this.accounts.get(accountId);
+    if (!slot) return Promise.resolve();
+    if (slot.account.emailVerifiedAt !== null) return Promise.resolve();
+    slot.account = { ...slot.account, emailVerifiedAt: at };
+    return Promise.resolve();
+  }
+
+  insertAuthToken(args: {
+    kind: AuthFlowKind;
+    accountId: string;
+    tokenHash: string;
+    expiresAt: Date;
+    requestedFromIp: string | null;
+  }): Promise<AuthFlowTokenRow> {
+    const row: AuthFlowTokenRow = {
+      id: randomUUID(),
+      accountId: args.accountId,
+      tokenHash: args.tokenHash,
+      expiresAt: args.expiresAt,
+      consumedAt: null,
+      createdAt: new Date(),
+    };
+    this.tokensByKind[args.kind].set(row.id, row);
+    return Promise.resolve(row);
+  }
+
+  findActiveAuthToken(args: {
+    kind: AuthFlowKind;
+    tokenHash: string;
+    now: Date;
+  }): Promise<AuthFlowTokenRow | null> {
+    for (const row of this.tokensByKind[args.kind].values()) {
+      if (row.tokenHash !== args.tokenHash) continue;
+      if (row.consumedAt !== null) continue;
+      if (row.expiresAt.getTime() <= args.now.getTime()) continue;
+      return Promise.resolve(row);
+    }
+    return Promise.resolve(null);
+  }
+
+  consumeAuthToken(args: { kind: AuthFlowKind; id: string; at: Date }): Promise<void> {
+    const row = this.tokensByKind[args.kind].get(args.id);
+    if (!row || row.consumedAt !== null) return Promise.resolve();
+    this.tokensByKind[args.kind].set(args.id, { ...row, consumedAt: args.at });
+    return Promise.resolve();
+  }
+
+  insertWebSession(args: {
+    accountId: string;
+    tokenHash: string;
+    expiresAt: Date;
+    issuedFromIp: string | null;
+    userAgent: string | null;
+  }): Promise<WebSessionRow> {
+    const now = new Date();
+    const row: WebSessionRow = {
+      id: randomUUID(),
+      accountId: args.accountId,
+      tokenHash: args.tokenHash,
+      expiresAt: args.expiresAt,
+      lastUsedAt: now,
+      revokedAt: null,
+      issuedFromIp: args.issuedFromIp,
+      userAgent: args.userAgent,
+      createdAt: now,
+    };
+    this.webSessions.set(row.id, row);
+    return Promise.resolve(row);
+  }
+
+  findActiveWebSession(args: { tokenHash: string; now: Date }): Promise<WebSessionRow | null> {
+    for (const row of this.webSessions.values()) {
+      if (row.tokenHash !== args.tokenHash) continue;
+      if (row.revokedAt !== null) continue;
+      if (row.expiresAt.getTime() <= args.now.getTime()) continue;
+      return Promise.resolve(row);
+    }
+    return Promise.resolve(null);
+  }
+
+  touchWebSession(id: string, at: Date): Promise<void> {
+    const row = this.webSessions.get(id);
+    if (!row) return Promise.resolve();
+    this.webSessions.set(id, { ...row, lastUsedAt: at });
+    return Promise.resolve();
+  }
+
+  revokeWebSession(id: string, at: Date): Promise<void> {
+    const row = this.webSessions.get(id);
+    if (!row) return Promise.resolve();
+    this.webSessions.set(id, { ...row, revokedAt: at });
+    return Promise.resolve();
+  }
+}

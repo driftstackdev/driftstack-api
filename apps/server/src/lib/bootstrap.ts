@@ -31,6 +31,7 @@ import { DrizzleAdminAuditLogRepo } from '../db/admin-audit-repo.js';
 import { DrizzleAccountsAdminRepo } from '../db/admin-accounts-repo.js';
 import { DrizzleRateLimitOverridesRepo } from '../db/rate-limit-overrides-repo.js';
 import { DrizzleLegalRepo } from '../db/legal-repo.js';
+import { DrizzleAuthFlowsRepo } from '../db/auth-flows-repo.js';
 import { SessionsService } from '../services/sessions.js';
 import { ApiKeysService } from '../services/api-keys.js';
 import { UsageService } from '../services/usage.js';
@@ -39,6 +40,7 @@ import { AdminAuditService } from '../services/admin-audit.js';
 import { AccountsAdminService } from '../services/admin-accounts.js';
 import { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import { LegalService } from '../services/legal.js';
+import { AuthFlowsService } from '../services/auth-flows.js';
 import { buildLegalCatalog } from '../services/legal-catalog.js';
 import { RedisAuthCache } from '../services/auth-cache.js';
 import { AuthCoalescer } from '../services/auth-coalescer.js';
@@ -160,6 +162,15 @@ export async function createProductionDeps(
   // ApiKeysService needs legalService (V-049 issuance gate).
   const apiKeysService = new ApiKeysService(apiKeysRepo, authCache, webhooksService, legalService);
 
+  // V-079: user-facing auth flows.
+  const authFlowsRepo = new DrizzleAuthFlowsRepo(dbHandle);
+  const authFlowsService = new AuthFlowsService(authFlowsRepo, email, logger, {
+    verifyEmailUrl: config.authFlowUrls.verifyEmail,
+    magicLinkUrl: config.authFlowUrls.magicLink,
+    passwordResetUrl: config.authFlowUrls.passwordReset,
+    exposeDebugToken: config.authFlowUrls.exposeDebugToken,
+  });
+
   // Readiness checks. Postgres + Redis are required; R2 only checked
   // if configured. Postmark + Sentry are never readiness-gated.
   const readinessChecks: ReadinessCheck[] = [
@@ -197,6 +208,7 @@ export async function createProductionDeps(
     accountsAdminService,
     rateLimitOverridesService,
     legalService,
+    authFlowsService,
     readinessChecks,
     permissiveCors: false,
   };

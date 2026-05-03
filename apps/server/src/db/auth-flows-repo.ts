@@ -1,0 +1,224 @@
+// Drizzle-backed implementation of AuthFlowsRepo (V-079).
+//
+// Maps the AuthFlowsService's domain shape onto the four token tables
+// (`email_verify_tokens`, `magic_link_tokens`, `password_reset_tokens`)
+// + `web_sessions` + the new `accounts.password_hash` /
+// `accounts.email_verified_at` columns.
+
+import { and, eq, gt, isNull } from 'drizzle-orm';
+import type {
+  AuthFlowAccountRow,
+  AuthFlowKind,
+  AuthFlowTokenRow,
+  AuthFlowsRepo,
+  WebSessionRow,
+} from '../services/auth-flows.js';
+import type { Database } from './client.js';
+import {
+  accounts,
+  emailVerifyTokens,
+  magicLinkTokens,
+  passwordResetTokens,
+  webSessions,
+} from './schema.js';
+import type { AccountTier } from '@driftstack/api-types';
+
+function tableForKind(kind: AuthFlowKind) {
+  switch (kind) {
+    case 'email_verify':
+      return emailVerifyTokens;
+    case 'magic_link':
+      return magicLinkTokens;
+    case 'password_reset':
+      return passwordResetTokens;
+  }
+}
+
+function toAccountRow(r: typeof accounts.$inferSelect): AuthFlowAccountRow {
+  return {
+    id: r.id,
+    email: r.email,
+    name: r.name,
+    passwordHash: r.passwordHash,
+    emailVerifiedAt: r.emailVerifiedAt,
+    tier: r.tier,
+    status: r.status,
+    createdAt: r.createdAt,
+  };
+}
+
+function toTokenRow<T extends typeof emailVerifyTokens.$inferSelect>(r: T): AuthFlowTokenRow {
+  return {
+    id: r.id,
+    accountId: r.accountId,
+    tokenHash: r.tokenHash,
+    expiresAt: r.expiresAt,
+    consumedAt: r.consumedAt,
+    createdAt: r.createdAt,
+  };
+}
+
+function toWebSessionRow(r: typeof webSessions.$inferSelect): WebSessionRow {
+  return {
+    id: r.id,
+    accountId: r.accountId,
+    tokenHash: r.tokenHash,
+    expiresAt: r.expiresAt,
+    lastUsedAt: r.lastUsedAt,
+    revokedAt: r.revokedAt,
+    issuedFromIp: r.issuedFromIp,
+    userAgent: r.userAgent,
+    createdAt: r.createdAt,
+  };
+}
+
+export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
+  constructor(private readonly database: Database) {}
+
+  async findAccountByEmail(email: string): Promise<AuthFlowAccountRow | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(accounts)
+      .where(eq(accounts.email, email.trim().toLowerCase()))
+      .limit(1);
+    return row ? toAccountRow(row) : null;
+  }
+
+  async findAccountById(id: string): Promise<AuthFlowAccountRow | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(accounts)
+      .where(eq(accounts.id, id))
+      .limit(1);
+    return row ? toAccountRow(row) : null;
+  }
+
+  async createAccount(args: {
+    email: string;
+    name: string | null;
+    passwordHash: string;
+    initialTier: AccountTier;
+  }): Promise<AuthFlowAccountRow> {
+    const [row] = await this.database.db
+      .insert(accounts)
+      .values({
+        email: args.email.trim().toLowerCase(),
+        name: args.name,
+        passwordHash: args.passwordHash,
+        tier: args.initialTier,
+      })
+      .returning();
+    if (!row) throw new Error('createAccount: insert returned no row');
+    return toAccountRow(row);
+  }
+
+  async setPassword(accountId: string, passwordHash: string): Promise<void> {
+    await this.database.db
+      .update(accounts)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(eq(accounts.id, accountId));
+  }
+
+  async markEmailVerified(accountId: string, at: Date): Promise<void> {
+    await this.database.db
+      .update(accounts)
+      .set({ emailVerifiedAt: at, updatedAt: at })
+      .where(and(eq(accounts.id, accountId), isNull(accounts.emailVerifiedAt)));
+  }
+
+  async insertAuthToken(args: {
+    kind: AuthFlowKind;
+    accountId: string;
+    tokenHash: string;
+    expiresAt: Date;
+    requestedFromIp: string | null;
+  }): Promise<AuthFlowTokenRow> {
+    const t = tableForKind(args.kind);
+    const [row] = await this.database.db
+      .insert(t)
+      .values({
+        accountId: args.accountId,
+        tokenHash: args.tokenHash,
+        expiresAt: args.expiresAt,
+        requestedFromIp: args.requestedFromIp,
+      })
+      .returning();
+    if (!row) throw new Error('insertAuthToken: insert returned no row');
+    return toTokenRow(row);
+  }
+
+  async findActiveAuthToken(args: {
+    kind: AuthFlowKind;
+    tokenHash: string;
+    now: Date;
+  }): Promise<AuthFlowTokenRow | null> {
+    const t = tableForKind(args.kind);
+    const [row] = await this.database.db
+      .select()
+      .from(t)
+      .where(and(eq(t.tokenHash, args.tokenHash), gt(t.expiresAt, args.now), isNull(t.consumedAt)))
+      .limit(1);
+    return row ? toTokenRow(row) : null;
+  }
+
+  async consumeAuthToken(args: { kind: AuthFlowKind; id: string; at: Date }): Promise<void> {
+    const t = tableForKind(args.kind);
+    await this.database.db
+      .update(t)
+      .set({ consumedAt: args.at })
+      .where(and(eq(t.id, args.id), isNull(t.consumedAt)));
+  }
+
+  async insertWebSession(args: {
+    accountId: string;
+    tokenHash: string;
+    expiresAt: Date;
+    issuedFromIp: string | null;
+    userAgent: string | null;
+  }): Promise<WebSessionRow> {
+    const [row] = await this.database.db
+      .insert(webSessions)
+      .values({
+        accountId: args.accountId,
+        tokenHash: args.tokenHash,
+        expiresAt: args.expiresAt,
+        issuedFromIp: args.issuedFromIp,
+        userAgent: args.userAgent,
+      })
+      .returning();
+    if (!row) throw new Error('insertWebSession: insert returned no row');
+    return toWebSessionRow(row);
+  }
+
+  async findActiveWebSession(args: {
+    tokenHash: string;
+    now: Date;
+  }): Promise<WebSessionRow | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(webSessions)
+      .where(
+        and(
+          eq(webSessions.tokenHash, args.tokenHash),
+          gt(webSessions.expiresAt, args.now),
+          isNull(webSessions.revokedAt),
+        ),
+      )
+      .limit(1);
+    return row ? toWebSessionRow(row) : null;
+  }
+
+  async touchWebSession(id: string, at: Date): Promise<void> {
+    await this.database.db
+      .update(webSessions)
+      .set({ lastUsedAt: at })
+      .where(eq(webSessions.id, id));
+  }
+
+  async revokeWebSession(id: string, at: Date): Promise<void> {
+    await this.database.db
+      .update(webSessions)
+      .set({ revokedAt: at })
+      .where(and(eq(webSessions.id, id), isNull(webSessions.revokedAt)));
+  }
+}
