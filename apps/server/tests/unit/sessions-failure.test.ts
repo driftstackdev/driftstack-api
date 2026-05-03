@@ -78,6 +78,9 @@ class StubRepo implements SessionRepo {
     if (!r || r.accountId !== accountId) return Promise.resolve(null);
     return Promise.resolve(r);
   }
+  findSessionUnscoped(id: string): Promise<SessionRecord | null> {
+    return Promise.resolve(this.sessions.get(id) ?? null);
+  }
   updateSessionStatus(
     id: string,
     status: SessionRecord['status'],
@@ -169,7 +172,7 @@ class ThrowingDriver implements Driver {
     });
   }
   capture(): Promise<{
-    kind: 'screenshot' | 'pdf' | 'dom' | 'network';
+    kind: 'screenshot' | 'pdf' | 'dom_snapshot';
     data: string;
     encoding: 'base64' | 'utf8';
     byteSize: number;
@@ -221,7 +224,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
 
     let caught: unknown;
     try {
-      await service.navigate(ctx, session.id, { url: 'https://example.com' });
+      await service.navigate(ctx, session.id, { url: 'https://example.com', wait_until: 'load' });
     } catch (e) {
       caught = e;
     }
@@ -250,7 +253,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     // First failure
     driver.primeNextThrow({ name: 'DriverError', message: 'first fail' });
     await expect(
-      service.navigate(ctx, session.id, { url: 'https://example.com' }),
+      service.navigate(ctx, session.id, { url: 'https://example.com', wait_until: 'load' }),
     ).rejects.toThrow();
 
     expect(webhookEvents).toHaveLength(1);
@@ -284,7 +287,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
             condition: { kind: 'selector', selector: 'b' },
           });
         } else if (op === 'capture') {
-          await service.capture(ctx, session.id, { kind: 'screenshot' });
+          await service.capture(ctx, session.id, { kind: 'screenshot', full_page: false });
         } else {
           await service.getState(ctx, session.id);
         }
@@ -308,7 +311,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     const ctx = buildCtx();
     const session = await service.create(ctx, { archetype: 'iphone16pro_ios26_4_1' });
 
-    await service.navigate(ctx, session.id, { url: 'https://example.com' });
+    await service.navigate(ctx, session.id, { url: 'https://example.com', wait_until: 'load' });
     await service.getState(ctx, session.id);
     await service.destroy(ctx, session.id);
 

@@ -52,6 +52,10 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
     return Promise.resolve(r && r.accountId === accountId ? r : null);
   }
 
+  findApiKeyUnscoped(id: string): Promise<ApiKeyRow | null> {
+    return Promise.resolve(this.byId.get(id) ?? null);
+  }
+
   markRevoked(id: string, at: Date): Promise<void> {
     const r = this.byId.get(id);
     if (r) {

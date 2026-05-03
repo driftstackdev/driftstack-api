@@ -43,6 +43,11 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
     return row ? toApiKeyRow(row) : null;
   }
 
+  async findApiKeyUnscoped(id: string): Promise<ApiKeyRow | null> {
+    const [row] = await this.database.db.select().from(apiKeys).where(eq(apiKeys.id, id)).limit(1);
+    return row ? toApiKeyRow(row) : null;
+  }
+
   async markRevoked(id: string, at: Date): Promise<void> {
     await this.database.db.update(apiKeys).set({ revokedAt: at }).where(eq(apiKeys.id, id));
   }

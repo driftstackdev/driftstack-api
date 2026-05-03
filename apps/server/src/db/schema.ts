@@ -89,6 +89,9 @@ export const adminAuditAction = pgEnum('admin_audit_action', [
   'webhook_delivery.requeued',
   'rate_limit_override.set',
   'rate_limit_override.cleared',
+  // V-100: admin force-actions on customer resources.
+  'session.destroyed_by_admin',
+  'api_key.revoked_by_admin',
 ]);
 
 // ───────────────────────────────────────────────────────────────────────────

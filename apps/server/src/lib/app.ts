@@ -25,6 +25,9 @@ import type { AuthFlowsService } from '../services/auth-flows.js';
 import type { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import type { ProfilesService } from '../services/profiles.js';
 import type { BillingService } from '../services/billing.js';
+import type { SessionRepo } from '../services/sessions.js';
+import type { ApiKeysRepo } from '../services/api-keys.js';
+import type { Driver } from '../drivers/types.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -41,6 +44,7 @@ import { registerAuthRoutes } from '../routes/auth.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
 import { registerBillingRoutes } from '../routes/billing.js';
+import { registerAdminForceActionRoutes } from '../routes/admin-force-actions.js';
 
 export interface ReadinessCheck {
   /** Display name surfaced in the /ready response (e.g. "postgres", "redis", "r2"). */
@@ -99,6 +103,14 @@ export interface AppDeps {
   profilesService?: ProfilesService;
   /** V-082: billing service (Stripe checkout / portal / trial-pack). Optional. */
   billingService?: BillingService;
+  /**
+   * V-100: admin force-action route deps. Routes register only when
+   * all four are provided (sessionRepo / apiKeysRepo / driver / audit
+   * are all needed for the destroy/revoke handlers).
+   */
+  sessionRepo?: SessionRepo;
+  apiKeysRepo?: ApiKeysRepo;
+  driver?: Driver;
   /**
    * Readiness checks executed by `/ready`. Each runs with the
    * supplied (or default 1500ms) timeout; aggregate result drives
@@ -176,6 +188,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   }
   if (deps.billingService !== undefined) {
     registerBillingRoutes(app, { service: deps.billingService });
+  }
+  if (
+    deps.sessionRepo !== undefined &&
+    deps.apiKeysRepo !== undefined &&
+    deps.driver !== undefined
+  ) {
+    registerAdminForceActionRoutes(app, {
+      sessionRepo: deps.sessionRepo,
+      apiKeysRepo: deps.apiKeysRepo,
+      driver: deps.driver,
+      audit: deps.adminAuditService,
+      authCache: deps.authCache,
+    });
   }
   await registerOpenApiRoutes(app);
 

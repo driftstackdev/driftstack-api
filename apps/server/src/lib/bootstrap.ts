@@ -281,6 +281,10 @@ export async function createProductionDeps(
     legalService,
     authFlowsService,
     profilesService,
+    // V-100: admin force-actions take direct repo + driver access.
+    sessionRepo: sessionsRepo,
+    apiKeysRepo,
+    driver,
     ...(config.stripe?.webhookSecret !== undefined
       ? {
           stripeWebhooksService,

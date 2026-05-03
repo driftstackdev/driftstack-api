@@ -17,7 +17,10 @@ export type AdminAuditAction =
   | 'webhook_delivery.replayed'
   | 'webhook_delivery.requeued'
   | 'rate_limit_override.set'
-  | 'rate_limit_override.cleared';
+  | 'rate_limit_override.cleared'
+  // V-100: force actions on customer resources.
+  | 'session.destroyed_by_admin'
+  | 'api_key.revoked_by_admin';
 
 export interface AdminAuditLogRow {
   id: string;

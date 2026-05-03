@@ -1,0 +1,224 @@
+// V-100: admin force-actions on customer resources.
+//
+//   POST /v1/admin/sessions/:id/destroy   — force-destroy a customer session
+//   POST /v1/admin/api-keys/:id/revoke    — force-revoke a customer API key
+//
+// These bypass the usual ownership check (admin scope only). Both
+// write an admin_audit_log row before responding (D-025: audit-write
+// before response is not best-effort).
+
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { z } from 'zod';
+import type { AdminAuditService, AdminAuditAction } from '../services/admin-audit.js';
+import type { SessionRepo } from '../services/sessions.js';
+import type { ApiKeysRepo } from '../services/api-keys.js';
+import type { Driver } from '../drivers/types.js';
+import type { AuthCache } from '../services/auth-cache.js';
+import { BadRequestError, NotFoundError } from '../lib/errors.js';
+import { requireScope } from '../lib/errors-helpers.js';
+
+const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+function uuidFromPrefixedId(value: string, expectedPrefix: string): string {
+  const match = PUBLIC_ID_RE.exec(value);
+  if (!match || !match[1] || !value.startsWith(`${expectedPrefix}_`)) {
+    throw new BadRequestError(`Invalid id format. Expected "${expectedPrefix}_<uuid>".`);
+  }
+  return match[1];
+}
+
+const ForceActionBodySchema = z
+  .object({
+    reason: z.string().min(1).max(500).optional(),
+  })
+  .optional();
+
+function clientIp(request: FastifyRequest): string | null {
+  const xff = request.headers['x-forwarded-for'];
+  if (typeof xff === 'string' && xff.length > 0) {
+    const first = xff.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return request.ip ?? null;
+}
+
+export interface AdminForceActionsRoutesOptions {
+  sessionRepo: SessionRepo;
+  apiKeysRepo: ApiKeysRepo;
+  driver: Driver;
+  audit: AdminAuditService;
+  authCache: AuthCache | null;
+}
+
+export function registerAdminForceActionRoutes(
+  app: FastifyInstance,
+  opts: AdminForceActionsRoutesOptions,
+): void {
+  const { sessionRepo, apiKeysRepo, driver, audit, authCache } = opts;
+
+  /**
+   * Wrap a force-action with audit-on-success + audit-on-error per D-025.
+   */
+  async function withAudit<T>(
+    request: FastifyRequest,
+    action: AdminAuditAction,
+    args: {
+      targetAccountId: string | null;
+      targetResourceId: string;
+      inputPayload: Record<string, unknown>;
+      perform: () => Promise<T>;
+    },
+  ): Promise<T> {
+    const ctx = request.account;
+    if (!ctx) throw new Error('account context missing after requireAuth');
+    try {
+      const result = await args.perform();
+      await audit.record({
+        adminAccountId: ctx.account.id,
+        adminKeyId: ctx.apiKey.id,
+        action,
+        targetAccountId: args.targetAccountId,
+        targetResourceId: args.targetResourceId,
+        inputPayload: args.inputPayload,
+        result: 'success',
+        ipAddress: clientIp(request),
+      });
+      return result;
+    } catch (err) {
+      const code =
+        err instanceof Error && err.name ? err.name.toLowerCase().replace(/error$/, '') : 'unknown';
+      await audit.record({
+        adminAccountId: ctx.account.id,
+        adminKeyId: ctx.apiKey.id,
+        action,
+        targetAccountId: args.targetAccountId,
+        targetResourceId: args.targetResourceId,
+        inputPayload: args.inputPayload,
+        result: `error: ${code}`,
+        ipAddress: clientIp(request),
+      });
+      throw err;
+    }
+  }
+
+  // ── POST /v1/admin/sessions/:id/destroy ───────────────────────────────
+  app.post<{ Params: { id: string } }>(
+    '/v1/admin/sessions/:id/destroy',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      requireScope(ctx, 'admin');
+
+      const sessionId = uuidFromPrefixedId(request.params.id, 'ses');
+      const parsed = ForceActionBodySchema.safeParse(request.body ?? {});
+      if (!parsed.success) throw new BadRequestError('Invalid body.');
+      const reason = parsed.data?.reason;
+
+      const session = await sessionRepo.findSessionUnscoped(sessionId);
+      if (!session) throw new NotFoundError(`Session "${sessionId}" not found.`);
+
+      // Admin destroy is idempotent — already-destroyed session returns the
+      // same shape without re-firing the driver / repo writes.
+      const targetAccountId = session.accountId;
+      const inputPayload = reason !== undefined ? { reason } : {};
+
+      if (session.status === 'destroyed') {
+        await audit.record({
+          adminAccountId: ctx.account.id,
+          adminKeyId: ctx.apiKey.id,
+          action: 'session.destroyed_by_admin',
+          targetAccountId,
+          targetResourceId: sessionId,
+          inputPayload: { ...inputPayload, idempotent: true },
+          result: 'success',
+          ipAddress: clientIp(request),
+        });
+        return {
+          id: `ses_${session.id}`,
+          status: 'destroyed',
+          destroyed_at: session.destroyedAt?.toISOString() ?? null,
+        };
+      }
+
+      const destroyedAt = new Date();
+      await withAudit(request, 'session.destroyed_by_admin', {
+        targetAccountId,
+        targetResourceId: sessionId,
+        inputPayload,
+        perform: async () => {
+          await driver.destroy(session.driverSessionId);
+          await sessionRepo.updateSessionStatus(session.id, 'destroyed', { destroyedAt });
+          await sessionRepo.recordEvent({
+            sessionId: session.id,
+            type: 'destroyed',
+            payload: { force: true, by_admin: true, ...(reason !== undefined ? { reason } : {}) },
+            durationMs: null,
+          });
+        },
+      });
+      return {
+        id: `ses_${session.id}`,
+        status: 'destroyed',
+        destroyed_at: destroyedAt.toISOString(),
+      };
+    },
+  );
+
+  // ── POST /v1/admin/api-keys/:id/revoke ────────────────────────────────
+  app.post<{ Params: { id: string } }>(
+    '/v1/admin/api-keys/:id/revoke',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      requireScope(ctx, 'admin');
+
+      const keyId = uuidFromPrefixedId(request.params.id, 'key');
+      const parsed = ForceActionBodySchema.safeParse(request.body ?? {});
+      if (!parsed.success) throw new BadRequestError('Invalid body.');
+      const reason = parsed.data?.reason;
+
+      const key = await apiKeysRepo.findApiKeyUnscoped(keyId);
+      if (!key) throw new NotFoundError(`API key "${keyId}" not found.`);
+
+      const targetAccountId = key.accountId;
+      const inputPayload = reason !== undefined ? { reason } : {};
+
+      if (key.revokedAt !== null) {
+        await audit.record({
+          adminAccountId: ctx.account.id,
+          adminKeyId: ctx.apiKey.id,
+          action: 'api_key.revoked_by_admin',
+          targetAccountId,
+          targetResourceId: keyId,
+          inputPayload: { ...inputPayload, idempotent: true },
+          result: 'success',
+          ipAddress: clientIp(request),
+        });
+        return { id: `key_${key.id}`, revoked_at: key.revokedAt.toISOString() };
+      }
+
+      const revokedAt = new Date();
+      await withAudit(request, 'api_key.revoked_by_admin', {
+        targetAccountId,
+        targetResourceId: keyId,
+        inputPayload,
+        perform: async () => {
+          await apiKeysRepo.markRevoked(key.id, revokedAt);
+          // Invalidate any cached AccountContext entries for this key
+          // so the next auth read sees the revocation immediately
+          // (D-020 cache invalidation pattern).
+          if (authCache !== null) {
+            try {
+              await authCache.invalidateKey(key.id);
+            } catch {
+              /* cache failure non-fatal */
+            }
+          }
+        },
+      });
+      return { id: `key_${key.id}`, revoked_at: revokedAt.toISOString() };
+    },
+  );
+}

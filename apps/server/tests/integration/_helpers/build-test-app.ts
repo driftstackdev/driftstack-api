@@ -350,6 +350,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     stripeWebhookSigningSecret,
     profilesService,
     billingService,
+    sessionRepo: sessionsRepo,
+    apiKeysRepo,
+    driver,
     permissiveCors: true,
   });
 

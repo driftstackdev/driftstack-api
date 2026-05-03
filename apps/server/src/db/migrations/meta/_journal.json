@@ -78,6 +78,13 @@
       "when": 1778890800000,
       "tag": "0010_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1778891200000,
+      "tag": "0011_admin_force_audit_actions",
+      "breakpoints": true
     }
   ]
 }

@@ -44,6 +44,10 @@ export class InMemorySessionsRepo implements SessionRepo {
     return Promise.resolve(s);
   }
 
+  findSessionUnscoped(id: string): Promise<SessionRecord | null> {
+    return Promise.resolve(this.sessions.get(id) ?? null);
+  }
+
   updateSessionStatus(
     id: string,
     status: SessionRecord['status'],

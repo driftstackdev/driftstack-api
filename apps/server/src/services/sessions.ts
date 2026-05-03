@@ -121,6 +121,8 @@ export interface SessionRepo {
   insertSession(input: NewSessionInput): Promise<SessionRecord>;
   /** Find a session by id, scoped to the supplied account. */
   findSession(id: string, accountId: string): Promise<SessionRecord | null>;
+  /** Find a session by id WITHOUT account scoping (admin force-actions only). */
+  findSessionUnscoped(id: string): Promise<SessionRecord | null>;
   updateSessionStatus(
     id: string,
     status: SessionRecord['status'],

@@ -41,6 +41,8 @@ export interface ApiKeysRepo {
   insertApiKey(input: NewApiKeyInput): Promise<ApiKeyRow>;
   listApiKeys(accountId: string): Promise<ApiKeyRow[]>;
   findApiKey(id: string, accountId: string): Promise<ApiKeyRow | null>;
+  /** Find an API key by id WITHOUT account scoping (admin force-actions only). */
+  findApiKeyUnscoped(id: string): Promise<ApiKeyRow | null>;
   markRevoked(id: string, at: Date): Promise<void>;
 }
 

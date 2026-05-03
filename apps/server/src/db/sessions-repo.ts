@@ -41,6 +41,15 @@ export class DrizzleSessionRepo implements SessionRepo {
     return row ? toSessionRecord(row) : null;
   }
 
+  async findSessionUnscoped(id: string): Promise<SessionRecord | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, id))
+      .limit(1);
+    return row ? toSessionRecord(row) : null;
+  }
+
   async updateSessionStatus(
     id: string,
     status: SessionRecord['status'],

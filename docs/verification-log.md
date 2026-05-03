@@ -5972,3 +5972,110 @@ Customer-visible copy + visual treatments on the onboarding flow pages (signup /
 ### Next
 
 Continuing to V-100 — onboarding flow page route shells (signup / verify-email / legal-accept / tier-select / payment-redirect / first-key). Page structure as Tier 1 scaffolding; copy as Tier 3 working-tree drafts.
+
+---
+
+## V-100 — Admin force-actions: session destroy + API key revoke (Routine — Workstream C admin panel API fill)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Round out the admin panel API surface with two cross-account force-action endpoints the founder's queue called out as missing:
+
+- `POST /v1/admin/sessions/:id/destroy` — force-destroy a customer session (e.g. abuse, support escalation).
+- `POST /v1/admin/api-keys/:id/revoke` — force-revoke a customer API key (e.g. credential leak, security incident).
+
+Both bypass the usual ownership check (admin scope required), write an admin_audit_log row before responding (D-025), and are idempotent on already-actioned resources.
+
+### What changed
+
+**Schema (Drizzle + migration 0011):**
+
+- Extended `admin_audit_action` enum with `'session.destroyed_by_admin'` and `'api_key.revoked_by_admin'`. Postgres-safe via `ALTER TYPE ... ADD VALUE IF NOT EXISTS`.
+
+**Repos extended with unscoped lookups:**
+
+- `SessionRepo.findSessionUnscoped(id)` — admin can find any session without account scoping. In-memory + Drizzle implementations.
+- `ApiKeysRepo.findApiKeyUnscoped(id)` — same shape for keys.
+
+**Route (`apps/server/src/routes/admin-force-actions.ts`):**
+
+Both endpoints share a `withAudit` wrapper that records success or `error: <code>` per D-025. Force-destroy session:
+
+1. `requireScope(ctx, 'admin')`.
+2. `findSessionUnscoped` → 404 if missing.
+3. If already destroyed → audit-with-`idempotent: true` flag, return current state.
+4. Otherwise `driver.destroy(driverSessionId)` → `updateSessionStatus(id, 'destroyed', { destroyedAt })` → record `'destroyed'` session_event with `force: true, by_admin: true` payload → audit row.
+
+Force-revoke API key follows the same shape:
+
+1. Admin scope.
+2. `findApiKeyUnscoped` → 404 if missing.
+3. Idempotent on already-revoked.
+4. Otherwise `markRevoked(id, at)` → invalidate auth cache (D-020 pattern) → audit row.
+
+Both accept an optional `{ reason?: string }` body (1-500 chars). Reason is recorded in the audit row's `inputPayload`.
+
+**API types (`packages/api-types/src/admin.ts`):**
+
+- `AdminAuditActionSchema` extended with the two new actions.
+
+**Service (`apps/server/src/services/admin-audit.ts`):**
+
+- `AdminAuditAction` union type extended.
+
+**Wiring (`app.ts` + `bootstrap.ts` + `build-test-app.ts`):**
+
+- New `AppDeps` fields: `sessionRepo?`, `apiKeysRepo?`, `driver?`. Routes register only when all three are provided.
+- Bootstrap wires the existing Drizzle repos + driver into AppDeps.
+- Test fixture wires the in-memory repos + mock driver.
+
+### How verified
+
+- `npm run typecheck`: clean across all 6 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 475/475 passing (was 465; +10 new admin force-action tests).
+
+Coverage:
+
+1. Force-destroy active session → 200, status 'destroyed', destroyed_at set, audit row recorded with reason.
+2. Force-destroy already-destroyed session → 200 idempotent.
+3. Force-destroy unknown id → 404.
+4. Force-destroy malformed id → 400.
+5. Force-destroy without admin scope → 403.
+6. Force-destroy session owned by a different account → admin can act cross-account; audit row records the correct target_account_id.
+7-10. Same shape for force-revoke API key (active, idempotent, 404, 403).
+
+### Decisions made (no new D-entries; follows D-025 admin audit pattern)
+
+- **Idempotent on already-actioned resources.** Both endpoints accept a second call as a 200 success with `idempotent: true` recorded in the audit payload. Avoids spurious 409s on follow-up retries; the audit log surfaces the duplicate explicitly for forensic review.
+- **Auth cache invalidation on key revoke.** `authCache.invalidateKey(key.id)` fires inside the `withAudit` perform block. Failure is non-fatal — the underlying revocation is committed; the next auth read TTLs out the stale entry within 30s in the worst case.
+- **Reason field optional, 1-500 chars when present.** Long enough for a one-paragraph incident note; short enough that admin-panel free-text doesn't bloat the audit table.
+- **Pre-existing typecheck-test fix in `tests/unit/sessions-failure.test.ts`.** V-090 unit tests were calling `service.navigate` with a partial body missing `wait_until`; this typechecked because the file was only run by `npm test` (vitest does runtime only) and not by `tsc --build` (which only checks `apps/server/src/`). V-100 added a type-only import path that pulled tests through the strict typechecker. Fixed by adding `wait_until: 'load'` to navigate calls and `full_page: false` to capture calls. Pre-existing latent issue surfaced; no behavioural change.
+
+### Files added
+
+- `apps/server/src/db/migrations/0011_admin_force_audit_actions.sql`
+- `apps/server/src/routes/admin-force-actions.ts`
+- `apps/server/tests/integration/admin-force-actions.test.ts`
+
+### Files modified
+
+- `apps/server/src/db/schema.ts` (admin_audit_action enum extended)
+- `apps/server/src/db/migrations/meta/_journal.json` (entry 11)
+- `apps/server/src/db/sessions-repo.ts` + `apps/server/src/db/api-keys-repo.ts` (unscoped lookups)
+- `apps/server/src/services/sessions.ts` + `apps/server/src/services/api-keys.ts` (interface methods)
+- `apps/server/src/services/admin-audit.ts` (action union)
+- `apps/server/src/lib/app.ts` + `apps/server/src/lib/bootstrap.ts` (AppDeps fields + wiring)
+- `apps/server/tests/integration/_helpers/in-memory-sessions-repo.ts` + `in-memory-api-keys-repo.ts` (unscoped lookups)
+- `apps/server/tests/integration/_helpers/build-test-app.ts` (fixture wiring)
+- `apps/server/tests/unit/sessions-failure.test.ts` (latent typecheck fix; navigate/capture default fields)
+- `packages/api-types/src/admin.ts` (action enum)
+
+### Next
+
+Status update batch via clipboard, then continuing per never-stop rule into Phase 5 admin-panel UI scaffolding (apps/admin-panel/) or Phase 6 GUI client foundation (Tauri scaffolding).
