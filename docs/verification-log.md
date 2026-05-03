@@ -3778,3 +3778,62 @@ Marketing-site scaffolding + landing page + 404 + base layout + theme tokens shi
 ### Next
 
 V-065: pricing page. 6-column comparison table (Trial pack / Starter / Solo / Builder / Scale / Enterprise) using file-127 values + ADR-003 trial-pack column. Monthly/annual toggle with 20% off badge across paid tiers. Self-hosted section below with 3 SKUs and "Contact Sales" CTAs. BYOK note prominent on Builder+ tiers using "pricing announced at launch" (BYOK markup remains the sole Tier 3 placeholder copy). BTW footnote.
+
+## V-065 — Marketing site pricing page
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream B iteration 2 — pricing page at `/pricing`. The single most consequential page on the marketing site for the buyer journey.
+
+The pricing page renders file-127 locked values for the five paid tiers and ADR-003 trial-pack values for the entry SKU. Monthly/annual toggle is a vanilla-JS interaction (no client-side framework) — the static-build remains static, and the interactivity is a 30-line inline script.
+
+### What changed
+
+- **`apps/marketing-site/src/data/pricing.ts`** (NEW) — single-source-of-truth TS module exporting `API_TIERS` (6 entries: trial-pack + 5 paid), `SELF_HOSTED_SKUS` (3 entries: Solo / Pro / Enterprise), `TRIAL_PACK` (constants for the trial-pack hero card), and `ANNUAL_DISCOUNT_LABEL`. Comment block in the file points to file 127 + ADR-003 + the backend equivalents at `apps/server/src/services/sessions.ts` + `usage.ts` so a future maintainer sees the cross-references when changing values.
+- **`apps/marketing-site/src/pages/pricing.astro`** (NEW) — pricing page composed of:
+  - **Header section** — eyebrow + "Pay for browser-hours. Cap by concurrency. Done." headline + framing paragraph emphasising "no API call upcharges, no retention gates, no archetype lockouts beyond what's listed."
+  - **Trial-pack hero card** at `#trial-pack` anchor — large card with trial-pack price + breakdown (299¢ credit, $0.18/hr Starter rate, ~16 hours, 1 concurrent, 14-day window, once per account) + dual CTA (primary "Buy $2.99 trial pack" → `/signup`, secondary "Read the docs"). Three-bullet feature list reinforcing the ADR-003 framing.
+  - **Subscription tiers section** — eyebrow + headline + monthly/annual toggle with `−20%` badge.
+    - Desktop: full 6-row × 5-column table (Plan / Price / Browser-hours / Overage/hr / Concurrent / Archetypes / Support / Bundled LLM / CTA). Builder column highlighted as "popular" with oxblood badge.
+    - Mobile: 5 stacked cards with the same fields. Same monthly/annual price toggle applies.
+  - **Pricing footnote** — "All prices in USD. BTW added per region (Moneybird per-region calculation). No setup fees on any tier. Annual contracts billed up front."
+  - **BYOK section** — pinned to Builder/Scale/Enterprise context. Eyebrow + "Bundled or BYOK — your call." headline + framing paragraph + 3-bullet feature list. **Bundled per-token pricing announced at launch** — the only remaining Tier 3 placeholder copy (BYOK markup is the sole Tier 3 founder-explicit value per memory `tier3_explicit_values.md`).
+  - **Self-Hosted section** — 3-card grid for Solo / Pro / Enterprise with hardware required, concurrency, archetype access, minimum term, "Contact sales" `mailto:` CTAs.
+  - **Mini FAQ section** — four common questions inline (browser-hours-vs-sessions, trial-pack exhaustion path, mid-month tier switching, EU stack reality) with a "See full FAQ" link to `/faq` (lands V-066).
+  - **Inline `<script is:inline>`** for the monthly/annual toggle: 30 lines of vanilla JS that flips `aria-selected` + tailwind classes on the toggle buttons + toggles `[data-period-target="monthly|annual"]` element visibility. No client framework, no hydration, no extra JS bundle.
+- **Trial-pack CTA copy throughout** uses "$2.99 trial pack" with the price visible in every CTA button. Subscription-tier CTAs all link to `/pricing#trial-pack` because trial-pack is the universal first-purchase step before tier selection (you can't subscribe without first having an account, and all accounts onboard via the trial-pack purchase per ADR-003 + Workstream F flow).
+- **Negative-positioning copy adjusted** — earlier draft had "No free trial; no card-then-bait" framing on the index page + pricing meta-description. Per founder direction (never use "free trial" anywhere), reworded to "One transparent price ladder, no bait-and-switch" / "$2.99 trial pack, then per-browser-hour billing. One transparent ladder, no bait-and-switch."
+
+### Empirical findings
+
+1. **All tier numbers come from `pricing.ts`, not inlined into the template.** Founder file-127 revisions update one TS file; the page rerenders with the new values. Same single-source-of-truth pattern as the backend's `TIER_CONCURRENT_SESSION_LIMITS` and `TIER_QUOTAS`. Both layers must agree per V-061's empirical-finding-3 ("per-tier limits are commercial commitments encoded in three layers; all three must agree").
+
+2. **Vanilla JS toggle vs client-side framework — vanilla wins at this scale.** Astro supports React/Vue/Svelte/SolidJS via island hydration. For a single toggle controlling visibility of a few cells, the framework boilerplate (component file + import + `client:load` directive + extra ~10KB of JS) doesn't pay for itself. 30 lines of inline JS does the same job with zero extra bundle. If the marketing site grows interactive surface (live API explorers, parameter playgrounds), reconsider; for now plain JS.
+
+3. **Mobile responsive split** — desktop renders the full 6-row × 5-column table (best for direct tier comparison); mobile renders 5 stacked cards (table-on-mobile is unreadable below 640px). Both use the same `data-period-target` attribute so the toggle works in both layouts simultaneously. Tested by manual viewport-width adjustment in `astro dev`; the table hides at `md:` breakpoint, cards show below.
+
+4. **Build size:** `/pricing/index.html` is 28 KB after gzip (raw HTML + inlined CSS + 30-line script). Total site dist is now ~80 KB across 3 pages + shared `_astro` chunk. Well within Cloudflare Pages' free-tier 25 MB-per-deploy cap; well within bundle-size targets for fast first-paint.
+
+5. **Zero "free trial" / "free tier" / "no card" matches in the built HTML across all pages.** Verified post-build via `grep -ic`. Even the negative-framing usage that earlier drafts contained ("No free trial; no card-then-bait") was removed because the founder-direction rule is "never use the phrase," not "never market a free trial." The semantic distinction is dropped in favour of the simpler rule.
+
+6. **Trial-pack hero card uses `id="trial-pack"`** so the homepage CTAs (Header "Get started", landing-page hero "Get started — $2.99 trial pack", landing-page subscription teaser CTA) all deep-link to it. Single anchor pattern keeps the conversion path uniform across pages.
+
+### Verify chain
+
+- `astro check`: 9 files, 0 errors / 0 warnings / 0 hints.
+- `astro build`: 3 static pages emitted in ~400ms.
+- `npm run lint`: clean (marketing-site excluded from root ESLint per V-064).
+- `npm run format:check`: clean repo-wide. Note: Astro `.astro` files don't have a Prettier parser registered (would need `prettier-plugin-astro`); they're effectively skipped, which is fine for now since Astro's own `astro check` covers TS-correctness in component frontmatter.
+- `npm test`: **360/360** unchanged (no backend code touched).
+
+### Decisions made
+
+No new D-entries. Pricing-page content + structure is implementation detail (Tier 1) — values come from file 127 (planning-side) + ADR-003 (this-repo); structure follows founder direction.
+
+### Status
+
+Pricing page complete. Trial-pack-first conversion path locked in via the `#trial-pack` anchor; subscription-tier CTAs all route through it. BYOK note pinned with the only remaining Tier 3 placeholder copy ("pricing announced at launch"). Self-hosted teaser links forward to `/self-hosted` (lands V-066).
+
+### Next
+
+V-066: `/self-hosted` sub-page + `/faq` page. Self-hosted page deepens the SKU positioning, value-prop framing, customer profile, ETA "GA within 6 months of API public launch," `mailto:sales@driftstack.dev` CTA per SKU. FAQ page covers browser-hour metering vs session-count, trial-pack-vs-subscription distinction, what happens when trial expires, upgrade/downgrade behaviour, concurrency-vs-sessions distinction, EU stack reality, and how to contact support.
