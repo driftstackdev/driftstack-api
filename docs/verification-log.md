@@ -2062,14 +2062,17 @@ V-032 added `tap_at` + `type_focused` to the customer-facing `InteractActionSche
 ### What changed
 
 **Locked decisions** (new file):
+
 - **`docs/locked-decisions.md`** — created. Captures L-001 ("the customer-facing API is intent-only") with the full rationale, drift-detection checklist, and the carve-out for the GUI's manual-control plane. Going forward, any change to public schemas is checked against this file; violations get flagged as drift, not as shape questions.
 
 **Customer-facing surface (api-types) — reverted:**
+
 - **`packages/api-types/src/sessions.ts`**: removed `tap_at` and `type_focused` from `InteractActionSchema`. Back to the original four-variant intent-only union.
 - **`packages/api-types/src/common.ts`**: added `gui_control` to `ApiKeyScopeSchema` (additive enum). Customer keys never carry this scope by default; only enterprise self-hosted GUI keys do.
 - **`@driftstack/api-types@0.1.2`** published to npm.
 
 **Server-internal gui-control plane (NEW):**
+
 - **`apps/server/src/schemas/gui-input.ts`** — new file, server-internal only. `GUIInputActionSchema` with `tap_at` + `type_focused` variants, `GUIInputRequestSchema`, `GUIInputResponseSchema`. Not exported from any SDK package.
 - **`apps/server/src/drivers/types.ts`** — `Driver` interface gains a `guiInput()` method alongside `interact()`. Mock driver implements it (sleeps + opSeq++); WebKit stub throws `DriverNotIntegratedError` like every other unimplemented method.
 - **`apps/server/src/services/sessions.ts`** — `SessionsService.guiInput()` mirrors `interact()`. New `gui_input` event type added to `SessionEventInput`.
@@ -2077,17 +2080,20 @@ V-032 added `tap_at` + `type_focused` to the customer-facing `InteractActionSche
 - **`apps/server/src/routes/sessions.ts`** — new route `POST /v1/sessions/:id/gui-input`, `requireScope('gui_control')` in the preHandler chain. Returns 403 for keys without the scope.
 
 **Tests:**
+
 - The 3 GUI4 integration tests against `/interact` were rewritten:
   - one regression test that `/interact` rejects `tap_at` with 400 (Zod parse failure) — locks in the intent-only contract.
   - 4 new tests against `/gui-input`: 200 happy path for `tap_at` and `type_focused` when the key has `gui_control`; 403 when it doesn't; 400 on negative coordinates.
 - `npm test`: 299/299 (was 297; net +2 — replaced 3 with 5).
 
 **SDKs — coordinate primitives removed across all four:**
+
 - **TypeScript** (`@driftstack/sdk@0.1.3`): types regenerated from cleaned api-types. Customer surface has no `tap_at` / `type_focused`. Published.
 - **Python** (`driftstack-sdk@0.1.2`): Pydantic models regenerated; `_version.py` bumped. Published to PyPI.
 - **Go** (`packages/sdk-go/v0.1.2`): `InteractAction` struct fields dropped (`X`, `Y` for tap_at), constructors removed (`NewTapAtAction`, `NewTypeFocusedAction`). The pre-existing scroll bug fix from V-032 (renamed `X/Y` → `DeltaX/DeltaY` for scroll, with proper `delta_x/delta_y` JSON tags) is **kept** — it's an unrelated correctness fix and the marshalling round-trip tests guard it. Tag pushed.
 
 **GUI:**
+
 - **`apps/gui-client/src/lib/gui-input.ts`** — new helper. Direct fetch to `/v1/sessions/:id/gui-input` (the SDK's `HttpClient` is private; no backdoor). `GUIInputError` carries the HTTP status + RFC 7807 error type for clean error mapping.
 - **`apps/gui-client/src/views/LiveSessionView.tsx`** — split `interact` (intent-only: `scroll`, `press`) from `guiInput` (coordinate: `tap_at`, `type_focused`). Click handler + printable-key handler call `guiInput`; wheel + non-printable-key handlers call `interact`. Errors from either surface in the inline ErrorBanner. The 403 case (key lacks `gui_control` scope) gets a friendly message: "API key lacks gui_control scope — manual control is unavailable on this key."
 
@@ -2138,3 +2144,65 @@ Re-cut complete. Customer SDK surfaces are clean. The `gui_control` plane is ser
 (a) Contract audit pass — first, per founder direction. Read every public schema in api-types + every customer-facing SDK method across TS/Python/Go. Flag intent-vs-mechanic violations, required-vs-optional correctness, deprecation paths, version-bump rules. Confirm marshalling round-trip tests in all four SDKs.
 (b) Entity-org transition prep (KvK 2026-05-21).
 (c) CAPABILITIES.md cross-check (when founder drafts).
+
+---
+
+## V-037 — Contract audit pass + two Go SDK silent-noop fixes
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Contract correctness sweep before paying customers exist.
+
+Per founder direction after V-036: read the public surface across api-types + 3 language SDKs, flag intent-vs-mechanic violations, required-vs-optional correctness, deprecation paths, version-bump rules, and confirm marshalling round-trip test coverage in all three (not just Go). Full findings in `docs/contract-audit-2026-05-03.md`.
+
+### What changed
+
+**Go SDK silent-noop fixes (same class as V-032's scroll bug):**
+
+- **`packages/sdk-go/types.go:261`** — `NewTimeCondition` now returns `Kind: "time"` (was `"time_ms"`). Every Go customer call to `client.Wait(NewTimeCondition(5000))` would have been rejected by the server's discriminated-union parser with a 400. Comment on line 242 corrected too.
+- **`packages/sdk-go/types.go:178`** — `NavigateRequest` gained `TimeoutMS int \`json:"timeout_ms,omitempty"\``. The Zod schema accepts `timeout_ms` in 1000–120000 range; TS/Python both expose it; Go customers had no way to set it. Now they do.
+- **`packages/sdk-go/version.go`** — bumped to `0.1.3`. Tag `packages/sdk-go/v0.1.3` pushed.
+
+**Marshalling round-trip test coverage — all three SDKs:**
+
+- **TS** — new `packages/sdk-typescript/tests/unit/wire-shape.test.ts`. 13 tests: InteractAction × 5 variants (tap with/without offset, type, scroll, press) + L-001 rejection (tap_at, type_focused) + WaitCondition × 4 variants + NavigateRequest. Asserts the canonical wire shape; any future schema typo fails fast.
+- **Python** — new `packages/sdk-python/tests/test_wire_shape.py`. 10 tests covering the same variants + bounds checks on NavigateRequest's `timeout_ms` (1000–120000).
+- **Go** — `types_test.go` extended with `TestWaitConditionConstructors` (4 cases) and `TestNavigateRequestMarshalling` (full request including `timeout_ms`).
+
+A typo like `time_ms` (or `kind: 'tab'` instead of `'tap'`) would now fail in the SDK's own test suite, not silently in customer production traffic.
+
+**Audit findings doc:** `docs/contract-audit-2026-05-03.md` captures the full walkthrough — every Zod schema in api-types reviewed, every public SDK method classified, and three open items surfaced for founder decision (`tap.offset` mechanic question, TS SDK CHANGELOG missing, drizzle-kit version bump).
+
+### Empirical findings
+
+1. **The two Go bugs were sitting in 0.1.0 since publish.** Both are exactly the kind of silent-noop the founder flagged after V-032 — server returns 200/400 in a way the customer can't easily distinguish from "my selector was wrong" or "the network was slow." Caught by the audit, not by any test, because no SDK had wire-shape tests for these specific shapes. Now they all do.
+
+2. **No customer-facing L-001 violations beyond V-032's already-reverted drift.** The InteractAction surface is now intent-only (V-036 reverted tap_at/type_focused), and no other endpoint exposes coordinates / sleep / raw key events / byte encodings the customer shouldn't pick. The only borderline case is `InteractAction.tap.offset` — a pixel offset within the element. Surfaced for founder decision (keep with bounds, or remove and use selector specificity instead).
+
+3. **TS SDK has no CHANGELOG.** Python and Go both have `CHANGELOG.md`. TS doesn't. Doesn't break anything today; flagged for cheap follow-up.
+
+4. **Codegen variant naming in Python is positional.** Pydantic models generated as `Action`, `Action1`, `Action2` ... in declaration order. Tests reference the union (`InteractRequest.action`) rather than the suffixed classes — survives reorderings. Worth pinning in case anyone ever pinned `from driftstack._generated.models import Action2` directly.
+
+### Verify chain
+
+- typecheck/lint/format all clean.
+- `npm test`: **312/312** (was 299 in V-036; +13 from new TS wire-shape tests).
+- Python: 95/95 (was 85; +10 new tests).
+- Go: round-trip tests pass with the two fixes + new WaitCondition + NavigateRequest cases.
+
+### Publish
+
+- **Go SDK 0.1.3** — tag `packages/sdk-go/v0.1.3` pushed alongside the commit below.
+- TS / Python SDKs unchanged at 0.1.3 / 0.1.2 (only added tests, no code change).
+
+### Decisions made
+
+No new D-entries. The two Go fixes are correctness-level (Tier 1). The audit doc is informational.
+
+### Status
+
+Audit pass closed. Public surface is clean against L-001. Wire-shape regression coverage is now uniform across all three SDKs.
+
+### Next
+
+Entity-org transition prep (KvK 2026-05-21, 18 days out). Scope what the geruisloze omzetting touches platform-side; founder handles the legal track.

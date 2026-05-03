@@ -175,6 +175,9 @@ type ListSessionsQuery struct {
 type NavigateRequest struct {
 	URL       string `json:"url"`
 	WaitUntil string `json:"wait_until,omitempty"` // load | domcontentloaded | networkidle
+	// Per-call timeout in ms. Server clamps to 1000–120000. Zero/omit
+	// = server default (currently 30s).
+	TimeoutMS int `json:"timeout_ms,omitempty"`
 }
 
 type NavigateResponse struct {
@@ -239,7 +242,7 @@ type InteractResponse struct {
 // WaitCondition is a discriminated-union of wait conditions. Use the
 // constructors (NewSelectorCondition, ...) to build one.
 type WaitCondition struct {
-	Kind     string `json:"kind"`               // selector | selector_hidden | url_matches | time_ms
+	Kind     string `json:"kind"`               // selector | selector_hidden | url_matches | time
 	Selector string `json:"selector,omitempty"`
 	Pattern  string `json:"pattern,omitempty"`
 	MS       int    `json:"ms,omitempty"`
@@ -258,7 +261,7 @@ func NewURLMatchesCondition(pattern string) WaitCondition {
 }
 
 func NewTimeCondition(ms int) WaitCondition {
-	return WaitCondition{Kind: "time_ms", MS: ms}
+	return WaitCondition{Kind: "time", MS: ms}
 }
 
 type WaitRequest struct {
