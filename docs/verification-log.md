@@ -3368,3 +3368,50 @@ Email service ready for downstream wiring. The legal-acceptance flow (V-047), AP
 ### Next
 
 V-058 lands the Sentry SDK (init at boot, fastify error-handler bridge, EU `.de.` DSN region validation). V-059 lands the real production bootstrap wiring Postgres / Redis / R2 readinessChecks + the SDK init log surface for Postmark + Sentry.
+
+## V-058 — Sentry SDK init helper + Fastify error-handler bridge
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream A iteration 2 — third SDK integration. Error tracking is fire-and-forget per founder direction; it does NOT readiness-gate.
+
+`@sentry/node` v8 wrapped in `apps/server/src/lib/sentry.ts`. Init at boot via `initSentry({ config, logger })`; Zod schema enforces the EU-region DSN (`.de.` substring) at config-parse time per the `env-vars.md` validation checklist. Fastify error-handler bridge installs an `onError` hook that captures exceptions with request context (request_id, method, url, route).
+
+### What changed
+
+- **`apps/server/src/lib/config.ts`** — extended Zod schema with a nullable `sentry` block: `{dsn, environment, release?, tracesSampleRate}`. The DSN validator runs `.refine(...)` enforcing the `.de.` substring with error message "must use the EU region (.de.) per data-residency policy" — a Zod parse error fails boot loudly, exactly the behaviour we want for a misrouted DSN.
+- **`apps/server/src/lib/sentry.ts`** (NEW, 100 lines) — `SentryClient` interface + `initSentry({config, logger})` factory + `wireSentryErrorHandler(app, sentry)` helper.
+  - `captureException(err, context)` swallows SDK errors with a warn-level structured log so a Sentry outage cannot bubble back into the application.
+  - `flush(timeoutMs)` and `close(timeoutMs)` exposed for graceful shutdown (V-059 wires SIGTERM to call them).
+  - When `config === null`, returns a no-op client and logs a one-time boot warning.
+  - `wireSentryErrorHandler` adds Fastify's `onError` hook capturing `(request.id, method, url, routeOptions?.url)` as Sentry "extra" data.
+- **`apps/server/tests/unit/sentry.test.ts`** (NEW, 9 tests) — `@sentry/node` mocked via `vi.mock`. Covers no-op-when-unconfigured, init-call shape (DSN / environment / release / tracesSampleRate), `release` omitted when undefined, captureException forwarding to SDK with `extra` context, captureException swallow-on-error semantics, EU-DSN parser rejection of US DSNs, EU-DSN parser acceptance + tracesSampleRate coercion, `sentry: null` when DSN missing, and the Fastify hook installation + invocation behaviour.
+
+### Empirical findings
+
+1. **EU-DSN enforcement at parse time, not runtime.** A misrouted DSN (US instead of EU) would route error data through US infrastructure and silently break the EU-only data-residency claim in the privacy policy. Catching the misroute via Zod `.refine()` at boot fails the process before any error can leak; runtime checks would let the first error already be in flight before detection. The validation message ("must use the EU region (.de.) per data-residency policy") is intentionally explicit so a mis-paste in `DEPLOY_DOTENV_BASE64` surfaces with the policy reasoning, not just a generic "invalid".
+
+2. **`captureException` swallow protects the request hot path.** Without the swallow, a Sentry SDK exception inside an `onError` hook would propagate up to the Fastify pipeline, which would re-trigger the error handler, which would re-call captureException — a loop. The swallow turns a Sentry outage into a Pino warn-log entry and nothing else. Worst case: lost error visibility for the duration of the outage. Acceptable.
+
+3. **Default `tracesSampleRate = 0`.** Performance tracing is opt-in per environment; sampling 100% of requests would load the SDK's transaction-attachment overhead onto every API call. Production stays at 0% until performance regressions warrant it; staging can be set to 0.05 (5%) for representative sampling without volume blowup. Founder can adjust per-environment via the `SENTRY_TRACES_SAMPLE_RATE` env var.
+
+4. **Default integrations cover the right surface.** Sentry v8's defaults include `httpIntegration`, `consoleIntegration`, `onUncaughtExceptionIntegration`, `onUnhandledRejectionIntegration`. We don't add custom integrations; the Fastify error-handler bridge is the only application-specific layer. If we ever need a Pino bridge (so structured Pino warnings flow into Sentry as breadcrumbs), it's an additive change, not a refactor.
+
+5. **Source-map upload deferred.** The deploy pipeline (`.github/workflows/deploy.yml`, V-051) builds the container image; it does not yet upload source maps to Sentry. Adding a `@sentry/cli` step requires a `SENTRY_AUTH_TOKEN` secret — not yet populated. V-059 (production bootstrap) will surface this as a follow-up step in the deploy pipeline; the runtime client works without source-map upload (errors will show minified stack frames until then).
+
+### Verify chain
+
+- typecheck/lint/format all clean.
+- `npm test`: **360/360** (was 351; +9 new sentry tests).
+
+### Decisions made
+
+No new D-entries. Sentry init pattern is implementation detail (Tier 1). The EU-DSN validation policy is documented in the file's leading comment + the env-vars.md validation checklist.
+
+### Status
+
+Sentry init helper ready. Production bootstrap (V-059) will call `initSentry({config: config.sentry, logger})` early in the boot sequence (before Fastify build) so that init exceptions surface in the existing pino logs, then `wireSentryErrorHandler(app, sentry)` after the Fastify app is built.
+
+### Next
+
+V-059: real production bootstrap wiring Postgres / Redis / R2 readinessChecks + Postmark + Sentry SDK init at boot + graceful SIGTERM shutdown that flushes Sentry.

@@ -34,11 +34,28 @@ const ConfigSchema = z.object({
       replyTo: z.string().email(),
     })
     .nullable(),
+  // Sentry — error tracking. EU region required: DSN must contain
+  // `.de.` (per docs/deployment/env-vars.md validation checklist).
+  // Fire-and-forget; readiness does NOT gate on Sentry connectivity.
+  sentry: z
+    .object({
+      dsn: z
+        .string()
+        .url()
+        .refine((u) => u.includes('.de.') || u.includes('.ingest.de.sentry.io'), {
+          message: 'SENTRY_DSN must use the EU region (.de.) per data-residency policy',
+        }),
+      environment: z.string().min(1),
+      release: z.string().min(1).optional(),
+      tracesSampleRate: z.coerce.number().min(0).max(1).default(0),
+    })
+    .nullable(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
 export type R2Config = NonNullable<Config['r2']>;
 export type PostmarkConfig = NonNullable<Config['postmark']>;
+export type SentryConfig = NonNullable<Config['sentry']>;
 
 function readR2Config(env: NodeJS.ProcessEnv): R2Config | null {
   const accountId = env.R2_ACCOUNT_ID;
@@ -62,6 +79,22 @@ function readPostmarkConfig(env: NodeJS.ProcessEnv): PostmarkConfig | null {
   return { apiToken, from, replyTo };
 }
 
+function readSentryConfig(env: NodeJS.ProcessEnv): SentryConfig | null {
+  const dsn = env.SENTRY_DSN;
+  const environment = env.SENTRY_ENVIRONMENT;
+  if (!dsn || !environment) {
+    return null;
+  }
+  const release = env.SENTRY_RELEASE;
+  const tracesSampleRate = env.SENTRY_TRACES_SAMPLE_RATE;
+  return {
+    dsn,
+    environment,
+    ...(release ? { release } : {}),
+    tracesSampleRate: tracesSampleRate !== undefined ? Number(tracesSampleRate) : 0,
+  };
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return ConfigSchema.parse({
     nodeEnv: env.NODE_ENV,
@@ -75,5 +108,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     mockInteractLatencyMs: env.MOCK_INTERACT_LATENCY_MS,
     r2: readR2Config(env),
     postmark: readPostmarkConfig(env),
+    sentry: readSentryConfig(env),
   });
 }
