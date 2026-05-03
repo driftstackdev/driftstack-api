@@ -16,6 +16,28 @@ If a technical decision genuinely depends on something outside the agent's scope
 
 The exception is opt-in per direction. Default behavior remains "surface against legal/compliance asks." Triggers for invoking the exception: explicit founder directive citing this clause. Documents land at `docs/legal/*.md` with a header marking them as AI-generated baseline drafts under this exception. Sub-processor lists, retention windows, jurisdiction, liability terms, and DPO necessity are factual claims that come from founder; agent does not extrapolate on them.
 
+**Exception extension (effective 2026-05-03):** the legal/compliance exception is extended to cover three additional categories when explicitly directed by founder:
+
+1. **Customer-facing copy** (marketing website at `driftstack.dev`, in-product onboarding flow text, transactional email templates, pricing-page positioning, docs-site landing).
+2. **Billing integration code** (Stripe SDK + webhook handlers, Coinbase Commerce SDK + webhook handlers, Moneybird API integration, subscription state machine, customer portal redirects, BYOK metering).
+3. **Onboarding flow with copy** (signup, email verification, legal acceptance UI, BYO-requirements explainer, payment-method selection, first-API-key issuance flow).
+
+Same revision policy: founder-directed; founder accepts risk; all customer-facing copy revisable; all billing code passes through staging + manual approval before production. Default remains "surface against asks not covered by an active exception."
+
+The "Out of scope" list is amended to reflect this:
+- ~~Marketing website~~ — **moved to in-scope under the extended exception**.
+- ~~Billing integration (Stripe/Mollie) — gated on commercial-activation gate~~ — **moved to in-scope under the extended exception for scaffolding work; live commercial activation (real charges, real signups) remains gated on KvK closure**.
+- ~~Customer dashboard frontend (`app.driftstack.dev` for cloud-tier customers) — separate workstream~~ — **moved to in-scope under the extended exception** for the onboarding flow + minimum surface needed to issue keys + pay; full dashboard parity with the GUI client lands later.
+
+Items still **out of scope** under the extension:
+- Behavioural simulation library (file 64) — Phase 3.
+- Recipe library — Phase 3.
+- Mac mini fleet provisioning — gated on first customer + Agent 1 coordination.
+- Behavioural data collection.
+- Mollie integration (founder reversed dual-processor decision; Stripe-only fiat rail).
+
+Sub-processor list lock under the extension: Hetzner, Neon, Upstash, Cloudflare (R2 + Pages + DNS), Postmark, Sentry, Stripe, Coinbase Commerce, Anthropic (BYO bundled LLM only, opt-in), Moneybird, MacStadium. Adding any sub-processor outside this list = directional question first, never silent.
+
 **Out of scope (separate workstreams or future phases):**
 
 - ~~GUI client (Electron/Tauri)~~ — **moved to active scope** (see file 128 / GUI workstream below). Self-hosted GUI is the higher-tier ($3k+) product surface and the founder's immediate dev tool for debugging WebKit-fork sessions + SOCKS5 proxy management.
@@ -23,9 +45,9 @@ The exception is opt-in per direction. Default behavior remains "surface against
 - Behavioural simulation library (file 64) — Phase 3
 - Recipe library — Phase 3
 - Mac mini fleet provisioning — gated on first customer
-- Marketing website
-- Billing integration (Stripe/Mollie) — gated on commercial-activation gate (see "Publishing vs commercial activation" below).
-- Customer dashboard frontend (`app.driftstack.dev` for cloud-tier customers) — separate workstream, after the self-hosted GUI client substantively closes.
+- ~~Marketing website~~ — **moved to in-scope under the legal-content exception extension below**.
+- ~~Billing integration (Stripe/Mollie)~~ — **scaffolding moved to in-scope under the exception extension; live commercial activation remains gated on KvK closure. Mollie dropped per founder reversal.**
+- ~~Customer dashboard frontend~~ — **onboarding-flow surface moved to in-scope under the exception extension; full dashboard parity later.**
 - Behavioural data collection
 
 If a request implies any of these, surface to founder rather than expanding scope.
