@@ -3474,8 +3474,55 @@ Source-map upload to Sentry is the one carried-over follow-up: needs `SENTRY_AUT
 
 Workstream A complete (iter 1 + iter 2 = V-051..V-059 inclusive). Parallel kickoff next:
 
-- **Workstream B** — marketing site at `apps/marketing-site/` (Astro on Cloudflare Pages, oxblood `#722F37` palette, signup-primary / GUI-download-secondary CTAs, "Limits announced at launch" copy per Tier 3 founder-explicit-values rule).
+- **Workstream B** — marketing site at `apps/marketing-site/` (Astro on Cloudflare Pages, oxblood `#722F37` palette, signup-primary / GUI-download-secondary CTAs). Pricing page renders parent-driftstack-repo file-127 locked values directly (per V-060+ founder correction: pricing/limits/concurrency are LOCKED spec, not Tier 3); only the BYOK markup line uses placeholder "pricing announced at launch" copy.
 - **Workstream C** — admin panel.
 - **Workstream D** — Stripe-only billing scaffolding (Coinbase rail dropped per V-052; per-tier price-id JSON + BYOK metering + webhook handlers).
 - **Workstream E** — Moneybird integration scoping doc.
 - **Workstream F** — onboarding flow (signup → email verify via V-057 EmailService → legal accept → tier select → payment → first key issue).
+
+## V-060 — ADR-002: Stripe-only payment processing at launch
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Decision-log enrichment. Founder direction: capture Stripe-only as a Tier 2 deviation from the planned Mollie-primary + Stripe-backup design (parent driftstack repo files 00 / 11 / 116).
+
+V-052 dropped Coinbase Commerce from the rail mix; the consequent posture is Stripe-only fiat at launch. V-060 captures the reasoning in long-form ADR shape so the deviation from the planned dual-processor architecture is reconstructible.
+
+### What changed
+
+- **`docs/adr/ADR-002-stripe-only-payment-processing.md`** (NEW) — full ADR. Captures:
+  - **Context:** dual-processor design from files 00 / 11 / 116 (Mollie primary + Stripe backup); Mollie's EU-method advantage narrowed as Stripe matured; solo-engineer operational doubling cost.
+  - **Decision:** Stripe sole rail. Stripe Billing for subscriptions, Stripe Tax for BTW reverse-charge, Stripe Webhooks for lifecycle events, Stripe Meters for BYOK LLM line-item billing (`driftstack_llm_tokens` per V-053), Stripe Customer Portal for self-service.
+  - **Consequences:** single-rail simplicity (one webhook secret rotation, one reconciliation, one DPA Annex 3 entry), automatic BTW reverse-charge handling, native metered billing for BYOK. Rules out Mollie's friendlier solo-entrepreneur underwriting + slightly cheaper NL-domestic iDEAL fees.
+  - **Alternatives considered:** Mollie-primary + Stripe-backup (the planned design — rejected because EU-method gap closed and operational doubling cost is real); Mollie-only (rejected — no BTW reverse-charge automation, no metered-billing primitive); Adyen / Braintree / Checkout.com (rejected — enterprise scale, not v1 fit).
+  - **Revisit triggers:** Stripe declines BV underwriting at KvK-onboarding (Mollie reactivation path documented); Stripe Tax regulatory edge case + counsel sign-off; BYOK volume warrants direct Anthropic billing; Stripe fee structure adverse change >10%; single-customer concentration risk on the rail.
+  - **Notes:** the deferred file-116 dual-processor spec remains the documented fallback architecture; do not delete from parent driftstack repo. Mollie reactivation path enumerated (5 steps).
+- **`docs/adr/README.md`** — index updated to include ADR-002.
+- **`docs/decisions.md`** — new `D-027` entry pointing at ADR-002 + V-060. Inserted in reverse-chronological order at the top of the body (D-026 was previously the newest).
+
+### Empirical findings
+
+1. **Stripe Tax + BTW reverse-charge is the dominant single-rail factor.** Without Stripe Tax, the Driftstack BV would need a custom invoicing layer that detects the customer's country, looks up their VAT-ID, validates against VIES, applies the reverse-charge rule for B2B EU sales between VAT-registered entities, and emits a compliant invoice line. Stripe Tax does all of that. Mollie does not. The cost of replicating Stripe Tax in-house is multiple person-months of EU-tax-compliance work; the cost of paying Stripe's slightly higher per-transaction fees is single-digit percent of revenue. Trade lopsided in favour of Stripe.
+
+2. **Stripe Meters for BYOK LLM billing is the second dominant factor.** BYOK is metered as `driftstack_llm_tokens` (V-053); customers see line-item billing for "platform subscription + LLM usage at markup." Stripe Meters handles meter-event ingestion + per-period rollup + invoice line-item generation natively. Replicating that without Stripe Meters means custom invoicing infrastructure — same person-month cost as the BTW layer above.
+
+3. **Mollie reactivation is preserved, not abandoned.** ADR-002 explicitly lists the 5-step Mollie reactivation path: provision API key + webhook endpoint, wire existing webhook scaffolding behind a `provider` discriminator, update DPA Annex 3 + Privacy Policy sub-processor table, issue Art 28(2) amendment notice with 30-day window, version-bump legal documents. The path costs ~2 weeks of work — meaningfully more than zero, but reachable if Stripe declines underwriting.
+
+4. **Coinbase rail dropped (V-052) means the rail mix is now {Stripe}.** Single-vendor concentration on the payment rail is a real risk; ADR-002's revisit-trigger structure is the mitigation, not redundancy.
+
+### Verify chain
+
+- typecheck/lint/format all clean (docs-only change, no code touched).
+- `npm test`: **360/360** unchanged.
+
+### Decisions made
+
+`D-027` — Stripe-only payment processing at launch. Tier 2 founder-approved deviation. Full context in ADR-002.
+
+### Status
+
+ADR-002 landed. Workstream D (Stripe-only billing scaffolding) can proceed against the documented architecture; revisit triggers are persisted for future re-evaluation.
+
+### Next
+
+V-061: pricing-correction sweep against parent driftstack repo file 127 locked values (file 127 supersedes files 8 + 39). Targets: `apps/server/src/services/sessions.ts` `TIER_CONCURRENT_SESSION_LIMITS`, `apps/server/src/services/usage.ts` `TIER_QUOTAS` (rename meter from `session_minute` to `browser_hour`), `packages/api-types/src/common.ts` `AccountTierSchema` price comments.

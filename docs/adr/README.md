@@ -71,3 +71,6 @@ header. The history matters; the number is part of the record.
 
 - [ADR-001](ADR-001-control-plane-hosting-hetzner.md) — Control-plane
   hosting on Hetzner Cloud (Tier 2 deviation from PaaS plan).
+- [ADR-002](ADR-002-stripe-only-payment-processing.md) — Stripe-only
+  payment processing at launch (Tier 2 deviation from Mollie-primary
+  - Stripe-backup plan).
