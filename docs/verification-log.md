@@ -4644,3 +4644,45 @@ No new D-entries. Anchor-link convention (`/pricing#manual`, `/pricing#api`) is 
 ### Next
 
 V-078 (/faq updates) commits next with the founder's one redline applied.
+
+---
+
+## V-078 — /faq concurrent-caps + Manual-vs-API entries (Routine — approved-with-one-redline)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Land the founder-approved /faq updates: replace the obsolete "Why browser-hours and not session count?" entry (carried over from the old hours-metering ADR-003 model) with "Why concurrent caps and not hours?" matching the new ADR-004 concurrent-only metering reality, and add a new "What's the difference between Manual and API?" entry under the Pricing-model group routing readers to the appropriate ladder.
+
+### What changed
+
+- `apps/marketing-site/src/pages/faq.astro` Pricing-model group: first entry replaced. Old framing argued for hours over per-call billing; new framing argues for concurrent caps over hours, anchoring on the manual-user 3-profiles × 8-hours/day = 720 hr/mo overage anxiety the founder called out as a Q3 must-keep example.
+- New entry "What's the difference between Manual and API?" inserted as second entry in the Pricing-model group. Contrasts GUI-client humans vs SDK code, notes same engine / fingerprints / fidelity / different access surface and concurrent caps. Routes via inline anchor links to `/pricing#manual` and `/pricing#api`.
+
+### Founder redline applied
+
+The original draft framed Manual + API access as "both can run on the same account if you have a use case that needs them." Founder corrected: AccountTier is a single-tier-per-account enum (V-073 backend rewrite), so the multi-tier-per-account framing was contractually wrong against the data model. Founder's exact prescribed replacement applied verbatim:
+
+> "Each Driftstack account holds one subscription. If you need both Manual and API access — for example, your team running profiles in the GUI client AND your engineering team running automation — run two accounts. Most customers find one path is enough; if you outgrow it, the second account is straightforward to provision."
+
+The redline matches the AccountTier-as-enum invariant (one tier per account; tier-changes are upgrade/downgrade transitions, not multi-subscription bundles). Re-running the dual-account framing through `apps/server/src/db/schema/accounts.ts` (the `tier` column is `not null` with the AccountTier enum) confirms the redline is the correct framing.
+
+### How verified
+
+- `npm run typecheck`: 0 errors.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 360/360 passing.
+- Astro `[check]`: 14 files, 0 errors.
+- Founder's exact prescribed wording confirmed to match committed text via diff.
+
+### Decisions made
+
+No new D-entries. The Manual-vs-API framing is a copy decision; the underlying single-subscription-per-account invariant was already locked in V-073 / ADR-004.
+
+### Next
+
+V-070-visual (architecture diagram on /self-hosted + asymmetric Why-Driftstack restructure on /index + hero SDK code refresh) stays in working tree per founder direction "stays in working tree. Founder reviews when awake." Per the standing never-stop rule (memory: never_stop_rule.md), V-070-visual draft does NOT block engineering forward motion — moving immediately to V-079 (auth endpoints scaffolding) per Priority 2 of the overnight queue.

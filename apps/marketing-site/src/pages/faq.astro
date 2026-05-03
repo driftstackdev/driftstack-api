@@ -16,8 +16,12 @@ const groups: FaqGroup[] = [
     title: 'Pricing model',
     entries: [
       {
-        q: 'Why browser-hours and not session count?',
-        a: 'Per-call billing penalises good engineering. If you check 50 elements per page, you\'d pay 50× the customer who checks 1 — for the same hour of fleet time consumed. Browser-hour metering aligns the bill with what actually costs us money: minutes of WebKit runtime. A 5-minute session costs less than a 60-minute one regardless of how dense your interaction is. Concurrency caps stay as tier-defining hard limits at session creation; nothing else surcharges.',
+        q: 'Why concurrent caps and not hours?',
+        a: 'Hours metering breaks for manual users — an account manager running 3 persistent profiles 8 hours a day generates ~720 browser-hours/month and a surprise overage bill. Concurrent caps mean the only thing you pay for is how many sessions you can run simultaneously. Use them as much as you want within your cap. Concurrency is the natural upgrade trigger when your team grows, not the metering anxiety of "did I use too many minutes this month."',
+      },
+      {
+        q: 'What\'s the difference between Manual and API?',
+        a: 'Manual is for humans clicking in the GUI client — solo operators, account managers, agencies juggling many profiles. API is for code — SDK access, programmatic session creation, scale-out automation. Same engine, same fingerprints, same fidelity. Different access surface, different concurrent caps. Each Driftstack account holds one subscription. If you need both Manual and API access — for example, your team running profiles in the GUI client AND your engineering team running automation — run two accounts. Most customers find one path is enough; if you outgrow it, the second account is straightforward to provision. See <a href="/pricing#manual" class="text-oxblood-700 underline">Manual pricing</a> or <a href="/pricing#api" class="text-oxblood-700 underline">API pricing</a>.',
       },
       {
         q: 'How does this compare to Chromium-cloud stealth services?',
