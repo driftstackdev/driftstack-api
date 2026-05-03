@@ -5524,3 +5524,61 @@ Coverage for V-089 mutations:
 ### Next
 
 Continuing to V-090 — `session.failed` webhook event emission with the founder-approved default semantic ("first-failure fires; subsequent ops on the same session 410 SessionDestroyed").
+
+---
+
+## V-090 — session.failed webhook event emission (Routine — webhook contract fill)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+V-079+ left a gap flagged in V-085: `session.failed` was declared in the `webhookEventType` enum + `SessionsService` deps signature but never actually emitted from anywhere. Founder-approved semantic: "first-failure fires; subsequent ops on the same session 410 SessionDestroyed."
+
+### What changed
+
+**`apps/server/src/services/sessions.ts`:**
+
+- New private helper `runWithFailureCapture(ctx, session, operation, fn)` wraps each driver call. On a thrown error:
+  1. Set `sessions.status = 'errored'`, `destroyedAt = now`.
+  2. Insert a `session_event` row with `type='errored'`, payload includes `operation` + `error_name` + `error_message`.
+  3. Fire `session.failed` webhook event with the same shape as `session.completed`: `{ session_id, duration_ms, operation, error_name, error_message }`.
+  4. Re-throw the original error so the route layer surfaces it as DriverError / SessionTimeoutError → RFC 7807.
+- All five operation methods refactored to wrap their driver call in `runWithFailureCapture`: `navigate` / `interact` / `guiInput` / `wait` / `getState` / `capture`. The `recordEvent` for the SUCCESSFUL path stays outside the wrapper (only fires on success).
+- `requireOwned` extended to reject `errored` status the same way it rejects `destroyed` — both throw `SessionDestroyedError` (HTTP 410). This implements the "subsequent ops 410" half of the founder-approved semantic.
+- DB write + webhook enqueue inside `runWithFailureCapture` are best-effort: each in its own try/catch that swallows. The original driver error always wins as the user-facing error; the persistence layer mutations are observability + downstream notification, not part of the user-visible contract.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 459/459 passing (was 455; +4 new unit tests in `sessions-failure.test.ts`).
+
+Coverage:
+
+1. Driver throws on navigate → session marked `errored`, `destroyedAt` set, `errored` session_event recorded, `session.failed` webhook emitted with `operation: 'navigate'`, original error re-thrown.
+2. Subsequent operation on errored session → `SessionDestroyedError` (would be 410 at the route), no second webhook fired.
+3. Per-operation: interact / wait / capture / state each produce `session.failed` with the correct `operation` tag.
+4. Successful operations do NOT emit `session.failed` (only `session.completed` fires from `destroy`).
+
+### Decisions made (no new D-entries; founder-approved inline)
+
+- **First-failure-only semantic.** Subsequent operations 410 at `requireOwned` before reaching `runWithFailureCapture`, so duplicate `session.failed` emissions are not a concern. This is structural, not enforced by an explicit "already emitted" flag.
+- **`errored` is a terminal state**, treated identically to `destroyed` for customer ops. Customer can DELETE the session (idempotent); any other op 410s.
+- **Best-effort persistence + webhook on the failure path.** If the DB write or webhook enqueue ALSO throws, we swallow and let the original driver error propagate. Worst case: a session is left in `ready` state in the DB even though it errored — a follow-on cleanup sweep would catch this, but it's an edge case (DB connection failure simultaneous with driver failure, vanishingly rare). Better than masking the user-facing error with a "we couldn't even tell you" 500.
+- **Event payload includes `error_name` + `error_message`.** The customer's webhook receiver gets enough to differentiate `DriverError` from `SessionTimeoutError` from `UnknownError` without needing to read internal Driftstack logs. We do NOT include stack traces — those leak implementation detail.
+
+### Files added
+
+- `apps/server/tests/unit/sessions-failure.test.ts`
+
+### Files modified
+
+- `apps/server/src/services/sessions.ts` (refactor 5 operations + new helper + extended requireOwned)
+
+### Next
+
+Continuing to V-091 — SDK webhook resource tests filling the 20% coverage gap surfaced in V-086 audit.

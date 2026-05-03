@@ -198,11 +198,13 @@ export class SessionsService {
     durationMs: number;
   }> {
     const session = await this.requireOwned(ctx, sessionId);
-    const result = await this.deps.driver.navigate(session.driverSessionId, {
-      url: body.url,
-      timeoutMs: body.timeout_ms ?? 30_000,
-      waitUntil: body.wait_until,
-    });
+    const result = await this.runWithFailureCapture(ctx, session, 'navigate', () =>
+      this.deps.driver.navigate(session.driverSessionId, {
+        url: body.url,
+        timeoutMs: body.timeout_ms ?? 30_000,
+        waitUntil: body.wait_until,
+      }),
+    );
     await this.deps.repo.recordEvent({
       sessionId: session.id,
       type: 'navigated',
@@ -218,10 +220,12 @@ export class SessionsService {
     body: InteractRequest,
   ): Promise<{ durationMs: number }> {
     const session = await this.requireOwned(ctx, sessionId);
-    const result = await this.deps.driver.interact(session.driverSessionId, {
-      action: body.action,
-      timeoutMs: body.timeout_ms ?? 10_000,
-    });
+    const result = await this.runWithFailureCapture(ctx, session, 'interact', () =>
+      this.deps.driver.interact(session.driverSessionId, {
+        action: body.action,
+        timeoutMs: body.timeout_ms ?? 10_000,
+      }),
+    );
     await this.deps.repo.recordEvent({
       sessionId: session.id,
       type: 'interacted',
@@ -237,10 +241,12 @@ export class SessionsService {
     body: GUIInputRequest,
   ): Promise<{ durationMs: number }> {
     const session = await this.requireOwned(ctx, sessionId);
-    const result = await this.deps.driver.guiInput(session.driverSessionId, {
-      action: body.action,
-      timeoutMs: body.timeout_ms ?? 10_000,
-    });
+    const result = await this.runWithFailureCapture(ctx, session, 'gui_input', () =>
+      this.deps.driver.guiInput(session.driverSessionId, {
+        action: body.action,
+        timeoutMs: body.timeout_ms ?? 10_000,
+      }),
+    );
     await this.deps.repo.recordEvent({
       sessionId: session.id,
       type: 'gui_input',
@@ -256,10 +262,12 @@ export class SessionsService {
     body: WaitRequest,
   ): Promise<{ satisfied: boolean; durationMs: number }> {
     const session = await this.requireOwned(ctx, sessionId);
-    const result = await this.deps.driver.wait(session.driverSessionId, {
-      condition: body.condition,
-      timeoutMs: body.timeout_ms ?? 30_000,
-    });
+    const result = await this.runWithFailureCapture(ctx, session, 'wait', () =>
+      this.deps.driver.wait(session.driverSessionId, {
+        condition: body.condition,
+        timeoutMs: body.timeout_ms ?? 30_000,
+      }),
+    );
     await this.deps.repo.recordEvent({
       sessionId: session.id,
       type: 'waited',
@@ -280,7 +288,9 @@ export class SessionsService {
     capturedAt: Date;
   }> {
     const session = await this.requireOwned(ctx, sessionId);
-    const state = await this.deps.driver.getState(session.driverSessionId);
+    const state = await this.runWithFailureCapture(ctx, session, 'state_capture', () =>
+      this.deps.driver.getState(session.driverSessionId),
+    );
     await this.deps.repo.updateSessionStatus(session.id, session.status, {
       lastStateAt: state.capturedAt,
     });
@@ -305,10 +315,12 @@ export class SessionsService {
     durationMs: number;
   }> {
     const session = await this.requireOwned(ctx, sessionId);
-    const result = await this.deps.driver.capture(session.driverSessionId, {
-      kind: body.kind,
-      fullPage: body.full_page,
-    });
+    const result = await this.runWithFailureCapture(ctx, session, 'capture', () =>
+      this.deps.driver.capture(session.driverSessionId, {
+        kind: body.kind,
+        fullPage: body.full_page,
+      }),
+    );
     await this.deps.repo.recordEvent({
       sessionId: session.id,
       type:
@@ -361,7 +373,83 @@ export class SessionsService {
   private async requireOwned(ctx: AccountContext, sessionId: string): Promise<SessionRecord> {
     const session = await this.deps.repo.findSession(sessionId, ctx.account.id);
     if (!session) throw new NotFoundError(`Session "${sessionId}" not found.`);
-    if (session.status === 'destroyed') throw new SessionDestroyedError();
+    // V-090 founder-approved semantic: a session that has entered the
+    // 'errored' state behaves the same as 'destroyed' for the customer
+    // — subsequent ops 410. The only useful op on a failed session is
+    // a delete (idempotent destroy) which is allowed to short-circuit.
+    if (session.status === 'destroyed' || session.status === 'errored') {
+      throw new SessionDestroyedError();
+    }
     return session;
+  }
+
+  /**
+   * V-090: wrap a driver call so that on throw, we mark the session
+   * `errored`, set destroyedAt, fire `session.failed` webhook event,
+   * and re-throw the original error. The route layer catches the
+   * re-throw and surfaces it as a DriverError / SessionTimeoutError
+   * RFC 7807 problem.
+   *
+   * The webhook event fires ONLY on the first failure for this
+   * session. Subsequent calls would 410 SessionDestroyed at
+   * `requireOwned` before reaching here, so duplicate `session.failed`
+   * emissions are not a risk.
+   */
+  private async runWithFailureCapture<T>(
+    ctx: AccountContext,
+    session: SessionRecord,
+    operation: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await fn();
+    } catch (err) {
+      const erroredAt = new Date();
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : ((err as { toString?: () => string }).toString?.() ?? 'unknown driver failure');
+      const errorName = err instanceof Error ? err.name : 'UnknownError';
+
+      // Persist the failure state. Errors here are swallowed so the
+      // original driver error still propagates to the caller — the DB
+      // write is best-effort, the user-facing error wins.
+      try {
+        await this.deps.repo.updateSessionStatus(session.id, 'errored', {
+          destroyedAt: erroredAt,
+        });
+      } catch {
+        /* swallow — original error wins */
+      }
+      try {
+        await this.deps.repo.recordEvent({
+          sessionId: session.id,
+          type: 'errored',
+          payload: { operation, error_name: errorName, error_message: errorMessage },
+          durationMs: null,
+        });
+      } catch {
+        /* swallow */
+      }
+
+      // Emit session.failed webhook event. Same fire-and-forget posture
+      // as session.completed in destroy().
+      if (this.deps.webhooks) {
+        const durationMs = erroredAt.getTime() - session.createdAt.getTime();
+        try {
+          await this.deps.webhooks.enqueueEvent(ctx.account.id, 'session.failed', {
+            session_id: `ses_${session.id}`,
+            duration_ms: durationMs,
+            operation,
+            error_name: errorName,
+            error_message: errorMessage,
+          });
+        } catch {
+          /* webhook enqueue is best-effort */
+        }
+      }
+
+      throw err;
+    }
   }
 }
