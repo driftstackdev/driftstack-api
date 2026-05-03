@@ -1,0 +1,40 @@
+---
+const navItems = [
+  { href: '/pricing', label: 'Pricing' },
+  { href: '/self-hosted', label: 'Self-hosted' },
+  { href: '/faq', label: 'FAQ' },
+  { href: 'https://docs.driftstack.dev', label: 'Docs', external: true },
+];
+const pathname = Astro.url.pathname;
+---
+
+<header class="border-b border-slate-200 bg-white">
+  <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+    <a href="/" class="flex items-center gap-2 font-mono text-base font-semibold text-slate-900">
+      <span
+        class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700 text-white"
+      >
+        D
+      </span>
+      <span>driftstack</span>
+    </a>
+    <nav class="flex items-center gap-6">
+      {
+        navItems.map((item) => (
+          <a
+            href={item.href}
+            class:list={[
+              'nav-link',
+              pathname === item.href && 'text-oxblood-700 font-medium',
+            ]}
+            target={item.external ? '_blank' : undefined}
+            rel={item.external ? 'noopener noreferrer' : undefined}
+          >
+            {item.label}
+          </a>
+        ))
+      }
+      <a href="/pricing#trial-pack" class="btn-primary">Get started</a>
+    </nav>
+  </div>
+</header>

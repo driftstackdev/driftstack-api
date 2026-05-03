@@ -11,6 +11,12 @@ export default tseslint.config(
       '**/.venv/**',
       '**/site-packages/**',
       '**/src-tauri/**',
+      // Marketing site is an Astro project — it uses Astro's own
+      // type-check pipeline (`astro check` via the workspace's
+      // `typecheck` script). Excluding it from the root ESLint
+      // type-aware run avoids the parser claiming Astro/Tailwind
+      // config files aren't in the TS project.
+      'apps/marketing-site/**',
     ],
   },
   js.configs.recommended,

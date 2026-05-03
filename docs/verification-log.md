@@ -3710,3 +3710,71 @@ Marketing copy framing locked: "$2.99 trial pack" (price visible) replaces all "
 ### Next
 
 Workstream B: marketing site at `apps/marketing-site/`. Astro on Cloudflare Pages; oxblood `#722F37` palette + slate base + Geist Sans body + Berkeley Mono technical. Pricing page renders file-127 values for Starter/Solo/Builder/Scale/Enterprise + ADR-003 trial-pack column ("$2.99 trial pack, 16 hours, 1 concurrent, 14-day window, once per account"). Monthly/annual toggle with 20% discount badge. Self-hosted sub-page with "Contact Sales" CTA. BYOK note on Builder+ tiers using "pricing announced at launch" (the only remaining Tier 3 placeholder copy). FAQ explaining browser-hour metering vs session-count, trial-pack-vs-subscription distinction, what happens when trial expires. CAPABILITIES.md hygiene pull (V-149 Q8 snap fix, V-141 atlas v3, V-141 POC) folded in during Workstream B run-up when the public-surface snapshot needs refreshing.
+
+## V-064 — Workstream B kickoff: Astro scaffolding + landing page
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream B iteration 1 — marketing site at `apps/marketing-site/`. Static-built Astro on Cloudflare Pages.
+
+The marketing site is a static-built Astro project. No SSR, no Workers, no edge functions; Cloudflare Pages serves `dist/` directly. Forms (contact-sales on the self-hosted page in V-066) post to a separate API endpoint that lands when the admin panel arrives in Workstream C.
+
+### What changed
+
+**New workspace at `apps/marketing-site/`:**
+
+- **`apps/marketing-site/package.json`** — `@driftstack/marketing-site@0.0.1`. Deps: `astro@^5.0.0`, `@astrojs/check`, `@astrojs/tailwind`, `tailwindcss`, `typescript`. Scripts: `dev` / `build` / `preview` / `typecheck` (= `astro check`).
+- **`apps/marketing-site/astro.config.mjs`** — `output: 'static'`, `site: 'https://driftstack.dev'`, Tailwind integration with `applyBaseStyles: false` so the layout's own `base.css` controls the global stack.
+- **`apps/marketing-site/tailwind.config.mjs`** — theme tokens locked: oxblood scale 50–950 with `oxblood.700 = #722F37` as the founder-locked accent; slate scale for surfaces + body text; `Geist` sans + `Berkeley Mono` mono with system fallbacks.
+- **`apps/marketing-site/tsconfig.json`** — extends `astro/tsconfigs/strict`; `@/*` path alias to `src/*`.
+- **`apps/marketing-site/src/styles/base.css`** — Tailwind layers + `@layer components { .btn-primary, .btn-secondary, .nav-link }` reusable patterns. `::selection` highlight in oxblood.
+- **`apps/marketing-site/src/layouts/BaseLayout.astro`** — meta + canonical + OG + Twitter card + inline-data-uri favicon (oxblood square with white "D"). Slot for page content. Renders Header + Footer.
+- **`apps/marketing-site/src/components/Header.astro`** — oxblood-square brand mark + nav (Pricing / Self-hosted / FAQ / Docs) + primary CTA "Get started" → `/pricing#trial-pack`. Active-route highlighting in oxblood.
+- **`apps/marketing-site/src/components/Footer.astro`** — three-column nav (Product / Company / Legal) + copyright + "All prices in USD. BTW added per region (Moneybird)." footnote.
+- **`apps/marketing-site/src/pages/index.astro`** — landing page:
+  - **Hero** — eyebrow ("iPhone Safari sessions, on demand") + H1 ("Premium fidelity for the device that matters.") + 3-line positioning + dual CTA (primary `Get started — $2.99 trial pack` → `/pricing#trial-pack`, secondary `Download GUI client` → GitHub releases). Sub-line: "16 hours of iPhone Safari sessions · no subscription required · use within 14 days · one-time purchase, used once per account." Right-side terminal-styled SDK example showing TS code.
+  - **Why Driftstack** — three-up: "No emulation tax", "Pay for what runs" (browser-hour metering framing), "GDPR by default" (Hetzner Falkenstein + Neon EU + Upstash EU + R2 EU).
+  - **Pricing teaser** — "Start with a $2.99 trial pack" headline + brief framing + → `/pricing` link.
+  - **Self-hosted teaser** — when self-hosted makes sense (privacy, &gt;5,000 hr/mo volume, data sovereignty) + → `/self-hosted` link.
+- **`apps/marketing-site/src/pages/404.astro`** — minimal 404 with `Back home` + `See pricing` CTAs.
+- **`apps/marketing-site/.gitignore`** — `.astro/`, `dist/`, `node_modules/`.
+
+**Root-level adjustments:**
+
+- **`eslint.config.js`** — added `apps/marketing-site/**` to `ignores`. Astro's own `astro check` (via `npm run typecheck --workspace apps/marketing-site`) handles type-checking the marketing site; the root ESLint type-aware setup expects every file to live in `tsconfig.eslint.json`'s project, which doesn't include Astro/Tailwind config files. Excluding the workspace from the root ESLint run avoids the parser error without weakening lint coverage on the actual TS server code.
+- **`.prettierignore`** — added `apps/marketing-site/.astro/` and `apps/marketing-site/dist/` (Astro-generated artifacts).
+
+### Empirical findings
+
+1. **All marketing copy adheres to ADR-003 framing.** Zero "free trial" / "free tier" / "no card required" strings anywhere in the site's source; all paths lead to "$2.99 trial pack" with the price visible. Hero sub-line surfaces 14-day window + once-per-account explicitly. Pricing-teaser headline is "Start with a $2.99 trial pack." — price front-loaded.
+
+2. **Output size is 32 KB total for 2 pages** (`/index.html` 12 KB + `/404.html` 8 KB + 12 KB shared `_astro/` chunk). Static-build is the right shape for the marketing surface — Cloudflare Pages CDN-caches the assets globally with no per-request compute. When the pricing + self-hosted + FAQ pages land in V-065 / V-066 the total is still well within Pages' 25-MB-per-deploy limit.
+
+3. **Astro check passes (0 errors / 0 warnings / 0 hints) on 7 files** — index + 404 pages, base layout, header + footer components, base.css, env.d.ts. The strict tsconfig + Astro's component-frontmatter type-checking catches mistakes in the `Astro.props` shape that vanilla TS wouldn't.
+
+4. **Geist + Berkeley Mono fallbacks intentional.** Both fonts are commercial / restricted-license — actual webfont files don't ship in this commit. The CSS declares them with `ui-sans-serif` / `ui-monospace` system fallbacks so the site renders correctly on first deploy; founder-side action is to procure the licensed fonts and add `@font-face` declarations + the `.woff2` files to `public/fonts/` when ready. The site is shipping-ready without them.
+
+5. **Trail of cross-references between marketing copy and backend invariants is clean.** Browser-hour-metering framing matches V-061 sweep + the future-self comment in `usage.ts`. Trial-pack framing matches ADR-003. Sub-processor list lock matches CLAUDE.md + V-052. Marketing copy isn't asserting any commercial commitment that backend code or legal text doesn't already back.
+
+6. **No tests added** — the marketing site is static content. Visual regressions and copy correctness will be caught by reviewer PRs (and, post-launch, by Sentry replays from real users). Adding a Playwright check for "loads + has 200 status" is possible but doesn't catch the failure modes that actually matter for a marketing site (broken copy, broken links, mis-rendered pricing).
+
+### Verify chain
+
+- `npm run typecheck` (root): clean — server + api-types + sdk all pass; marketing-site runs via its own `astro check` script.
+- `npm run typecheck --workspace apps/marketing-site`: 7 files, 0 errors / 0 warnings / 0 hints.
+- `npm run lint`: clean (marketing-site excluded from root ESLint per the rationale above).
+- `npm run format:check`: clean across the entire repo.
+- `npm test`: **360/360** unchanged.
+- `npx astro build` (in `apps/marketing-site`): build complete in ~500ms; 2 static pages emitted.
+
+### Decisions made
+
+No new D-entries. Astro + Tailwind on Cloudflare Pages is implementation detail (Tier 1) — matches the founder direction in `docs/network-architecture.md` §2.
+
+### Status
+
+Marketing-site scaffolding + landing page + 404 + base layout + theme tokens shipped. The hero, why-Driftstack three-up, pricing teaser, and self-hosted teaser cover the static framing. V-065 wires the full pricing page (6-column tier table + monthly/annual toggle + self-hosted SKUs + BYOK + BTW footnote). V-066 lands `/self-hosted` and `/faq`. V-067 wires the Cloudflare Pages deploy workflow + final polish + DNS.
+
+### Next
+
+V-065: pricing page. 6-column comparison table (Trial pack / Starter / Solo / Builder / Scale / Enterprise) using file-127 values + ADR-003 trial-pack column. Monthly/annual toggle with 20% off badge across paid tiers. Self-hosted section below with 3 SKUs and "Contact Sales" CTAs. BYOK note prominent on Builder+ tiers using "pricing announced at launch" (BYOK markup remains the sole Tier 3 placeholder copy). BTW footnote.

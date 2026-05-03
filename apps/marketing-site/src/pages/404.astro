@@ -1,0 +1,21 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="404 · Driftstack" description="Page not found.">
+  <section class="bg-white">
+    <div class="mx-auto max-w-3xl px-6 py-32 text-center">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">404</p>
+      <h1 class="mt-4 text-4xl font-semibold tracking-tight text-slate-900">
+        We couldn't find that.
+      </h1>
+      <p class="mt-4 text-slate-600">
+        The page you were looking for has moved, doesn't exist, or never did.
+      </p>
+      <div class="mt-8 flex justify-center gap-4">
+        <a href="/" class="btn-primary">Back home</a>
+        <a href="/pricing" class="btn-secondary">See pricing</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

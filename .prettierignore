@@ -8,3 +8,7 @@ LICENSE
 
 # Drizzle generated artifacts
 apps/server/src/db/migrations/
+
+# Astro generated artifacts
+apps/marketing-site/.astro/
+apps/marketing-site/dist/
