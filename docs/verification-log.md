@@ -5582,3 +5582,41 @@ Coverage:
 ### Next
 
 Continuing to V-091 — SDK webhook resource tests filling the 20% coverage gap surfaced in V-086 audit.
+
+---
+
+## V-091 — SDK webhook resource tests (Routine — coverage)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+V-086 coverage audit flagged `packages/sdk-typescript/src/resources/webhooks.ts` at 20.93% — the SDK's webhook resource methods (create, list, get, delete, listDeliveries) had no integration test exercising them through the SDK against the real server. V-091 adds 6 tests against the same `fetchAdapter(fx)` pattern the existing SDK integration tests use.
+
+### What changed
+
+`packages/sdk-typescript/tests/integration/sdk-against-server.test.ts`: 6 new tests under the existing `describe('@driftstack/sdk against real server')`:
+
+1. `sdk.webhooks.create` returns plaintext signing secret once; `list` strips it.
+2. `sdk.webhooks.get` returns the endpoint without plaintext.
+3. `sdk.webhooks.delete` is idempotent (second delete also succeeds).
+4. `sdk.webhooks.delete` on unknown id throws `NotFoundError` (the SDK error type, not raw HTTP).
+5. `sdk.webhooks.listDeliveries` returns paginated shape (`data`, `has_more`, `next_cursor`).
+6. `sdk.webhooks.create` with non-https URL throws `ValidationError` from the SDK.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 465/465 (was 459; +6).
+
+### Files modified
+
+- `packages/sdk-typescript/tests/integration/sdk-against-server.test.ts` (+6 tests)
+
+### Next
+
+Continuing to V-092 — rate-limit observability: structured-log fields when budget consumed.

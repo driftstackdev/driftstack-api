@@ -140,4 +140,113 @@ describe('@driftstack/sdk against real server', () => {
     expect(u.tier).toBe('api_scale');
     expect(u.totals.navigate).toBe(0);
   });
+
+  // ── V-091: webhooks resource ────────────────────────────────────────
+
+  it('webhooks.create returns plaintext signing secret once', async () => {
+    fx = await buildTestApp();
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+
+    const created = await sdk.webhooks.create({
+      url: 'https://customer.example/hook',
+      events: ['session.completed', 'session.failed'],
+    });
+    expect(created.id).toMatch(/^whk_/);
+    expect(created.secret).toMatch(/^whsec_/);
+    // List response strips the plaintext secret.
+    const list = await sdk.webhooks.list();
+    expect(list.data).toHaveLength(1);
+    expect((list.data[0] as { secret?: unknown }).secret).toBeUndefined();
+  });
+
+  it('webhooks.get returns the endpoint without plaintext', async () => {
+    fx = await buildTestApp();
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+
+    const created = await sdk.webhooks.create({
+      url: 'https://customer.example/hook',
+      events: ['session.completed'],
+    });
+    const fetched = await sdk.webhooks.get(created.id);
+    expect(fetched.id).toBe(created.id);
+    expect((fetched as { secret?: unknown }).secret).toBeUndefined();
+  });
+
+  it('webhooks.delete soft-disables the endpoint; second delete is idempotent', async () => {
+    fx = await buildTestApp();
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+
+    const created = await sdk.webhooks.create({
+      url: 'https://customer.example/hook',
+      events: ['session.completed'],
+    });
+    await expect(sdk.webhooks.delete(created.id)).resolves.toBeUndefined();
+    // Second delete is a 204 no-op (idempotent — endpoint stays disabled).
+    await expect(sdk.webhooks.delete(created.id)).resolves.toBeUndefined();
+  });
+
+  it('webhooks.delete on unknown id throws NotFoundError', async () => {
+    fx = await buildTestApp();
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+
+    await expect(
+      sdk.webhooks.delete('whk_00000000-0000-4000-8000-000000000099'),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('webhooks.listDeliveries returns paginated shape', async () => {
+    fx = await buildTestApp();
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+
+    const created = await sdk.webhooks.create({
+      url: 'https://customer.example/hook',
+      events: ['session.completed'],
+    });
+    const page = await sdk.webhooks.listDeliveries(created.id, { limit: 10 });
+    expect(page.data).toEqual([]);
+    expect(page.has_more).toBe(false);
+    expect(page.next_cursor).toBeNull();
+  });
+
+  it('webhooks.create surfaces ValidationError on non-https URL', async () => {
+    fx = await buildTestApp();
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+
+    await expect(
+      sdk.webhooks.create({
+        url: 'http://insecure.example/hook',
+        events: ['session.completed'],
+      }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
 });
