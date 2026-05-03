@@ -24,6 +24,7 @@ import type { LegalService } from '../services/legal.js';
 import type { AuthFlowsService } from '../services/auth-flows.js';
 import type { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import type { ProfilesService } from '../services/profiles.js';
+import type { BillingService } from '../services/billing.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -39,6 +40,7 @@ import { registerLegalRoutes } from '../routes/legal.js';
 import { registerAuthRoutes } from '../routes/auth.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
+import { registerBillingRoutes } from '../routes/billing.js';
 
 export interface ReadinessCheck {
   /** Display name surfaced in the /ready response (e.g. "postgres", "redis", "r2"). */
@@ -95,6 +97,8 @@ export interface AppDeps {
   stripeWebhookSigningSecret?: string;
   /** V-081: profile CRUD service. Optional during scaffolding window. */
   profilesService?: ProfilesService;
+  /** V-082: billing service (Stripe checkout / portal / trial-pack). Optional. */
+  billingService?: BillingService;
   /**
    * Readiness checks executed by `/ready`. Each runs with the
    * supplied (or default 1500ms) timeout; aggregate result drives
@@ -169,6 +173,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   }
   if (deps.profilesService !== undefined) {
     registerProfileRoutes(app, { service: deps.profilesService });
+  }
+  if (deps.billingService !== undefined) {
+    registerBillingRoutes(app, { service: deps.billingService });
   }
   await registerOpenApiRoutes(app);
 

@@ -1,0 +1,146 @@
+// In-memory BillingRepo + BillingProvider for integration tests.
+
+import { randomUUID } from 'node:crypto';
+import type {
+  BillingAccountSnapshot,
+  BillingProvider,
+  BillingRepo,
+  SubscriptionMirror,
+} from '../../../src/services/billing.js';
+
+export class InMemoryBillingRepo implements BillingRepo {
+  private readonly accounts = new Map<string, BillingAccountSnapshot>();
+  private readonly subscriptions = new Map<string, SubscriptionMirror>();
+
+  /** Test seam: register or update an account snapshot. */
+  upsertAccount(snap: BillingAccountSnapshot): void {
+    this.accounts.set(snap.id, snap);
+  }
+
+  /** Test seam: record a subscription mirror row. */
+  upsertSubscription(s: SubscriptionMirror): void {
+    this.subscriptions.set(s.id, s);
+  }
+
+  /** Test seam: simulate a successful trial-pack purchase. */
+  applyTrialPackPurchase(accountId: string, args: { creditCents: number; expiresAt: Date }): void {
+    const a = this.accounts.get(accountId);
+    if (!a) throw new Error('applyTrialPackPurchase: account not found');
+    this.accounts.set(accountId, {
+      ...a,
+      trialPackPurchasedAt: new Date(),
+      trialPackCreditCents: args.creditCents,
+      trialPackExpiresAt: args.expiresAt,
+      trialPackRedeemed: false,
+    });
+  }
+
+  getAccount(accountId: string): Promise<BillingAccountSnapshot | null> {
+    return Promise.resolve(this.accounts.get(accountId) ?? null);
+  }
+
+  setStripeCustomerId(args: { accountId: string; customerId: string }): Promise<void> {
+    const a = this.accounts.get(args.accountId);
+    if (a) this.accounts.set(args.accountId, { ...a, stripeCustomerId: args.customerId });
+    return Promise.resolve();
+  }
+
+  findCurrentSubscription(accountId: string): Promise<SubscriptionMirror | null> {
+    let latest: SubscriptionMirror | null = null;
+    for (const s of this.subscriptions.values()) {
+      if (s.accountId !== accountId) continue;
+      if (latest === null || s.createdAt.getTime() > latest.createdAt.getTime()) latest = s;
+    }
+    return Promise.resolve(latest);
+  }
+}
+
+export interface InMemoryProviderState {
+  customers: Map<string, { id: string; accountId: string; email: string; name: string | null }>;
+  checkoutSessions: Array<{
+    id: string;
+    customerId: string;
+    accountId: string;
+    priceId: string;
+    kind: 'subscription' | 'trial_pack';
+  }>;
+  portalSessions: Array<{ id: string; customerId: string }>;
+}
+
+export class InMemoryBillingProvider implements BillingProvider {
+  readonly state: InMemoryProviderState = {
+    customers: new Map(),
+    checkoutSessions: [],
+    portalSessions: [],
+  };
+
+  ensureCustomer(args: { accountId: string; email: string; name: string | null }): Promise<string> {
+    // Look up existing customer by accountId (1:1 in this stub).
+    for (const c of this.state.customers.values()) {
+      if (c.accountId === args.accountId) return Promise.resolve(c.id);
+    }
+    const id = `cus_${randomUUID().replace(/-/g, '').slice(0, 14)}`;
+    this.state.customers.set(id, {
+      id,
+      accountId: args.accountId,
+      email: args.email,
+      name: args.name,
+    });
+    return Promise.resolve(id);
+  }
+
+  createSubscriptionCheckout(args: {
+    customerId: string;
+    priceId: string;
+    successUrl: string;
+    cancelUrl: string;
+    accountId: string;
+  }): Promise<{ url: string; sessionId: string }> {
+    const sessionId = `cs_test_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    this.state.checkoutSessions.push({
+      id: sessionId,
+      customerId: args.customerId,
+      accountId: args.accountId,
+      priceId: args.priceId,
+      kind: 'subscription',
+    });
+    void args.successUrl;
+    void args.cancelUrl;
+    return Promise.resolve({
+      url: `https://checkout.stripe.example/${sessionId}`,
+      sessionId,
+    });
+  }
+
+  createTrialPackCheckout(args: {
+    customerId: string;
+    priceId: string;
+    successUrl: string;
+    cancelUrl: string;
+    accountId: string;
+  }): Promise<{ url: string; sessionId: string }> {
+    const sessionId = `cs_test_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    this.state.checkoutSessions.push({
+      id: sessionId,
+      customerId: args.customerId,
+      accountId: args.accountId,
+      priceId: args.priceId,
+      kind: 'trial_pack',
+    });
+    void args.successUrl;
+    void args.cancelUrl;
+    return Promise.resolve({
+      url: `https://checkout.stripe.example/${sessionId}`,
+      sessionId,
+    });
+  }
+
+  createPortalSession(args: { customerId: string; returnUrl: string }): Promise<{ url: string }> {
+    const id = `bps_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    this.state.portalSessions.push({ id, customerId: args.customerId });
+    void args.returnUrl;
+    return Promise.resolve({
+      url: `https://billing.stripe.example/p/${id}`,
+    });
+  }
+}

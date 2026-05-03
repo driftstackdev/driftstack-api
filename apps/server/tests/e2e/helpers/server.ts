@@ -70,6 +70,7 @@ const TRUNCATE_SQL = `
     "password_reset_tokens",
     "web_sessions",
     "processed_stripe_events",
+    "subscriptions",
     "profiles",
     "api_keys",
     "accounts"

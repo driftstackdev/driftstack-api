@@ -113,6 +113,20 @@ export const accounts = pgTable(
     emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
     tier: accountTier('tier').notNull().default('trial_pack'),
     status: accountStatus('status').notNull().default('active'),
+    // V-082 / Workstream D — Stripe customer link. Set at first
+    // checkout-session create; remains pinned across tier changes
+    // (Stripe customer ID is stable for the lifetime of the account).
+    stripeCustomerId: text('stripe_customer_id'),
+    // V-082 / ADR-003 — trial-pack mechanics. Set at trial-pack
+    // purchase (Checkout success). $0.18/hr decrement debits this
+    // counter; 14-day window from `trial_pack_purchased_at`.
+    // `trial_pack_redeemed` flips true when this account exits
+    // trial state via either subscription start OR credit
+    // exhaustion OR window expiry.
+    trialPackPurchasedAt: timestamp('trial_pack_purchased_at', { withTimezone: true }),
+    trialPackCreditCents: integer('trial_pack_credit_cents'),
+    trialPackExpiresAt: timestamp('trial_pack_expires_at', { withTimezone: true }),
+    trialPackRedeemed: boolean('trial_pack_redeemed').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -210,6 +224,60 @@ export const passwordResetTokens = pgTable(
     uniqueIndex('password_reset_tokens_hash_unique').on(t.tokenHash),
     index('password_reset_tokens_account_idx').on(t.accountId),
     index('password_reset_tokens_expires_idx').on(t.expiresAt),
+  ],
+);
+
+// subscriptions — local mirror of the Stripe subscription resource.
+// One row per active or recently-past subscription per account; the
+// `account_id` is the FK back to the local accounts row, while
+// `stripe_subscription_id` is the Stripe-side identifier.
+//
+// State stays in sync with Stripe via webhook events (V-080 router):
+//   - customer.subscription.created → INSERT (or UPDATE if races)
+//   - customer.subscription.updated → UPDATE current_period_end / status
+//   - customer.subscription.deleted → set status='canceled'
+//   - invoice.payment_succeeded     → no-op on this table; usage analytics
+//
+// Status enum tracks Stripe's status verbatim for fidelity.
+export const subscriptionStatus = pgEnum('subscription_status', [
+  'incomplete',
+  'incomplete_expired',
+  'trialing',
+  'active',
+  'past_due',
+  'canceled',
+  'unpaid',
+  'paused',
+]);
+
+export const subscriptions = pgTable(
+  'subscriptions',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    stripeSubscriptionId: text('stripe_subscription_id').notNull(),
+    stripePriceId: text('stripe_price_id').notNull(),
+    /** Tier this subscription corresponds to (mirrors AccountTier enum). */
+    tier: accountTier('tier').notNull(),
+    status: subscriptionStatus('status').notNull(),
+    currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+    cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+    canceledAt: timestamp('canceled_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('subscriptions_stripe_id_unique').on(t.stripeSubscriptionId),
+    index('subscriptions_account_idx').on(t.accountId),
+    index('subscriptions_status_idx').on(t.status),
   ],
 );
 
@@ -732,3 +800,6 @@ export type NewProcessedStripeEvent = typeof processedStripeEvents.$inferInsert;
 
 export type Profile = typeof profiles.$inferSelect;
 export type NewProfile = typeof profiles.$inferInsert;
+
+export type Subscription = typeof subscriptions.$inferSelect;
+export type NewSubscription = typeof subscriptions.$inferInsert;

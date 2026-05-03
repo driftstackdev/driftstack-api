@@ -34,6 +34,8 @@ import { InMemoryLegalRepo } from './in-memory-legal-repo.js';
 import { InMemoryAuthFlowsRepo } from './in-memory-auth-flows-repo.js';
 import { InMemoryStripeWebhooksRepo } from './in-memory-stripe-webhooks-repo.js';
 import { InMemoryProfilesRepo } from './in-memory-profiles-repo.js';
+import { InMemoryBillingProvider, InMemoryBillingRepo } from './in-memory-billing.js';
+import { BillingService } from '../../../src/services/billing.js';
 import { AuthFlowsService } from '../../../src/services/auth-flows.js';
 import { StripeWebhooksService } from '../../../src/services/stripe-webhooks.js';
 import { ProfilesService } from '../../../src/services/profiles.js';
@@ -98,6 +100,8 @@ export interface TestAppFixture {
   /** Stripe webhook signing secret used by the test fixture. */
   stripeWebhookSigningSecret: string;
   profilesRepo: InMemoryProfilesRepo;
+  billingRepo: InMemoryBillingRepo;
+  billingProvider: InMemoryBillingProvider;
   driver: MockDriver;
   /** Plaintext API key — pass as `Authorization: Bearer <plaintext>`. */
   plaintext: string;
@@ -270,6 +274,37 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const profilesRepo = new InMemoryProfilesRepo();
   const profilesService = new ProfilesService(profilesRepo);
 
+  // V-082: Billing service against an in-memory provider. The seeded
+  // account is registered with the billing repo so getAccount + the
+  // ensureCustomer flow round-trip without DB.
+  const billingRepo = new InMemoryBillingRepo();
+  billingRepo.upsertAccount({
+    id: accountId,
+    email: opts.email ?? 'tester@driftstack.local',
+    name: 'Tester',
+    tier: opts.tier ?? 'api_builder',
+    stripeCustomerId: null,
+    trialPackPurchasedAt: null,
+    trialPackCreditCents: null,
+    trialPackExpiresAt: null,
+    trialPackRedeemed: false,
+  });
+  const billingProvider = new InMemoryBillingProvider();
+  const billingService = new BillingService(billingRepo, billingProvider, {
+    tierPrices: {
+      solo_manual: { monthly: 'price_solo_monthly', annual: 'price_solo_annual' },
+      team_manual: { monthly: 'price_team_monthly', annual: 'price_team_annual' },
+      agency_manual: { monthly: 'price_agency_monthly', annual: 'price_agency_annual' },
+      api_starter: { monthly: 'price_api_starter_monthly', annual: 'price_api_starter_annual' },
+      api_builder: { monthly: 'price_api_builder_monthly', annual: 'price_api_builder_annual' },
+      api_scale: { monthly: 'price_api_scale_monthly', annual: 'price_api_scale_annual' },
+    },
+    trialPackPriceId: 'price_trial_pack_one_time',
+    defaultSuccessUrl: 'http://localhost:5173/billing/success',
+    defaultCancelUrl: 'http://localhost:5173/billing/cancel',
+    portalReturnUrl: 'http://localhost:5173/billing',
+  });
+
   const app = await buildApp({
     logger: testLogger,
     authRepo,
@@ -289,6 +324,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     stripeWebhooksService,
     stripeWebhookSigningSecret,
     profilesService,
+    billingService,
     permissiveCors: true,
   });
 
@@ -308,6 +344,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     stripeWebhooksRepo,
     stripeWebhookSigningSecret,
     profilesRepo,
+    billingRepo,
+    billingProvider,
     driver,
     plaintext,
     accountId,

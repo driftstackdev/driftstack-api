@@ -4983,3 +4983,95 @@ Five endpoints under `/v1/profiles`. All auth-gated (`app.requireAuth`) + rate-l
 ### Next
 
 Per the never-stop rule: continuing to V-082 (direct-buy + trial-pack billing flow scaffolding) per Priority 5 of the overnight queue. V-070-visual remains uncommitted in working tree pending founder review.
+
+---
+
+## V-082 — Direct-buy + trial-pack billing flow scaffolding (Routine — Workstream D P5)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Scaffold the customer-facing billing surface that backs Stripe Checkout for paid-tier subscriptions, the $2.99 one-time trial pack (per ADR-003), and the Stripe Customer Portal redirect. Together with the V-080 inbound webhook handler, this completes the billing on-ramp / off-ramp; downstream V-NNN entries fill in webhook → subscription-mirror state mutation, the actual production Stripe SDK / HTTP client, and the customer-dashboard pages that render `/v1/billing` state.
+
+### What changed
+
+**Schema (Drizzle + migration 0010):**
+
+- `accounts.stripe_customer_id` (text, nullable) — link to Stripe customer; pinned across tier changes.
+- `accounts.trial_pack_purchased_at` / `trial_pack_credit_cents` / `trial_pack_expires_at` / `trial_pack_redeemed` — ADR-003 trial-pack columns. Set at trial-pack purchase; `trial_pack_redeemed` flips when the account exits trial state.
+- `subscriptions` table — local mirror of Stripe subscription resource. One row per (account, Stripe subscription id), unique on `stripe_subscription_id`. Status enum mirrors Stripe's verbatim (`incomplete | incomplete_expired | trialing | active | past_due | canceled | unpaid | paused`).
+
+**API contract (`packages/api-types/src/billing.ts`):**
+
+- `CreateCheckoutSessionRequest` — tier (refined to exclude trial_pack + enterprise), billing_period (monthly | annual), optional success/cancel URLs.
+- `StartTrialPackRequest` — optional success/cancel URLs only (Stripe price id baked into config, not request).
+- `CreatePortalSessionResponse` — portal URL.
+- `GetBillingStateResponse` — current subscription mirror + trial-pack state.
+
+**Service (`apps/server/src/services/billing.ts`):**
+
+`BillingService` decouples Stripe SDK access via a `BillingProvider` interface (`ensureCustomer` / `createSubscriptionCheckout` / `createTrialPackCheckout` / `createPortalSession`) so tests run against an in-memory provider without touching real Stripe. Operations:
+
+- `createCheckoutSession`: ensures Stripe customer (creates on first call, reuses thereafter via `stripe_customer_id`), looks up tier price id from `tierPrices` config, returns Checkout URL.
+- `startTrialPack`: rejects with 409 if `trial_pack_purchased_at IS NOT NULL` (one trial pack per account, per ADR-003), otherwise ensures customer + creates one-time Checkout for the trial-pack price id.
+- `createPortalSession`: 409 if no Stripe customer yet; otherwise opens Customer Portal.
+- `getBillingState`: returns subscription mirror + trial-pack state with computed `active` flag (purchased AND not redeemed AND not expired AND credit > 0).
+
+**Route (`apps/server/src/routes/billing.ts`):**
+
+Four endpoints under `/v1/billing/*`. All auth-gated + rate-limited.
+
+**Test fixture (`build-test-app.ts`):**
+
+In-memory `BillingProvider` records every customer / checkout / portal call into observable state for assertions. Test prices use shape `price_<tier>_<period>` for legibility. Seeded account is pre-registered with the in-memory billing repo so the first `getAccount` call succeeds.
+
+### How verified
+
+- `npm run typecheck`: clean across all 5 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 413/413 passing (was 402; +11 new billing integration tests). Tests cover:
+  1. Checkout for paid tier returns Stripe URL + records provider state.
+  2. trial_pack tier rejected at validation (refined enum).
+  3. enterprise tier rejected at validation.
+  4. Two checkouts reuse the same Stripe customer.
+  5. Trial-pack checkout records kind='trial_pack' with the one-time price id.
+  6. Trial-pack on already-purchased account → 409 Conflict.
+  7. Portal session works after a customer exists.
+  8. Portal session 409s on a fresh account with no customer.
+  9. `GET /v1/billing` returns null subscription + inactive trial-pack on fresh account.
+  10. Active trial-pack reflected in response.
+  11. Subscription mirror reflected in response.
+
+### Decisions made (no new D-entries)
+
+- **Production Stripe wiring deferred.** `bootstrap.ts` does NOT yet construct a real `BillingProvider` — that requires either the `stripe` SDK (heavy dep, deferred until subscription state machine lands) or a hand-rolled Stripe HTTP client (preferable for reasons same as V-080's hand-rolled signature verification, but more code to land + test against the real Stripe sandbox). The route registration is gated on `billingService !== undefined`, so production deploys without billing config simply don't expose `/v1/billing/*` and the customer dashboard surfaces a "billing not configured" state. Follow-on V-NNN lands the real provider once the founder confirms which Stripe SDK pattern they prefer + provides Stripe price IDs from the live dashboard.
+- **trial_pack + enterprise excluded from CreateCheckoutSession at the schema layer**, not at the service. Refined Zod enum returns 400 ValidationFailed before the request reaches the service — clearer error semantics, and the contract exposes "these tiers are not self-serve" up-front.
+- **`tierPrices` config is `Partial<Record<AccountTier, TierPrices>>`.** Lets the test fixture only configure self-serve tiers and lets production add tiers incrementally without crashing on undefined access. Service throws BadRequest with a meaningful message when a tier has no price configured.
+- **Trial-pack 14-day window + 299¢ credit not enforced at the service yet.** Those are set by the inbound `checkout.session.completed` webhook handler (V-080 router) when it lands the actual mutation; at scaffolding time the values come from the test fixture's `applyTrialPackPurchase` test seam.
+
+### Files added
+
+- `apps/server/src/db/migrations/0010_billing.sql`
+- `apps/server/src/db/billing-repo.ts`
+- `apps/server/src/services/billing.ts`
+- `apps/server/src/routes/billing.ts`
+- `apps/server/tests/integration/_helpers/in-memory-billing.ts`
+- `apps/server/tests/integration/billing.test.ts`
+- `packages/api-types/src/billing.ts`
+
+### Files modified
+
+- `apps/server/src/db/schema.ts` (accounts.stripe_customer_id + 4 trial-pack columns + subscriptions table + subscriptionStatus enum + 2 inferred types)
+- `apps/server/src/db/migrations/meta/_journal.json` (entry 10)
+- `apps/server/src/lib/app.ts` (BillingService AppDeps + route registration)
+- `apps/server/tests/integration/_helpers/build-test-app.ts` (fixture wiring + seeded account in billing repo)
+- `apps/server/tests/e2e/helpers/server.ts` (TRUNCATE_SQL adds subscriptions)
+- `packages/api-types/src/index.ts` (re-export billing.ts)
+
+### Next
+
+Per the never-stop rule: continuing to V-083 (admin panel API — list accounts, account detail, suspend/unsuspend, tier-change, audit-log, leads) per Priority 6 of the overnight queue. V-070-visual remains uncommitted in working tree pending founder review.
