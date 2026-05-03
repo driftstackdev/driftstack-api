@@ -3606,3 +3606,57 @@ Backend tier-limit values now reflect file-127 locked spec. Workstream B (market
 ### Next
 
 V-062: Sentry source-map upload — small commit. Adds `@sentry/cli` step to `.github/workflows/deploy.yml` after the build; documents `SENTRY_AUTH_TOKEN` GH secret in `docs/deployment/env-vars.md`. Source maps make Sentry stack traces readable in production; landing the wiring before first production deploy avoids first-incident debugging pain.
+
+## V-062 — Sentry source-map upload in deploy pipeline
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream A follow-on. Founder approval to land before first production deploy: "better to have the wiring in place before first production deploy than after first incident."
+
+V-058 wired the runtime Sentry client; V-062 wires the build-time source-map upload so Sentry stack traces resolve to original TypeScript line numbers rather than minified `dist/index.js:1:NNNN` columns. Release matching pins source maps to a specific deploy via the SHA-keyed `SENTRY_RELEASE`.
+
+### What changed
+
+- **`apps/server/Dockerfile`** — added `ARG SENTRY_RELEASE=""` + `ENV SENTRY_RELEASE=${SENTRY_RELEASE}` block in stage 2. The deploy pipeline passes the full git SHA as a build arg; runtime config (`SentryConfig.release` per V-058) reads from the env. Build arg defaults to empty so a local `docker build` without the arg still works.
+- **`.github/workflows/deploy.yml`** — three additive changes:
+  1. Header comment block extended with the three new repository-wide GH secrets (`SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`). Documented as repository-wide (not per-environment) since the upload step runs once per build, not per-deploy-target.
+  2. `docker/build-push-action@v6` step gains `build-args: SENTRY_RELEASE=${{ github.sha }}` so the runtime image is tagged with the same release identifier the source-map upload uses.
+  3. Two new steps after the docker build: `actions/setup-node@v4` (cheap, unconditional) and a single `Upload source maps to Sentry` step that:
+     - Shells out the `SENTRY_AUTH_TOKEN` check at the top — if unset, prints a one-line skip message and exits 0 (runtime unaffected, stack traces minified until populated).
+     - If set: runs `npm install --no-audit --include=dev` + `npx tsc --build packages/api-types` + `npm run build --workspace=@driftstack/server` to produce local `apps/server/dist/*.js.map` files matching the just-pushed image.
+     - Runs `@sentry/cli releases new $SHA` → `sourcemaps upload --release=$SHA --url-prefix=app:///apps/server/dist apps/server/dist` → `releases finalize $SHA` → `releases set-commits $SHA --auto || true`.
+- **`docs/deployment/env-vars.md`** — Sentry section restructured:
+  - **Runtime env vars** (live in `DEPLOY_DOTENV_BASE64`): `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE` (now noted as build-arg-set, not in the env file), `SENTRY_TRACES_SAMPLE_RATE`.
+  - **Build-time / GH Actions secrets** (repository-level GH secrets, NOT in `DEPLOY_DOTENV_BASE64`): `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`. Each annotated with scope + skip-behaviour.
+  - Per-environment baseline `.env` example updated: `SENTRY_RELEASE` removed (with explanatory comment) since it's now baked into the image.
+  - Validation checklist gains: confirm `SENTRY_AUTH_TOKEN` populated as a repository-wide secret.
+
+### Empirical findings
+
+1. **`url-prefix` of `app:///apps/server/dist`.** The Node runtime's stack traces report file paths as `/app/apps/server/dist/index.js:LINE:COL` (the `WORKDIR /app` + the COPY destination). Sentry maps these via the `app:///` prefix convention. If the WORKDIR ever changes, this prefix needs adjustment — flagged in the comment block adjacent to the upload step.
+
+2. **One step, not three, for the upload.** Earlier draft separated "setup Node", "build", and "upload" into three steps with `if: ${{ env.SENTRY_AUTH_TOKEN != '' }}` gates each. GitHub Actions' step-level `if:` does not have access to env defined via secrets at the step level — that pattern only works at job/workflow scope. Consolidating to one step with a shell-level `[ -z "${SENTRY_AUTH_TOKEN}" ]` check sidesteps the restriction cleanly. `actions/setup-node` runs unconditionally because it's cheap (~5s) and doesn't fail without a token.
+
+3. **`releases set-commits --auto` falls back gracefully.** Auto-mode uses git remote info to associate commits with the release. In some GH Actions environments, the checkout doesn't include enough git history (`fetch-depth: 1` by default) for the auto-association. The `|| true` ensures the release still finalizes; the Sentry-side "Suspect commits" feature is opportunistic, not load-bearing for stack-trace resolution.
+
+4. **Build runs twice — once in Docker, once on the runner — and that's deliberate.** The Docker build is the artifact source of truth. The runner build provides the source maps and is verified deterministic by the same package-lock + same TypeScript version + same Node 22. If divergence becomes a concern, a future change can extract `apps/server/dist/` from the Docker image via `docker buildx build --output` instead of rebuilding.
+
+5. **Source maps remain in the runtime image.** `tsconfig.base.json` sets `sourceMap: true`; stage 2's `COPY dist` carries `.js.map` files into the image. Could prune in a future image-size pass, but at ~50KB the size impact is immaterial. Pruning would also break Node's automatic stack-trace symbolication in case Sentry is unreachable — keeping them is the more robust default.
+
+### Verify chain
+
+- typecheck/lint/format all clean (no code changes; only Dockerfile + workflow + docs).
+- `npm test`: **360/360** unchanged.
+- The deploy pipeline change isn't locally testable without GH-hosted runners + actual Sentry credentials. First production deploy will exercise the upload step empirically.
+
+### Decisions made
+
+No new D-entries. Source-map upload is operational tooling, not an architecture decision.
+
+### Status
+
+Pipeline ready. Founder-side action before first production deploy: populate `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` as repository-level GH secrets (not per-environment). Until populated, the upload step no-ops with a console message; runtime is unaffected.
+
+### Next
+
+Workstream B (marketing site at `apps/marketing-site/`). Astro on Cloudflare Pages; oxblood `#722F37` palette; signup-primary / GUI-download-secondary CTAs. Pricing page renders file-127 locked values directly per V-061 sweep; only the BYOK markup line uses placeholder copy. Self-hosted sub-page with "Contact Sales" + brief positioning. Founder-direction-driven structure: hero / API tier comparison table / monthly-annual toggle / self-hosted section / BYOK note / FAQ.

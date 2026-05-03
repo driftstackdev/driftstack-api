@@ -22,9 +22,20 @@
 #   - DEPLOY_DOTENV_BASE64 — base64-encoded .env file dropped at
 #                              /opt/driftstack/.env on the VM. Contains
 #                              DATABASE_URL, REDIS_URL, R2_*, POSTMARK_*,
-#                              SENTRY_DSN, STRIPE_*, COINBASE_COMMERCE_*,
-#                              etc. Updated via gh secret set when
-#                              founder rotates a credential.
+#                              SENTRY_DSN, STRIPE_*, etc.
+#                              Updated via gh secret set when founder
+#                              rotates a credential.
+#
+# Required repository-wide secrets (not per-environment):
+#   - SENTRY_AUTH_TOKEN    — Sentry auth token with project:write scope
+#                              (https://sentry.io → Settings → Auth Tokens).
+#                              Used by `@sentry/cli` to upload source
+#                              maps in the build-image job. If unset,
+#                              the upload step is skipped — runtime
+#                              still works, stack traces will be
+#                              minified until token is populated.
+#   - SENTRY_ORG           — Sentry organization slug.
+#   - SENTRY_PROJECT       — Sentry project slug for driftstack-api.
 
 name: Deploy
 
@@ -77,8 +88,46 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image-tag }}
             ghcr.io/${{ github.repository_owner }}/driftstack-api:latest
+          build-args: |
+            SENTRY_RELEASE=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Sentry source-map upload. Build the server outside Docker so
+      # the runner has local dist/*.js.map files to ship to Sentry.
+      # The build is deterministic; this dist/ matches what's already
+      # been baked into the image we just pushed. The whole step is a
+      # no-op if SENTRY_AUTH_TOKEN is unset (e.g. fresh repo without
+      # the secret populated yet) — runtime still works, stack traces
+      # will be minified until the secret lands.
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Upload source maps to Sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_RELEASE: ${{ github.sha }}
+        run: |
+          if [ -z "${SENTRY_AUTH_TOKEN}" ]; then
+            echo "SENTRY_AUTH_TOKEN unset — skipping source-map upload."
+            echo "Runtime still works; stack traces will be minified until the secret is populated."
+            exit 0
+          fi
+          npm install --no-audit --include=dev
+          npx tsc --build packages/api-types
+          npm run build --workspace=@driftstack/server
+          npx --yes @sentry/cli@^2 releases new "${SENTRY_RELEASE}"
+          npx --yes @sentry/cli@^2 sourcemaps upload \
+            --release="${SENTRY_RELEASE}" \
+            --url-prefix="app:///apps/server/dist" \
+            apps/server/dist
+          npx --yes @sentry/cli@^2 releases finalize "${SENTRY_RELEASE}"
+          npx --yes @sentry/cli@^2 releases set-commits "${SENTRY_RELEASE}" --auto || true
 
   deploy-staging:
     name: Deploy to staging

@@ -72,6 +72,13 @@ COPY --chown=driftstack:driftstack docs/legal ./docs/legal
 
 USER driftstack
 
+# SENTRY_RELEASE — passed in via --build-arg from the deploy
+# pipeline; matches the `release` field on Sentry source-map uploads
+# so error stack traces resolve to original source. No-op in dev
+# (build arg unset → empty string → Sentry init treats as undefined).
+ARG SENTRY_RELEASE=""
+ENV SENTRY_RELEASE=${SENTRY_RELEASE}
+
 # The server listens on PORT (default 7780 in dev; production deploys
 # typically run behind a reverse proxy and bind to 8080 or similar).
 ENV NODE_ENV=production

@@ -86,15 +86,27 @@ iteration 2 + Workstream F).
 
 ### Sentry (error tracking, EU region)
 
-For diagnostics (V-051 baseline integration; full SDK wiring lands in
-Workstream A iteration 2).
+For diagnostics (V-058 SDK wiring + V-062 source-map upload).
 
-| Name                        | Required           | Per-env? | Example                                                | Notes                                                                                                                                             |
-| --------------------------- | ------------------ | -------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SENTRY_DSN`                | required at deploy | per-env  | `https://<key>@<org>.ingest.de.sentry.io/<project-id>` | EU region (`*.ingest.de.sentry.io`, not `.us.`). Staging + production map to **the same Sentry project** but different `SENTRY_ENVIRONMENT` tags. |
-| `SENTRY_ENVIRONMENT`        | optional           | per-env  | `production` / `staging`                               | Tagged on every event for filtering. Defaults to `NODE_ENV`.                                                                                      |
-| `SENTRY_RELEASE`            | optional           | per-env  | `<git short sha>`                                      | Set by the deploy pipeline to the image tag (`${{ github.sha }}` short form) so the source-map upload + release tracking align.                   |
-| `SENTRY_TRACES_SAMPLE_RATE` | optional           | per-env  | `0.1`                                                  | Default 0 (no APM traces). 0.1 in staging for tuning; production typically 0.01 to keep quota down.                                               |
+**Runtime env vars** (live in `DEPLOY_DOTENV_BASE64`, read by the
+running container):
+
+| Name                        | Required           | Per-env? | Example                                                | Notes                                                                                                                                                                                          |
+| --------------------------- | ------------------ | -------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SENTRY_DSN`                | required at deploy | per-env  | `https://<key>@<org>.ingest.de.sentry.io/<project-id>` | EU region (`*.ingest.de.sentry.io`, not `.us.`). Staging + production map to **the same Sentry project** but different `SENTRY_ENVIRONMENT` tags.                                              |
+| `SENTRY_ENVIRONMENT`        | optional           | per-env  | `production` / `staging`                               | Tagged on every event for filtering. Defaults to `NODE_ENV`.                                                                                                                                   |
+| `SENTRY_RELEASE`            | optional           | per-env  | full git SHA                                           | **Baked into the Docker image** at build time via `--build-arg SENTRY_RELEASE=${{ github.sha }}` (per V-062); not in `DEPLOY_DOTENV_BASE64`. Matches the Sentry source-map release identifier. |
+| `SENTRY_TRACES_SAMPLE_RATE` | optional           | per-env  | `0.1`                                                  | Default 0 (no APM traces). 0.1 in staging for tuning; production typically 0.01 to keep quota down.                                                                                            |
+
+**Build-time / GH Actions secrets** (live in repository-level GitHub
+secrets, NOT in `DEPLOY_DOTENV_BASE64` — used only by the deploy
+workflow's source-map upload step):
+
+| Name                | Required for source-map upload | Example          | Notes                                                                                                                                                                                                                                               |
+| ------------------- | ------------------------------ | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SENTRY_AUTH_TOKEN` | optional (skipped if unset)    | `sntrys_…`       | Sentry auth token with `project:write` + `project:releases` scopes. Generated at <https://sentry.io> → Settings → Auth Tokens. If unset, the upload step is a no-op (runtime still works; stack traces will be minified on Sentry until populated). |
+| `SENTRY_ORG`        | required if upload runs        | `driftstack`     | Sentry organization slug.                                                                                                                                                                                                                           |
+| `SENTRY_PROJECT`    | required if upload runs        | `driftstack-api` | Sentry project slug for this service.                                                                                                                                                                                                               |
 
 ### Stripe (payment processing — fiat only at launch)
 
@@ -179,6 +191,8 @@ POSTMARK_REPLY_TO=support@driftstack.dev
 
 SENTRY_DSN=https://...ingest.de.sentry.io/...
 SENTRY_ENVIRONMENT=staging
+# SENTRY_RELEASE is baked into the image at build time; do not set
+# here.
 
 STRIPE_PUBLISHABLE_KEY=pk_test_...
 STRIPE_SECRET_KEY=sk_test_...
@@ -231,6 +245,10 @@ Before flipping `DEPLOY_DOTENV_BASE64` for the first time:
       not).
 - [ ] `BV_*` placeholders left empty pre-KvK; the legal-doc
       placeholder substitution skips when unset.
+- [ ] `SENTRY_AUTH_TOKEN` populated as a **repository-wide** GH
+      secret (not an environment secret) so the deploy workflow's
+      source-map upload step runs. If left unset, the upload step
+      no-ops with a console message; runtime is unaffected.
 
 ## Updating this doc
 
