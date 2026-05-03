@@ -5849,3 +5849,55 @@ None. Read-only audit per CLAUDE.md exception.
 ### Next
 
 Continuing to V-098 — README sweep across top-level + apps/server + packages/api-types + packages/sdk-typescript.
+
+---
+
+## V-098 — README sweep (Routine — documentation)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Audit + refresh top-level README + packages/api-types README. Surface staleness; update where the doc lies about repo state.
+
+### What changed
+
+**`README.md` (top-level):**
+
+- Status line updated: was "Phase 1 (repo + infrastructure). Pre-launch, not production-ready" — refreshed to "Pre-launch. Control-plane API surface is built and tested (auth flow, profiles, sessions, billing, webhooks, admin)."
+- Repository layout refreshed: was missing `apps/marketing-site/`, `apps/gui-client/`, `packages/sdk-typescript/`, `packages/sdk-python/`, `packages/sdk-go/`, `docs/adr/`, `docs/deployment/`, `docs/legal/`, `docs/architecture/`. All added; old layout was Phase 1 baseline.
+- Configuration table replaced with config-groups list: process / Postgres+Redis / R2 / Postmark / Sentry / Stripe / auth-flow URLs, with cross-reference to `docs/deployment/env-vars.md` as the canonical source.
+- Authentication section now describes BOTH surfaces (API keys + web sessions) instead of just API keys.
+- Documentation list updated: added `docs/adr/`, `docs/deployment/env-vars.md`; removed the "(Phase 7)" qualifier on `/openapi.json` + `/docs` since they're live now.
+
+**`packages/api-types/README.md`:**
+
+- "What's exported" section refreshed:
+  - Added `Profile` (V-081), `Subscription` + `TrialPackState` + billing schemas (V-082).
+  - Added auth-flow schemas section (V-079): all 9 request/response types + `WebSession`.
+  - Added billing section (V-082).
+  - Added `ProfileId` to the prefixed-id list.
+  - Updated `PROBLEM_TYPES` summary: was generic "stable problem-type URIs"; now lists all 21 stable types as of V-079 (including the 4 auth-flow problem types V-079 added).
+
+### How verified
+
+- `npm run format:check`: clean.
+- No code changes; markdown only.
+
+### Files modified
+
+- `README.md`
+- `packages/api-types/README.md`
+
+### Files NOT modified (but inspected)
+
+- `packages/sdk-typescript/README.md`: 141 lines, looked accurate against the SDK's current shape — no edit needed at this pass. Recheck on the next SDK API surface change.
+- `packages/sdk-python/README.md`, `packages/sdk-go/README.md`: SDKs in scaffolded state; their READMEs match scaffolded reality.
+- `apps/gui-client/README.md`: separate workstream.
+- `perf/README.md`, `docs/adr/README.md`, `docs/legal/README.md`: subsystem-level READMEs, not affected by V-079..V-097 changes.
+
+### Next
+
+Continuing to V-099 — onboarding flow page scaffolding (Astro pages, working-tree only per Tier 3 / customer-facing copy). Per CLAUDE.md: page structure can land Tier 1, customer-visible copy stays draft. Will draft signup → verify-email → legal-accept → tier-select → payment-redirect → first-key as a multi-page onboarding flow.

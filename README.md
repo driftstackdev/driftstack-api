@@ -1,8 +1,8 @@
 # Driftstack API
 
-Customer-facing REST + WebSocket API and control plane for [Driftstack](https://github.com/driftstackdev) — a stealth iPhone Safari automation platform.
+Customer-facing REST API and control plane for Driftstack — an iPhone Safari automation platform.
 
-> **Status:** Phase 1 (repo + infrastructure). Pre-launch, not production-ready. The mock WebKit driver is a contract; the real driver lands when the Driftstack WebKit fork closes Phase 2.
+> **Status:** Pre-launch. Control-plane API surface is built and tested (auth flow, profiles, sessions, billing, webhooks, admin). Mock WebKit driver is the contract; the real driver swaps in when the Driftstack WebKit fork closes Phase 2.
 
 ## Stack
 
@@ -20,20 +20,26 @@ Customer-facing REST + WebSocket API and control plane for [Driftstack](https://
 
 ```
 driftstack-api/
-├── apps/server/          # Fastify API
-│   ├── src/
-│   │   ├── routes/       # HTTP handlers grouped by resource
-│   │   ├── services/     # Business logic, orchestration
-│   │   ├── drivers/      # Mock + (future) WebKit driver
-│   │   ├── schemas/      # Zod schemas (request/response)
-│   │   ├── db/           # Drizzle schema + migrations
-│   │   ├── middleware/   # Auth, rate limit, error handler, logging
-│   │   ├── lib/          # Cross-cutting utilities (config, etc.)
-│   │   └── index.ts      # Server entry
-│   └── tests/{unit,integration,e2e}/
-├── packages/api-types/   # Shared types/schemas published to clients
-├── docs/                 # architecture, decisions, verification log
-├── docker-compose.yml    # Local Postgres + Redis
+├── apps/
+│   ├── server/             # Fastify API + control plane
+│   │   ├── src/{routes,services,drivers,schemas,db,middleware,lib}
+│   │   └── tests/{unit,integration,e2e}/
+│   ├── marketing-site/     # Astro static-build (driftstack.dev)
+│   └── gui-client/         # Tauri desktop client (separate workstream)
+├── packages/
+│   ├── api-types/          # Public Zod schemas + inferred TS types (SDK consumers)
+│   ├── sdk-typescript/     # @driftstack/sdk
+│   ├── sdk-python/         # python SDK (generated + hand-polished)
+│   └── sdk-go/             # go SDK (planned)
+├── docs/
+│   ├── architecture.md     # system shape (synced 2026-05-03 V-087)
+│   ├── decisions.md        # D-NNN decision log
+│   ├── verification-log.md # V-NNN empirical log (append-only)
+│   ├── adr/                # ADR-001..ADR-006
+│   ├── deployment/         # env-vars schema + deploy notes
+│   ├── legal/              # ToS / Privacy / DPA / AUP / SLA / SOC2 drafts
+│   └── architecture/       # subsystem-level design docs
+├── docker-compose.yml      # Local Postgres 17 + Redis 7
 └── drizzle.config.ts
 ```
 
@@ -90,32 +96,38 @@ npm run db:studio    # drizzle studio web UI
 
 ## Configuration
 
-All runtime config comes from environment variables. See `.env.example` for the full list. The schema lives in `apps/server/src/lib/config.ts` (Zod-validated at startup).
+All runtime config comes from environment variables. The Zod schema in `apps/server/src/lib/config.ts` validates at startup. The canonical reference is `docs/deployment/env-vars.md` — every env var the control plane reads is documented there.
 
-| Var                        | Required | Default                                                      |
-| -------------------------- | -------- | ------------------------------------------------------------ |
-| `NODE_ENV`                 | no       | `development`                                                |
-| `PORT`                     | no       | `3000`                                                       |
-| `LOG_LEVEL`                | no       | `info`                                                       |
-| `DATABASE_URL`             | no\*     | `postgres://driftstack:driftstack@localhost:5432/driftstack` |
-| `REDIS_URL`                | no\*     | `redis://localhost:6379`                                     |
-| `DRIVER`                   | no       | `mock`                                                       |
-| `MOCK_NAVIGATE_LATENCY_MS` | no       | `120`                                                        |
-| `MOCK_INTERACT_LATENCY_MS` | no       | `40`                                                         |
+Core groups (see env-vars.md for the full list):
 
-\* Falls back to dev defaults that match `docker-compose.yml`. In production you must set both explicitly.
+- **Process**: `NODE_ENV`, `PORT`, `HOST`, `LOG_LEVEL`, `DRIVER`.
+- **Postgres / Redis**: `DATABASE_URL`, `REDIS_URL` (dev defaults to docker-compose).
+- **Cloudflare R2** (optional): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_RECORDINGS`.
+- **Postmark** (optional): `POSTMARK_API_TOKEN`, `POSTMARK_FROM`, `POSTMARK_REPLY_TO`.
+- **Sentry** (optional): `SENTRY_DSN` (EU region required), `SENTRY_ENVIRONMENT`.
+- **Stripe** (optional): `STRIPE_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`, `DRIFTSTACK_TIER_PRICE_IDS`, `STRIPE_TRIAL_PACK_PRICE_ID`.
+- **Auth-flow links**: `AUTH_VERIFY_EMAIL_URL`, `AUTH_MAGIC_LINK_URL`, `AUTH_PASSWORD_RESET_URL`.
+
+Routes register conditionally — when a vendor isn't configured, its routes don't register and the rest of the API stays up. /v1/billing/\* needs Stripe configured; /v1/webhooks/stripe needs `STRIPE_WEBHOOK_SECRET`; /v1/auth/\* needs the auth-flow URLs.
 
 ## Authentication
 
-API keys are long-lived, scoped, revocable. Pass as `Authorization: Bearer <key>`. See `docs/architecture.md` (Phase 3 onward).
+Two surfaces:
+
+- **API keys** (long-lived, scoped, revocable) — for SDK consumers. Pass as `Authorization: Bearer <key>`. Issuance via `POST /v1/api-keys`. scrypt-hashed at rest; sha256-keyed Redis cache with 30s TTL.
+- **Web sessions** (opaque sha256 tokens, 30d TTL, revocable) — for browser dashboard / admin panel. Issued by `/v1/auth/{login,verify-email,magic-link/consume,password-reset/confirm}`; rotated by `/v1/auth/refresh`.
+
+See `docs/architecture.md` for the full request lifecycle (V-087 sync).
 
 ## Documentation
 
-- `docs/architecture.md` — system shape and component boundaries
-- `docs/decisions.md` — D-NNN decision log
-- `docs/verification-log.md` — V-NNN empirical verification log
-- `/openapi.json` — generated OpenAPI 3.1 spec (served at runtime, Phase 7)
-- `/docs` — Swagger UI (Phase 7)
+- `docs/architecture.md` — system shape, layers, persistence, request lifecycles
+- `docs/decisions.md` — D-NNN decision log (D-001..D-034 as of 2026-05-03)
+- `docs/verification-log.md` — V-NNN append-only empirical log
+- `docs/adr/` — long-form ADRs for architectural deviations
+- `docs/deployment/env-vars.md` — canonical env-var schema
+- `/openapi.json` — generated OpenAPI 3.1 spec (live, served at runtime)
+- `/docs` — Swagger UI (live)
 
 ## Contributing
 

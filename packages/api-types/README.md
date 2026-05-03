@@ -32,12 +32,14 @@ function handle(session: Session) {
 
 ## What's exported
 
-- **Resource schemas + types:** `Account`, `ApiKey`, `Session`, `SessionState`, `WebhookEndpoint`, `WebhookDelivery`, `UsagePeriodSummary`.
-- **Request / response schemas:** `CreateSessionRequest`, `NavigateRequest`, `InteractRequest`, `WaitRequest`, `CaptureRequest`, `CreateApiKeyRequest`, `CreateWebhookRequest`, etc., plus their `*Response` counterparts.
+- **Resource schemas + types:** `Account`, `ApiKey`, `Session`, `SessionState`, `Profile`, `Subscription`, `WebhookEndpoint`, `WebhookDelivery`, `UsagePeriodSummary`.
+- **Request / response schemas:** `CreateSessionRequest`, `NavigateRequest`, `InteractRequest`, `WaitRequest`, `CaptureRequest`, `CreateProfileRequest` / `UpdateProfileRequest`, `CreateApiKeyRequest`, `CreateWebhookRequest`, plus their `*Response` counterparts.
+- **Auth flow** (V-079): `SignupRequest` / `SignupResponse`, `LoginRequest` / `LoginResponse`, `VerifyEmailRequest` / `VerifyEmailResponse`, `MagicLinkRequest` / `MagicLinkConsumeRequest`, `PasswordResetRequest` / `PasswordResetConfirmRequest`, `RefreshSessionRequest`, `LogoutRequest`, `WebSession`.
+- **Billing** (V-082): `CreateCheckoutSessionRequest` / `CreateCheckoutSessionResponse`, `StartTrialPackRequest` / `StartTrialPackResponse`, `CreatePortalSessionResponse`, `GetBillingStateResponse`, `Subscription`, `TrialPackState`, `BillingPeriod`, `SubscriptionStatus`.
 - **Discriminated unions:** `InteractAction`, `WaitCondition`.
-- **Common shapes:** `Problem` (RFC 7807 error envelope), `PaginationQuery`, prefixed-id branded types (`AccountId`, `SessionId`, `ApiKeyId`, `WebhookEndpointId`, `WebhookDeliveryId`).
-- **Closed enums:** `AccountTier`, `AccountStatus`, `ApiKeyScope`, `SessionStatus`, `WebhookEventType`, `WebhookDeliveryStatus`.
-- **Stable problem-type URIs:** `PROBLEM_TYPES`.
+- **Common shapes:** `Problem` (RFC 7807 error envelope), `PaginationQuery`, prefixed-id branded types (`AccountId`, `SessionId`, `ApiKeyId`, `ProfileId`, `WebhookEndpointId`, `WebhookDeliveryId`).
+- **Closed enums:** `AccountTier`, `AccountStatus`, `ApiKeyScope`, `SessionStatus`, `WebhookEventType`, `WebhookDeliveryStatus`, `SubscriptionStatus`.
+- **Stable problem-type URIs:** `PROBLEM_TYPES` (21 stable types as of V-079: BadRequest, Unauthorized, Forbidden, NotFound, Conflict, RateLimited, ConcurrencyLimit, TierLimit, RevokedKey, ExpiredKey, InvalidKey, SessionDestroyed, SessionTimeout, LegalAcceptanceRequired, DriverError, DriverNotIntegrated, ValidationFailed, Internal, EmailAlreadyRegistered, InvalidCredentials, InvalidAuthToken, EmailNotVerified).
 - **`*Input` variants** (per the `z.input` / `z.output` distinction) for shapes with server-side defaults — see the SDK README for the full pattern.
 
 ## Versioning
