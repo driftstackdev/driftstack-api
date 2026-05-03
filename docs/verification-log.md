@@ -3973,3 +3973,69 @@ Workstream B → C / D / E / F per founder sequencing:
 - **F** — onboarding flow. Signup → email verify (V-057 EmailService) → legal accept (V-047) → tier select → trial-pack purchase via Stripe Checkout → first key issue (V-049 issuance gate). Per V-061 + ADR-003: trial-pack purchase is the first session-creation gate; before that, `POST /v1/sessions` returns 402 with the trial-pack Stripe Checkout link.
 
 CAPABILITIES.md hygiene pull (V-149 Q8 snap fix, V-141 atlas v3, V-141 POC) folds into Workstream C run-up when the public-surface snapshot needs refreshing.
+
+## V-068 — Sub-processor leakage purge + /trust/sub-processors page
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream B v2 iteration 1 — copy/design audit follow-on. Tier 1 maintenance once founder direction lands. V-069 (copy revision) + V-070 (visual revision) follow as draft-for-review.
+
+V-068 is the leakage purge and the new public-trust artifact.
+
+### What changed
+
+**Leakage purge (5 customer-facing pages):**
+
+- **`apps/marketing-site/src/pages/index.astro`** — landing-page "EU stack / GDPR by default" card had Hetzner Falkenstein / Neon EU / Upstash EU / Cloudflare R2 EU. Replaced with founder-supplied generic copy + link to `/trust/sub-processors`.
+- **`apps/marketing-site/src/pages/pricing.astro`** — three changes:
+  - Mini-FAQ "Is the EU stack just marketing?" purged of vendor names.
+  - BTW footnote: "BTW added per region (Moneybird per-region calculation)" → "VAT/BTW added per region per applicable EU rules".
+  - BYOK section purged of "Anthropic Claude Sonnet 4.6 + Opus 4.7 supported" specifics → "Latest frontier models supported. Token usage on your bill, not ours." + footnote pointer to `/trust/sub-processors`.
+  - Mini-FAQ Stripe references → "the checkout flow" / "the change is prorated automatically".
+- **`apps/marketing-site/src/pages/faq.astro`** — multiple FAQ entries reworded:
+  - "Where is my data stored?" — full vendor list replaced with generic copy + cross-link to `/trust/sub-processors` and `/legal/dpa`.
+  - All Stripe mechanics references → "the checkout flow" / "the billing portal" / "automatically".
+  - All Anthropic references → "the LLM provider" / "your LLM provider key" + cross-link to `/trust/sub-processors`.
+- **`apps/marketing-site/src/components/Footer.astro`** — copyright-line BTW footnote: "(Moneybird)" parenthetical removed; "VAT/BTW added per region per applicable EU rules". This footer renders on every page (404 / self-hosted / etc.) so the leak was on all 5 pages.
+
+**New page + data module:**
+
+- **`apps/marketing-site/src/data/sub-processors.ts`** (NEW) — `SUB_PROCESSORS` array mirroring DPA Annex 3 + CLAUDE.md sub-processor lock. 10 entries: Hetzner Cloud / Neon / Upstash / Cloudflare R2 / Postmark / Sentry / Stripe / Anthropic / Moneybird / MacStadium. Each tagged with EU-resident-or-transfer-mechanism.
+- **`apps/marketing-site/src/pages/trust/sub-processors.astro`** (NEW) — `/trust/sub-processors`. Header (eyebrow + H1 + framing + Art 28(2) notice mention + cross-link to `/legal/dpa` + last-updated timestamp) + 4-column data-driven table + "How sub-processor changes work" explainer + privacy@ contact.
+
+**Footer Trust column:**
+
+- **`apps/marketing-site/src/components/Footer.astro`** — fourth column "Trust" added between "Company" and "Legal" with `/trust/sub-processors` link. Layout shifts to `md:grid-cols-4`. `/trust/` becomes parent path for future trust-and-transparency content.
+
+### Empirical findings
+
+1. **Founder's enumerated leak list was infrastructure-only** (Hetzner / Neon / Upstash / Cloudflare R2 / MacStadium / Moneybird). Stripe + Anthropic mentions on `/pricing` + `/faq` were not in the enumerated list but the directional principle ("specific vendor names belong in legal-compliance documents, not marketing pages") is universal. Applied consistently — Stripe → generic "checkout flow" / "billing portal", Anthropic → generic "LLM provider". **This is a judgment call; flagging to founder for confirmation.** If Stripe / Anthropic should re-appear by name as customer-touch surface disclosures, V-068.1 reverses while keeping infrastructure purge.
+
+2. **Stripe + Anthropic are customer-touch surfaces.** Customers see "Stripe" in card statements + Stripe-hosted checkout; customers must know "Anthropic" to bring their BYOK key. Hiding doesn't fully hide the dependency, just keeps marketing copy generic. After V-068: marketing-site copy provider-neutral, `/trust/sub-processors` provider-specific, `/legal/dpa` provider-specific.
+
+3. **Footer leak (`(Moneybird)` parenthetical)** rendered on every page including 404. Initial purge edited the pricing-page footnote without realising the Footer component carried its own copy. Cross-component shared copy is a leakage surface; future copy passes sweep shared components first.
+
+4. **`/trust/sub-processors` is a compliance artifact, not just marketing.** Mirrors DPA Annex 3 verbatim. When DPA Annex 3 changes, this page must change in the same commit (and trigger Art 28(2) notice). Comment block at top of `data/sub-processors.ts` captures the invariant.
+
+5. **Forbidden-phrase grep extended to vendor names** — 10 vendor strings checked across 5 customer-facing pages + `/trust/sub-processors` verified to have them. Repeatable as a post-build check; candidate for CI step.
+
+### Verify chain
+
+- `astro check`: 13 files (+2 new), 0 errors / 0 warnings / 0 hints.
+- `astro build`: 6 static pages emitted in ~450ms.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: **360/360** unchanged.
+- Forbidden-phrase grep: 0/0/0/0/0 on 5 customer-facing pages; trust page has the full register.
+
+### Decisions made
+
+No new D-entries. `/trust/sub-processors` mirrors DPA Annex 3; DPA is canonical source.
+
+### Status
+
+V-068 closes the leak surface. Founder confirmation needed on the Stripe + Anthropic purge: keep aggressive (current state) or selectively re-name as customer-touch disclosures. V-069 + V-070 wait on confirmation + draft review.
+
+### Next
+
+V-069 draft delivery via clipboard. New copy lives in working tree (not staged, not committed) until founder confirms. Same pattern for V-070. Both Tier 3 surface treatments per founder direction.

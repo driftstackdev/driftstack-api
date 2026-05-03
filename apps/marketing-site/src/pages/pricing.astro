@@ -257,7 +257,7 @@ function fmtUsd(value: number | null | undefined): string {
       </div>
 
       <p class="mt-8 text-xs text-slate-500">
-        All prices in USD. BTW added per region (Moneybird per-region calculation).
+        All prices in USD. VAT/BTW added per region per applicable EU rules.
         No setup fees on any tier. Annual contracts billed up front.
       </p>
     </div>
@@ -275,19 +275,22 @@ function fmtUsd(value: number | null | undefined): string {
             Bundled or BYOK — your call.
           </h2>
           <p class="mt-3 max-w-prose text-slate-600">
-            Driftstack's optional AI agent feature drives sessions with an LLM
-            of your choice. Bring your own Anthropic key (BYOK) or use the
-            bundled LLM billing. Per-token pricing for the bundled rate is
-            announced at launch; BYOK is metered against your own provider key
-            at no Driftstack markup.
+            Driftstack's optional AI agent feature drives sessions with a
+            large language model. Bring your own LLM API key (BYOK) or use
+            the bundled billing. Per-token pricing for the bundled rate is
+            announced at launch; BYOK is metered against your own provider
+            key at no Driftstack markup.
           </p>
         </div>
         <div class="text-sm text-slate-600">
           <ul class="space-y-2">
-            <li class="flex gap-2"><span class="text-oxblood-700">→</span> Anthropic Claude Sonnet 4.6 + Opus 4.7 supported.</li>
-            <li class="flex gap-2"><span class="text-oxblood-700">→</span> Token usage on your bill, not Anthropic's.</li>
+            <li class="flex gap-2"><span class="text-oxblood-700">→</span> Latest frontier models supported.</li>
+            <li class="flex gap-2"><span class="text-oxblood-700">→</span> Token usage on your bill, not ours.</li>
             <li class="flex gap-2"><span class="text-oxblood-700">→</span> Toggle BYOK ↔ bundled per-account.</li>
           </ul>
+          <p class="mt-3 text-xs text-slate-500">
+            Supported LLM provider listed at <a href="/trust/sub-processors" class="text-oxblood-700 underline">/trust/sub-processors</a>.
+          </p>
         </div>
       </div>
     </div>
@@ -363,7 +366,7 @@ function fmtUsd(value: number | null | undefined): string {
           <h3 class="font-medium text-slate-900">What happens when the trial pack runs out?</h3>
           <p class="mt-2 text-sm text-slate-600">
             Either the credit hits zero or 14 days pass. New session attempts
-            return 402 Payment Required pointing at Stripe Checkout for a
+            return 402 Payment Required pointing at the checkout flow for a
             paid tier. Trial pack is once per account, no reset on downgrade
             or churn — to come back, subscribe.
           </p>
@@ -371,16 +374,18 @@ function fmtUsd(value: number | null | undefined): string {
         <div>
           <h3 class="font-medium text-slate-900">Can I switch tiers mid-month?</h3>
           <p class="mt-2 text-sm text-slate-600">
-            Yes. Stripe prorates the change. New limits apply immediately;
+            Yes. The change is prorated automatically. New limits apply immediately;
             session-creation gates use the new tier on the next call.
           </p>
         </div>
         <div>
           <h3 class="font-medium text-slate-900">Is the EU stack just marketing?</h3>
           <p class="mt-2 text-sm text-slate-600">
-            No. Compute on Hetzner Falkenstein. Postgres on Neon EU (Frankfurt). Redis
-            on Upstash EU (Frankfurt). Object storage on Cloudflare R2 EU. Every
-            sub-processor listed in the DPA, no footnotes.
+            No. Customer data is hosted in the EU — compute, database, and
+            object storage all EU-resident. Mac fleet sessions may run in
+            supported regions outside the EU under SCCs and the EU-US Data
+            Privacy Framework. Full sub-processor list with locations and
+            contractual basis at <a href="/trust/sub-processors" class="text-oxblood-700 underline">/trust/sub-processors</a>.
           </p>
         </div>
       </div>

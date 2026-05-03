@@ -1,0 +1,94 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import {
+  SUB_PROCESSORS,
+  SUB_PROCESSOR_REGISTER_LAST_UPDATED,
+} from '../../data/sub-processors.ts';
+---
+
+<BaseLayout
+  title="Sub-processors"
+  description="The complete list of sub-processors Driftstack engages, with regions of operation, purpose, and transfer mechanism. Source of truth for Article 28(2) sub-processor amendment notices."
+>
+  <section class="bg-gradient-to-b from-white to-slate-50">
+    <div class="mx-auto max-w-4xl px-6 py-20">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Trust</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+        Sub-processors.
+      </h1>
+      <p class="mt-6 max-w-prose text-lg text-slate-600">
+        The complete list of organisations that process customer data on
+        Driftstack's behalf, the region they operate in, what they do, and
+        the contractual basis under which any non-EU transfer happens.
+      </p>
+      <p class="mt-3 max-w-prose text-sm text-slate-500">
+        This page is the customer-facing source of truth for sub-processor
+        changes. Adding or removing an entry triggers a 30-day notice to all
+        customers per Article 28(2) of the GDPR; the same content also lives
+        in <a href="/legal/dpa" class="text-oxblood-700 underline"
+          >Annex 3 of the Data Processing Agreement</a
+        >.
+      </p>
+      <p class="mt-3 font-mono text-xs text-slate-500">
+        Last updated: {SUB_PROCESSOR_REGISTER_LAST_UPDATED}
+      </p>
+    </div>
+  </section>
+
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-4xl px-6 py-16">
+      <div class="overflow-x-auto">
+        <table class="w-full border-collapse text-left text-sm">
+          <thead>
+            <tr class="border-b border-slate-200">
+              <th class="py-4 pr-4 font-medium text-slate-700">Sub-processor</th>
+              <th class="px-4 py-4 font-medium text-slate-700">Region</th>
+              <th class="px-4 py-4 font-medium text-slate-700">Purpose</th>
+              <th class="px-4 py-4 font-medium text-slate-700">Transfer mechanism</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              SUB_PROCESSORS.map((sp) => (
+                <tr class="border-b border-slate-100 align-top">
+                  <td class="py-4 pr-4 font-medium text-slate-900">{sp.name}</td>
+                  <td class="px-4 py-4 text-slate-700">{sp.region}</td>
+                  <td class="px-4 py-4 text-slate-600">{sp.purpose}</td>
+                  <td class="px-4 py-4 text-slate-600">{sp.transferMechanism}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-4xl px-6 py-16">
+      <h2 class="text-2xl font-semibold text-slate-900">How sub-processor changes work.</h2>
+      <div class="mt-6 space-y-4 text-sm text-slate-600">
+        <p>
+          When Driftstack engages a new sub-processor, removes one, or
+          materially changes the role of an existing one, customers receive
+          notice at least 30 days before the change takes effect. The notice
+          states what's changing, the contractual basis for any new
+          transfer, and the cut-off date for raising objections.
+        </p>
+        <p>
+          Customers who object to a sub-processor change have the right to
+          terminate the affected portion of the service before the change
+          takes effect. The mechanics live in the
+          <a href="/legal/dpa" class="text-oxblood-700 underline">DPA</a>
+          (Article 28(2) — Sub-processor amendment).
+        </p>
+        <p>
+          For questions about the list, email
+          <a href="mailto:privacy@driftstack.dev" class="text-oxblood-700 underline"
+            >privacy@driftstack.dev</a
+          >.
+        </p>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

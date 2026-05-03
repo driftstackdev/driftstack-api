@@ -25,7 +25,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'What happens when I exceed my monthly browser-hours?',
-        a: 'Sessions don\'t block — overage charges apply automatically per Stripe metered line item at your tier\'s overage rate ($0.18/hr Starter, $0.16/hr Solo, $0.14/hr Builder, $0.12/hr Scale; Enterprise custom). The next monthly invoice itemises the overage. If you want a hard ceiling, set a usage alert in the Stripe Customer Portal.',
+        a: 'Sessions don\'t block — overage charges apply automatically per metered line item at your tier\'s overage rate ($0.18/hr Starter, $0.16/hr Solo, $0.14/hr Builder, $0.12/hr Scale; Enterprise custom). The next monthly invoice itemises the overage. If you want a hard ceiling, set a usage alert in the billing portal.',
       },
       {
         q: 'Are there setup fees on any tier?',
@@ -33,7 +33,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'How does annual billing work?',
-        a: 'Annual contracts are billed up front for 12 months at 20% off the monthly equivalent. Switching from monthly to annual or vice versa is prorated by Stripe at the changeover date. Annual contracts auto-renew unless cancelled at least 30 days before renewal.',
+        a: 'Annual contracts are billed up front for 12 months at 20% off the monthly equivalent. Switching from monthly to annual or vice versa is prorated automatically at the changeover date. Annual contracts auto-renew unless cancelled at least 30 days before renewal.',
       },
     ],
   },
@@ -50,11 +50,11 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'Can I extend the trial pack?',
-        a: 'No. The trial pack is once per account, no reset on downgrade or churn. To continue beyond it, subscribe to a paid tier. Stripe Checkout handles the conversion — your existing Stripe customer record carries over.',
+        a: 'No. The trial pack is once per account, no reset on downgrade or churn. To continue beyond it, subscribe to a paid tier. The hosted checkout flow handles the conversion — your existing customer record carries over.',
       },
       {
         q: 'What happens when the trial pack runs out?',
-        a: 'Either the credit hits zero or 14 days pass. New session attempts return 402 Payment Required pointing at Stripe Checkout for a paid tier. You can subscribe at any tier; existing API keys keep working once the subscription activates.',
+        a: 'Either the credit hits zero or 14 days pass. New session attempts return 402 Payment Required pointing at the checkout flow for a paid tier. You can subscribe at any tier; existing API keys keep working once the subscription activates.',
       },
       {
         q: 'Can I get a refund on the trial pack?',
@@ -67,7 +67,7 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'Can I upgrade or downgrade mid-month?',
-        a: 'Yes. Stripe prorates the change at the changeover date. New limits apply immediately on the next session-creation gate; the new browser-hour cap kicks in for the remainder of the calendar month.',
+        a: 'Yes. The change is prorated at the changeover date. New limits apply immediately on the next session-creation gate; the new browser-hour cap kicks in for the remainder of the calendar month.',
       },
       {
         q: 'What if I cancel?',
@@ -84,15 +84,15 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'What is the bundled LLM?',
-        a: 'Driftstack\'s optional AI agent feature drives sessions with a large language model — useful for natural-language test specifications, automated screenshot diffing, or LLM-driven flow exploration. On Builder / Scale / Enterprise, you can either bring your own Anthropic API key (BYOK, billed by Anthropic directly) or use the bundled rate (billed by Driftstack at a markup over Anthropic\'s published price).',
+        a: 'Driftstack\'s optional AI agent feature drives sessions with a large language model — useful for natural-language test specifications, automated screenshot diffing, or LLM-driven flow exploration. On Builder / Scale / Enterprise, you can either bring your own LLM API key (BYOK, billed by the provider directly) or use the bundled rate (billed by Driftstack at a markup over the provider\'s published price). The supported LLM provider is listed at <a href="/trust/sub-processors" class="text-oxblood-700 underline">/trust/sub-processors</a>.',
       },
       {
         q: 'What\'s the BYOK markup?',
-        a: 'Per-token pricing for the bundled rate is announced at launch. BYOK incurs no Driftstack markup — your Anthropic key, your bill, your control. Toggle BYOK ↔ bundled per-account in the dashboard.',
+        a: 'Per-token pricing for the bundled rate is announced at launch. BYOK incurs no Driftstack markup — your LLM provider key, your bill, your control. Toggle BYOK ↔ bundled per-account in the dashboard.',
       },
       {
         q: 'Is BYOK secret-handling secure?',
-        a: 'Yes. Your Anthropic API key is encrypted at rest with envelope encryption, decrypted in-memory only at session execution time, and never logged. The DPA covers the handling shape. Self-hosted customers can use their own KMS for the envelope key.',
+        a: 'Yes. Your LLM provider API key is encrypted at rest with envelope encryption, decrypted in-memory only at session execution time, and never logged. The DPA covers the handling shape. Self-hosted customers can use their own KMS for the envelope key.',
       },
     ],
   },
@@ -101,7 +101,7 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'Where is my data stored?',
-        a: 'Compute on Hetzner Cloud, Falkenstein region (Germany). Postgres on Neon EU (Frankfurt). Redis on Upstash EU (Frankfurt). Object storage on Cloudflare R2 EU jurisdiction. Mac mini fleet for session execution at MacStadium (Las Vegas, US — covered by 2021 SCCs + EU-US Data Privacy Framework). Every sub-processor listed in the DPA, no footnotes.',
+        a: 'Customer data is hosted in the EU. Compute, database, and object storage are all EU-resident. Mac fleet sessions for browser execution may run in supported regions outside the EU under standard contractual clauses (SCCs) and the EU-US Data Privacy Framework. Our complete sub-processor list, with locations and contractual basis, is published at <a href="/trust/sub-processors" class="text-oxblood-700 underline">/trust/sub-processors</a> and in the <a href="/legal/dpa" class="text-oxblood-700 underline">Data Processing Agreement</a>.',
       },
       {
         q: 'Are you GDPR-compliant?',
