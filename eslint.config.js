@@ -17,6 +17,10 @@ export default tseslint.config(
       // type-aware run avoids the parser claiming Astro/Tailwind
       // config files aren't in the TS project.
       'apps/marketing-site/**',
+      // Customer dashboard — same Astro-project pattern (V-099).
+      // Files are typechecked via `astro check`, not by the eslint
+      // config.
+      'apps/customer-dashboard/**',
     ],
   },
   js.configs.recommended,

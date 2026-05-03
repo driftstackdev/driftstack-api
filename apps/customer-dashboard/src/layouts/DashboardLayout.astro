@@ -1,0 +1,79 @@
+---
+import '../styles/base.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  /** When true, render the side-nav. Onboarding pages opt out. */
+  withSidebar?: boolean;
+}
+
+const {
+  title,
+  description = 'Driftstack — manage your account, profiles, sessions, and billing.',
+  withSidebar = true,
+} = Astro.props;
+
+const fullTitle = `${title} · Driftstack`;
+const pathname = Astro.url.pathname;
+
+const navItems = [
+  { href: '/', label: 'Overview' },
+  { href: '/profiles', label: 'Profiles' },
+  { href: '/sessions', label: 'Sessions' },
+  { href: '/api-keys', label: 'API keys' },
+  { href: '/usage', label: 'Usage' },
+  { href: '/billing', label: 'Billing' },
+  { href: '/webhooks', label: 'Webhooks' },
+  { href: '/team', label: 'Team' },
+  { href: '/settings', label: 'Settings' },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <meta name="robots" content="noindex" />
+  </head>
+  <body class="bg-slate-50 text-slate-900">
+    <div class="flex min-h-screen">
+      {
+        withSidebar && (
+          <aside class="hidden w-56 shrink-0 border-r border-slate-200 bg-white md:block">
+            <div class="flex h-16 items-center px-6 border-b border-slate-200">
+              <a href="/" class="font-semibold text-slate-900">
+                Driftstack
+              </a>
+            </div>
+            <nav class="px-4 py-6">
+              <ul class="space-y-1">
+                {navItems.map((item) => (
+                  <li>
+                    <a
+                      href={item.href}
+                      class:list={[
+                        'block rounded-md px-3 py-2 text-sm transition-colors',
+                        pathname === item.href || pathname.startsWith(item.href + '/')
+                          ? 'bg-oxblood-50 font-medium text-oxblood-700'
+                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                      ]}
+                    >
+                      {item.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </aside>
+        )
+      }
+      <main class="flex-1">
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>

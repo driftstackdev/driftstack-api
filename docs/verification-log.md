@@ -5901,3 +5901,74 @@ Audit + refresh top-level README + packages/api-types README. Surface staleness;
 ### Next
 
 Continuing to V-099 — onboarding flow page scaffolding (Astro pages, working-tree only per Tier 3 / customer-facing copy). Per CLAUDE.md: page structure can land Tier 1, customer-visible copy stays draft. Will draft signup → verify-email → legal-accept → tier-select → payment-redirect → first-key as a multi-page onboarding flow.
+
+---
+
+## V-099 — customer-dashboard Astro app scaffolding (Routine — workspace scaffolding)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Scaffold the `apps/customer-dashboard/` Astro project per the customer-dashboard-stack proposal in V-084 (Option A: Astro + React islands shared with marketing site, the default founder confirmed in the GO message). Land project init + design tokens + base layout + dashboard home page in Tier 1; defer customer-visible copy on onboarding pages to Tier 3 working-tree drafts in subsequent passes.
+
+### What changed
+
+**New workspace `apps/customer-dashboard/`:**
+
+- `package.json` — `@driftstack/customer-dashboard@0.0.1`, scripts: dev / build / preview / typecheck. Deps: astro 5, @astrojs/tailwind, tailwindcss, typescript, @driftstack/api-types (for TypeScript-only imports of Profile / Subscription / TrialPackState shapes in the mocks layer).
+- `astro.config.mjs` — static-build output, site `https://app.driftstack.dev`, tailwind integration. Mirrors `apps/marketing-site/astro.config.mjs` shape (Cloudflare Pages serves `dist/` directly).
+- `tailwind.config.mjs` — design tokens copied from marketing-site verbatim (oxblood + slate palettes, Geist Sans + Berkeley Mono fonts, `prose` max-width). Comment notes "keep synchronised — customer experience reads as one product."
+- `tsconfig.json` — extends astro/tsconfigs/strict, `@/*` path alias.
+- `src/styles/base.css` — Tailwind layers + base styles + component utilities (btn-primary, btn-secondary, nav-link, dashboard-card). Tokens shared with marketing site.
+- `src/layouts/DashboardLayout.astro` — sidebar navigation (9 items: Overview / Profiles / Sessions / API keys / Usage / Billing / Webhooks / Team / Settings) + main content slot. `noindex` meta tag (dashboard isn't crawlable). Optional `withSidebar` prop so onboarding pages can opt out.
+- `src/pages/index.astro` — dashboard home with three at-a-glance cards (concurrent now / profiles / API keys) + active sessions list + subscription summary. Uses mock data via `src/data/mocks.ts`.
+- `src/data/mocks.ts` — `MOCK_ACCOUNT`, `MOCK_SUBSCRIPTION`, `MOCK_TRIAL_PACK_STATE`, `MOCK_PROFILES`, `MOCK_API_KEYS`, `MOCK_USAGE_SUMMARY`, `MOCK_SESSIONS`. TypeScript types pulled from `@driftstack/api-types` where they exist (Profile, Subscription, TrialPackState); the rest defined inline as `MockX` interfaces. Module header documents that mocks swap to live `/v1/*` reads when the dashboard moves past scaffolding.
+- `.gitignore` — `.astro/`, `dist/`, `node_modules/`.
+
+**Project-level config:**
+
+- `eslint.config.js`: `apps/customer-dashboard/**` added to the ignore list, mirroring the marketing-site pattern (Astro projects use their own typecheck pipeline; the root ESLint type-aware run claims Astro/Tailwind config files aren't in the TS project otherwise).
+- `.prettierignore`: `apps/customer-dashboard/.astro/` + `apps/customer-dashboard/dist/` added.
+
+### How verified
+
+- `npm run typecheck`: clean across all 6 workspaces (gui-client, marketing-site, customer-dashboard, server, api-types, sdk).
+- `npm run typecheck --workspace apps/customer-dashboard`: 5 files, 0 errors.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 465/465 (no test count change — frontend-only addition; integration tests don't touch this workspace).
+
+### Decisions made (no new D-entries)
+
+- **Mock data layer at `src/data/mocks.ts`** rather than direct API reads. Keeps the scaffolding self-contained until the founder approves the dashboard-stack proposal AND wires the real auth-flow path (web-session cookie validation in front of the dashboard, deferred to a follow-on V-NNN).
+- **`@driftstack/api-types` is a runtime dep, not just a devDep.** TypeScript-only imports work, but `tsconfig.json`'s `verbatimModuleSyntax` makes Astro's tooling resolve the package at module-load time. Listing as a runtime dep is the cleaner fix.
+- **Sidebar pre-populated with 9 items** even though only `index.astro` exists yet. Sub-pages (profiles / sessions / api-keys / usage / billing / webhooks / team / settings) land in subsequent V-NNN entries; the navigation already routes to them so future page additions don't need a layout change.
+
+### What's deferred (intentional Tier 3 drafts)
+
+Customer-visible copy + visual treatments on the onboarding flow pages (signup / verify-email / legal-accept / tier-select / payment-redirect / first-key) and the sub-page content for Profiles / Sessions / API keys / Usage / Billing / Webhooks / Team / Settings — these stay as working-tree drafts (Tier 3) per CLAUDE.md's marketing-copy + brand-surface cadence. The page scaffolding (route shells, design tokens, mock data wiring) lands as Tier 1.
+
+### Files added
+
+- `apps/customer-dashboard/package.json`
+- `apps/customer-dashboard/astro.config.mjs`
+- `apps/customer-dashboard/tailwind.config.mjs`
+- `apps/customer-dashboard/tsconfig.json`
+- `apps/customer-dashboard/.gitignore`
+- `apps/customer-dashboard/src/styles/base.css`
+- `apps/customer-dashboard/src/layouts/DashboardLayout.astro`
+- `apps/customer-dashboard/src/pages/index.astro`
+- `apps/customer-dashboard/src/data/mocks.ts`
+
+### Files modified
+
+- `eslint.config.js` (ignore customer-dashboard like marketing-site)
+- `.prettierignore` (ignore customer-dashboard's .astro/ + dist/)
+- `package-lock.json` (workspace install)
+
+### Next
+
+Continuing to V-100 — onboarding flow page route shells (signup / verify-email / legal-accept / tier-select / payment-redirect / first-key). Page structure as Tier 1 scaffolding; copy as Tier 3 working-tree drafts.

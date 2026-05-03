@@ -12,3 +12,5 @@ apps/server/src/db/migrations/
 # Astro generated artifacts
 apps/marketing-site/.astro/
 apps/marketing-site/dist/
+apps/customer-dashboard/.astro/
+apps/customer-dashboard/dist/
