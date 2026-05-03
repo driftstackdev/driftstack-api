@@ -77,3 +77,7 @@ header. The history matters; the number is part of the record.
 - [ADR-003](ADR-003-paid-trial-pack-replaces-free-tier.md) — $2.99
   paid trial pack replaces the free tier (Tier 3 deviation from
   parent driftstack repo file 127 §6).
+- [ADR-004](ADR-004-pricing-restructure-two-ladder.md) — Pricing
+  restructure to two-ladder concurrent-only (Tier 3 deviation from
+  parent driftstack repo file 127 single-ladder hours-with-overage
+  design).

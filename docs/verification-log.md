@@ -4289,3 +4289,53 @@ Workstream E scoping complete. Implementation gates on KvK closure + accountant 
 ### Next
 
 Pricing restructure direction incoming from founder per the V-070-pause directive. Workstream B v3 (pricing-page rewrite against new structure), then C (admin panel) and D (Stripe billing) and F (onboarding) follow. Marketing-site visual revision pass picks up the next sequential V-NNN when the restructure pass closes.
+
+## V-071 — ADR-004: pricing restructure to two-ladder concurrent-only
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream B v3 prep — captures Tier 3 founder-locked pricing restructure ahead of the data-layer / enforcement / marketing rewrites that follow (V-072 / V-073 / V-074 / V-075+).
+
+### What changed
+
+- **`docs/adr/ADR-004-pricing-restructure-two-ladder.md`** (NEW) — full ADR. Captures:
+  - **Context:** prior file 127 / V-061 single-ladder hours-with-overage design breaks for manual users (720+ browser-hours/mo on persistent profiles → $130+ unexpected overage on Starter $29 base). Concurrent-only is simpler everywhere (customer mental model, Stripe integration, internal enforcement). Conservative N=4 fleet-capacity assumption (concurrent sessions per M4 Mini 16GB, ~$50-70 per concurrent slot per month at MacStadium pricing) sets the floor on Solo Manual's price and ceiling on aggressive entry pricing.
+  - **Decision:** trial pack unchanged from ADR-003. Two-ladder paid structure: Manual (Solo $79 / Team $249 / Agency $699 — humans clicking GUI client, profile count tier-defining) + API (Starter $149 / Builder $499 / Scale $1,499 / Enterprise from $4,000 annual — programmatic SDK access, concurrent caps tier-defining). Self-hosted lowered to $1,000 / $2,000 / $4,000+ (down from $1,500 / $2,500 / $5,000+). Annual = 20% off all tiers. Setup fees zero.
+  - **Enforcement implications:** Postgres `account_tier` enum drops + recreates pre-launch (no production customers). `TIER_QUOTAS.session_minute` removed from paid tiers. Trial-pack `trial_pack_credit_cents` decrement at $0.18/hr stays (only place hours metering survives). New `PROFILES_PER_TIER` map enforces profile count at `/v1/profiles`. Concurrent-cap exceeded → 429 (rate-limit semantic); profile-cap exceeded → 402 (payment-required semantic for upgrade prompt).
+  - **Consequences:** manual users get fair price (Team Manual $249 covers 8h × 3-profile workflow with no overage); customer mental model collapses to "how many parallel sessions"; Stripe integration simpler (no metered events on paid tiers); two-ladder positioning makes GUI client a first-class commercial product; self-hosted floor enters competitive range vs Multilogin self-hosted. Rules out pure usage-based pricing for paid tiers; loses "more generous than competitors" framing of prior design; risks audience-confusion at Manual/API boundary.
+  - **Six alternatives considered** (with rationale): single-ladder + hours-with-overage (rejected — manual breakage), two-ladder but keep API hours metering (rejected — same metering anxiety), Solo Manual at $49 (rejected — negative margin under conservative N=4), Self-Hosted Solo at $500 (rejected — undervalues software licensing), API Starter at $199 (rejected — loses comparison-shoppers vs Browserbase $99-149), per-archetype premium pricing (rejected — only one archetype at v1).
+  - **Five revisit triggers:** measured fleet capacity diverges from N=4 estimate by ±2; provider arbitrage qualifies <$150/mo Mac fleet alternative; Solo Manual customer feedback signals mispricing; competitive pressure restructures peer pricing to directly comparable shape; BYOK markup multiplier locks (still Tier 3 founder-pending).
+  - **Notes:** trial pack mechanics survive intact (ADR-003 schema unchanged, $0.18/hr decrement, 14-day window, once-per-account). Old V-061 Stripe price IDs deprecated; founder archives in Stripe (don't delete). New SKU convention `driftstack_<tier_id>_<period>` produces 19 price IDs total. N=4 fleet-capacity assumption is the load-bearing pre-launch unknown; Phase 2.5 multi-tenancy stress test deferred to first paying customer per D-2026-04-30-13.
+- **`docs/adr/README.md`** — index updated to include ADR-004.
+
+### Empirical findings
+
+1. **Hours metering breakage on manual users is real and not patchable inside a single ladder.** A 3-profile, 8-hour-daily workflow generates ~720 browser-hours/month. Under V-061 file-127 values that's $130+/mo overage on Starter, surfaced as a surprise rather than a feature. Either Manual users need their own ladder or hours metering goes away. Going both routes simultaneously is the cleanest answer.
+
+2. **Pre-launch + zero production customers makes the migration tractable.** The Postgres `account_tier` enum can drop + recreate without preserving values. SDK regen is a one-shot bump. Stripe price IDs are net-new — old V-061 IDs were never used commercially. Cost of restructuring is purely scaffolding work.
+
+3. **N=4 fleet-capacity assumption** sets the load-bearing constraint on entry-tier pricing. The conservative reasoning: 16GB minus OS + Driftstack runtime leaves ~12GB for sessions; each concurrent WebKit session needs ~3-4GB working set. If real measurement shows N=6, Solo Manual could drop to $49 with positive margin. Revisit trigger #1 captures this.
+
+4. **Self-hosted floor lowered for competitive parity, not for revenue-per-customer.** $1,000 Solo entry is comparable to Multilogin self-hosted (~$300/mo equivalent for 1 concurrent / weaker fingerprint fidelity). Cloud Solo Manual at $79 is 79× cheaper at entry — that 79× spread is justified by no-hardware-no-ops vs full sovereignty.
+
+5. **Trial pack survives ADR-004 unchanged.** ADR-003's $0.18/hr decrement is the only place hours metering exists in the new design — and it's hours metering against pre-paid credit, not overage. Customers convert from trial pack into Solo Manual or API Starter (customer choice at conversion); the conversion mechanic is unchanged.
+
+### Verify chain
+
+- `npm run typecheck`: clean (docs-only change).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: **360/360** unchanged.
+- Astro check N/A (doc lives in `docs/adr/`, not `apps/marketing-site/`).
+
+### Decisions made
+
+ADR-004 itself is the decision record. No new D-NNN entry created; D-019 ("Six-tier locked pricing model") is now superseded by ADR-004 and the next D-log touch may add a pointer.
+
+### Status
+
+Pricing restructure direction locked + reasoning persisted. V-072 follows immediately with the data-layer rewrite (`pricing.ts` + `AccountTierSchema` + Postgres enum + Drizzle migration + test fixtures), V-073 with the enforcement rewrite (`sessions.ts` / `usage.ts` concurrent-only + profile counts), V-074 with E2E test updates (`concurrency-limit.spec.ts` + new `profile-limit.spec.ts`). Marketing site B v3 (V-075+) follows the engineering layer with draft-surface-before-commit cadence per CLAUDE.md.
+
+### Next
+
+V-072 — data layer rewrite.
