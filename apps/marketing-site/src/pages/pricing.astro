@@ -2,8 +2,8 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { API_TIERS, SELF_HOSTED_SKUS, TRIAL_PACK } from '../data/pricing.ts';
 
-const paidTiers = API_TIERS.filter((t) => t.id !== 'trial-pack');
-const trialPack = API_TIERS.find((t) => t.id === 'trial-pack')!;
+const paidTiers = API_TIERS.filter((t) => t.id !== 'trial_pack');
+const trialPack = API_TIERS.find((t) => t.id === 'trial_pack')!;
 
 function fmtUsd(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
