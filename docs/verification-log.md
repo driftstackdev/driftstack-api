@@ -3324,3 +3324,47 @@ R2 client surface ready for downstream wiring. The production bootstrap (V-059) 
 ### Next
 
 V-057 lands the Postmark SDK + transactional EmailService; V-058 lands Sentry; V-059 lands the real production bootstrap wiring everything together with readinessChecks for Postgres + Redis + R2.
+
+## V-057 — Postmark SDK + transactional EmailService
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream A iteration 2 — second SDK integration. Email is fire-and-forget per founder direction; it does NOT readiness-gate.
+
+Postmark `postmark` npm package wrapped in an `EmailService` interface at `apps/server/src/services/email.ts`. Six template senders cover every email the control plane fires from the V-046 / V-049 / V-051 / V-053 envelope (signup-verification, password-reset, billing-receipt, billing-failure, subscription-cancellation, support-ack). Templates own their own subject / text-body / HTML-body inline — no Postmark "templates" feature dependency, since vendor-locking template storage limits future portability and the templates are simple enough to inline.
+
+### What changed
+
+- **`apps/server/src/lib/config.ts`** — extended Zod schema with a nullable `postmark` block: `{apiToken, from, replyTo}`. All-or-nothing reading via `readPostmarkConfig`. If any of the three env vars is missing, `config.postmark` is `null` and `createEmailService` returns a no-op service that logs a one-time warning at boot.
+- **`apps/server/src/services/email.ts`** (NEW, 188 lines) — `EmailService` interface + `createEmailService(args)` factory. Six typed sender methods. Plain-text + HTML body per template. Fire-and-forget: send errors are logged at `warn` with the full Postmark error name + message, but never thrown to the caller. `messageStream` defaults to `outbound` (Postmark's transactional stream); broadcast / inbound are configurable per-call.
+- **`apps/server/tests/unit/email.test.ts`** (NEW, 10 tests) — covers every template (variable interpolation in subject + text + HTML), unconfigured no-op behaviour, fire-and-forget swallow-on-error semantics, success-path info logging, custom messageStream override, and the boot-time warn log when config is null.
+- **`apps/server/package.json`** — added `postmark@^4.0.7`.
+
+### Empirical findings
+
+1. **Fire-and-forget by interface, not by call site.** The `EmailService` methods all return `Promise<void>`; callers can `await` them or not, and either way no error path exists. This is deliberate: the alternative ("throw on send failure, let callers decide") would require try/catch at every call site, which the codebase would inevitably get wrong somewhere — leading to a missed billing receipt taking down a webhook handler. Concentrating the swallow in the service guarantees the property regardless of caller discipline. The trade-off: silent send failures. Mitigated by the `warn`-level structured log per failure (Sentry will pick this up once V-058 lands), and by the fact that the user's flow is recoverable in every case (re-send verification on next signup attempt; retry billing on next cycle; Stripe will re-fire the webhook).
+
+2. **Templates inline, not in Postmark.** Postmark offers a server-side template feature; using it would mean updating templates via Postmark UI (out-of-band from the codebase) and storing only the template ID in code. Rejected because (a) PR-review on email content is a real value-add — templates are user-facing copy and should pass through the same review as any other customer-facing surface, (b) vendor lock-in if we ever switch from Postmark to a different transactional provider, (c) testing inline templates is trivial; testing against remote template renderings requires Postmark sandbox round-trips. Cost: any HTML-template designer the founder hires has to PR the codebase, not click around in Postmark UI. Acceptable given the template count is small (6) and copy-driven, not design-driven.
+
+3. **No-op service for missing config is the right default.** Tests run without Postmark credentials; integration tests would otherwise have to mock the SDK at every entry point. The no-op pattern means the `EmailService` interface is always present in `AppDeps`; callers just call `service.sendX(...)`, and in dev/test it's a silent no-op. Boot-time warning surfaces the unconfigured state without requiring a separate config-validation pass.
+
+4. **Templates carry timestamps in ISO 8601 UTC.** Magic-link and reset emails include `expiresAt.toISOString()` which renders as `2026-05-03T12:30:00.000Z`. Slightly verbose for a user-facing email but unambiguous (no timezone confusion) and machine-parseable if a user pastes the email into a debug window. Trade-off: less natural-language than "in 30 minutes" — but "30 minutes from when, exactly?" is a real ambiguity for users in motion.
+
+5. **5 vulnerabilities (4 moderate, 1 high)** persist in transitive deps from V-056. None on the request critical path; full audit fix would require breaking-change updates that warrant separate review.
+
+### Verify chain
+
+- typecheck/lint/format all clean.
+- `npm test`: **351/351** (was 341; +10 new email tests).
+
+### Decisions made
+
+No new D-entries. Email-service pattern is implementation detail (Tier 1). The fire-and-forget contract is documented in the file's leading comment and asserted by tests.
+
+### Status
+
+Email service ready for downstream wiring. The legal-acceptance flow (V-047), API-key issuance flow (V-049), and future signup / billing flows can now call `emailService.sendX(...)` without import-time SDK init concerns.
+
+### Next
+
+V-058 lands the Sentry SDK (init at boot, fastify error-handler bridge, EU `.de.` DSN region validation). V-059 lands the real production bootstrap wiring Postgres / Redis / R2 readinessChecks + the SDK init log surface for Postmark + Sentry.

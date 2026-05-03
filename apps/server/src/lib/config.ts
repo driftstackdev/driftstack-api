@@ -22,10 +22,23 @@ const ConfigSchema = z.object({
       endpointUrl: z.string().url(),
     })
     .nullable(),
+  // Postmark — transactional email. All three required to enable.
+  // Fire-and-forget; readiness does NOT gate on Postmark connectivity
+  // (per founder direction V-054 follow-up: SDK init failures logged
+  // clearly at boot, then service operates degraded — no email path
+  // is in the request critical-path).
+  postmark: z
+    .object({
+      apiToken: z.string().min(1),
+      from: z.string().email(),
+      replyTo: z.string().email(),
+    })
+    .nullable(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
 export type R2Config = NonNullable<Config['r2']>;
+export type PostmarkConfig = NonNullable<Config['postmark']>;
 
 function readR2Config(env: NodeJS.ProcessEnv): R2Config | null {
   const accountId = env.R2_ACCOUNT_ID;
@@ -37,6 +50,16 @@ function readR2Config(env: NodeJS.ProcessEnv): R2Config | null {
     return null;
   }
   return { accountId, accessKeyId, secretAccessKey, bucketRecordings, endpointUrl };
+}
+
+function readPostmarkConfig(env: NodeJS.ProcessEnv): PostmarkConfig | null {
+  const apiToken = env.POSTMARK_API_TOKEN;
+  const from = env.POSTMARK_FROM;
+  const replyTo = env.POSTMARK_REPLY_TO;
+  if (!apiToken || !from || !replyTo) {
+    return null;
+  }
+  return { apiToken, from, replyTo };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -51,5 +74,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     mockNavigateLatencyMs: env.MOCK_NAVIGATE_LATENCY_MS,
     mockInteractLatencyMs: env.MOCK_INTERACT_LATENCY_MS,
     r2: readR2Config(env),
+    postmark: readPostmarkConfig(env),
   });
 }
