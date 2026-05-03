@@ -1,0 +1,148 @@
+# Driftstack API — deploy pipeline.
+#
+# Triggered on push to main. Build pipeline runs in CI (ci.yml) on
+# every PR + main; deploy.yml only runs on main merges and depends on
+# the same image build.
+#
+# Two-environment flow:
+#   - Staging deploy auto-fires on main merge. No approval gate.
+#   - Production deploy is a manual job that requires the
+#     "production" GitHub environment's approver list to ack.
+#
+# Per Workstream A spec (V-051):
+#   - Hetzner Cloud VMs (CCX13 default — 4 vCPU, 16GB RAM, €25/mo).
+#   - systemd + docker-compose orchestration on the host.
+#   - Image pushed to ghcr.io/driftstackdev/driftstack-api.
+#   - Smoke test against /health post-deploy.
+#
+# Required GitHub secrets (per environment):
+#   - HETZNER_HOST         — IP or hostname of the Hetzner VM.
+#   - HETZNER_USER         — SSH user (typically `driftstack`).
+#   - HETZNER_SSH_KEY      — private key, deploy-scoped.
+#   - DEPLOY_DOTENV_BASE64 — base64-encoded .env file dropped at
+#                              /opt/driftstack/.env on the VM. Contains
+#                              DATABASE_URL, REDIS_URL, R2_*, POSTMARK_*,
+#                              SENTRY_DSN, STRIPE_*, COINBASE_COMMERCE_*,
+#                              etc. Updated via gh secret set when
+#                              founder rotates a credential.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-image:
+    name: Build + push Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-tag: ${{ steps.meta.outputs.image-tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image metadata
+        id: meta
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/driftstack-api:${SHORT_SHA}"
+          echo "image-tag=${IMAGE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build + push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/server/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image-tag }}
+            ghcr.io/${{ github.repository_owner }}/driftstack-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-staging:
+    name: Deploy to staging
+    needs: build-image
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://api.staging.driftstack.dev
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/driftstack
+            echo "${{ secrets.DEPLOY_DOTENV_BASE64 }}" | base64 -d > .env
+            export IMAGE_TAG='${{ needs.build-image.outputs.image-tag }}'
+            docker compose pull
+            docker compose up -d --remove-orphans
+            # Wait for /health to come up before declaring success.
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -fsS http://127.0.0.1:7780/health > /dev/null; then
+                echo "staging healthy"
+                exit 0
+              fi
+              echo "attempt $i: not ready yet, sleeping"
+              sleep 3
+            done
+            echo "staging /health never returned 200"
+            exit 1
+
+  deploy-production:
+    name: Deploy to production (manual approval)
+    needs: [build-image, deploy-staging]
+    runs-on: ubuntu-latest
+    # The "production" environment is configured in repo settings to
+    # require approval from the founder before this job runs.
+    environment:
+      name: production
+      url: https://api.driftstack.dev
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/driftstack
+            echo "${{ secrets.DEPLOY_DOTENV_BASE64 }}" | base64 -d > .env
+            export IMAGE_TAG='${{ needs.build-image.outputs.image-tag }}'
+            docker compose pull
+            docker compose up -d --remove-orphans
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -fsS http://127.0.0.1:7780/health > /dev/null; then
+                echo "production healthy"
+                exit 0
+              fi
+              echo "attempt $i: not ready yet, sleeping"
+              sleep 3
+            done
+            echo "production /health never returned 200"
+            exit 1

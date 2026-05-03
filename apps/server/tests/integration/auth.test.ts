@@ -156,6 +156,16 @@ describe('public routes', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it('GET /ready returns 200 with empty checks when no readinessChecks supplied', async () => {
+    // Fixture passes no readinessChecks — /ready returns process-up
+    // semantics only.
+    const res = await fx.app.inject({ method: 'GET', url: '/ready' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ready).toBe(true);
+    expect(body.checks).toEqual([]);
+  });
+
   it('unknown route returns 404 problem+json', async () => {
     const res = await fx.app.inject({ method: 'GET', url: '/v1/nope' });
     expect(res.statusCode).toBe(404);

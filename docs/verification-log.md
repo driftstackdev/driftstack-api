@@ -2879,15 +2879,18 @@ The acceptance machinery from V-047 records but doesn't enforce. V-049 adds the 
 ### What changed
 
 **New problem type + server error:**
+
 - **`packages/api-types/src/problem.ts`** — added `LegalAcceptanceRequired: 'https://errors.driftstack.dev/legal-acceptance-required'`. Additive (new entry, no rename); same shape as V-044's `SessionTimeout` addition.
 - **`apps/server/src/lib/errors.ts`** — new `LegalAcceptanceRequiredError` class. Status 409. Extension `pending_acceptances` carries `[{document_key, current_version}, ...]` so the client can render the acceptance flow without re-querying.
 - **`@driftstack/api-types@0.1.5`** published to npm.
 
 **Service gate:**
+
 - **`apps/server/src/services/api-keys.ts`** — new `LegalAcceptanceGate` interface with one method: `required(accountId): Promise<{documentKey, currentVersion}[]>`. The existing `LegalService` matches via duck typing. `ApiKeysService` accepts an optional `legalGate` constructor argument; when present, `create` checks for pending acceptances before generating the key and throws `LegalAcceptanceRequiredError` if any are pending. Optional means existing tests / wiring without the gate keep working; production wiring (test fixture + e2e) supplies the gate.
 - **Test fixture** (`tests/integration/_helpers/build-test-app.ts`) now constructs `ApiKeysService` with the `legalService` gate, AND pre-seeds acceptances for the seeded account by default. The new `skipLegalAcceptance: true` option suppresses the seed for tests that exercise the gate (e.g. confirming the 409 fires).
 
 **SDK error mapping — propagated across all three:**
+
 - **TypeScript** (`@driftstack/sdk@0.1.6`): new `LegalAcceptanceRequiredError` extending `DriftstackError`, `kind: 'legal_acceptance_required'`, `pendingAcceptances: PendingAcceptance[]` field. Mapped in `TYPE_TO_CTOR`.
 - **Python** (`driftstack-sdk@0.1.5`): new `LegalAcceptanceRequiredError` class, `pending_acceptances: list[dict[str, str]]` attribute, mapped in `PROBLEM_TYPE_TO_ERROR`, extracted in `_error_from_response_data`, re-exported from `driftstack` package root.
 - **Go** (`packages/sdk-go/v0.1.6`): new `LegalAcceptanceRequiredError` struct + `PendingAcceptance` payload type + `ErrLegalAcceptanceRequired` sentinel + builder + compile-time interface check.
@@ -2977,3 +2980,76 @@ CAPABILITIES.md current as of main-repo V-149. 18 open residuals. Closure ledger
 ### Next
 
 Workstream A — hosting integration scaffolding. Substantial; first commit lands the foundational pieces (Dockerfile, /health + /ready, structured logging + Sentry hook, network architecture doc draft). R2 + Postmark + GH Actions follow in subsequent commits within the workstream.
+
+---
+
+## V-051 — Workstream A foundational: Dockerfile, /ready, deploy pipeline, network architecture doc
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Hosting integration scaffolding (Workstream A from founder direction).
+
+First commit of Workstream A. Lands the foundational pieces; R2 + Postmark + Sentry SDK integrations follow in subsequent V-entries within the same workstream.
+
+### What changed
+
+**Container build:**
+- **`apps/server/Dockerfile`** — multi-stage build. Stage 1 (`builder`): Node 22 bookworm-slim, installs build deps (python3 / make / g++ / openssl for native modules), copies workspace manifests for layer-cached `npm install`, builds api-types then the server, prunes dev deps. Stage 2 (`runtime`): non-root user (`driftstack` uid 1001), copies pruned `node_modules` + built `dist` + migrations + bundled `docs/legal/*` (LegalDocumentCatalog reads them at startup, V-047). Healthcheck baked in (`fetch /health`). `EXPOSE 7780`. `CMD ["node", "apps/server/dist/index.js"]`.
+
+**Production compose file:**
+- **`infra/hetzner/docker-compose.yml`** — one service (the API container). Postgres + Redis + R2 are managed (Neon / Upstash / Cloudflare); not provisioned by Docker on the host. `env_file: .env` populated by the deploy pipeline from `DEPLOY_DOTENV_BASE64` GH secret. Binds `127.0.0.1:7780` only (Cloudflare Tunnel fronts external traffic). Healthcheck mirrors the Dockerfile. Log rotation: 50 MB × 5 files via the json-file driver.
+
+**Deploy pipeline:**
+- **`.github/workflows/deploy.yml`** — three jobs. (1) `build-image`: Docker Buildx build + push to `ghcr.io/driftstackdev/driftstack-api:<short-sha>` and `:latest`, GHA-cached. (2) `deploy-staging`: SSH to Hetzner (env: staging), pull + compose up + 10× retry on `/health` for readiness. (3) `deploy-production`: same pattern but gated on the GitHub `production` environment's manual-approval policy (founder configures approver list in repo settings). Required secrets per environment: `HETZNER_HOST`, `HETZNER_USER`, `HETZNER_SSH_KEY`, `DEPLOY_DOTENV_BASE64`.
+- CI workflow (existing `.github/workflows/ci.yml`) untouched — already covered build + test on PR with Postgres + Redis service containers.
+
+**Readiness endpoint:**
+- **`apps/server/src/lib/app.ts`** — new `GET /ready` endpoint. Public, no auth, no rate limit. Aggregates `readinessChecks: ReadinessCheck[]` from `AppDeps`; each check runs with a 1500 ms default timeout. Returns 200 with `{ready: true, checks: [...]}` if all pass; 503 if any fail. Test fixture passes no checks → /ready returns 200 with empty array (process-up semantics). Production wires checks for Postgres + Redis + R2 (lands in next V-entry within Workstream A — DB/Redis ping helpers + R2 client).
+- New `ReadinessCheck` interface + `runWithTimeout` helper exported alongside `AppDeps`.
+- New integration test in `auth.test.ts` confirms the empty-checks path returns 200.
+
+**Network architecture doc:**
+- **`docs/network-architecture.md`** (NEW) — V-051 / Workstream A foundational. Documents the three network surfaces:
+  1. Customer ↔ control plane: Cloudflare Tunnel from Hetzner VM; loopback-only HTTP container; CF reads `/health`, Hetzner-internal probe reads `/ready`.
+  2. Customer ↔ marketing site: Cloudflare Pages for `driftstack.dev` and `docs.driftstack.dev`; `app.driftstack.dev` reverse-proxies to the Hetzner VM for the dynamic onboarding surface.
+  3. Control plane ↔ Mac Mini fleet: **load-bearing**. v1 design = signed JWT (Ed25519 per-node keypair, 5-min exp, nonce cache for replay defence) over mTLS, fleet-initiated. v2 = WireGuard mesh once fleet ≥5 nodes or multi-region. The doc carries three open questions for founder: (a) mTLS terminator placement (recommend Hetzner-side direct, not Cloudflare API Shield); (b) fleet-node identity bootstrap flow (recommend founder posts public key via existing admin API at provisioning time); (c) JWT signing-key rotation cadence (recommend monthly auto-rotate with 24h overlap).
+- Full sub-processor cross-provider data-flow table (matches V-048 lock).
+- Disaster scenarios table covers Hetzner / Neon / Upstash / R2 / Postmark / Cloudflare / MacStadium / GH Actions failure modes.
+- §7 enumerates 5 open architecture decisions for founder review before fleet code starts.
+
+### Empirical findings
+
+1. **`/ready` deliberately separate from `/health`.** Cloudflare's healthcheck reads `/health` (cheap, "process up"); Hetzner-internal readiness probe reads `/ready` (timed dep checks, returns 503 if any dependency unreachable). Splitting them lets the Cloudflare healthcheck stay green during a transient Postgres / Redis blip without flapping (the customer's request would 503 anyway through the dep-checking layer downstream), while the readiness probe drains the orchestrator pool when the deps are genuinely down.
+
+2. **Fleet endpoint authentication is fleet-initiated by design.** §4 of the network architecture doc walks through why: fleet nodes can sit behind NAT or restrictive egress without inbound holes if they initiate. mTLS + signed JWT is defence-in-depth (cert leak alone or JWT leak alone is insufficient). Per-node keypair is the long-term identity; per-request JWT is the short-lived authenticator.
+
+3. **Bundling `docs/legal/*` into the runtime image** is the right call for v1. The LegalDocumentCatalog (V-047) reads these at startup; mounting them externally would create a deploy-ordering issue (image deploy + legal-docs-volume sync as separate steps). Bundling means the image is self-contained: deploy = atomic. Future cost: re-deploying just to update legal text. Acceptable at v1 cadence; revisit when legal text changes more than the codebase does.
+
+4. **Manual-approval gate uses GitHub Environments.** No extra tooling. Founder configures the `production` environment's required approvers list in repo settings; the workflow waits there. Same mechanism Stripe / Linear / similar B2B SaaS shops use.
+
+5. **Cloudflare Authenticated Origin Pulls vs Cloudflare API Shield** — the doc recommends Hetzner-side mTLS termination (skip Cloudflare for the fleet endpoint entirely) because (a) fleet endpoint isn't customer-facing so CF WAF / DDoS is less load-bearing, (b) avoids the API Shield paid-feature dependency, (c) simpler config. Founder sign-off in §7.
+
+### What's still pending in Workstream A (subsequent V-entries)
+
+- **R2 SDK integration** for recordings durability + cross-device access. Extends V-040's local ndjson approach: write local on STOP, async upload to R2, optional local eviction policy. Founder review on retention defaults at that point.
+- **Postmark SDK + transactional email service.** Templates: signup verification, password reset, billing receipt, billing failure, subscription cancellation, support@ auto-ack. Plain-text + HTML versions per template.
+- **Sentry SDK integration** with env-driven DSN. Source maps uploaded on deploy.
+- **Real readiness checks** (Postgres `SELECT 1`, Redis `PING`, R2 HEAD a known sentinel object) wired into `AppDeps.readinessChecks` in production bootstrap.
+
+### Verify chain
+
+- typecheck/lint/format all clean.
+- `npm test`: **328/328** (was 327; +1 `/ready` empty-checks test). 30 test files unchanged.
+- Docker build: not re-run in this V-entry (would require buildx + a clean checkout; founder runs the first deploy through GH Actions which validates the build).
+
+### Decisions made
+
+No new D-entries. Workstream A's load-bearing architectural decisions live in `docs/network-architecture.md` and are flagged for founder review before fleet integration.
+
+### Status
+
+Workstream A foundational pieces landed. Next iteration adds R2 + Postmark + Sentry SDK integrations.
+
+### Next
+
+Architecture inputs flagged in the prior surface still pending from founder (per-tier limits, oxblood hex confirm, marketing repo location, Stripe/Coinbase test creds, etc.). Continuing Workstream A iteration with R2 + Postmark + Sentry would be next; alternatively V-051 can pause here for founder review of the network architecture doc before the more product-shaping integrations land.

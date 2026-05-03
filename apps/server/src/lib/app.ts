@@ -34,6 +34,29 @@ import { registerAdminWebhookRoutes } from '../routes/admin-webhooks.js';
 import { registerAdminAuditLogRoutes } from '../routes/admin-audit-log.js';
 import { registerLegalRoutes } from '../routes/legal.js';
 
+export interface ReadinessCheck {
+  /** Display name surfaced in the /ready response (e.g. "postgres", "redis", "r2"). */
+  name: string;
+  /** Async probe — throws or rejects on failure, resolves on success. */
+  fn: () => Promise<unknown>;
+  /** Per-check timeout in ms. Default 1500. */
+  timeoutMs?: number;
+}
+
+async function runWithTimeout<T>(p: Promise<T>, timeoutMs: number): Promise<T> {
+  let to: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race<T>([
+      p,
+      new Promise<T>((_, reject) => {
+        to = setTimeout(() => reject(new Error(`timeout after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (to !== undefined) clearTimeout(to);
+  }
+}
+
 export interface AppDeps {
   logger: Logger;
   authRepo: AccountAuthRepo;
@@ -49,6 +72,13 @@ export interface AppDeps {
   accountsAdminService: AccountsAdminService;
   rateLimitOverridesService: RateLimitOverridesService;
   legalService: LegalService;
+  /**
+   * Readiness checks executed by `/ready`. Each runs with the
+   * supplied (or default 1500ms) timeout; aggregate result drives
+   * the HTTP status (200 all-ok, 503 any-fail). Empty array =
+   * /ready always returns 200 (process-up semantics only).
+   */
+  readinessChecks?: ReadinessCheck[];
   /** When true, register a permissive CORS policy. Production locks this down. */
   permissiveCors?: boolean;
 }
@@ -106,9 +136,43 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerLegalRoutes(app, deps.legalService);
   await registerOpenApiRoutes(app);
 
-  // Health endpoint — public, no auth, no rate limit.
+  // Health endpoint — public, no auth, no rate limit. Liveness only:
+  // the process is up and accepting connections. Does not check DB,
+  // Redis, or R2 — those checks live on /ready (readiness).
   app.get('/health', () => ({ ok: true }));
   app.get('/healthz', () => ({ ok: true }));
+
+  // Readiness endpoint — public, no auth, no rate limit. Returns 200
+  // only when the dependencies the server needs to serve traffic are
+  // reachable. Designed for orchestrator readiness probes (the
+  // Hetzner deploy reads this; Cloudflare in front of the host reads
+  // /health). Production wires `readinessChecks` for postgres + redis
+  // + R2; tests typically pass none and /ready returns 200 with an
+  // empty checks array.
+  app.get('/ready', async (_request, reply) => {
+    const checks = deps.readinessChecks ?? [];
+    const results = await Promise.all(
+      checks.map(async (c) => {
+        const start = Date.now();
+        try {
+          await runWithTimeout(c.fn(), c.timeoutMs ?? 1500);
+          return { name: c.name, ok: true, latency_ms: Date.now() - start };
+        } catch (err) {
+          return {
+            name: c.name,
+            ok: false,
+            latency_ms: Date.now() - start,
+            error: err instanceof Error ? err.message : 'unknown',
+          };
+        }
+      }),
+    );
+    const allReady = results.every((c) => c.ok);
+    return reply.code(allReady ? 200 : 503).send({
+      ready: allReady,
+      checks: results,
+    });
+  });
 
   // Whoami — quick smoke test for auth.
   app.get('/v1/whoami', { preHandler: [app.requireAuth, app.rateLimit('global')] }, (request) => {

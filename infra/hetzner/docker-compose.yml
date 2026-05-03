@@ -1,0 +1,47 @@
+# Driftstack API — production / staging compose file.
+#
+# Lives on the Hetzner VM at /opt/driftstack/docker-compose.yml. The
+# deploy pipeline (`.github/workflows/deploy.yml`) SSHes in, sets
+# IMAGE_TAG via env, runs `docker compose pull && docker compose up -d`.
+#
+# This compose file is for the API server only. Postgres + Redis are
+# managed services (Neon + Upstash); R2 is HTTP-API; Postmark is
+# HTTP-API; Sentry is HTTP-API. Nothing is provisioned by docker on
+# the host except the API container itself.
+#
+# A future iteration may add a Caddy reverse proxy in front for
+# automatic TLS, but Cloudflare in front of the host already
+# terminates TLS for production, so the API container can speak
+# plain HTTP locally.
+
+services:
+  api:
+    image: ${IMAGE_TAG:-ghcr.io/driftstackdev/driftstack-api:latest}
+    container_name: driftstack-api
+    restart: unless-stopped
+    env_file:
+      .env # populated by the deploy pipeline from
+      #   DEPLOY_DOTENV_BASE64. Contains DATABASE_URL, REDIS_URL,
+      #   R2_*, POSTMARK_*, SENTRY_DSN, STRIPE_*, COINBASE_COMMERCE_*,
+      #   per the Workstream A locked sub-processor list.
+    environment:
+      NODE_ENV: production
+      PORT: 7780
+    ports:
+      - '127.0.0.1:7780:7780' # bind localhost-only; Cloudflare Tunnel or a
+        # reverse proxy fronts this externally.
+    healthcheck:
+      test:
+        - 'CMD'
+        - 'node'
+        - '-e'
+        - "fetch('http://127.0.0.1:7780/health').then(r => process.exit(r.ok?0:1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50m'
+        max-file: '5'
