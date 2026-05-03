@@ -213,6 +213,46 @@ export const passwordResetTokens = pgTable(
   ],
 );
 
+// profiles — persistent customer-defined identity slots that sessions
+// are created against. The Manual ladder caps profile count as the
+// tier-defining metric (e.g. team_manual = 50 profiles); the API ladder
+// also caps profiles to prevent unbounded growth at lower tiers.
+//
+// V-081 scaffolding: only the metadata fields land here. The actual
+// per-profile persistent browser state (cookies, localStorage, IndexedDB)
+// flows through the WebKit driver when sessions resume from a profile;
+// none of that is stored at the control-plane layer.
+//
+// Uniqueness: (account_id, name) is unique — profile names are
+// human-meaningful identifiers within an account ("aws-staging",
+// "instagram-account-1"), not opaque IDs.
+export const profiles = pgTable(
+  'profiles',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    archetype: text('archetype').notNull().default('iphone16pro_ios26_4_1'),
+    description: text('description'),
+    /** Last time a session was created against this profile. Updated by SessionsService at create-time. */
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('profiles_account_name_unique').on(t.accountId, t.name),
+    index('profiles_account_idx').on(t.accountId),
+  ],
+);
+
 // processed_stripe_events — append-only idempotency ledger for inbound
 // Stripe webhooks. The Stripe `event.id` is unique across the lifetime
 // of a Stripe account; we record it here on first successful handling
@@ -689,3 +729,6 @@ export type NewWebSession = typeof webSessions.$inferInsert;
 
 export type ProcessedStripeEvent = typeof processedStripeEvents.$inferSelect;
 export type NewProcessedStripeEvent = typeof processedStripeEvents.$inferInsert;
+
+export type Profile = typeof profiles.$inferSelect;
+export type NewProfile = typeof profiles.$inferInsert;

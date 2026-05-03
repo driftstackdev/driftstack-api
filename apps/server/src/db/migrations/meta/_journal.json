@@ -64,6 +64,13 @@
       "when": 1778890000000,
       "tag": "0008_processed_stripe_events",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778890400000,
+      "tag": "0009_profiles",
+      "breakpoints": true
     }
   ]
 }

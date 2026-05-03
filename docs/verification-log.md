@@ -4893,3 +4893,93 @@ Verification flow: missing header → 401, invalid signature → 401, malformed 
 ### Next
 
 Per the never-stop rule: continuing to V-081 (Profiles API + tier-limit enforcement at create) per Priority 4 of the overnight queue. V-070-visual remains uncommitted in working tree pending founder review.
+
+---
+
+## V-081 — Profiles API + tier-limit enforcement (Routine — Workstream F P4)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Land the customer-facing Profiles CRUD API with tier-limit enforcement at creation. Profiles are the persistent identity slots that sessions are created against; the Manual ladder uses profile count as the tier-defining metric (`team_manual = 50 profiles`), and the API ladder also caps profiles to prevent unbounded growth at lower tiers (per ADR-004 / `PROFILES_PER_TIER` in `apps/server/src/services/sessions.ts`).
+
+### What changed
+
+**Schema (Drizzle + migration 0009):**
+
+- `profiles` table: `id` UUID PK, `account_id` FK (cascade), `name` text (unique per account), `archetype` text default `'iphone16pro_ios26_4_1'`, `description` text nullable, `last_used_at` timestamp nullable, `created_at` / `updated_at` timestamps. Two indexes: `(account_id, name)` unique, `(account_id)` for list/count.
+
+**API contract (`packages/api-types/src/profiles.ts`):**
+
+- `ProfileSchema` — public response shape (id prefixed `prof_<uuid>`, ISO timestamps).
+- `CreateProfileRequestSchema` — name (1-120 chars, alphanumeric-bordered, allowed inner: letters/digits/space/`_`/`-`/`.`), optional archetype + description.
+- `UpdateProfileRequestSchema` — partial: name, description.
+- `ListProfilesResponseSchema` — paginated wrapper.
+
+**Service (`apps/server/src/services/profiles.ts`):**
+
+`ProfilesService` covers create / list / get / update / delete / touch:
+
+- `create` enforces `profileLimitFor(tier)` BEFORE the insert. trial_pack=1, solo=10, team=50, agency=200, api_starter=25, api_builder=100, api_scale=500, enterprise=null (unlimited). Limit hit → `TierLimitError` with `{limit, current, resource: 'profile', tier}` extensions for client-side UX.
+- Name uniqueness checked at create + at rename (PATCH with `name` field). Conflict → `ConflictError`.
+- `touch` updates `last_used_at`; intended to be called by `SessionsService` at session creation (wiring lands in a follow-on once the session-create path takes a `profile_id` parameter).
+
+**Route (`apps/server/src/routes/profiles.ts`):**
+
+Five endpoints under `/v1/profiles`. All auth-gated (`app.requireAuth`) + rate-limited (`app.rateLimit('global')`). Public ID format `prof_<uuid>` parsed at the route boundary; service + DB use raw UUIDs. Cursor pagination uses the prior-page-last-id (created_at desc + id desc tie-break).
+
+**Wiring:**
+
+- `app.ts`: `profilesService` added as optional `AppDeps` field; route registered when present.
+- `bootstrap.ts`: `DrizzleProfilesRepo` constructed against the Postgres pool, fed into `ProfilesService`, threaded into AppDeps.
+- `build-test-app.ts`: in-memory fixture wiring + exposed `profilesRepo` for direct test inspection.
+- `tests/e2e/helpers/server.ts`: TRUNCATE_SQL adds `profiles` + `processed_stripe_events`.
+
+### How verified
+
+- `npm run typecheck`: clean across all 5 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 402/402 passing (was 387; +15 new profile integration tests). Tests cover:
+  1. Create with default + explicit archetype + description.
+  2. Tier-limit enforcement (trial_pack with 1 profile rejects the second create with 429).
+  3. Duplicate name within an account → 409.
+  4. Invalid name format → 400 ValidationFailed.
+  5. Unauthenticated create → 401.
+  6. List returns all account profiles + cursor pagination round-trip.
+  7. Get owned profile → 200; unknown id → 404; malformed id → 400.
+  8. Patch name + description; rename to existing name → 409.
+  9. Delete → 204; subsequent get → 404; delete unknown → 404.
+
+### Decisions made (no new D-entries)
+
+- **`description` is nullable on update**: Update path treats `description: null` as "clear it", `description: undefined` as "leave unchanged". Matches the standard PATCH-with-explicit-null convention.
+- **Cursor format reuses the public ID prefix**: `next_cursor: "prof_<uuid>"` rather than a separate opaque cursor token. Customers don't need to handle two ID formats; the Drizzle repo decodes back to UUID + does a second SELECT to find the cursor row's `created_at` for the comparison clause.
+- **`touch` is optimistic**: SessionsService can call it fire-and-forget at session creation without holding up the create response; if the row vanishes (cascaded delete mid-flight), it's a no-op rather than an error.
+
+### Files added
+
+- `apps/server/src/db/migrations/0009_profiles.sql`
+- `apps/server/src/db/profiles-repo.ts`
+- `apps/server/src/services/profiles.ts`
+- `apps/server/src/routes/profiles.ts`
+- `apps/server/tests/integration/_helpers/in-memory-profiles-repo.ts`
+- `apps/server/tests/integration/profiles.test.ts`
+- `packages/api-types/src/profiles.ts`
+
+### Files modified
+
+- `apps/server/src/db/schema.ts` (profiles table + 2 inferred types)
+- `apps/server/src/db/migrations/meta/_journal.json` (entry 9)
+- `apps/server/src/lib/app.ts` (ProfilesService AppDeps + route registration)
+- `apps/server/src/lib/bootstrap.ts` (production wiring)
+- `apps/server/tests/integration/_helpers/build-test-app.ts` (fixture wiring)
+- `apps/server/tests/e2e/helpers/server.ts` (TRUNCATE_SQL adds 2 tables)
+- `packages/api-types/src/index.ts` (re-export profiles.ts)
+
+### Next
+
+Per the never-stop rule: continuing to V-082 (direct-buy + trial-pack billing flow scaffolding) per Priority 5 of the overnight queue. V-070-visual remains uncommitted in working tree pending founder review.

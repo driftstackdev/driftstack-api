@@ -33,8 +33,10 @@ import { InMemoryRateLimitOverridesRepo } from './in-memory-rate-limit-overrides
 import { InMemoryLegalRepo } from './in-memory-legal-repo.js';
 import { InMemoryAuthFlowsRepo } from './in-memory-auth-flows-repo.js';
 import { InMemoryStripeWebhooksRepo } from './in-memory-stripe-webhooks-repo.js';
+import { InMemoryProfilesRepo } from './in-memory-profiles-repo.js';
 import { AuthFlowsService } from '../../../src/services/auth-flows.js';
 import { StripeWebhooksService } from '../../../src/services/stripe-webhooks.js';
+import { ProfilesService } from '../../../src/services/profiles.js';
 import { createEmailService } from '../../../src/services/email.js';
 import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
 
@@ -95,6 +97,7 @@ export interface TestAppFixture {
   stripeWebhooksRepo: InMemoryStripeWebhooksRepo;
   /** Stripe webhook signing secret used by the test fixture. */
   stripeWebhookSigningSecret: string;
+  profilesRepo: InMemoryProfilesRepo;
   driver: MockDriver;
   /** Plaintext API key — pass as `Authorization: Bearer <plaintext>`. */
   plaintext: string;
@@ -263,6 +266,10 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   });
   const stripeWebhookSigningSecret = 'whsec_test_fixture_secret';
 
+  // V-081: Profiles service.
+  const profilesRepo = new InMemoryProfilesRepo();
+  const profilesService = new ProfilesService(profilesRepo);
+
   const app = await buildApp({
     logger: testLogger,
     authRepo,
@@ -281,6 +288,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     authFlowsService,
     stripeWebhooksService,
     stripeWebhookSigningSecret,
+    profilesService,
     permissiveCors: true,
   });
 
@@ -299,6 +307,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     authFlowsRepo,
     stripeWebhooksRepo,
     stripeWebhookSigningSecret,
+    profilesRepo,
     driver,
     plaintext,
     accountId,

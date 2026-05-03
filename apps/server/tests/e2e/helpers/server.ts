@@ -69,6 +69,8 @@ const TRUNCATE_SQL = `
     "magic_link_tokens",
     "password_reset_tokens",
     "web_sessions",
+    "processed_stripe_events",
+    "profiles",
     "api_keys",
     "accounts"
   RESTART IDENTITY CASCADE

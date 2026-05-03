@@ -23,6 +23,7 @@ import type { RateLimitOverridesService } from '../services/rate-limit-overrides
 import type { LegalService } from '../services/legal.js';
 import type { AuthFlowsService } from '../services/auth-flows.js';
 import type { StripeWebhooksService } from '../services/stripe-webhooks.js';
+import type { ProfilesService } from '../services/profiles.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -37,6 +38,7 @@ import { registerAdminAuditLogRoutes } from '../routes/admin-audit-log.js';
 import { registerLegalRoutes } from '../routes/legal.js';
 import { registerAuthRoutes } from '../routes/auth.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
+import { registerProfileRoutes } from '../routes/profiles.js';
 
 export interface ReadinessCheck {
   /** Display name surfaced in the /ready response (e.g. "postgres", "redis", "r2"). */
@@ -91,6 +93,8 @@ export interface AppDeps {
   stripeWebhooksService?: StripeWebhooksService;
   /** Stripe webhook signing secret (whsec_...). Required if `stripeWebhooksService` is set. */
   stripeWebhookSigningSecret?: string;
+  /** V-081: profile CRUD service. Optional during scaffolding window. */
+  profilesService?: ProfilesService;
   /**
    * Readiness checks executed by `/ready`. Each runs with the
    * supplied (or default 1500ms) timeout; aggregate result drives
@@ -162,6 +166,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       signingSecret: deps.stripeWebhookSigningSecret,
       logger: deps.logger,
     });
+  }
+  if (deps.profilesService !== undefined) {
+    registerProfileRoutes(app, { service: deps.profilesService });
   }
   await registerOpenApiRoutes(app);
 

@@ -33,6 +33,7 @@ import { DrizzleRateLimitOverridesRepo } from '../db/rate-limit-overrides-repo.j
 import { DrizzleLegalRepo } from '../db/legal-repo.js';
 import { DrizzleAuthFlowsRepo } from '../db/auth-flows-repo.js';
 import { DrizzleStripeWebhooksRepo } from '../db/stripe-webhooks-repo.js';
+import { DrizzleProfilesRepo } from '../db/profiles-repo.js';
 import { SessionsService } from '../services/sessions.js';
 import { ApiKeysService } from '../services/api-keys.js';
 import { UsageService } from '../services/usage.js';
@@ -43,6 +44,7 @@ import { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import { LegalService } from '../services/legal.js';
 import { AuthFlowsService } from '../services/auth-flows.js';
 import { StripeWebhooksService } from '../services/stripe-webhooks.js';
+import { ProfilesService } from '../services/profiles.js';
 import { buildLegalCatalog } from '../services/legal-catalog.js';
 import { RedisAuthCache } from '../services/auth-cache.js';
 import { AuthCoalescer } from '../services/auth-coalescer.js';
@@ -180,6 +182,10 @@ export async function createProductionDeps(
   const stripeWebhooksRepo = new DrizzleStripeWebhooksRepo(dbHandle);
   const stripeWebhooksService = new StripeWebhooksService(stripeWebhooksRepo, { logger });
 
+  // V-081: Profiles service.
+  const profilesRepo = new DrizzleProfilesRepo(dbHandle);
+  const profilesService = new ProfilesService(profilesRepo);
+
   // Readiness checks. Postgres + Redis are required; R2 only checked
   // if configured. Postmark + Sentry are never readiness-gated.
   const readinessChecks: ReadinessCheck[] = [
@@ -218,6 +224,7 @@ export async function createProductionDeps(
     rateLimitOverridesService,
     legalService,
     authFlowsService,
+    profilesService,
     ...(config.stripe?.webhookSecret !== undefined
       ? {
           stripeWebhooksService,
