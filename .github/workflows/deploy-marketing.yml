@@ -1,0 +1,102 @@
+# Marketing site — deploy pipeline.
+#
+# Triggered on push to main. Builds the Astro static site at
+# `apps/marketing-site/` and deploys the resulting `dist/` to
+# Cloudflare Pages via the `wrangler` CLI.
+#
+# Path-filter triggers are deliberate: the workflow only runs when
+# something under `apps/marketing-site/`, this workflow file, or
+# the shared root manifests changes — so a backend-only commit
+# doesn't redeploy the marketing site.
+#
+# Skipped if `CLOUDFLARE_API_TOKEN` is unset (e.g. fresh repo
+# without secrets populated). Build still runs and surfaces any
+# Astro errors at PR review time; only the upload step gates on
+# the secret.
+#
+# Required GitHub secrets (repository-wide; not per-environment):
+#   - CLOUDFLARE_API_TOKEN          — token with `Cloudflare Pages
+#                                       — Edit` permission. Generated
+#                                       at dash.cloudflare.com →
+#                                       My Profile → API Tokens.
+#   - CLOUDFLARE_ACCOUNT_ID         — Cloudflare account ID (32 hex
+#                                       chars). Visible in any zone
+#                                       overview page.
+#
+# Required repository variable:
+#   - CLOUDFLARE_PAGES_PROJECT_NAME — Cloudflare Pages project slug
+#                                       (e.g. `driftstack-marketing`).
+#                                       Pre-create the project in the
+#                                       CF dashboard before the first
+#                                       deploy. Set as a repo variable
+#                                       (not a secret) since it's not
+#                                       sensitive.
+#
+# Custom domains + DNS are configured in the Cloudflare Pages
+# dashboard, not by this workflow:
+#   - driftstack.dev → apex of the Pages project
+#   - www.driftstack.dev → CNAME to the Pages project
+# DNS records live in Cloudflare DNS for the driftstack.dev zone.
+
+name: Deploy marketing site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/marketing-site/**'
+      - '.github/workflows/deploy-marketing.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-marketing-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build + deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    environment:
+      name: marketing-production
+      url: https://driftstack.dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (workspace-aware)
+        run: npm install --no-audit
+
+      - name: Build marketing site
+        run: npm run build --workspace apps/marketing-site
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "CLOUDFLARE_API_TOKEN unset — skipping Cloudflare Pages upload."
+            echo "Build artifact is at apps/marketing-site/dist/ and verified above."
+            exit 0
+          fi
+          if [ -z "${PROJECT_NAME}" ]; then
+            echo "CLOUDFLARE_PAGES_PROJECT_NAME variable unset — set as a repo variable in Settings → Variables."
+            exit 1
+          fi
+          npx --yes wrangler@^3 pages deploy apps/marketing-site/dist \
+            --project-name="${PROJECT_NAME}" \
+            --branch="${GITHUB_REF_NAME}" \
+            --commit-hash="${GITHUB_SHA}" \
+            --commit-message="${GITHUB_SHA::8} — $(git log -1 --pretty=%s)"

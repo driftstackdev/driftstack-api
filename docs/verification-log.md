@@ -3897,3 +3897,79 @@ Static-content surface of the marketing site is complete: landing / pricing / se
 ### Next
 
 V-067: Cloudflare Pages deploy workflow + final polish. Adds `.github/workflows/deploy-marketing.yml` that builds + deploys to Cloudflare Pages on main merges; documents `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` GH secrets in `docs/deployment/env-vars.md` (build-time-only, repository-wide); polish pass on nav consistency + favicons + meta tags + OG card + 404 routing on Cloudflare Pages.
+
+## V-067 — Cloudflare Pages deploy workflow + Workstream B closeout
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream B iteration 4 — closes the workstream. Marketing site now ships from main pushes onto Cloudflare Pages.
+
+### What changed
+
+- **`.github/workflows/deploy-marketing.yml`** (NEW) — separate from the API deploy pipeline because (a) the marketing site is independent of the control plane, (b) path-filter triggers (`apps/marketing-site/**`, the workflow file, root manifests) prevent backend-only commits from redeploying the marketing site, (c) the marketing site has different secrets + different GH environment than the control plane.
+  - Single job `deploy` with `permissions: { contents: read, deployments: write }` and a `marketing-production` environment named so the founder can configure approval requirements separately from the API's `production` environment if needed.
+  - Steps: checkout → setup-node@v4 with npm cache → `npm install --no-audit` → `npm run build --workspace apps/marketing-site` → deploy via `npx --yes wrangler@^3 pages deploy apps/marketing-site/dist --project-name="${PROJECT_NAME}" --branch="${GITHUB_REF_NAME}" --commit-hash="${GITHUB_SHA}" --commit-message="${SHORT_SHA} — $(git log -1 --pretty=%s)"`.
+  - Token-gated like V-062's Sentry upload: `[ -z "${CLOUDFLARE_API_TOKEN}" ]` shell-level check at the top of the deploy step. If unset, prints "skipping Cloudflare Pages upload" and exits 0 — build still runs (so Astro errors surface in PR review), only upload is gated. Founder can land the workflow file before populating the secrets without breaking CI.
+  - `PROJECT_NAME` read from a **repository variable** (not a secret) since it's not sensitive — `vars.CLOUDFLARE_PAGES_PROJECT_NAME`. Documents this distinction explicitly because GH's secrets-vs-variables UI is non-obvious.
+- **`docs/deployment/env-vars.md`** — new `### Marketing site (Cloudflare Pages — build-time only)` section documenting:
+  - `CLOUDFLARE_API_TOKEN` (secret, repo-level, optional — skipped if unset)
+  - `CLOUDFLARE_ACCOUNT_ID` (secret, repo-level, required if deploy runs)
+  - `CLOUDFLARE_PAGES_PROJECT_NAME` (variable, repo-level, required if deploy runs)
+  - DNS configuration note: custom domains (`driftstack.dev` apex + `www.driftstack.dev` CNAME) are configured in the Cloudflare Pages dashboard, not via env or workflow.
+- No source changes to `apps/marketing-site/` — V-066 closed the static-content surface; V-067 is wiring + docs only.
+
+### Empirical findings
+
+1. **Wrangler CLI vs `cloudflare/pages-action@v1`.** GitHub Marketplace has a Cloudflare-maintained action but it's been deprecated in favour of `cloudflare/wrangler-action@v3` + `wrangler pages deploy`. We use `npx wrangler@^3 pages deploy` directly, bypassing the wrapper, because (a) it's one step instead of two, (b) `npx wrangler` works the same locally as in CI (founder can run the deploy by hand if needed), (c) the wrapper action's auth-error messages are less clear than wrangler's own.
+
+2. **`commit-hash` + `commit-message` in the deploy command** populate the Cloudflare Pages dashboard's "Deployments" view with the actual git context. Without those flags, Pages deployments show as anonymous timestamps — meaningful when debugging "which deploy broke X."
+
+3. **Path-filter triggers prevent unnecessary deploys.** Without the filter, every backend-only commit (which is the majority of commits per the V-001..V-066 history) would trigger a marketing-site rebuild + redeploy, burning CI minutes + Cloudflare Pages build quota. Filter is intentionally narrow: `apps/marketing-site/**` + the workflow file + the root `package.json` / `package-lock.json` (since those affect the build). If a backend change updates the lockfile, the marketing site rebuilds — that's the intended overlap for dependency safety.
+
+4. **`marketing-production` environment is separate from `production`.** The control-plane deploy pipeline (V-051) uses an environment called `production` with founder as the required approver. The marketing site deploys without manual approval (low blast-radius — a broken marketing page doesn't break customer billing). Separating environments lets the founder enforce different approval rules per surface; if a future revision adds approval to the marketing site too, the environment is already named distinctly.
+
+5. **Forbidden-phrase check survives V-067 unchanged.** No new copy added; static content from V-064/V-065/V-066 ships as-is. Re-verified via `grep -ic "free trial|free tier|no card|free-tier|free-trial"` post-build → 0 matches across all 5 pages.
+
+6. **Workstream B closeout summary.**
+
+| V-entry | Surface                                   | Notes                                                       |
+| ------- | ----------------------------------------- | ----------------------------------------------------------- |
+| V-064   | Astro scaffolding + landing page          | Slate + oxblood + Geist + Berkeley Mono                     |
+| V-065   | Pricing page + 6-tier comparison + toggle | file-127 + ADR-003 single-source-of-truth in `pricing.ts`   |
+| V-066   | Self-hosted + FAQ                         | `mailto:` CTAs + native `<details>` disclosure widget       |
+| V-067   | Cloudflare Pages deploy + docs            | path-filtered workflow + 3 GH-config items in `env-vars.md` |
+
+Total marketing-site dist after V-066: ~110 KB across 5 pages. Astro check 11 files clean. Forbidden-phrase enforcement verified post-build. Trial-pack-first conversion path uniform across pages.
+
+### Verify chain
+
+- `astro check`: 11 files, 0 errors / 0 warnings / 0 hints (unchanged).
+- `astro build`: 5 pages, ~400ms.
+- `npm run lint`: clean.
+- `npm run format:check`: clean repo-wide.
+- `npm test`: **360/360** unchanged (no backend code touched).
+
+### Decisions made
+
+No new D-entries. Cloudflare Pages deploy mechanics are operational tooling (Tier 1).
+
+### Status
+
+**Workstream B closes here.** Marketing site is shipping-ready: 5 static pages (landing / pricing / self-hosted / faq / 404) + Cloudflare Pages deploy workflow + per-secret documentation. Founder-side action before first deploy: (1) create the Cloudflare Pages project (`driftstack-marketing` recommended slug) in the CF dashboard, (2) populate `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` as repository-level GH secrets, (3) populate `CLOUDFLARE_PAGES_PROJECT_NAME` as a repository variable, (4) configure custom domains (`driftstack.dev` + `www.driftstack.dev`) in the CF Pages dashboard against the project.
+
+Pending Workstream B follow-ups for future V-entries (not blocking close):
+
+- Webfont licenses + `@font-face` declarations for Geist Sans + Berkeley Mono (currently fall back to system stack).
+- Open Graph share image (currently the favicon serves; a 1200×630 OG card image lands later when design ships).
+- Docs site at `docs.driftstack.dev` (separate Astro project or VitePress; deferred until SDK reference + tutorials need somewhere to live).
+
+### Next
+
+Workstream B → C / D / E / F per founder sequencing:
+
+- **C** — admin panel (founder-facing dashboard at `app.driftstack.dev/admin`; trial-pack visibility per account, account search, suspension flow, audit-log view). Reuses the V-049 admin scope + V-025 admin audit log primitives.
+- **D** — Stripe-only billing scaffolding. Subscription state machine + Stripe Customer Portal redirect + webhook handlers (`checkout.session.completed`, `customer.subscription.{created,updated,deleted}`, `invoice.{paid,payment_failed}`). Trial-pack Stripe Checkout flow (one-time product) + ADR-003 schema (`accounts.trial_pack_*`) + session-creation gate enforcement. Browser-hour metering via Stripe Meters; `session_minute` → `browser_hour` rename bundled here per V-061 future-self note.
+- **E** — Moneybird scoping doc. Trial-pack one-time revenue line distinct from subscription MRR; per-region BTW reverse-charge mechanics; OAuth2 vs personal-access-token decision. Per founder direction this is a scoping doc, not implementation; lands as `docs/architecture/moneybird-scoping.md`.
+- **F** — onboarding flow. Signup → email verify (V-057 EmailService) → legal accept (V-047) → tier select → trial-pack purchase via Stripe Checkout → first key issue (V-049 issuance gate). Per V-061 + ADR-003: trial-pack purchase is the first session-creation gate; before that, `POST /v1/sessions` returns 402 with the trial-pack Stripe Checkout link.
+
+CAPABILITIES.md hygiene pull (V-149 Q8 snap fix, V-141 atlas v3, V-141 POC) folds into Workstream C run-up when the public-surface snapshot needs refreshing.

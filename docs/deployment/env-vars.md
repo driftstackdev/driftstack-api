@@ -159,6 +159,28 @@ The find-replace lands in V-046 follow-up work; founder direction is
 to keep brackets in `docs/legal/*.md` and substitute at runtime, not
 to commit values.
 
+### Marketing site (Cloudflare Pages — build-time only)
+
+The marketing site (`apps/marketing-site/`) is a static Astro build
+deployed to Cloudflare Pages. These secrets live at the **repository
+level** (not per-environment) since the marketing-site deploy runs
+once per main-merge push, not per-environment. Skipped if
+`CLOUDFLARE_API_TOKEN` is unset (the workflow no-ops with a console
+message; runtime is unaffected because the site is static).
+
+| Name                            | Type     | Required for deploy | Example                | Notes                                                                                                                                                                                                                      |
+| ------------------------------- | -------- | ------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`          | secret   | optional            | `<api token>`          | Cloudflare API token with `Cloudflare Pages — Edit` permission. Generated at <https://dash.cloudflare.com> → My Profile → API Tokens. If unset, the deploy step is a no-op (build still runs, surfacing any Astro errors). |
+| `CLOUDFLARE_ACCOUNT_ID`         | secret   | required if deploy  | `<32 hex chars>`       | Cloudflare account ID. Visible in any zone overview page in the CF dashboard.                                                                                                                                              |
+| `CLOUDFLARE_PAGES_PROJECT_NAME` | variable | required if deploy  | `driftstack-marketing` | Cloudflare Pages project slug. Pre-create the project in the CF dashboard before the first deploy. Set as a **repository variable** (Settings → Variables, not Secrets) since it's not sensitive.                          |
+
+Custom domains + DNS are configured in the Cloudflare Pages dashboard,
+not by env / secrets:
+
+- `driftstack.dev` — apex of the Pages project
+- `www.driftstack.dev` — CNAME alias to the Pages project
+- DNS records live in Cloudflare DNS for the `driftstack.dev` zone
+
 ### Future Workstream slots (placeholder — not yet wired)
 
 | Name                                      | Notes                                                                                                                            |
