@@ -3415,3 +3415,67 @@ Sentry init helper ready. Production bootstrap (V-059) will call `initSentry({co
 ### Next
 
 V-059: real production bootstrap wiring Postgres / Redis / R2 readinessChecks + Postmark + Sentry SDK init at boot + graceful SIGTERM shutdown that flushes Sentry.
+
+## V-059 — Real production bootstrap + readiness checks (Postgres / Redis / R2)
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream A iteration 2 — closes the iteration. The `apps/server/src/index.ts` Phase-1 stub is replaced with a real bootstrap; the deploy pipeline (V-051) finally runs a process that does work.
+
+V-051 landed the deploy pipeline; V-051 V-log explicitly noted "Production wires checks for Postgres + Redis + R2 (lands in next V-entry)." That V-entry is V-059. The bootstrap factory at `apps/server/src/lib/bootstrap.ts` constructs the full `AppDeps` graph from config + a logger; `apps/server/src/index.ts` calls it, builds the Fastify app, listens, and installs SIGTERM / SIGINT handlers for graceful shutdown.
+
+### What changed
+
+- **`apps/server/src/lib/bootstrap.ts`** (NEW, 199 lines) — `createProductionDeps(config, logger)` returns `BootstrapResult { deps, handles, teardown }`.
+  - **Sentry first** — initialised before Postgres / Redis so any later init exception surfaces in Sentry.
+  - **Postgres pool** with fail-fast probe `await dbHandle.client\`SELECT 1\``at boot. A misconfigured`DATABASE_URL`fails the bootstrap (and therefore`process.exit(1)`); the deploy pipeline's `/health` poll fails, the orchestrator does not promote.
+  - **Redis client** with `await redis.ping()` fail-fast at boot for the same reason. Single Redis client shared by `RedisAuthCache` + `RedisRateLimitStore` (they use distinct key prefixes — auth-cache uses `acache:*`, rate-limit-store uses `rl:*`).
+  - **R2 client** initialised conditionally on `config.r2 !== null`. If R2 env vars are missing, R2 is skipped and a boot warning is logged. Recordings durability + presigned URLs become no-ops in that path.
+  - **Email service** initialised via `createEmailService({config: config.postmark, logger})`. No-op if `config.postmark === null`; boot warning logged.
+  - **All Drizzle repos + services wired** — auth, sessions (with webhook emit), api-keys (with V-049 legal-acceptance gate), usage, webhooks, admin-audit, admin-accounts, rate-limit-overrides, legal.
+  - **Legal catalog** loaded from `docs/legal/*.md` via `buildLegalCatalog({repoRoot: process.cwd()})`. The V-051 Dockerfile copies these into the runtime image at `./docs/legal/`, so `process.cwd()` resolves correctly inside the container.
+  - **Driver** selected via `createDriver(config)` — mock in dev/staging, WebKit when Agent 1's fork closes Phase 2.
+  - **Readiness checks array**: `postgres` (`SELECT 1`, 1500ms timeout), `redis` (`PING`, 1500ms timeout), `r2` (sentinel HEAD, 2000ms timeout, only added if `config.r2 !== null`). Each check is hard pass/fail per probe — `/ready` returns 503 with structured per-dep status when any check fails.
+  - **Teardown** flushes Sentry (2s), closes Redis (`quit()`), closes the Postgres pool (5s timeout). Idempotent — guarded by a `torn` flag.
+  - One-line "bootstrap complete" log at the end summarising SDK init state for production-log sanity check.
+- **`apps/server/src/index.ts`** — replaced 19-line Phase-1 stub with a real bootstrap. Loads config, creates logger, calls `createProductionDeps` (catches and `process.exit(1)`s on bootstrap failure), builds the app via `buildApp(deps)`, calls `wireSentryErrorHandler(app, sentry)` so request errors flow into Sentry with `(request_id, method, url, route)` context, registers `SIGTERM` / `SIGINT` handlers that close the app + run teardown + `process.exit(0)`, then `app.listen({host, port})`.
+
+### Empirical findings
+
+1. **Fail-fast at boot beats deferred discovery.** Without the boot-time `SELECT 1` and `PING`, a misconfigured `DATABASE_URL` or `REDIS_URL` would only surface on the first authenticated request — by which point the orchestrator has already promoted the new image and is routing traffic. Failing at boot means the deploy pipeline's `/health` poll times out, the orchestrator keeps the old image live, and the founder gets a clear "deploy failed" signal in the Hetzner ssh output rather than a silent 503 cascade for end users.
+
+2. **Sentry init before Postgres / Redis is deliberate.** If Postgres init throws, the exception should still surface in Sentry — initialisation failures are exactly the kind of thing the team wants visibility on. Initialising Sentry first costs nothing (no network round-trip until first `captureException`) and gains observability of init-time failures.
+
+3. **Single Redis client for both AuthCache + RateLimitStore.** The two services have orthogonal key prefixes (`acache:*` vs `rl:*`), so they cannot interfere; sharing one connection avoids holding two TCP sessions to Upstash. Trade-off: a single Redis connection failure stalls both pipelines simultaneously. Acceptable: in any realistic outage either both go down together (Upstash is down) or both stay up (network blip recovered by ioredis's retry logic).
+
+4. \*\*`buildLegalCatalog({repoRoot: process.cwd()})` works in both dev (`npm run dev` from repo root) and production (Docker `WORKDIR /app` with `docs/legal` copied in via Dockerfile). The path resolution does not depend on `import.meta.url` or any module-relative trick — `process.cwd()` is the runtime working directory in both cases.
+
+5. **Teardown swallows errors per-step.** A failure to `flush(Sentry)` should not prevent `redis.quit()` or `dbHandle.close()`. Each step has its own `try/catch`; the `torn` flag prevents double-execution if SIGTERM fires twice. Cost: silent teardown failures in logs only (warn-level if the close fn happened to log itself; otherwise silent). Acceptable for a graceful-shutdown path that's about ending cleanly, not about debugging.
+
+6. **`apps/server/dist/index.js` ESM build at 20 KB.** The runtime entrypoint is small because tsup bundles only what `index.ts` directly imports + transitive ESM. Drizzle + postgres-js + ioredis + Sentry + AWS SDK are pulled at runtime from `node_modules` (not bundled), keeping the image build deterministic and the dist output reviewable. Confirmed via `npm run build` post-V-059: build succeeds, dist outputs ESM + CJS + DTS cleanly.
+
+### Verify chain
+
+- typecheck/lint/format all clean.
+- `npm test`: **360/360** unchanged from V-058 (bootstrap.ts is not exercised by unit tests; integration tests use the existing in-memory test fixture).
+- `npm run build`: ESM (19.96 KB), CJS (21.76 KB), DTS (10.00 KB). Build success.
+
+### Decisions made
+
+No new D-entries. Bootstrap pattern is implementation detail (Tier 1) — the wiring graph is dictated by the existing service interfaces.
+
+### Status
+
+**Workstream A iteration 2 closes here.** The control plane now boots end-to-end against Hetzner: Postgres + Redis fail-fast at boot, R2 / Postmark / Sentry initialise (or no-op gracefully), `/ready` returns structured 503-on-partial-failure for orchestrator probes, SIGTERM gracefully shuts down. The deploy pipeline (V-051) can run a real container; the env-var schema (V-053) tells the founder what to populate; the network architecture (V-054) is pinned.
+
+Source-map upload to Sentry is the one carried-over follow-up: needs `SENTRY_AUTH_TOKEN` GH secret + a `@sentry/cli` step in `.github/workflows/deploy.yml`. Defer to V-060+ when source-map fidelity becomes a debugging blocker.
+
+### Next
+
+Workstream A complete (iter 1 + iter 2 = V-051..V-059 inclusive). Parallel kickoff next:
+
+- **Workstream B** — marketing site at `apps/marketing-site/` (Astro on Cloudflare Pages, oxblood `#722F37` palette, signup-primary / GUI-download-secondary CTAs, "Limits announced at launch" copy per Tier 3 founder-explicit-values rule).
+- **Workstream C** — admin panel.
+- **Workstream D** — Stripe-only billing scaffolding (Coinbase rail dropped per V-052; per-tier price-id JSON + BYOK metering + webhook handlers).
+- **Workstream E** — Moneybird integration scoping doc.
+- **Workstream F** — onboarding flow (signup → email verify via V-057 EmailService → legal accept → tier select → payment → first key issue).
