@@ -4495,3 +4495,41 @@ Working overnight queue per founder direction:
 - V-070 visual revision pass — DRAFT in working tree (Tier 3 draft-surface; not committed)
 
 Workstream E (Moneybird scoping) noted as already landed at V-070 (commit b569e59 from prior batch).
+
+## V-074 — E2E test updates: concurrency-limit finalize + new profile-limit.spec.ts
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream B v3 follow-on. Tier 1 maintenance — push-to-main per CLAUDE.md cadence (engineering scaffolding, not customer-facing copy).
+
+### What changed
+
+- **`apps/server/tests/e2e/concurrency-limit.spec.ts`** — file header comment updated from "(D-019)" reference to "(ADR-004 two-ladder concurrent-only)" + extended explainer noting concurrent caps are the primary metering primitive on paid tiers. The actual `TIER_LIMITS` array was already updated in V-073 for the new tier IDs (trial_pack:1, solo_manual:1, team_manual:3, agency_manual:8, api_starter:2, api_builder:8) plus the `api_scale` 24-concurrent spot-check. V-074 finalises by pinning the comment to the canonical ADR-004 reference.
+- **`apps/server/tests/e2e/profile-limit.spec.ts`** (NEW) — placeholder test exercising `profileLimitFor()` from V-073 against the locked `PROFILES_PER_TIER` map (1/10/50/200/25/100/500/null per tier). Eight per-tier assertions + two ladder-monotonicity tests + one enterprise-null sentinel test. TODO comment captures the conversion target: when `/v1/profiles` route lands (future Workstream F or Manual-tier-specific work), this test rewrites as real HTTP-driven create-N-profiles → N+1-fails-with-402-and-upgrade-link.
+
+### Empirical findings
+
+1. **Placeholder-style E2E test is the right shape pre-route-existence.** The `PROFILES_PER_TIER` constant is the load-bearing piece; until `/v1/profiles` exists, exercising it directly via the helper is more meaningful than mocking the route. When the route lands, the rewrite is mechanical — the per-tier assertions translate 1:1 to "create N profiles, assert 201" + "create N+1th, assert 402."
+
+2. **Ladder-monotonicity tests catch off-by-one regressions.** If a future change accidentally swaps `api_starter`'s 25 with `solo_manual`'s 10, the per-tier assertions catch the value mismatch but the monotonicity test catches the structural regression too. Two lines of insurance against the kind of typo that's easy to miss in a `Record<AccountTier, number>` map review.
+
+3. **Enterprise sentinel is `null`, not a large number.** `null` semantically means "unlimited via per-account override" — distinct from "32 concurrent" which is the smallest custom contract size. Per-account rate-limit-overrides path (V-013) is the actual upgrade mechanism for enterprise; the `null` in `PROFILES_PER_TIER` is just the discriminator that says "skip the cap check entirely for this tier."
+
+### Verify chain
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: **360/360** unchanged (Playwright e2e tests are a separate command, `npm run test:e2e`; V-074 adds 11 new e2e test cases that exercise the profileLimitFor helper at e2e-suite-runtime).
+
+### Decisions made
+
+No new D-entries. E2E test additions are implementation detail.
+
+### Status
+
+E2E test suite covers the new concurrent caps + the profile-count cap helper. V-074 closes the V-071..V-074 pricing-restructure engineering arc; the customer-facing surface (V-075 pricing page) is also done. Drafts for /index two-cards + /faq updates in progress per the overnight queue.
+
+### Next
+
+V-076 (public repo hygiene pass) — Tier 1 push-to-main. Then V-077 (/index two-audiences draft) + V-078 (/faq updates draft) in working tree for founder review.

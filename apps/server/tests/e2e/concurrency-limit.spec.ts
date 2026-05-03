@@ -1,5 +1,8 @@
 // E2E tier concurrency limits — verifies the locked-pricing concurrency
-// caps (D-019) hold when measured against real DB row counts.
+// caps (ADR-004 two-ladder concurrent-only) hold when measured against
+// real DB row counts. Concurrent caps are the primary metering primitive
+// on paid tiers; trial pack inherits the same enforcement path with
+// limit=1 plus the trial_pack_credit_cents decrement (per ADR-003).
 
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { PROBLEM_TYPES, type AccountTier } from '@driftstack/api-types';
