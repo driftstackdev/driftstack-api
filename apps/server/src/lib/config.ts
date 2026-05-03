@@ -50,18 +50,28 @@ const ConfigSchema = z.object({
       tracesSampleRate: z.coerce.number().min(0).max(1).default(0),
     })
     .nullable(),
-  // V-080: Stripe webhook signing secret + (future) API keys.
-  // `webhookSecret` (whsec_...) is required to register the inbound
-  // Stripe webhook route; the publishable / secret keys land in a
-  // follow-on V-NNN when the actual subscription-create flow gets
-  // wired. Sub-fields are individually optional so dev can run
-  // without any Stripe config and the webhook route silently
-  // doesn't register.
+  // V-080 / V-082 / V-088: Stripe configuration.
+  // `webhookSecret` (whsec_...) gates the inbound webhook route.
+  // `secretKey` (sk_live_... or sk_test_...) gates the production
+  // BillingProvider — when present, the StripeBillingProvider replaces
+  // the in-memory stub. Sub-fields are individually optional so dev
+  // can run without any Stripe config (routes simply don't register).
+  // `tierPrices` maps each self-serve paid tier to its monthly +
+  // annual Stripe price ids (price_...). `trialPackPriceId` is the
+  // one-time price for ADR-003 trial-pack purchases.
   stripe: z
     .object({
       webhookSecret: z.string().min(1).optional(),
       publishableKey: z.string().min(1).optional(),
       secretKey: z.string().min(1).optional(),
+      apiVersion: z.string().min(1).optional(),
+      tierPrices: z
+        .record(z.string(), z.object({ monthly: z.string(), annual: z.string() }))
+        .optional(),
+      trialPackPriceId: z.string().min(1).optional(),
+      successUrl: z.string().url().optional(),
+      cancelUrl: z.string().url().optional(),
+      portalReturnUrl: z.string().url().optional(),
     })
     .optional(),
   // V-079: where the user-facing auth-flow links point. The plaintext
@@ -109,6 +119,35 @@ function readPostmarkConfig(env: NodeJS.ProcessEnv): PostmarkConfig | null {
   return { apiToken, from, replyTo };
 }
 
+function parseTierPrices(raw: string): Record<string, { monthly: string; annual: string }> {
+  // Expected JSON shape: {"api_starter":{"monthly":"price_xxx","annual":"price_yyy"}, ...}
+  // Accepts either the new nested shape (monthly + annual per tier) or the
+  // legacy flat shape from the env-vars.md placeholder (single price id per
+  // tier — synthesised as monthly only). Throws on malformed input so a
+  // misconfigured deploy fails fast at boot.
+  const parsed = JSON.parse(raw) as unknown;
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('DRIFTSTACK_TIER_PRICE_IDS must be a JSON object');
+  }
+  const out: Record<string, { monthly: string; annual: string }> = {};
+  for (const [tier, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof value === 'string') {
+      out[tier] = { monthly: value, annual: value };
+    } else if (
+      typeof value === 'object' &&
+      value !== null &&
+      typeof (value as { monthly?: unknown }).monthly === 'string' &&
+      typeof (value as { annual?: unknown }).annual === 'string'
+    ) {
+      const v = value as { monthly: string; annual: string };
+      out[tier] = { monthly: v.monthly, annual: v.annual };
+    } else {
+      throw new Error(`DRIFTSTACK_TIER_PRICE_IDS.${tier} must be a string or {monthly, annual}`);
+    }
+  }
+  return out;
+}
+
 function readSentryConfig(env: NodeJS.ProcessEnv): SentryConfig | null {
   const dsn = env.SENTRY_DSN;
   const environment = env.SENTRY_ENVIRONMENT;
@@ -140,11 +179,26 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     postmark: readPostmarkConfig(env),
     sentry: readSentryConfig(env),
     stripe:
-      env.STRIPE_WEBHOOK_SECRET || env.STRIPE_PUBLISHABLE_KEY || env.STRIPE_SECRET_KEY
+      env.STRIPE_WEBHOOK_SECRET ||
+      env.STRIPE_PUBLISHABLE_KEY ||
+      env.STRIPE_SECRET_KEY ||
+      env.DRIFTSTACK_TIER_PRICE_IDS
         ? {
             ...(env.STRIPE_WEBHOOK_SECRET ? { webhookSecret: env.STRIPE_WEBHOOK_SECRET } : {}),
             ...(env.STRIPE_PUBLISHABLE_KEY ? { publishableKey: env.STRIPE_PUBLISHABLE_KEY } : {}),
             ...(env.STRIPE_SECRET_KEY ? { secretKey: env.STRIPE_SECRET_KEY } : {}),
+            ...(env.STRIPE_API_VERSION ? { apiVersion: env.STRIPE_API_VERSION } : {}),
+            ...(env.DRIFTSTACK_TIER_PRICE_IDS
+              ? { tierPrices: parseTierPrices(env.DRIFTSTACK_TIER_PRICE_IDS) }
+              : {}),
+            ...(env.STRIPE_TRIAL_PACK_PRICE_ID
+              ? { trialPackPriceId: env.STRIPE_TRIAL_PACK_PRICE_ID }
+              : {}),
+            ...(env.STRIPE_SUCCESS_URL ? { successUrl: env.STRIPE_SUCCESS_URL } : {}),
+            ...(env.STRIPE_CANCEL_URL ? { cancelUrl: env.STRIPE_CANCEL_URL } : {}),
+            ...(env.STRIPE_PORTAL_RETURN_URL
+              ? { portalReturnUrl: env.STRIPE_PORTAL_RETURN_URL }
+              : {}),
           }
         : undefined,
     authFlowUrls: {

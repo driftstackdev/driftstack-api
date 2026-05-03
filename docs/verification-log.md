@@ -5352,3 +5352,81 @@ Full rewrite of `docs/architecture.md`:
 ### Next
 
 Per the never-stop rule: continuing autonomous Tier 1 queue. Founder confirmed the never-stop rule extension to 14+ hours; planning to address documentation drift, SDK coverage gaps, observability / metrics ADR drafts, and the production Stripe HTTP-client implementation (consistent with V-080's hand-rolled HMAC approach, no `stripe` npm dep). V-070-visual remains uncommitted in working tree pending founder review.
+
+---
+
+## V-088 — Production Stripe HTTP client + StripeBillingProvider (Routine — Workstream D follow-on)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+V-082 scaffolded the BillingService against an in-memory `BillingProvider` stub. V-088 lands the production-path Stripe-backed provider so a deploy with `STRIPE_SECRET_KEY` + `DRIFTSTACK_TIER_PRICE_IDS` + `STRIPE_TRIAL_PACK_PRICE_ID` actually creates customers / Checkout sessions / Customer Portal sessions against real Stripe.
+
+Same posture as V-080's hand-rolled HMAC verification: NO `stripe` npm SDK dependency. Reasons:
+
+1. We touch a small surface of Stripe's API (Customers, Checkout Sessions, Billing Portal). The official SDK includes hundreds of types + dozens of resource methods we'll never call.
+2. Slim dependency graph reduces supply-chain attack surface and version-drift maintenance.
+3. Test friendliness — `BillingProvider` is an interface; the in-memory test provider stays for fast tests.
+
+### What changed
+
+**`apps/server/src/lib/stripe-api.ts` (new):**
+
+`StripeApiClient` — minimal HTTP client wrapping `fetch()`. Authenticates via `Authorization: Basic <secret_key>:` (Stripe's Basic auth pattern), URL-encodes form bodies (Stripe API expects `application/x-www-form-urlencoded`), pins API version via `Stripe-Version` header (default `2024-12-18.acacia`), per-request timeout (default 10s) via `AbortController`, structured logging on errors. Implements four methods covering all V-082 needs:
+
+- `createCustomer({ email, name?, metadata? })` → `{ id, email }`
+- `createSubscriptionCheckoutSession({...})` → `{ id, url }` — `mode=subscription`, `automatic_tax[enabled]=true` (Stripe Tax handles BTW reverse-charge per ADR-002), passes `client_reference_id` for webhook correlation.
+- `createOneTimeCheckoutSession({...})` → `{ id, url }` — `mode=payment` for the trial-pack purchase.
+- `createBillingPortalSession({...})` → `{ id, url }`.
+
+Error path: 4xx/5xx surface as `StripeApiError` with `status` + `stripeError` envelope (matches Stripe's `{ error: { type, code, message, ... } }` shape). Malformed JSON → `StripeApiError` with type `'malformed_response'`. Timeout → `AbortError` from `fetch`.
+
+**`apps/server/src/services/stripe-billing-provider.ts` (new):**
+
+`StripeBillingProvider implements BillingProvider` — composes `StripeApiClient` calls into the `BillingProvider` interface from V-082. Maps `accountId` to Stripe `client_reference_id` + adds `metadata.driftstack_account_id` for forensic correlation. Trial-pack path tags `metadata.driftstack_purchase_kind='trial_pack'`. Customer lookup: we don't search Stripe; we always create on first call and persist the Stripe customer id on `accounts.stripe_customer_id` (BillingService's `ensureCustomerId` path means subsequent calls skip the provider).
+
+**`apps/server/src/lib/config.ts`:**
+
+Extended `stripe` config block with `apiVersion`, `tierPrices` (Record of tier → {monthly, annual} price ids), `trialPackPriceId`, `successUrl`, `cancelUrl`, `portalReturnUrl`. New `parseTierPrices` helper accepts both nested `{monthly, annual}` shape AND legacy flat-string shape from the env-vars.md placeholder (synthesises monthly = annual). Throws on malformed input — fail-fast at boot.
+
+**`apps/server/src/lib/bootstrap.ts`:**
+
+When `config.stripe.secretKey + tierPrices + trialPackPriceId` are all present, constructs `StripeApiClient` → `StripeBillingProvider` → `BillingService` against `DrizzleBillingRepo`, threads through `AppDeps`. Logs explicit "wired" vs "NOT wired" at boot so deploy logs make the state obvious. Default URLs point at `app.driftstack.dev/billing/{success,cancel,return}` if not env-overridden.
+
+### How verified
+
+- `npm run typecheck`: clean across all 5 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 447/447 passing (was 434; +13 new unit tests — 9 in `stripe-api.test.ts` + 4 in `stripe-billing-provider.test.ts`).
+
+Test coverage:
+
+- StripeApiClient: createCustomer happy path with metadata + name, omit-when-not-provided body shape, subscription + one-time Checkout body shapes (verifying `mode`, `client_reference_id`, `automatic_tax`, `subscription_data[metadata]` urlencoding), portal session, 4xx StripeApiError surfacing, non-JSON response handling, timeout via AbortController, no-retry-on-network-failure (caller responsibility).
+- StripeBillingProvider: each method composes the underlying client correctly + returns the BillingProvider-shaped result.
+
+### Decisions made (no new D-entries)
+
+- **No `stripe` SDK dep** — same reasoning as V-080's hand-rolled HMAC. Documented in `stripe-api.ts` header comment so a future contributor doesn't reflexively `npm install stripe`.
+- **`automatic_tax[enabled]=true` always** — Stripe Tax handles BTW reverse-charge per ADR-002. Safe to leave on even when Stripe Tax isn't enabled at the account level (Stripe just doesn't compute tax in that case).
+- **Customer lookup: create-on-first-call, persist locally, skip provider for cached id** — avoids the parallel-ensureCustomer race condition that searching-by-email would have. `BillingService.ensureCustomerId` is the authority for "do we have a customer id for this account."
+- **Pinned API version `2024-12-18.acacia`** — matches the latest stable as of this commit. Bumps land via `STRIPE_API_VERSION` env override (no code change required) so deploy can roll forward independently of the codebase.
+
+### Files added
+
+- `apps/server/src/lib/stripe-api.ts`
+- `apps/server/src/services/stripe-billing-provider.ts`
+- `apps/server/tests/unit/stripe-api.test.ts`
+- `apps/server/tests/unit/stripe-billing-provider.test.ts`
+
+### Files modified
+
+- `apps/server/src/lib/config.ts` (stripe config extended)
+- `apps/server/src/lib/bootstrap.ts` (production billing wiring)
+
+### Next
+
+Continuing per never-stop rule to V-089 — Stripe webhook event handler mutations (V-080 scaffolded the dispatch + idempotency; V-089 lands the actual subscription-mirror INSERT/UPDATE on `customer.subscription.{created,updated,deleted}` + trial-pack provisioning on `checkout.session.completed`).

@@ -1,0 +1,239 @@
+// Minimal Stripe API HTTP client (V-088).
+//
+// We deliberately do NOT depend on the `stripe` npm package. Reasons:
+//
+//   1. Same reasoning as V-080's hand-rolled signature verification:
+//      we touch a small surface area of Stripe's API (Customers,
+//      Checkout Sessions, Billing Portal Sessions). The official SDK
+//      is hundreds of types + dozens of resource-method paths we'll
+//      never call; for a small touched surface, a fetch wrapper +
+//      typed-result narrowing is cleaner.
+//
+//   2. Keeps the dependency graph slim. Every additional npm package
+//      adds supply-chain risk (the Stripe SDK is well-maintained, but
+//      its transitive dep tree is non-trivial).
+//
+//   3. The integration shape stays test-friendly: BillingProvider is
+//      an interface with an in-memory test implementation; the real
+//      Stripe-backed implementation is one of many possible providers.
+//
+// Stripe's API uses application/x-www-form-urlencoded for request
+// bodies, BasicAuth for the secret key, and returns JSON. Errors come
+// back as `{ error: { type, message, code, ... } }` with a 4xx/5xx.
+//
+// This client covers the minimum endpoints V-082 needs:
+//
+//   - POST /v1/customers
+//   - GET  /v1/customers (search by email)
+//   - POST /v1/checkout/sessions  (subscription mode)
+//   - POST /v1/checkout/sessions  (payment mode for trial-pack)
+//   - POST /v1/billing_portal/sessions
+//
+// New endpoint touches land here as one method per Stripe resource.
+
+import type { Logger } from './logger.js';
+
+export interface StripeApiClientConfig {
+  /** Stripe secret key (sk_live_... or sk_test_...). */
+  secretKey: string;
+  /** Stripe API version pinned at deploy time. Default '2024-12-18.acacia'. */
+  apiVersion?: string;
+  /** Per-request timeout in ms. Default 10000. */
+  timeoutMs?: number;
+  /** Override base URL for tests. Default 'https://api.stripe.com'. */
+  baseUrl?: string;
+  /** Test seam: substitute fetch implementation. */
+  fetchImpl?: typeof fetch;
+  logger: Logger;
+}
+
+export interface StripeApiError extends Error {
+  /** HTTP status code. */
+  status: number;
+  /** Stripe error object as returned. */
+  stripeError: {
+    type: string;
+    code?: string;
+    message?: string;
+    param?: string;
+    decline_code?: string;
+    [key: string]: unknown;
+  };
+}
+
+const DEFAULT_API_VERSION = '2024-12-18.acacia';
+const DEFAULT_TIMEOUT_MS = 10_000;
+const DEFAULT_BASE_URL = 'https://api.stripe.com';
+
+export class StripeApiClient {
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(private readonly config: StripeApiClientConfig) {
+    this.fetchImpl = config.fetchImpl ?? globalThis.fetch.bind(globalThis);
+  }
+
+  // ── Customers ─────────────────────────────────────────────────────────
+
+  async createCustomer(args: {
+    email: string;
+    name?: string | null;
+    metadata?: Record<string, string>;
+  }): Promise<{ id: string; email: string }> {
+    const body: Record<string, string> = { email: args.email };
+    if (args.name !== undefined && args.name !== null) body.name = args.name;
+    if (args.metadata !== undefined) {
+      for (const [k, v] of Object.entries(args.metadata)) {
+        body[`metadata[${k}]`] = v;
+      }
+    }
+    const result = await this.post<{ id: string; email: string }>('/v1/customers', body);
+    return result;
+  }
+
+  // ── Checkout Sessions ─────────────────────────────────────────────────
+
+  /**
+   * Create a Checkout Session in `subscription` mode for a recurring price.
+   * `clientReferenceId` is the local account UUID — surfaced back to us in
+   * the `checkout.session.completed` webhook event for correlation.
+   */
+  async createSubscriptionCheckoutSession(args: {
+    customerId: string;
+    priceId: string;
+    successUrl: string;
+    cancelUrl: string;
+    clientReferenceId: string;
+    /** Optional metadata round-tripped onto the resulting subscription. */
+    metadata?: Record<string, string>;
+  }): Promise<{ id: string; url: string }> {
+    const body: Record<string, string> = {
+      mode: 'subscription',
+      customer: args.customerId,
+      'line_items[0][price]': args.priceId,
+      'line_items[0][quantity]': '1',
+      success_url: args.successUrl,
+      cancel_url: args.cancelUrl,
+      client_reference_id: args.clientReferenceId,
+      // BTW reverse-charge handling (per ADR-002): Stripe Tax must be
+      // enabled for the account; the line below tells Stripe Checkout
+      // to compute tax automatically. Safe to leave on for live + test
+      // accounts; if Stripe Tax isn't enabled the Checkout init still
+      // succeeds — Stripe just doesn't compute tax.
+      'automatic_tax[enabled]': 'true',
+    };
+    if (args.metadata !== undefined) {
+      for (const [k, v] of Object.entries(args.metadata)) {
+        body[`subscription_data[metadata][${k}]`] = v;
+      }
+    }
+    return this.post<{ id: string; url: string }>('/v1/checkout/sessions', body);
+  }
+
+  /**
+   * Create a Checkout Session in `payment` mode for a one-time price
+   * (the trial pack per ADR-003). Same correlation pattern via
+   * `client_reference_id`.
+   */
+  async createOneTimeCheckoutSession(args: {
+    customerId: string;
+    priceId: string;
+    successUrl: string;
+    cancelUrl: string;
+    clientReferenceId: string;
+    metadata?: Record<string, string>;
+  }): Promise<{ id: string; url: string }> {
+    const body: Record<string, string> = {
+      mode: 'payment',
+      customer: args.customerId,
+      'line_items[0][price]': args.priceId,
+      'line_items[0][quantity]': '1',
+      success_url: args.successUrl,
+      cancel_url: args.cancelUrl,
+      client_reference_id: args.clientReferenceId,
+    };
+    if (args.metadata !== undefined) {
+      for (const [k, v] of Object.entries(args.metadata)) {
+        body[`payment_intent_data[metadata][${k}]`] = v;
+      }
+    }
+    return this.post<{ id: string; url: string }>('/v1/checkout/sessions', body);
+  }
+
+  // ── Billing Portal ────────────────────────────────────────────────────
+
+  async createBillingPortalSession(args: {
+    customerId: string;
+    returnUrl: string;
+  }): Promise<{ id: string; url: string }> {
+    const body: Record<string, string> = {
+      customer: args.customerId,
+      return_url: args.returnUrl,
+    };
+    return this.post<{ id: string; url: string }>('/v1/billing_portal/sessions', body);
+  }
+
+  // ── Internal request plumbing ─────────────────────────────────────────
+
+  private async post<T>(path: string, body: Record<string, string>): Promise<T> {
+    const url = `${this.config.baseUrl ?? DEFAULT_BASE_URL}${path}`;
+    const formBody = new URLSearchParams(body).toString();
+    const auth = `Basic ${Buffer.from(`${this.config.secretKey}:`).toString('base64')}`;
+
+    const ac = new AbortController();
+    const timeoutMs = this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
+
+    let res: Response;
+    try {
+      res = await this.fetchImpl(url, {
+        method: 'POST',
+        headers: {
+          Authorization: auth,
+          'Stripe-Version': this.config.apiVersion ?? DEFAULT_API_VERSION,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formBody,
+        signal: ac.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const text = await res.text();
+    let parsed: unknown;
+    try {
+      parsed = text.length === 0 ? {} : JSON.parse(text);
+    } catch {
+      const err: StripeApiError = Object.assign(new Error('Stripe response was not JSON'), {
+        status: res.status,
+        stripeError: { type: 'malformed_response', message: text.slice(0, 200) },
+      });
+      err.name = 'StripeApiError';
+      throw err;
+    }
+
+    if (!res.ok) {
+      const stripeError = (parsed as { error?: StripeApiError['stripeError'] }).error ?? {
+        type: 'unknown_error',
+      };
+      this.config.logger.warn(
+        {
+          component: 'stripe-api',
+          path,
+          status: res.status,
+          stripeErrorType: stripeError.type,
+          stripeErrorCode: stripeError.code,
+        },
+        'Stripe API error',
+      );
+      const err: StripeApiError = Object.assign(
+        new Error(`Stripe ${path} failed: ${stripeError.message ?? stripeError.type}`),
+        { status: res.status, stripeError },
+      );
+      err.name = 'StripeApiError';
+      throw err;
+    }
+
+    return parsed as T;
+  }
+}

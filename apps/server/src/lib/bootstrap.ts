@@ -45,6 +45,10 @@ import { LegalService } from '../services/legal.js';
 import { AuthFlowsService } from '../services/auth-flows.js';
 import { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import { ProfilesService } from '../services/profiles.js';
+import { BillingService, type BillingProvider } from '../services/billing.js';
+import { StripeBillingProvider } from '../services/stripe-billing-provider.js';
+import { StripeApiClient } from './stripe-api.js';
+import { DrizzleBillingRepo } from '../db/billing-repo.js';
 import { buildLegalCatalog } from '../services/legal-catalog.js';
 import { RedisAuthCache } from '../services/auth-cache.js';
 import { AuthCoalescer } from '../services/auth-coalescer.js';
@@ -186,6 +190,40 @@ export async function createProductionDeps(
   const profilesRepo = new DrizzleProfilesRepo(dbHandle);
   const profilesService = new ProfilesService(profilesRepo);
 
+  // V-082 + V-088: Billing service. Activates only when all three of
+  // STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS + STRIPE_TRIAL_PACK_PRICE_ID
+  // are configured (the StripeBillingProvider needs the secret key
+  // for API calls; tier + trial-pack price ids are needed to map
+  // tier → Stripe Checkout price). When any is missing, billingService
+  // is undefined and routes simply don't register.
+  let billingService: BillingService | undefined;
+  if (
+    config.stripe?.secretKey !== undefined &&
+    config.stripe.tierPrices !== undefined &&
+    config.stripe.trialPackPriceId !== undefined
+  ) {
+    const stripeApi = new StripeApiClient({
+      secretKey: config.stripe.secretKey,
+      ...(config.stripe.apiVersion !== undefined ? { apiVersion: config.stripe.apiVersion } : {}),
+      logger,
+    });
+    const billingProvider: BillingProvider = new StripeBillingProvider(stripeApi);
+    const billingRepo = new DrizzleBillingRepo(dbHandle);
+    billingService = new BillingService(billingRepo, billingProvider, {
+      tierPrices: config.stripe.tierPrices,
+      trialPackPriceId: config.stripe.trialPackPriceId,
+      defaultSuccessUrl: config.stripe.successUrl ?? 'https://app.driftstack.dev/billing/success',
+      defaultCancelUrl: config.stripe.cancelUrl ?? 'https://app.driftstack.dev/billing/cancel',
+      portalReturnUrl: config.stripe.portalReturnUrl ?? 'https://app.driftstack.dev/billing',
+    });
+    logger.info({ component: 'billing' }, 'BillingService wired with StripeBillingProvider');
+  } else {
+    logger.warn(
+      { component: 'billing' },
+      'BillingService NOT wired (STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS + STRIPE_TRIAL_PACK_PRICE_ID required); /v1/billing/* routes will not register',
+    );
+  }
+
   // Readiness checks. Postgres + Redis are required; R2 only checked
   // if configured. Postmark + Sentry are never readiness-gated.
   const readinessChecks: ReadinessCheck[] = [
@@ -231,6 +269,7 @@ export async function createProductionDeps(
           stripeWebhookSigningSecret: config.stripe.webhookSecret,
         }
       : {}),
+    ...(billingService !== undefined ? { billingService } : {}),
     readinessChecks,
     permissiveCors: false,
   };
