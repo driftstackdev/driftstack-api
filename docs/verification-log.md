@@ -5692,3 +5692,36 @@ Date.now() chosen over `performance.now()` for consistency with the rest of the 
 ### Next
 
 Continuing to V-094 — ADR-005 Sentry-first observability proposal.
+
+---
+
+## V-094 — ADR-005 observability metrics destination + format (Tier 2 draft, founder review)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Capture the destination + retention + query-model decision for the structured logs landed in V-080 / V-085 / V-091 / V-092 / V-093. Founder calibration: lead with Sentry-first reasoning, surface alternatives (Better Stack / Axiom / Datadog) with cost projections per the never-stop rule's standing direction.
+
+### What changed
+
+- New file `docs/adr/ADR-005-observability-sentry-first.md`. Recommends Sentry as primary structured-log + metrics destination at launch (next 6-12 months), with explicit revisit triggers (volume ceiling / query depth / compliance / customer-facing metrics surface). Three alternatives with cost projections at launch + production volume. OpenTelemetry-only positioned as portable future path (NOT abandoned, scaffolding lands as a follow-on).
+
+### Status
+
+ADR is **Proposed** — pending founder review. Per Decision authority in CLAUDE.md, vendor-level architectural decisions surface for founder approval before any production change. The structured-log fields landed in V-080 onward are already shaped for log-aggregation querying, so no re-instrumentation will be needed when the chosen vendor flips on.
+
+### How verified
+
+- `npm run format:check`: clean.
+- No code changes; markdown only.
+
+### Files added
+
+- `docs/adr/ADR-005-observability-sentry-first.md`
+
+### Next
+
+Continuing to V-095 — ADR-006 audit log retention + export proposal.
