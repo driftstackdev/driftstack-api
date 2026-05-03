@@ -4229,3 +4229,63 @@ Marketing-site copy is content-complete: positioning sharpened across hero, why-
 ### Next
 
 V-070 (visual revision pass) per founder direction. Surface design choices as descriptions / dev-server screenshots before commit. Asymmetric layouts on landing + self-hosted, real code samples in Berkeley Mono with `archetype: 'iphone-16-pro-ios-26-4-1'`, terminal-output blocks, ASCII diagram on `/self-hosted`, drop generic icons or pick one distinctive recurring motif, typography refinement (mixed weights, 96px hero number, varied letter-spacing).
+
+## V-070 — Moneybird integration scoping doc
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream E. Tier 1 maintenance during the V-070-visual-revision pause (which waits on a pricing restructure per founder direction). Founder explicit: Moneybird scoping is fully independent of the tier-structure restructure and is the best use of cycles while the restructure is in flight. Proceeded without further approval.
+
+V-070 documents the boundary between Driftstack DB / Stripe / Moneybird, the four revenue categories that need separate ledger treatment, the per-region BTW handling matrix, the OAuth2 vs PAT authentication choice, and eight open questions for accountant + counsel review at implementation time.
+
+> Numbering note: the founder's batch direction had labelled the visual revision pass "V-070" provisionally. With that pass paused indefinitely on the pricing restructure, V-070 is allocated to the Moneybird scoping doc per sequential V-NNN convention. The visual revision pass will pick up the next available number when it lands.
+
+### What changed
+
+- **`docs/architecture/moneybird-scoping.md`** (NEW) — scoping doc, ~250 lines. Sections:
+  - **Why this doc** — three-system disagreement risk (Driftstack DB / Stripe / Moneybird), year-end consequences of getting the boundary wrong.
+  - **Sub-processor classification** — Moneybird is V-052 lock + `/trust/sub-processors` listed; data scope limited to billing context (no session content, no API keys, no recordings).
+  - **Source-of-truth boundary** — table mapping each question (account state / payment / VAT computation / books / BTW filing / lifetime revenue) to its authoritative source.
+  - **Revenue categories** — four streams that need separate Moneybird ledger lines: subscription MRR, trial-pack one-time revenue (per ADR-003), BYOK LLM markup revenue (`driftstack_llm_tokens` per V-053), self-hosted contract revenue.
+  - **Per-region BTW handling** — Stripe Tax matrix (B2B EU with VAT-ID, B2C EU, outside EU, NL domestic).
+  - **Three integration patterns** — A (real-time webhook + control-plane bridge), B (scheduled batch sync), C (native Marketplace connector if it exists). Recommendation: C if available, A as fallback, B too lagging for first-paying-customer year-end.
+  - **OAuth2 vs PAT** — OAuth2 recommended for production with scoped tokens, PAT acceptable for staging.
+  - **Sync mechanics design notes** — idempotency key (Stripe invoice ID), dead-letter queue for Moneybird failures, monthly automated reconciliation, customer-data minimization.
+  - **Six implementation gates** — KvK closure, Moneybird account opened under BV, accountant review, counsel review, pattern selection, OAuth2 client registration.
+  - **Eight open questions** — trial-pack revenue recognition (purchase vs amortised over 14d), BYOK markup treatment (gross vs net-of-passthrough), self-hosted prepaid recognition (cash vs IFRS 15), refund credit-note workflow, Marketplace native connector existence, MRR/ARR source-of-truth for investor reporting, billing-address handling, VAT-ID disagreement resolution.
+  - **Implementation surface** — wrapper at `apps/server/src/lib/moneybird.ts` (matches V-056 R2 / V-057 Postmark wrapper pattern), `services/billing-sync.ts` reconciler, OAuth2 fields added to `config.ts` when production posture lands. Estimated 2-3 V-entries when implementation gates clear.
+  - **References** to ADR-002 / ADR-003 / V-052 / V-053 / V-068 / DPA Annex 3.
+
+### Empirical findings
+
+1. **Three systems-of-record exposes a real reconciliation surface.** Stripe is authoritative for "did the charge happen + at what tax rate"; Moneybird is authoritative for "what's on the BV's books for the Belastingdienst." When they disagree (rare in practice but real at year-end edges), accountants have opinions about which side wins. The doc's source-of-truth-boundary table makes the call explicit so it can be reviewed, rather than discovered during reconciliation.
+
+2. **Pattern C (native connector) is the right default if it exists.** Driftstack-as-sync-coordinator (Pattern A) is a real maintenance surface — webhook handlers, idempotency tracking, schema-drift detection, DLQ for failures. If Moneybird Marketplace ships a working Stripe connector that handles Stripe Tax line items + VAT-ID reverse-charge correctly, that connector eliminates ~2 weeks of agent work without sacrificing correctness. Founder verifies Marketplace state at implementation time.
+
+3. **Trial-pack revenue recognition is the load-bearing accountant question.** $2.99 collected at purchase; credit decrements over 14 days. Cash-basis recognition is simpler but might mismatch Dutch revenue-recognition rules for prepaid digital service consumption. Wrong call has year-end reporting consequences. Flagged explicitly as accountant-call rather than agent-decision.
+
+4. **BYOK markup gross-vs-net distinction has tax-treatment, MRR-computation, and book-balance consequences.** The same dollar amount of Driftstack-side revenue can show up as $X gross with $Y cost-of-revenue, or as $(X−Y) net revenue, depending on which posture the accountant takes. Both are defensible under different revenue-recognition frameworks. Flagged for accountant + counsel; agent doesn't pick.
+
+5. **Customer-data minimization in Moneybird is enforceable.** The Moneybird invoice carries customer email, billing address, VAT-ID, line items, totals — nothing else. Session metadata, API key references, usage-detail-beyond-aggregate all stay inside Driftstack. The DPA Annex 3 already scopes Moneybird to "accounting and invoicing operations"; the implementation respects that scope by design.
+
+6. **Implementation surface fits the existing wrapper pattern.** V-056 (R2), V-057 (Postmark), V-058 (Sentry) all share a shape: typed wrapper in `apps/server/src/lib/`, no-op-when-unconfigured semantics, optional `config.X` block in `config.ts`. Moneybird wrapper would land in the same shape — testable surface, gracefully degraded when config absent (e.g., dev environments without a Moneybird administration), matched test seam pattern.
+
+### Verify chain
+
+- `npm run typecheck`: clean (docs-only change; no code touched).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: **360/360** unchanged.
+- Astro check: no impact (doc is in `docs/`, not `apps/marketing-site/`).
+
+### Decisions made
+
+No new D-entries. Scoping doc is architecture-side planning; the load-bearing decisions (revenue recognition, gross-vs-net, pattern selection, OAuth2 vs PAT) are flagged as open questions for accountant + counsel review, not closed by this doc.
+
+### Status
+
+Workstream E scoping complete. Implementation gates on KvK closure + accountant + counsel review + Marketplace verification. Doc lives at `docs/architecture/moneybird-scoping.md` for founder + accountant + counsel reference when those gates open.
+
+### Next
+
+Pricing restructure direction incoming from founder per the V-070-pause directive. Workstream B v3 (pricing-page rewrite against new structure), then C (admin panel) and D (Stripe billing) and F (onboarding) follow. Marketing-site visual revision pass picks up the next sequential V-NNN when the restructure pass closes.
