@@ -4408,3 +4408,90 @@ Backend tier-limit values, AccountTier enum, Postgres schema, and Drizzle migrat
 V-074 — E2E test updates: full rewrite of `apps/server/tests/e2e/concurrency-limit.spec.ts` (already partially landed in V-073 to satisfy typecheck; V-074 finalises) + new `apps/server/tests/e2e/profile-limit.spec.ts` (placeholder until /v1/profiles route lands; can assert via direct DB write that tier exceeded would fire).
 
 V-075+ — Marketing site B v3 rewrite (Tier 3, draft-surface cadence per CLAUDE.md).
+
+## V-075 — Marketing site B v3 pricing page rewrite (founder approved)
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream B v3 — Tier 3 marketing copy + Tier 1 data shape. Drafts surfaced via clipboard pbcopy 2026-05-03; founder approved with answers to 8 review questions; commit follows the standing-convention cadence (V-068.1 CLAUDE.md addition).
+
+### What changed
+
+**Data shape (`apps/marketing-site/src/data/pricing.ts`):**
+
+- `ApiTier` interface gains `aiAgent: boolean` + `llmBilling: 'byok_only' | 'byok_or_bundled' | 'byok_or_bundled_custom' | null` per tier — codifies the AI-agent feature gating matrix from founder Tier 3 spec.
+- `SelfHostedSku` interface restructured: `concurrent` removed entirely (customer hardware bounds parallelism, not the license per founder spec); `hardwareRequired` removed (moves to `self-hosted.astro` `HARDWARE_BY_SKU` map since procurement detail belongs only on `/self-hosted`); `archetypeAccess: string` → `archetypesMax: number | null`; `minimumTerm: string` → `minimumTermMonths: number`. New fields: `profilesMax: number | null`, `multiRegion: boolean`, `multiNodeClustering: boolean`, `customArchetypeDevelopment: 'none' | 'limited' | 'unlimited'`, `supportTier: 'email_48h' | 'email_slack_12h' | 'dedicated_csm_1h'`, `sourceEscrow: boolean`, `annualUsd: number | null`.
+
+**Pricing page (`apps/marketing-site/src/pages/pricing.astro`):**
+
+Full rewrite per founder structure spec:
+
+- **Header** — eyebrow "Pricing", H1 "Two ladders. One trial pack to start."
+- **Trial pack hero** — unchanged at $2.99 / 1 concurrent / ~16 hrs / 14-day window. Hero CTA: "Get started — $2.99" (Q4 founder direction — match V-069 landing-hero CTA).
+- **Positioning band** — "Pay per concurrent session. Run as many hours as you want within your concurrent cap. No surprise overage bills." Replaces the V-069 per-browser-hour framing.
+- **Monthly/annual toggle** — controls Manual + API ladders simultaneously. Vanilla JS, no client framework.
+- **Manual section** (Q1: kept single-word audience anchor) — eyebrow "Manual", H2 "Manual — for humans", subhead "Persistent profiles. Drive sessions yourself in the GUI client. No code required." Three cards: Solo Manual / Team Manual (highlighted) / Agency Manual. Per-card fields per Q6 founder-confirmed order: price → profiles → concurrent → hours → AI agent → support.
+- **Oxblood horizontal divider** between Manual + API sections.
+- **API section** — eyebrow "API", H2 "API — for code", subhead "SDK in your language. Programmatic session creation. Concurrent caps that scale with your fleet." Four cards: API Starter / API Builder (highlighted) / API Scale / Enterprise. Same field order as Manual. Enterprise renders "from $4,000/mo annual contract only".
+- **Pricing footnote** — "All prices in USD. VAT/BTW added per region per applicable EU rules. No setup fees on any tier. Annual contracts billed up front."
+- **Oxblood horizontal divider** between API + Self-hosted.
+- **Self-hosted section** — eyebrow "Self-hosted", H2 "Self-hosted — for sovereignty", subhead "Run the entire stack on your own hardware. No concurrent-session caps from us — your hardware is the cap. Driftstack licenses the software, you scale the fleet." Three cards: Solo $1,000 / Pro $2,000 / Enterprise from $4,000 annual only. Per card: price → profiles → archetypes → multi-region → multi-node clustering → custom archetype dev → source escrow → support → minimum term. Per-card footnote (Q3 founder direction): "Concurrent capacity is bounded by your hardware, not by license. Hardware procurement detail at /self-hosted."
+- **BYOK / bundled LLM explainer** — names Anthropic + console.anthropic.com link. Bundled is API Builder / API Scale / Enterprise only; self-hosted SKUs are BYOK-only ("we don't proxy LLM calls into customer hardware").
+- **Mini-FAQ teaser** (Q5 founder OK on placeholder copy) — 4 cards: "Manual or API — which one?" / "Why concurrent caps and not hours?" / "Can I switch tiers mid-month?" / "What happens when the trial pack runs out?" + "See full FAQ" link.
+
+**AI agent row label** (Q2 founder direction) — "AI agent" → "AI agent (LLM-driven sessions)" disambiguates from generic AI hand-waving for technical buyers.
+
+**Dual CTA per tier card** (Q7 founder option (a) — explicit dual path, no subordination):
+
+- Manual + API non-Enterprise tiers: primary `<button>Start with $2.99</button>` (oxblood-700, full-width) routes to `/signup` (trial-pack flow), plus secondary `<a>Buy [Tier Name] →</a>` (text-only oxblood underline) routes to `/signup?tier=<tier_id>` (direct-buy flow placeholder).
+- Enterprise: single CTA "Contact sales" mailto. No trial-pack route for enterprise.
+- Backend impact noted in V-log: Workstream D wires the actual `/signup?tier=<id>` direct-buy → Stripe Checkout flow against the per-tier price IDs.
+
+**Self-hosted page (`apps/marketing-site/src/pages/self-hosted.astro`):**
+
+- Updated to consume the new `SelfHostedSku` schema. Hardware string moved to `HARDWARE_BY_SKU` map at file top (procurement detail belongs only on this page per V-068 / V-069 standards).
+- New rows in card `<dl>`: Browser profiles, Archetypes, Multi-region, Multi-node clustering, Custom archetype dev, Source escrow, Support, Minimum term.
+- Per-card footer "Concurrent capacity is bounded by your hardware, not by license." reinforces the self-hosted positioning.
+
+### Empirical findings
+
+1. **Two-section visual split is the right answer for the audience-routing problem.** Customers reading the pricing page now see "Manual or API" as the first decision, not a 7-column table they need to interpret. The oxblood horizontal divider is intentional visual force — readers' eyes break on it, reset, then read the second section as a separate frame. Confirmed by walking the live `localhost:4321/pricing` after rewrite.
+
+2. **Dual CTA pattern preserves both customer paths cleanly.** The primary button ("Start with $2.99") is the cheap-evaluation route; the secondary text-link ("Buy [Tier Name] →") is the I-already-know route. Customers who scan only primary CTAs fall into the trial-pack funnel; customers who actively look for a direct-buy path find it without it being overweighted. Backend completion (Workstream D) wires the actual checkout for both paths against the per-tier Stripe price IDs already in the founder action queue.
+
+3. **AI agent row label "AI agent (LLM-driven sessions)" is the right disambiguation.** The bare "AI agent" was vague enough that technical buyers might assume marketing-speak (some kind of generic AI assistance). The parenthetical "LLM-driven sessions" tells them concretely that this is the feature where an LLM drives session interactions. Founder picked Q2 option correctly.
+
+4. **Per-card self-hosted footnote ("your hardware is the cap") is repetition force not redundancy.** The subhead at section level says it once; the per-card footnote says it three more times (one per SKU card). Customers scanning a specific card see the framing without having to scroll back up to the section header. Repetition matters at the buy-decision moment more than it does at the section-header moment.
+
+5. **Trial-pack mechanics restructure (Q8) deferred per founder direction.** ADR-003 schema (`accounts.trial_pack_*`, $0.18/hr decrement on `trial_pack_credit_cents`, 14-day window) stays unchanged. Founder marked this as a future ADR-003.1 candidate post-launch when actual customer feedback can inform whether the credit model is confusing in practice. V-075 hero card reads "299¢ pre-paid credit decremented at the Starter equivalent rate (~16 hours)" matching ADR-003.
+
+6. **Self-hosted differentiation now leans on capability fields not capacity caps.** Multi-region / multi-node clustering / custom archetype dev / source escrow are software-licensing differentiators, not concurrent-session caps. Pre-launch the actual infrastructure for multi-region + multi-node clustering doesn't exist yet (Workstream D / future); the marketing claim is forward-looking commitment. Customer signing a self-hosted contract is buying into the platform's growth trajectory — fair framing, common in B2B SaaS sales.
+
+### Verify chain
+
+- `astro check`: 14 files, 0 errors / 0 warnings / 0 hints.
+- `astro build`: 6 static pages emitted in ~430ms.
+- `npm run lint`: clean.
+- `npm run format:check`: clean repo-wide.
+- `npm test`: **360/360** unchanged (no backend code touched).
+- Forbidden-phrase grep on customer-facing pages (index/pricing/faq/404, excluding /self-hosted procurement page + /trust register): 0/0/0/0 for infrastructure vendor names; 0/0/0/0 for "free trial" / "free tier" / "no card" framing.
+
+### Decisions made
+
+No new D-entries. V-075 is implementation against the locked ADR-004 spec + founder Tier 3 review answers; no new architecture decisions originated here.
+
+### Status
+
+Pricing page B v3 rewrite landed. /pricing renders the two-ladder structure with self-hosted as a third section, dual CTAs preserve direct-buy + trial-pack paths, AI agent / BYOK gating per locked tier matrix. Hardware procurement detail confined to /self-hosted only.
+
+### Next
+
+Working overnight queue per founder direction:
+
+- /index "Built for two audiences" two-card section — DRAFT in working tree (Tier 3 draft-surface; not committed)
+- /faq updates ("Why concurrent caps..." replacement + new "Manual vs API" entry) — DRAFT in working tree (Tier 3 draft-surface; not committed)
+- V-074 E2E test updates (concurrency-limit + new profile-limit.spec.ts) — Tier 1 push-to-main
+- Public repo hygiene pass — Tier 1 push-to-main, single V-NNN commit
+- V-070 visual revision pass — DRAFT in working tree (Tier 3 draft-surface; not committed)
+
+Workstream E (Moneybird scoping) noted as already landed at V-070 (commit b569e59 from prior batch).

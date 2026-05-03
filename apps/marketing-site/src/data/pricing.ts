@@ -3,41 +3,49 @@
 // supersedes file-127 single-ladder hours-with-overage design).
 // Trial pack mechanics survive intact per ADR-003.
 //
-// V-072 NOTE: this file lands the new pricing values + tier IDs +
-// new fields (`tierType`, `profiles`) but retains old field names
-// (`monthlyUsd`, `annualUsd`, etc.) so the existing pricing.astro
-// + self-hosted.astro templates keep compiling. The proper visual
-// rewrite — two-ladder layout, removed-overage-row, profile-count
-// emphasis — lands in V-075+ Marketing site B v3 (Tier 3
-// draft-surface cadence).
-//
 // Backend equivalent at apps/server/src/services/sessions.ts
-// (TIER_CONCURRENT_SESSION_LIMITS) + new PROFILES_PER_TIER per V-073.
-// Both layers must agree.
+// (TIER_CONCURRENT_SESSION_LIMITS, PROFILES_PER_TIER) per V-073.
+// Both layers must agree on tier ids + concurrent caps + profile
+// counts.
+//
+// V-075+ NOTE: schema folds the spec corrections from founder Tier 3
+// review post-V-072 — `aiAgent` + `llmBilling` per-tier gating fields
+// added; `concurrentCeiling` removed from self-hosted entirely
+// (customer hardware bounds parallelism, not the license);
+// self-hosted profile / archetype / multi-region / multi-node /
+// custom-archetype-dev / support-tier / source-escrow fields
+// expanded per the locked shape. Old field names retained where
+// they still apply so the Tier 3 draft-surface review can focus on
+// new fields + render structure.
 
 export type TierType = 'trial' | 'manual' | 'api';
 
+/**
+ * AI agent feature gating per ADR-004 + founder Tier 3 spec
+ * (post-V-072). `null` for tiers where the feature is off entirely.
+ */
+export type LlmBilling = 'byok_only' | 'byok_or_bundled' | 'byok_or_bundled_custom' | null;
+
 export interface ApiTier {
   id: string;
-  /** Two-ladder discriminator added in V-072 for V-075+ section grouping. */
+  /** Two-ladder discriminator for V-075+ section grouping. */
   tierType: TierType;
   name: string;
   monthlyUsd: number | null;
   annualMonthlyEquivalentUsd: number | null;
   annualUsd: number | null;
-  /**
-   * Profile count limit (Manual-tier-defining per ADR-004).
-   * `'Custom'` for Enterprise; numbers everywhere else.
-   * V-072 added field; V-073 enforces at /v1/profiles gate.
-   */
+  /** Profile count limit (Manual-tier-defining). `'Custom'` for Enterprise. */
   profiles: number | string;
   hoursLabel: string;
   overagePerHourUsd: number | null;
   concurrent: number | string;
   archetypeAccess: string;
   support: string;
-  /** Audience description for V-075+ two-ladder positioning. */
   audience: string;
+  /** AI agent feature available on this tier? Per founder Tier 3 spec. */
+  aiAgent: boolean;
+  /** LLM billing model when aiAgent is true; `null` when aiAgent is false. */
+  llmBilling: LlmBilling;
   cta: { label: string; href: string };
   highlight?: boolean;
   oneTime?: boolean;
@@ -59,6 +67,8 @@ export const API_TIERS: ApiTier[] = [
     archetypeAccess: 'All currently-available archetypes',
     support: 'Community',
     audience: 'Evaluation',
+    aiAgent: false,
+    llmBilling: null,
     cta: { label: 'Get started — $2.99', href: '/pricing#trial-pack' },
     oneTime: true,
   },
@@ -78,6 +88,8 @@ export const API_TIERS: ApiTier[] = [
     archetypeAccess: 'All currently-available archetypes',
     support: 'Email · 48h SLA',
     audience: 'Solo power users, individual operators',
+    aiAgent: false,
+    llmBilling: null,
     cta: { label: 'Start with $2.99', href: '/pricing#trial-pack' },
   },
   {
@@ -94,6 +106,8 @@ export const API_TIERS: ApiTier[] = [
     archetypeAccess: 'All currently-available archetypes',
     support: 'Email · 24h SLA',
     audience: 'Teams of account managers',
+    aiAgent: true,
+    llmBilling: 'byok_only',
     cta: { label: 'Start with $2.99', href: '/pricing#trial-pack' },
     highlight: true,
   },
@@ -111,6 +125,8 @@ export const API_TIERS: ApiTier[] = [
     archetypeAccess: 'All currently-available archetypes',
     support: 'Email + Slack Connect · 12h SLA',
     audience: 'Agencies juggling many client profiles',
+    aiAgent: true,
+    llmBilling: 'byok_only',
     cta: { label: 'Start with $2.99', href: '/pricing#trial-pack' },
   },
 
@@ -129,6 +145,8 @@ export const API_TIERS: ApiTier[] = [
     archetypeAccess: 'All currently-available archetypes',
     support: 'Email · 48h SLA',
     audience: 'Solo developers, evaluation-stage automation',
+    aiAgent: true,
+    llmBilling: 'byok_only',
     cta: { label: 'Start with $2.99', href: '/pricing#trial-pack' },
   },
   {
@@ -145,6 +163,8 @@ export const API_TIERS: ApiTier[] = [
     archetypeAccess: 'All currently-available archetypes',
     support: 'Email + Slack Connect · 12h SLA',
     audience: 'Production automation at scale',
+    aiAgent: true,
+    llmBilling: 'byok_or_bundled',
     cta: { label: 'Start with $2.99', href: '/pricing#trial-pack' },
     highlight: true,
   },
@@ -162,6 +182,8 @@ export const API_TIERS: ApiTier[] = [
     archetypeAccess: 'All currently-available archetypes',
     support: 'Slack Connect · 4h SLA',
     audience: 'High-throughput automation fleets',
+    aiAgent: true,
+    llmBilling: 'byok_or_bundled',
     cta: { label: 'Start with $2.99', href: '/pricing#trial-pack' },
   },
   {
@@ -178,19 +200,35 @@ export const API_TIERS: ApiTier[] = [
     archetypeAccess: 'All available + custom archetypes',
     support: 'Dedicated CSM · 1h SLA',
     audience: 'Negotiated commitment',
+    aiAgent: true,
+    llmBilling: 'byok_or_bundled_custom',
     cta: { label: 'Contact sales', href: 'mailto:sales@driftstack.dev' },
   },
 ];
 
+/**
+ * Self-hosted SKU — concurrent capacity is bounded by customer
+ * hardware, NOT by license. Per founder Tier 3 spec post-V-072: no
+ * `concurrentCeiling` field. Differentiation is by profile count,
+ * archetype access, multi-region / multi-node deployment,
+ * custom-archetype development, support tier, term, source escrow.
+ */
 export interface SelfHostedSku {
   id: string;
   name: string;
   monthlyUsd: number | null;
   annualMonthlyEquivalentUsd: number | null;
-  hardwareRequired: string;
-  concurrent: string;
-  archetypeAccess: string;
-  minimumTerm: string;
+  annualUsd: number | null;
+  /** Profile count limit. `null` = unlimited (Enterprise). */
+  profilesMax: number | null;
+  /** Archetype slot limit. `null` = unlimited (Enterprise). */
+  archetypesMax: number | null;
+  multiRegion: boolean;
+  multiNodeClustering: boolean;
+  customArchetypeDevelopment: 'none' | 'limited' | 'unlimited';
+  supportTier: 'email_48h' | 'email_slack_12h' | 'dedicated_csm_1h';
+  minimumTermMonths: number;
+  sourceEscrow: boolean;
   ctaHref: string;
 }
 
@@ -200,10 +238,15 @@ export const SELF_HOSTED_SKUS: SelfHostedSku[] = [
     name: 'Self-Hosted Solo',
     monthlyUsd: 1_000,
     annualMonthlyEquivalentUsd: 800,
-    hardwareRequired: 'Mac Mini M4 16 GB (customer-purchased)',
-    concurrent: '4 concurrent ceiling',
-    archetypeAccess: '1 archetype',
-    minimumTerm: '3-month minimum',
+    annualUsd: 9_600,
+    profilesMax: 25,
+    archetypesMax: 1,
+    multiRegion: false,
+    multiNodeClustering: false,
+    customArchetypeDevelopment: 'none',
+    supportTier: 'email_48h',
+    minimumTermMonths: 3,
+    sourceEscrow: false,
     ctaHref: 'mailto:sales@driftstack.dev?subject=Self-Hosted%20Solo',
   },
   {
@@ -211,10 +254,15 @@ export const SELF_HOSTED_SKUS: SelfHostedSku[] = [
     name: 'Self-Hosted Pro',
     monthlyUsd: 2_000,
     annualMonthlyEquivalentUsd: 1_600,
-    hardwareRequired: 'Mac Studio M4 Max',
-    concurrent: '12–16 concurrent',
-    archetypeAccess: '3 archetypes',
-    minimumTerm: '3-month minimum',
+    annualUsd: 19_200,
+    profilesMax: 100,
+    archetypesMax: 3,
+    multiRegion: true,
+    multiNodeClustering: false,
+    customArchetypeDevelopment: 'limited',
+    supportTier: 'email_slack_12h',
+    minimumTermMonths: 3,
+    sourceEscrow: false,
     ctaHref: 'mailto:sales@driftstack.dev?subject=Self-Hosted%20Pro',
   },
   {
@@ -222,10 +270,15 @@ export const SELF_HOSTED_SKUS: SelfHostedSku[] = [
     name: 'Self-Hosted Enterprise',
     monthlyUsd: null,
     annualMonthlyEquivalentUsd: 4_000,
-    hardwareRequired: 'Mac Studio Ultra / Mac Pro / multi-node cluster',
-    concurrent: '32+ concurrent',
-    archetypeAccess: 'Unlimited archetypes',
-    minimumTerm: '12-month minimum',
+    annualUsd: 48_000,
+    profilesMax: null,
+    archetypesMax: null,
+    multiRegion: true,
+    multiNodeClustering: true,
+    customArchetypeDevelopment: 'unlimited',
+    supportTier: 'dedicated_csm_1h',
+    minimumTermMonths: 12,
+    sourceEscrow: true,
     ctaHref: 'mailto:sales@driftstack.dev?subject=Self-Hosted%20Enterprise',
   },
 ];

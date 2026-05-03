@@ -2,9 +2,42 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { SELF_HOSTED_SKUS } from '../data/pricing.ts';
 
+const HARDWARE_BY_SKU: Record<string, string> = {
+  self_hosted_solo: 'Mac Mini M4 16 GB (customer-purchased)',
+  self_hosted_pro: 'Mac Studio M4 Max',
+  self_hosted_enterprise: 'Mac Studio Ultra / Mac Pro / multi-node cluster',
+};
+
 function fmtUsd(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
   return value % 1 === 0 ? `$${value.toLocaleString('en-US')}` : `$${value.toFixed(2)}`;
+}
+
+function fmtArchetypes(max: number | null): string {
+  if (max === null) return 'All available + custom archetypes';
+  return max === 1 ? '1 archetype' : `${max.toString()} archetypes`;
+}
+
+function fmtSupportTier(tier: 'email_48h' | 'email_slack_12h' | 'dedicated_csm_1h'): string {
+  switch (tier) {
+    case 'email_48h':
+      return 'Email · 48h SLA';
+    case 'email_slack_12h':
+      return 'Email + Slack Connect · 12h SLA';
+    case 'dedicated_csm_1h':
+      return 'Dedicated CSM · 1h SLA';
+  }
+}
+
+function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string {
+  switch (level) {
+    case 'none':
+      return '—';
+    case 'limited':
+      return 'Limited (1/yr)';
+    case 'unlimited':
+      return 'Unlimited';
+  }
 }
 ---
 
@@ -118,21 +151,48 @@ function fmtUsd(value: number | null | undefined): string {
             <dl class="mt-6 space-y-3 text-sm">
               <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
                 <dt class="text-slate-500">Hardware</dt>
-                <dd class="text-right text-slate-900">{sku.hardwareRequired}</dd>
+                <dd class="text-right text-slate-900">{HARDWARE_BY_SKU[sku.id]}</dd>
               </div>
               <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
-                <dt class="text-slate-500">Concurrent</dt>
-                <dd class="text-right text-slate-900">{sku.concurrent}</dd>
+                <dt class="text-slate-500">Browser profiles</dt>
+                <dd class="text-right text-slate-900">
+                  {sku.profilesMax === null ? 'Unlimited' : sku.profilesMax.toString()}
+                </dd>
               </div>
               <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
                 <dt class="text-slate-500">Archetypes</dt>
-                <dd class="text-right text-slate-900">{sku.archetypeAccess}</dd>
+                <dd class="text-right text-slate-900">{fmtArchetypes(sku.archetypesMax)}</dd>
+              </div>
+              <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <dt class="text-slate-500">Multi-region</dt>
+                <dd class="text-right text-slate-700">{sku.multiRegion ? 'Yes' : 'No'}</dd>
+              </div>
+              <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <dt class="text-slate-500">Multi-node clustering</dt>
+                <dd class="text-right text-slate-700">{sku.multiNodeClustering ? 'Yes' : 'No'}</dd>
+              </div>
+              <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <dt class="text-slate-500">Custom archetype dev</dt>
+                <dd class="text-right text-slate-700">
+                  {fmtCustomArchetypeDev(sku.customArchetypeDevelopment)}
+                </dd>
+              </div>
+              <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <dt class="text-slate-500">Source escrow</dt>
+                <dd class="text-right text-slate-700">{sku.sourceEscrow ? 'Yes' : 'No'}</dd>
+              </div>
+              <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <dt class="text-slate-500">Support</dt>
+                <dd class="text-right text-slate-600">{fmtSupportTier(sku.supportTier)}</dd>
               </div>
               <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
                 <dt class="text-slate-500">Minimum term</dt>
-                <dd class="text-right text-slate-900">{sku.minimumTerm}</dd>
+                <dd class="text-right text-slate-900">{sku.minimumTermMonths.toString()}-month</dd>
               </div>
             </dl>
+            <p class="mt-3 text-xs text-slate-500">
+              Concurrent capacity is bounded by your hardware, not by license.
+            </p>
             <a href={sku.ctaHref} class="btn-primary mt-6 w-full">Contact sales</a>
           </div>
         ))}
