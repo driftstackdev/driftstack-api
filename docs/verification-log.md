@@ -2206,3 +2206,45 @@ Audit pass closed. Public surface is clean against L-001. Wire-shape regression 
 ### Next
 
 Entity-org transition prep (KvK 2026-05-21, 18 days out). Scope what the geruisloze omzetting touches platform-side; founder handles the legal track.
+
+---
+
+## V-038 — Entity-org transition prep (KvK 2026-05-21)
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Pre-cutover scoping. KvK closure target is 18 days out.
+
+Per founder direction: scope what the geruisloze omzetting touches platform-side. Founder handles the legal track separately (out of scope per `CLAUDE.md`).
+
+### What changed
+
+- **`docs/entity-org-transition.md`** — new doc. TL;DR sequence, current-state inventory ("already neutral"), punch list to apply post-KvK, registry-ownership transfer table, risks (especially "don't rename the GitHub org or the Go module path breaks irreversibly").
+
+### Empirical findings
+
+1. **Founder name appears nowhere in published metadata.** Audit pass confirms `LICENSE` is `Copyright (c) 2026 driftstackdev` (org name, not person), no `author` fields populated in npm package.json, Python `pyproject.toml` says `Driftstack` (org-neutral), no founder email or address embedded anywhere. The publish-yesterday work landed clean — no churn needed during the transition.
+
+2. **GitHub org name is technical infrastructure, not trademark.** Renaming `driftstackdev` would break every `go get` against the published Go module path (`github.com/driftstackdev/driftstack-api/packages/sdk-go`). Decision pinned in the doc: keep the GitHub org name regardless of the BV's legal name. Same logic for the `@driftstack` npm scope — it's the import name, not a name on the wall.
+
+3. **Tauri bundle identifier `dev.driftstack.gui` should NOT change.** Renaming invalidates the local store (`~/Library/Application Support/dev.driftstack.gui/...`), forcing API key + proxy re-entry. Already org-neutral; leave.
+
+4. **Three things are founder action only** (account-level, not file-level): Apple Developer cert swap, npm/PyPI/GitHub registry ownership transfers (one row per registry in the table). Sequence guidance: add BV account as co-owner FIRST, remove personal AFTER first BV publish — don't atomic-swap.
+
+5. **Two open questions** for the founder before applying the punch list at KvK closure: final BV legal name + KvK number + BTW number (paste when available); support email decision (default assumed `support@driftstack.dev`).
+
+### Surprise
+
+The transition is small. Most of the "what changes" surface is already neutral because the publish-yesterday cycle (V-027–V-029) was deliberately org-named, not founder-named. The post-KvK punch list lands in one commit + one coordinated SDK minor bump (api-types 0.2.0, sdk 0.2.0, sdk-go 0.2.0, sdk-python 0.2.0). The founder track (legal entity, billing, ToS, invoicing) is the long pole — platform side rides along.
+
+### Verify chain
+
+No code changes. Doc-only addition. Format check clean.
+
+### Status
+
+Scoped. Awaiting KvK closure inputs. Punch list lands in one post-closure session.
+
+### Next
+
+CAPABILITIES.md cross-check (when founder drafts). Idle until then.

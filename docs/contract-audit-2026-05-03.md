@@ -26,7 +26,7 @@ language SDKs' public surfaces, and their existing test coverage.
    (`packages/api-types/src/sessions.ts:61`). TS / Python SDKs both
    expose it; Go customers had no way to set it. **Fix landed:**
    `packages/sdk-go/types.go:178` → added `TimeoutMS int
-   \`json:"timeout_ms,omitempty"\``.
+\`json:"timeout_ms,omitempty"\``.
 
 Both fixes ride out as `Go SDK 0.1.3` (tag `packages/sdk-go/v0.1.3`).
 Same shape as V-032's silent-noop scroll fix — pre-1.0, zero
@@ -69,7 +69,7 @@ customers, breaking is fine.
      positioning ("upper-right corner of the button").
    - **Remove** — fold positional intent into selectors instead
      (`button.primary > .icon-arrow`). Tighter L-001 alignment.
-   No fix today; flagged for founder decision.
+     No fix today; flagged for founder decision.
 
 5. **TypeScript SDK has no CHANGELOG / version-bump documentation.**
    Python and Go both have `CHANGELOG.md` files declaring
@@ -126,11 +126,11 @@ No mechanic-level primitives on the customer-facing surface.
 
 ## Marshalling round-trip test coverage — final state
 
-| SDK     | File                                              | Variants covered | Status post-audit |
-|---------|---------------------------------------------------|------------------|-------------------|
-| TS      | `tests/unit/wire-shape.test.ts`                   | InteractAction × 5, WaitCondition × 4, NavigateRequest, L-001 reject × 2 | ✅ landed today |
-| Python  | `tests/test_wire_shape.py`                        | InteractAction × 5, WaitCondition × 3, NavigateRequest + bounds, L-001 reject × 2 | ✅ landed today |
-| Go      | `types_test.go`                                   | InteractAction × 4, WaitCondition × 4, NavigateRequest | ✅ extended today |
+| SDK    | File                            | Variants covered                                                                  | Status post-audit |
+| ------ | ------------------------------- | --------------------------------------------------------------------------------- | ----------------- |
+| TS     | `tests/unit/wire-shape.test.ts` | InteractAction × 5, WaitCondition × 4, NavigateRequest, L-001 reject × 2          | ✅ landed today   |
+| Python | `tests/test_wire_shape.py`      | InteractAction × 5, WaitCondition × 3, NavigateRequest + bounds, L-001 reject × 2 | ✅ landed today   |
+| Go     | `types_test.go`                 | InteractAction × 4, WaitCondition × 4, NavigateRequest                            | ✅ extended today |
 
 ## Top 3 to surface to founder
 
