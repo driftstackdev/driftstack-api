@@ -26,11 +26,13 @@ interface TierExpectation {
 }
 
 const TIER_LIMITS: TierExpectation[] = [
-  { tier: 'free', limit: 1 },
-  { tier: 'starter', limit: 2 },
-  { tier: 'solo', limit: 4 },
-  { tier: 'builder', limit: 8 },
-  // 'scale' (24) and 'enterprise' (32) are skipped from this loop because
+  { tier: 'trial_pack', limit: 1 },
+  { tier: 'solo_manual', limit: 1 },
+  { tier: 'team_manual', limit: 3 },
+  { tier: 'api_starter', limit: 2 },
+  { tier: 'agency_manual', limit: 8 },
+  { tier: 'api_builder', limit: 8 },
+  // 'api_scale' (24) and 'enterprise' (32) are skipped from this loop because
   // creating 24+ sessions per test multiplies the suite runtime; they're
   // covered by spot-check tests below.
 ];
@@ -79,8 +81,8 @@ for (const { tier, limit } of TIER_LIMITS) {
   });
 }
 
-test('tier=scale: 25th concurrent session denied (spot-check)', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'scale' });
+test('tier=api_scale: 25th concurrent session denied (spot-check)', async ({ request }) => {
+  const seed = await seedAccount(server.client, { tier: 'api_scale' });
   await clearRateLimits(server.redis);
 
   // Create 24 concurrent sessions in parallel — concurrency-limit logic
@@ -96,7 +98,7 @@ test('tier=scale: 25th concurrent session denied (spot-check)', async ({ request
   // Drain to exactly 24 if there's slack.
   if (successes > 24) {
     // unreachable — tier limit is 24 strictly enforced sequentially
-    throw new Error(`scale tier let ${successes.toString()} sessions through, expected ≤ 24`);
+    throw new Error(`api_scale tier let ${successes.toString()} sessions through, expected ≤ 24`);
   }
 
   // After whatever count succeeded, an extra attempt should fail if the
@@ -115,7 +117,7 @@ test('tier=scale: 25th concurrent session denied (spot-check)', async ({ request
 });
 
 test('destroying a session frees a slot', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'free' });
+  const seed = await seedAccount(server.client, { tier: 'trial_pack' });
   await clearRateLimits(server.redis);
 
   // Free tier allows 1 concurrent.

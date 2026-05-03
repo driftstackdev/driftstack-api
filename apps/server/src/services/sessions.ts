@@ -21,25 +21,50 @@ import type { GUIInputRequest } from '../schemas/gui-input.js';
 import { ConcurrencyLimitError, NotFoundError, SessionDestroyedError } from '../lib/errors.js';
 
 // ───────────────────────────────────────────────────────────────────────────
-// Concurrent session limits per tier
+// Concurrent session limits + profile count limits per tier
 // ───────────────────────────────────────────────────────────────────────────
 
-// Locked pricing model — see D-019. Values from parent driftstack
-// repo file 127 (`docs/planning/127-pricing-self-hosted-strategy.md`),
-// which supersedes files 8 + 39. Enterprise is custom-negotiated;
-// the value here is a sentinel for the smallest custom contract,
-// upgraded per-account via the rate-limit-overrides path.
+// Locked pricing model — see ADR-004 (two-ladder concurrent-only,
+// supersedes D-019 / file 127 single-ladder hours-with-overage).
+// Concurrent caps are the primary metering primitive on paid tiers;
+// hours metering exists ONLY for trial_pack (per ADR-003
+// trial_pack_credit_cents decrement). Enterprise is custom-
+// negotiated; the value here is a sentinel for the smallest custom
+// contract, upgraded per-account via the rate-limit-overrides path.
 const TIER_CONCURRENT_SESSION_LIMITS: Record<AccountTier, number> = {
-  free: 1,
-  starter: 2,
-  solo: 4,
-  builder: 8,
-  scale: 24,
+  trial_pack: 1,
+  solo_manual: 1,
+  team_manual: 3,
+  agency_manual: 8,
+  api_starter: 2,
+  api_builder: 8,
+  api_scale: 24,
   enterprise: 32,
 };
 
 export function concurrentSessionLimitFor(tier: AccountTier): number {
   return TIER_CONCURRENT_SESSION_LIMITS[tier];
+}
+
+// Profile count limit per tier — enforced at the /v1/profiles
+// creation gate (route lands in a future Workstream; constant +
+// helper land here per ADR-004 enforcement plan). Manual ladder
+// uses profile count as the tier-defining metric; API ladder also
+// caps profiles to prevent unbounded growth at lower tiers.
+// Enterprise is `null` = unlimited (per-contract overrides apply).
+const PROFILES_PER_TIER: Record<AccountTier, number | null> = {
+  trial_pack: 1,
+  solo_manual: 10,
+  team_manual: 50,
+  agency_manual: 200,
+  api_starter: 25,
+  api_builder: 100,
+  api_scale: 500,
+  enterprise: null,
+};
+
+export function profileLimitFor(tier: AccountTier): number | null {
+  return PROFILES_PER_TIER[tier];
 }
 
 // ───────────────────────────────────────────────────────────────────────────

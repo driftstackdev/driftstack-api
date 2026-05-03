@@ -22,26 +22,26 @@ const accId = (fixture: TestAppFixture): string => `acc_${fixture.accountId}`;
 
 describe('POST /v1/admin/accounts/:id/tier', () => {
   it('200 changes the tier; updated row reflected in response', async () => {
-    fx = await buildTestApp({ tier: 'starter' });
+    fx = await buildTestApp({ tier: 'api_starter' });
     const res = await fx.app.inject({
       method: 'POST',
       url: `/v1/admin/accounts/${accId(fx)}/tier`,
       headers: auth(fx),
-      payload: { tier: 'scale', reason: 'enterprise pilot' },
+      payload: { tier: 'api_scale', reason: 'enterprise pilot' },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<Record<string, unknown>>();
-    expect(body.tier).toBe('scale');
+    expect(body.tier).toBe('api_scale');
     expect(body.id).toBe(accId(fx));
   });
 
   it('writes an audit row capturing input + admin identity', async () => {
-    fx = await buildTestApp({ tier: 'free' });
+    fx = await buildTestApp({ tier: 'trial_pack' });
     await fx.app.inject({
       method: 'POST',
       url: `/v1/admin/accounts/${accId(fx)}/tier`,
       headers: auth(fx),
-      payload: { tier: 'builder', reason: 'paying customer' },
+      payload: { tier: 'api_builder', reason: 'paying customer' },
     });
     const all = fx.adminAuditRepo.getAll();
     expect(all).toHaveLength(1);
@@ -50,7 +50,7 @@ describe('POST /v1/admin/accounts/:id/tier', () => {
     expect(all[0]?.adminKeyId).toBe(fx.apiKeyId);
     expect(all[0]?.targetAccountId).toBe(fx.accountId);
     expect(all[0]?.result).toBe('success');
-    expect(all[0]?.inputPayload).toEqual({ tier: 'builder', reason: 'paying customer' });
+    expect(all[0]?.inputPayload).toEqual({ tier: 'api_builder', reason: 'paying customer' });
   });
 
   it('403 when admin scope is missing', async () => {
@@ -59,7 +59,7 @@ describe('POST /v1/admin/accounts/:id/tier', () => {
       method: 'POST',
       url: `/v1/admin/accounts/${accId(fx)}/tier`,
       headers: auth(fx),
-      payload: { tier: 'scale' },
+      payload: { tier: 'api_scale' },
     });
     expect(res.statusCode).toBe(403);
     // Audit row written even on the 403 — it's an admin action attempt.
@@ -76,7 +76,7 @@ describe('POST /v1/admin/accounts/:id/tier', () => {
       method: 'POST',
       url: '/v1/admin/accounts/acc_00000000-0000-4000-8000-000000000999/tier',
       headers: auth(fx),
-      payload: { tier: 'builder' },
+      payload: { tier: 'api_builder' },
     });
     expect(res.statusCode).toBe(404);
     // 404 still produces an audit row — the attempt is recorded.
@@ -106,13 +106,13 @@ describe('POST /v1/admin/accounts/:id/tier', () => {
       method: 'POST',
       url: '/v1/admin/accounts/not-a-prefixed-id/tier',
       headers: auth(fx),
-      payload: { tier: 'builder' },
+      payload: { tier: 'api_builder' },
     });
     expect(res.statusCode).toBe(400);
   });
 
   it('cache invalidation: tier change bumps account version', async () => {
-    fx = await buildTestApp({ tier: 'starter' });
+    fx = await buildTestApp({ tier: 'api_starter' });
 
     // Warm cache via one auth-bearing request.
     await fx.app.inject({
@@ -127,7 +127,7 @@ describe('POST /v1/admin/accounts/:id/tier', () => {
       method: 'POST',
       url: `/v1/admin/accounts/${accId(fx)}/tier`,
       headers: auth(fx),
-      payload: { tier: 'scale' },
+      payload: { tier: 'api_scale' },
     });
     expect(res.statusCode).toBe(200);
 

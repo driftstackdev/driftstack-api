@@ -21,8 +21,8 @@ afterEach(async () => {
 
 describe('admin: suspend → blocked → unsuspend → restored', () => {
   it('admin A can suspend account B; B is blocked; A can unsuspend; B works again', async () => {
-    fx = await buildTestApp({ tier: 'builder' });
-    const target = await seedAdditionalAccount(fx, { tier: 'builder' });
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const target = await seedAdditionalAccount(fx, { tier: 'api_builder' });
 
     const adminAuth = { authorization: `Bearer ${fx.plaintext}` };
     const targetAuth = { authorization: `Bearer ${target.plaintext}` };
@@ -137,8 +137,8 @@ describe('admin: suspend → blocked → unsuspend → restored', () => {
   });
 
   it('cross-account: tier change on B doesn’t affect A’s tier', async () => {
-    fx = await buildTestApp({ tier: 'free' });
-    const target = await seedAdditionalAccount(fx, { tier: 'free' });
+    fx = await buildTestApp({ tier: 'trial_pack' });
+    const target = await seedAdditionalAccount(fx, { tier: 'trial_pack' });
     const adminAuth = { authorization: `Bearer ${fx.plaintext}` };
 
     // Admin changes B's tier to scale.
@@ -146,7 +146,7 @@ describe('admin: suspend → blocked → unsuspend → restored', () => {
       method: 'POST',
       url: `/v1/admin/accounts/acc_${target.accountId}/tier`,
       headers: adminAuth,
-      payload: { tier: 'scale' },
+      payload: { tier: 'api_scale' },
     });
 
     // A's tier is unchanged.
@@ -156,7 +156,7 @@ describe('admin: suspend → blocked → unsuspend → restored', () => {
       headers: adminAuth,
     });
     expect(aWhoami.statusCode).toBe(200);
-    expect(aWhoami.json<{ tier: string }>().tier).toBe('free');
+    expect(aWhoami.json<{ tier: string }>().tier).toBe('trial_pack');
 
     // B sees the new tier on the next request (cache invalidation
     // forces a re-load).
@@ -166,6 +166,6 @@ describe('admin: suspend → blocked → unsuspend → restored', () => {
       headers: { authorization: `Bearer ${target.plaintext}` },
     });
     expect(bWhoami.statusCode).toBe(200);
-    expect(bWhoami.json<{ tier: string }>().tier).toBe('scale');
+    expect(bWhoami.json<{ tier: string }>().tier).toBe('api_scale');
   });
 });

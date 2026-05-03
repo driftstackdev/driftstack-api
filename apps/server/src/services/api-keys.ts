@@ -90,7 +90,7 @@ export class ApiKeysService {
       }
     }
 
-    const env = ctx.account.tier === 'free' ? 'test' : 'live';
+    const env = ctx.account.tier === 'trial_pack' ? 'test' : 'live';
     const plaintext = generateApiKey(env);
     const keyHash = await hashApiKey(plaintext);
     const keyPrefix = keyPrefixFromPlaintext(plaintext);

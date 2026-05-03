@@ -57,7 +57,7 @@ test('POST /v1/api-keys: 400 with empty scopes', async ({ request }) => {
 });
 
 test('POST /v1/api-keys: free tier returns ds_test_ prefix', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'free' });
+  const seed = await seedAccount(server.client, { tier: 'trial_pack' });
   const res = await request.post(`${server.baseUrl}/v1/api-keys`, {
     headers: authHeader(seed.plaintext),
     data: { name: 'free-key', scopes: ['read'] },
@@ -132,13 +132,13 @@ test('DELETE /v1/api-keys/:id: 403 when admin scope missing', async ({ request }
 test('GET /v1/usage: zero totals + tier quotas for fresh scale-tier account', async ({
   request,
 }) => {
-  const seed = await seedAccount(server.client, { tier: 'scale' });
+  const seed = await seedAccount(server.client, { tier: 'api_scale' });
   const res = await request.get(`${server.baseUrl}/v1/usage`, {
     headers: authHeader(seed.plaintext),
   });
   expect(res.status()).toBe(200);
   const body = (await res.json()) as Record<string, unknown>;
-  expect(body.tier).toBe('scale');
+  expect(body.tier).toBe('api_scale');
   expect((body.totals as Record<string, number>).navigate).toBe(0);
   expect((body.quotas as Record<string, number>).navigate).toBe(100_000);
 });
@@ -154,7 +154,7 @@ test('GET /v1/usage: enterprise tier returns null quotas', async ({ request }) =
 });
 
 test('GET /v1/usage: aggregates totals from usage_records via DB', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'solo' });
+  const seed = await seedAccount(server.client, { tier: 'api_starter' });
   // Insert usage rows directly — exercises the DrizzleUsageRepo aggregation
   // path against real Postgres (count(*)::int group by record_type).
   await server.client`

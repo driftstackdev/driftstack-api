@@ -136,24 +136,39 @@ describe('MemoryRateLimitStore.consume', () => {
 
 describe('bucketConfigFor', () => {
   it('returns tier-specific bucket when defined', () => {
-    const cfg = bucketConfigFor('scale', 'sessions:create');
+    const cfg = bucketConfigFor('api_scale', 'sessions:create');
     expect(cfg.capacity).toBe(120);
     expect(cfg.refillPerSecond).toBeCloseTo(2);
   });
 
   it('falls back to the tier global bucket for unknown bucket keys', () => {
-    const cfg = bucketConfigFor('solo', 'unknown:bucket');
-    expect(cfg.capacity).toBe(600);
-    expect(cfg.refillPerSecond).toBe(10);
+    const cfg = bucketConfigFor('api_starter', 'unknown:bucket');
+    expect(cfg.capacity).toBe(240);
+    expect(cfg.refillPerSecond).toBe(4);
   });
 
-  it('tiers scale monotonically up to enterprise', () => {
-    const tiers = ['free', 'starter', 'solo', 'builder', 'scale', 'enterprise'] as const;
+  it('tiers scale monotonically along each ladder up to enterprise', () => {
+    // Two-ladder per ADR-004 — verify each ladder + trial pack scales
+    // monotonically up. Bonus: enterprise is the strict upper bound.
+    const orderedAlongLadders = [
+      'trial_pack',
+      'solo_manual',
+      'team_manual',
+      'agency_manual',
+      'enterprise',
+    ] as const;
     let prev = 0;
-    for (const t of tiers) {
+    for (const t of orderedAlongLadders) {
       const cfg = bucketConfigFor(t, 'global');
       expect(cfg.capacity).toBeGreaterThan(prev);
       prev = cfg.capacity;
+    }
+    const apiLadder = ['api_starter', 'api_builder', 'api_scale', 'enterprise'] as const;
+    let prevApi = 0;
+    for (const t of apiLadder) {
+      const cfg = bucketConfigFor(t, 'global');
+      expect(cfg.capacity).toBeGreaterThan(prevApi);
+      prevApi = cfg.capacity;
     }
   });
 });
@@ -163,7 +178,7 @@ describe('rateLimitConsume (service)', () => {
     const store = new MemoryRateLimitStore();
     const r = await rateLimitConsume(store, {
       accountId: 'acc-1',
-      tier: 'free',
+      tier: 'trial_pack',
       bucketKey: 'global',
       now: 1000,
     });

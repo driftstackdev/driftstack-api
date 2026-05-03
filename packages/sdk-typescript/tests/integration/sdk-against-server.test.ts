@@ -92,7 +92,7 @@ describe('@driftstack/sdk against real server', () => {
   });
 
   it('list returns paginated shape', async () => {
-    fx = await buildTestApp({ tier: 'builder' });
+    fx = await buildTestApp({ tier: 'api_builder' });
     const sdk = new Driftstack({
       apiKey: fx.plaintext,
       baseUrl: 'http://test.local',
@@ -128,7 +128,7 @@ describe('@driftstack/sdk against real server', () => {
   });
 
   it('usage.current returns the period summary', async () => {
-    fx = await buildTestApp({ tier: 'scale' });
+    fx = await buildTestApp({ tier: 'api_scale' });
     const sdk = new Driftstack({
       apiKey: fx.plaintext,
       baseUrl: 'http://test.local',
@@ -137,7 +137,7 @@ describe('@driftstack/sdk against real server', () => {
     });
 
     const u = await sdk.usage.current();
-    expect(u.tier).toBe('scale');
+    expect(u.tier).toBe('api_scale');
     expect(u.totals.navigate).toBe(0);
   });
 });

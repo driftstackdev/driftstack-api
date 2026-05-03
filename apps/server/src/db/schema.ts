@@ -19,11 +19,13 @@ import {
 // ───────────────────────────────────────────────────────────────────────────
 
 export const accountTier = pgEnum('account_tier', [
-  'free',
-  'starter',
-  'solo',
-  'builder',
-  'scale',
+  'trial_pack',
+  'solo_manual',
+  'team_manual',
+  'agency_manual',
+  'api_starter',
+  'api_builder',
+  'api_scale',
   'enterprise',
 ]);
 
@@ -101,7 +103,7 @@ export const accounts = pgTable(
       .default(sql`gen_random_uuid()`),
     email: text('email').notNull(),
     name: text('name'),
-    tier: accountTier('tier').notNull().default('free'),
+    tier: accountTier('tier').notNull().default('trial_pack'),
     status: accountStatus('status').notNull().default('active'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()

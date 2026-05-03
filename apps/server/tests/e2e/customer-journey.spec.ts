@@ -24,7 +24,7 @@ test('full customer journey: account → key → session → ops → destroy →
   request,
 }) => {
   // Bootstrap account with admin scope (simulates founder/CLI provisioning).
-  const admin = await seedAccount(server.client, { tier: 'builder' });
+  const admin = await seedAccount(server.client, { tier: 'api_builder' });
 
   // 1. Customer creates a scoped (read+write only) API key for their app.
   const createKeyRes = await request.post(`${server.baseUrl}/v1/api-keys`, {

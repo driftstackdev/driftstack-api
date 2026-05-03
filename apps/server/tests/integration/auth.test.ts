@@ -26,7 +26,7 @@ describe('auth pipeline (GET /v1/whoami)', () => {
     expect(res.headers['x-ratelimit-remaining']).toBeTruthy();
 
     const body = res.json<Record<string, unknown>>();
-    expect(body.tier).toBe('builder');
+    expect(body.tier).toBe('api_builder');
     expect(body.scopes).toEqual(['read', 'write', 'admin']);
   });
 
@@ -180,7 +180,7 @@ describe('rate limit', () => {
     // Drain the bucket directly via the store to avoid scrypt-bound timing
     // dependence on number of HTTP calls. Free tier has capacity 60 in the
     // 'global' bucket. The store key encodes (rl:<accountId>:global).
-    const fx = await buildTestApp({ tier: 'free' });
+    const fx = await buildTestApp({ tier: 'trial_pack' });
     try {
       const drained = await fx.rateLimitStore.consume({
         key: `rl:${fx.accountId}:global`,
@@ -209,7 +209,7 @@ describe('rate limit', () => {
   });
 
   it('exposes x-ratelimit-remaining on successful authenticated requests', async () => {
-    const fx = await buildTestApp({ tier: 'free' });
+    const fx = await buildTestApp({ tier: 'trial_pack' });
     try {
       const res = await fx.app.inject({
         method: 'GET',

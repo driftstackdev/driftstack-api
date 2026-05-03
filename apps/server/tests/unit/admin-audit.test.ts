@@ -30,7 +30,7 @@ describe('AdminAuditService.record', () => {
       action: 'account.tier_changed',
       targetAccountId: TARGET_A,
       targetResourceId: null,
-      inputPayload: { from: 'free', to: 'builder' },
+      inputPayload: { from: 'trial_pack', to: 'api_builder' },
       result: 'success',
       ipAddress: '127.0.0.1',
     });
@@ -38,7 +38,7 @@ describe('AdminAuditService.record', () => {
     expect(row.action).toBe('account.tier_changed');
     expect(row.adminAccountId).toBe(ADMIN);
     expect(row.targetAccountId).toBe(TARGET_A);
-    expect(row.inputPayload).toEqual({ from: 'free', to: 'builder' });
+    expect(row.inputPayload).toEqual({ from: 'trial_pack', to: 'api_builder' });
     expect(row.result).toBe('success');
     expect(row.timestamp).toBeInstanceOf(Date);
     expect(repo.getAll()).toHaveLength(1);

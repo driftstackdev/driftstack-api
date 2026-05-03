@@ -39,78 +39,80 @@ const ALL_TYPES: UsageRecordType[] = [
 ];
 
 // ───────────────────────────────────────────────────────────────────────────
-// Tier quotas. null = unmetered (enterprise-only by default).
+// Tier quotas. null = unmetered.
 // ───────────────────────────────────────────────────────────────────────────
 
-// Locked pricing model — see D-019 + parent driftstack repo file 127
-// (`docs/planning/127-pricing-self-hosted-strategy.md`), which
-// supersedes files 8 + 39.
+// Per ADR-004: paid tiers are concurrent-only; hours metering exists
+// ONLY for the trial pack (via `accounts.trial_pack_credit_cents`
+// decrement at session_end per ADR-003 — independent of this map).
+// All TIER_QUOTAS values are now `null` (unmetered) across every
+// tier; the `session_minute` usage_record_type stays as the granular
+// ledger primitive for analytics + abuse detection but is not gated
+// against a per-tier cap. Operation-count meters (navigate / interact
+// / wait / state_capture / screenshot_capture) likewise remain
+// unmetered scaffolding.
 //
-// **Primary billing meter is per-browser-hour.** The `session_minute`
-// usage_record_type stays as the granular ledger primitive (one row
-// per minute of active session time); the customer-facing cap is
-// `session_minute_total / 60 = browser_hour_total` rolled up at
-// summary time. Workstream D's Stripe-meter integration emits the
-// per-browser-hour line item from the same minute-granular ledger.
-//
-// `session_minute` quota values below = file-127 monthly hour cap × 60
-// minutes. Per-tier hour caps:
-//   - free       25 hr  (one-time, 7-day trial window — full trial
-//                        primitive lands in Workstream F; the value
-//                        below is the "credit pool size" expressed in
-//                        minutes for now)
-//   - starter   100 hr/mo
-//   - solo      400 hr/mo
-//   - builder 1,500 hr/mo
-//   - scale   6,000 hr/mo
-//   - enterprise unmetered (null)
-//
-// Operation-count meters (navigate / interact / wait / state_capture /
-// screenshot_capture) are NOT part of the file-127 pricing model.
-// They remain as scaffolding for analytics + abuse detection; quotas
-// here are conservative fair-use-style ceilings, not commercial
-// commitments. Workstream D revisits when the Stripe meter setup
-// lands.
+// V-073 NOTE: this map is preserved with `null` values rather than
+// removed entirely so the `/v1/usage` summary response shape (which
+// returns `quotas: Record<UsageRecordType, number | null>`) doesn't
+// change. The customer-visible signal is "no per-meter caps at this
+// tier" rather than the absence of the field.
 const TIER_QUOTAS: Record<AccountTier, Record<UsageRecordType, number | null>> = {
-  free: {
-    session_minute: 1_500, // 25 hr (one-time, 7-day trial)
-    navigate: 100,
-    interact: 200,
-    wait: 200,
-    state_capture: 100,
-    screenshot_capture: 50,
+  trial_pack: {
+    session_minute: null,
+    navigate: null,
+    interact: null,
+    wait: null,
+    state_capture: null,
+    screenshot_capture: null,
   },
-  starter: {
-    session_minute: 6_000, // 100 hr/mo
-    navigate: 500,
-    interact: 1_000,
-    wait: 1_000,
-    state_capture: 500,
-    screenshot_capture: 250,
+  solo_manual: {
+    session_minute: null,
+    navigate: null,
+    interact: null,
+    wait: null,
+    state_capture: null,
+    screenshot_capture: null,
   },
-  solo: {
-    session_minute: 24_000, // 400 hr/mo
-    navigate: 5_000,
-    interact: 10_000,
-    wait: 10_000,
-    state_capture: 5_000,
-    screenshot_capture: 2_500,
+  team_manual: {
+    session_minute: null,
+    navigate: null,
+    interact: null,
+    wait: null,
+    state_capture: null,
+    screenshot_capture: null,
   },
-  builder: {
-    session_minute: 90_000, // 1,500 hr/mo
-    navigate: 25_000,
-    interact: 50_000,
-    wait: 50_000,
-    state_capture: 25_000,
-    screenshot_capture: 12_500,
+  agency_manual: {
+    session_minute: null,
+    navigate: null,
+    interact: null,
+    wait: null,
+    state_capture: null,
+    screenshot_capture: null,
   },
-  scale: {
-    session_minute: 360_000, // 6,000 hr/mo
-    navigate: 100_000,
-    interact: 200_000,
-    wait: 200_000,
-    state_capture: 100_000,
-    screenshot_capture: 50_000,
+  api_starter: {
+    session_minute: null,
+    navigate: null,
+    interact: null,
+    wait: null,
+    state_capture: null,
+    screenshot_capture: null,
+  },
+  api_builder: {
+    session_minute: null,
+    navigate: null,
+    interact: null,
+    wait: null,
+    state_capture: null,
+    screenshot_capture: null,
+  },
+  api_scale: {
+    session_minute: null,
+    navigate: null,
+    interact: null,
+    wait: null,
+    state_capture: null,
+    screenshot_capture: null,
   },
   enterprise: {
     session_minute: null,

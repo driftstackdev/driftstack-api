@@ -35,7 +35,7 @@ async function main(): Promise<void> {
         .values({
           email: SEED_EMAIL,
           name: 'Local Dev',
-          tier: 'builder',
+          tier: 'api_builder',
           status: 'active',
         })
         .returning({ id: accounts.id });

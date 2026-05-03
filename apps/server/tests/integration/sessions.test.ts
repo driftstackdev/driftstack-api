@@ -66,7 +66,7 @@ describe('POST /v1/sessions', () => {
   });
 
   it('429 ConcurrencyLimit when free-tier already at limit', async () => {
-    fx = await buildTestApp({ tier: 'free' });
+    fx = await buildTestApp({ tier: 'trial_pack' });
     await createSession(fx); // free tier limit = 1
 
     const res = await fx.app.inject({
@@ -112,7 +112,7 @@ describe('GET /v1/sessions', () => {
   });
 
   it('lists created sessions in reverse-chrono order', async () => {
-    fx = await buildTestApp({ tier: 'builder' });
+    fx = await buildTestApp({ tier: 'api_builder' });
     // Cache-amortised auth makes session creation fast enough that the three
     // creates can land in the same millisecond, breaking the reverse-chrono
     // sort. Sleep between each so timestamps are strictly distinct.
@@ -382,8 +382,8 @@ describe('DELETE /v1/sessions/:id', () => {
 
 describe('account scoping', () => {
   it('a session created by one account is invisible to another', async () => {
-    const a = await buildTestApp({ tier: 'builder' });
-    const b = await buildTestApp({ tier: 'builder' });
+    const a = await buildTestApp({ tier: 'api_builder' });
+    const b = await buildTestApp({ tier: 'api_builder' });
     try {
       const sessionA = await createSession(a);
       // B tries to navigate A's session id — should 404 (not 403, to avoid

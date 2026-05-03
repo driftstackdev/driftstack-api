@@ -25,7 +25,7 @@ const accId = (fixture: TestAppFixture): string => `acc_${fixture.accountId}`;
 
 describe('POST /v1/admin/accounts/:id/quota-override', () => {
   it('200 stores the override + returns the public shape', async () => {
-    fx = await buildTestApp({ tier: 'starter' });
+    fx = await buildTestApp({ tier: 'api_starter' });
     const res = await fx.app.inject({
       method: 'POST',
       url: `/v1/admin/accounts/${accId(fx)}/quota-override`,
@@ -295,7 +295,7 @@ describe('R2 consume-path integration', () => {
     for (let i = 0; i < 60; i++) {
       const r = await rateLimitConsume(store, {
         accountId: 'acc-1',
-        tier: 'free',
+        tier: 'trial_pack',
         bucketKey: 'global',
         overrides,
       });
@@ -319,7 +319,7 @@ describe('R2 consume-path integration', () => {
     for (let i = 0; i < 5; i++) {
       const r = await rateLimitConsume(store, {
         accountId: 'acc-1',
-        tier: 'starter',
+        tier: 'api_starter',
         bucketKey: 'global',
         overrides,
       });
@@ -330,14 +330,14 @@ describe('R2 consume-path integration', () => {
     // second denied.
     const ok = await rateLimitConsume(store, {
       accountId: 'acc-1',
-      tier: 'starter',
+      tier: 'api_starter',
       bucketKey: 'sessions:create',
       overrides,
     });
     expect(ok.allowed).toBe(true);
     const denied = await rateLimitConsume(store, {
       accountId: 'acc-1',
-      tier: 'starter',
+      tier: 'api_starter',
       bucketKey: 'sessions:create',
       overrides,
     });
@@ -345,7 +345,7 @@ describe('R2 consume-path integration', () => {
   });
 
   it('end-to-end via HTTP: setting an override is visible to the next request', async () => {
-    fx = await buildTestApp({ tier: 'free' });
+    fx = await buildTestApp({ tier: 'trial_pack' });
 
     // Warm the cache (loads AccountContext with no overrides).
     const before = await fx.app.inject({

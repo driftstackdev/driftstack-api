@@ -16,7 +16,7 @@ const auth = (fixture: TestAppFixture): { authorization: string } => ({
 
 describe('GET /v1/admin/accounts/:id/usage', () => {
   it('200 returns the period summary for the target account', async () => {
-    fx = await buildTestApp({ tier: 'builder' });
+    fx = await buildTestApp({ tier: 'api_builder' });
     const res = await fx.app.inject({
       method: 'GET',
       url: `/v1/admin/accounts/acc_${fx.accountId}/usage`,
@@ -25,7 +25,7 @@ describe('GET /v1/admin/accounts/:id/usage', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<Record<string, unknown>>();
     expect(body.account_id).toBe(`acc_${fx.accountId}`);
-    expect(body.tier).toBe('builder');
+    expect(body.tier).toBe('api_builder');
     expect(body.totals).toEqual({
       session_minute: 0,
       navigate: 0,
@@ -41,15 +41,19 @@ describe('GET /v1/admin/accounts/:id/usage', () => {
 
   it('uses the TARGET account tier (not the caller tier) for quotas', async () => {
     // Caller tier doesn't matter — admin endpoint reflects target.
-    fx = await buildTestApp({ tier: 'free' });
+    fx = await buildTestApp({ tier: 'trial_pack' });
     const res = await fx.app.inject({
       method: 'GET',
       url: `/v1/admin/accounts/acc_${fx.accountId}/usage`,
       headers: auth(fx),
     });
     const body = res.json<{ tier: string; quotas: Record<string, number | null> }>();
-    expect(body.tier).toBe('free');
-    expect(body.quotas.navigate).toBe(100); // free tier quota
+    expect(body.tier).toBe('trial_pack');
+    // Per ADR-004 all paid tiers + trial_pack are unmetered for the
+    // operation-count meters; quota values are `null` (no per-meter
+    // cap). Trial-pack hours metering is via accounts.trial_pack_credit_cents,
+    // independent of TIER_QUOTAS.
+    expect(body.quotas.navigate).toBeNull();
   });
 
   it('403 without admin scope', async () => {
@@ -96,7 +100,7 @@ describe('GET /v1/admin/audit-log', () => {
       adminKeyId: fixture.apiKeyId,
       action: 'account.tier_changed',
       targetAccountId: fixture.accountId,
-      inputPayload: { tier: 'scale' },
+      inputPayload: { tier: 'api_scale' },
       result: 'success',
     });
     await new Promise((r) => setTimeout(r, 5));

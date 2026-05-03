@@ -87,7 +87,7 @@ test('POST /v1/api-keys response matches CreateApiKeyResponse schema', async ({ 
 });
 
 test('GET /v1/usage response matches UsagePeriodSummary schema', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'scale' });
+  const seed = await seedAccount(server.client, { tier: 'api_scale' });
   const res = await request.get(`${server.baseUrl}/v1/usage`, {
     headers: authHeader(seed.plaintext),
   });

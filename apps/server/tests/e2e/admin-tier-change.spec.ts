@@ -27,8 +27,8 @@ test.beforeEach(async () => {
 
 test('admin tier-change: full stack — auth, cache, rate-limit, audit', async ({ request }) => {
   // Two distinct accounts: A (admin) and B (target).
-  const admin = await seedAccount(server.client, { tier: 'builder' });
-  const target = await seedAccount(server.client, { tier: 'free' });
+  const admin = await seedAccount(server.client, { tier: 'api_builder' });
+  const target = await seedAccount(server.client, { tier: 'trial_pack' });
 
   // 1. Sanity: B is on free tier (whoami reflects tier from cached ctx).
   const beforeWhoami = await request.get(`${server.baseUrl}/v1/whoami`, {
@@ -36,19 +36,19 @@ test('admin tier-change: full stack — auth, cache, rate-limit, audit', async (
   });
   expect(beforeWhoami.status()).toBe(200);
   const beforeBody = (await beforeWhoami.json()) as { tier: string };
-  expect(beforeBody.tier).toBe('free');
+  expect(beforeBody.tier).toBe('trial_pack');
 
   // 2. Admin A changes B's tier to scale.
   const tierChange = await request.post(
     `${server.baseUrl}/v1/admin/accounts/acc_${target.accountId}/tier`,
     {
       headers: authHeader(admin.plaintext),
-      data: { tier: 'scale', reason: 'enterprise pilot' },
+      data: { tier: 'api_scale', reason: 'enterprise pilot' },
     },
   );
   expect(tierChange.status()).toBe(200);
   const tierBody = (await tierChange.json()) as { id: string; tier: string };
-  expect(tierBody.tier).toBe('scale');
+  expect(tierBody.tier).toBe('api_scale');
   expect(tierBody.id).toBe(`acc_${target.accountId}`);
 
   // 3. Cache invalidation propagated: B's next request sees new tier.
@@ -59,14 +59,14 @@ test('admin tier-change: full stack — auth, cache, rate-limit, audit', async (
   });
   expect(afterWhoami.status()).toBe(200);
   const afterBody = (await afterWhoami.json()) as { tier: string };
-  expect(afterBody.tier).toBe('scale');
+  expect(afterBody.tier).toBe('api_scale');
 
   // 4. Admin A's tier is unchanged (cross-account isolation).
   const adminWhoami = await request.get(`${server.baseUrl}/v1/whoami`, {
     headers: authHeader(admin.plaintext),
   });
   expect(adminWhoami.status()).toBe(200);
-  expect(((await adminWhoami.json()) as { tier: string }).tier).toBe('builder');
+  expect(((await adminWhoami.json()) as { tier: string }).tier).toBe('api_builder');
 
   // 5. DB-level audit row: one entry with action=account.tier_changed,
   //    target=B's account, admin=A's account+key, success.
@@ -90,7 +90,7 @@ test('admin tier-change: full stack — auth, cache, rate-limit, audit', async (
   expect(row?.admin_account_id).toBe(admin.accountId);
   expect(row?.admin_key_id).toBe(admin.apiKeyId);
   expect(row?.result).toBe('success');
-  expect(row?.input_payload).toMatchObject({ tier: 'scale', reason: 'enterprise pilot' });
+  expect(row?.input_payload).toMatchObject({ tier: 'api_scale', reason: 'enterprise pilot' });
 
   // 6. The /v1/admin/audit-log read endpoint also surfaces the row.
   const auditList = await request.get(

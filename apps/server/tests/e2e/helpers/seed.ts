@@ -28,7 +28,7 @@ export async function seedAccount(
   input: SeedAccountInput = {},
 ): Promise<SeededAccount> {
   const db = drizzle(client, { schema });
-  const tier: AccountTier = input.tier ?? 'builder';
+  const tier: AccountTier = input.tier ?? 'api_builder';
 
   const [account] = await db
     .insert(accounts)
@@ -41,7 +41,7 @@ export async function seedAccount(
     .returning({ id: accounts.id });
   if (!account) throw new Error('failed to seed account');
 
-  const env = tier === 'free' ? 'test' : 'live';
+  const env = tier === 'trial_pack' ? 'test' : 'live';
   const plaintext = generateApiKey(env);
   const keyHash = await hashApiKey(plaintext);
   const keyPrefix = keyPrefixFromPlaintext(plaintext);

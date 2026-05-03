@@ -43,6 +43,13 @@
       "when": 1778097600000,
       "tag": "0005_legal_acceptances",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778803200000,
+      "tag": "0006_two_ladder_tier_restructure",
+      "breakpoints": true
     }
   ]
 }

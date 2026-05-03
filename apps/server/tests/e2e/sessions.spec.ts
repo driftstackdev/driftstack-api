@@ -70,7 +70,7 @@ test('POST /v1/sessions: records "created" event in DB', async ({ request }) => 
 });
 
 test('POST /v1/sessions: 429 ConcurrencyLimit when free-tier already at 1', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'free' });
+  const seed = await seedAccount(server.client, { tier: 'trial_pack' });
   await createSession(request, server.baseUrl, seed.plaintext);
 
   const res = await request.post(`${server.baseUrl}/v1/sessions`, {
@@ -109,7 +109,7 @@ test('GET /v1/sessions: empty initially', async ({ request }) => {
 });
 
 test('GET /v1/sessions: lists sessions in reverse-chrono order', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'builder' });
+  const seed = await seedAccount(server.client, { tier: 'api_builder' });
   await createSession(request, server.baseUrl, seed.plaintext, { label: 'a' });
   await createSession(request, server.baseUrl, seed.plaintext, { label: 'b' });
   await createSession(request, server.baseUrl, seed.plaintext, { label: 'c' });

@@ -79,7 +79,7 @@ function startReceiver(): Promise<{
 test('full webhook flow: subscribe → event → worker delivers signed POST → receiver verifies', async ({
   request,
 }) => {
-  const seed = await seedAccount(server.client, { tier: 'builder' });
+  const seed = await seedAccount(server.client, { tier: 'api_builder' });
   const receiver = await startReceiver();
   try {
     // 1. Subscribe to session.completed via the API. We have to talk https://

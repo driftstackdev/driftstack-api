@@ -57,27 +57,39 @@ export type SessionId = z.infer<typeof SessionIdSchema>;
 // are tier-keyed.
 // ───────────────────────────────────────────────────────────────────────────
 
-// Locked pricing model (six tiers) — values from parent driftstack
-// repo file 127 (`docs/planning/127-pricing-self-hosted-strategy.md`),
-// supersedes files 8 + 39:
+// Locked pricing model — two-ladder concurrent-only per ADR-004
+// (supersedes file-127 single-ladder hours-with-overage design;
+// pre-launch, no production customers, V-073 migration drops +
+// recreates the Postgres enum and re-maps any existing test data
+// from old tier names to new equivalents).
 //
-//   - free       $0     — 25 browser-hr trial, 7-day window, 1 concurrent, 1 archetype
-//   - starter   $29/mo  ($278/yr = $23/mo) — 100 hr/mo, $0.18/hr overage, 2 concurrent
-//   - solo      $99/mo  ($950/yr = $79/mo) — 400 hr/mo, $0.16/hr overage, 4 concurrent
-//   - builder  $299/mo  ($2,870/yr = $239/mo) — 1,500 hr/mo, $0.14/hr overage, 8 concurrent
-//   - scale    $999/mo  ($9,590/yr = $799/mo) — 6,000 hr/mo, $0.12/hr overage, 24 concurrent
-//   - enterprise from $2,500/mo annual only — custom hours/concurrent, all archetypes
+// Trial (one-time):
+//   - trial_pack    $2.99  — 14-day window, 1 concurrent, 299¢ at $0.18/hr ≈ 16 hrs (ADR-003)
 //
-// Annual is 20% off across all tiers. Primary meter is per-browser-hour
-// (minute-granular ledger via `session_minute` usage_record_type,
-// rolled up to hours at summary time). Concurrency caps are
-// session-creation hard limits per tier.
+// Manual ladder (humans clicking GUI client; profile count tier-defining):
+//   - solo_manual    $79/mo   ($758/yr = $63/mo)    — 10 profiles  / 1 concurrent / unlimited hours
+//   - team_manual    $249/mo  ($2,390/yr = $199/mo) — 50 profiles  / 3 concurrent / unlimited hours
+//   - agency_manual  $699/mo  ($6,710/yr = $559/mo) — 200 profiles / 8 concurrent / unlimited hours
+//
+// API ladder (programmatic SDK access; concurrent caps tier-defining):
+//   - api_starter    $149/mo   ($1,430/yr = $119/mo)    — 25 profiles  / 2 concurrent  / unlimited hours
+//   - api_builder    $499/mo   ($4,790/yr = $399/mo)    — 100 profiles / 8 concurrent  / unlimited hours
+//   - api_scale      $1,499/mo ($14,390/yr = $1,199/mo) — 500 profiles / 24 concurrent / unlimited hours
+//   - enterprise     from $4,000/mo annual only — custom profiles + concurrent, negotiated
+//
+// Annual is 20% off across all tiers. Concurrent caps are the
+// only metering primitive on paid tiers; hours metering exists
+// ONLY for the trial pack (per ADR-003 trial_pack_credit_cents
+// decrement). Profile count is enforced at the /v1/profiles
+// creation gate (V-073 lands the constant + scaffolding).
 export const AccountTierSchema = z.enum([
-  'free',
-  'starter',
-  'solo',
-  'builder',
-  'scale',
+  'trial_pack',
+  'solo_manual',
+  'team_manual',
+  'agency_manual',
+  'api_starter',
+  'api_builder',
+  'api_scale',
   'enterprise',
 ]);
 export type AccountTier = z.infer<typeof AccountTierSchema>;

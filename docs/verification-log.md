@@ -4339,3 +4339,72 @@ Pricing restructure direction locked + reasoning persisted. V-072 follows immedi
 ### Next
 
 V-072 — data layer rewrite.
+
+## V-073 — Backend AccountTier rewrite + concurrent-only enforcement + PROFILES_PER_TIER
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Atomic backend rewrite per ADR-004. Enforcement changes that must land together with the AccountTier enum change due to TypeScript's `Record<AccountTier, _>` typecheck invariant.
+
+### What changed
+
+**Public contract (api-types):**
+
+- **`packages/api-types/src/common.ts`** — `AccountTierSchema` rewritten: `'free' | 'starter' | 'solo' | 'builder' | 'scale' | 'enterprise'` → `'trial_pack' | 'solo_manual' | 'team_manual' | 'agency_manual' | 'api_starter' | 'api_builder' | 'api_scale' | 'enterprise'`. Block comment captures the new locked structure (Manual ladder + API ladder + trial pack) with prices, profile counts, and concurrent caps inline.
+
+**Postgres schema + migration:**
+
+- **`apps/server/src/db/schema.ts`** — `accountTier` enum values rewritten to match `AccountTierSchema`. Default tier on new accounts: `'free'` → `'trial_pack'`.
+- **`apps/server/src/db/migrations/0006_two_ladder_tier_restructure.sql`** (NEW) — Postgres-safe enum migration following the same drop-default → text-cast → defensive UPDATE → drop-old-type → create-new-type → cast-back → restore-default sequence as 0001. Old → new mapping (idempotent for any pre-launch test data): `'free' → 'trial_pack'`, `'starter' → 'api_starter'`, `'solo' → 'api_starter'` (was 4 concurrent; nearest API tier), `'builder' → 'api_builder'` (8 → 8), `'scale' → 'api_scale'` (24 → 24), `'enterprise' → 'enterprise'` (unchanged).
+- **`apps/server/src/db/migrations/meta/0006_snapshot.json`** + **`_journal.json`** updated for migration index 6.
+
+**Service layer:**
+
+- **`apps/server/src/services/sessions.ts`** — `TIER_CONCURRENT_SESSION_LIMITS` rewritten with new tier IDs + values per ADR-004 (trial_pack:1, solo_manual:1, team_manual:3, agency_manual:8, api_starter:2, api_builder:8, api_scale:24, enterprise:32 sentinel). New `PROFILES_PER_TIER` constant + `profileLimitFor(tier)` helper (trial_pack:1, solo_manual:10, team_manual:50, agency_manual:200, api_starter:25, api_builder:100, api_scale:500, enterprise:null=unlimited). The `/v1/profiles` enforcement gate that consumes `profileLimitFor` lands in a future Workstream (Manual-tier-specific implementation); V-073 lands the constant + helper as the data-layer surface.
+- **`apps/server/src/services/usage.ts`** — `TIER_QUOTAS` rewritten: all tiers now have `null` for every meter (`session_minute`, `navigate`, `interact`, `wait`, `state_capture`, `screenshot_capture`). Per ADR-004 paid tiers are concurrent-only; hours metering exists ONLY for trial pack via `accounts.trial_pack_credit_cents` decrement (independent of `TIER_QUOTAS`). The `session_minute` ledger primitive stays as the granular per-minute record for analytics + abuse detection but is unmetered. `/v1/usage` summary response shape preserved (returns `quotas: { x: null, ... }` rather than missing field).
+- **`apps/server/src/services/rate-limit.ts`** — `TIER_DEFAULTS` rewritten with new tier IDs. Capacities + refill rates scale roughly with concurrent cap (more concurrent = more API calls/sec). Per V-061 finding: rate-limit defaults are NOT pricing-related per ADR-004; they protect against DDoS/abuse, scaling roughly with tier. Eight tiers covered.
+- **`apps/server/src/services/api-keys.ts`** — single tier-discriminator update: `tier === 'free' ? 'test' : 'live'` → `tier === 'trial_pack' ? 'test' : 'live'`. Determines API-key environment prefix (test vs live) at issuance time.
+- **`apps/server/src/db/seed.ts`** — local-dev seed account default tier: `'builder'` → `'api_builder'`.
+
+**Tests (33 files touched via batch sed pass):**
+
+- All test fixtures using old tier names (`'free' → 'trial_pack'`, `'starter' → 'api_starter'`, `'solo' → 'api_starter'`, `'builder' → 'api_builder'`, `'scale' → 'api_scale'`) batch-replaced via sed across `apps/server/tests/` + `packages/sdk-typescript/tests/`. Patterns covered: `tier: '<old>'`, `'tier': '<old>'`, `from '<old>'` / `to '<old>'` / `from: '<old>'` / `to: '<old>'`, `toBe('<old>')`.
+- **`apps/server/tests/e2e/concurrency-limit.spec.ts`** — `TIER_LIMITS` array updated to new tier IDs with new concurrent values per ADR-004. Trial pack + Solo Manual both 1 concurrent (preserved as separate test runs since they exercise distinct enforcement paths). Spot-check test renamed `tier=scale` → `tier=api_scale` with same 24-concurrent expectation.
+- **`apps/server/tests/integration/_helpers/build-test-app.ts`** — default tier in two locations: `'builder'` → `'api_builder'`.
+- **`apps/server/tests/e2e/helpers/seed.ts`** — default tier: `'builder'` → `'api_builder'`. API-key env discriminator: `tier === 'free'` → `tier === 'trial_pack'`.
+- **`apps/server/tests/integration/admin-reads.test.ts`** — `expect(body.quotas.navigate).toBe(100)` → `toBeNull()` per ADR-004 unmetered paid tiers.
+- **`apps/server/tests/integration/admin.test.ts`** — `expect((body.quotas).navigate).toBe(100_000)` → `toBeNull()` same reasoning.
+- **`apps/server/tests/unit/rate-limit.test.ts`** — `bucketConfigFor('scale', ...)` → `bucketConfigFor('api_scale', ...)`. Monotonicity test rewritten for two-ladder structure (verifies each ladder + trial pack scales monotonically up; enterprise is upper bound on both).
+
+### Empirical findings
+
+1. **Sed pass eliminated 50/56 typecheck errors in one shot.** The breaking change to `AccountTier` cascaded across 21 test files; a batch sed replacement (with patterns for `tier: '...'`, `'tier': '...'`, `from '...'` / `to '...'`, `toBe('...')`) handled the bulk mechanically. The remaining 6 errors needed semantic intervention (concurrency-limit.spec.ts `TIER_LIMITS` array shape changed from 6 entries to a different 6, rate-limit.test.ts monotonicity test needed two-ladder rewrite).
+
+2. **Quota-related test assertions fell over because TIER_QUOTAS values are now uniformly null.** The two failing integration tests (`admin.test.ts`, `admin-reads.test.ts`) asserted specific quota numbers (100 / 100_000) that no longer exist. Per ADR-004 those operation-count meters are unmetered for all paid tiers + trial pack; trial pack hours metering is via the trial_pack_credit_cents column not via TIER_QUOTAS. Tests updated to assert `toBeNull()` with comments explaining the ADR-004 semantic.
+
+3. **Enum migration follows established 0001 pattern.** Drop default → text-cast column → defensive UPDATE blocks → drop old enum → create new enum → cast column back → restore default. Pre-launch + zero production customers, but the UPDATE blocks make the migration idempotent for local dev / staging databases that may have rows in old tier values. Mapping rationale captured in the migration's leading comment.
+
+4. **`/v1/usage` response shape preserved.** Removing `TIER_QUOTAS` entirely would have changed the API response shape (no `quotas` field on the summary). Keeping the map structure with all-null values preserves the field; consumers see `quotas: { session_minute: null, navigate: null, ... }` instead of `quotas: { session_minute: 1500, navigate: 100, ... }`. Customer-visible signal is "no per-meter caps at this tier" rather than the absence of the field. Acceptable backward-compat shape even pre-launch since SDK consumers may already be reading the shape in dev.
+
+5. **`/v1/profiles` route doesn't exist yet.** `PROFILES_PER_TIER` + `profileLimitFor()` land as data-layer surface in V-073; the actual route implementation (POST creates a profile, GET lists profiles, DELETE removes) is deferred to a future Workstream (likely Manual-tier-specific work since Manual ladder is profile-count-tier-defining). Current V-073 lands the constant so the route can wire it up without re-deriving values when the time comes.
+
+### Verify chain
+
+- `npm run typecheck`: clean (was 56 errors after enum change; sed + 7 manual edits got to 0).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: **360/360** unchanged.
+
+### Decisions made
+
+No new D-entries. ADR-004 is the architecture decision; V-073 is the implementation per that decision.
+
+### Status
+
+Backend tier-limit values, AccountTier enum, Postgres schema, and Drizzle migration all reflect ADR-004 locked direction. Test suite updated and green. The customer-visible side (marketing site B v3 rewrite for two-ladder layout, `/v1/profiles` route implementation) lands in V-074 + V-075+.
+
+### Next
+
+V-074 — E2E test updates: full rewrite of `apps/server/tests/e2e/concurrency-limit.spec.ts` (already partially landed in V-073 to satisfy typecheck; V-074 finalises) + new `apps/server/tests/e2e/profile-limit.spec.ts` (placeholder until /v1/profiles route lands; can assert via direct DB write that tier exceeded would fire).
+
+V-075+ — Marketing site B v3 rewrite (Tier 3, draft-surface cadence per CLAUDE.md).

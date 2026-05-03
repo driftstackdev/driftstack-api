@@ -60,7 +60,7 @@ describe('POST /v1/api-keys', () => {
   });
 
   it('returns ds_test_ prefix for free tier', async () => {
-    fx = await buildTestApp({ tier: 'free' });
+    fx = await buildTestApp({ tier: 'trial_pack' });
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/api-keys',
@@ -200,7 +200,7 @@ describe('DELETE /v1/api-keys/:id', () => {
 
 describe('GET /v1/usage', () => {
   it('200 returns current-period summary with zero totals + tier quotas', async () => {
-    fx = await buildTestApp({ tier: 'scale' });
+    fx = await buildTestApp({ tier: 'api_scale' });
     const res = await fx.app.inject({
       method: 'GET',
       url: '/v1/usage',
@@ -208,14 +208,15 @@ describe('GET /v1/usage', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<Record<string, unknown>>();
-    expect(body.tier).toBe('scale');
+    expect(body.tier).toBe('api_scale');
     expect((body.totals as Record<string, number>).navigate).toBe(0);
-    // 'scale' tier inherited the quota numbers the old 'pro' had (D-019).
-    expect((body.quotas as Record<string, number>).navigate).toBe(100_000);
+    // Per ADR-004: paid tiers are concurrent-only (no per-meter
+    // operation-count caps). All quota values are `null`.
+    expect((body.quotas as Record<string, number | null>).navigate).toBeNull();
   });
 
   it('aggregates totals from recorded usage', async () => {
-    fx = await buildTestApp({ tier: 'starter' });
+    fx = await buildTestApp({ tier: 'api_starter' });
     const now = new Date();
     fx.usageRepo.record({
       accountId: fx.accountId,
