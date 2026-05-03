@@ -9,6 +9,18 @@
 import type { AccountContext } from './auth.js';
 import type { AccountTier } from '@driftstack/api-types';
 
+// FUTURE-SELF NOTE — `session_minute` rename to `browser_hour` is
+// deferred to Workstream D (Stripe Meter integration). The unit name
+// is misleading: this column stores **minutes** of session time (one
+// row per minute of active session). The customer-facing meter is
+// browser-hours (file 127 + V-061), so summary-layer code rolls this
+// up via `floor(session_minute_total / 60) = browser_hour_total`. The
+// rename is a coordinated breaking change (Postgres enum migration +
+// 3-SDK regen + OpenAPI version bump) and bundles cleanly with the
+// Stripe Meter event-name introduction in Workstream D — doing it
+// twice would create churn. Until then: anywhere code references
+// `session_minute`, treat the value as a minute-granular ledger and
+// translate to hours at the API/UI boundary.
 export type UsageRecordType =
   | 'session_minute'
   | 'navigate'

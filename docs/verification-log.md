@@ -3660,3 +3660,53 @@ Pipeline ready. Founder-side action before first production deploy: populate `SE
 ### Next
 
 Workstream B (marketing site at `apps/marketing-site/`). Astro on Cloudflare Pages; oxblood `#722F37` palette; signup-primary / GUI-download-secondary CTAs. Pricing page renders file-127 locked values directly per V-061 sweep; only the BYOK markup line uses placeholder copy. Self-hosted sub-page with "Contact Sales" + brief positioning. Founder-direction-driven structure: hero / API tier comparison table / monthly-annual toggle / self-hosted section / BYOK note / FAQ.
+
+## V-063 — ADR-003 (paid trial pack replaces free tier) + sweep annotations
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Founder course-correction. Pre-Workstream-B scaffolding cleanup so marketing-site copy ships with the right framing.
+
+Three coupled changes: (1) ADR-003 captures the deviation from parent driftstack repo file 127 §6 (free trial → $2.99 paid trial pack); (2) `usage.ts` gains a future-self comment block annotating the deferred `session_minute` → `browser_hour` rename so a future reviewer doesn't need to reconstruct the rationale; (3) `CLAUDE.md` gains an "External services + credentials" pointer to the parent driftstack repo's `external-state.md` master register, eliminating the need for a per-repo external-state register.
+
+### What changed
+
+- **`docs/adr/ADR-003-paid-trial-pack-replaces-free-tier.md`** (NEW) — Tier 3 founder-explicit ADR. Captures:
+  - **Context:** file 127 §6 specced a 25-hour / 7-day / no-card free trial with "more generous than competitors" framing. Two constraints reshaped the decision: (a) anti-abuse infrastructure cost (signup-fingerprinting, IP rate limits, OAuth-quality gates, Turnstile, behaviour-anomaly detection — months of solo-engineer work for a free trial of any meaningful duration) and (b) self-funding fleet costs at first session (each browser-hour costs ~$0.04 in MacStadium time; abuse + sock-puppet accounts disproportionately consume fleet).
+  - **Decision:** $2.99 one-time charge via Stripe Checkout funds 299 cents credit at $0.18/hr (Starter rate) ≈ 16 hours, 1 concurrent, 14-day window, once per account (`trial_pack_redeemed` boolean prevents re-activation; no reset on downgrade or churn).
+  - **Consequences:** zero anti-abuse infrastructure required (the $2.99 charge IS the abuse filter); self-funding from session 1; cleaner funnel framing; rules out file 127 §6's "more generous than competitors" SEO/funnel angle, free-trial-driven promotions, and reactivation-as-trial flows.
+  - **Alternatives considered:** file-127 §6 free trial (rejected — anti-abuse infra cost), card-pre-auth chromium-cloud model (rejected — worst of both worlds: friction without abuse-resistance), single-session-ever free tier (rejected — insufficient evaluation surface), free during private beta only (rejected — defers the problem).
+  - **Revisit triggers:** trial-pack-to-paid conversion < 8% (90-day rolling), competitor pricing pressure forcing a free trial, third-party abuse-defence SaaS becomes operationally feasible, trial-pack revenue < 0.5× MacStadium spend, audience composition shifts away from B2B technical buyer.
+  - **Notes:** schema (`accounts.trial_pack_purchased_at` + `trial_pack_credit_cents` + `trial_pack_expires_at` + `trial_pack_redeemed`) lands in Workstream D alongside Stripe Checkout integration. Marketing copy (this ADR drives the framing) lands in Workstream B (active). Admin-panel visibility per account in Workstream C. Onboarding flow in Workstream F. Moneybird accounting line separation (one-time revenue vs subscription MRR) in Workstream E.
+- **`docs/adr/README.md`** — index updated to include ADR-003.
+- **`apps/server/src/services/usage.ts`** — added a "FUTURE-SELF NOTE" comment block above the `UsageRecordType` union explaining: (a) `session_minute` stores minutes, not hours; (b) the customer-facing meter is browser-hours per file 127 + V-061; (c) rename to `browser_hour` is deferred to Workstream D and bundles cleanly with Stripe Meter integration since both are coordinated breaking changes (Postgres enum migration + 3-SDK regen + OpenAPI version bump). The comment matches founder direction: "future-self protection."
+- **`CLAUDE.md`** — two additions:
+  - `docs/adr/` and `docs/deployment/env-vars.md` added to the "What's where" section (closes a doc-discoverability gap).
+  - New "External services + credentials" section with explicit pointer: external services + credential locations are tracked in the parent driftstack repo at `docs/external-state.md` (founder-maintained master register); this repo references env vars per `docs/deployment/env-vars.md`. Cross-repo write coordination is the founder's role; agent does not edit the parent register.
+
+### Empirical findings
+
+1. **Founder feedback withdraws speculative anti-abuse infrastructure entirely.** Prior conversational drift had hinted at signup-fingerprinting / IP rate limits / GitHub-OAuth-quality gates / Cloudflare Turnstile as Workstream F components. ADR-003 explicitly invalidates that scope: the $2.99 charge is the abuse filter, and adding any of those layers would be redundant work without commensurate value. Memory updated (`tier3_explicit_values.md` + new `trial_pack_design.md`) to prevent re-introduction in future sessions.
+
+2. **`usage.ts` future-self note is 12 lines and pays for itself the first time someone asks "why does this say minute when the cap is in hours."** The original sweep (V-061) updated the values without the explanatory annotation. A reviewer reading the file in 2027 would have to reconstruct the rationale from the V-061 V-log entry; the annotation makes it self-documenting. Cost: 12 lines of comment. Benefit: zero future-self confusion. Trade favourable.
+
+3. **External-state-register-in-parent-repo eliminates a duplication surface.** A `driftstack-api/docs/external-state.md` would have to be maintained against the parent register on every credential rotation, every sub-processor add/remove, every login URL change. The CLAUDE.md pointer eliminates the duplication while preserving discoverability. Founder explicit: "single source of truth in driftstack repo."
+
+4. **The trial-pack ADR enumerates 5 revisit triggers with measurable thresholds.** Conversion-rate threshold (<8%), competitor-pricing event, abuse-defence SaaS maturation, trial-pack-revenue / fleet-spend ratio (<0.5), audience composition shift. Each is testable; none rely on subjective judgement at re-evaluation time. ADR-002 had similar discipline; the pattern is settling into a repeatable shape.
+
+### Verify chain
+
+- typecheck/lint/format all clean (docs + comment-only changes; no code logic touched).
+- `npm test`: **360/360** unchanged.
+
+### Decisions made
+
+No new D-entries. ADR-003 is the long-form record; if a future one-line summary becomes necessary it adds as a future `D-NNN` entry. The deviation is from parent-repo planning (file 127 §6), not from in-repo D-entries; the ADR is the single canonical source.
+
+### Status
+
+Marketing copy framing locked: "$2.99 trial pack" (price visible) replaces all "free trial" / "free tier" / "no card required" language across the upcoming marketing site. Workstream B can proceed against the ADR-003 framing.
+
+### Next
+
+Workstream B: marketing site at `apps/marketing-site/`. Astro on Cloudflare Pages; oxblood `#722F37` palette + slate base + Geist Sans body + Berkeley Mono technical. Pricing page renders file-127 values for Starter/Solo/Builder/Scale/Enterprise + ADR-003 trial-pack column ("$2.99 trial pack, 16 hours, 1 concurrent, 14-day window, once per account"). Monthly/annual toggle with 20% discount badge. Self-hosted sub-page with "Contact Sales" CTA. BYOK note on Builder+ tiers using "pricing announced at launch" (the only remaining Tier 3 placeholder copy). FAQ explaining browser-hour metering vs session-count, trial-pack-vs-subscription distinction, what happens when trial expires. CAPABILITIES.md hygiene pull (V-149 Q8 snap fix, V-141 atlas v3, V-141 POC) folded in during Workstream B run-up when the public-surface snapshot needs refreshing.

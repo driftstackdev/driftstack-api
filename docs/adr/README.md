@@ -74,3 +74,6 @@ header. The history matters; the number is part of the record.
 - [ADR-002](ADR-002-stripe-only-payment-processing.md) — Stripe-only
   payment processing at launch (Tier 2 deviation from Mollie-primary
   - Stripe-backup plan).
+- [ADR-003](ADR-003-paid-trial-pack-replaces-free-tier.md) — $2.99
+  paid trial pack replaces the free tier (Tier 3 deviation from
+  parent driftstack repo file 127 §6).

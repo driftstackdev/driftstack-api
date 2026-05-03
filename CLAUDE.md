@@ -166,7 +166,15 @@ If any step fails, fix root cause — don't paper over with `// eslint-disable`,
 - `packages/api-types/` — Shared types/schemas (re-exported for SDK consumers)
 - `docs/architecture.md` — System shape
 - `docs/decisions.md` — D-NNN decision log
+- `docs/adr/` — Long-form ADRs for Tier 2/3 deviations from planned approaches
 - `docs/verification-log.md` — V-NNN empirical log
+- `docs/deployment/env-vars.md` — Canonical env-var schema (every var the control plane reads)
+
+## External services + credentials
+
+External services and credential locations — Hetzner / Neon / Upstash / Cloudflare R2 + Pages + DNS / Postmark / Sentry / Stripe / Anthropic / Moneybird / MacStadium — are tracked in the parent driftstack repo at `docs/external-state.md` (founder-maintained master register). This repo references env vars per `docs/deployment/env-vars.md` (the canonical schema for what the control plane reads at runtime); the master register at the parent repo holds login + 2FA + billing + credential-location + agent-access-pattern + use-case + autonomy-tier per service.
+
+If a request involves rotating a credential, verifying which service hosts a piece of state, or onboarding a new sub-processor, consult the parent register rather than inventing the answer here. Cross-repo write coordination is the founder's role (the agent does not edit the parent register).
 
 ## Cross-agent coordination
 
