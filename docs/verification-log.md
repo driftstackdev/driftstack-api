@@ -4603,3 +4603,44 @@ Continuing overnight queue:
 - /index "Built for two audiences" two-card section — DRAFT in working tree (Tier 3 draft-surface; not committed)
 - /faq updates ("Why concurrent caps..." replacement + new "Manual vs API" entry) — DRAFT in working tree
 - V-070 visual revision pass — DRAFT in working tree
+
+---
+
+## V-077 — /index two-audiences section + /pricing anchor IDs (Routine — approved-as-drafted)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Land the founder-approved "Built for two audiences" two-card section on `/index` between Why-Driftstack and the Pricing teaser, plus add `id="manual"` and `id="api"` anchor IDs to the corresponding sections on `/pricing` so the new index cards can deep-link.
+
+### What changed
+
+- `apps/marketing-site/src/pages/index.astro`: new section after Why-Driftstack: header "Manual or API. Same engine, different access surface.", then a 2-column card grid. Manual card lists Solo/Team/Agency $79/$249/$699, 1/3/8 concurrent, unlimited hours within cap. API card lists Starter/Builder/Scale $149/$499/$1,499, 2/8/24 concurrent, bundled-LLM-or-BYOK note. Each card has a "See {Manual,API} pricing →" anchor button into `/pricing#manual` or `/pricing#api`. Trailing "Not sure which fits?" copy points at the $2.99 trial pack as the universal evaluation entry point.
+- `apps/marketing-site/src/pages/pricing.astro`: added `id="manual"` to the Manual ladder section and `id="api"` to the API ladder section so the index two-card deep-links resolve to the right section.
+
+### Why
+
+The /index page positioned Driftstack as a single product surface (the SDK code sample + value props), but the actual product is two ladders — Manual (GUI client, persistent profiles, humans clicking) and API (SDK, programmatic, code-driven). Visitors landing on /index from search or referral were not seeing the bifurcation until they reached /pricing, which buried the lede. Surfacing the split on /index above the pricing teaser routes each audience to their lane on /pricing without forcing them to scan both ladders to find their fit.
+
+### How verified
+
+- `npm run typecheck`: 0 errors.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 360/360 passing (no test surface affected — Astro page edits only).
+- Astro `[check]`: 14 files, 0 errors / 0 warnings / 0 hints.
+
+### Founder-review state
+
+Draft surfaced via clipboard at end of V-076. Founder responded "V-077 (/index two-cards section) — APPROVED to commit as drafted." Committing exactly as surfaced; no redlines on V-077.
+
+### Decisions made
+
+No new D-entries. Anchor-link convention (`/pricing#manual`, `/pricing#api`) is an in-page nav decision, not architectural.
+
+### Next
+
+V-078 (/faq updates) commits next with the founder's one redline applied.
