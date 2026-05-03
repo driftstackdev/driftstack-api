@@ -8,7 +8,7 @@
 > document represents the BV's intended position; defects from baseline
 > drafting are founder's risk.
 
-**Version:** 0.1.1-draft · **Effective:** 2026-05-03
+**Version:** 0.1.2-draft · **Effective:** 2026-05-03
 
 This file is the source of truth for terminology used across the
 Driftstack legal document set: the [Terms of Service](terms-of-service.md),
@@ -78,8 +78,7 @@ or instructions Customer provides to the Service to drive Sessions.
 
 **"Subscription"** means Customer's ongoing access to the Service
 under one of Driftstack's published tiers (Free, $39/mo, $99/mo,
-$299/mo, $999/mo, $3,000+/mo enterprise), purchased via Stripe or via
-the cryptocurrency payment rail (Coinbase Commerce).
+$299/mo, $999/mo, $3,000+/mo enterprise), purchased via Stripe.
 
 ## Data terms (GDPR-aligned)
 
@@ -212,11 +211,6 @@ Bancontact) Subscription Fees from Customers established in the
 European Economic Area, the United Kingdom, and Switzerland; and
 Stripe, Inc. (Delaware, USA) for Customers established outside the
 EEA / UK / CH.
-
-**"Coinbase Commerce"** means Coinbase, Inc. (Delaware, USA), the
-payment processor for cryptocurrency Subscription Fees, accepting
-USDC, USDT, BTC, and ETH payments fixed in USD-equivalent at
-invoicing.
 
 **"Moneybird"** means Moneybird B.V. (Dutch entity, Utrecht), the
 accounting and invoicing platform used to generate VAT-compliant

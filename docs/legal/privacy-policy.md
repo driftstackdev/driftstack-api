@@ -8,7 +8,7 @@
 > document represents the BV's intended position; defects from baseline
 > drafting are founder's risk.
 
-**Version:** 0.1.1-draft · **Effective:** 2026-05-03
+**Version:** 0.1.2-draft · **Effective:** 2026-05-03
 
 This Privacy Policy describes how Driftstack Processes Personal Data
 in connection with the Service. Capitalised terms are defined in
@@ -170,7 +170,7 @@ Not used for any purpose beyond executing Customer's Session.
 ### 3.6 Billing data
 
 **What:** transaction identifiers, payment method type (card,
-SEPA, iDEAL, Bancontact, crypto rail), last-four of payment
+SEPA, iDEAL, Bancontact), last-four of payment
 instruments where retained, invoice status, amount, currency, VAT
 basis. Driftstack does **not** retain primary account numbers
 (PANs); these are tokenised by Stripe under PCI-DSS scope.
@@ -182,9 +182,9 @@ maintain accounting records.
 Article 6(1)(c) — compliance with Dutch tax law (Article 52 of the
 Dutch _Algemene wet inzake rijksbelastingen_; 7-year retention).
 
-**Source:** Stripe and Coinbase Commerce return transaction metadata
-to Driftstack via webhook. Customer provides billing details at
-signup or via the customer portal.
+**Source:** Stripe returns transaction metadata to Driftstack via
+webhook. Customer provides billing details at signup or via the
+customer portal.
 
 ### 3.7 Support correspondence
 
@@ -287,7 +287,6 @@ imposing obligations consistent with Article 28 GDPR.
 | **MacStadium, Inc.** (US, California)                                  | Mac mini fleet hosting infrastructure for the WebKit driver layer at launch.                                                                                                                                          | United States                                                  | 2021 SCCs (Module 2) supplemented by EU-US DPF where MacStadium is self-certified at the time of transfer; counsel verifies current status.                                                                               |
 | **Stripe Payments Europe Limited** (Ireland)                           | Payment processing for Customers established in the EEA, UK, and Switzerland.                                                                                                                                         | Ireland                                                        | EEA-internal; no transfer mechanism required for EEA Customer base.                                                                                                                                                       |
 | **Stripe, Inc.** (US, Delaware)                                        | Payment processing for Customers established outside the EEA / UK / CH.                                                                                                                                               | United States                                                  | 2021 SCCs (Module 2) and EU-US DPF (Stripe is DPF-self-certified at time of writing; counsel verifies current status).                                                                                                    |
-| **Coinbase Commerce / Coinbase, Inc.** (US, Delaware)                  | Cryptocurrency payment processing (USDC, USDT, BTC, ETH).                                                                                                                                                             | United States                                                  | 2021 SCCs (Module 2) and EU-US DPF where applicable; counsel verifies current Coinbase certification status.                                                                                                              |
 | **Anthropic, PBC** (US, Delaware) — _conditional_                      | Bundled LLM for the AI agent feature. Engaged only when Customer opts into bundled-LLM billing. Customers using BYOK (own Anthropic credentials) do not establish this Sub-processor relationship through Driftstack. | United States                                                  | 2021 SCCs (Module 3 — controller-to-processor where Driftstack acts as Customer's Processor and Anthropic acts as Sub-processor) and EU-US DPF where applicable; counsel verifies current Anthropic certification status. |
 | **Moneybird B.V.** (Netherlands)                                       | Accounting platform for invoice generation and bookkeeping.                                                                                                                                                           | Netherlands                                                    | EEA-internal; no transfer mechanism required.                                                                                                                                                                             |
 | **Hetzner Online GmbH** (Germany)                                      | Control-plane hosting (VM running the API server, admin panel, and onboarding surface).                                                                                                                               | Germany                                                        | EEA-internal; no transfer mechanism required.                                                                                                                                                                             |

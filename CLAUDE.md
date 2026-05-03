@@ -19,7 +19,7 @@ The exception is opt-in per direction. Default behavior remains "surface against
 **Exception extension (effective 2026-05-03):** the legal/compliance exception is extended to cover three additional categories when explicitly directed by founder:
 
 1. **Customer-facing copy** (marketing website at `driftstack.dev`, in-product onboarding flow text, transactional email templates, pricing-page positioning, docs-site landing).
-2. **Billing integration code** (Stripe SDK + webhook handlers, Coinbase Commerce SDK + webhook handlers, Moneybird API integration, subscription state machine, customer portal redirects, BYOK metering).
+2. **Billing integration code** (Stripe SDK + webhook handlers, Moneybird API integration, subscription state machine, customer portal redirects, BYOK metering).
 3. **Onboarding flow with copy** (signup, email verification, legal acceptance UI, BYO-requirements explainer, payment-method selection, first-API-key issuance flow).
 
 Same revision policy: founder-directed; founder accepts risk; all customer-facing copy revisable; all billing code passes through staging + manual approval before production. Default remains "surface against asks not covered by an active exception."
@@ -38,7 +38,9 @@ Items still **out of scope** under the extension:
 - Behavioural data collection.
 - Mollie integration (founder reversed dual-processor decision; Stripe-only fiat rail).
 
-Sub-processor list lock under the extension: Hetzner, Neon, Upstash, Cloudflare (R2 + Pages + DNS), Postmark, Sentry, Stripe, Coinbase Commerce, Anthropic (BYO bundled LLM only, opt-in), Moneybird, MacStadium. Adding any sub-processor outside this list = directional question first, never silent.
+Sub-processor list lock under the extension (revised 2026-05-03 — V-052): Hetzner, Neon, Upstash, Cloudflare (R2 + Pages + DNS), Postmark, Sentry, Stripe, Anthropic (BYO bundled LLM only, opt-in), Moneybird, MacStadium. Adding any sub-processor outside this list = directional question first, never silent.
+
+**Crypto rail dropped from launch (2026-05-03 founder direction):** Coinbase Commerce closed for non-US/Singapore merchants 2026-03-31; Coinbase Business unavailable in NL. Stripe is the sole payment rail at launch (fiat-only). Stripe's native USDC/USDB support (Dec 2025) is the candidate for crypto re-entry post-KvK pending EU merchant eligibility verification. Alternative EU-friendly crypto processors (CoinGate, NOWPayments, BVNK, Triple-A) deferred to post-launch evaluation against actual transaction volume.
 
 **Out of scope (separate workstreams or future phases):**
 

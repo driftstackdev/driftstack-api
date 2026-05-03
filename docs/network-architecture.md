@@ -115,7 +115,6 @@ end-to-end:
 | Error tracking        | Sentry                 | EU region            |
 | Payment (fiat EU)     | Stripe Payments Europe | Ireland              |
 | Payment (fiat non-EU) | Stripe Inc.            | US (DPF + 2021 SCCs) |
-| Crypto payment        | Coinbase Commerce      | US (DPF + 2021 SCCs) |
 | Accounting            | Moneybird              | Netherlands          |
 | Fingerprint fleet     | MacStadium             | US, California       |
 | Bundled LLM (opt-in)  | Anthropic              | US (DPF + 2021 SCCs) |
@@ -205,6 +204,110 @@ sit behind NAT or restrictive egress rules without inbound holes.
 - Recording frames (PNG) upload to R2 via a presigned URL the
   control plane generates per-session.
 
+### Revocation (required from day one)
+
+Per founder direction (V-052, decision 1B): revocation is required
+infrastructure, not a follow-up. Building it in is an order of
+magnitude cheaper than retrofitting; deploying without it leaves the
+control plane unable to respond to a compromised mac mini, a stolen
+keypair, or a decommissioned node.
+
+**Data model:** the `fleet_nodes` table gains a `revoked_at`
+timestamp column (nullable; `NULL` = active). When admin revokes,
+`revoked_at` is set to `now()` along with a `revocation_reason`
+(free-form text recorded for audit).
+
+**JWT validation:** the control plane's JWT verifier checks
+`fleet_nodes.revoked_at IS NULL` for the issuing `node_id` on every
+request. A revoked node's JWTs fail validation immediately, even if
+the JWT itself is otherwise well-formed and within its 5-minute
+expiry. There is no propagation delay because the check hits the
+hot row in `fleet_nodes`.
+
+**Cache strategy:** the JWT validation path caches the
+`(node_id, public_key, revoked_at)` tuple in Redis with a short TTL
+(15 seconds is enough to absorb burst traffic without delaying a
+revocation past a quarter-minute). Admin revoke also issues a
+`DEL` on the cached entry, so revocation propagates immediately to
+the validation hot path.
+
+**Admin API:** new endpoint `POST /v1/admin/fleet/{node_id}/revoke`,
+`admin` scope required. Body: `{reason: string}`. Response: 200 with
+the new `revoked_at` timestamp. Idempotent: revoking a revoked node
+is a 200 no-op.
+
+**Audit log:** revocation events written to the existing
+`admin_audit_log` table (V-025 / D-025) with action
+`fleet_node.revoked`, target = node_id, payload = reason. No
+separate audit table needed.
+
+**WebSocket / long-poll behaviour on revocation:** if a revoked
+node has an active connection, the control plane sends a close
+frame on the next outbound message attempt. The fleet node's
+reconnect loop will fail JWT validation and stop trying. No
+zombie-connection risk because all messages flow through the JWT
+validator.
+
+### JWT signing-key rotation event format
+
+Per founder direction (V-052, decision 1C): document the rotation
+event so security audits can reconstruct which key signed which
+JWT at which time.
+
+**Storage:** signing keys live in a `fleet_signing_keys` table.
+
+```
+CREATE TABLE fleet_signing_keys (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  kid          text NOT NULL UNIQUE,         -- key identifier embedded in JWT
+                                             -- header `kid` claim
+  public_key   text NOT NULL,                -- PEM-encoded
+  -- Private key NOT stored in this table; lives in HashiCorp Vault
+  -- or equivalent secret store, fetched into memory on rotation.
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  active_from  timestamptz NOT NULL,         -- earliest timestamp this key may sign
+  active_until timestamptz NOT NULL,         -- last timestamp this key may sign
+                                             -- (active_from + 30 days for normal rotation)
+  retired_at   timestamptz                   -- nullable; set when key is no longer
+                                             -- accepted for verification (active_until + 24h)
+);
+```
+
+**Rotation event** (logged to `admin_audit_log`):
+
+```
+{
+  "event": "fleet_signing_key.rotated",
+  "previous_kid": "<old kid>",
+  "new_kid": "<new kid>",
+  "previous_active_until": "<ISO 8601>",
+  "new_active_from": "<ISO 8601>",
+  "overlap_window_hours": 24,
+  "rotation_actor": "automated_monthly_rotation" | "<admin_id> manual"
+}
+```
+
+**JWT header:** every fleet-issued JWT includes `kid` in the JOSE
+header. The verifier looks up the kid in `fleet_signing_keys`,
+checks the JWT's `iat` falls within `[active_from, active_until]`,
+and verifies signature against the corresponding public key.
+Fast-fails outside the active window.
+
+**24-hour overlap rationale:** during the overlap window, both the
+old and new keys are accepted for verification (`retired_at IS NULL`
+on both rows). Fleet nodes that were briefly offline during rotation
+can finish their old key's in-flight JWTs without auth failures.
+After 24 hours, the old key's `retired_at` is set, validation
+rejects, and the only path forward for the fleet node is to fetch
+the new public key (which it does on JWT-validation 401 → public-key
+refresh).
+
+**Audit reconstruction:** for any historical JWT, querying
+`fleet_signing_keys WHERE kid = ?` yields the public key, the
+active window, and (via `created_at`) when the key entered service.
+Cross-referencing `admin_audit_log` for `fleet_signing_key.rotated`
+events gives the full rotation history.
+
 ### v2 design — WireGuard mesh
 
 When fleet size + cross-region complexity justify it (probably
@@ -221,26 +324,25 @@ Cost vs benefit at v1:
 - Net: not worth it at single-fleet-node scale. Re-evaluate at
   fleet-size = 5+.
 
-### Open questions for founder
+### Decided architecture (V-052 founder sign-off)
 
-1. **mTLS terminator placement.** Cloudflare's Authenticated Origin
-   Pulls mTLS-authenticates Cloudflare → origin (the Hetzner VM), not
-   client → Cloudflare. For client → Cloudflare mTLS we'd use
-   "Cloudflare API Shield" (paid feature) or terminate mTLS on the
-   Hetzner VM directly (skipping Cloudflare for the fleet endpoint).
-   Recommend: terminate on Hetzner VM (simpler, no Cloudflare paid
-   feature, fleet endpoint isn't customer-facing so the Cloudflare
-   WAF / DDoS protection is less load-bearing).
-2. **Fleet node identity provisioning.** When a new mac mini joins
-   the fleet, what's the bootstrap flow for the keypair? Recommend:
-   founder provisions the mini, generates the keypair on-device,
-   posts the public key to the control plane via an admin endpoint
-   that requires the founder's existing admin API key.
-3. **JWT secret rotation.** Per-node keypairs don't rotate (they're
-   the long-term identity). The control plane's signing key for
-   any _control-plane-issued_ tokens (e.g. session-creation tokens
-   the fleet acts on) needs a rotation schedule — recommend monthly
-   automated rotation with 24h overlap window.
+1. **mTLS terminator placement: Hetzner-side direct.** Cloudflare
+   Tunnel handles edge HTTPS for the public API surface; mTLS
+   between Mac Mini fleet and control plane terminates on the
+   Hetzner VM directly. Skips Cloudflare API Shield (paid feature),
+   simpler architecture, fewer moving parts.
+2. \*\*Fleet node identity provisioning: on-device keypair generation
+   - admin-API public-key registration.\*\* Founder provisions the
+     Mac Mini → keypair generated on-device (private key never leaves
+     the device) → public key posted to the control plane via an
+     admin endpoint that requires the founder's existing admin API
+     key. Plus the mandatory revocation flow documented above.
+3. **JWT signing-key rotation: monthly auto-rotate with 24h
+   overlap.** Per-node keypairs don't rotate (long-term identity).
+   The control plane's signing key for control-plane-issued tokens
+   rotates monthly with a 24-hour overlap window so briefly-offline
+   fleet nodes don't fail auth. Rotation event format documented
+   above.
 
 ## §5. Logging + observability
 
@@ -276,18 +378,19 @@ Cost vs benefit at v1:
 The "manual" entries are intentionally not yet automated; founder
 review on which to automate first when traffic justifies.
 
-## §7. Open architecture decisions (founder review)
+## §7. Open architecture decisions
 
-1. mTLS terminator placement (§4 open Q1).
-2. Fleet-node identity bootstrap flow (§4 open Q2).
-3. JWT signing-key rotation cadence (§4 open Q3).
-4. Log shipping trigger threshold (§5).
-5. Status page provider — Cloudflare Workers status page vs Better
-   Stack vs Statuspage. Recommend founder review when first paying
+Three V-051 open questions resolved by founder direction in V-052
+(see §4 "Decided architecture"). Remaining open items:
+
+1. **Log shipping trigger threshold (§5).** Currently journald-only;
+   moving to Loki / Better Stack / equivalent when traffic justifies.
+2. **Status page provider** — Cloudflare Workers status page vs
+   Better Stack vs Statuspage. Founder review when first paying
    customer onboards.
 
 ---
 
-_This doc is V-051 / Workstream A. Founder review required before
-fleet code starts; Agent 1 will integrate against the §4 contract
-once signed off._
+_§1–§5 documented in V-051; §4 "Decided architecture" + revocation
+flow + JWT rotation event format added in V-052. Agent 1's fleet
+integration may begin against the §4 contract as documented._

@@ -70,7 +70,7 @@ follows these rules:
   to clients running on the prior version.
 
 The current version of every document at the time of this commit is
-`0.1.1-draft`. The `-draft` suffix retires when counsel review lands.
+`0.1.2-draft`. The `-draft` suffix retires when counsel review lands.
 
 History:
 
@@ -82,6 +82,15 @@ History:
   Paddle ever activates). Hosting sub-processors added to the
   Privacy Policy + DPA Annex 3 + definitions.md (Hetzner, Neon,
   Upstash, Cloudflare, Postmark, Sentry).
+- `0.1.2-draft` (2026-05-03, V-052): Coinbase Commerce dropped
+  from sub-processor list and customer-facing references. Coinbase
+  Commerce closed for non-US/Singapore merchants 2026-03-31;
+  Coinbase Business unavailable in NL. Stripe is the sole payment
+  rail at launch (fiat-only). Crypto rail re-entry deferred to
+  post-launch when transaction volume justifies evaluating EU-
+  friendly alternatives (CoinGate, NOWPayments, BVNK, Triple-A) or
+  Stripe's native USDC/USDB if EU merchant eligibility is
+  confirmed at BV onboarding.
 
 ## Cross-document consistency
 
@@ -128,7 +137,7 @@ Annotated for the reviewing counsel:
 
 4. **EU-US Data Privacy Framework applicability**. The Privacy Policy
    relies on DPF self-certification status for US sub-processors
-   (Stripe, MacStadium, Coinbase Commerce, Anthropic). Counsel verify
+   (Stripe, MacStadium, Anthropic). Counsel verify
    each sub-processor's current self-certification status at
    <https://www.dataprivacyframework.gov/list> and update or fall back
    to SCCs as appropriate.

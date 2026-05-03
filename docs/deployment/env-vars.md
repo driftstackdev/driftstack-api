@@ -1,0 +1,244 @@
+# Driftstack control plane — environment variables
+
+> **Founder fills the values + base64-encodes** the resulting `.env` file
+> into the GitHub repo secret `DEPLOY_DOTENV_BASE64`. The deploy
+> pipeline (`.github/workflows/deploy.yml`) decodes it onto the
+> Hetzner VM at `/opt/driftstack/.env`. No actual secrets land in this
+> repo — examples below are placeholder shapes only.
+
+**Effective:** 2026-05-03 · **Version:** 0.1.0-draft · **V-053**
+
+This is the canonical schema for every env var the control plane
+reads. When code adds a new env var, it lands here in the same
+commit. Undocumented env-var sprawl is how production breaks two
+months in.
+
+## Conventions
+
+- **Required** vars: server fails at startup if unset (Zod parse error).
+- **Optional** vars: server uses a documented default if unset.
+- **Per-environment** column: the same var may differ between
+  staging and production (different DB URL, different Sentry env
+  tag, etc.). Where the value is environment-independent (e.g. a
+  Stripe webhook secret pinned to one Stripe account), the column
+  reads "shared" — but **never** share secrets across environments
+  unless they're tied to a single external resource.
+- All values supplied via `.env` file at `/opt/driftstack/.env` on
+  the Hetzner VM. The deploy pipeline writes this from
+  `DEPLOY_DOTENV_BASE64`. Local dev uses `apps/server/.env`
+  (gitignored).
+
+## Variables
+
+### Process / runtime
+
+| Name        | Required | Per-env? | Example      | Notes                                                                                                                                           |
+| ----------- | -------- | -------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`  | yes      | per-env  | `production` | One of `development \| test \| production`. Production deploys hardcode `production` in the Dockerfile env block; the .env override is unusual. |
+| `PORT`      | optional | shared   | `7780`       | Default 3000 in dev; production compose pins 7780 to match the GUI client's expected default.                                                   |
+| `HOST`      | optional | shared   | `0.0.0.0`    | Default `0.0.0.0`. Inside the container; the host binds `127.0.0.1:7780` so the bind value is irrelevant externally.                            |
+| `LOG_LEVEL` | optional | per-env  | `info`       | `fatal \| error \| warn \| info \| debug \| trace`. Production: `info`. Staging: `debug`. Default `info`.                                       |
+| `DRIVER`    | optional | per-env  | `mock`       | `mock \| webkit`. Pre-V1 staging + production both run `mock` until Agent 1's WebKit fork integrates.                                           |
+
+### Postgres (Neon, EU Frankfurt)
+
+| Name           | Required | Per-env? | Example                                                        | Notes                                                                                                                                                                                 |
+| -------------- | -------- | -------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL` | yes      | per-env  | `postgres://user:pass@<branch>.neon.tech/<db>?sslmode=require` | Neon connection string from the Neon dashboard. Staging + production are **separate Neon projects** (or separate branches of the same project), with separate databases. Never share. |
+
+### Redis (Upstash, EU Frankfurt)
+
+| Name        | Required | Per-env? | Example                                  | Notes                                                                                                 |
+| ----------- | -------- | -------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `REDIS_URL` | yes      | per-env  | `rediss://default:<token>@<host>:<port>` | Upstash TLS-enabled URL (`rediss://`, not `redis://`). Staging + production are separate Upstash DBs. |
+
+### Mock-driver tuning (test / dev only)
+
+| Name                       | Required | Per-env? | Example | Notes                                                                                                          |
+| -------------------------- | -------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------- |
+| `MOCK_NAVIGATE_LATENCY_MS` | optional | shared   | `120`   | Used by `MockDriver` to simulate navigate latency. Defaults to 120ms. Tests set to 0 via `fastForwardLatency`. |
+| `MOCK_INTERACT_LATENCY_MS` | optional | shared   | `40`    | Same shape, interact path. Default 40ms.                                                                       |
+
+### Cloudflare R2 (object storage, EU jurisdiction)
+
+For session Recording uploads (V-040 in-memory ring → R2 mirror, lands
+in Workstream A iteration 2).
+
+| Name                   | Required           | Per-env? | Example                                      | Notes                                                                                                                     |
+| ---------------------- | ------------------ | -------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `R2_ACCOUNT_ID`        | required at deploy | shared   | `<32 hex chars>`                             | Cloudflare account ID. One per BV; same across environments.                                                              |
+| `R2_ACCESS_KEY_ID`     | required at deploy | per-env  | `<20 chars>`                                 | Generated per environment; staging + production get separate access keys with separate scoped tokens.                     |
+| `R2_SECRET_ACCESS_KEY` | required at deploy | per-env  | `<40 chars>`                                 | Pair to `R2_ACCESS_KEY_ID`.                                                                                               |
+| `R2_BUCKET_RECORDINGS` | required at deploy | per-env  | `driftstack-recordings-staging`              | Bucket names: `driftstack-recordings-staging` and `driftstack-recordings-production`. Pre-create in Cloudflare dashboard. |
+| `R2_ENDPOINT_URL`      | optional           | shared   | `https://<account>.r2.cloudflarestorage.com` | Default derives from `R2_ACCOUNT_ID`. Override only if Cloudflare's URL convention shifts.                                |
+
+### Postmark (transactional email, EU sending region)
+
+For signup verification, password reset, billing receipts, support
+correspondence (transactional email service, lands in Workstream A
+iteration 2 + Workstream F).
+
+| Name                 | Required           | Per-env? | Example                               | Notes                                                                                                               |
+| -------------------- | ------------------ | -------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `POSTMARK_API_TOKEN` | required at deploy | per-env  | `<UUID-shaped token>`                 | Postmark issues separate Server tokens per "Server" (their term). Staging + production = separate Postmark Servers. |
+| `POSTMARK_FROM`      | required at deploy | shared   | `Driftstack <noreply@driftstack.dev>` | Verified sender address. DNS records (DKIM, Return-Path, Sender Signature) propagated per founder direction.        |
+| `POSTMARK_REPLY_TO`  | optional           | shared   | `support@driftstack.dev`              | Customer replies route here.                                                                                        |
+
+### Sentry (error tracking, EU region)
+
+For diagnostics (V-051 baseline integration; full SDK wiring lands in
+Workstream A iteration 2).
+
+| Name                        | Required           | Per-env? | Example                                                | Notes                                                                                                                                             |
+| --------------------------- | ------------------ | -------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SENTRY_DSN`                | required at deploy | per-env  | `https://<key>@<org>.ingest.de.sentry.io/<project-id>` | EU region (`*.ingest.de.sentry.io`, not `.us.`). Staging + production map to **the same Sentry project** but different `SENTRY_ENVIRONMENT` tags. |
+| `SENTRY_ENVIRONMENT`        | optional           | per-env  | `production` / `staging`                               | Tagged on every event for filtering. Defaults to `NODE_ENV`.                                                                                      |
+| `SENTRY_RELEASE`            | optional           | per-env  | `<git short sha>`                                      | Set by the deploy pipeline to the image tag (`${{ github.sha }}` short form) so the source-map upload + release tracking align.                   |
+| `SENTRY_TRACES_SAMPLE_RATE` | optional           | per-env  | `0.1`                                                  | Default 0 (no APM traces). 0.1 in staging for tuning; production typically 0.01 to keep quota down.                                               |
+
+### Stripe (payment processing — fiat only at launch)
+
+Per V-052: Stripe is the sole payment rail. Coinbase Commerce dropped.
+
+| Name                           | Required           | Per-env? | Example                                          | Notes                                                                                                                                                                                                                                        |
+| ------------------------------ | ------------------ | -------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `STRIPE_PUBLISHABLE_KEY`       | required at deploy | per-env  | `pk_test_<...>` / `pk_live_<...>`                | Test mode for staging + pre-KvK; live mode for production post-KvK. Stripe enforces the test-vs-live split server-side.                                                                                                                      |
+| `STRIPE_SECRET_KEY`            | required at deploy | per-env  | `sk_test_<...>` / `sk_live_<...>`                | Same split. Live keys never enter chat / PR — written directly into Hetzner `.env` via SSH at production cutover.                                                                                                                            |
+| `STRIPE_WEBHOOK_SECRET`        | required at deploy | per-env  | `whsec_<...>`                                    | Per-endpoint signing secret, populated after the webhook URL is registered with Stripe. Different per environment because webhook URLs differ (`/staging/webhooks/stripe` vs `/v1/webhooks/stripe`).                                         |
+| `DRIFTSTACK_TIER_PRICE_IDS`    | required at deploy | per-env  | `{"starter":"price_xxx","solo":"price_xxx",...}` | JSON map of tier slug → Stripe price ID. SKU naming convention: `driftstack_<tier>_<period>` (e.g. `driftstack_starter_monthly`). Annual SKUs `_annual` later. Founder creates in Stripe test mode (staging) + later live mode (production). |
+| `DRIFTSTACK_BYOK_METER_NAME`   | optional           | shared   | `driftstack_llm_tokens`                          | Meter event name for BYOK LLM token billing. Defaults to `driftstack_llm_tokens`. Stripe meter aggregates monthly.                                                                                                                           |
+| `DRIFTSTACK_BYOK_MARKUP_RATIO` | optional           | shared   | `1.3`                                            | Multiplier on Anthropic published rates for bundled-LLM customers. Placeholder `1.3` until founder confirms. BYOK customers (own Anthropic key) skip metering entirely; detected via account flag.                                           |
+
+### Anthropic (bundled-LLM AI agent — opt-in only)
+
+Per V-046 / V-048: Anthropic is a conditional Sub-processor; engaged
+only for customers who opt into bundled-LLM billing. BYOK customers
+supply their own Anthropic key directly to the SDK and don't trigger
+this path.
+
+| Name                | Required           | Per-env? | Example        | Notes                                                                                                                                                                                                                                  |
+| ------------------- | ------------------ | -------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY` | required at deploy | per-env  | `sk-ant-<...>` | Driftstack's Anthropic key for the bundled-LLM path. Production-only at launch (bundled LLM is disabled in staging). Server fails to boot the bundled-LLM service if this is required at runtime + missing — gate with a feature flag. |
+
+### Moneybird (accounting / invoicing)
+
+Workstream E scoping doc + Workstream D implementation. Founder
+holds the access token + administration ID.
+
+| Name                          | Required           | Per-env? | Example          | Notes                                                                                                                          |
+| ----------------------------- | ------------------ | -------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `MONEYBIRD_API_TOKEN`         | required at deploy | per-env  | `<bearer token>` | Moneybird personal access token (or OAuth2 token; OAuth2 recommended in scoping doc). Founder delivers at implementation time. |
+| `MONEYBIRD_ADMINISTRATION_ID` | required at deploy | per-env  | `<numeric id>`   | One administration per BV. Staging may use a separate test administration; production uses the BV's production administration. |
+
+### Legal / entity placeholders (post-KvK)
+
+These are read into the legal documents at startup (V-047
+LegalDocumentCatalog reads `docs/legal/*.md`) and the Privacy /
+ToS / DPA placeholder substitution (founder's task post-KvK).
+
+| Name                    | Required          | Per-env? | Example                         | Notes                                                                                                                    |
+| ----------------------- | ----------------- | -------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `BV_LEGAL_NAME`         | required post-KvK | shared   | `Driftstack B.V.`               | Find-replaces `[BV LEGAL NAME]` in the legal documents at server startup. Pre-KvK: leave unset; placeholder text serves. |
+| `BV_KVK_NUMBER`         | required post-KvK | shared   | `<8 digits>`                    | Find-replaces `[KvK NUMBER]`.                                                                                            |
+| `BV_BTW_NUMBER`         | required post-KvK | shared   | `NL<9 digits>B<2 digits>`       | Find-replaces `[BTW NUMBER]`. Format: `NL` + 9 digits + `B` + 2 digits per Dutch BTW format.                             |
+| `BV_REGISTERED_ADDRESS` | required post-KvK | shared   | `<street>, <postal> <city>, NL` | Find-replaces `[REGISTERED ADDRESS]`. Single-line format.                                                                |
+
+The find-replace lands in V-046 follow-up work; founder direction is
+to keep brackets in `docs/legal/*.md` and substitute at runtime, not
+to commit values.
+
+### Future Workstream slots (placeholder — not yet wired)
+
+| Name                                      | Notes                                                                                                                            |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `JWT_SIGNING_KEY_KID`                     | Per V-052 §4: control-plane signing key id (current). Rotation event format documented in `docs/network-architecture.md` §4.     |
+| `FLEET_NODE_PUBLIC_KEY_CACHE_TTL_SECONDS` | Default 15. JWT validation cache TTL for `(node_id, public_key, revoked_at)` triples. See network-architecture.md §4 revocation. |
+
+## Per-environment baseline
+
+A minimum staging `.env` looks roughly like this (no actual values,
+shapes only):
+
+```
+NODE_ENV=production
+PORT=7780
+LOG_LEVEL=info
+DRIVER=mock
+
+DATABASE_URL=postgres://...neon.tech/...
+REDIS_URL=rediss://...upstash.io:...
+
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET_RECORDINGS=driftstack-recordings-staging
+
+POSTMARK_API_TOKEN=...
+POSTMARK_FROM=Driftstack <noreply@driftstack.dev>
+POSTMARK_REPLY_TO=support@driftstack.dev
+
+SENTRY_DSN=https://...ingest.de.sentry.io/...
+SENTRY_ENVIRONMENT=staging
+
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+DRIFTSTACK_TIER_PRICE_IDS={"starter":"price_xxx","solo":"price_xxx","builder":"price_xxx","scale":"price_xxx"}
+
+# bundled LLM disabled in staging by default
+# ANTHROPIC_API_KEY=
+
+MONEYBIRD_API_TOKEN=...
+MONEYBIRD_ADMINISTRATION_ID=...
+```
+
+Production `.env` is structurally identical with environment-tagged
+values (`SENTRY_ENVIRONMENT=production`, `R2_BUCKET_RECORDINGS=
+driftstack-recordings-production`, etc.) and live-mode Stripe keys
+post-KvK.
+
+## How DEPLOY_DOTENV_BASE64 gets populated
+
+Per founder direction (V-052 decision 2): values reviewed via the
+GitHub UI (not `gh secret set`), one at a time. Founder workflow:
+
+1. Compose the `.env` file locally per the schema above.
+2. `base64 -i .env > .env.b64` (single-line base64 on macOS:
+   `base64 -i .env | tr -d '\n' > .env.b64`).
+3. Open repo settings → Environments → staging → Add secret →
+   `DEPLOY_DOTENV_BASE64` → paste contents of `.env.b64`.
+4. Repeat for production environment.
+
+The deploy pipeline (`deploy.yml`) decodes it onto the Hetzner VM
+at deploy time. Full round-trip stays on the founder's machine +
+GitHub + Hetzner; no third-party secret store at this stage. When
+secret count or rotation cadence justifies, migrate to HashiCorp
+Vault / 1Password Connect / equivalent.
+
+## Validation checklist
+
+Before flipping `DEPLOY_DOTENV_BASE64` for the first time:
+
+- [ ] `NODE_ENV=production` set explicitly (Dockerfile already
+      hardcodes; .env override would be unusual).
+- [ ] `DATABASE_URL` ends with `?sslmode=require` (Neon enforces TLS).
+- [ ] `REDIS_URL` uses `rediss://` not `redis://` (Upstash TLS).
+- [ ] `SENTRY_DSN` contains `.de.` for EU region.
+- [ ] `STRIPE_PUBLISHABLE_KEY` matches the mode of `STRIPE_SECRET_KEY`
+      (both `pk_test_` + `sk_test_` for staging; both `pk_live_` +
+      `sk_live_` for production).
+- [ ] `DRIFTSTACK_TIER_PRICE_IDS` JSON parses (server fails fast if
+      not).
+- [ ] `BV_*` placeholders left empty pre-KvK; the legal-doc
+      placeholder substitution skips when unset.
+
+## Updating this doc
+
+Every PR that adds or removes a `process.env.X` read in
+`apps/server/src/lib/config.ts` (or any other server-side env
+read) lands here in the same commit. The CI build step verifies
+that the `ConfigSchema` Zod object's required keys are documented
+above — when it isn't (e.g. doc drift), CI fails.
+
+CI verification not yet wired; lands in Workstream A iteration 2
+when the Zod-config-vs-doc parity check is added as a unit test.

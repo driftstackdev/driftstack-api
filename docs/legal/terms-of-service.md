@@ -8,7 +8,7 @@
 > document represents the BV's intended position; defects from baseline
 > drafting are founder's risk.
 
-**Version:** 0.1.1-draft · **Effective:** 2026-05-03
+**Version:** 0.1.2-draft · **Effective:** 2026-05-03
 
 These Terms of Service ("**ToS**") govern Customer's access to and
 use of the Service offered by Driftstack. Capitalised terms are
@@ -228,10 +228,6 @@ Enterprise tier bills annually in advance by default.
 3. **iDEAL** for Customers with a Dutch bank account, via Stripe.
 4. **Bancontact** for Customers with a Belgian bank account, via
    Stripe.
-5. **Cryptocurrency** (USDC, USDT, BTC, ETH) via Coinbase Commerce.
-   Crypto payments are accepted at fixed USD-equivalent at invoice
-   issuance; Customer bears the conversion-rate risk between invoice
-   and payment.
 
 8.4 **VAT / BTW.**
 

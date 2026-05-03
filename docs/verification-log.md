@@ -2994,21 +2994,26 @@ First commit of Workstream A. Lands the foundational pieces; R2 + Postmark + Sen
 ### What changed
 
 **Container build:**
+
 - **`apps/server/Dockerfile`** — multi-stage build. Stage 1 (`builder`): Node 22 bookworm-slim, installs build deps (python3 / make / g++ / openssl for native modules), copies workspace manifests for layer-cached `npm install`, builds api-types then the server, prunes dev deps. Stage 2 (`runtime`): non-root user (`driftstack` uid 1001), copies pruned `node_modules` + built `dist` + migrations + bundled `docs/legal/*` (LegalDocumentCatalog reads them at startup, V-047). Healthcheck baked in (`fetch /health`). `EXPOSE 7780`. `CMD ["node", "apps/server/dist/index.js"]`.
 
 **Production compose file:**
+
 - **`infra/hetzner/docker-compose.yml`** — one service (the API container). Postgres + Redis + R2 are managed (Neon / Upstash / Cloudflare); not provisioned by Docker on the host. `env_file: .env` populated by the deploy pipeline from `DEPLOY_DOTENV_BASE64` GH secret. Binds `127.0.0.1:7780` only (Cloudflare Tunnel fronts external traffic). Healthcheck mirrors the Dockerfile. Log rotation: 50 MB × 5 files via the json-file driver.
 
 **Deploy pipeline:**
+
 - **`.github/workflows/deploy.yml`** — three jobs. (1) `build-image`: Docker Buildx build + push to `ghcr.io/driftstackdev/driftstack-api:<short-sha>` and `:latest`, GHA-cached. (2) `deploy-staging`: SSH to Hetzner (env: staging), pull + compose up + 10× retry on `/health` for readiness. (3) `deploy-production`: same pattern but gated on the GitHub `production` environment's manual-approval policy (founder configures approver list in repo settings). Required secrets per environment: `HETZNER_HOST`, `HETZNER_USER`, `HETZNER_SSH_KEY`, `DEPLOY_DOTENV_BASE64`.
 - CI workflow (existing `.github/workflows/ci.yml`) untouched — already covered build + test on PR with Postgres + Redis service containers.
 
 **Readiness endpoint:**
+
 - **`apps/server/src/lib/app.ts`** — new `GET /ready` endpoint. Public, no auth, no rate limit. Aggregates `readinessChecks: ReadinessCheck[]` from `AppDeps`; each check runs with a 1500 ms default timeout. Returns 200 with `{ready: true, checks: [...]}` if all pass; 503 if any fail. Test fixture passes no checks → /ready returns 200 with empty array (process-up semantics). Production wires checks for Postgres + Redis + R2 (lands in next V-entry within Workstream A — DB/Redis ping helpers + R2 client).
 - New `ReadinessCheck` interface + `runWithTimeout` helper exported alongside `AppDeps`.
 - New integration test in `auth.test.ts` confirms the empty-checks path returns 200.
 
 **Network architecture doc:**
+
 - **`docs/network-architecture.md`** (NEW) — V-051 / Workstream A foundational. Documents the three network surfaces:
   1. Customer ↔ control plane: Cloudflare Tunnel from Hetzner VM; loopback-only HTTP container; CF reads `/health`, Hetzner-internal probe reads `/ready`.
   2. Customer ↔ marketing site: Cloudflare Pages for `driftstack.dev` and `docs.driftstack.dev`; `app.driftstack.dev` reverse-proxies to the Hetzner VM for the dynamic onboarding surface.
@@ -3053,3 +3058,171 @@ Workstream A foundational pieces landed. Next iteration adds R2 + Postmark + Sen
 ### Next
 
 Architecture inputs flagged in the prior surface still pending from founder (per-tier limits, oxblood hex confirm, marketing repo location, Stripe/Coinbase test creds, etc.). Continuing Workstream A iteration with R2 + Postmark + Sentry would be next; alternatively V-051 can pause here for founder review of the network architecture doc before the more product-shaping integrations land.
+
+## V-052 — Drop Coinbase Commerce from legal docs + sub-processor lock; bump to v0.1.2-draft
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Legal-doc revision under the CLAUDE.md legal-content exception. Founder direction.
+
+Founder dropped the crypto rail from launch entirely: Coinbase Commerce closed for non-US/Singapore merchants 2026-03-31, Coinbase Business unavailable in NL. Stripe is the sole payment rail at launch (fiat-only). Crypto rail re-entry deferred post-KvK pending evaluation against actual transaction volume — candidates are Stripe's native USDC/USDB if EU merchant eligibility is confirmed, or EU-friendly alternatives (CoinGate, NOWPayments, BVNK, Triple-A). All customer-facing legal text revised; sub-processor list lock revised.
+
+### What changed
+
+**Sub-processor list lock (CLAUDE.md):**
+
+- Removed Coinbase Commerce from the locked sub-processor list. New list: Hetzner, Neon, Upstash, Cloudflare (R2 + Pages + DNS), Postmark, Sentry, Stripe, Anthropic (BYO bundled LLM only, opt-in), Moneybird, MacStadium.
+- Added explicit "Crypto rail dropped from launch" block citing Coinbase Commerce closure date, NL unavailability of Coinbase Business, Stripe's USDC/USDB path as the post-KvK candidate, and EU-friendly alternative processors as deferred fallbacks.
+- Removed `Coinbase Commerce SDK + webhook handlers` from the billing-integration-code clause of the legal-content exception extension.
+
+**Legal-doc revisions (all bumped to v0.1.2-draft):**
+
+- **`docs/legal/definitions.md`** — `Coinbase Commerce` defined-term entry removed entirely. `Subscription` definition simplified: "purchased via Stripe" (was "purchased via Stripe or via the cryptocurrency payment rail (Coinbase Commerce)").
+- **`docs/legal/terms-of-service.md`** — payment method 5 (Cryptocurrency / Coinbase Commerce) removed from §8.3. Stripe is the sole listed payment processor.
+- **`docs/legal/privacy-policy.md`** — Coinbase row removed from §7 sub-processor table. §3.6 "billing data" section: "crypto rail" dropped from payment-method types; source attribution simplified to "Stripe returns transaction metadata" (was "Stripe and Coinbase Commerce").
+- **`docs/legal/dpa.md`** — Coinbase, Inc. row removed from Annex 3 sub-processor list.
+- **`docs/legal/acceptable-use-policy.md`** — §7.3 (Coinbase Commerce AUP item) removed entirely. §7.2 revised to drop the Paddle merchant-of-record reference and the explicit Coinbase mention; future processor additions covered generically via the DPA's sub-processor amendment mechanism.
+- **`docs/legal/README.md`** — current version bumped to `0.1.2-draft`. New history entry under V-052 documents the rationale (Coinbase closure + NL unavailability + Stripe-only at launch + crypto re-entry candidates). Counsel-review focus area #4 (EU-US DPF applicability) updated to remove Coinbase from the per-sub-processor verification list.
+
+**Network architecture doc:**
+
+- **`docs/network-architecture.md`** §3 cross-provider data-flow table — Coinbase Commerce row removed. Stripe remains the sole payment processor row.
+
+### Empirical findings
+
+1. **`grep -rln Coinbase docs/legal/` returns empty after the revision.** Confirmed by post-edit sweep: the only remaining `Coinbase` references in the repo are (a) `docs/legal/README.md` history block (intentional — versioning history), (b) `CLAUDE.md` history block (intentional — sub-processor lock evolution + crypto-rail deferral rationale). Customer-facing legal text contains zero Coinbase references.
+
+2. **Document-level versioning forces re-acceptance under conservative posture.** Per `docs/legal/README.md` versioning rules, minor bumps (`0.1.x` → `0.2.0`) force re-acceptance; patch bumps (`0.1.1` → `0.1.2`) do not. This revision is patch-level: the substantive change for any current customer is "the sub-processor list shrank by one entry whose service the customer never actually consumed." No re-acceptance trigger fires. If counsel reviews and decides Coinbase removal is material enough to require re-acceptance, version moves to 0.2.0-draft and re-accept fires through the existing V-047 machinery.
+
+3. **AUP §7.2 generic phrasing chosen over Paddle/Coinbase-specific wording.** Original §7.2 referenced Paddle (already dropped at V-048) and §7.3 referenced Coinbase. Both removals leave the AUP without specific named alternative-processor scenarios; the revised §7.2 covers the future case generically: "If Driftstack subsequently engages an additional payment processor (e.g. a merchant-of-record alternative or a cryptocurrency processor), customers will be notified per the Sub-processor amendment mechanism in the DPA." This avoids re-revising AUP each time a payment-rail decision changes; the DPA's Art 28(2) sub-processor amendment mechanism is the single source of truth for that flow.
+
+4. **Counsel-review focus area #4 (DPF applicability) shrinks.** Sub-processors requiring DPF self-certification verification: Stripe, MacStadium, Anthropic. Was: same three plus Coinbase. Counsel verification surface area shrinks correspondingly.
+
+### Verify chain
+
+- typecheck/lint/format all clean (touched only docs/markdown).
+- `npm test`: **328/328** unchanged from V-051. No code paths affected.
+
+### Decisions made
+
+No new D-entries. Sub-processor list and payment-rail composition are operational facts, not architecture decisions. The revised CLAUDE.md sub-processor lock is the source of truth.
+
+### Status
+
+Customer-facing legal text + sub-processor lock fully reflect Stripe-only fiat-rail at launch. Re-acceptance not triggered (patch bump). Counsel review pre-publication blocker remains the gate before first paying customer.
+
+### Next
+
+V-053 lands the env-var schema doc (founder-directed: "Don't ship without this doc — undocumented env-var sprawl is how production breaks two months in"). V-054 revises the network architecture doc with the three founder-decided architecture decisions (mTLS terminator, fleet-node identity bootstrap with revocation-required, JWT signing-key rotation event format).
+
+## V-053 — Env-var schema doc at `docs/deployment/env-vars.md`
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream A pre-deploy artifact. Founder direction: doc must land before `DEPLOY_DOTENV_BASE64` is populated for either environment.
+
+Founder direction (verbatim): "Don't ship without this doc — undocumented env-var sprawl is how production breaks two months in." V-053 is that doc.
+
+### What changed
+
+- **`docs/deployment/env-vars.md`** (NEW, 244 lines) — single source of truth for every env var the control plane reads or will read in the next two workstreams. Sections:
+  - **Process / runtime** — `NODE_ENV`, `PORT`, `HOST`, `LOG_LEVEL`, `DRIVER`. Values + defaults + per-environment differences (staging vs production).
+  - **Postgres** — `DATABASE_URL`. Separate Neon projects per environment (no shared DB across staging/production). Required everywhere.
+  - **Redis** — `REDIS_URL`. `rediss://` TLS-only Upstash URL. Required everywhere.
+  - **Mock-driver tuning** — `MOCK_NAVIGATE_LATENCY_MS`, `MOCK_INTERACT_LATENCY_MS`. Optional. Used in test/dev only.
+  - **Cloudflare R2** — `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_RECORDINGS`, `R2_ENDPOINT_URL`. Lands in V-053+ Workstream A iter 2.
+  - **Postmark** — `POSTMARK_API_TOKEN`, `POSTMARK_FROM`, `POSTMARK_REPLY_TO`. Lands in V-053+ Workstream A iter 2.
+  - **Sentry** — `SENTRY_DSN` (must contain `.de.` for EU region), `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, `SENTRY_TRACES_SAMPLE_RATE`. Lands in V-053+ Workstream A iter 2.
+  - **Stripe** — `STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `DRIFTSTACK_TIER_PRICE_IDS` (JSON map), `DRIFTSTACK_BYOK_METER_NAME`, `DRIFTSTACK_BYOK_MARKUP_RATIO`. Lands in Workstream D.
+  - **Anthropic** — `ANTHROPIC_API_KEY`. BYO bundled LLM only (opt-in feature). Optional.
+  - **Moneybird** — `MONEYBIRD_API_TOKEN`, `MONEYBIRD_ADMINISTRATION_ID`. Lands in Workstream E.
+  - **Legal entity placeholders** — `BV_LEGAL_NAME`, `BV_KVK_NUMBER`, `BV_BTW_NUMBER`, `BV_REGISTERED_ADDRESS`. All required post-KvK; populated at first paying customer activation.
+  - **Future Workstream slots** — `JWT_SIGNING_KEY_KID`, `FLEET_NODE_PUBLIC_KEY_CACHE_TTL_SECONDS`. Reserved for fleet-integration workstream.
+- Per-environment baseline `.env` example block (no actual values, structure only).
+- DEPLOY_DOTENV_BASE64 population instructions: `base64 -i .env | pbcopy` → paste into the GH environment secret. Per-environment secret (staging vs production).
+- Validation checklist: TLS in URLs, Stripe key mode parity (test keys → staging, live keys → production), `DRIFTSTACK_TIER_PRICE_IDS` JSON parsability, R2 endpoint URL form (`https://<account_id>.r2.cloudflarestorage.com`), Sentry DSN region marker.
+- "Updating this doc" note: future commit lands a CI parity check (compare `apps/server/src/lib/config.ts` Zod env schema against this doc's listed vars; fail if drift). Deferred to Workstream A iter 2 since the schema currently only covers `config.ts`'s 9 vars; iter 2 will expand it as R2/Postmark/Sentry land.
+
+### Empirical findings
+
+1. **The doc lists vars that don't yet exist in `apps/server/src/lib/config.ts`.** Intentional. The doc is forward-looking — it documents the post-Workstream A/D/E shape so DEPLOY_DOTENV_BASE64 can be populated in two batches (Workstream A iter 1 secrets now, Workstream D + E secrets after their workstreams land) without going back to amend the doc each time. Each section flags which workstream lands the var; Workstream A iter 1 vars are the only ones currently reachable by code.
+
+2. **Sentry DSN region marker is load-bearing.** EU Sentry DSN looks like `https://<key>@o<org>.ingest.de.sentry.io/<project>`; US DSN is `.us.` instead of `.de.`. Pasting the wrong region routes error data through US infrastructure and breaks the EU-only data residency claim in the privacy policy. The validation checklist explicitly checks for `.de.` substring before deploy.
+
+3. **`DRIFTSTACK_TIER_PRICE_IDS` shape choice.** JSON-stringified map (`{"starter_monthly":"price_…","starter_yearly":"price_…","pro_monthly":"price_…",...}`) over 6+ separate `STRIPE_PRICE_ID_*` vars because (a) shape mirrors the tier-key naming convention (`driftstack_<tier>_<period>`), (b) adding a new tier requires only a JSON-map extension, not a new secret + redeploy, (c) Zod parses + validates the whole map at boot — single point of failure if the map is malformed, with a clear error message. Trade-off: secret rotation requires re-templating the whole JSON. Acceptable at the v1 cadence.
+
+4. **Stripe key mode parity is a foot-gun.** Test-mode publishable + live-mode secret (or vice versa) silently produces 401s on every Stripe call with no obvious symptom. The validation checklist enforces both keys share the same prefix (`sk_test_` ↔ `pk_test_`, `sk_live_` ↔ `pk_live_`) before deploy.
+
+### Verify chain
+
+- typecheck/lint/format all clean (docs-only change, no code touched).
+- `npm test`: **328/328** unchanged.
+
+### Decisions made
+
+No new D-entries. The doc captures decisions made elsewhere (Stripe-only at launch from V-052, fleet-integration env shape from V-054, etc.) — no new decisions originate here.
+
+### Status
+
+Doc landed; founder can populate `DEPLOY_DOTENV_BASE64` for staging using only the Workstream A iter 1 vars (NODE*ENV / PORT / HOST / LOG_LEVEL / DRIVER / DATABASE_URL / REDIS_URL plus optional MOCK*\*). Production environment population waits on Stripe / R2 / Postmark / Sentry workstream landings.
+
+### Next
+
+V-054 lands the network architecture doc revisions reflecting founder's three architecture decisions (mTLS terminator placement, fleet-node identity bootstrap with revocation-required, JWT signing-key rotation event format).
+
+## V-054 — Network architecture doc revisions: revocation flow + JWT rotation event format + decided-architecture section
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream A architecture pinning. Founder sign-off on V-051 open questions.
+
+Founder closed the three open architecture questions from V-051 §7 with explicit direction. Most consequential: "build revocation flow from day one. Don't ship fleet integration without revocation; it's an order of magnitude harder to retrofit than to build in." V-054 pins those decisions into the network architecture doc, adds the revocation-flow design + the JWT signing-key rotation event format, and replaces the "open questions for founder" section with a "decided architecture" section that captures the rationale.
+
+### What changed
+
+- **`docs/network-architecture.md`** §4 (Control plane ↔ Mac Mini fleet) — three new subsections appended after the v1 design walkthrough:
+  - **"Revocation (required from day one)"** —
+    - DB column: `fleet_nodes.revoked_at TIMESTAMPTZ NULL`. Non-null = revoked; never deleted (audit trail preserved).
+    - JWT validation flow: `(node_id, kid)` → look up `fleet_signing_keys` row + `fleet_nodes` row → reject if `fleet_nodes.revoked_at IS NOT NULL`.
+    - Cache: Redis-backed `fleet_node:<node_id>` key with 15-second TTL caching the `(public_key, revoked_at)` tuple. Invalidated immediately by `DEL fleet_node:<node_id>` from the admin endpoint on revoke.
+    - Admin endpoint: `POST /v1/admin/fleet/{node_id}/revoke` — sets `revoked_at = NOW()`, deletes the cache entry, logs to existing `admin_audit_log` table with payload `{"action":"fleet_node_revoke","node_id":<>,"reason":<text>}`.
+    - Reasons enumerated: compromised device, decommissioned hardware, suspected key leak, lost/stolen.
+    - 15-second TTL chosen over instant invalidation because (a) the admin-side `DEL` covers the immediate-propagation case for a known revocation, (b) the TTL bounds stale-cache exposure if the `DEL` is ever lost (network blip, Redis restart), (c) 15s is acceptable exposure for a key already known to be compromised — in any realistic scenario the attacker has already done the damage by the time revoke fires.
+  - **"JWT signing-key rotation event format"** —
+    - DB schema for `fleet_signing_keys` table: `id uuid PK` + `kid text UNIQUE` (embedded in JWT JOSE header) + `public_key text` (PEM; private key lives in Vault, not in this table) + `created_at` + `active_from` + `active_until` (active_from + 30 days for normal rotation) + `retired_at` (nullable; set when the key is no longer accepted for verification, = active_until + 24h).
+    - Rotation event format (logged to `admin_audit_log`): `{event: "fleet_signing_key.rotated", previous_kid, new_kid, previous_active_until, new_active_from, overlap_window_hours: 24, rotation_actor: "automated_monthly_rotation" | "<admin_id> manual"}`.
+    - JWT verification flow uses the JOSE `kid` header: client signs with the key currently in `[active_from, active_until)`; server verifies against any key still within `[active_from, retired_at)` window. The 24h overlap means a fleet node that fetches the new key 23h after rotation still has 1h of old-key validity to catch up.
+    - Rotation cadence: monthly auto-rotate with 24h overlap. Cron job lands in fleet-integration workstream; the schema + event format are pinned now so the audit-log shape is locked before the cron lands.
+- **`docs/network-architecture.md`** §3 cross-provider table — Coinbase Commerce row already removed in V-052; no V-054 change.
+- **`docs/network-architecture.md`** §7 — replaced "Open questions for founder" with "Decided architecture (V-052 founder sign-off)":
+  - **mTLS terminator:** Hetzner-side direct termination (not Cloudflare API Shield). Rationale: fleet endpoint is not customer-facing, Cloudflare WAF/DDoS less load-bearing, avoids API Shield paid-feature dependency, simpler config.
+  - **Fleet-node identity bootstrap:** on-device keypair generation; founder posts the public key via the admin API at provisioning time; **revocation flow required from day one** (compromised device, decommissioned, suspected leak, lost/stolen).
+  - **JWT signing-key rotation:** monthly auto-rotate with 24h overlap window. Rotation event format documented in §4 to enable audit reconstruction of which key signed which JWT at which time.
+- Remaining open items in §7 reduced to two: log-shipping threshold (when to ship Pino logs to a managed service vs keep on-host), and status-page provider choice (instatus / statuspage / Cloudflare Status). Both are operational decisions, not architectural; deferred to first-customer onboarding.
+
+### Empirical findings
+
+1. **Revocation cache TTL choice (15s) is asymmetric with the JWT-exp choice (5min).** A revoked node still holds a JWT valid for up to 5 minutes from its issuance time; the cache TTL only bounds how long the _next_ JWT issued by that revoked node could be accepted. The total worst-case revoked-node window is `JWT-exp + cache-TTL ≈ 5min15s`. Acceptable for a key-revocation flow whose primary use case is "compromised device — the attacker already has whatever they were after." If the threat model tightens later (e.g., per-tier restriction on what a fleet node can pull), the JWT-exp shrinks first; cache TTL stays.
+
+2. **`kid` header lookup ties JWT to specific signing key for full audit reconstruction.** Without `kid`, a JWT signed during the overlap window is ambiguous between two keys. With `kid`, the audit log can answer "which physical signing key signed this specific JWT" exactly — the foundation for the security audit trail the founder asked for.
+
+3. **Schema-pinning before code lands prevents migration churn.** `fleet_signing_keys` and `fleet_nodes.revoked_at` are pinned now; the fleet-integration workstream lands the cron + admin endpoint + Redis cache against this fixed schema. If the schema were left "TBD," each iteration of the fleet code would risk a schema migration. By locking the audit-log event shape now, downstream code has a stable target.
+
+4. **24h overlap is the conservative end of "monthly rotation."** Some implementations use 1h overlap; some use 7d. 24h was chosen because (a) Mac Mini fleet nodes might be rebooted overnight on a maintenance window, (b) a 1h window would mean a node restarting during the rotation hour could fail to verify, (c) a 7d window leaks rotation-window key-validity exposure for too long. 24h is the sweet spot: covers a realistic operational hiccup without holding old keys live for a week.
+
+### Verify chain
+
+- typecheck/lint/format all clean (docs-only change, no code touched).
+- `npm test`: **328/328** unchanged.
+
+### Decisions made
+
+No new D-entries. Architecture decisions live in `docs/network-architecture.md` §7 ("Decided architecture") with full rationale; the doc is the source of truth.
+
+### Status
+
+Network architecture doc fully reflects founder-decided architecture. Three load-bearing decisions pinned: Hetzner-side mTLS terminator, on-device keypair bootstrap with revocation-required-from-day-one, monthly JWT signing-key rotation with 24h overlap and documented audit-event format. Fleet-integration workstream can now land code against fixed schema and pinned architecture.
+
+### Next
+
+Workstream A iteration 2: R2 + Postmark + Sentry SDK integrations, plus real readiness checks (`SELECT 1` / `PING` / R2 HEAD) wired into `AppDeps.readinessChecks`. After Workstream A iter 2: parallel kickoff on Workstream B (marketing site), Workstream C (admin panel), Workstream D revision (Stripe-only — Coinbase scaffolding dropped per V-052), Workstream E (Moneybird scoping), Workstream F (onboarding flow). Mac Mini fleet integration coordinates with Agent 1 and lands when Agent 1's WebKit fork Phase 2 closes.

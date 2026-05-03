@@ -8,7 +8,7 @@
 > document represents the BV's intended position; defects from baseline
 > drafting are founder's risk.
 
-**Version:** 0.1.1-draft · **Effective:** 2026-05-03
+**Version:** 0.1.2-draft · **Effective:** 2026-05-03
 
 This Data Processing Agreement ("**DPA**") forms part of the
 [Terms of Service](terms-of-service.md) between [BV LEGAL NAME] (the
@@ -499,7 +499,6 @@ The same list as in [Privacy Policy Section 7](privacy-policy.md#7-sub-processor
 | MacStadium, Inc.                          | Mac mini fleet hosting                   | US, California                    | 2021 SCCs Module 2 + EU-US DPF (verify) |
 | Stripe Payments Europe Ltd                | Payment processing (EEA/UK/CH Customers) | Ireland                           | EEA-internal                            |
 | Stripe, Inc.                              | Payment processing (non-EEA Customers)   | US, Delaware                      | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| Coinbase, Inc.                            | Cryptocurrency payment processing        | US, Delaware                      | 2021 SCCs Module 2 + EU-US DPF (verify) |
 | Anthropic, PBC (conditional, opt-in only) | Bundled-LLM AI agent                     | US, Delaware                      | 2021 SCCs Module 3 + EU-US DPF (verify) |
 | Moneybird B.V.                            | Accounting + invoicing                   | Netherlands                       | EEA-internal                            |
 | Hetzner Online GmbH                       | Control-plane hosting (VM)               | Germany                           | EEA-internal                            |
