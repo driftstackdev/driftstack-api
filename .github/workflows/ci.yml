@@ -198,11 +198,20 @@ jobs:
           from driftstack import DriftstackError, RateLimitError, AuthError
           from driftstack._generated.models import Session, ApiKey, WebhookEndpoint
           client = Driftstack(api_key='ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+          # Original 4 resources
           assert hasattr(client, 'sessions')
           assert hasattr(client, 'api_keys')
           assert hasattr(client, 'usage')
           assert hasattr(client, 'webhooks')
-          print('wheel smoke ok')
+          # V-103 additions
+          assert hasattr(client, 'profiles')
+          assert hasattr(client, 'billing')
+          assert hasattr(client, 'auth')
+          # Async parity
+          aclient = AsyncDriftstack(api_key='ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+          for accessor in ['sessions', 'api_keys', 'usage', 'webhooks', 'profiles', 'billing', 'auth']:
+              assert hasattr(aclient, accessor), accessor
+          print('wheel smoke ok — all 7 resource accessors wired')
           "
 
   go-sdk:

@@ -6203,3 +6203,36 @@ Request/response bodies typed as `dict[str, Any]` pending the next `scripts/gene
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-104 — Python SDK CI smoke test for V-103 accessors (Routine — CI hygiene)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+V-103 added three new resource accessors to the Python SDK (profiles / billing / auth) but the CI smoke-test step only asserted the original four. V-104 extends the smoke test to catch regressions in the wheel install + import path.
+
+### What changed
+
+`.github/workflows/ci.yml` — extended the `Smoke-test wheel install in a fresh venv` step:
+
+- Asserts all 7 sync accessors are wired (`sessions / api_keys / usage / webhooks / profiles / billing / auth`).
+- Adds parallel async-client check via `AsyncDriftstack`, asserting the same 7 accessors are wired on the async path.
+- Smoke output line updated: `wheel smoke ok — all 7 resource accessors wired`.
+
+### How verified
+
+- YAML-only change; no code in scope.
+- Manually traced `AsyncDriftstack` accessor list in `client.py` to confirm all 7 are wired.
+
+### Files modified
+
+- `.github/workflows/ci.yml`
+
+### Next
+
+Continuing per never-stop rule.
