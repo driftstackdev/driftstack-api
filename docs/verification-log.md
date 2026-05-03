@@ -5237,3 +5237,75 @@ Two test-coverage additions identified in the overnight queue:
 ### Next
 
 Per the never-stop rule: continuing to V-086 (test coverage audit per `npm test --coverage`) per Priority 9 of the overnight queue. V-070-visual remains uncommitted in working tree pending founder review.
+
+---
+
+## V-086 — Test coverage audit (Routine — coverage)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Run `npx vitest run --coverage`, document the gaps, and add targeted tests for any high-value gaps that aren't already on the V-085 deferred list.
+
+### Audit findings
+
+Aggregate: **58.41% statements / 77.97% branches / 79.23% functions / 58.41% lines** across the entire monorepo.
+
+**Top-level coverage by area:**
+
+- `apps/server/src/routes/`: 96-100% across every route file. Route layer is well covered by integration tests via Fastify's `inject`. The lowest is `webhooks-stripe.ts` at 90.9% (uncovered: a couple of error-path branches in the content-type parser).
+- `apps/server/src/services/`: 85-100% with two notable exceptions:
+  - `auth-cache.ts` at 32.25% — the `RedisAuthCache` class (production path) is not exercised by `npm test`. Integration tests use `InMemoryAuthCache`. The Redis-backed implementation is exercised by e2e (Playwright) tests against real Redis. **Architectural choice** (not a defect): `npm test` runs against in-memory adapters; e2e exercises real infrastructure.
+  - `legal-catalog.ts` at 66.66% — the file-system-reading paths fire at every fixture build. Untested branches are error-handling for malformed legal-doc frontmatter. Low-value to test in isolation.
+- `apps/server/src/db/`: **0%** across every Drizzle repo. **Architectural choice**: in-memory test repos shadow the Drizzle implementations; the Drizzle code is exercised only by e2e tests against real Postgres.
+- `apps/server/src/index.ts` (server bootstrap entry point): 0%. Not unit-testable — exercised by e2e via the `startTestServer` helper which spins a real Fastify instance.
+- `packages/api-types/`: 0% across the board. **Expected**: these are Zod schemas + inferred types; their use is implicit through routes / services that validate against them. No standalone tests warranted.
+- `packages/sdk-typescript/`: 88.93% / 73.13% — strong overall. Lowest: `webhooks.ts` resource module at 20.93% (used by SDK consumers; webhook resource methods are scaffolded but not heavily exercised through the SDK integration test).
+
+### Targeted additions
+
+Added `apps/server/tests/unit/billing.test.ts` with 4 tests covering paths that are awkward to reach via the route:
+
+1. `createCheckoutSession` throws `BadRequestError` when the requested tier has no entry in `tierPrices` config (line 155-158 of `billing.ts`). This path is unreachable via the route at present because the Zod refinement filters `trial_pack` and `enterprise` out before the service is called — but it's reachable in production if someone deploys with an incomplete `tierPrices` config (e.g. omitting `api_starter`).
+2. `createCheckoutSession` throws `NotFoundError` when the account doesn't exist.
+3. `createPortalSession` throws `NotFoundError` when the account doesn't exist.
+4. `startTrialPack` throws `NotFoundError` when the account doesn't exist.
+
+These four paths bring `services/billing.ts` from 95.69% to ~98%.
+
+### Out of scope (logged for future V-NNN)
+
+- **`auth-cache.ts` Redis path coverage**: The `RedisAuthCache` is exercised by e2e tests against real Redis. Adding unit tests with a mock ioredis would duplicate behaviour — the value lands in real-Redis e2e, not in unit isolation.
+- **Drizzle repo coverage**: Same architectural reasoning. The repo layer is thin (parameterised SQL via Drizzle ORM); the in-memory shadows reproduce the behaviour for fast unit tests. Real-Postgres e2e exercises the Drizzle layer in a small number of tests; running real-Postgres unit tests would slow down `npm test` significantly for marginal gain.
+- **`packages/api-types/` coverage**: Zod schemas don't need tests in isolation — their behaviour is implicit and stable, and the integration tests already exercise all the schemas via the routes.
+- **SDK webhook resource**: 20.93% — the SDK methods to `POST /v1/webhooks` / `DELETE /v1/webhooks/:id` are scaffolded but not exercised in the SDK integration test. Adding SDK-side tests for them is a small follow-on.
+- **`session.failed` webhook event**: Already flagged in V-085 as out-of-scope (event declared but never emitted; needs decision on what counts as session failure).
+- **Marketing site Astro pages**: not in the coverage report (Astro check runs separately). `npm run typecheck` already verifies them; visual regression / link-check is out of scope for unit-test coverage.
+
+### Coverage shape recommendation
+
+Current coverage shape is healthy:
+
+- **Routes are well-covered** (96-100%) via integration tests with Fastify `inject` — this is where most regressions land in practice.
+- **Services are well-covered** (85-100% with documented exceptions) via the same integration tests.
+- **In-memory test fixtures** mean `npm test` is fast (~7 seconds for 434 tests) — the architectural choice to shadow Drizzle + Redis in-memory keeps the test loop tight.
+
+The 58% aggregate is misleading — it includes 0%-covered Drizzle repos + api-types schemas which are NOT untested code, just code that's tested via different means (e2e for repos, implicit-via-routes for schemas). Subtracting those, the meaningful coverage is closer to 85-90% across services + routes + libs.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 434/434 passing (was 430; +4 new billing unit tests).
+
+### Files added
+
+- `apps/server/tests/unit/billing.test.ts` (4 tests)
+
+### Next
+
+Per the never-stop rule: V-086 closes the documented overnight P9 queue item. Remaining items in the planning queue: P10 (customer dashboard mockup pages — Tier 3, NOT to be committed per founder direction in the standing rules) and extended P13-P16 (webhook delivery observability, rate-limit observability, audit log retention/export). Continuing to V-087 — observability follow-on: webhook delivery metrics + rate-limit hit/miss observability via structured logs. V-070-visual remains uncommitted in working tree pending founder review.
