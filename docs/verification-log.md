@@ -5655,3 +5655,40 @@ The Pino logger in `createTestLogger` is configured at `level: 'silent'` — cap
 ### Next
 
 Continuing to V-093 — webhook delivery duration logging.
+
+---
+
+## V-093 — webhook delivery duration logging (Routine — observability)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Add `duration_ms` field to all three webhook delivery outcome log lines (delivered / DLQ / retry-scheduled) so observability tooling can answer "how long did the customer's endpoint take to respond?" — slow-customer alerting + capacity planning.
+
+### What changed
+
+`apps/server/src/services/webhook-worker.ts`:
+
+- `deliver()` captures `fetchStartMs = Date.now()` immediately before the `fetchImpl(...)` call and computes `durationMs = Date.now() - fetchStartMs` in a `finally` (so timeouts + network errors still report duration).
+- `handleOutcome` extended with `durationMs: number` parameter.
+- All three log lines (delivered info, DLQ warn, retry-scheduled warn) now include `duration_ms`.
+
+Date.now() chosen over `performance.now()` for consistency with the rest of the worker's clock (`this.now()` returns `Date`); ~1ms precision is fine for capacity-planning observability.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 465/465 (no test count change — pure observability addition).
+
+### Files modified
+
+- `apps/server/src/services/webhook-worker.ts`
+
+### Next
+
+Continuing to V-094 — ADR-005 Sentry-first observability proposal.

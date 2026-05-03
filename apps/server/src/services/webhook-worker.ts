@@ -130,6 +130,12 @@ export class WebhookDeliveryWorker {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
 
+    // V-093: wall-clock duration of the actual fetch call. Excludes
+    // body serialization + signing (negligible) but includes DNS +
+    // TCP + TLS + HTTP exchange. Reported via Date.now() rather than
+    // perf.now() because we already use Date for this.now() and the
+    // reporting precision is ~1ms which is fine.
+    const fetchStartMs = Date.now();
     let response: Response | null = null;
     let networkError: Error | null = null;
     try {
@@ -150,8 +156,9 @@ export class WebhookDeliveryWorker {
     } finally {
       clearTimeout(timer);
     }
+    const durationMs = Date.now() - fetchStartMs;
 
-    return this.handleOutcome(delivery, endpoint, response, networkError);
+    return this.handleOutcome(delivery, endpoint, response, networkError, durationMs);
   }
 
   private async handleOutcome(
@@ -159,6 +166,7 @@ export class WebhookDeliveryWorker {
     endpoint: WebhookEndpointRow,
     response: Response | null,
     networkError: Error | null,
+    durationMs: number,
   ): Promise<DeliveryOutcome> {
     const at = this.now();
 
@@ -173,6 +181,7 @@ export class WebhookDeliveryWorker {
           webhookId: endpoint.id,
           status: response.status,
           attempt: delivery.attempts + 1,
+          duration_ms: durationMs,
         },
         'webhook delivered',
       );
@@ -202,6 +211,7 @@ export class WebhookDeliveryWorker {
           status: responseStatus,
           attempts: nextAttemptIndex,
           lastError,
+          duration_ms: durationMs,
         },
         'webhook delivery → DLQ (max attempts)',
       );
@@ -230,6 +240,7 @@ export class WebhookDeliveryWorker {
         status: responseStatus,
         attempts: nextAttemptIndex,
         nextAttemptAt: nextAttemptAt.toISOString(),
+        duration_ms: durationMs,
       },
       'webhook delivery scheduled for retry',
     );
