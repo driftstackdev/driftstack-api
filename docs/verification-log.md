@@ -2248,3 +2248,46 @@ Scoped. Awaiting KvK closure inputs. Punch list lands in one post-closure sessio
 ### Next
 
 CAPABILITIES.md cross-check (when founder drafts). Idle until then.
+
+---
+
+## V-039 — CAPABILITIES.md drafted + placed (closure backlog for fingerprint parity)
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Cross-repo doc placement.
+
+Per founder direction: draft and place `docs/CAPABILITIES.md` autonomously, framed as the closure backlog for fingerprint parity (not marketing copy, not a status report). Bar = 100% match against genuine iPhone 17 Pro / iOS 26 Safari. Every non-zero residual is open. Initial entries pulled from V-031–V-144 across both repos.
+
+### What changed
+
+- **`docs/CAPABILITIES.md`** — created. Snapshot count at the top (currently **19 open residuals** as of main-repo V-143, 2026-05-03). Categories: Canvas2D glyph advance (6 entries), Canvas2D pixel rasterization (9 entries), Stage F complex scripts and transforms (7 entries), Canvas2D encoder MIME types (2 entries), Layout/Typography (1 entry), JS API surface (1 entry), Performance Timing (1 entry). Plus a "no current open residuals" section for categories where the rig measures zero today (Apple secure-context, speech voices, ontouchstart/matchMedia, WebGL, Network/TLS/HTTP, WebRTC, Permissions, Storage), so Agent 1 can drop new entries in without re-templating.
+
+### Empirical findings
+
+1. **Two parallel V-log namespaces both start at V-031.** Main repo (`/Users/john/code/driftstack/operations/verification-log.md`) covers V-031–V-143+ and is fingerprint-closure work. Control-plane repo (this one) covers V-031–V-039 and is API/SDK/GUI/contract work. Documented this disambiguation at the top of CAPABILITIES.md so future readers don't conflate the streams. Bare `V-NNN` citations refer to main repo by default; control-plane entries are explicitly suffixed `V-NNN [control]`.
+
+2. **All 19 open residuals are concentrated in Canvas2D + Layout.** Zero open residuals in JS DOM event surfaces (closed V-112), Apple secure-context (closed V-123), audio speech-synthesis names (closed V-112), WebGL/Metal/ANGLE (none measured), Network/TLS/HTTP (none measured), WebRTC (none measured). The main-repo cumulative match rate is 1250/1253 (99.76%), but the residual count is the independent gating metric — pass-rate denominators can mask tail-of-distribution misses.
+
+3. **Closure structure is additive.** Agent 1 logs new residuals as new rows in the relevant category table, or new category sections for surfaces not yet measured. Closure of an existing entry = delete the row. Founder explicitly: "Entries retire only when the rig measures zero." No "observable-by-design" framing kept anywhere — every delta is an open item until measurement says otherwise.
+
+4. **Pass-rate trajectory anchors included as context, not closure tracking.** V-072 (2026-05-01, 77.8%) → V-119–V-120 ASCII atlas sprint (99.3%) → V-123 HTTPS rig (99.76%) → V-143 (99.76%, with per-glyph emoji advance capture in flight). The trajectory tells you the closure work is real but doesn't itself close any residual; only rig-zero on a specific surface retires its entry.
+
+5. **Cross-repo coupling is light, by design.** CAPABILITIES.md cites WebKit-fork patches (`wave-1-stage-a`, `v-127-d5-kernel`, `v-138-full-coverage`, etc.) by patch ID, but the patch implementations live in `/Users/john/code/webkit-driftstack` (Agent 1's fork). The control-plane repo's role is to host the doc itself + the closure backlog ledger — it does not edit fingerprint patches. The mock-driver-as-contract boundary stays intact.
+
+### Verify chain
+
+No code changes; doc-only commit. Format check clean.
+
+### Status
+
+CAPABILITIES.md placed. Additive structure ready for Agent 1 entries.
+
+### Next
+
+Working through standing queue without waiting on founder direction (per founder explicit "After CAPABILITIES.md lands, keep moving without waiting on me"):
+
+- (a) **Recordings persistence (GUI6.5)** — ndjson via tauri fs plugin. In-memory ring was a dogfooding stopgap; persistence is needed before any real customer trial. Founder explicit "ship it." Next.
+- (b) **Marshalling round-trip test parity** — confirmed in V-037 audit pass: TS / Python / Go all have wire-shape tests. Done.
+- (c) **V-037 audit follow-ups** — three open items: tap.offset decision (founder call), TS SDK CHANGELOG (agent), drizzle-kit upgrade (agent at clean window). Working in priority.
+- (d) **Proxy field end-to-end with Agent 1** — blocked on Agent 1 SOCKS5 UDP ASSOCIATE + QUIC routing.
