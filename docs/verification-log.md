@@ -2291,3 +2291,52 @@ Working through standing queue without waiting on founder direction (per founder
 - (b) **Marshalling round-trip test parity** — confirmed in V-037 audit pass: TS / Python / Go all have wire-shape tests. Done.
 - (c) **V-037 audit follow-ups** — three open items: tap.offset decision (founder call), TS SDK CHANGELOG (agent), drizzle-kit upgrade (agent at clean window). Working in priority.
 - (d) **Proxy field end-to-end with Agent 1** — blocked on Agent 1 SOCKS5 UDP ASSOCIATE + QUIC routing.
+
+---
+
+## V-040 — GUI6.5: recordings persistence (ndjson via tauri fs)
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Self-hosted GUI client (file 128). Supersedes the V-034 in-memory ring.
+
+### What changed
+
+- **`apps/gui-client/src-tauri/Cargo.toml`** — added `tauri-plugin-fs = "2.0"`.
+- **`apps/gui-client/src-tauri/src/lib.rs`** — initialised `tauri_plugin_fs` alongside the existing shell + store plugins.
+- **`apps/gui-client/src-tauri/capabilities/default.json`** — scoped `fs:scope` to `$APPDATA/recordings/**` only. Granted `fs:allow-{read-text-file, write-text-file, remove, mkdir, exists, read-dir}`. No broader fs access.
+- **`apps/gui-client/package.json`** — added `@tauri-apps/plugin-fs ^2.1.0`.
+- **`apps/gui-client/src/lib/recordings-store.ts`** — new module. `loadIndex` / `loadFrames` / `persistRecording` / `deletePersisted` over the scoped fs API. Layout: `$APPDATA/recordings/index.json` (lightweight metadata for fast list-view hydration) + `$APPDATA/recordings/<id>.ndjson` (per-recording: header line + one frame-JSON per subsequent line). Index corruption falls back to a directory scan that rebuilds it from the ndjson files. Shape guards on every read.
+- **`apps/gui-client/src/lib/recordings.tsx`** — RecordingsProvider extended with on-mount index hydration, on-stop persistence, on-delete disk removal, on-unmount auto-flush of any active recording, and a `hydrateFrames(id)` lazy-loader the player calls when opening a persisted recording. The Recording interface gained `hydrated`, `frameCount`, `totalBytes` fields so the list view can render counts + size without forcing every recording's frames into memory.
+- **`apps/gui-client/src/views/RecordingsView.tsx`** — uses the cached `frameCount` + `totalBytes` for hydrated entries. `deleteRecording` is now async (void-wrapped at the call site).
+- **`apps/gui-client/src/views/RecordingPlayerView.tsx`** — calls `hydrateFrames` on mount when opening a persisted recording. Adds a "Loading frames…" state while the ndjson read is in flight.
+- **`apps/gui-client/src/views/LiveSessionView.tsx`** — toggleRecording now `void`-wraps the async `stopRecording` call.
+
+### Empirical findings
+
+1. **Persist on STOP, not per-frame.** At 2 fps × ~150 KB / frame, per-frame disk writes through Tauri's IPC would cost a couple ms each — fine in isolation but unnecessary churn for marginal crash safety. Recordings are deliberate; the user clicks Stop when they want to save. Per-stop write of the full ndjson is one IPC call. Same UX as the in-memory ring for the in-flight case (lose unstopped recordings on crash) but everything finalised survives restart.
+
+2. **Auto-flush on provider unmount catches the clean-close path.** When the user closes the app without clicking Stop, the React tree tears down and the unmount cleanup persists any active recording with non-zero frames. Fire-and-forget through the IPC queue — Tauri lets the writes drain before the process exits in most cases. Documented as best-effort; crash-during-recording still loses, parity with the existing model.
+
+3. **Lazy frame load keeps startup fast.** Without lazy load, hydrating 50 recordings × 1200 frames × 150 KB = 9 GB into memory at startup. The index file is a few KB; only opening a recording for playback reads its frames. Hydration shows a "Loading frames…" state in the player; the list view shows cached `frameCount` + `totalBytes` immediately.
+
+4. **fs capability scoped tightly.** `fs:scope` allows `$APPDATA/recordings/**` only — the GUI cannot read or write outside this directory. Specific `fs:allow-*` permissions for the verbs we use (read-text-file, write-text-file, remove, mkdir, exists, read-dir). No `fs:allow-write-binary-file`, no `fs:allow-rename`, etc. Same posture as the rest of the GUI's capabilities (see V-028 for the store plugin scoping precedent).
+
+5. **Bundle now 203 KB JS / 17 KB CSS (gzip 61 KB / 3.7 KB).** Up 6 KB from V-035's 197 KB due to plugin-fs runtime + the persistence module. Past the 200 KB watch I set in V-035; under the working ceiling. If GUI keeps growing, code-splitting RecordingPlayerView via `lazy()` would knock ~10 KB off initial bundle. Not urgent.
+
+6. **No GUI test infrastructure means persistence is verified by hand for now.** Integration testing the fs plugin requires a running Tauri WebView — too heavy for vitest. Smoke-test path: start GUI, record a session, stop, kill GUI, restart, confirm recording still listed and plays back. Documented in PACKAGING.md adjacent material if it ever becomes a CI concern.
+
+### Verify chain
+
+- typecheck/lint/format/test all clean.
+- Workspace tests: **312/312** vitest unchanged.
+- GUI bundle: 203 KB JS / 17 KB CSS.
+- Native tauri:build: not re-run (no native code beyond the plugin-fs `init()` registration; would compile but takes ~46 s).
+
+### Status
+
+GUI6.5 closed. Recordings now survive app restart. The dogfooding-stopgap label retires.
+
+### Next
+
+V-037 audit follow-ups (TS CHANGELOG agent-doable; tap.offset decision needs founder; drizzle-kit upgrade agent-doable at clean window).

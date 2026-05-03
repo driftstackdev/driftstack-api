@@ -195,7 +195,7 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
     if (recordingId === null) {
       startRecording(sessionId);
     } else {
-      stopRecording(recordingId);
+      void stopRecording(recordingId);
     }
   }
 

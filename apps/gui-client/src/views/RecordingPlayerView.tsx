@@ -25,15 +25,24 @@ export function RecordingPlayerView({
   recordingId,
   onBack,
 }: RecordingPlayerViewProps): JSX.Element {
-  const { recordings } = useRecordings();
+  const { recordings, hydrateFrames } = useRecordings();
   const recording = recordings.get(recordingId) ?? null;
 
   // Cursor position in ms relative to recording.startedAt.
   const [cursorMs, setCursorMs] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [hydrating, setHydrating] = useState(false);
   const tickRef = useRef<number | null>(null);
-  // Wall-clock anchor for the playback loop: { wallStart, cursorAtWallStart }
+  // Wall-clock anchor for the playback loop: { wallStart, cursorBase }
   const playStateRef = useRef<{ wallStart: number; cursorBase: number } | null>(null);
+
+  // Lazy-load frames the first time this player opens for a persisted recording.
+  useEffect(() => {
+    if (recording === null) return;
+    if (!recording.hydrated || recording.frames.length > 0) return;
+    setHydrating(true);
+    void hydrateFrames(recordingId).finally(() => setHydrating(false));
+  }, [recording, recordingId, hydrateFrames]);
 
   const totalMs = useMemo(
     () => (recording !== null ? recordingDurationMs(recording) : 0),
@@ -149,7 +158,9 @@ export function RecordingPlayerView({
       </header>
 
       <div className="flex flex-1 items-center justify-center overflow-hidden rounded border border-surface-divider bg-black">
-        {currentFrame === null ? (
+        {hydrating ? (
+          <span className="section-label text-ink-muted">Loading frames…</span>
+        ) : currentFrame === null ? (
           <span className="section-label text-ink-muted">No frames captured</span>
         ) : (
           <img

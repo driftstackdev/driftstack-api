@@ -12,6 +12,16 @@
     "core:resources:default",
     "core:menu:default",
     "core:tray:default",
-    "store:default"
+    "store:default",
+    {
+      "identifier": "fs:scope",
+      "allow": [{ "path": "$APPDATA/recordings/**" }]
+    },
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-remove",
+    "fs:allow-mkdir",
+    "fs:allow-exists",
+    "fs:allow-read-dir"
   ]
 }

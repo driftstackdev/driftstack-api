@@ -74,8 +74,8 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                     </Td>
                     <Td>
                       <span className="mono text-ink-secondary">
-                        {r.frames.length}
-                        {r.totalCaptured > r.frames.length && (
+                        {r.hydrated && r.frames.length === 0 ? r.frameCount : r.frames.length}
+                        {r.totalCaptured > Math.max(r.frames.length, r.frameCount) && (
                           <span className="ml-1 text-ink-muted">/ {r.totalCaptured}</span>
                         )}
                       </span>
@@ -98,7 +98,7 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                         <button
                           type="button"
                           className="btn-danger"
-                          onClick={() => deleteRecording(r.id)}
+                          onClick={() => void deleteRecording(r.id)}
                           disabled={live}
                           title={live ? 'Stop recording before deleting' : undefined}
                         >
