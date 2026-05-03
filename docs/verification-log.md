@@ -2340,3 +2340,51 @@ GUI6.5 closed. Recordings now survive app restart. The dogfooding-stopgap label 
 ### Next
 
 V-037 audit follow-ups (TS CHANGELOG agent-doable; tap.offset decision needs founder; drizzle-kit upgrade agent-doable at clean window).
+
+---
+
+## V-041 — V-037 audit follow-ups: TS CHANGELOG landed; drizzle bump deferred
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Audit follow-ups (V-037).
+
+Two of three V-037 follow-ups picked up; the third (`tap.offset` keep-or-remove) needs a founder call.
+
+### What changed
+
+- **`packages/sdk-typescript/CHANGELOG.md`** — created. Mirrors the Python + Go SDK CHANGELOG shape (Keep a Changelog + SemVer). Includes a pre-1.0 stability policy paragraph (additive minor bumps OK; breaking changes deferred to 1.0; pin `^0.1.0` not exact). Entries for 0.1.0, 0.1.1, 0.1.2, 0.1.3 backfilled from the V-log + commit history. The 0.1.2 entry explicitly documents the `tap_at` / `type_focused` addition + the 0.1.3 reversion per L-001 — anyone reading this CHANGELOG sees the policy correction, not just a silent revert.
+- **No TS SDK version bump** for this commit — the CHANGELOG is documentation that ships with the next release, not a release itself.
+
+### Empirical findings — drizzle-kit upgrade is bigger than it looked
+
+V-037 noted drizzle-kit 0.30.6 errored out when generating migrations with "Please install latest version of drizzle-orm". I tried bumping just drizzle-kit:
+
+1. **`drizzle-kit ^0.30.0` → `^0.31.0`.** Reinstalled; got drizzle-kit 0.31.10. Re-ran `npx drizzle-kit generate`. Still errored: "Please install latest version of drizzle-orm".
+2. **drizzle-kit 0.31.x requires drizzle-orm 0.39+.** We're pinned at `drizzle-orm: ^0.38.0` (currently resolves to 0.38.4). Latest drizzle-orm is 0.45.2 — a major version range jump.
+3. **drizzle-orm 0.38 → 0.45 is not a "clean window" change.** It touches the actual query builder API used across `apps/server/src/db/*-repo.ts`. Several breaking changes between minor versions in that range (relations API rewrite, type narrowing changes, a few signature shifts on `update().set()` and `with()`). Each repo file would need read-pass + manual test against the integration suite.
+4. **Reverted the drizzle-kit bump.** Back at `^0.30.0` everywhere; full verify chain green (312/312 vitest, lint/format/typecheck clean).
+
+**Surface for founder:** the drizzle bump is a half-day-to-day-of-work task on its own, not a follow-up. Recommendation: schedule it into a dedicated session when there's appetite for touching DB query code, OR accept the status quo (hand-write migrations as I did for V-036's `0004_gui_input_event_type.sql`; the cost is one bespoke SQL file per migration we add, which is small enough that auto-gen isn't paying for itself yet).
+
+### Status of the three V-037 follow-ups
+
+| Item | Status |
+|---|---|
+| `tap.offset` keep-with-bounds vs remove | **needs founder call** — borderline L-001 case, no autonomous edit |
+| TS SDK CHANGELOG | **done** (this entry) |
+| drizzle-kit upgrade | **deferred** — real ask is drizzle-orm 0.38→0.45 major bump; not a clean-window change. Surface above. |
+
+### Verify chain
+
+- typecheck/lint/format/test all clean.
+- 312/312 vitest unchanged (no code changes — only docs + ephemeral package.json edits that got reverted).
+- npm install reproduced clean from scratch.
+
+### Status
+
+V-037 follow-ups partially closed. One needs founder, one needs a bigger session. Marking the audit-follow-ups task as done in the agent's standing queue; the open items are now standalone surface-to-founder items.
+
+### Next
+
+Proxy field end-to-end is blocked on Agent 1 (SOCKS5 UDP ASSOCIATE + QUIC routing). Idle on the standing queue otherwise.
