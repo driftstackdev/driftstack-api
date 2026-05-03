@@ -5430,3 +5430,97 @@ Test coverage:
 ### Next
 
 Continuing per never-stop rule to V-089 — Stripe webhook event handler mutations (V-080 scaffolded the dispatch + idempotency; V-089 lands the actual subscription-mirror INSERT/UPDATE on `customer.subscription.{created,updated,deleted}` + trial-pack provisioning on `checkout.session.completed`).
+
+---
+
+## V-089 — Stripe webhook event handler mutations (Routine — Workstream D follow-on)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+V-080 scaffolded inbound Stripe webhook handling: signature verification, idempotency ledger, dispatch by `event.type`. The dispatch handlers were logging no-ops. V-089 fills the actual state mutations:
+
+- `customer.subscription.created` / `customer.subscription.updated` → upsert local `subscriptions` mirror row + set `accounts.tier` from price-id when subscription is in an active-paying state (`active` or `trialing`).
+- `customer.subscription.deleted` → mark mirror canceled + downgrade `accounts.tier` to the configured `cancelDowngradeTier` (default `trial_pack`).
+- `checkout.session.completed` (mode=payment) → provision trial-pack credit per ADR-003 (299¢, 14-day window, redeemed=false), idempotent on second delivery.
+- `checkout.session.completed` (mode=subscription) → informational only (the actual mirror write happens via the `customer.subscription.created` event that fires alongside).
+
+### What changed
+
+**`apps/server/src/services/stripe-webhooks.ts`:**
+
+- `StripeWebhooksRepo` interface extended with four new methods: `findAccountIdFromCustomerOrRef`, `upsertSubscription`, `setAccountTier`, `applyTrialPackPurchase`.
+- `dispatch` is now async (was sync at scaffolding) and routes to per-event-type handler methods that own the actual mutation.
+- New config field `priceToTier: Record<string, AccountTier>` — inverse of `tierPrices`, used to determine which local tier a Stripe price represents on subscription create / update events. Configurable `trialPackCreditCents` (default 299), `trialPackWindowMs` (default 14 days), `cancelDowngradeTier` (default `trial_pack`) for test override.
+- Error-throwing handlers are caught at the dispatch level and surfaced as `error:<short>` outcome — the ledger row gets written with the error marker, the route still returns 200 to Stripe (a code bug won't be fixed by Stripe re-delivering).
+- Helper functions for safe field reads from the open `data.object` shape: `readString`, `readBool`, `readUnixTimestamp`, `readSubscriptionPriceId` (descends `subscription.items.data[0].price.id`), `stripeStatusToLocal`.
+
+**`apps/server/src/db/stripe-webhooks-repo.ts`:**
+
+Drizzle implementation of the four new methods:
+
+- `findAccountIdFromCustomerOrRef`: tries `client_reference_id` first (faster lookup against `accounts.id` PK), falls back to `accounts.stripe_customer_id`.
+- `upsertSubscription`: `INSERT ... ON CONFLICT (stripe_subscription_id) DO UPDATE` for atomic upsert.
+- `setAccountTier`: standard UPDATE.
+- `applyTrialPackPurchase`: conditional UPDATE with `WHERE trial_pack_purchased_at IS NULL` so the second checkout for the same account is a no-op; returns `{ applied: result.length > 0 }`.
+
+**`apps/server/tests/integration/_helpers/in-memory-stripe-webhooks-repo.ts`:**
+
+In-memory implementation extended with the same four methods + test seams (`registerAccount`, `readAccount`, `listSubscriptions`).
+
+**`apps/server/src/lib/bootstrap.ts`:**
+
+Inverts `config.stripe.tierPrices` into `priceToTier` at boot and threads it into `StripeWebhooksService`. Added `AccountTier` type-only import to satisfy lint's `consistent-type-imports` rule.
+
+**`apps/server/tests/integration/_helpers/build-test-app.ts`:**
+
+The seeded test account is now registered in `InMemoryStripeWebhooksRepo` with `stripeCustomerId: 'cus_test_default'` so canned subscription events round-trip through the customer-id lookup. `priceToTier` covers the same fixture price-id list as `BillingService.tierPrices`.
+
+**`apps/server/tests/integration/stripe-webhooks.test.ts`:**
+
+`makeEvent` test helper extended to synthesize the minimum subscription event shape (id, customer, status, items.data[0].price.id, current_period_end) when the type starts with `customer.subscription.`. Existing V-080 tests now pass against the new validation in the V-089 handlers.
+
+### How verified
+
+- `npm run typecheck`: clean across all 5 workspaces.
+- `npm run lint`: clean (after fixing two `import()` type annotations to top-level type imports).
+- `npm run format:check`: clean.
+- `npm test`: 455/455 passing (was 447; +8 new mutation integration tests in `stripe-webhooks-mutations.test.ts`).
+
+Coverage for V-089 mutations:
+
+- subscription.created → mirror INSERT + tier upgrade on `active`.
+- subscription.created with `incomplete` status → mirror written, tier NOT changed (payment hasn't cleared).
+- subscription.created with unknown customer → ignored, no mutation.
+- subscription.updated → mirror UPSERT (no duplicate row), tier change reflects new price id.
+- subscription.deleted → mirror status='canceled' + canceledAt, account tier downgraded to trial_pack.
+- checkout.session.completed (mode=payment) → trial-pack provisioned with 299¢ credit + +14d expires_at.
+- checkout.session.completed (mode=subscription) → informational, no trial-pack mutation.
+- Second checkout.session.completed for already-purchased account → idempotent no-op.
+
+### Decisions made (no new D-entries)
+
+- **Tier change only on `active` or `trialing` status.** Subscription creation in `incomplete` state means the customer hit Checkout but hasn't completed payment yet (3DS pending, etc.). We don't grant the tier until Stripe transitions the subscription to `active`. The subscription mirror row still gets written so admin can see the in-flight state.
+- **Cancel-downgrade default is `trial_pack`.** When a paid subscription ends (`customer.subscription.deleted`), the account tier drops to `trial_pack` rather than to a "canceled" pseudo-tier. The trial-pack credit (if any) remains independently usable. Configurable via `cancelDowngradeTier` for tests / future policy changes.
+- **Ignored events are reachable via Stripe's customer / payment_method lifecycle events** — these get logged but no mutation. We don't persist customer state locally beyond `stripe_customer_id`; Stripe's customer record IS the source of truth for those fields.
+- **Handler errors surface as `error:<code>` outcome** with the ledger row still recording the failure (NOT swallowing). Future debugging via admin panel can filter ledger rows by `result LIKE 'error:%'`. The route still returns 200 to Stripe to avoid retry storms on code bugs.
+
+### Files added
+
+- `apps/server/tests/integration/stripe-webhooks-mutations.test.ts`
+
+### Files modified
+
+- `apps/server/src/services/stripe-webhooks.ts` (full rewrite of dispatch + handlers)
+- `apps/server/src/db/stripe-webhooks-repo.ts` (4 new methods)
+- `apps/server/tests/integration/_helpers/in-memory-stripe-webhooks-repo.ts` (4 new methods + test seams)
+- `apps/server/tests/integration/_helpers/build-test-app.ts` (priceToTier + register seeded account with stripe_customer_id)
+- `apps/server/src/lib/bootstrap.ts` (priceToTier construction at boot)
+- `apps/server/tests/integration/stripe-webhooks.test.ts` (subscription event payload shape in `makeEvent`)
+
+### Next
+
+Continuing to V-090 — `session.failed` webhook event emission with the founder-approved default semantic ("first-failure fires; subsequent ops on the same session 410 SessionDestroyed").

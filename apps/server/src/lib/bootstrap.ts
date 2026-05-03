@@ -45,6 +45,7 @@ import { LegalService } from '../services/legal.js';
 import { AuthFlowsService } from '../services/auth-flows.js';
 import { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import { ProfilesService } from '../services/profiles.js';
+import type { AccountTier } from '@driftstack/api-types';
 import { BillingService, type BillingProvider } from '../services/billing.js';
 import { StripeBillingProvider } from '../services/stripe-billing-provider.js';
 import { StripeApiClient } from './stripe-api.js';
@@ -184,7 +185,24 @@ export async function createProductionDeps(
   // is not registered and inbound deliveries 404 (Stripe will retry, but
   // that's a deploy misconfig signal, not a normal state).
   const stripeWebhooksRepo = new DrizzleStripeWebhooksRepo(dbHandle);
-  const stripeWebhooksService = new StripeWebhooksService(stripeWebhooksRepo, { logger });
+  // V-089: invert the tierPrices config to drive subscription event
+  // tier resolution. Each (monthly | annual) price id maps back to the
+  // same tier; the webhook handler uses this to determine which tier
+  // to set on the account when a subscription created/updated event
+  // arrives.
+  const priceToTier: Record<string, AccountTier> = {};
+  if (config.stripe?.tierPrices !== undefined) {
+    for (const [tier, prices] of Object.entries(config.stripe.tierPrices) as Array<
+      [AccountTier, { monthly: string; annual: string }]
+    >) {
+      priceToTier[prices.monthly] = tier;
+      priceToTier[prices.annual] = tier;
+    }
+  }
+  const stripeWebhooksService = new StripeWebhooksService(stripeWebhooksRepo, {
+    logger,
+    priceToTier,
+  });
 
   // V-081: Profiles service.
   const profilesRepo = new DrizzleProfilesRepo(dbHandle);

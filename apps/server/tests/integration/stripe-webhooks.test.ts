@@ -13,7 +13,28 @@ interface PostBody {
   signature: string;
 }
 
+/**
+ * Build a Stripe event payload for tests. For subscription events we
+ * synthesize the minimal shape the V-089 handler needs: `id`, `customer`,
+ * `status`, and an `items.data[0].price.id` array. Caller can override
+ * any field via `extra`.
+ */
 function makeEvent(eventId: string, type: string, extra: Record<string, unknown> = {}): string {
+  const isSubscription = type.startsWith('customer.subscription.');
+  const baseObject: Record<string, unknown> = isSubscription
+    ? {
+        id: 'sub_test_123',
+        customer: 'cus_test_default',
+        status: 'active',
+        cancel_at_period_end: false,
+        current_period_end: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
+        items: {
+          data: [{ price: { id: 'price_api_builder_monthly' } }],
+        },
+        ...extra,
+      }
+    : { id: 'sub_test_123', ...extra };
+
   return JSON.stringify({
     id: eventId,
     object: 'event',
@@ -21,7 +42,7 @@ function makeEvent(eventId: string, type: string, extra: Record<string, unknown>
     api_version: '2024-12-18.acacia',
     created: Math.floor(Date.now() / 1000),
     livemode: false,
-    data: { object: { id: 'sub_test_123', ...extra } },
+    data: { object: baseObject },
     request: { id: 'req_test', idempotency_key: null },
   });
 }
