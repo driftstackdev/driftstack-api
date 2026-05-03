@@ -276,10 +276,16 @@ function fmtUsd(value: number | null | undefined): string {
           </h2>
           <p class="mt-3 max-w-prose text-slate-600">
             Driftstack's optional AI agent feature drives sessions with a
-            large language model. Bring your own LLM API key (BYOK) or use
-            the bundled billing. Per-token pricing for the bundled rate is
+            large language model. Bring your own API key (BYOK) or use the
+            bundled billing. Per-token pricing for the bundled rate is
             announced at launch; BYOK is metered against your own provider
             key at no Driftstack markup.
+          </p>
+          <p class="mt-3 max-w-prose text-sm text-slate-600">
+            BYOK supports <strong>Anthropic Claude</strong> — bring your API
+            key from <a href="https://console.anthropic.com" class="text-oxblood-700 underline" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>
+            and pay Anthropic directly. Bundled per-token pricing announced
+            at launch for customers who want a single bill.
           </p>
         </div>
         <div class="text-sm text-slate-600">
@@ -288,9 +294,6 @@ function fmtUsd(value: number | null | undefined): string {
             <li class="flex gap-2"><span class="text-oxblood-700">→</span> Token usage on your bill, not ours.</li>
             <li class="flex gap-2"><span class="text-oxblood-700">→</span> Toggle BYOK ↔ bundled per-account.</li>
           </ul>
-          <p class="mt-3 text-xs text-slate-500">
-            Supported LLM provider listed at <a href="/trust/sub-processors" class="text-oxblood-700 underline">/trust/sub-processors</a>.
-          </p>
         </div>
       </div>
     </div>
@@ -366,7 +369,7 @@ function fmtUsd(value: number | null | undefined): string {
           <h3 class="font-medium text-slate-900">What happens when the trial pack runs out?</h3>
           <p class="mt-2 text-sm text-slate-600">
             Either the credit hits zero or 14 days pass. New session attempts
-            return 402 Payment Required pointing at the checkout flow for a
+            return 402 Payment Required pointing at Stripe Checkout for a
             paid tier. Trial pack is once per account, no reset on downgrade
             or churn — to come back, subscribe.
           </p>
@@ -374,7 +377,7 @@ function fmtUsd(value: number | null | undefined): string {
         <div>
           <h3 class="font-medium text-slate-900">Can I switch tiers mid-month?</h3>
           <p class="mt-2 text-sm text-slate-600">
-            Yes. The change is prorated automatically. New limits apply immediately;
+            Yes. Stripe prorates the change automatically. New limits apply immediately;
             session-creation gates use the new tier on the next call.
           </p>
         </div>

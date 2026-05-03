@@ -116,6 +116,20 @@ D-NNN entries: stack decisions, architecture decisions, naming decisions. Body l
 
 Every commit is pushed directly to main. No PR-per-feature workflow. Founder may check progress remotely. Don't batch a session's work into one commit; land logical units, verify each (typecheck + lint + tests), push, continue.
 
+### Tier 3 marketing-copy + brand-surface cadence (standing convention)
+
+Engineering work follows the push-to-main pattern above. Marketing copy and brand-surface decisions go through an explicit founder gate:
+
+1. Agent drafts copy / design in working tree but does NOT commit.
+2. Agent surfaces full draft in next status update message — entire copy block as it would appear on the page (line breaks and all), or descriptions/screenshots of dev-server output for visual changes.
+3. Founder reviews + redlines + replies with corrections or approval.
+4. Agent commits approved version (with redlines applied).
+5. V-NNN entry notes "draft surfaced + founder approved before commit."
+
+Applies to: customer-facing pages under `apps/marketing-site/`, brand surface treatments (typography, layout, motif), customer-facing copy in transactional emails (V-057 templates), customer-facing onboarding flow text (Workstream F). Engineering scaffolding behind those surfaces (config, data modules, build pipelines, tests) follows the standard push-to-main pattern.
+
+Exception: factual technical-state numbers (e.g. `apps/marketing-site/src/data/capabilities.ts` cumulative-rig snapshot) are Tier 1 maintenance — founder relays the new numbers, agent lands the constant update without draft review.
+
 ### Empirical framing
 
 Findings format: empirical results with attribution. No "good enough" framing on broken endpoints, missing error handling, or missing tests. Spot-check empirical: predict before testing; verify before committing.

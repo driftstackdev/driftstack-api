@@ -4039,3 +4039,91 @@ V-068 closes the leak surface. Founder confirmation needed on the Stripe + Anthr
 ### Next
 
 V-069 draft delivery via clipboard. New copy lives in working tree (not staged, not committed) until founder confirms. Same pattern for V-070. Both Tier 3 surface treatments per founder direction.
+
+## V-068.1 — Selective restore: Stripe + Anthropic in customer-touch contexts + capabilities.ts
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream B v2 follow-on. Founder direction acked: V-068's universal-principle application over-purged Stripe + Anthropic. The principle is "hide infrastructure vendors customers never directly encounter," not "hide all vendor names."
+
+### What changed
+
+**Stripe restoration (FAQ + pricing mini-FAQ):**
+
+- **`apps/marketing-site/src/pages/faq.astro`** — Stripe-specific mechanics restored where customer-touch:
+  - Overage answer: "set a usage alert in the billing portal" → "set a usage alert in the Stripe Customer Portal".
+  - Annual billing answer: "prorated automatically" → "prorated automatically by Stripe".
+  - Trial-pack-extension answer: "The hosted checkout flow handles the conversion — your existing customer record carries over" → "Stripe Checkout handles the conversion — your existing Stripe customer record carries over".
+  - Trial-pack-runs-out answer: "pointing at the checkout flow" → "pointing at Stripe Checkout".
+  - Mid-month-tier-switch answer: "The change is prorated at the changeover date" → "Stripe prorates the change automatically at the changeover date".
+  - **New "Billing + payments" group with 3 entries:**
+    - "Why Stripe?" — "Stripe is our payment processor. Card statements show 'STRIPE \*DRIFTSTACK'. Receipts come from Stripe. Subscription management goes through the Stripe Customer Portal. Stripe handles PCI compliance, fraud protection, dispute mechanisms, and EU VAT/BTW reverse-charge — all of which we inherit rather than reimplement."
+    - "Where do I update my payment method or download invoices?" — points at Stripe Customer Portal.
+    - "Do you store my card details?" — explicit "No. Card details are stored by Stripe, never by Driftstack." answer.
+- **`apps/marketing-site/src/pages/pricing.astro`** mini-FAQ — same restoration: "Stripe Checkout" + "Stripe prorates the change automatically".
+
+**Anthropic restoration (BYOK-specific contexts only):**
+
+- **`apps/marketing-site/src/pages/faq.astro`** "Bundled LLM + BYOK" group — Anthropic restored in BYOK-specific contexts:
+  - "What is the bundled LLM?" — BYOK clause names Anthropic + links to console.anthropic.com for key generation. Bundled-rate clause stays provider-neutral ("the published per-token price") since founder hasn't committed to Anthropic specifically as the bundled provider.
+  - "What's the BYOK markup?" — "your LLM provider key" → "your Anthropic API key".
+  - "Is BYOK secret-handling secure?" — "Your LLM provider API key" → "Your Anthropic API key".
+- **`apps/marketing-site/src/pages/pricing.astro`** BYOK section — added a second paragraph naming Anthropic for the BYOK path: "BYOK supports **Anthropic Claude** — bring your API key from console.anthropic.com and pay Anthropic directly. Bundled per-token pricing announced at launch for customers who want a single bill." Top paragraph and feature bullets stay provider-neutral so the bundled-LLM Tier-3 placeholder copy isn't inadvertently committed to Anthropic-specifically.
+
+**capabilities.ts constant for V-069+ headline number:**
+
+- **`apps/marketing-site/src/data/capabilities.ts`** (NEW) — `CUMULATIVE_RIG` constant exporting:
+  - `surfacesMatched: 1252`
+  - `surfacesMeasured: 1253`
+  - `matchRatePercentage: 99.9`
+  - `archetypeReference: 'iPhone 16 Pro / iOS 26.4.1'`
+  - `lastUpdated: '2026-05-03'`
+    Comment block in the file documents the source (parent driftstack repo `/docs/progress/phase-2.md` cumulative-rig snapshot, probes-with-iPhone-reference denominator, NOT raw which includes ref=None pinned post-V-141 capture) and the update protocol (founder relays new numbers, agent lands as Tier 1 maintenance).
+
+**Standing-convention lock in CLAUDE.md:**
+
+- **`CLAUDE.md`** — new "Tier 3 marketing-copy + brand-surface cadence (standing convention)" subsection under "Operational discipline." Codifies the draft-surface-before-commit flow founder confirmed: agent drafts in working tree, surfaces full block in next status update, founder reviews + redlines, agent commits approved version, V-NNN entry notes "draft surfaced + founder approved before commit." Applies to customer-facing pages, brand surface treatments, customer-facing copy in transactional emails, customer-facing onboarding flow text. Engineering scaffolding behind those surfaces follows standard push-to-main. Factual technical-state numbers (capabilities.ts) are explicit exception — Tier 1 maintenance, no draft review.
+
+**What stays purged (not restored):**
+
+Hetzner / Neon / Upstash / Cloudflare R2 / MacStadium / Postmark / Sentry / Moneybird remain absent from customer-facing pages. They live only on `/trust/sub-processors` (and `/legal/dpa` Annex 3). Footer "(Moneybird)" parenthetical stays gone.
+
+### Empirical findings
+
+1. **Selective restoration verified via grep matrix:** Stripe + Anthropic now present where customer-touch (pricing + FAQ); infrastructure vendors zero everywhere customer-facing. Trust page keeps the full register. Per-page counts post-V-068.1:
+
+   | Page                    | Stripe | Anthropic | Infrastructure |
+   | ----------------------- | ------ | --------- | -------------- |
+   | `/`                     | 0      | 0         | 0              |
+   | `/pricing`              | 2      | 3         | 0              |
+   | `/self-hosted`          | 0      | 0         | 0              |
+   | `/faq`                  | 9      | 3         | 0              |
+   | `/404`                  | 0      | 0         | 0              |
+   | `/trust/sub-processors` | (full) | (full)    | (full)         |
+
+2. **"Why Stripe?" FAQ entry surfaces the trust-signal positioning** founder flagged. Stripe-as-payment-processor is a positive customer trust signal (PCI, fraud, dispute, BTW reverse-charge inheritance), not a leak to hide. Inheriting the EU VAT/BTW handling from Stripe Tax is mentioned explicitly so customers don't wonder how a single founder handles per-region VAT correctly.
+
+3. **Bundled-LLM rate stays provider-neutral.** Both pricing BYOK section + FAQ "What is the bundled LLM?" entry name Anthropic only on the BYOK path; the bundled rate stays "Driftstack at a markup over the published per-token price" without naming the provider. Per founder direction: "Founder hasn't committed to Anthropic specifically as the bundled provider; might keep multi-provider option or rename to 'Bundled' tier-agnostic."
+
+4. **CLAUDE.md cadence lock makes V-069 + V-070 process predictable.** Future marketing-copy V-entries (and any Workstream F onboarding-flow text) will follow the same draft-surface-before-commit pattern. Engineering work continues push-to-main. The factual-technical-state exception (capabilities.ts) ensures cumulative-rig number updates don't get gated behind unnecessary review.
+
+### Verify chain
+
+- `astro check`: 13 files, 0 errors / 0 warnings / 0 hints.
+- `astro build`: 6 static pages emitted in ~470ms.
+- `npm run lint`: clean.
+- `npm run format:check`: clean repo-wide.
+- `npm test`: **360/360** unchanged.
+- Forbidden-phrase grep (infrastructure subset): 0/0/0/0/0 across 5 customer-facing pages; trust page has the full register.
+
+### Decisions made
+
+No new D-entries. The cadence lock in CLAUDE.md is operational discipline (Tier 1) — codifies a founder direction rather than originating a decision.
+
+### Status
+
+V-068.1 closes the leak-purge debate. Marketing site is content-correct: customer-touch vendors named where they aid customer UX (Stripe + Anthropic-for-BYOK), infrastructure vendors absent, trust page exhaustive. capabilities.ts constant is in place for V-069's headline number. CLAUDE.md cadence locked.
+
+### Next
+
+V-069 draft delivery via clipboard. Hero copy options A/B + headline number presentation + opinionated technical copy on landing/self-hosted/FAQ. Founder reviews drafts, agent commits approved version. V-070 follows.
