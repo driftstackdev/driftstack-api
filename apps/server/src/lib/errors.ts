@@ -209,6 +209,23 @@ export class SessionDestroyedError extends ApiError {
   }
 }
 
+// SessionTimeoutError — distinguished from DriverError so customers
+// can react specifically to "the operation didn't finish within the
+// per-call timeout I supplied" without conflating it with downstream
+// driver failures.
+export class SessionTimeoutError extends ApiError {
+  constructor(timeoutMs: number, detail?: string) {
+    super({
+      type: PROBLEM_TYPES.SessionTimeout,
+      title: 'Session timeout',
+      status: 504,
+      detail: detail ?? `The operation exceeded the supplied timeout of ${timeoutMs} ms.`,
+      extensions: { timeout_ms: timeoutMs },
+    });
+    this.name = 'SessionTimeoutError';
+  }
+}
+
 export class DriverError extends ApiError {
   constructor(detail: string, extensions?: Record<string, unknown>) {
     super({

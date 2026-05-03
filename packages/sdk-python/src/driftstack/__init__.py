@@ -31,6 +31,7 @@ from driftstack.errors import (
     RevokedKeyError,
     SessionDestroyedError,
     SessionNotFoundError,
+    SessionTimeoutError,
     TransportError,
     ValidationError,
 )
@@ -53,6 +54,7 @@ __all__ = [
     "ConcurrencyLimitError",
     "SessionNotFoundError",
     "SessionDestroyedError",
+    "SessionTimeoutError",
     "DriverError",
     "ValidationError",
     "TransportError",

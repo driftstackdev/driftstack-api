@@ -57,6 +57,7 @@ var (
 	ErrConcurrencyLimit = errors.New("concurrency limit hit")
 	ErrQuotaExceeded    = errors.New("quota exceeded")
 	ErrSessionDestroyed = errors.New("session destroyed")
+	ErrSessionTimeout   = errors.New("session timeout")
 	ErrDriverError      = errors.New("driver error")
 	ErrTransport        = errors.New("transport-level failure")
 )
@@ -137,6 +138,19 @@ func (e *QuotaExceededError) Is(target error) bool { return target == ErrQuotaEx
 type SessionDestroyedError struct{ apiError }
 
 func (e *SessionDestroyedError) Is(target error) bool { return target == ErrSessionDestroyed }
+
+// SessionTimeoutError — 504 when an op exceeds the per-call
+// timeout_ms. Distinguished from DriverError so customers can react
+// specifically to "didn't finish in time" without conflating with
+// downstream driver failures. TimeoutMs is the bound the server
+// actually applied (may differ from the request if the server
+// clamped it).
+type SessionTimeoutError struct {
+	apiError
+	TimeoutMs int
+}
+
+func (e *SessionTimeoutError) Is(target error) bool { return target == ErrSessionTimeout }
 
 // DriverError — 502 when the underlying driver (mock or real WebKit)
 // returns an unrecoverable error.

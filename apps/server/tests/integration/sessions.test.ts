@@ -229,6 +229,21 @@ describe('POST /v1/sessions/:id/interact', () => {
     // The Zod discriminated union has no `tap_at` variant, so parse fails.
     expect(res.statusCode).toBe(400);
   });
+
+  it('504 with session-timeout problem when interact hits the #hangs trigger', async () => {
+    fx = await buildTestApp();
+    const session = await createSession(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/sessions/${session.id}/interact`,
+      headers: auth(fx),
+      payload: { action: { kind: 'tap', selector: '#hangs' }, timeout_ms: 5000 },
+    });
+    expect(res.statusCode).toBe(504);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.type).toBe('https://errors.driftstack.dev/session-timeout');
+    expect(body.timeout_ms).toBe(5000);
+  });
 });
 
 describe('POST /v1/sessions/:id/gui-input (gui_control plane)', () => {

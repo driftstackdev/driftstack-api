@@ -25,6 +25,7 @@ from driftstack._version import __version__
 from driftstack.errors import (
     PROBLEM_TYPE_TO_ERROR,
     ConcurrencyLimitError,
+    SessionTimeoutError,
     DriftstackError,
     QuotaExceededError,
     RateLimitError,
@@ -122,6 +123,14 @@ def _error_from_response_data(
             detail,
             current_sessions=_int_or_none(problem.get("current_sessions")),
             limit=_int_or_none(problem.get("limit")),
+            status=status,
+            problem_type=problem_type,
+            problem=problem,
+        )
+    if error_cls is SessionTimeoutError:
+        return SessionTimeoutError(
+            detail,
+            timeout_ms=_int_or_none(problem.get("timeout_ms")),
             status=status,
             problem_type=problem_type,
             problem=problem,

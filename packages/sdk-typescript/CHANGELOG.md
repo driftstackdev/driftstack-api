@@ -19,6 +19,32 @@ discovers a wire-shape divergence. **Breaking changes** that affect
 shipping customer code are deferred until 1.0; pre-1.0 customers
 should pin against `^0.1.0` rather than an exact version.
 
+## [0.1.5] - 2026-05-03
+
+### Added
+
+- **`SessionTimeoutError`** — new typed error subclass mapping
+  the `https://errors.driftstack.dev/session-timeout` problem type
+  (status 504). Distinguished from `DriverError` so callers can
+  react specifically to "the operation didn't finish within the
+  per-call timeout I supplied" without conflating with downstream
+  driver failures. Carries `timeoutMs: number | undefined` from
+  the problem extension. See V-044 [control].
+
+  ```ts
+  try {
+    await client.sessions.interact(sid, { action: t, timeout_ms: 5000 });
+  } catch (err) {
+    if (err instanceof SessionTimeoutError) {
+      // Retry with a longer timeout, or surface to the user.
+      console.log(`Op timed out after ${err.timeoutMs} ms`);
+    }
+  }
+  ```
+
+- HTTP-layer regression tests for `RevokedKeyError`,
+  `ExpiredKeyError`, and `SessionTimeoutError` mappings.
+
 ## [0.1.4] - 2026-05-03
 
 ### Removed

@@ -11,6 +11,31 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 - `0.0.1` is the inaugural alpha. Versioning will move to SemVer
   proper once the SDK is published to PyPI (gated on entity setup).
 
+## [0.1.4] - 2026-05-03
+
+### Added
+
+- **`SessionTimeoutError`** — new typed error subclass mapping
+  the `https://errors.driftstack.dev/session-timeout` problem type
+  (status 504). Distinguished from `DriverError` so callers can
+  react specifically to "the operation didn't finish within the
+  per-call timeout I supplied" without conflating with downstream
+  driver failures. Carries `timeout_ms: int | None` from the
+  problem extension. Re-exported at `driftstack.SessionTimeoutError`
+  for convenient `isinstance` checks. See V-044 [control].
+
+  ```python
+  from driftstack import SessionTimeoutError
+
+  try:
+      client.sessions.interact(sid, body)
+  except SessionTimeoutError as e:
+      # Retry with a longer timeout, or surface to the user.
+      print(f"Op timed out after {e.timeout_ms} ms")
+  ```
+
+- Test coverage at `tests/test_errors.py::test_session_timeout_extracts_timeout_ms`.
+
 ## [0.1.3] - 2026-05-03
 
 ### Removed

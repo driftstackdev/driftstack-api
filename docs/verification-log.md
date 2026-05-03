@@ -2473,19 +2473,19 @@ Per founder: check whether GUI state beyond recordings still lives in-memory and
 
 ### Audit walkthrough
 
-| State source | Type | Persistence | Verdict |
-|---|---|---|---|
-| `lib/settings.ts` | apiKey + baseUrl | tauri-plugin-store (V-027) | ✓ correctly disk-backed |
-| `lib/proxies.ts` | SOCKS5 proxy roster | tauri-plugin-store (V-033) | ✓ correctly disk-backed |
-| `lib/recordings.tsx` | session recordings | tauri-plugin-fs (V-040) | ✓ correctly disk-backed |
-| `App.tsx` `view` route | current sidebar selection | ephemeral; defaults to `sessions` on each open | ✓ correctly NOT persisted (deliberate UX reset; resuming view is a slippery slope) |
-| `SettingsView` `draftKey/draftUrl/reveal` | unsaved form draft | ephemeral; commits to plugin-store on Save | ✓ correctly NOT persisted (security-positive — a forgotten draft never becomes a forgotten unsaved key on disk) |
-| `SessionsView` `state.sessions` | server-fetched list | ephemeral; refetched from API every 5 s + on mount | ✓ server is the truth source |
-| `LiveSessionView` `state.frame / fpsActual / paused / lastTap` | viewport polling state | ephemeral; refetched from server | ✓ correctly NOT persisted |
-| `LiveSessionView` `manualControl / recording` | per-session toggles | ephemeral; default off on every open | ✓ correctly NOT persisted (safety: control toggle off by default) |
-| `RecordingPlayerView` `cursorMs / playing / hydrating` | playback transport | ephemeral | ✓ correctly NOT persisted |
-| `ProxiesView` `editor / draft / validation` | form-modal state | ephemeral | ✓ correctly NOT persisted |
-| `ConnectivityView` `result / running` | last test outcome | ephemeral; point-in-time check | ✓ correctly NOT persisted |
+| State source                                                   | Type                      | Persistence                                        | Verdict                                                                                                         |
+| -------------------------------------------------------------- | ------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `lib/settings.ts`                                              | apiKey + baseUrl          | tauri-plugin-store (V-027)                         | ✓ correctly disk-backed                                                                                         |
+| `lib/proxies.ts`                                               | SOCKS5 proxy roster       | tauri-plugin-store (V-033)                         | ✓ correctly disk-backed                                                                                         |
+| `lib/recordings.tsx`                                           | session recordings        | tauri-plugin-fs (V-040)                            | ✓ correctly disk-backed                                                                                         |
+| `App.tsx` `view` route                                         | current sidebar selection | ephemeral; defaults to `sessions` on each open     | ✓ correctly NOT persisted (deliberate UX reset; resuming view is a slippery slope)                              |
+| `SettingsView` `draftKey/draftUrl/reveal`                      | unsaved form draft        | ephemeral; commits to plugin-store on Save         | ✓ correctly NOT persisted (security-positive — a forgotten draft never becomes a forgotten unsaved key on disk) |
+| `SessionsView` `state.sessions`                                | server-fetched list       | ephemeral; refetched from API every 5 s + on mount | ✓ server is the truth source                                                                                    |
+| `LiveSessionView` `state.frame / fpsActual / paused / lastTap` | viewport polling state    | ephemeral; refetched from server                   | ✓ correctly NOT persisted                                                                                       |
+| `LiveSessionView` `manualControl / recording`                  | per-session toggles       | ephemeral; default off on every open               | ✓ correctly NOT persisted (safety: control toggle off by default)                                               |
+| `RecordingPlayerView` `cursorMs / playing / hydrating`         | playback transport        | ephemeral                                          | ✓ correctly NOT persisted                                                                                       |
+| `ProxiesView` `editor / draft / validation`                    | form-modal state          | ephemeral                                          | ✓ correctly NOT persisted                                                                                       |
+| `ConnectivityView` `result / running`                          | last test outcome         | ephemeral; point-in-time check                     | ✓ correctly NOT persisted                                                                                       |
 
 **Conclusion:** every load-bearing state surface is disk-backed where it should be; every ephemeral surface is correctly NOT persisted (including a few that are deliberately ephemeral for safety/UX reasons — manual-control toggle defaults off, settings form drafts don't survive crash, current view resets on app open).
 
@@ -2506,3 +2506,88 @@ GUI state persistence is complete. Marking the standing-queue (a) item closed.
 ### Next
 
 (b) CAPABILITIES.md hygiene pass — watching for V-145/V-146/V-147/V-148 in main repo. Quick poll of the main-repo verification log before moving on; if those entries have landed I pull closures in immediately.
+
+---
+
+## V-044 — SDK error-path audit + SessionTimeoutError landed across all SDKs
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Customer-trust hygiene per founder direction (c).
+
+Audit pass on each SDK's coverage for the five canonical error scenarios — auth failure, rate limit, malformed proxy, session timeout, expired key. Findings doc-equivalent: `docs/contract-audit-2026-05-03.md` extended with this entry's empirical results below.
+
+### Audit results
+
+**Server-side problem catalog** (`packages/api-types/src/problem.ts`): 16 stable problem types defined. Each has a corresponding `ApiError` subclass on the server. Every server error is RFC 7807 with stable `type` URIs.
+
+**Coverage matrix:**
+
+| Scenario | TS SDK | Python SDK | Go SDK |
+|---|---|---|---|
+| Auth missing | ✓ AuthError + test | ✓ AuthError + test | ✓ AuthError + test |
+| Auth malformed | ✓ InvalidKeyError + test | ✓ InvalidKeyError + test | ✓ InvalidKeyError + test |
+| Auth revoked | ✓ RevokedKeyError + **test backfilled this entry** | ✓ RevokedKeyError + test | ✓ RevokedKeyError + test |
+| Auth expired | ✓ ExpiredKeyError + **test backfilled this entry** | ✓ ExpiredKeyError + test | ✓ ExpiredKeyError + test |
+| Rate limit | ✓ RateLimitError + retryAfterSeconds + test | ✓ RateLimitError + retry_after_seconds + test | ✓ RateLimitError + RetryAfterSeconds + test |
+| Concurrency limit | ✓ ConcurrencyLimitError + payload | ✓ ConcurrencyLimitError + payload | ✓ ConcurrencyLimitError + payload |
+| **Session timeout** | ✓ **SessionTimeoutError + timeoutMs + test (NEW)** | ✓ **SessionTimeoutError + timeout_ms + test (NEW)** | ✓ **SessionTimeoutError + TimeoutMs + test (NEW)** |
+| Malformed proxy | n/a — proxy field not on CreateSessionRequest yet | n/a | n/a |
+
+### What changed
+
+**Server-side:**
+- **`packages/api-types/src/problem.ts`** — added `SessionTimeout: 'https://errors.driftstack.dev/session-timeout'` to the stable URI catalog. Additive (new entry, no rename).
+- **`apps/server/src/lib/errors.ts`** — new `SessionTimeoutError` class. Status 504. Extension `timeout_ms` carries the bound the server actually applied.
+- **`apps/server/src/drivers/mock.ts`** — mock driver's two timeout sites (navigate `host === TRIGGER_HOSTS.timeout`, interact `selector === TRIGGER_SELECTORS.hangs`) now throw `SessionTimeoutError` instead of `DriverError`. Customers calling those triggers used to get a generic 502; they now get a specific 504 with `timeout_ms`.
+- New server integration test in `sessions.test.ts` covering the `#hangs` selector → 504 path with body assertions on `type` and `timeout_ms`.
+
+**SDKs — `SessionTimeoutError` added across all three:**
+- **TypeScript** (`@driftstack/sdk@0.1.5`): new class extending `DriftstackError`, `kind: 'session_timeout'`, `timeoutMs: number | undefined`. Mapped in `TYPE_TO_CTOR`. Test in `tests/unit/http.test.ts` covers the 504 → SessionTimeoutError path.
+- **Python** (`driftstack-sdk@0.1.4`): new class with `timeout_ms: int | None`, mapped in `PROBLEM_TYPE_TO_ERROR`, extracted in `_error_from_response_data`, re-exported from `driftstack` package root for `isinstance` ergonomics. Test in `tests/test_errors.py`.
+- **Go** (`packages/sdk-go/v0.1.5`): new struct with `TimeoutMs int`, sentinel `ErrSessionTimeout`, builder `buildSessionTimeout`, mapped in `problemTypeToFactory`. Compile-time interface check added. Test in `errors_test.go`.
+
+**Tests backfilled (V-037 audit gap closure):**
+- TS SDK: added `RevokedKeyError` + `ExpiredKeyError` + `SessionTimeoutError` http-layer tests at `tests/unit/http.test.ts`. The first two were the V-037 gap; the third is the new error type.
+- Python SDK: added `SessionTimeoutError` extraction test.
+- Go SDK: added `TestSessionTimeoutExtractsTimeoutMs` covering both `errors.As` and `errors.Is`.
+
+**CHANGELOGs updated** with the new error type + migration sample code in all three SDKs.
+
+### Empirical findings
+
+1. **Audit conclusion:** Error-path coverage is now uniform across all three SDKs. Every customer-facing scenario has a typed error class with extracted payload (where applicable) and at least one regression test. No more "request failed: 504" — customers get `SessionTimeoutError` carrying the timeout the server applied.
+
+2. **Pre-existing message quality is good.** All error messages source from the server's RFC 7807 `detail` field, which is actionable ("This API key has expired", "Account already has 15 active sessions", etc.). No stringly-typed "request failed" anywhere. The previous gap was specifically on session timeouts — customers had no way to programmatically distinguish "timed out" from "driver crashed" — and that's now closed.
+
+3. **Mock-driver throw sites are clean.** Two of the three mock timeout sites (navigate, interact) now throw `SessionTimeoutError`. The third (wait condition timeout) doesn't throw — it returns `{satisfied: false}` per the existing wait contract, which is correct: the customer asked "wait until X is true, but at most N ms" and the answer is "the condition didn't become true in N ms" — that's a successful wait result, not an error. Documented inline.
+
+4. **Proxy errors deferred.** The audit flagged proxy malformation as a future gap, but `CreateSessionRequest` has no `proxy` field yet (gated on Agent 1's SOCKS5 UDP work). When the field lands, a `proxy_validation_error` problem type + SDK error class lands with it. Not in this V-entry.
+
+5. **No L-001 concerns.** SessionTimeoutError is intent-shaped: the customer asked "do this within N ms"; the server says "couldn't finish in N ms". No coordinate primitive, no behavioral-simulation bypass. Pure error contract addition.
+
+### Verify chain
+
+- typecheck/lint/format: all clean.
+- `npm test`: **316/316** (was 312; +4 from new TS error-mapping tests including SessionTimeout + revoked + expired + the server integration test for #hangs trigger).
+- Python: **97/97** (was 96; +1 for the new SessionTimeout extraction test).
+- Go: round-trip + error-mapping tests pass.
+
+### Publish
+
+- `@driftstack/api-types@0.1.4` ✓ npm.
+- `@driftstack/sdk@0.1.5` ✓ npm.
+- `driftstack-sdk@0.1.4` ✓ PyPI (https://pypi.org/project/driftstack-sdk/0.1.4/).
+- Go tag `packages/sdk-go/v0.1.5` pushed alongside the commit below.
+
+### Decisions made
+
+No new D-entries. Adding a new RFC 7807 problem type is additive within the established stack; same shape as V-037's Go SDK fixes.
+
+### Status
+
+Standing-queue (c) closed. Customer-trust error coverage is now uniform.
+
+### Next
+
+(d) GUI first-run / empty-state polish walkthrough. Cold-start UX audit: open the GUI fresh with no API key, no sessions, no recordings, no proxies — what does the user see?

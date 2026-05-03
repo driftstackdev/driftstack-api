@@ -17,7 +17,7 @@
 // against the real driver.
 
 import { setTimeout as sleep } from 'node:timers/promises';
-import { DriverError } from '../lib/errors.js';
+import { DriverError, SessionTimeoutError } from '../lib/errors.js';
 import type {
   CaptureInput,
   CaptureResult,
@@ -135,10 +135,7 @@ export class MockDriver implements Driver {
     if (host === TRIGGER_HOSTS.timeout) {
       // Pretend to hang for the full timeout, then throw.
       await this.sleep(input.timeoutMs);
-      throw new DriverError('Navigation timed out', {
-        url: input.url,
-        timeout_ms: input.timeoutMs,
-      });
+      throw new SessionTimeoutError(input.timeoutMs);
     }
 
     const httpStatus = host === TRIGGER_HOSTS.http500 ? 500 : 200;
@@ -168,10 +165,7 @@ export class MockDriver implements Driver {
     }
     if (selector === TRIGGER_SELECTORS.hangs) {
       await this.sleep(input.timeoutMs);
-      throw new DriverError('Interaction timed out', {
-        selector,
-        timeout_ms: input.timeoutMs,
-      });
+      throw new SessionTimeoutError(input.timeoutMs);
     }
 
     const start = Date.now();

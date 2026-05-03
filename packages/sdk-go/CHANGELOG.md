@@ -12,6 +12,31 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
   `packages/sdk-go/v0.1.0` (Go modules sub-directory tagging
   convention) once the first publish lands.
 
+## [0.1.5] - 2026-05-03
+
+### Added
+
+- **`SessionTimeoutError`** — new typed error struct mapping the
+  `https://errors.driftstack.dev/session-timeout` problem type
+  (status 504). Distinguished from `DriverError` so callers can
+  react specifically to "the operation didn't finish within the
+  per-call timeout I supplied" without conflating with downstream
+  driver failures. Carries `TimeoutMs int` from the problem
+  extension. Sentinel: `ErrSessionTimeout` for `errors.Is`
+  matching. See V-044 in the control-plane repo.
+
+  ```go
+  err := client.Sessions.Interact(ctx, sid, body)
+  if errors.Is(err, ErrSessionTimeout) {
+      var ste *SessionTimeoutError
+      if errors.As(err, &ste) {
+          log.Printf("Op timed out after %d ms", ste.TimeoutMs)
+      }
+  }
+  ```
+
+- Test coverage at `errors_test.go::TestSessionTimeoutExtractsTimeoutMs`.
+
 ## [0.1.4] - 2026-05-03
 
 ### Removed

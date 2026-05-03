@@ -23,6 +23,7 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	"https://errors.driftstack.dev/expired-key":           buildExpiredKey,
 	"https://errors.driftstack.dev/invalid-key":           buildInvalidKey,
 	"https://errors.driftstack.dev/session-destroyed":     buildSessionDestroyed,
+	"https://errors.driftstack.dev/session-timeout":       buildSessionTimeout,
 	"https://errors.driftstack.dev/driver-error":          buildDriverError,
 	"https://errors.driftstack.dev/driver-not-integrated": buildDriverError,
 	"https://errors.driftstack.dev/validation-failed":     buildValidation,
@@ -119,6 +120,13 @@ func buildSessionDestroyed(base apiError, _ map[string]any, _ string) error {
 	return &SessionDestroyedError{apiError: base}
 }
 
+func buildSessionTimeout(base apiError, problem map[string]any, _ string) error {
+	return &SessionTimeoutError{
+		apiError:  base,
+		TimeoutMs: intFromProblem(problem, "timeout_ms"),
+	}
+}
+
 func buildDriverError(base apiError, _ map[string]any, _ string) error {
 	return &DriverError{apiError: base}
 }
@@ -197,6 +205,7 @@ var (
 	_ error = (*ExpiredKeyError)(nil)
 	_ error = (*RevokedKeyError)(nil)
 	_ error = (*SessionDestroyedError)(nil)
+	_ error = (*SessionTimeoutError)(nil)
 	_ error = (*DriverError)(nil)
 	_ error = (*UnknownError)(nil)
 

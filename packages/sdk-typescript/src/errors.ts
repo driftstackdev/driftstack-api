@@ -42,6 +42,7 @@ export type DriftstackErrorKind =
   | 'concurrency_limit'
   | 'tier_limit'
   | 'session_destroyed'
+  | 'session_timeout'
   | 'driver_error'
   | 'driver_not_integrated'
   | 'internal'
@@ -180,6 +181,22 @@ export class SessionDestroyedError extends DriftstackError {
   }
 }
 
+// SessionTimeoutError — distinguished from DriverError so customers can
+// react specifically to "the operation didn't finish within the per-call
+// timeout I supplied" without conflating with downstream driver failures.
+// The `timeout_ms` field on the problem extension surfaces the bound the
+// server actually applied (may differ from the customer's request if the
+// server clamped it).
+export class SessionTimeoutError extends DriftstackError {
+  readonly timeoutMs: number | undefined;
+  constructor(p: Problem) {
+    super(toOpts('session_timeout', p));
+    this.name = 'SessionTimeoutError';
+    const ext = (p as { timeout_ms?: unknown }).timeout_ms;
+    this.timeoutMs = typeof ext === 'number' ? ext : undefined;
+  }
+}
+
 export class DriverError extends DriftstackError {
   constructor(p: Problem) {
     super(toOpts('driver_error', p));
@@ -233,6 +250,7 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
   'https://errors.driftstack.dev/concurrency-limit': (p) => new ConcurrencyLimitError(p),
   'https://errors.driftstack.dev/tier-limit': (p) => new TierLimitError(p),
   'https://errors.driftstack.dev/session-destroyed': (p) => new SessionDestroyedError(p),
+  'https://errors.driftstack.dev/session-timeout': (p) => new SessionTimeoutError(p),
   'https://errors.driftstack.dev/driver-error': (p) => new DriverError(p),
   'https://errors.driftstack.dev/driver-not-integrated': (p) => new DriverNotIntegratedError(p),
   'https://errors.driftstack.dev/internal': (p) => new InternalError(p),

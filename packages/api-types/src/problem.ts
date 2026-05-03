@@ -34,6 +34,7 @@ export const PROBLEM_TYPES = {
   ExpiredKey: 'https://errors.driftstack.dev/expired-key',
   InvalidKey: 'https://errors.driftstack.dev/invalid-key',
   SessionDestroyed: 'https://errors.driftstack.dev/session-destroyed',
+  SessionTimeout: 'https://errors.driftstack.dev/session-timeout',
   DriverError: 'https://errors.driftstack.dev/driver-error',
   DriverNotIntegrated: 'https://errors.driftstack.dev/driver-not-integrated',
   ValidationFailed: 'https://errors.driftstack.dev/validation-failed',

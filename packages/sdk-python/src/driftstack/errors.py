@@ -94,6 +94,28 @@ class SessionDestroyedError(DriftstackError):
     """The session was destroyed; further operations on it are rejected (410)."""
 
 
+class SessionTimeoutError(DriftstackError):
+    """The operation exceeded the per-call ``timeout_ms`` (504).
+
+    Distinguished from ``DriverError`` so customers can react specifically
+    to "didn't finish in time" without conflating with downstream driver
+    failures. ``timeout_ms`` is the bound the server actually applied
+    (may differ from the request if the server clamped it).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        timeout_ms: int | None = None,
+        status: int | None = 504,
+        problem_type: str | None = None,
+        problem: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, status=status, problem_type=problem_type, problem=problem)
+        self.timeout_ms = timeout_ms
+
+
 # ── Rate / quota (429) ────────────────────────────────────────────────────
 
 
@@ -188,6 +210,7 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/expired-key": ExpiredKeyError,
     "https://errors.driftstack.dev/invalid-key": InvalidKeyError,
     "https://errors.driftstack.dev/session-destroyed": SessionDestroyedError,
+    "https://errors.driftstack.dev/session-timeout": SessionTimeoutError,
     "https://errors.driftstack.dev/driver-error": DriverError,
     "https://errors.driftstack.dev/driver-not-integrated": DriverError,
     "https://errors.driftstack.dev/validation-failed": ValidationError,

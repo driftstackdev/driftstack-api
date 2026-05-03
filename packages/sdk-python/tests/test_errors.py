@@ -20,6 +20,7 @@ from driftstack.errors import (
     RevokedKeyError,
     SessionDestroyedError,
     SessionNotFoundError,
+    SessionTimeoutError,
     TransportError,
     ValidationError,
 )
@@ -112,6 +113,19 @@ def test_quota_exceeded_extracts_fields() -> None:
     assert err.current == 1000
     assert err.limit == 1000
     assert err.record_type == "navigate"
+
+
+def test_session_timeout_extracts_timeout_ms() -> None:
+    body = (
+        '{"type":"https://errors.driftstack.dev/session-timeout",'
+        '"title":"Session timeout","status":504,'
+        '"detail":"The operation exceeded the supplied timeout of 30000 ms.",'
+        '"timeout_ms":30000}'
+    )
+    err = _error_from_response_data(status=504, text=body, retry_after_header=None)
+    assert isinstance(err, SessionTimeoutError)
+    assert err.timeout_ms == 30_000
+    assert err.status == 504
 
 
 def test_unknown_problem_type_falls_back_to_base_class() -> None:

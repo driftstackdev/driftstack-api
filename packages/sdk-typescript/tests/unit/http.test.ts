@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
-import { AuthError, NotFoundError, TransportError, ValidationError } from '../../src/errors.js';
+import {
+  AuthError,
+  ExpiredKeyError,
+  NotFoundError,
+  RevokedKeyError,
+  SessionTimeoutError,
+  TransportError,
+  ValidationError,
+} from '../../src/errors.js';
 import { HttpClient } from '../../src/http.js';
 
 interface FakeFetchSpec {
@@ -120,6 +128,58 @@ describe('HttpClient.request', () => {
     await expect(http.request<unknown>({ method: 'GET', path: '/v1/x' })).rejects.toBeInstanceOf(
       AuthError,
     );
+  });
+
+  it('401 revoked-key maps to RevokedKeyError', async () => {
+    const http = new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'http://api.test',
+      fetch: fakeFetch({
+        status: 401,
+        body: { type: PROBLEM_TYPES.RevokedKey, title: 'Revoked', status: 401 },
+      }),
+      retry: NEVER_RETRY,
+    });
+    await expect(http.request<unknown>({ method: 'GET', path: '/v1/x' })).rejects.toBeInstanceOf(
+      RevokedKeyError,
+    );
+  });
+
+  it('401 expired-key maps to ExpiredKeyError', async () => {
+    const http = new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'http://api.test',
+      fetch: fakeFetch({
+        status: 401,
+        body: { type: PROBLEM_TYPES.ExpiredKey, title: 'Expired', status: 401 },
+      }),
+      retry: NEVER_RETRY,
+    });
+    await expect(http.request<unknown>({ method: 'GET', path: '/v1/x' })).rejects.toBeInstanceOf(
+      ExpiredKeyError,
+    );
+  });
+
+  it('504 session-timeout maps to SessionTimeoutError carrying timeout_ms', async () => {
+    const http = new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'http://api.test',
+      fetch: fakeFetch({
+        status: 504,
+        body: {
+          type: PROBLEM_TYPES.SessionTimeout,
+          title: 'Session timeout',
+          status: 504,
+          timeout_ms: 30_000,
+        },
+      }),
+      retry: NEVER_RETRY,
+    });
+    const err = await http
+      .request<unknown>({ method: 'GET', path: '/v1/x' })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SessionTimeoutError);
+    expect((err as SessionTimeoutError).timeoutMs).toBe(30_000);
   });
 
   it('404 maps to NotFoundError', async () => {

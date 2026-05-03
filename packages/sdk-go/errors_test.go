@@ -148,6 +148,22 @@ func TestQuotaExceededExtractsFields(t *testing.T) {
 	}
 }
 
+func TestSessionTimeoutExtractsTimeoutMs(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"type":"https://errors.driftstack.dev/session-timeout","title":"Session timeout","status":504,"detail":"The operation exceeded the supplied timeout of 30000 ms.","timeout_ms":30000}`)
+	err := errorFromResponse(504, body, "")
+	var ste *SessionTimeoutError
+	if !errors.As(err, &ste) {
+		t.Fatalf("expected SessionTimeoutError, got %T", err)
+	}
+	if ste.TimeoutMs != 30000 {
+		t.Errorf("timeout_ms=%d, want 30000", ste.TimeoutMs)
+	}
+	if !errors.Is(err, ErrSessionTimeout) {
+		t.Errorf("expected errors.Is ErrSessionTimeout, got %v", err)
+	}
+}
+
 func TestUnknownProblemTypeFallsBackToUnknownError(t *testing.T) {
 	t.Parallel()
 	body := []byte(`{"type":"https://errors.driftstack.dev/unknown-future-thing","title":"new","status":418,"detail":"teapot"}`)
