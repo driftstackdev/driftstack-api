@@ -5801,3 +5801,51 @@ Capture the architectural / contractual decisions that landed in V-079 through V
 ### Next
 
 Continuing to V-097 — CAPABILITIES.md audit (read-only; surface drift in V-log per CLAUDE.md "do not edit without explicit direction").
+
+---
+
+## V-097 — CAPABILITIES.md audit (read-only surface)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Per CLAUDE.md: "`docs/CAPABILITIES.md` (when it exists) defines what the API claims to do — every documented capability must work end-to-end. Read it before claiming any capability; do **not** edit it without explicit direction. If implementation deviates from CAPABILITIES.md, surface the gap rather than silently changing scope."
+
+V-097 is the audit: read CAPABILITIES.md, surface any drift between the document and current control-plane reality, do NOT edit.
+
+### What the audit found
+
+CAPABILITIES.md is the **fingerprint parity closure backlog** (the WebKit-fork side of the contract), not a control-plane API capability ledger. Most entries cite the main-repo verification log (`<driftstack>/operations/verification-log.md`), not this control-plane repo's V-log. The document's stated scope is "100% match against genuine iPhone 17 Pro running iOS 26 Safari, measured by the detection rig." Categories: HTTP/3 stack, TLS, font rasterisation, paint regions, screen + viewport, WebRTC, etc. — all WebKit-engine concerns.
+
+**Drift identified (single instance):**
+
+In the "Numbering namespace note" section near the top:
+
+> Control-plane repo (this repo, `docs/verification-log.md`) — API / SDK / GUI / contract work (V-031–V-039 as of this writing).
+
+This repo's V-log is now at V-096 (V-097 about to land). The "V-031–V-039 as of this writing" note is stale. Not load-bearing — the doc's purpose is fingerprint parity tracking, not control-plane V-log indexing — but a future founder-driven edit could refresh this line if they want.
+
+**No control-plane-API drift to surface:**
+
+Every CAPABILITIES.md entry is fingerprint-residual / WebKit-engine-side, not control-plane. No `/v1/sessions` capability claim, no auth-flow capability claim, no Stripe-billing claim, no profile claim. The control-plane API surface is documented in `docs/architecture.md` (synced V-087), `docs/decisions.md` (synced V-096), and the OpenAPI spec served at `/openapi.json`. Those are the ledgers to consult for control-plane capabilities; CAPABILITIES.md is the parallel fork-side ledger.
+
+### Decision
+
+**No edit to CAPABILITIES.md.** Founder maintains; agent surfaces drift via this V-log entry per CLAUDE.md. The single stale line about control-plane V-log range is not blocking — it's a meta-note about V-log numbering, not a capability claim.
+
+### How verified
+
+- Read `docs/CAPABILITIES.md` end-to-end (209 lines).
+- Cross-referenced the "control-plane V-log range" note against current state (V-097 in flight, was at V-096 at audit time).
+- Confirmed no entries reference control-plane API capabilities that don't exist.
+
+### Files modified
+
+None. Read-only audit per CLAUDE.md exception.
+
+### Next
+
+Continuing to V-098 — README sweep across top-level + apps/server + packages/api-types + packages/sdk-typescript.
