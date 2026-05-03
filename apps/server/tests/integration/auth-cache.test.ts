@@ -24,7 +24,10 @@ import { WebhooksService, WebhooksAdminService } from '../../src/services/webhoo
 import { AdminAuditService } from '../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../src/services/admin-accounts.js';
 import { RateLimitOverridesService } from '../../src/services/rate-limit-overrides.js';
+import { LegalService } from '../../src/services/legal.js';
+import { buildLegalCatalogFromContent } from '../../src/services/legal-catalog.js';
 import { InMemoryAuthRepo } from './_helpers/in-memory-auth-repo.js';
+import { InMemoryLegalRepo } from './_helpers/in-memory-legal-repo.js';
 import { InMemorySessionsRepo } from './_helpers/in-memory-sessions-repo.js';
 import { InMemoryApiKeysRepo } from './_helpers/in-memory-api-keys-repo.js';
 import { InMemoryUsageRepo } from './_helpers/in-memory-usage-repo.js';
@@ -217,6 +220,17 @@ describe('auth cache — graceful degradation', () => {
       adminAuditService,
       accountsAdminService,
       rateLimitOverridesService,
+      legalService: new LegalService(
+        buildLegalCatalogFromContent([
+          {
+            documentKey: 'tos',
+            title: 'ToS',
+            sourcePath: 'docs/legal/terms-of-service.md',
+            content: '# Test\n\n**Version:** 0.1.0 · **Effective:** 2026-05-03\n',
+          },
+        ]),
+        new InMemoryLegalRepo(),
+      ),
       permissiveCors: true,
     });
 
@@ -308,6 +322,17 @@ describe('auth cache — graceful degradation', () => {
       adminAuditService,
       accountsAdminService,
       rateLimitOverridesService,
+      legalService: new LegalService(
+        buildLegalCatalogFromContent([
+          {
+            documentKey: 'tos',
+            title: 'ToS',
+            sourcePath: 'docs/legal/terms-of-service.md',
+            content: '# Test\n\n**Version:** 0.1.0 · **Effective:** 2026-05-03\n',
+          },
+        ]),
+        new InMemoryLegalRepo(),
+      ),
       permissiveCors: true,
     });
 

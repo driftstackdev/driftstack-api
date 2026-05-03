@@ -27,6 +27,9 @@ import { WebhookDeliveryWorker } from '../../../src/services/webhook-worker.js';
 import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
 import { RateLimitOverridesService } from '../../../src/services/rate-limit-overrides.js';
+import { LegalService } from '../../../src/services/legal.js';
+import { buildLegalCatalog } from '../../../src/services/legal-catalog.js';
+import { DrizzleLegalRepo } from '../../../src/db/legal-repo.js';
 import { RedisAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { DrizzleAccountAuthRepo } from '../../../src/db/auth-repo.js';
@@ -137,6 +140,9 @@ export async function startTestServer(): Promise<TestServer> {
   });
 
   const authCoalescer = new AuthCoalescer(logger);
+  const legalRepo = new DrizzleLegalRepo(database);
+  const legalCatalog = buildLegalCatalog({ repoRoot: resolve(here, '../../../../../') });
+  const legalService = new LegalService(legalCatalog, legalRepo);
   const app = await buildApp({
     logger,
     authRepo,
@@ -150,6 +156,7 @@ export async function startTestServer(): Promise<TestServer> {
     adminAuditService,
     accountsAdminService,
     rateLimitOverridesService,
+    legalService,
     rateLimitStore,
     permissiveCors: true,
   });

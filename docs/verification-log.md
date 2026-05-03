@@ -2661,7 +2661,7 @@ Idling on the queue otherwise.
 
 ---
 
-## V-046 — Legal baseline drafts placed at docs/legal/* (CLAUDE.md exception)
+## V-046 — Legal baseline drafts placed at docs/legal/\* (CLAUDE.md exception)
 
 **Date:** 2026-05-03
 **Author:** Driftstack Agent #2
@@ -2676,7 +2676,7 @@ Six new files at `docs/legal/`:
 - **`README.md`** — provenance, revision policy, versioning rules, cross-document consistency, counsel review focus areas, what's NOT in this set.
 - **`definitions.md`** — shared defined terms across all four bound documents. Single source of truth for terminology. Includes the Customer-Connected Service distinction (NOT a Sub-processor) used heavily in DPA + Privacy Policy.
 - **`acceptable-use-policy.md`** — prohibited targets (CSAM, terrorism, sanctions, infrastructure, malware), prohibited techniques (credential stuffing, mass account creation, DDoS, vuln exploit, anti-circumvention boundaries, PII scraping outside lawful basis, anti-CAPTCHA edge cases), customer responsibility framing, abuse reporting, warning → suspension → termination progression with discretion-to-skip, takedown response.
-- **`terms-of-service.md`** — full ToS structure: services description, account + authorised users, customer responsibilities + warranties, IP allocation (Customer owns Workflows, Driftstack owns Platform), confidentiality, fees + payment (Stripe + Coinbase Commerce, BTW + reverse-charge, late payment with Dutch *wettelijke handelsrente*), service levels (no SLA at launch tiers; commercial SLA at Scale+Enterprise), data + privacy by reference, warranties + disclaimer, mutual indemnification, **liability cap (12 months fees with carve-outs for gross negligence, willful misconduct, IP infringement, confidentiality, payment, mandatory law)**, term + termination + suspension, modifications, **Dutch governing law + Amsterdam exclusive jurisdiction**, dispute resolution, export controls, force majeure, notices, severability + entire agreement + assignment.
+- **`terms-of-service.md`** — full ToS structure: services description, account + authorised users, customer responsibilities + warranties, IP allocation (Customer owns Workflows, Driftstack owns Platform), confidentiality, fees + payment (Stripe + Coinbase Commerce, BTW + reverse-charge, late payment with Dutch _wettelijke handelsrente_), service levels (no SLA at launch tiers; commercial SLA at Scale+Enterprise), data + privacy by reference, warranties + disclaimer, mutual indemnification, **liability cap (12 months fees with carve-outs for gross negligence, willful misconduct, IP infringement, confidentiality, payment, mandatory law)**, term + termination + suspension, modifications, **Dutch governing law + Amsterdam exclusive jurisdiction**, dispute resolution, export controls, force majeure, notices, severability + entire agreement + assignment.
 - **`privacy-policy.md`** — Controller identity (placeholders for BV name/KvK/BTW/address); data categories with per-category legal bases under Article 6 GDPR + Article 52 AWR; Customer-Provided Secrets handling; Sub-processor list with transfer mechanisms (2021 SCCs + EU-US DPF where applicable); Customer-Connected Services explicitly NOT Sub-processors; retention by category (account 7y per Dutch tax law, recordings customer-controlled 1-365d default 30, secrets 30d post-termination, billing 7y, support 3y); GDPR rights (Articles 15–22); DPO threshold-based policy + Privacy Contact alternative; security summary (TOMs by reference); breach notification (72h to AP, 48h to Customer, undue delay to data subjects); cookies (strictly-necessary only at launch); children; updates + contact.
 - **`dpa.md`** — Article 28 GDPR Processor agreement: subject matter / duration / nature / purpose, roles (Customer = Controller, Driftstack = Processor), processor obligations (process only on documented instructions, confidentiality, Art 32 security, Sub-processors with general authorisation + 30-day objection window, **Customer-Connected Services explicitly NOT Sub-processors**, assistance with data subject requests, controller compliance assistance, deletion/return on termination, audit cooperation with frequency cap), Customer-Provided Secrets specific obligations, Personal Data breach notifications (48h to Customer), records of Processing (Article 30(2)), term, liability (cross-references ToS Section 13), conflict resolution, retention summary. **Annexes:** Annex 1 (description of Processing), Annex 2 (TOMs — confidentiality, integrity, availability, restoration, testing, pseudonymisation, logical separation), Annex 3 (Sub-processors), Annex 4 (SCC Module selection), Annex 5 (UK / Swiss addenda).
 
@@ -2696,7 +2696,7 @@ Six new files at `docs/legal/`:
 
 2. **DPF self-certification status is a moving target.** Each US-based Sub-processor (Stripe US, MacStadium, Coinbase Commerce, Anthropic) requires verification at https://www.dataprivacyframework.gov/list at the moment counsel reviews. The drafts say "verify current status" everywhere this matters — counsel must do this verification, agent cannot.
 
-3. **Liability carve-outs under Dutch law.** Per founder note: "uncapped liability for these categories" is a Dutch-law enforceability point — gross negligence (*opzet of bewuste roekeloosheid*), willful misconduct, IP infringement indemnification, and breach of confidentiality must be carved out for the cap to be enforceable at all. The ToS Section 13 reflects this. Counsel to verify the wording defeats a "the entire cap is unconscionable" argument.
+3. **Liability carve-outs under Dutch law.** Per founder note: "uncapped liability for these categories" is a Dutch-law enforceability point — gross negligence (_opzet of bewuste roekeloosheid_), willful misconduct, IP infringement indemnification, and breach of confidentiality must be carved out for the cap to be enforceable at all. The ToS Section 13 reflects this. Counsel to verify the wording defeats a "the entire cap is unconscionable" argument.
 
 4. **DPO threshold policy is opinion-based.** Article 37(1)(b) GDPR is qualitative ("regular and systematic monitoring of data subjects on a large scale"). The drafts pick concrete numbers (1M monthly active sessions; any single customer >5,000 unique data subjects monthly) as the threshold trigger. Different counsel may pick different numbers. The drafts document the rationale; counsel may move the numbers without rewriting the structure.
 
@@ -2729,3 +2729,79 @@ Six legal baseline drafts placed. Version 0.1.0-draft. Counsel review is the gat
 ### Next
 
 Acceptance machinery (V-047): DB schema for `legal_acceptances`, `POST /v1/legal/accept` and `GET /v1/legal/required` endpoints, force re-accept on version bump, audit-logged. Engineering scope, no contract dependencies.
+
+---
+
+## V-047 — Legal-acceptance machinery (DB + service + routes)
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Engineering scope per founder direction. Companion to V-046 legal documents.
+
+Customer acceptance of legal documents — version hash, timestamp, customer ID, re-accept on bump — landed as the engineering scaffold for the V-046 documents. Independent of the legal text generation; the machinery binds whatever document text is at `docs/legal/*.md` at server boot.
+
+### What changed
+
+**Database:**
+- **`apps/server/src/db/schema.ts`** — new `legal_acceptances` table. Columns: `id`, `account_id` (FK to accounts, cascade), `document_key` (text — `'tos' | 'privacy' | 'dpa' | 'aup'`, free-form to allow new documents without schema migration), `version` (text, SemVer-shaped), `content_hash` (text, lowercase hex SHA-256), `accepted_from_ip`, `accepted_user_agent`, `accepted_at`. Three indexes: `(account_id, document_key)` for the hot read path, `(account_id)` for audit queries, `(document_key, version)` for "who accepted v0.2.0" reverse-lookup audits.
+- **Migration `0005_legal_acceptances.sql`** — CREATE TABLE + FK + 3 indexes. Snapshot + journal updated. Hand-written per the V-037 finding that drizzle-kit's auto-generation needs a drizzle-orm major bump first; the SQL is the same shape drizzle would have produced.
+
+**Service layer:**
+- **`apps/server/src/services/legal-catalog.ts`** — `LegalDocumentCatalog`. Loaded at server start from `docs/legal/*.md`. Parses each document's header for version + effective date, computes SHA-256 of content, exposes `entries()` + `get(documentKey)`. Two builders: `buildLegalCatalog({ repoRoot })` (production — reads from disk) and `buildLegalCatalogFromContent([…])` (tests — pass canned strings). Fails fast at startup if a document is missing or its header doesn't parse.
+- **`apps/server/src/services/legal.ts`** — `LegalService`. Three methods: `list()` returns the catalog snapshot for client display, `recordAcceptance(input)` validates the (version, content_hash) match the current catalog and writes a `legal_acceptances` row, `required(accountId)` returns the documents the account still needs to accept (or re-accept). Three reasons surfaced in `required`: `never_accepted`, `version_outdated`, `content_hash_changed` (same version string but the underlying content changed mid-flight). Two typed errors: `LegalDocumentNotFoundError` and `LegalDocumentMismatchError` (the latter carries the current version + hash so the route can return them in a 409 problem extension).
+- **`apps/server/src/db/legal-repo.ts`** — `DrizzleLegalRepo`. Two methods: `recordAcceptance` (insert + return), `latestAcceptancesForAccount` (DISTINCT ON (document_key) ORDER BY accepted_at DESC — Postgres-native; raw SQL via `db.execute` because Drizzle doesn't expose DISTINCT ON natively).
+
+**Routes:**
+- **`apps/server/src/routes/legal.ts`** — three endpoints under `/v1/legal`:
+  - `GET /v1/legal/documents` — catalog list, auth-gated.
+  - `GET /v1/legal/required` — documents the calling account must accept, auth-gated.
+  - `POST /v1/legal/accept` — record acceptance. Body `{document_key, version, content_hash}` parsed through Zod. Returns 201 with the acceptance audit shape. Returns 404 for unknown document, 409 for stale version (with current version + hash in the problem extension so the client can refresh-and-retry), 400 for malformed content_hash.
+- **`apps/server/src/lib/app.ts`** — `AppDeps` gained a `legalService` field; the new routes are registered alongside the existing route modules.
+- **`apps/server/src/lib/errors.ts`** — `ConflictError` constructor extended to accept optional `extensions`. The 409 stale-version response uses this to surface the current version + hash to the client. Backwards-compatible (extensions param is optional; existing callers untouched).
+
+**Test infrastructure:**
+- **`apps/server/tests/integration/_helpers/in-memory-legal-repo.ts`** — `InMemoryLegalRepo` mirrors the Drizzle implementation's behaviour (latest acceptance per `(account, document_key)`).
+- **`apps/server/tests/integration/_helpers/build-test-app.ts`** — fixture builds a canned catalog with 4 documents (tos, privacy, dpa, aup) at version `0.1.0-draft`, fixed effective date 2026-05-03. Wires `LegalService` + `InMemoryLegalRepo`.
+- **`apps/server/tests/integration/auth-cache.test.ts`** + **`apps/server/tests/e2e/helpers/server.ts`** — both call `buildApp` directly; both updated to pass `legalService` (using the in-memory repo + canned catalog in the integration test, the disk-backed catalog + Drizzle repo in e2e).
+
+**Tests:**
+- **`apps/server/tests/integration/legal.test.ts`** — 9 new tests:
+  - GET /v1/legal/documents: 200 lists 4 canned docs, 401 without auth.
+  - GET /v1/legal/required: lists all 4 as `never_accepted` for fresh account; returns empty after accepting all four.
+  - POST /v1/legal/accept: 201 with audit shape, 409 stale version with current version + hash in extension, 404 unknown document, 400 malformed content_hash.
+  - Service-level test: `content_hash_changed` reason fires when the same version string ships with new content (patch-level edit). Exercised via direct service construction since the catalog is fixed at app boot.
+
+### Empirical findings
+
+1. **Document text loaded at server boot, content_hash captured at boot.** Subsequent edits to `docs/legal/*.md` require a server restart to surface in the catalog. This is the right behavior — legal text changes are inherently re-acceptance events; restarting the server is a reasonable trigger to invalidate caches anyway. If hot-reload becomes desirable in development, the catalog could expose a `reload()` method; not needed for V-047.
+
+2. **Postgres DISTINCT ON is the right query for "latest per (account, document)"**. Drizzle doesn't expose it natively, but `db.execute(sql\`...\`)` works fine. The `(account_id, document_key)` index covers the WHERE + ORDER BY without a sort. Iterating rows for the in-memory result builder is O(documents) — small.
+
+3. **The 409 stale-version response is the load-bearing UX**. When a customer's GUI / app fetches the catalog, caches it, and the user clicks "Accept" 30 seconds later — but the server has bumped a version in the meantime — the customer's POST fails with a clean 409 carrying the current version + hash. The client refreshes its catalog, re-shows the (now-different) document, and the user accepts again. Without this round-trip, the customer would silently accept a stale version with a hash that didn't match the current content.
+
+4. **`content_hash_changed` is intentional separate-from-version-bump signal.** Per the V-046 README, patch-level edits do not force re-acceptance by policy; minor + major do. The service surfaces the `content_hash_changed` reason regardless, leaving the call to the route layer / client to gate on it. Default behavior: client UIs may surface the reason as informational ("your accepted version of the ToS has been clarified") without blocking.
+
+5. **Dev-flow note:** in-memory catalog in tests bypasses file-system reads. Production catalog reads from disk; e2e helpers point it at the repo root. The `repoRoot` parameter is the resolution anchor; counsel-edited documents at `docs/legal/*.md` are picked up by the production catalog without code changes.
+
+6. **No SDK exposure of `/v1/legal/*` yet.** The endpoints exist on the server but the published TS / Python / Go SDKs do not yet wrap them. Decision: defer SDK wrapping until the marketing-site / customer-dashboard surface lands and there's an actual customer-facing client to test it. Today's clients are: the GUI (when it adds a legal-acceptance page) and `curl` / Postman for ops. SDK wrapping is additive when the time comes.
+
+7. **API-key issuance does not yet block on acceptance.** A customer with no acceptances can still create API keys, create sessions, and operate the Service. Acceptance-gating is a separate decision the founder hasn't directed yet — the machinery records but doesn't enforce. Two natural enforcement points: (a) at signup (block account creation pending ToS + Privacy acceptance) — likely lives in the customer-dashboard onboarding flow which is out of scope; (b) at API-key issuance (block creation if `required(accountId)` is non-empty) — small change in `ApiKeysService`, not landed here.
+
+### Verify chain
+
+- typecheck/lint/format/test all clean.
+- `npm test`: **325/325** (was 316; +9 from new legal tests). 30 test files (was 29; +1).
+- Python pytest: 97/97 unchanged. Go tests: clean.
+- Server bundle unchanged. GUI bundle unchanged.
+
+### Decisions made
+
+No new D-entries. The acceptance machinery is implementation under the locked stack (Postgres + Fastify + Zod). Documented patch-vs-bump policy lives in the V-046 README, not here.
+
+### Status
+
+Acceptance machinery in place. Customer can accept documents, server records audits, version + hash mismatch surfaces a clean 409. Awaiting (a) counsel review of the V-046 documents themselves and (b) founder direction on whether/where to enforce acceptance (signup-block, API-key-issuance-block, or both).
+
+### Next
+
+CAPABILITIES.md hygiene pass — V-145/V-146/V-147/V-148 weren't landed in main repo when last polled (V-143 was the latest). Re-poll on next session and pull closures in if they've appeared.

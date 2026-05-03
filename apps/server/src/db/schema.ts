@@ -429,12 +429,60 @@ export const rateLimitOverrides = pgTable(
   ],
 );
 
+// legal_acceptances — audit log of customer acceptance of legal documents
+// (ToS, Privacy Policy, DPA, AUP). Each row binds (account, document, version)
+// to a content hash + acceptance timestamp; version bumps invalidate prior
+// acceptances by referencing a different (document_key, version) row. The
+// service layer queries the latest acceptance per (account, document_key)
+// and compares against the currently-published version to decide whether
+// to force a re-acceptance flow.
+//
+// Document content lives in `docs/legal/*.md` and is loaded into config at
+// server start; content_hash is SHA-256 of the file content at the time of
+// acceptance, so post-acceptance edits to the file are detectable.
+export const legalAcceptances = pgTable(
+  'legal_acceptances',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    // Document key — 'tos' | 'privacy' | 'dpa' | 'aup'. Free-form text rather
+    // than a pgEnum to allow new documents without a schema migration.
+    documentKey: text('document_key').notNull(),
+    // SemVer-shaped version string (e.g. '0.1.0-draft', '1.0.0').
+    version: text('version').notNull(),
+    // SHA-256 of the document content at acceptance time, lowercase hex.
+    contentHash: text('content_hash').notNull(),
+    // Optional metadata — IP / user agent at acceptance, captured by the
+    // route layer for forensic value.
+    acceptedFromIp: text('accepted_from_ip'),
+    acceptedUserAgent: text('accepted_user_agent'),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    // Latest-acceptance lookup by (account, document) — the hot read path.
+    index('legal_acceptances_account_doc_idx').on(t.accountId, t.documentKey),
+    // For audit queries by account.
+    index('legal_acceptances_account_idx').on(t.accountId),
+    // For audit queries by document version (e.g. "who accepted v0.2.0?").
+    index('legal_acceptances_doc_version_idx').on(t.documentKey, t.version),
+  ],
+);
+
 // ───────────────────────────────────────────────────────────────────────────
 // Inferred types (for service / route layers)
 // ───────────────────────────────────────────────────────────────────────────
 
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
+
+export type LegalAcceptance = typeof legalAcceptances.$inferSelect;
+export type NewLegalAcceptance = typeof legalAcceptances.$inferInsert;
 
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;

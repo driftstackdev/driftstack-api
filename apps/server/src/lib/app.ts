@@ -20,6 +20,7 @@ import type { WebhooksService, WebhooksAdminService } from '../services/webhooks
 import type { AdminAuditService } from '../services/admin-audit.js';
 import type { AccountsAdminService } from '../services/admin-accounts.js';
 import type { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
+import type { LegalService } from '../services/legal.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -31,6 +32,7 @@ import { registerWebhookRoutes } from '../routes/webhooks.js';
 import { registerAdminAccountsRoutes } from '../routes/admin-accounts.js';
 import { registerAdminWebhookRoutes } from '../routes/admin-webhooks.js';
 import { registerAdminAuditLogRoutes } from '../routes/admin-audit-log.js';
+import { registerLegalRoutes } from '../routes/legal.js';
 
 export interface AppDeps {
   logger: Logger;
@@ -46,6 +48,7 @@ export interface AppDeps {
   adminAuditService: AdminAuditService;
   accountsAdminService: AccountsAdminService;
   rateLimitOverridesService: RateLimitOverridesService;
+  legalService: LegalService;
   /** When true, register a permissive CORS policy. Production locks this down. */
   permissiveCors?: boolean;
 }
@@ -100,6 +103,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     audit: deps.adminAuditService,
   });
   registerAdminAuditLogRoutes(app, { audit: deps.adminAuditService });
+  registerLegalRoutes(app, deps.legalService);
   await registerOpenApiRoutes(app);
 
   // Health endpoint — public, no auth, no rate limit.

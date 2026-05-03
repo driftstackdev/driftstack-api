@@ -36,6 +36,13 @@
       "when": 1778011200000,
       "tag": "0004_gui_input_event_type",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778097600000,
+      "tag": "0005_legal_acceptances",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,8 @@ import { WebhooksService, WebhooksAdminService } from '../../../src/services/web
 import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
 import { RateLimitOverridesService } from '../../../src/services/rate-limit-overrides.js';
+import { LegalService } from '../../../src/services/legal.js';
+import { buildLegalCatalogFromContent } from '../../../src/services/legal-catalog.js';
 import { InMemoryAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { InMemoryAuthRepo } from './in-memory-auth-repo.js';
@@ -28,6 +30,7 @@ import { InMemoryWebhooksRepo } from './in-memory-webhooks-repo.js';
 import { InMemoryAdminAuditLogRepo } from './in-memory-admin-audit-repo.js';
 import { InMemoryAccountsAdminRepo } from './in-memory-admin-accounts-repo.js';
 import { InMemoryRateLimitOverridesRepo } from './in-memory-rate-limit-overrides-repo.js';
+import { InMemoryLegalRepo } from './in-memory-legal-repo.js';
 import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
 
 export interface TestAppOptions {
@@ -169,6 +172,42 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   });
   const apiKeysService = new ApiKeysService(apiKeysRepo, authCache, webhooksService);
 
+  // Legal-acceptance plumbing — uses an in-memory catalog with a fixed
+  // canned document set (one per documentKey) so tests don't depend on
+  // file-system reads.
+  const legalRepo = new InMemoryLegalRepo();
+  const legalCatalog = buildLegalCatalogFromContent([
+    {
+      documentKey: 'tos',
+      title: 'Terms of Service',
+      sourcePath: 'docs/legal/terms-of-service.md',
+      content:
+        '# Test ToS\n\n**Version:** 0.1.0-draft · **Effective:** 2026-05-03\n\nFixture content.',
+    },
+    {
+      documentKey: 'privacy',
+      title: 'Privacy Policy',
+      sourcePath: 'docs/legal/privacy-policy.md',
+      content:
+        '# Test Privacy\n\n**Version:** 0.1.0-draft · **Effective:** 2026-05-03\n\nFixture content.',
+    },
+    {
+      documentKey: 'dpa',
+      title: 'DPA',
+      sourcePath: 'docs/legal/dpa.md',
+      content:
+        '# Test DPA\n\n**Version:** 0.1.0-draft · **Effective:** 2026-05-03\n\nFixture content.',
+    },
+    {
+      documentKey: 'aup',
+      title: 'AUP',
+      sourcePath: 'docs/legal/acceptable-use-policy.md',
+      content:
+        '# Test AUP\n\n**Version:** 0.1.0-draft · **Effective:** 2026-05-03\n\nFixture content.',
+    },
+  ]);
+  const legalService = new LegalService(legalCatalog, legalRepo);
+
   const app = await buildApp({
     logger: createTestLogger(),
     authRepo,
@@ -183,6 +222,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     adminAuditService,
     accountsAdminService,
     rateLimitOverridesService,
+    legalService,
     permissiveCors: true,
   });
 

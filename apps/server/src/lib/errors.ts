@@ -147,12 +147,13 @@ export class NotFoundError extends ApiError {
 }
 
 export class ConflictError extends ApiError {
-  constructor(detail: string) {
+  constructor(detail: string, extensions?: Record<string, unknown>) {
     super({
       type: PROBLEM_TYPES.Conflict,
       title: 'Conflict',
       status: 409,
       detail,
+      ...(extensions !== undefined ? { extensions } : {}),
     });
     this.name = 'ConflictError';
   }
