@@ -32,6 +32,7 @@ import { DrizzleAccountsAdminRepo } from '../db/admin-accounts-repo.js';
 import { DrizzleRateLimitOverridesRepo } from '../db/rate-limit-overrides-repo.js';
 import { DrizzleLegalRepo } from '../db/legal-repo.js';
 import { DrizzleAuthFlowsRepo } from '../db/auth-flows-repo.js';
+import { DrizzleStripeWebhooksRepo } from '../db/stripe-webhooks-repo.js';
 import { SessionsService } from '../services/sessions.js';
 import { ApiKeysService } from '../services/api-keys.js';
 import { UsageService } from '../services/usage.js';
@@ -41,6 +42,7 @@ import { AccountsAdminService } from '../services/admin-accounts.js';
 import { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import { LegalService } from '../services/legal.js';
 import { AuthFlowsService } from '../services/auth-flows.js';
+import { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import { buildLegalCatalog } from '../services/legal-catalog.js';
 import { RedisAuthCache } from '../services/auth-cache.js';
 import { AuthCoalescer } from '../services/auth-coalescer.js';
@@ -171,6 +173,13 @@ export async function createProductionDeps(
     exposeDebugToken: config.authFlowUrls.exposeDebugToken,
   });
 
+  // V-080: inbound Stripe webhook handler. Optional — only wired when
+  // STRIPE_WEBHOOK_SECRET is configured. When absent, /v1/webhooks/stripe
+  // is not registered and inbound deliveries 404 (Stripe will retry, but
+  // that's a deploy misconfig signal, not a normal state).
+  const stripeWebhooksRepo = new DrizzleStripeWebhooksRepo(dbHandle);
+  const stripeWebhooksService = new StripeWebhooksService(stripeWebhooksRepo, { logger });
+
   // Readiness checks. Postgres + Redis are required; R2 only checked
   // if configured. Postmark + Sentry are never readiness-gated.
   const readinessChecks: ReadinessCheck[] = [
@@ -209,6 +218,12 @@ export async function createProductionDeps(
     rateLimitOverridesService,
     legalService,
     authFlowsService,
+    ...(config.stripe?.webhookSecret !== undefined
+      ? {
+          stripeWebhooksService,
+          stripeWebhookSigningSecret: config.stripe.webhookSecret,
+        }
+      : {}),
     readinessChecks,
     permissiveCors: false,
   };

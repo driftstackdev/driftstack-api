@@ -4793,3 +4793,103 @@ New `authFlowUrls` block with four env vars: `AUTH_VERIFY_EMAIL_URL`, `AUTH_MAGI
 ### Next
 
 Per the never-stop rule: continuing immediately to V-080 (Stripe webhook handler scaffolding) per Priority 3 of the overnight queue. V-070-visual remains uncommitted in working tree pending founder review.
+
+---
+
+## V-080 — Inbound Stripe webhook handler scaffolding (Routine — Workstream D P3)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Scaffold the inbound Stripe webhook surface so subscription lifecycle, invoice payments, and customer events from Stripe land in the control plane with signature-verified, idempotent handling. ADR-002 (Stripe-only payment rail) makes this load-bearing for the billing flow; this commit lands the verify + dispatch + idempotency primitives, with per-event-type business logic stubbed at scaffolding time.
+
+### What changed
+
+**Schema (Drizzle + migration 0008):**
+
+- `processed_stripe_events` — append-only idempotency ledger keyed on Stripe `event.id` (PK). Records `event_type`, `payload_hash` (sha256 of raw body for forensic reconstructability without keeping the full body), `result` (`'handled' | 'ignored' | 'error:<short>'`), `received_at`. Two indexes (received-by-time, type-by-time) for admin debugging queries.
+
+**Signature verification (`apps/server/src/lib/stripe-signing.ts`):**
+
+`verifyStripeSignature` is hand-rolled — we do NOT depend on the `stripe` SDK for this single primitive. Stripe's signature algorithm is straightforward (HMAC-SHA256 over `<timestamp>.<raw body>` with the webhook signing secret), and pulling in the SDK adds 1-2 MB of unused subscription / invoice / customer types. Header parser tolerates ordering and ignores unknown keys (e.g. a future `v2`); replay tolerance defaults to 5 minutes (matches Stripe SDK's default). Constant-time hex comparison defends against signature timing-leak recovery. `signStripePayload` is the inverse helper for tests.
+
+**Service (`apps/server/src/services/stripe-webhooks.ts`):**
+
+`StripeWebhooksService.handle(event, rawBody)` returns `'duplicate' | 'handled' | 'ignored' | 'error:<short>'`:
+
+1. `repo.hasEvent(event.id)` short-circuits duplicates BEFORE running the handler. Stripe re-delivers events within a 3-day window; the ledger is the durable record.
+2. Dispatch routes by `event.type` to per-event-type handlers. At scaffolding time every handler is a logging no-op tagged with the event kind; downstream V-NNN entries fill in actual subscription / invoice / tier-change state mutation.
+3. `repo.recordEvent(...)` inserts the ledger row with `INSERT ... ON CONFLICT DO NOTHING` on `event_id`. The race between the `hasEvent` check and the insert is resolved deterministically — only one delivery wins, the other gets `inserted: false` and returns `'duplicate'`.
+
+Event types currently routed (all return `'handled'` after logging):
+
+- `customer.subscription.created` / `updated` / `deleted`
+- `invoice.payment_succeeded` / `payment_failed` / `finalized`
+- `checkout.session.completed`
+- `customer.created` / `updated` / `deleted`
+- `payment_method.attached` / `detached`
+
+Anything else returns `'ignored'` (Stripe sends many event types we don't care about — `radar.early_fraud_warning.created`, etc.).
+
+**Route (`apps/server/src/routes/webhooks-stripe.ts`):**
+
+`POST /v1/webhooks/stripe` — public, no `requireAuth` (Stripe-Signature header IS the auth). Route registers a content-type parser keyed by `req.routeOptions.url` so only this route receives raw-body stashing on `request.rawBody`; every other JSON route still goes through Fastify's default parser. Body limit 1 MiB (Stripe events are usually <16 KiB; generous bound).
+
+Verification flow: missing header → 401, invalid signature → 401, malformed body / missing event fields → 400, otherwise → service.handle → 200 with `{ received: true, outcome: '...' }`. We DON'T leak which check failed in the response body — Stripe interprets any 4xx as a delivery failure and retries, so the surface is intentionally opaque while logs record the specific reason.
+
+**Wiring:**
+
+- `app.ts`: `stripeWebhooksService` + `stripeWebhookSigningSecret` added as optional `AppDeps` fields. Route registers only when both are present (so dev runs without Stripe config don't 404 on Stripe's retry attempts).
+- `bootstrap.ts`: `DrizzleStripeWebhooksRepo` constructed against the Postgres pool, fed into `StripeWebhooksService`. Webhook secret pulled from `config.stripe.webhookSecret`.
+- `config.ts`: new `stripe` config block (webhookSecret + publishableKey + secretKey, all individually optional). When any one is set, the block surfaces; when all are absent, `config.stripe` is `undefined`.
+- `build-test-app.ts`: integration fixtures get an in-memory `StripeWebhooksService` + a deterministic test signing secret (`whsec_test_fixture_secret`) exposed on the fixture so tests can sign canned events.
+
+### How verified
+
+- `npm run typecheck`: clean across all 5 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 387/387 passing (was 377; +10 new Stripe webhook integration tests). Tests cover:
+  1. Valid signature → 200 + recorded.
+  2. Missing Stripe-Signature header → 401.
+  3. Wrong-secret signature → 401.
+  4. Timestamp 10 minutes old → 401 (outside 5-min tolerance).
+  5. Malformed signature header → 401.
+  6. Duplicate `event.id` → second delivery returns `outcome: 'duplicate'`, only first row recorded.
+  7. Subscription lifecycle events all dispatch to `'handled'`.
+  8. Invoice events all dispatch to `'handled'`.
+  9. Unknown event type returns `'ignored'`.
+  10. Missing `event.id` in body → 400.
+
+### Decisions made (no new D-entries; documented inline)
+
+- **No `stripe` SDK dependency for verification.** Hand-rolled HMAC is ~30 LOC; the SDK adds significant surface area for one primitive. If the actual subscription-create / invoice-finalize flow needs the SDK later (for typed event payloads or API calls back to Stripe), that's a separate decision at that time.
+- **Always 200 to verified-but-ignored events.** Stripe retries on non-2xx; replying 200 to events we don't care about prevents an infinite re-delivery loop. The `outcome: 'ignored'` field tells admin tooling what happened without forcing Stripe to keep trying.
+- **Idempotency at the service boundary, not via webhook secret rotation.** Stripe `event.id` is unique for the lifetime of the Stripe account. Our `processed_stripe_events` PK enforces single-handling; the secret-rotation flow can swap webhook signing secrets without invalidating the idempotency ledger.
+- **Body-limit 1 MiB.** Stripe events I've seen in the wild top out around 30 KiB; 1 MiB is a generous bound that shouldn't reject legitimate events. Lower limits (e.g. 64 KiB) may be safer once the actual event-type set stabilises in production.
+
+### Files added
+
+- `apps/server/src/db/migrations/0008_processed_stripe_events.sql`
+- `apps/server/src/db/stripe-webhooks-repo.ts`
+- `apps/server/src/lib/stripe-signing.ts`
+- `apps/server/src/services/stripe-webhooks.ts`
+- `apps/server/src/routes/webhooks-stripe.ts`
+- `apps/server/tests/integration/_helpers/in-memory-stripe-webhooks-repo.ts`
+- `apps/server/tests/integration/stripe-webhooks.test.ts`
+
+### Files modified
+
+- `apps/server/src/db/schema.ts` (processedStripeEvents table + 2 inferred types)
+- `apps/server/src/db/migrations/meta/_journal.json` (entry 8)
+- `apps/server/src/lib/app.ts` (StripeWebhooksService AppDeps + conditional route registration)
+- `apps/server/src/lib/bootstrap.ts` (production wiring under `config.stripe.webhookSecret` gate)
+- `apps/server/src/lib/config.ts` (new optional `stripe` block)
+- `apps/server/tests/integration/_helpers/build-test-app.ts` (fixture wiring)
+
+### Next
+
+Per the never-stop rule: continuing to V-081 (Profiles API + tier-limit enforcement at create) per Priority 4 of the overnight queue. V-070-visual remains uncommitted in working tree pending founder review.

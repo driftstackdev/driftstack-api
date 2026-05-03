@@ -213,6 +213,32 @@ export const passwordResetTokens = pgTable(
   ],
 );
 
+// processed_stripe_events — append-only idempotency ledger for inbound
+// Stripe webhooks. The Stripe `event.id` is unique across the lifetime
+// of a Stripe account; we record it here on first successful handling
+// and reject duplicates with a 200 OK no-op (Stripe re-delivers events
+// up to 3 days after the first attempt). Also stores the event type +
+// the raw payload digest so admin debugging can reconstruct what was
+// seen without keeping the full body. See V-080.
+export const processedStripeEvents = pgTable(
+  'processed_stripe_events',
+  {
+    eventId: text('event_id').primaryKey(),
+    eventType: text('event_type').notNull(),
+    /** SHA-256 of the raw event payload at the time we processed it. */
+    payloadHash: text('payload_hash').notNull(),
+    /** Outcome of the handler: 'handled' | 'ignored' | 'error:<short>'. */
+    result: text('result').notNull(),
+    receivedAt: timestamp('received_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index('processed_stripe_events_received_idx').on(t.receivedAt),
+    index('processed_stripe_events_type_idx').on(t.eventType, t.receivedAt),
+  ],
+);
+
 // Long-lived browser session tokens — used by the customer dashboard
 // + admin panel (when those land). Distinct from API keys: API keys are
 // for code; web sessions are for humans in a browser. Same hash pattern
@@ -660,3 +686,6 @@ export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;
 
 export type WebSession = typeof webSessions.$inferSelect;
 export type NewWebSession = typeof webSessions.$inferInsert;
+
+export type ProcessedStripeEvent = typeof processedStripeEvents.$inferSelect;
+export type NewProcessedStripeEvent = typeof processedStripeEvents.$inferInsert;

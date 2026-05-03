@@ -22,6 +22,7 @@ import type { AccountsAdminService } from '../services/admin-accounts.js';
 import type { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import type { LegalService } from '../services/legal.js';
 import type { AuthFlowsService } from '../services/auth-flows.js';
+import type { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -35,6 +36,7 @@ import { registerAdminWebhookRoutes } from '../routes/admin-webhooks.js';
 import { registerAdminAuditLogRoutes } from '../routes/admin-audit-log.js';
 import { registerLegalRoutes } from '../routes/legal.js';
 import { registerAuthRoutes } from '../routes/auth.js';
+import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 
 export interface ReadinessCheck {
   /** Display name surfaced in the /ready response (e.g. "postgres", "redis", "r2"). */
@@ -80,6 +82,15 @@ export interface AppDeps {
    * onboarding flow lands in production this becomes required.
    */
   authFlowsService?: AuthFlowsService;
+  /**
+   * V-080: inbound Stripe webhook handler. Optional — when both
+   * `stripeWebhooksService` and `stripeWebhookSigningSecret` are
+   * provided, POST /v1/webhooks/stripe is registered with raw-body
+   * parsing + signature verification.
+   */
+  stripeWebhooksService?: StripeWebhooksService;
+  /** Stripe webhook signing secret (whsec_...). Required if `stripeWebhooksService` is set. */
+  stripeWebhookSigningSecret?: string;
   /**
    * Readiness checks executed by `/ready`. Each runs with the
    * supplied (or default 1500ms) timeout; aggregate result drives
@@ -144,6 +155,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerLegalRoutes(app, deps.legalService);
   if (deps.authFlowsService !== undefined) {
     registerAuthRoutes(app, { service: deps.authFlowsService });
+  }
+  if (deps.stripeWebhooksService !== undefined && deps.stripeWebhookSigningSecret !== undefined) {
+    registerStripeWebhookRoutes(app, {
+      service: deps.stripeWebhooksService,
+      signingSecret: deps.stripeWebhookSigningSecret,
+      logger: deps.logger,
+    });
   }
   await registerOpenApiRoutes(app);
 

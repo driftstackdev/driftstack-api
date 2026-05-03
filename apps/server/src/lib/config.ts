@@ -50,6 +50,20 @@ const ConfigSchema = z.object({
       tracesSampleRate: z.coerce.number().min(0).max(1).default(0),
     })
     .nullable(),
+  // V-080: Stripe webhook signing secret + (future) API keys.
+  // `webhookSecret` (whsec_...) is required to register the inbound
+  // Stripe webhook route; the publishable / secret keys land in a
+  // follow-on V-NNN when the actual subscription-create flow gets
+  // wired. Sub-fields are individually optional so dev can run
+  // without any Stripe config and the webhook route silently
+  // doesn't register.
+  stripe: z
+    .object({
+      webhookSecret: z.string().min(1).optional(),
+      publishableKey: z.string().min(1).optional(),
+      secretKey: z.string().min(1).optional(),
+    })
+    .optional(),
   // V-079: where the user-facing auth-flow links point. The plaintext
   // single-use token gets appended as `?token=<...>` to each. Defaults
   // are dev-friendly localhost URLs; production sets these to the real
@@ -125,6 +139,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     r2: readR2Config(env),
     postmark: readPostmarkConfig(env),
     sentry: readSentryConfig(env),
+    stripe:
+      env.STRIPE_WEBHOOK_SECRET || env.STRIPE_PUBLISHABLE_KEY || env.STRIPE_SECRET_KEY
+        ? {
+            ...(env.STRIPE_WEBHOOK_SECRET ? { webhookSecret: env.STRIPE_WEBHOOK_SECRET } : {}),
+            ...(env.STRIPE_PUBLISHABLE_KEY ? { publishableKey: env.STRIPE_PUBLISHABLE_KEY } : {}),
+            ...(env.STRIPE_SECRET_KEY ? { secretKey: env.STRIPE_SECRET_KEY } : {}),
+          }
+        : undefined,
     authFlowUrls: {
       verifyEmail: env.AUTH_VERIFY_EMAIL_URL,
       magicLink: env.AUTH_MAGIC_LINK_URL,

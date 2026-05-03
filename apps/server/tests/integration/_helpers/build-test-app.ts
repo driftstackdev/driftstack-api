@@ -32,7 +32,9 @@ import { InMemoryAccountsAdminRepo } from './in-memory-admin-accounts-repo.js';
 import { InMemoryRateLimitOverridesRepo } from './in-memory-rate-limit-overrides-repo.js';
 import { InMemoryLegalRepo } from './in-memory-legal-repo.js';
 import { InMemoryAuthFlowsRepo } from './in-memory-auth-flows-repo.js';
+import { InMemoryStripeWebhooksRepo } from './in-memory-stripe-webhooks-repo.js';
 import { AuthFlowsService } from '../../../src/services/auth-flows.js';
+import { StripeWebhooksService } from '../../../src/services/stripe-webhooks.js';
 import { createEmailService } from '../../../src/services/email.js';
 import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
 
@@ -90,6 +92,9 @@ export interface TestAppFixture {
   rateLimitOverridesRepo: InMemoryRateLimitOverridesRepo;
   rateLimitStore: MemoryRateLimitStore;
   authFlowsRepo: InMemoryAuthFlowsRepo;
+  stripeWebhooksRepo: InMemoryStripeWebhooksRepo;
+  /** Stripe webhook signing secret used by the test fixture. */
+  stripeWebhookSigningSecret: string;
   driver: MockDriver;
   /** Plaintext API key — pass as `Authorization: Bearer <plaintext>`. */
   plaintext: string;
@@ -250,6 +255,14 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     exposeDebugToken: true,
   });
 
+  // V-080: Stripe webhook service + a deterministic signing secret so
+  // tests can sign canned events without a real Stripe dashboard.
+  const stripeWebhooksRepo = new InMemoryStripeWebhooksRepo();
+  const stripeWebhooksService = new StripeWebhooksService(stripeWebhooksRepo, {
+    logger: testLogger,
+  });
+  const stripeWebhookSigningSecret = 'whsec_test_fixture_secret';
+
   const app = await buildApp({
     logger: testLogger,
     authRepo,
@@ -266,6 +279,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     rateLimitOverridesService,
     legalService,
     authFlowsService,
+    stripeWebhooksService,
+    stripeWebhookSigningSecret,
     permissiveCors: true,
   });
 
@@ -282,6 +297,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     usageRepo,
     rateLimitStore,
     authFlowsRepo,
+    stripeWebhooksRepo,
+    stripeWebhookSigningSecret,
     driver,
     plaintext,
     accountId,

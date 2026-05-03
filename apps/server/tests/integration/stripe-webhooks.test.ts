@@ -1,0 +1,246 @@
+// Integration tests for the V-080 Stripe webhook surface.
+//
+// Covers signature verification (valid / invalid / replay), idempotency
+// (duplicate event.id short-circuits to 200), event-type dispatch
+// (handled vs ignored), and malformed payloads.
+
+import { afterEach, describe, expect, it } from 'vitest';
+import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { signStripePayload } from '../../src/lib/stripe-signing.js';
+
+interface PostBody {
+  raw: string;
+  signature: string;
+}
+
+function makeEvent(eventId: string, type: string, extra: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    id: eventId,
+    object: 'event',
+    type,
+    api_version: '2024-12-18.acacia',
+    created: Math.floor(Date.now() / 1000),
+    livemode: false,
+    data: { object: { id: 'sub_test_123', ...extra } },
+    request: { id: 'req_test', idempotency_key: null },
+  });
+}
+
+function signWithFixture(fx: TestAppFixture, raw: string, timestampSec?: number): PostBody {
+  const sig = signStripePayload({
+    rawBody: raw,
+    secret: fx.stripeWebhookSigningSecret,
+    timestampSec,
+  });
+  return { raw, signature: sig };
+}
+
+describe('POST /v1/webhooks/stripe — signature verification', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('200 on valid signature + known event type', async () => {
+    fx = await buildTestApp();
+    const raw = makeEvent('evt_001', 'customer.subscription.created');
+    const { signature } = signWithFixture(fx, raw);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/stripe',
+      headers: {
+        'stripe-signature': signature,
+        'content-type': 'application/json',
+      },
+      payload: raw,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ received: boolean; outcome: string }>();
+    expect(body.received).toBe(true);
+    expect(body.outcome).toBe('handled');
+    expect(fx.stripeWebhooksRepo.list()).toHaveLength(1);
+  });
+
+  it('401 on missing Stripe-Signature header', async () => {
+    fx = await buildTestApp();
+    const raw = makeEvent('evt_002', 'customer.subscription.created');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/stripe',
+      headers: { 'content-type': 'application/json' },
+      payload: raw,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('401 on invalid signature (wrong secret)', async () => {
+    fx = await buildTestApp();
+    const raw = makeEvent('evt_003', 'customer.subscription.created');
+    const sig = signStripePayload({ rawBody: raw, secret: 'whsec_wrong_secret' });
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/stripe',
+      headers: {
+        'stripe-signature': sig,
+        'content-type': 'application/json',
+      },
+      payload: raw,
+    });
+    expect(res.statusCode).toBe(401);
+    expect(fx.stripeWebhooksRepo.list()).toHaveLength(0);
+  });
+
+  it('401 on signature outside the tolerance window (timestamp 10 minutes old)', async () => {
+    fx = await buildTestApp();
+    const raw = makeEvent('evt_004', 'customer.subscription.created');
+    const tenMinAgo = Math.floor(Date.now() / 1000) - 10 * 60;
+    const { signature } = signWithFixture(fx, raw, tenMinAgo);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/stripe',
+      headers: {
+        'stripe-signature': signature,
+        'content-type': 'application/json',
+      },
+      payload: raw,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('401 on malformed signature header', async () => {
+    fx = await buildTestApp();
+    const raw = makeEvent('evt_005', 'customer.subscription.created');
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/stripe',
+      headers: {
+        'stripe-signature': 'this is not a valid stripe signature',
+        'content-type': 'application/json',
+      },
+      payload: raw,
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('POST /v1/webhooks/stripe — idempotency', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('duplicate event.id returns 200 with outcome=duplicate; only first is recorded', async () => {
+    fx = await buildTestApp();
+    const raw = makeEvent('evt_dup_001', 'invoice.payment_succeeded');
+    const { signature } = signWithFixture(fx, raw);
+
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/stripe',
+      headers: { 'stripe-signature': signature, 'content-type': 'application/json' },
+      payload: raw,
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json<{ outcome: string }>().outcome).toBe('handled');
+
+    // Re-deliver the SAME event (Stripe does this within 3 days).
+    const second = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/stripe',
+      headers: { 'stripe-signature': signature, 'content-type': 'application/json' },
+      payload: raw,
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json<{ outcome: string }>().outcome).toBe('duplicate');
+
+    expect(fx.stripeWebhooksRepo.list()).toHaveLength(1);
+  });
+});
+
+describe('POST /v1/webhooks/stripe — dispatch', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('handles subscription lifecycle events', async () => {
+    fx = await buildTestApp();
+    for (const t of [
+      'customer.subscription.created',
+      'customer.subscription.updated',
+      'customer.subscription.deleted',
+    ]) {
+      const raw = makeEvent(`evt_sub_${t}`, t);
+      const { signature } = signWithFixture(fx, raw);
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/stripe',
+        headers: { 'stripe-signature': signature, 'content-type': 'application/json' },
+        payload: raw,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json<{ outcome: string }>().outcome).toBe('handled');
+    }
+    expect(fx.stripeWebhooksRepo.list()).toHaveLength(3);
+  });
+
+  it('handles invoice.payment events', async () => {
+    fx = await buildTestApp();
+    for (const t of ['invoice.payment_succeeded', 'invoice.payment_failed', 'invoice.finalized']) {
+      const raw = makeEvent(`evt_inv_${t}`, t);
+      const { signature } = signWithFixture(fx, raw);
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/stripe',
+        headers: { 'stripe-signature': signature, 'content-type': 'application/json' },
+        payload: raw,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json<{ outcome: string }>().outcome).toBe('handled');
+    }
+  });
+
+  it('returns outcome=ignored for unknown event types', async () => {
+    fx = await buildTestApp();
+    const raw = makeEvent('evt_radar_001', 'radar.early_fraud_warning.created');
+    const { signature } = signWithFixture(fx, raw);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/stripe',
+      headers: { 'stripe-signature': signature, 'content-type': 'application/json' },
+      payload: raw,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ outcome: string }>().outcome).toBe('ignored');
+  });
+});
+
+describe('POST /v1/webhooks/stripe — malformed payloads', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('400 when the body parses but is missing event.id', async () => {
+    fx = await buildTestApp();
+    const raw = JSON.stringify({ type: 'customer.subscription.created', data: { object: {} } });
+    const { signature } = signWithFixture(fx, raw);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/stripe',
+      headers: { 'stripe-signature': signature, 'content-type': 'application/json' },
+      payload: raw,
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});
