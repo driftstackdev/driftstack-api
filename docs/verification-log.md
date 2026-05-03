@@ -5620,3 +5620,38 @@ V-086 coverage audit flagged `packages/sdk-typescript/src/resources/webhooks.ts`
 ### Next
 
 Continuing to V-092 — rate-limit observability: structured-log fields when budget consumed.
+
+---
+
+## V-092 — rate-limit observability structured logs (Routine — observability)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Add explicit structured Pino log fields to the rate-limit middleware so observability tooling can answer "is account X near its budget right now?" without piecing it together from the egress access log. Two emission points: every consume (debug level — high volume, off in default info-level production logs) and every exceeded (warn level — operational signal).
+
+### What changed
+
+`apps/server/src/middleware/rate-limit.ts`: in the `app.rateLimit(bucketKey)` decorator's preHandler, after the consume call, emit `{component: 'rate-limit', account_id, tier, bucket_key, cost, tokens_remaining, allowed, retry_after_ms}` via `request.log.debug` on allowed and `request.log.warn` on exceeded. The existing `RateLimitedError` throw + `retry-after` header is unchanged.
+
+### Why no unit test
+
+The Pino logger in `createTestLogger` is configured at `level: 'silent'` — capturing log calls through `app.log` doesn't catch the per-request child loggers Fastify creates. Adding a writable Pino destination + spying on it would test Pino's plumbing, not our code. The structured-log fields are TypeScript-checked (call signature matches `request.log.debug(obj, msg)`) and the integration tests exercise the middleware path on every authenticated route — any regression in the log call would fail typecheck or break the rate-limit middleware test (`tests/unit/rate-limit.test.ts`).
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 465/465 (no test count change — pure observability addition).
+
+### Files modified
+
+- `apps/server/src/middleware/rate-limit.ts`
+
+### Next
+
+Continuing to V-093 — webhook delivery duration logging.

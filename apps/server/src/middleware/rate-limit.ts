@@ -45,7 +45,29 @@ function rateLimitPlugin(
 
       reply.header('x-ratelimit-remaining', Math.floor(result.remaining).toString());
 
+      // V-092: structured log line on every consume so observability
+      // tooling (Sentry breadcrumbs, log search) can answer "is account
+      // X near its rate-limit budget right now?" without piecing it
+      // together from the egress log. Fastify's per-request logger is
+      // already account-tagged from the auth middleware; we add the
+      // bucket-specific fields here.
+      //
+      // Allowed → debug level (high-volume; avoid noise at default
+      // info-level production logs). Exceeded → warn level (carries the
+      // operational signal for capacity planning + abuse detection).
+      const logFields = {
+        component: 'rate-limit',
+        account_id: ctx.account.id,
+        tier: ctx.account.tier,
+        bucket_key: bucketKey,
+        cost,
+        tokens_remaining: Math.floor(result.remaining),
+        allowed: result.allowed,
+        retry_after_ms: result.retryAfterMs,
+      };
+
       if (!result.allowed) {
+        request.log.warn(logFields, 'rate-limit exceeded');
         const retryAfterSec = Math.max(1, Math.ceil(result.retryAfterMs / 1000));
         reply.header('retry-after', retryAfterSec.toString());
         throw new RateLimitedError(
@@ -53,6 +75,7 @@ function rateLimitPlugin(
           `Rate limit for "${bucketKey}" exceeded for tier "${ctx.account.tier}".`,
         );
       }
+      request.log.debug(logFields, 'rate-limit consumed');
     };
   });
 
