@@ -6127,3 +6127,32 @@ Add resource accessors for V-079 (auth flow), V-081 (profiles), V-082 (billing) 
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-102 — docs/onboarding-for-future-developers.md (Routine — documentation)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+One-stop "how do I get this running locally + what's the dev loop" reference for future contributors and future-self.
+
+### What changed
+
+New `docs/onboarding-for-future-developers.md` covering: prerequisites, first-run setup, daily dev loop (per-workspace dev commands), verification chain, repository layout, the three decision-record docs (D-log / V-log / ADRs), common operations recipes (add column / endpoint / admin endpoint / sub-processor / Stripe-test-config / OpenAPI dump), failure-mode triage, and recommended reading order for new contributors.
+
+### How verified
+
+- `npm run format:check`: clean.
+- Markdown only; no code changes.
+
+### Files added
+
+- `docs/onboarding-for-future-developers.md`
+
+### Next
+
+Continuing per never-stop rule. 26 commits this session. Scheduling a brief wakeup to let context compact and resume.
