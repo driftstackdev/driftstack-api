@@ -15,7 +15,18 @@ import type { AccountContext } from './auth.js';
 import type { ApiKeyRow } from './auth.js';
 import type { AuthCache } from './auth-cache.js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../lib/api-keys.js';
+import { LegalAcceptanceRequiredError } from '../lib/errors.js';
 import { NotFoundError, requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
+
+/**
+ * Gate interface for blocking API key issuance on pending legal
+ * acceptances. Production wiring supplies a LegalService instance;
+ * tests can pass `null` to skip the check (used by tests that don't
+ * exercise the legal track).
+ */
+export interface LegalAcceptanceGate {
+  required(accountId: string): Promise<Array<{ documentKey: string; currentVersion: string }>>;
+}
 
 export interface NewApiKeyInput {
   accountId: string;
@@ -57,10 +68,27 @@ export class ApiKeysService {
     private readonly repo: ApiKeysRepo,
     private readonly authCache: AuthCache | null = null,
     private readonly webhooks: RevocationWebhookEmitter | null = null,
+    private readonly legalGate: LegalAcceptanceGate | null = null,
   ) {}
 
   async create(ctx: AccountContext, input: CreateApiKeyServiceInput): Promise<CreatedApiKey> {
     throwIfMissingScope(ctx, 'admin');
+
+    // Block issuance until the account has accepted all currently-required
+    // legal documents. Production wiring supplies the gate; tests that
+    // don't exercise the legal track pass null (skips the check). Per
+    // V-049 + the founder direction "API-key-issuance-block first".
+    if (this.legalGate !== null) {
+      const pending = await this.legalGate.required(ctx.account.id);
+      if (pending.length > 0) {
+        throw new LegalAcceptanceRequiredError(
+          pending.map((p) => ({
+            document_key: p.documentKey,
+            current_version: p.currentVersion,
+          })),
+        );
+      }
+    }
 
     const env = ctx.account.tier === 'free' ? 'test' : 'live';
     const plaintext = generateApiKey(env);

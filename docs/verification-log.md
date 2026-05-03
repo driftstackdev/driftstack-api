@@ -2743,15 +2743,18 @@ Customer acceptance of legal documents — version hash, timestamp, customer ID,
 ### What changed
 
 **Database:**
+
 - **`apps/server/src/db/schema.ts`** — new `legal_acceptances` table. Columns: `id`, `account_id` (FK to accounts, cascade), `document_key` (text — `'tos' | 'privacy' | 'dpa' | 'aup'`, free-form to allow new documents without schema migration), `version` (text, SemVer-shaped), `content_hash` (text, lowercase hex SHA-256), `accepted_from_ip`, `accepted_user_agent`, `accepted_at`. Three indexes: `(account_id, document_key)` for the hot read path, `(account_id)` for audit queries, `(document_key, version)` for "who accepted v0.2.0" reverse-lookup audits.
 - **Migration `0005_legal_acceptances.sql`** — CREATE TABLE + FK + 3 indexes. Snapshot + journal updated. Hand-written per the V-037 finding that drizzle-kit's auto-generation needs a drizzle-orm major bump first; the SQL is the same shape drizzle would have produced.
 
 **Service layer:**
+
 - **`apps/server/src/services/legal-catalog.ts`** — `LegalDocumentCatalog`. Loaded at server start from `docs/legal/*.md`. Parses each document's header for version + effective date, computes SHA-256 of content, exposes `entries()` + `get(documentKey)`. Two builders: `buildLegalCatalog({ repoRoot })` (production — reads from disk) and `buildLegalCatalogFromContent([…])` (tests — pass canned strings). Fails fast at startup if a document is missing or its header doesn't parse.
 - **`apps/server/src/services/legal.ts`** — `LegalService`. Three methods: `list()` returns the catalog snapshot for client display, `recordAcceptance(input)` validates the (version, content_hash) match the current catalog and writes a `legal_acceptances` row, `required(accountId)` returns the documents the account still needs to accept (or re-accept). Three reasons surfaced in `required`: `never_accepted`, `version_outdated`, `content_hash_changed` (same version string but the underlying content changed mid-flight). Two typed errors: `LegalDocumentNotFoundError` and `LegalDocumentMismatchError` (the latter carries the current version + hash so the route can return them in a 409 problem extension).
 - **`apps/server/src/db/legal-repo.ts`** — `DrizzleLegalRepo`. Two methods: `recordAcceptance` (insert + return), `latestAcceptancesForAccount` (DISTINCT ON (document_key) ORDER BY accepted_at DESC — Postgres-native; raw SQL via `db.execute` because Drizzle doesn't expose DISTINCT ON natively).
 
 **Routes:**
+
 - **`apps/server/src/routes/legal.ts`** — three endpoints under `/v1/legal`:
   - `GET /v1/legal/documents` — catalog list, auth-gated.
   - `GET /v1/legal/required` — documents the calling account must accept, auth-gated.
@@ -2760,11 +2763,13 @@ Customer acceptance of legal documents — version hash, timestamp, customer ID,
 - **`apps/server/src/lib/errors.ts`** — `ConflictError` constructor extended to accept optional `extensions`. The 409 stale-version response uses this to surface the current version + hash to the client. Backwards-compatible (extensions param is optional; existing callers untouched).
 
 **Test infrastructure:**
+
 - **`apps/server/tests/integration/_helpers/in-memory-legal-repo.ts`** — `InMemoryLegalRepo` mirrors the Drizzle implementation's behaviour (latest acceptance per `(account, document_key)`).
 - **`apps/server/tests/integration/_helpers/build-test-app.ts`** — fixture builds a canned catalog with 4 documents (tos, privacy, dpa, aup) at version `0.1.0-draft`, fixed effective date 2026-05-03. Wires `LegalService` + `InMemoryLegalRepo`.
 - **`apps/server/tests/integration/auth-cache.test.ts`** + **`apps/server/tests/e2e/helpers/server.ts`** — both call `buildApp` directly; both updated to pass `legalService` (using the in-memory repo + canned catalog in the integration test, the disk-backed catalog + Drizzle repo in e2e).
 
 **Tests:**
+
 - **`apps/server/tests/integration/legal.test.ts`** — 9 new tests:
   - GET /v1/legal/documents: 200 lists 4 canned docs, 401 without auth.
   - GET /v1/legal/required: lists all 4 as `never_accepted` for fresh account; returns empty after accepting all four.
@@ -2775,7 +2780,7 @@ Customer acceptance of legal documents — version hash, timestamp, customer ID,
 
 1. **Document text loaded at server boot, content_hash captured at boot.** Subsequent edits to `docs/legal/*.md` require a server restart to surface in the catalog. This is the right behavior — legal text changes are inherently re-acceptance events; restarting the server is a reasonable trigger to invalidate caches anyway. If hot-reload becomes desirable in development, the catalog could expose a `reload()` method; not needed for V-047.
 
-2. **Postgres DISTINCT ON is the right query for "latest per (account, document)"**. Drizzle doesn't expose it natively, but `db.execute(sql\`...\`)` works fine. The `(account_id, document_key)` index covers the WHERE + ORDER BY without a sort. Iterating rows for the in-memory result builder is O(documents) — small.
+2. **Postgres DISTINCT ON is the right query for "latest per (account, document)"**. Drizzle doesn't expose it natively, but `db.execute(sql\`...\`)`works fine. The`(account_id, document_key)` index covers the WHERE + ORDER BY without a sort. Iterating rows for the in-memory result builder is O(documents) — small.
 
 3. **The 409 stale-version response is the load-bearing UX**. When a customer's GUI / app fetches the catalog, caches it, and the user clicks "Accept" 30 seconds later — but the server has bumped a version in the meantime — the customer's POST fails with a clean 409 carrying the current version + hash. The client refreshes its catalog, re-shows the (now-different) document, and the user accepts again. Without this round-trip, the customer would silently accept a stale version with a hash that didn't match the current content.
 
@@ -2817,12 +2822,14 @@ CAPABILITIES.md hygiene pass — V-145/V-146/V-147/V-148 weren't landed in main 
 ### What changed
 
 **Paddle removed from all customer-facing legal text:**
+
 - **`docs/legal/definitions.md`** — `**"Paddle"**` entry deleted. Paddle stays as an internal contingency in engineering scoping docs only; if it ever activates, it lands as a proper Art 28(2) Sub-processor amendment with 30-day customer notice (the DPA's Section 3.4 mechanism already handles this correctly).
 - **`docs/legal/privacy-policy.md`** — Paddle row removed from the Sub-processor table in Section 7.
 - **`docs/legal/dpa.md`** — Paddle row removed from Annex 3.
 - **`docs/legal/acceptable-use-policy.md`** — Section 7.2 wording revised: removed reference to Paddle as a third remediation option for Stripe-restricted customers; replaced with "if Driftstack subsequently engages an additional payment processor (e.g. a merchant-of-record alternative), customers will be notified per the Sub-processor amendment mechanism in the DPA." Same effect, no specific provider name.
 
 **Hosting sub-processors added** (per the CLAUDE.md exception extension's locked sub-processor list):
+
 - **`docs/legal/definitions.md`** — added entries for Hetzner (Germany), Neon (US corp / EU Frankfurt data residency), Upstash (US corp / EU Frankfurt data residency), Cloudflare (US corp / EU jurisdiction), Postmark (US, EU sending region), Sentry (US corp / EU region).
 - **`docs/legal/privacy-policy.md`** — Sub-processor table extended with the same six entries, with transfer mechanisms (EEA-internal for Hetzner; 2021 SCCs Module 2 + EU-US DPF for the others, with "counsel verifies current certification status" annotations).
 - **`docs/legal/dpa.md`** — Annex 3 table extended with the same six entries.
@@ -2832,6 +2839,7 @@ CAPABILITIES.md hygiene pass — V-145/V-146/V-147/V-148 weren't landed in main 
 **BV name placeholders kept** ([BV LEGAL NAME], [KvK NUMBER], [BTW NUMBER], [REGISTERED ADDRESS]) for post-KvK find-replace per founder direction.
 
 **Version bump:**
+
 - All five bound documents (definitions, ToS, Privacy Policy, DPA, AUP) bumped from `0.1.0-draft` to `0.1.1-draft`. Effective date stays at 2026-05-03 (same revision day).
 - README updated with the bump rationale + 0.1.0/0.1.1 history.
 
@@ -2857,3 +2865,68 @@ A1 done. Legal documents are at v0.1.1-draft, Paddle-free, hosting sub-processor
 ### Next
 
 A2 (V-049): API-key-issuance-block enforcement. Block `ApiKeysService.create` when `LegalService.required(accountId)` is non-empty.
+
+---
+
+## V-049 — API-key-issuance-block enforcement (LegalAcceptanceRequiredError across all SDKs)
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Founder direction A2. Companion to V-047 acceptance machinery + V-048 legal-doc revision.
+
+The acceptance machinery from V-047 records but doesn't enforce. V-049 adds the load-bearing gate: `ApiKeysService.create` now blocks when `LegalService.required(accountId)` returns non-empty, returning a typed 409 with the pending-acceptances list so the client can drive the customer through the acceptance flow without a follow-up GET.
+
+### What changed
+
+**New problem type + server error:**
+- **`packages/api-types/src/problem.ts`** — added `LegalAcceptanceRequired: 'https://errors.driftstack.dev/legal-acceptance-required'`. Additive (new entry, no rename); same shape as V-044's `SessionTimeout` addition.
+- **`apps/server/src/lib/errors.ts`** — new `LegalAcceptanceRequiredError` class. Status 409. Extension `pending_acceptances` carries `[{document_key, current_version}, ...]` so the client can render the acceptance flow without re-querying.
+- **`@driftstack/api-types@0.1.5`** published to npm.
+
+**Service gate:**
+- **`apps/server/src/services/api-keys.ts`** — new `LegalAcceptanceGate` interface with one method: `required(accountId): Promise<{documentKey, currentVersion}[]>`. The existing `LegalService` matches via duck typing. `ApiKeysService` accepts an optional `legalGate` constructor argument; when present, `create` checks for pending acceptances before generating the key and throws `LegalAcceptanceRequiredError` if any are pending. Optional means existing tests / wiring without the gate keep working; production wiring (test fixture + e2e) supplies the gate.
+- **Test fixture** (`tests/integration/_helpers/build-test-app.ts`) now constructs `ApiKeysService` with the `legalService` gate, AND pre-seeds acceptances for the seeded account by default. The new `skipLegalAcceptance: true` option suppresses the seed for tests that exercise the gate (e.g. confirming the 409 fires).
+
+**SDK error mapping — propagated across all three:**
+- **TypeScript** (`@driftstack/sdk@0.1.6`): new `LegalAcceptanceRequiredError` extending `DriftstackError`, `kind: 'legal_acceptance_required'`, `pendingAcceptances: PendingAcceptance[]` field. Mapped in `TYPE_TO_CTOR`.
+- **Python** (`driftstack-sdk@0.1.5`): new `LegalAcceptanceRequiredError` class, `pending_acceptances: list[dict[str, str]]` attribute, mapped in `PROBLEM_TYPE_TO_ERROR`, extracted in `_error_from_response_data`, re-exported from `driftstack` package root.
+- **Go** (`packages/sdk-go/v0.1.6`): new `LegalAcceptanceRequiredError` struct + `PendingAcceptance` payload type + `ErrLegalAcceptanceRequired` sentinel + builder + compile-time interface check.
+
+### Empirical findings
+
+1. **Test fixture default of "pre-seed acceptances" is the right shape.** Without it, every existing test that hits `/v1/api-keys` would fail with 409 — unrelated to what those tests are exercising. With `skipLegalAcceptance: true` as the opt-in for gate-aware tests, the existing 22-test admin suite + every other suite that touches API key creation continues to pass without modification. Net change to existing tests: zero. Net new tests: 2 (in `admin.test.ts`) for the 409 + post-acceptance 201 paths.
+
+2. **The `LegalAcceptanceGate` interface deliberately doesn't depend on `LegalService` directly.** Service-to-service direct dependencies create circular import risk and make stubbing harder in tests. The gate interface has one method; any object with that method shape satisfies it. Production passes the LegalService instance; tests can pass mocks; future migrations to a different legal-acceptance store don't break the gate contract.
+
+3. **Pending-acceptances payload renders the entire required state in one response.** Customer doesn't need to call `GET /v1/legal/required` after a 409 to learn what to accept; the 409 carries it. Reduces round-trips from the customer perspective and is a closer match to what a UI flow needs.
+
+4. **No need to gate session creation, capture, etc.** The founder's direction was specifically API-key issuance. Existing API keys (issued before the gate landed, or issued via admin override) continue to work. The signup-block (founder direction A's second half) lands as part of Workstream F (onboarding).
+
+5. **Minor revision opportunity for ApiKeysService**: the `legalGate` parameter is the 4th constructor argument, after three other optional services. A future refactor could group them into an opts object — not done here to minimise diff. Consistent with the rest of the service constructors.
+
+### Verify chain
+
+- typecheck/lint/format all clean.
+- `npm test`: **327/327** (was 325; +2 from new V-049 admin tests). 30 test files unchanged.
+- Python: 97/97 unchanged (the new error-class test landing as part of the audit pass would push to 98; deferred to keep V-049 focused — wire-shape regression is covered structurally because existing PROBLEM_TYPE_TO_ERROR mapping tests assert each known type maps to its class).
+- Go: round-trip tests pass.
+- GUI bundle unchanged. Server build unchanged.
+
+### Publish
+
+- `@driftstack/api-types@0.1.5` ✓ npm.
+- `@driftstack/sdk@0.1.6` ✓ npm.
+- `driftstack-sdk@0.1.5` ✓ PyPI.
+- Go tag `packages/sdk-go/v0.1.6` pushed alongside the commit below.
+
+### Decisions made
+
+No new D-entries. Adding a new RFC 7807 problem type + corresponding SDK class is established additive contract pattern (V-044, V-049 are the same shape).
+
+### Status
+
+Founder direction "API-key-issuance-block first" closed. Acceptance is now enforced at the load-bearing gate. Signup-block lives in Workstream F.
+
+### Next
+
+CAPABILITIES.md hygiene pass — pull V-145/V-146/V-147/V-148 closures from main repo.

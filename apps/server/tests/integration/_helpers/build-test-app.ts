@@ -47,6 +47,13 @@ export interface TestAppOptions {
   accountId?: string;
   /** Optional override for the seeded api-key id. */
   apiKeyId?: string;
+  /**
+   * If `true`, the fixture skips pre-seeding legal acceptances. Used by
+   * tests that exercise the legal-acceptance gate (e.g. confirming
+   * `POST /v1/api-keys` is blocked when documents are pending). Default
+   * `false` — most tests are unrelated to the gate and need it open.
+   */
+  skipLegalAcceptance?: boolean;
   /** Optional override for the seeded email (must be unique per fixture). */
   email?: string;
 }
@@ -170,8 +177,6 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     driver,
     webhooks: webhooksService,
   });
-  const apiKeysService = new ApiKeysService(apiKeysRepo, authCache, webhooksService);
-
   // Legal-acceptance plumbing — uses an in-memory catalog with a fixed
   // canned document set (one per documentKey) so tests don't depend on
   // file-system reads.
@@ -207,6 +212,26 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     },
   ]);
   const legalService = new LegalService(legalCatalog, legalRepo);
+
+  // Pre-seed acceptances for the seeded account so the api-key
+  // issuance gate (V-049) doesn't block existing tests that exercise
+  // /v1/api-keys without separately accepting docs. Tests that
+  // exercise the gate set `skipLegalAcceptance: true` and then assert
+  // 409s.
+  if (opts.skipLegalAcceptance !== true) {
+    for (const entry of legalCatalog.entries()) {
+      await legalRepo.recordAcceptance({
+        accountId,
+        documentKey: entry.documentKey,
+        version: entry.version,
+        contentHash: entry.contentHash,
+        acceptedFromIp: null,
+        acceptedUserAgent: null,
+      });
+    }
+  }
+
+  const apiKeysService = new ApiKeysService(apiKeysRepo, authCache, webhooksService, legalService);
 
   const app = await buildApp({
     logger: createTestLogger(),

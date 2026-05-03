@@ -130,7 +130,10 @@ export async function startTestServer(): Promise<TestServer> {
     driver,
     webhooks: webhooksService,
   });
-  const apiKeysService = new ApiKeysService(apiKeysRepo, authCache, webhooksService);
+  // legalService is constructed below; ApiKeysService gets the gate
+  // wired in production. e2e tests authenticate with pre-seeded keys
+  // and don't typically hit /v1/api-keys; if they do, they need to
+  // also seed legal_acceptances per the migration shape.
   const usageService = new UsageService(usageRepo);
 
   const webhookWorker = new WebhookDeliveryWorker({
@@ -143,6 +146,7 @@ export async function startTestServer(): Promise<TestServer> {
   const legalRepo = new DrizzleLegalRepo(database);
   const legalCatalog = buildLegalCatalog({ repoRoot: resolve(here, '../../../../../') });
   const legalService = new LegalService(legalCatalog, legalRepo);
+  const apiKeysService = new ApiKeysService(apiKeysRepo, authCache, webhooksService, legalService);
   const app = await buildApp({
     logger,
     authRepo,

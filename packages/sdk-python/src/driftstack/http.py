@@ -25,6 +25,7 @@ from driftstack._version import __version__
 from driftstack.errors import (
     PROBLEM_TYPE_TO_ERROR,
     ConcurrencyLimitError,
+    LegalAcceptanceRequiredError,
     SessionTimeoutError,
     DriftstackError,
     QuotaExceededError,
@@ -131,6 +132,29 @@ def _error_from_response_data(
         return SessionTimeoutError(
             detail,
             timeout_ms=_int_or_none(problem.get("timeout_ms")),
+            status=status,
+            problem_type=problem_type,
+            problem=problem,
+        )
+    if error_cls is LegalAcceptanceRequiredError:
+        raw = problem.get("pending_acceptances")
+        pending: list[dict[str, str]] = []
+        if isinstance(raw, list):
+            for entry in raw:
+                if (
+                    isinstance(entry, dict)
+                    and isinstance(entry.get("document_key"), str)
+                    and isinstance(entry.get("current_version"), str)
+                ):
+                    pending.append(
+                        {
+                            "document_key": entry["document_key"],
+                            "current_version": entry["current_version"],
+                        }
+                    )
+        return LegalAcceptanceRequiredError(
+            detail,
+            pending_acceptances=pending,
             status=status,
             problem_type=problem_type,
             problem=problem,

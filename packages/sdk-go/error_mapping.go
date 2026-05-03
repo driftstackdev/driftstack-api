@@ -24,6 +24,7 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	"https://errors.driftstack.dev/invalid-key":           buildInvalidKey,
 	"https://errors.driftstack.dev/session-destroyed":     buildSessionDestroyed,
 	"https://errors.driftstack.dev/session-timeout":       buildSessionTimeout,
+	"https://errors.driftstack.dev/legal-acceptance-required": buildLegalAcceptanceRequired,
 	"https://errors.driftstack.dev/driver-error":          buildDriverError,
 	"https://errors.driftstack.dev/driver-not-integrated": buildDriverError,
 	"https://errors.driftstack.dev/validation-failed":     buildValidation,
@@ -127,6 +128,30 @@ func buildSessionTimeout(base apiError, problem map[string]any, _ string) error 
 	}
 }
 
+func buildLegalAcceptanceRequired(base apiError, problem map[string]any, _ string) error {
+	pending := []PendingAcceptance{}
+	if raw, ok := problem["pending_acceptances"].([]any); ok {
+		for _, entry := range raw {
+			obj, ok := entry.(map[string]any)
+			if !ok {
+				continue
+			}
+			docKey, dkOk := obj["document_key"].(string)
+			curVer, cvOk := obj["current_version"].(string)
+			if dkOk && cvOk {
+				pending = append(pending, PendingAcceptance{
+					DocumentKey:    docKey,
+					CurrentVersion: curVer,
+				})
+			}
+		}
+	}
+	return &LegalAcceptanceRequiredError{
+		apiError:           base,
+		PendingAcceptances: pending,
+	}
+}
+
 func buildDriverError(base apiError, _ map[string]any, _ string) error {
 	return &DriverError{apiError: base}
 }
@@ -206,6 +231,7 @@ var (
 	_ error = (*RevokedKeyError)(nil)
 	_ error = (*SessionDestroyedError)(nil)
 	_ error = (*SessionTimeoutError)(nil)
+	_ error = (*LegalAcceptanceRequiredError)(nil)
 	_ error = (*DriverError)(nil)
 	_ error = (*UnknownError)(nil)
 

@@ -71,6 +71,64 @@ describe('POST /v1/api-keys', () => {
     const body = res.json<{ plaintext: string }>();
     expect(body.plaintext.startsWith('ds_test_')).toBe(true);
   });
+
+  it('409 when legal acceptances are pending (V-049 issuance block)', async () => {
+    // skipLegalAcceptance: true keeps the fixture from pre-seeding
+    // acceptances, so the gate sees 4 pending docs.
+    fx = await buildTestApp({ skipLegalAcceptance: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: auth(fx),
+      payload: { name: 'pre-acceptance-key', scopes: ['read', 'write'] },
+    });
+    expect(res.statusCode).toBe(409);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.type).toBe('https://errors.driftstack.dev/legal-acceptance-required');
+    expect(body.title).toBe('Legal acceptance required');
+    expect(Array.isArray(body.pending_acceptances)).toBe(true);
+    const pending = body.pending_acceptances as Array<{
+      document_key: string;
+      current_version: string;
+    }>;
+    expect(pending).toHaveLength(4);
+    expect(new Set(pending.map((p) => p.document_key))).toEqual(
+      new Set(['tos', 'privacy', 'dpa', 'aup']),
+    );
+  });
+
+  it('201 succeeds after the account accepts every pending document', async () => {
+    fx = await buildTestApp({ skipLegalAcceptance: true });
+    // Walk the catalog and accept each.
+    const cat = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/legal/documents',
+      headers: auth(fx),
+    });
+    const entries = cat.json<{
+      data: Array<{ document_key: string; version: string; content_hash: string }>;
+    }>().data;
+    for (const entry of entries) {
+      await fx.app.inject({
+        method: 'POST',
+        url: '/v1/legal/accept',
+        headers: { ...auth(fx), 'content-type': 'application/json' },
+        payload: {
+          document_key: entry.document_key,
+          version: entry.version,
+          content_hash: entry.content_hash,
+        },
+      });
+    }
+    // Now the gate should let key creation through.
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: auth(fx),
+      payload: { name: 'post-acceptance-key', scopes: ['read', 'write'] },
+    });
+    expect(res.statusCode).toBe(201);
+  });
 });
 
 describe('GET /v1/api-keys', () => {

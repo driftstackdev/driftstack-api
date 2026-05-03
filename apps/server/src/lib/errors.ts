@@ -252,6 +252,29 @@ export class DriverNotIntegratedError extends ApiError {
   }
 }
 
+// LegalAcceptanceRequiredError — 409 when an operation is gated on
+// the customer accepting one or more legal documents (ToS, Privacy,
+// DPA, AUP). The extension carries `pending_acceptances` so the
+// client can surface the exact list to the customer without a
+// follow-up GET /v1/legal/required round-trip.
+export class LegalAcceptanceRequiredError extends ApiError {
+  constructor(
+    pendingAcceptances: Array<{ document_key: string; current_version: string }>,
+    detail?: string,
+  ) {
+    super({
+      type: PROBLEM_TYPES.LegalAcceptanceRequired,
+      title: 'Legal acceptance required',
+      status: 409,
+      detail:
+        detail ??
+        `Operation requires acceptance of ${pendingAcceptances.length} document(s) before proceeding.`,
+      extensions: { pending_acceptances: pendingAcceptances },
+    });
+    this.name = 'LegalAcceptanceRequiredError';
+  }
+}
+
 export class InternalError extends ApiError {
   constructor(detail = 'An unexpected error occurred.', cause?: unknown) {
     super({

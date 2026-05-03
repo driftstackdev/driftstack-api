@@ -57,7 +57,7 @@ describe('GET /v1/legal/documents', () => {
 
 describe('GET /v1/legal/required', () => {
   it('200 lists all 4 documents as never_accepted for a fresh account', async () => {
-    fx = await buildTestApp();
+    fx = await buildTestApp({ skipLegalAcceptance: true });
     const res = await fx.app.inject({
       method: 'GET',
       url: '/v1/legal/required',
@@ -73,7 +73,7 @@ describe('GET /v1/legal/required', () => {
   });
 
   it('returns empty after the account has accepted every document', async () => {
-    fx = await buildTestApp();
+    fx = await buildTestApp({ skipLegalAcceptance: true });
     // Fetch catalog to get the current version + hash for each.
     const cat = await fx.app.inject({
       method: 'GET',

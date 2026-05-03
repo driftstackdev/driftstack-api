@@ -94,6 +94,28 @@ class SessionDestroyedError(DriftstackError):
     """The session was destroyed; further operations on it are rejected (410)."""
 
 
+class LegalAcceptanceRequiredError(DriftstackError):
+    """409 when an operation (e.g. creating an API key) is gated on the
+    customer accepting one or more legal documents.
+
+    ``pending_acceptances`` carries the document keys + current versions
+    so the client can drive the user through the acceptance flow without
+    a follow-up GET.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        pending_acceptances: list[dict[str, str]] | None = None,
+        status: int | None = 409,
+        problem_type: str | None = None,
+        problem: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, status=status, problem_type=problem_type, problem=problem)
+        self.pending_acceptances = pending_acceptances or []
+
+
 class SessionTimeoutError(DriftstackError):
     """The operation exceeded the per-call ``timeout_ms`` (504).
 
@@ -211,6 +233,7 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/invalid-key": InvalidKeyError,
     "https://errors.driftstack.dev/session-destroyed": SessionDestroyedError,
     "https://errors.driftstack.dev/session-timeout": SessionTimeoutError,
+    "https://errors.driftstack.dev/legal-acceptance-required": LegalAcceptanceRequiredError,
     "https://errors.driftstack.dev/driver-error": DriverError,
     "https://errors.driftstack.dev/driver-not-integrated": DriverError,
     "https://errors.driftstack.dev/validation-failed": ValidationError,

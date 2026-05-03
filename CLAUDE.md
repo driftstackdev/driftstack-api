@@ -25,11 +25,13 @@ The exception is opt-in per direction. Default behavior remains "surface against
 Same revision policy: founder-directed; founder accepts risk; all customer-facing copy revisable; all billing code passes through staging + manual approval before production. Default remains "surface against asks not covered by an active exception."
 
 The "Out of scope" list is amended to reflect this:
+
 - ~~Marketing website~~ — **moved to in-scope under the extended exception**.
 - ~~Billing integration (Stripe/Mollie) — gated on commercial-activation gate~~ — **moved to in-scope under the extended exception for scaffolding work; live commercial activation (real charges, real signups) remains gated on KvK closure**.
 - ~~Customer dashboard frontend (`app.driftstack.dev` for cloud-tier customers) — separate workstream~~ — **moved to in-scope under the extended exception** for the onboarding flow + minimum surface needed to issue keys + pay; full dashboard parity with the GUI client lands later.
 
 Items still **out of scope** under the extension:
+
 - Behavioural simulation library (file 64) — Phase 3.
 - Recipe library — Phase 3.
 - Mac mini fleet provisioning — gated on first customer + Agent 1 coordination.

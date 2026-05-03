@@ -56,8 +56,9 @@ var (
 	ErrRateLimit        = errors.New("rate limited")
 	ErrConcurrencyLimit = errors.New("concurrency limit hit")
 	ErrQuotaExceeded    = errors.New("quota exceeded")
-	ErrSessionDestroyed = errors.New("session destroyed")
-	ErrSessionTimeout   = errors.New("session timeout")
+	ErrSessionDestroyed         = errors.New("session destroyed")
+	ErrSessionTimeout           = errors.New("session timeout")
+	ErrLegalAcceptanceRequired  = errors.New("legal acceptance required")
 	ErrDriverError      = errors.New("driver error")
 	ErrTransport        = errors.New("transport-level failure")
 )
@@ -151,6 +152,26 @@ type SessionTimeoutError struct {
 }
 
 func (e *SessionTimeoutError) Is(target error) bool { return target == ErrSessionTimeout }
+
+// PendingAcceptance is one entry in LegalAcceptanceRequiredError's payload.
+type PendingAcceptance struct {
+	DocumentKey    string `json:"document_key"`
+	CurrentVersion string `json:"current_version"`
+}
+
+// LegalAcceptanceRequiredError — 409 when an operation (e.g. creating
+// an API key) is gated on the customer accepting one or more legal
+// documents. The PendingAcceptances slice carries the document keys
+// + current versions so the client can drive the user through the
+// acceptance flow without a follow-up GET.
+type LegalAcceptanceRequiredError struct {
+	apiError
+	PendingAcceptances []PendingAcceptance
+}
+
+func (e *LegalAcceptanceRequiredError) Is(target error) bool {
+	return target == ErrLegalAcceptanceRequired
+}
 
 // DriverError — 502 when the underlying driver (mock or real WebKit)
 // returns an unrecoverable error.

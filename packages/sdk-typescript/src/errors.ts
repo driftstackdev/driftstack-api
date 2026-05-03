@@ -43,6 +43,7 @@ export type DriftstackErrorKind =
   | 'tier_limit'
   | 'session_destroyed'
   | 'session_timeout'
+  | 'legal_acceptance_required'
   | 'driver_error'
   | 'driver_not_integrated'
   | 'internal'
@@ -181,6 +182,33 @@ export class SessionDestroyedError extends DriftstackError {
   }
 }
 
+// LegalAcceptanceRequiredError — 409 when an operation (e.g. creating
+// an API key) is gated on the customer accepting one or more legal
+// documents. The `pendingAcceptances` array carries the document
+// keys + current versions so the client can drive the user through
+// the acceptance flow without a follow-up GET.
+export interface PendingAcceptance {
+  document_key: string;
+  current_version: string;
+}
+export class LegalAcceptanceRequiredError extends DriftstackError {
+  readonly pendingAcceptances: PendingAcceptance[];
+  constructor(p: Problem) {
+    super(toOpts('legal_acceptance_required', p));
+    this.name = 'LegalAcceptanceRequiredError';
+    const ext = (p as { pending_acceptances?: unknown }).pending_acceptances;
+    this.pendingAcceptances = Array.isArray(ext)
+      ? (ext.filter(
+          (e) =>
+            typeof e === 'object' &&
+            e !== null &&
+            typeof (e as { document_key?: unknown }).document_key === 'string' &&
+            typeof (e as { current_version?: unknown }).current_version === 'string',
+        ) as PendingAcceptance[])
+      : [];
+  }
+}
+
 // SessionTimeoutError — distinguished from DriverError so customers can
 // react specifically to "the operation didn't finish within the per-call
 // timeout I supplied" without conflating with downstream driver failures.
@@ -251,6 +279,8 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
   'https://errors.driftstack.dev/tier-limit': (p) => new TierLimitError(p),
   'https://errors.driftstack.dev/session-destroyed': (p) => new SessionDestroyedError(p),
   'https://errors.driftstack.dev/session-timeout': (p) => new SessionTimeoutError(p),
+  'https://errors.driftstack.dev/legal-acceptance-required': (p) =>
+    new LegalAcceptanceRequiredError(p),
   'https://errors.driftstack.dev/driver-error': (p) => new DriverError(p),
   'https://errors.driftstack.dev/driver-not-integrated': (p) => new DriverNotIntegratedError(p),
   'https://errors.driftstack.dev/internal': (p) => new InternalError(p),

@@ -35,6 +35,7 @@ export const PROBLEM_TYPES = {
   InvalidKey: 'https://errors.driftstack.dev/invalid-key',
   SessionDestroyed: 'https://errors.driftstack.dev/session-destroyed',
   SessionTimeout: 'https://errors.driftstack.dev/session-timeout',
+  LegalAcceptanceRequired: 'https://errors.driftstack.dev/legal-acceptance-required',
   DriverError: 'https://errors.driftstack.dev/driver-error',
   DriverNotIntegrated: 'https://errors.driftstack.dev/driver-not-integrated',
   ValidationFailed: 'https://errors.driftstack.dev/validation-failed',
