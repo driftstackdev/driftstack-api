@@ -2930,3 +2930,50 @@ Founder direction "API-key-issuance-block first" closed. Acceptance is now enfor
 ### Next
 
 CAPABILITIES.md hygiene pass — pull V-145/V-146/V-147/V-148 closures from main repo.
+
+---
+
+## V-050 — CAPABILITIES.md hygiene: pull V-148-Complex / V-148-PM / V-149 closures
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** CAPABILITIES.md hygiene per founder direction.
+
+### What changed
+
+- **`docs/CAPABILITIES.md`** — pulled the latest fingerprint-closure work from the main repo's verification log into the closure backlog.
+  - **Retired:** `canvas.measureText.fonts.value['-apple-system'].width` row from the Glyph Advance table. Closed by main-repo **V-149** (Q8 snap on Simple-path V-138 over-correction; Mac result `163.73046875` = iPhone EXACT). Footnote in the new "Recent closures (audit footnote)" section captures the closure with V-ID + WebKit-fork commit references.
+  - **Status snapshot updated:** 19 → 18 open residuals.
+  - **Trajectory anchors updated:** added V-148-Complex (1251/1493 — hook integration landed but didn't itself close anything; correctly hooks for any future Complex-path closures) and V-149 (1252/1493 — closes -apple-system width). Noted the rig denominator shifted from 1253 to 1493 between V-143 and V-148 because additional probes were added; the +1 match count is the load-bearing closure number, not the percentage.
+
+### Empirical findings
+
+1. **Founder's anticipated V-145–V-148 progression didn't literally land.** The actual closure path was V-148-Complex → V-148-PM → V-149, with V-145–V-147 not appearing as numbered entries. V-148-Complex was the ComplexTextController hook integration (correct on its own merits, but turned out to be the wrong path for the cumulative-rig 0.002 px residual the founder was tracking). V-148-PM diagnosed the real cause: Simple-path V-138 over-correction. V-149 landed the Q8 snap fix. Net effect: same closure outcome the founder expected (-apple-system width to iPhone-exact), different V-IDs.
+
+2. **V-148-Complex's value is forward-looking, not closure-creating.** The hook integration is correctly wired and fires correctly on the Complex path; it just doesn't address the residual the founder was watching. Future Complex-path closures (e.g., complex-script kerning differences) will benefit from the integration without additional plumbing. The `m_lastDriftstackAsciiCharacter` member + `Font::driftstackPairKerningDelta()` helper are now part of the standing fork architecture.
+
+3. **Cumulative rig denominator grew silently between V-143 (1253 total) and V-148 (1493 total).** That's +240 probes added to the rig over the course of fingerprint work I don't have direct visibility into (different V-IDs in the main repo). The match-count metric is the safer indicator of closure progress; the percentage is sensitive to denominator changes.
+
+4. **Other residuals in CAPABILITIES.md still open**: Apple Color Emoji width (V-143 capture in flight, Option A primary-font-context threading still pending), Hiragino Sans / Papyrus / Marker Felt fontfamily-fallback issues (Track 4 Phase 4.D, no patch in flight), Stage F complex scripts / variable fonts / WebFont hinting / CSS filters / vertical writing / non-integer transforms (mostly closing as side effects of Track-4-Phase-4-D + V-127-D5-kernel + V-138-kerning), CJK line-height (founder-deferred), generic-family fallback (in flight, wave-1-stage-a), performance.nowResolution ULP noise (in flight, diff-script-tolerance), AVIF/HEIC encoder MIME types (no patch, lower priority).
+
+### What stays for the next hygiene pass
+
+- When Apple Color Emoji width closes (V-143 follow-up): retire row, update count.
+- When Track 4 Phase 4.D lands the font-family-fallback override: retire Hiragino + Papyrus + Marker Felt + Marker Felt-fontBoundingBoxAscent rows in one batch, update count.
+- When V-127-D5 kernel + multi-color atlas closes: canvas-fp t01 + t02 + t13 + Stage F.4/F.5 retire as side effects.
+- When V-125 D-α Coverage A+ capture completes: canvas-fp t03 + non-strike emoji sizes retire.
+- When V-104 + AA-edge work closes F.3 size=16 hinting: F.3/F.4/F.5/F.6 close as side effects.
+
+Will pick these up on subsequent hygiene passes when the main-repo V-log shows them landing.
+
+### Verify chain
+
+- Format check: clean. No code touched (docs-only commit).
+
+### Status
+
+CAPABILITIES.md current as of main-repo V-149. 18 open residuals. Closure ledger reflects the V-149 reality.
+
+### Next
+
+Workstream A — hosting integration scaffolding. Substantial; first commit lands the foundational pieces (Dockerfile, /health + /ready, structured logging + Sentry hook, network architecture doc draft). R2 + Postmark + GH Actions follow in subsequent commits within the workstream.

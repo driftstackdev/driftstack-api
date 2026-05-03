@@ -1,6 +1,7 @@
 # Driftstack — fingerprint parity closure backlog
 
-**Status snapshot:** 19 open residuals (as of 2026-05-03, per main-repo V-143).
+**Status snapshot:** 18 open residuals (as of 2026-05-03, per main-repo V-149).
+Cumulative rig: **1252/1493 match**, zero critical-surface diffs.
 
 This document is the **closure backlog for fingerprint parity** — not
 marketing copy, not a status report. The bar is **100% match against
@@ -53,11 +54,26 @@ for audit.
 
 ## Total open count
 
-As of **2026-05-03 (V-143)**: **19 open residuals.**
+As of **2026-05-03 (V-149)**: **18 open residuals.**
 
-- 9 in flight (patch / capture / analyzer in motion).
+- 8 in flight (patch / capture / analyzer in motion).
 - 5 open with side-effect closure pending (root cause closes them).
 - 5 open with no patch in flight (founder-deferred or blocked on investigation).
+
+## Recent closures (audit footnote)
+
+Removed from the tables below per the rig-zero retirement rule:
+
+- **`canvas.measureText.fonts.value['-apple-system'].width`** — closed
+  via **V-149** (2026-05-03). Q8 snap on Simple-path V-138 over-correction
+  in `applyDriftstackPairKerningOverride` (FontCoreText.cpp:1320–1326)
+  + Complex-path twin in `Font::driftstackPairKerningDelta`
+  (FontCoreText.cpp:1110–1115). Mac result `163.73046875` = iPhone EXACT.
+  V-148-Complex (the ComplexTextController hook integration) landed at
+  WebKit-fork commit `e522811f5a` and is correctly hooked; V-148-PM
+  established that V-148-Complex was the wrong place to look for the
+  cumulative-rig 0.002 px residual (probe routes Simple, not Complex);
+  V-149 closed via the Simple-path Q8 snap.
 
 ---
 
@@ -69,7 +85,6 @@ because each font × size × text triple is a separate surface.
 
 | Surface                                                                                       | Current delta                                                                                                                                                                                  | Closure path                                                                                                                                                                                                                                          | Status                         | V-log               |
 | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------------------- |
-| `canvas.measureText.fonts.value['-apple-system'].width` (sentinel `'mWmwwMWWmm 😃🍕'` @ 14px) | Mac=161.730 px vs iPhone=163.730 px (Δ=2.0 px). Root cause: Core Text kerning divergence — Mac CT applies −1.846 px kerning, iOS CT applies +0.154 px.                                         | Per-pair kerning capture (902 files via BS Automate) + runtime override table. v4 partial-coverage landed; full-pair analyzer + override hook in flight.                                                                                              | in flight: v-138-full-coverage | V-126, V-138, V-142 |
 | `canvas.measureText.fonts.value['Apple Color Emoji'].width` (same sentinel @ 14px)            | Mac=170.173 px vs iPhone=175.173 px (Δ=5.0 px). Decomposes as: emoji-glyph width matches; Latin-fallback portion (`mWmwwMWWmm`) differs ~0.45 px/char on sans-serif fallback × 5 chars = 5 px. | Per-glyph emoji-advance capture landed (1880 probes: 4 fonts × 5 sizes × 94 emoji). Primary-font-context threading needed: Option A (fontCascade lookup level, invasive but correct) vs Option B (global +1 emoji, wrong vector). Option A preferred. | in flight: v-143-option-a      | V-143               |
 | `canvas.measureText.fonts.value['Hiragino Sans'].width`                                       | W3 (bold) variant selected on Mac; W4 (regular) expected per iPhone reference.                                                                                                                 | Track 4 Phase 4.D — font-family fallback disambiguation capture.                                                                                                                                                                                      | open                           | V-081, V-090        |
 | `canvas.measureText.fonts.value['Papyrus'].width`                                             | Mac returns `PapyrusCondensed.ttf` metrics (110.97 px); iPhone returns `Papyrus Regular` (143.77 px). Wrong file selected from family.                                                         | Track 4 Phase 4.D — same as Hiragino: font-fallback capture + override.                                                                                                                                                                               | open                           | V-090               |
@@ -182,8 +197,13 @@ without re-templating when a new surface is discovered.
 | V-119–V-120    | 2026-05-02 | 1244/1253 = 99.3%  | ASCII atlas sprint closed +238 surfaces.                                      |
 | V-123          | 2026-05-02 | 1250/1253 = 99.76% | HTTPS rig variant for `ApplePaySession`.                                      |
 | V-143          | 2026-05-03 | 1250/1253 = 99.76% | Per-glyph emoji advance capture landed; primary-font-context closure pending. |
+| V-148-Complex  | 2026-05-03 | 1251/1493          | ComplexTextController hook integration (`m_lastDriftstackAsciiCharacter` member + `Font::driftstackPairKerningDelta()`); landed at WebKit-fork commit `e522811f5a`. No residual closure on its own — V-148-PM established Complex was the wrong path for the cumulative-rig probe. |
+| V-149          | 2026-05-03 | 1252/1493          | Q8 snap on Simple-path V-138 over-correction. `-apple-system` width = `163.73046875` = iPhone EXACT. **Closes the −apple-system glyph-advance residual.** |
 
 These are aggregate-rig pass rates, not residual counts. The
-residual count above (19 open) is the **independent** gating metric
+residual count above (18 open) is the **independent** gating metric
 because a single non-matching field is a non-zero delta regardless
-of pass-rate denominator.
+of pass-rate denominator. Note that the V-148/V-149 denominator
+shifted from 1253 to 1493 — the rig grew between V-143 and V-148
+as additional probes were added; the +1 in the match count is the
+load-bearing closure number.
