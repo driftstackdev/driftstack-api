@@ -3526,3 +3526,83 @@ ADR-002 landed. Workstream D (Stripe-only billing scaffolding) can proceed again
 ### Next
 
 V-061: pricing-correction sweep against parent driftstack repo file 127 locked values (file 127 supersedes files 8 + 39). Targets: `apps/server/src/services/sessions.ts` `TIER_CONCURRENT_SESSION_LIMITS`, `apps/server/src/services/usage.ts` `TIER_QUOTAS` (rename meter from `session_minute` to `browser_hour`), `packages/api-types/src/common.ts` `AccountTierSchema` price comments.
+
+## V-061 — Pricing-correction sweep against file-127 locked values
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Spec adherence. Founder course-correction: the platform-tier pricing/limits/concurrency are LOCKED in the parent driftstack repo at `docs/planning/127-pricing-self-hosted-strategy.md` (file 127, supersedes files 8 + 39); only the BYOK markup remains Tier 3 founder-explicit. Existing scaffolding had stale numbers from earlier (file 8 / file 39) iterations.
+
+### What changed
+
+**Concurrency caps (`apps/server/src/services/sessions.ts`):**
+
+`TIER_CONCURRENT_SESSION_LIMITS` reconciled to file-127 values. Diff:
+
+| Tier       | Old | New | Source            |
+| ---------- | --- | --- | ----------------- |
+| free       | 1   | 1   | unchanged         |
+| starter    | 2   | 2   | unchanged         |
+| solo       | 5   | 4   | file-127          |
+| builder    | 15  | 8   | file-127          |
+| scale      | 50  | 24  | file-127          |
+| enterprise | 100 | 32  | file-127 sentinel |
+
+Enterprise is custom-negotiated; the integer here is the smallest custom-contract sentinel (matches the file-127 "32+ concurrent" floor for Self-Hosted Enterprise / API Enterprise). Per-account upgrades happen through the existing rate-limit-overrides path (V-013).
+
+**Tier quotas (`apps/server/src/services/usage.ts`):**
+
+`TIER_QUOTAS.session_minute` reconciled to file-127 monthly hour caps × 60 minutes:
+
+| Tier       | Old (min)    | New (min)          | Hours equivalent      |
+| ---------- | ------------ | ------------------ | --------------------- |
+| free       | 60 (1 hr)    | 1,500 (25 hr)      | 25 hr one-time, 7-day |
+| starter    | 200 (3.3 hr) | 6,000 (100 hr)     | 100 hr/mo             |
+| solo       | 1,500 (25)   | 24,000 (400 hr)    | 400 hr/mo             |
+| builder    | 6,000 (100)  | 90,000 (1,500 hr)  | 1,500 hr/mo           |
+| scale      | 30,000 (500) | 360,000 (6,000 hr) | 6,000 hr/mo           |
+| enterprise | null         | null               | unmetered, custom     |
+
+The `session_minute` usage_record_type stays as the granular ledger primitive (one row per minute of session time); customer-facing display + Stripe Meter line-item billing rolls up to browser-hours at summary time. Renaming the on-the-wire enum to `browser_hour` is a public-API breaking change (Postgres enum migration + SDK regeneration + OpenAPI version bump) — deferred to Workstream D when the Stripe Meter integration warrants it.
+
+Operation-count meters (`navigate` / `interact` / `wait` / `state_capture` / `screenshot_capture`) are NOT part of file-127 pricing and remain as scaffolding for analytics + abuse detection. Quotas unchanged.
+
+**AccountTier comment (`packages/api-types/src/common.ts`):**
+
+`AccountTierSchema` block comment updated with file-127 values — six tiers, monthly + annual pricing, hour caps, overage rates, concurrency. The "primary meter is per-browser-hour" framing is documented inline so SDK consumers reading the generated TS types see the canonical model.
+
+**E2E tests (`apps/server/tests/e2e/concurrency-limit.spec.ts`):**
+
+`TIER_LIMITS` array updated: solo 5→4, builder 15→8. The "scale spot-check" test creating 50 sessions reduced to 24; loop bound + comment + error string + race-tolerance threshold updated proportionally.
+
+### Empirical findings
+
+1. **The trial-credit primitive ("25 hours one-time, 7-day window") is not a monthly cap.** File 127 frames the free tier as a trial credit pool with a hard 7-day window from account creation, not a recurring monthly allowance. The current implementation tracks all caps as monthly. Setting `session_minute: 1500` for free is a placeholder that gives the right ceiling magnitude (25 hours) but the wrong reset semantic (monthly instead of one-time). Full trial-credit primitive lands in Workstream F (onboarding flow): adds `accounts.trial_started_at` + `accounts.trial_hours_remaining` columns + trial-aware enforcement at session-creation time + trial-expired blocking at the auth layer. Scope-flagged for that V-entry.
+
+2. **Renaming `session_minute` → `browser_hour` in the public API is a multi-step migration, not part of this sweep.** Touch points: Postgres enum (needs migration to add new value + backfill + drop old), Drizzle schema, OpenAPI spec, all 3 SDKs (TS / Python / Go), all integration + e2e tests, all migration snapshots. Risk-cost matrix doesn't favor doing it now since the file-127 values fit cleanly in the existing minute-granular ledger via × 60 conversion. Workstream D revisits when the Stripe Meter integration ships.
+
+3. **Per-tier limits are commercial commitments encoded in three layers:** legal text (already correct — no per-tier numbers in the customer-facing legal docs, just framework references), backend enforcement (this sweep), and customer-facing pricing display (Workstream B marketing site). All three must agree; this sweep aligns the backend layer with file 127, leaving the marketing site to follow in Workstream B.
+
+4. **Rate-limit defaults (`apps/server/src/services/rate-limit.ts` `TIER_DEFAULTS`) are NOT pricing-related per file 127.** They protect against DDOS / abuse, scaling roughly with tier price, but file 127 doesn't lock them. Untouched in this sweep — Workstream D may revisit if Stripe tier changes warrant.
+
+5. **No tests broke from the concurrency-cap changes.** Vitest 360/360 unchanged because the integration tests that exercise concurrency don't hardcode the absolute limit value (they read it via `concurrentSessionLimitFor(tier)`). The e2e test (`concurrency-limit.spec.ts`) has hardcoded values per-tier and was updated; e2e tests run separately under Playwright with `npm run test:e2e` and need a fresh run when the founder next runs the full e2e gate.
+
+6. **Test count is unchanged at 360/360.** No new tests added because the changes are value tweaks within already-tested code paths. The behaviour assertions (concurrency cap fires, quota returned in /v1/usage) still hold; only the absolute numbers shifted.
+
+### Verify chain
+
+- typecheck/lint/format all clean.
+- `npm test`: **360/360** unchanged.
+- E2E (`concurrency-limit.spec.ts`) updated; founder-side run gates on the next deploy verification.
+
+### Decisions made
+
+No new D-entries. The pricing values are spec adherence to file 127 in the parent driftstack repo — that file is the source of truth, no D-entry needed for "applied the spec." D-019 (six-tier locked pricing model) implicitly references the latest file-127 spec via this sweep.
+
+### Status
+
+Backend tier-limit values now reflect file-127 locked spec. Workstream B (marketing site) renders the same values directly. Workstream D (Stripe billing) will read from this same source-of-truth when the per-tier price-id JSON wires up. The trial-credit primitive (free tier 7-day window semantic) is flagged for Workstream F.
+
+### Next
+
+V-062: Sentry source-map upload — small commit. Adds `@sentry/cli` step to `.github/workflows/deploy.yml` after the build; documents `SENTRY_AUTH_TOKEN` GH secret in `docs/deployment/env-vars.md`. Source maps make Sentry stack traces readable in production; landing the wiring before first production deploy avoids first-incident debugging pain.

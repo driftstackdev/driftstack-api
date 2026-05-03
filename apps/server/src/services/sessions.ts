@@ -24,14 +24,18 @@ import { ConcurrencyLimitError, NotFoundError, SessionDestroyedError } from '../
 // Concurrent session limits per tier
 // ───────────────────────────────────────────────────────────────────────────
 
-// Locked pricing model — see D-019.
+// Locked pricing model — see D-019. Values from parent driftstack
+// repo file 127 (`docs/planning/127-pricing-self-hosted-strategy.md`),
+// which supersedes files 8 + 39. Enterprise is custom-negotiated;
+// the value here is a sentinel for the smallest custom contract,
+// upgraded per-account via the rate-limit-overrides path.
 const TIER_CONCURRENT_SESSION_LIMITS: Record<AccountTier, number> = {
   free: 1,
   starter: 2,
-  solo: 5,
-  builder: 15,
-  scale: 50,
-  enterprise: 100,
+  solo: 4,
+  builder: 8,
+  scale: 24,
+  enterprise: 32,
 };
 
 export function concurrentSessionLimitFor(tier: AccountTier): number {

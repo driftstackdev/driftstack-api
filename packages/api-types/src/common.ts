@@ -57,13 +57,21 @@ export type SessionId = z.infer<typeof SessionIdSchema>;
 // are tier-keyed.
 // ───────────────────────────────────────────────────────────────────────────
 
-// Locked pricing model (six tiers):
-//   - free      trial / sandbox
-//   - starter   $39/mo
-//   - solo      $99/mo
-//   - builder   $299/mo
-//   - scale     $999/mo
-//   - enterprise  $3k+/mo, custom
+// Locked pricing model (six tiers) — values from parent driftstack
+// repo file 127 (`docs/planning/127-pricing-self-hosted-strategy.md`),
+// supersedes files 8 + 39:
+//
+//   - free       $0     — 25 browser-hr trial, 7-day window, 1 concurrent, 1 archetype
+//   - starter   $29/mo  ($278/yr = $23/mo) — 100 hr/mo, $0.18/hr overage, 2 concurrent
+//   - solo      $99/mo  ($950/yr = $79/mo) — 400 hr/mo, $0.16/hr overage, 4 concurrent
+//   - builder  $299/mo  ($2,870/yr = $239/mo) — 1,500 hr/mo, $0.14/hr overage, 8 concurrent
+//   - scale    $999/mo  ($9,590/yr = $799/mo) — 6,000 hr/mo, $0.12/hr overage, 24 concurrent
+//   - enterprise from $2,500/mo annual only — custom hours/concurrent, all archetypes
+//
+// Annual is 20% off across all tiers. Primary meter is per-browser-hour
+// (minute-granular ledger via `session_minute` usage_record_type,
+// rolled up to hours at summary time). Concurrency caps are
+// session-creation hard limits per tier.
 export const AccountTierSchema = z.enum([
   'free',
   'starter',

@@ -28,10 +28,10 @@ interface TierExpectation {
 const TIER_LIMITS: TierExpectation[] = [
   { tier: 'free', limit: 1 },
   { tier: 'starter', limit: 2 },
-  { tier: 'solo', limit: 5 },
-  { tier: 'builder', limit: 15 },
-  // 'scale' (50) and 'enterprise' (100) are skipped from this loop because
-  // creating 50+ sessions per test multiplies the suite runtime; they're
+  { tier: 'solo', limit: 4 },
+  { tier: 'builder', limit: 8 },
+  // 'scale' (24) and 'enterprise' (32) are skipped from this loop because
+  // creating 24+ sessions per test multiplies the suite runtime; they're
   // covered by spot-check tests below.
 ];
 
@@ -79,30 +79,30 @@ for (const { tier, limit } of TIER_LIMITS) {
   });
 }
 
-test('tier=scale: 51st concurrent session denied (spot-check)', async ({ request }) => {
+test('tier=scale: 25th concurrent session denied (spot-check)', async ({ request }) => {
   const seed = await seedAccount(server.client, { tier: 'scale' });
   await clearRateLimits(server.redis);
 
-  // Create 50 concurrent sessions in parallel — concurrency-limit logic
+  // Create 24 concurrent sessions in parallel — concurrency-limit logic
   // reads count from DB pre-create, so race conditions could let extras
-  // through. We're mainly verifying that the post-50 attempt is denied.
+  // through. We're mainly verifying that the post-24 attempt is denied.
   const created = await Promise.all(
-    Array.from({ length: 50 }, () => createSession(request, server.baseUrl, seed.plaintext)),
+    Array.from({ length: 24 }, () => createSession(request, server.baseUrl, seed.plaintext)),
   );
   const successes = created.filter((s) => s === 201).length;
   // Allow some race tolerance; assert the bulk got through.
-  expect(successes).toBeGreaterThanOrEqual(45);
+  expect(successes).toBeGreaterThanOrEqual(20);
 
-  // Drain to exactly 50 if there's slack.
-  if (successes > 50) {
-    // unreachable — tier limit is 50 strictly enforced sequentially
-    throw new Error(`scale tier let ${successes.toString()} sessions through, expected ≤ 50`);
+  // Drain to exactly 24 if there's slack.
+  if (successes > 24) {
+    // unreachable — tier limit is 24 strictly enforced sequentially
+    throw new Error(`scale tier let ${successes.toString()} sessions through, expected ≤ 24`);
   }
 
   // After whatever count succeeded, an extra attempt should fail if the
   // count is at the limit. To make this deterministic, fill any remaining
   // slack and then attempt one more.
-  for (let i = successes; i < 50; i++) {
+  for (let i = successes; i < 24; i++) {
     const status = await createSession(request, server.baseUrl, seed.plaintext);
     expect(status).toBe(201);
   }
