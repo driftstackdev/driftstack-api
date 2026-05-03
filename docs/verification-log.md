@@ -2608,7 +2608,7 @@ Cold-start UX walkthrough for a fresh `.app` install with no API key, no session
 ### Walkthrough findings
 
 1. **`SessionsView` "Not connected" was a dead-end.** When `client === null` (no API key yet), the view rendered "Add an API key under Settings to connect to …" with no clickable path forward. The user had to spot the sidebar and click Settings themselves. For a first-run engineer, that's friction; for a less-technical evaluator, it can read as broken.
-2. **`SettingsView` had no first-run guidance.** The form has two empty inputs and a Save button. Nothing tells a fresh user *where to get* an API key. The answer is "run `npm run admin:create-key` on your self-hosted server" but the GUI didn't mention it.
+2. **`SettingsView` had no first-run guidance.** The form has two empty inputs and a Save button. Nothing tells a fresh user _where to get_ an API key. The answer is "run `npm run admin:create-key` on your self-hosted server" but the GUI didn't mention it.
 3. **Other empty states are already clean.** `RecordingsView` (V-043 fix), `ProxiesView`, `SessionsView`'s `EmptyList`, and `ConnectivityView` all have proper guidance. The two above were the only rough patches.
 
 ### What changed
@@ -2618,7 +2618,7 @@ Cold-start UX walkthrough for a fresh `.app` install with no API key, no session
   - New required prop `onGoToSettings` on `SessionsView`. Wired through `App.tsx`'s view-routing as `() => onNavigate({ kind: 'settings' })`.
   - Copy tightened: "Add an API key to connect to <baseUrl>" (was "Add an API key under Settings to connect to <baseUrl>" — the explicit "under Settings" pointer is now a button, not prose).
 - **`apps/gui-client/src/views/SettingsView.tsx`**:
-  - First-run banner appears above the form when `settings.apiKey === null`. Oxblood-accent styling so it's noticeable but not alarming. Copy: *"Don't have an API key yet? Mint one against your self-hosted server with `npm run admin:create-key` in the `driftstack-api` repo, or `POST /v1/admin/accounts/<id>/keys` against a running instance."*
+  - First-run banner appears above the form when `settings.apiKey === null`. Oxblood-accent styling so it's noticeable but not alarming. Copy: _"Don't have an API key yet? Mint one against your self-hosted server with `npm run admin:create-key` in the `driftstack-api` repo, or `POST /v1/admin/accounts/<id>/keys` against a running instance."_
   - Hides automatically once any API key has been saved (tracked via the existing `settings.apiKey` value, no new persistence).
 - **`apps/gui-client/src/App.tsx`**:
   - `CurrentView` passes `onGoToSettings` to `SessionsView`.
@@ -2646,13 +2646,86 @@ Standing-queue (d) closed. The cold-start UX has a working CTA at every dead-end
 ### Next
 
 Standing queue is now empty of immediate items:
+
 - (a) GUI persistence audit — V-043, done.
 - (b) CAPABILITIES.md hygiene — waiting for V-145/V-146/V-147/V-148 in main repo (not yet landed).
 - (c) SDK error-path audit — V-044, done.
 - (d) GUI first-run polish — this V-entry, done.
 
 Open items on the queue:
+
 - Proxy field end-to-end (#100) — blocked on Agent 1 SOCKS5 UDP work.
 - CAPABILITIES.md hygiene (#103) — watching for Agent 1 commits.
 
 Idling on the queue otherwise.
+
+---
+
+## V-046 — Legal baseline drafts placed at docs/legal/* (CLAUDE.md exception)
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Founder-directed under CLAUDE.md legal-content exception (commit af4dd76).
+
+Six legal documents drafted and placed per founder direction. Path A from the surface in this conversation: CLAUDE.md updated with the exception clause first (greppable), facts supplied, documents generated against those facts.
+
+### What changed
+
+Six new files at `docs/legal/`:
+
+- **`README.md`** — provenance, revision policy, versioning rules, cross-document consistency, counsel review focus areas, what's NOT in this set.
+- **`definitions.md`** — shared defined terms across all four bound documents. Single source of truth for terminology. Includes the Customer-Connected Service distinction (NOT a Sub-processor) used heavily in DPA + Privacy Policy.
+- **`acceptable-use-policy.md`** — prohibited targets (CSAM, terrorism, sanctions, infrastructure, malware), prohibited techniques (credential stuffing, mass account creation, DDoS, vuln exploit, anti-circumvention boundaries, PII scraping outside lawful basis, anti-CAPTCHA edge cases), customer responsibility framing, abuse reporting, warning → suspension → termination progression with discretion-to-skip, takedown response.
+- **`terms-of-service.md`** — full ToS structure: services description, account + authorised users, customer responsibilities + warranties, IP allocation (Customer owns Workflows, Driftstack owns Platform), confidentiality, fees + payment (Stripe + Coinbase Commerce, BTW + reverse-charge, late payment with Dutch *wettelijke handelsrente*), service levels (no SLA at launch tiers; commercial SLA at Scale+Enterprise), data + privacy by reference, warranties + disclaimer, mutual indemnification, **liability cap (12 months fees with carve-outs for gross negligence, willful misconduct, IP infringement, confidentiality, payment, mandatory law)**, term + termination + suspension, modifications, **Dutch governing law + Amsterdam exclusive jurisdiction**, dispute resolution, export controls, force majeure, notices, severability + entire agreement + assignment.
+- **`privacy-policy.md`** — Controller identity (placeholders for BV name/KvK/BTW/address); data categories with per-category legal bases under Article 6 GDPR + Article 52 AWR; Customer-Provided Secrets handling; Sub-processor list with transfer mechanisms (2021 SCCs + EU-US DPF where applicable); Customer-Connected Services explicitly NOT Sub-processors; retention by category (account 7y per Dutch tax law, recordings customer-controlled 1-365d default 30, secrets 30d post-termination, billing 7y, support 3y); GDPR rights (Articles 15–22); DPO threshold-based policy + Privacy Contact alternative; security summary (TOMs by reference); breach notification (72h to AP, 48h to Customer, undue delay to data subjects); cookies (strictly-necessary only at launch); children; updates + contact.
+- **`dpa.md`** — Article 28 GDPR Processor agreement: subject matter / duration / nature / purpose, roles (Customer = Controller, Driftstack = Processor), processor obligations (process only on documented instructions, confidentiality, Art 32 security, Sub-processors with general authorisation + 30-day objection window, **Customer-Connected Services explicitly NOT Sub-processors**, assistance with data subject requests, controller compliance assistance, deletion/return on termination, audit cooperation with frequency cap), Customer-Provided Secrets specific obligations, Personal Data breach notifications (48h to Customer), records of Processing (Article 30(2)), term, liability (cross-references ToS Section 13), conflict resolution, retention summary. **Annexes:** Annex 1 (description of Processing), Annex 2 (TOMs — confidentiality, integrity, availability, restoration, testing, pseudonymisation, logical separation), Annex 3 (Sub-processors), Annex 4 (SCC Module selection), Annex 5 (UK / Swiss addenda).
+
+### Architecture facts grounding the documents (per founder)
+
+- **Sub-processors:** MacStadium, Stripe (IE/US split), Coinbase Commerce, Anthropic (conditional/opt-in), Moneybird, Paddle (contingency).
+- **Customer-Connected Services (NOT Sub-processors):** proxies, captcha, email, SMS — all customer-credentialled and customer-contracted.
+- **Retention windows:** all per founder direction.
+- **DPO threshold:** policy-based (1M monthly active sessions, OR any single customer >5,000 unique data subjects monthly, OR AP guidance applying threshold to similar services). Privacy Contact in the interim.
+- **Liability cap:** 12 months fees paid; carve-outs for gross negligence, willful misconduct, IP indemnification, breach of confidentiality, payment obligations, mandatory law.
+- **Indemnification:** Driftstack indemnifies for IP infringement of the Platform; Customer indemnifies for use against targets, customer-provided content, AUP violations, lawful-basis breaches.
+- **Jurisdiction:** Dutch law, Amsterdam exclusive.
+
+### Empirical findings
+
+1. **Customer-Connected Services as a defined term is the load-bearing distinction.** Without it, Driftstack would arguably be a Sub-processor of itself for proxy/captcha/email/SMS data, which would muddy the contractual chain to the third-party providers and create indemnification confusion. The DPA (Section 3.5) and the Privacy Policy (Section 8) both codify the term. This is non-standard SaaS DPA framing; counsel verify the framing holds under cases where Customer's authentication failure causes Driftstack-side data exposure.
+
+2. **DPF self-certification status is a moving target.** Each US-based Sub-processor (Stripe US, MacStadium, Coinbase Commerce, Anthropic) requires verification at https://www.dataprivacyframework.gov/list at the moment counsel reviews. The drafts say "verify current status" everywhere this matters — counsel must do this verification, agent cannot.
+
+3. **Liability carve-outs under Dutch law.** Per founder note: "uncapped liability for these categories" is a Dutch-law enforceability point — gross negligence (*opzet of bewuste roekeloosheid*), willful misconduct, IP infringement indemnification, and breach of confidentiality must be carved out for the cap to be enforceable at all. The ToS Section 13 reflects this. Counsel to verify the wording defeats a "the entire cap is unconscionable" argument.
+
+4. **DPO threshold policy is opinion-based.** Article 37(1)(b) GDPR is qualitative ("regular and systematic monitoring of data subjects on a large scale"). The drafts pick concrete numbers (1M monthly active sessions; any single customer >5,000 unique data subjects monthly) as the threshold trigger. Different counsel may pick different numbers. The drafts document the rationale; counsel may move the numbers without rewriting the structure.
+
+5. **Anthropic and Paddle are conditional sub-processors.** Anthropic appears only when Customer opts into bundled-LLM billing; BYOK customers don't establish the relationship through Driftstack. Paddle appears only if Stripe declines underwriting and Plan B fires. Both are listed but explicitly footnoted as conditional. When the conditions become settled, the documents should be revised to remove the conditional framing or to add the activation event.
+
+6. **Dutch tax law retention drives 7-year retention on billing + account data.** Article 52 AWR (Algemene wet inzake rijksbelastingen) requires 7-year retention of administration. This dominates the retention section despite GDPR's "no longer than necessary" principle, because Dutch tax law is itself a legal-basis trigger under Article 6(1)(c) GDPR.
+
+7. **Effective Date convention.** All six documents are dated 2026-05-03 with Version 0.1.0-draft. The `-draft` suffix retires when counsel review lands. Effective dates move in lockstep on multi-document revisions; single-document revisions are allowed.
+
+### Verify chain
+
+- typecheck/lint/format: clean (docs only, no code).
+- 316/316 vitest unchanged. 97/97 pytest unchanged.
+- Six new files at `docs/legal/`. README + definitions are scaffolding for the four bound documents.
+
+### Decisions made
+
+No new D-entries beyond L-001 (already documented). The legal documents are in-scope because of the CLAUDE.md exception (commit af4dd76); they are not themselves stack/architecture decisions.
+
+### What's still pending
+
+- **Acceptance machinery (#107)** — DB schema + API endpoints + service to record customer acceptance of legal document versions. Engineering scope, in-scope from the start, lands as a separate V-entry.
+- **Counsel review** — required before first paying customer, before any of these documents represents the BV's binding position, before public hosting at `driftstack.dev/legal/*`. Out of scope for agent.
+- **Post-KvK find-replace** — six placeholders to replace once entity registration completes (BV LEGAL NAME, KvK NUMBER, BTW NUMBER, REGISTERED ADDRESS, plus any addresses). Tracked in the entity-org transition doc (V-038); can run as part of that punch list.
+
+### Status
+
+Six legal baseline drafts placed. Version 0.1.0-draft. Counsel review is the gate to publication; agent does not gate further.
+
+### Next
+
+Acceptance machinery (V-047): DB schema for `legal_acceptances`, `POST /v1/legal/accept` and `GET /v1/legal/required` endpoints, force re-accept on version bump, audit-logged. Engineering scope, no contract dependencies.
