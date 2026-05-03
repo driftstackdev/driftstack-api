@@ -5309,3 +5309,46 @@ The 58% aggregate is misleading — it includes 0%-covered Drizzle repos + api-t
 ### Next
 
 Per the never-stop rule: V-086 closes the documented overnight P9 queue item. Remaining items in the planning queue: P10 (customer dashboard mockup pages — Tier 3, NOT to be committed per founder direction in the standing rules) and extended P13-P16 (webhook delivery observability, rate-limit observability, audit log retention/export). Continuing to V-087 — observability follow-on: webhook delivery metrics + rate-limit hit/miss observability via structured logs. V-070-visual remains uncommitted in working tree pending founder review.
+
+---
+
+## V-087 — docs/architecture.md sync (Routine — documentation)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+The `docs/architecture.md` was a Phase-1 baseline and significantly out of date — missed the V-079 auth flow, V-080 inbound Stripe webhooks, V-081 profiles, V-082 billing surface, V-046+ legal acceptance, V-056 R2 / V-057 Postmark / V-058 Sentry external services, V-073 ADR-004 tier model, the auth cache + rate-limit cache invariants, the test-fixture / in-memory-repo testing pattern, and several other subsystems that landed since Phase 1.
+
+### What changed
+
+Full rewrite of `docs/architecture.md`:
+
+- **System shape diagram** updated to reflect all current Postgres tables (15 tables: accounts + api_keys + sessions + session_events + usage_records + rate_limit_buckets + rate_limit_overrides + webhook_endpoints + webhook_deliveries + admin_audit_log + legal_acceptances + email_verify_tokens + magic_link_tokens + password_reset_tokens + web_sessions + profiles + subscriptions + processed_stripe_events), Redis subsystems, R2 + Postmark + Sentry + Stripe + Anthropic + Moneybird sub-processors.
+- **Layers** section now covers `apps/server/src/lib/` (was missing), updated routes/services/db/middleware/schemas descriptions to match current shape (e.g. `schemas/` is server-internal vs `packages/api-types/` is public-contract).
+- **Public API surfaces** table — explicit per-route auth model + the V-NNN that landed it (sessions / api-keys / usage / profiles / auth-flow / billing / outbound-webhooks / inbound-Stripe / admin / legal / health-readiness-openapi).
+- **Auth model** — explicit two-surface description (long-lived API keys via Bearer + scrypt for SDK consumers vs opaque web sessions via sha256 + revocation table for browser dashboard).
+- **Persistence** — table groupings by domain (accounts+auth / sessions / metering / outbound-webhooks / inbound-Stripe / admin-audit / legal); Redis subsystems (auth cache, rate-limit token buckets, auth coalescer); R2 optionality.
+- **External services** table cross-referencing `docs/deployment/env-vars.md`.
+- **Three request lifecycles** documented separately: Bearer-API-key path, public auth-flow path, Stripe inbound webhook path. Each has its specific middleware / validation / dispatch shape.
+- **OpenAPI generation** updated.
+- **Driver abstraction** unchanged from prior baseline (still mock vs webkit factory; webkit still throws DriverNotIntegratedError until fork hands off).
+- **Tier model** cross-references ADR-004 + the locked tier list location.
+- **Decisions cross-reference** — links to D-019/020/023/025/027 + ADR-001/002/003/004 with one-line summaries.
+
+### How verified
+
+- `npm run typecheck`: clean (markdown-only change; no TS surface affected).
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after applying prettier formatting to the markdown table).
+- `npm test`: 434/434 passing (no test surface affected).
+
+### Files modified
+
+- `docs/architecture.md` (complete rewrite — 69 lines → ~190 lines)
+
+### Next
+
+Per the never-stop rule: continuing autonomous Tier 1 queue. Founder confirmed the never-stop rule extension to 14+ hours; planning to address documentation drift, SDK coverage gaps, observability / metrics ADR drafts, and the production Stripe HTTP-client implementation (consistent with V-080's hand-rolled HMAC approach, no `stripe` npm dep). V-070-visual remains uncommitted in working tree pending founder review.
