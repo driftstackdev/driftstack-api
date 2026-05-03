@@ -5149,3 +5149,45 @@ The "leads" surface (signup-intent leads from the marketing site) is out of scop
 ### Next
 
 Per the never-stop rule: continuing to V-084 (customer dashboard stack proposal doc) per Priority 7 of the overnight queue. Markdown-only Tier 1 work — the doc is for founder review of the dashboard stack choice (Astro + React islands vs Next.js vs SvelteKit). V-070-visual remains uncommitted in working tree pending founder review.
+
+---
+
+## V-084 — Customer dashboard stack proposal doc (Routine — markdown-only proposal)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Capture the four candidate stacks for the customer dashboard / admin panel / onboarding flow surfaces, the trade-offs each makes, and a recommendation. The doc is a **proposal** — Decision authority for the stack choice is "architectural / structural" per CLAUDE.md, so the actual stack pick is founder-reviewed before any code lands. V-084 is just the markdown.
+
+### What changed
+
+- New file `docs/architecture/customer-dashboard-stack.md`. Four options (Astro + React islands shared with marketing site / Next.js / SvelteKit / server-rendered htmx). Recommendation: **Option A (Astro + React islands)** — same toolchain as marketing site, no new sub-processor (Cloudflare already on the list), shallow interactivity surface fits Astro's island architecture, brand continuity, and the migration is reversible if Astro hits a ceiling.
+
+### Why this is a markdown-only commit
+
+The proposal is for founder review. No code changes; no test surface affected. Per the "draft-surface" cadence in CLAUDE.md the marketing-copy + brand-surface gate doesn't apply to internal architecture docs (this isn't customer-facing copy), so this commits as a Tier 1 / Routine doc. The actual stack-choice decision and any subsequent dashboard scaffolding await founder review.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 423/423 passing (no test surface affected — markdown only).
+
+### Open questions for founder review (also in the doc)
+
+1. Does the dashboard MUST share marketing tokens (oxblood accent, Geist Sans, Berkeley Mono)? — affects whether Option A's "share design tokens with marketing" is load-bearing.
+2. Onboarding flow shape: single-page React-island state machine or multi-page MPA with one URL per step?
+3. Cloudflare Pages vs Vercel for dashboard runtime — Cloudflare already on sub-processor list, Vercel would require DPA Annex 3 amendment.
+4. Admin panel co-located (`/admin/*`) inside dashboard, or separate `admin.driftstack.dev` deploy?
+
+### Files added
+
+- `docs/architecture/customer-dashboard-stack.md`
+
+### Next
+
+Per the never-stop rule: continuing to V-085 (webhook event tests + Postmark integration tests) per Priority 8 of the overnight queue. V-070-visual remains uncommitted in working tree pending founder review.
