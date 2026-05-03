@@ -17,6 +17,9 @@ import httpx
 
 from driftstack.http import AsyncHttpClient, HttpClient
 from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
+from driftstack.resources.auth import AsyncAuthResource, AuthResource
+from driftstack.resources.billing import AsyncBillingResource, BillingResource
+from driftstack.resources.profiles import AsyncProfilesResource, ProfilesResource
 from driftstack.resources.sessions import AsyncSessionsResource, SessionsResource
 from driftstack.resources.usage import AsyncUsageResource, UsageResource
 from driftstack.resources.webhooks import AsyncWebhooksResource, WebhooksResource
@@ -69,6 +72,9 @@ class Driftstack:
         self.api_keys = ApiKeysResource(self._http)
         self.usage = UsageResource(self._http)
         self.webhooks = WebhooksResource(self._http)
+        self.profiles = ProfilesResource(self._http)
+        self.billing = BillingResource(self._http)
+        self.auth = AuthResource(self._http)
 
     def close(self) -> None:
         self._http.close()
@@ -109,6 +115,9 @@ class AsyncDriftstack:
         self.api_keys = AsyncApiKeysResource(self._http)
         self.usage = AsyncUsageResource(self._http)
         self.webhooks = AsyncWebhooksResource(self._http)
+        self.profiles = AsyncProfilesResource(self._http)
+        self.billing = AsyncBillingResource(self._http)
+        self.auth = AsyncAuthResource(self._http)
 
     async def aclose(self) -> None:
         await self._http.aclose()

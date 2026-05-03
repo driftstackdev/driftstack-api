@@ -6156,3 +6156,50 @@ New `docs/onboarding-for-future-developers.md` covering: prerequisites, first-ru
 ### Next
 
 Continuing per never-stop rule. 26 commits this session. Scheduling a brief wakeup to let context compact and resume.
+
+---
+
+## V-103 — Python SDK resource accessors for profiles + billing + auth (Routine — SDK expansion)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Mirror V-101 for the Python SDK. The TypeScript SDK got resource accessors for V-079 / V-081 / V-082 in V-101; Python SDK was lagging.
+
+### What changed
+
+- `packages/sdk-python/src/driftstack/resources/profiles.py` — `ProfilesResource` + `AsyncProfilesResource` (create / list / get / update / delete).
+- `packages/sdk-python/src/driftstack/resources/billing.py` — `BillingResource` + `AsyncBillingResource` (get_state / create_checkout_session / start_trial_pack / create_portal_session).
+- `packages/sdk-python/src/driftstack/resources/auth.py` — `AuthResource` + `AsyncAuthResource` (9 V-079 auth-flow methods).
+- `client.py`: both `Driftstack` and `AsyncDriftstack` extended with `profiles`, `billing`, `auth` accessors.
+
+### Type-strictness deferred
+
+Request/response bodies typed as `dict[str, Any]` pending the next `scripts/generate.sh` regeneration pass — Python SDK's `_generated/models.py` is generated via `datamodel-codegen` from the OpenAPI spec; running it requires a Python venv setup outside the autonomous loop. Hand-editing `_generated/` is forbidden per the SDK policy. Module headers document the deferral so a future regen lands strictness without code rewrites.
+
+### How verified
+
+- `npm run typecheck` / lint / format: clean.
+- `npm test`: 478/478 unchanged (Python pytest suite is not in the Node test path).
+
+### Decisions made (no new D-entries)
+
+- **`dict[str, Any]` typing for now**; full Pydantic typing on next regen.
+- **AuthResource included in Python SDK** for symmetry with TypeScript SDK even though auth-flow endpoints don't use Bearer auth.
+
+### Files added
+
+- `packages/sdk-python/src/driftstack/resources/profiles.py`
+- `packages/sdk-python/src/driftstack/resources/billing.py`
+- `packages/sdk-python/src/driftstack/resources/auth.py`
+
+### Files modified
+
+- `packages/sdk-python/src/driftstack/client.py`
+
+### Next
+
+Continuing per never-stop rule.
