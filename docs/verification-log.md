@@ -5764,3 +5764,40 @@ ADR is **Proposed** — pending founder review. No code changes yet; the audit_a
 ### Next
 
 Continuing to V-096 — docs/decisions.md sync to capture D-NNN entries for V-079 through V-095.
+
+---
+
+## V-096 — docs/decisions.md sync (Routine — documentation)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Capture the architectural / contractual decisions that landed in V-079 through V-095 as D-NNN entries in `docs/decisions.md`. The V-log entries documented many of these inline ("no new D-entries; documented inline"); V-096 promotes the load-bearing ones to D-entries so the decision log is the canonical surface for "what did we decide and why."
+
+### What changed
+
+`docs/decisions.md`: 7 new D-entries appended (D-028 through D-034):
+
+- **D-028** — Web sessions are opaque sha256-hashed tokens (not JWT). V-079.
+- **D-029** — Hand-rolled Stripe HTTP client (no `stripe` npm SDK dep). V-080 + V-088.
+- **D-030** — Inbound Stripe webhook idempotency via `processed_stripe_events` PK + `ON CONFLICT DO NOTHING`. V-080 + V-089.
+- **D-031** — `session.failed` first-failure-only emission semantic. V-090.
+- **D-032** — Profile name uniqueness scoped to `(account_id, name)`. V-081.
+- **D-033** — Audit-log retention pattern 90d hot Postgres / R2 archive / 7y total. **Proposed**. V-095 / ADR-006.
+- **D-034** — Sentry-first observability destination. **Proposed**. V-094 / ADR-005.
+
+### How verified
+
+- `npm run format:check`: clean.
+- No code changes.
+
+### Files modified
+
+- `docs/decisions.md`
+
+### Next
+
+Continuing to V-097 — CAPABILITIES.md audit (read-only; surface drift in V-log per CLAUDE.md "do not edit without explicit direction").

@@ -242,3 +242,52 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Reasoning:** when we ship a TypeScript SDK in Phase 8+, it depends on `@driftstack/api-types` only — not on the server. Putting public schemas in the api-types package makes the SDK's transitive surface tractable and forces conscious choices when something internal needs to become public.
 - **Tier:** 2.
 - **V-log:** V-002.
+
+## D-028 — Web sessions are opaque sha256-hashed tokens (not JWT)
+
+- **Decision:** browser-dashboard auth uses 32-byte URL-safe random tokens, sha256-hashed at rest in `web_sessions.token_hash`, with `revoked_at` for revocation. NOT JWT.
+- **Reasoning:** opaque tokens are revocable by DB delete without JWT secret-rotation complexity. Lookup is O(1) (sha256 + indexed), authoritative, and survives the server restart. The B2B audience doesn't need federated SSO; a JWT would add infra without benefit. Same primitive used twice (API keys also use sha256-of-prefix + scrypt-of-key) keeps the auth-cache invariants consistent.
+- **Tier:** 2 (architectural — auth model).
+- **V-log:** V-079.
+
+## D-029 — Hand-rolled Stripe HTTP client (no `stripe` npm SDK dep)
+
+- **Decision:** `apps/server/src/lib/stripe-api.ts` and `apps/server/src/lib/stripe-signing.ts` implement Stripe API access + webhook signature verification by wrapping `fetch()` directly. The `stripe` npm package is NOT a dependency.
+- **Reasoning:** we touch a small surface area (Customers, Checkout Sessions, Billing Portal, webhook signature verification). The official SDK is hundreds of types + dozens of resource methods we'll never call. Slim dependency graph reduces supply-chain attack surface + version-drift maintenance. The `BillingProvider` interface keeps the test-friendliness — production swaps in `StripeBillingProvider`, tests use `InMemoryBillingProvider`. If we ever need a Stripe API surface that's significantly more complex (e.g. issuing, treasury), revisit.
+- **Tier:** 2 (architectural — vendor surface management).
+- **V-log:** V-080 (signature verification), V-088 (full Stripe HTTP client).
+
+## D-030 — Inbound Stripe webhook idempotency via `processed_stripe_events` PK
+
+- **Decision:** every inbound Stripe webhook event records its `event.id` in `processed_stripe_events` (PK on `event_id`). Handler short-circuits via `hasEvent` before running; race-safe via `INSERT ... ON CONFLICT DO NOTHING` on the record path. Append-only ledger; no UPDATE / DELETE at the service layer.
+- **Reasoning:** Stripe's `event.id` is unique per Stripe account for the lifetime of the account. This is the cheapest available idempotency key. Stripe re-delivers events within a 3-day window; the ledger is the durable record of "we've already handled this." `ON CONFLICT DO NOTHING` resolves concurrent-delivery races deterministically.
+- **Tier:** 2 (architectural — idempotency model).
+- **V-log:** V-080 (scaffold + verification), V-089 (mutation handlers).
+
+## D-031 — `session.failed` first-failure-only emission semantic
+
+- **Decision:** `session.failed` webhook fires once per session — when a driver call (`navigate` / `interact` / `wait` / `getState` / `capture` / `guiInput`) throws, the SessionsService marks the session `errored`, sets `destroyedAt`, fires `session.failed`, and re-throws. Subsequent ops on the same session 410 SessionDestroyed at the `requireOwned` gate, so duplicate emission is structurally impossible.
+- **Reasoning:** founder-approved (V-090 surface). Customer's webhook receiver gets the failure once; subsequent calls give a clear 410 instead of a silent retry-loop opportunity. `errored` and `destroyed` behave identically for customer ops (only DELETE is allowed, idempotent).
+- **Tier:** 2 (architectural — webhook contract semantic).
+- **V-log:** V-090.
+
+## D-032 — Profile name uniqueness scoped to (account_id, name)
+
+- **Decision:** `profiles.name` is unique per account, NOT globally. Customers may use their own naming conventions ("aws-staging", "instagram-account-1") without collision risk.
+- **Reasoning:** profile names are human-meaningful identifiers within an account. A global unique constraint would force customers to disambiguate against other tenants' names — privacy leak + UX friction. The `(account_id, name)` unique index is an O(1) lookup at create time + supports the public ID resolution path.
+- **Tier:** 1 (routine — schema design).
+- **V-log:** V-081.
+
+## D-033 — Audit-log retention pattern: 90d hot Postgres / R2 archive / 7y total (proposed)
+
+- **Decision (PROPOSED — pending founder review):** audit-shaped tables (`admin_audit_log`, `processed_stripe_events`, `legal_acceptances`, `webhook_deliveries`) retain 90 days hot in Postgres, monthly archive sweep to Cloudflare R2 in JSON Lines + gzip, 7-year total retention.
+- **Reasoning:** 90 days covers admin queries / Stripe re-delivery / customer-support span; 7 years aligns with Dutch BV bewaarplicht + GDPR Art 17(3)(b) legal-obligation exception. JSONL chosen over Parquet for human-readability + no schema-evolution friction. R2 already on locked sub-processor list. NOT a separate audit-store vendor (cost + sub-processor amendment outweighs benefit at launch scale; we don't operate at the regulated-banking threshold that justifies QLDB-equivalent crypto-anchored ledgers).
+- **Tier:** 2 (architectural — retention SLA + workflow). Status: proposed.
+- **V-log:** V-095. ADR: `docs/adr/ADR-006-audit-log-retention-export.md`.
+
+## D-034 — Sentry-first observability destination (proposed)
+
+- **Decision (PROPOSED — pending founder review):** primary structured-log + metrics destination at launch is Sentry. Defer adding a second observability vendor (Better Stack / Axiom / Datadog) until Sentry's structured-log capacity, retention, or query depth becomes a documented bottleneck against actual production volume.
+- **Reasoning:** Sentry already on locked sub-processor list (V-052) + EU region wired (V-058). Adding a vendor requires DPA Annex 3 amendment + 30-day customer notice — meaningful cost for marginal benefit at launch volume. Single pane of glass for errors / performance / structured logs / breadcrumbs. Cost predictable at launch scale.
+- **Tier:** 2 (architectural — vendor surface). Status: proposed.
+- **V-log:** V-094. ADR: `docs/adr/ADR-005-observability-sentry-first.md`.
