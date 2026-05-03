@@ -3273,3 +3273,54 @@ ADR pattern landed. Future Tier 2 deviations + load-bearing contextual decisions
 ### Next
 
 Workstream A iter 2 SDK integrations (R2 / Postmark / Sentry) + real readiness checks land in V-056 / V-057 / V-058 / V-059.
+
+## V-056 — R2 SDK + readiness probe
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Workstream A iteration 2 — first SDK integration. Recordings durability + cross-device GUI access + future Mac Mini fleet upload-presigning depend on this.
+
+R2 is S3-compatible; we use the official AWS SDK pointed at R2's endpoint. The wrapper at `apps/server/src/lib/r2.ts` exposes the four primitives the rest of the codebase needs: HEAD (used by readiness probe + future "does this recording exist" checks), PUT (server-side ingestion path), and presigned PUT/GET (Mac Mini fleet uploads + GUI download URLs). All real S3 calls go through the SDK; the wrapper exists purely to give us a typed, testable surface.
+
+### What changed
+
+- **`apps/server/src/lib/config.ts`** — extended Zod schema with a nullable `r2` block: `{accountId, accessKeyId, secretAccessKey, bucketRecordings, endpointUrl}`. Reading is all-or-nothing: if any of the five env vars is missing, `config.r2` is `null` and downstream code skips R2 wiring. This matches the env-vars.md schema (V-053) and the founder's "fail-safe on missing config" pattern.
+- **`apps/server/src/lib/r2.ts`** (NEW, 138 lines) — `R2` interface + `createR2Client(config)` factory. Methods:
+  - `headObject(key)` — returns `{exists: true|false}`. 404 → `exists: false` (treated as success); credentials/network errors → throw.
+  - `putObject({key, body, contentType})` — server-side write.
+  - `presignPut({key, contentType, expiresIn})` — default 900s expiry; used by Mac Mini fleet recording uploads + future direct-upload flows.
+  - `presignGet({key, expiresIn})` — default 900s expiry; used by GUI cross-device recordings download.
+  - `r2ReadinessCheck(r2, key?)` — factory returning a `ReadinessCheck` (per V-051 interface) that HEADs the sentinel key. 2000ms timeout. Sentinel key default = `__driftstack_sentinel__`. The sentinel is uploaded once at bucket-provisioning time by the founder; HEAD returning 404 still passes the readiness probe (`exists: false` in the result body) — the bucket existing + credentials working is the load-bearing check, sentinel-presence is informational.
+  - `recordingKey(accountId, sessionId)` helper exporting the canonical key shape: `recordings/<account_id>/<session_id>.ndjson`. Stable shape so future per-customer signed-URL scoping doesn't require a key restructure.
+- **`apps/server/tests/unit/r2.test.ts`** (NEW, 11 tests) — mocks the underlying `S3Client.send` + `getSignedUrl` and verifies: HEAD 200 → `exists:true`, HEAD 404 (both `httpStatusCode` and `name: 'NotFound'` discriminators) → `exists:false`, HEAD other errors throw, PUT passes correct command shape, presign methods return URL strings, readiness check name + timeout + 200/404/error pass-fail behaviour, recording-key shape.
+- **`apps/server/tests/unit/config.test.ts`** — added 2 cases: "parses R2 config when all five vars set" and "returns r2: null when any R2 var is missing."
+- **`apps/server/package.json`** — added `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner` (^3.1041.0). Workspace lockfile updated.
+
+### Empirical findings
+
+1. **R2 sentinel-key pattern beats bucket-HEAD.** S3 (and R2) doesn't expose a cheap "is this bucket reachable" probe; the closest is `HeadBucketCommand` which requires `s3:ListBucket` permission and which different S3-compatible providers handle differently. HEAD on a known object key works the same way across S3 / R2 / MinIO / etc., uses minimum scope (`s3:GetObject`), and is fast (small request, no body). The sentinel-key approach is also self-documenting: a curious future-engineer will find the key, work out what it's for, and not be tempted to rip it out.
+
+2. **404 on the sentinel must not fail readiness.** First boot, before the founder has uploaded the sentinel, would otherwise leave production stuck in 503. The probe distinguishes "404 (bucket reachable, sentinel missing — log warning at boot, /ready still 200)" from "credentials/network error (hard fail)." Boot-time logging will surface the missing sentinel; readiness keeps the orchestrator pool from draining unnecessarily.
+
+3. **Presign expiry default = 900s.** Stripe, GitHub, and most S3 clients default to 15 minutes for presigned URL expiry. The Mac Mini fleet upload flow needs at most a few seconds to push a recording frame; 900s is long enough to absorb network blips + clock drift between the control plane and the fleet node without being so long that a leaked URL is dangerous. Caller can override per-request.
+
+4. **Lockfile-update on `npm install` failed initially due to npm 10.5 + Node 25 minimatch incompatibility.** Bumped npm to 11.13.0 globally — the bug is in `@npmcli/arborist`'s use of minimatch that npm 10.5 ships, fixed in 11.x. Memory-touch flagged: future `npm install` calls in this repo work after this fix. (`5 vulnerabilities (4 moderate, 1 high)` reported by npm audit on the new transitive deps; agent does not auto-fix, will surface in a separate commit if any reach the production runtime path.)
+
+5. **`@aws-sdk/client-s3` is large (~10 MB unpacked).** The runtime-image impact is acceptable (the production image is already ~250 MB with Node + node_modules) but worth noting. If image size becomes a deploy-time concern, the SDK ships individual command modules (`@aws-sdk/client-s3/dist-es/commands/HeadObjectCommand`) that can be imported separately for tree-shaking. Not worth the complexity at v1.
+
+### Verify chain
+
+- typecheck/lint/format all clean.
+- `npm test`: **341/341** (was 328; +11 new R2 tests + 2 new config tests).
+
+### Decisions made
+
+No new D-entries. The R2 wrapper is implementation detail inside the locked stack (Tier 1). Sentinel-key pattern is documented in the file's leading comment.
+
+### Status
+
+R2 client surface ready for downstream wiring. The production bootstrap (V-059) will instantiate it conditionally (on `config.r2 !== null`) and pass it to the readinessChecks array + future recordings service.
+
+### Next
+
+V-057 lands the Postmark SDK + transactional EmailService; V-058 lands Sentry; V-059 lands the real production bootstrap wiring everything together with readinessChecks for Postgres + Redis + R2.
