@@ -2805,3 +2805,55 @@ Acceptance machinery in place. Customer can accept documents, server records aud
 ### Next
 
 CAPABILITIES.md hygiene pass — V-145/V-146/V-147/V-148 weren't landed in main repo when last polled (V-143 was the latest). Re-poll on next session and pull closures in if they've appeared.
+
+---
+
+## V-048 — Drop Paddle from V-046 legal docs; add hosting sub-processors; bump to v0.1.1-draft
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Founder-directed revision under CLAUDE.md exception. Companion to the CLAUDE.md exception extension (commit 8996c87).
+
+### What changed
+
+**Paddle removed from all customer-facing legal text:**
+- **`docs/legal/definitions.md`** — `**"Paddle"**` entry deleted. Paddle stays as an internal contingency in engineering scoping docs only; if it ever activates, it lands as a proper Art 28(2) Sub-processor amendment with 30-day customer notice (the DPA's Section 3.4 mechanism already handles this correctly).
+- **`docs/legal/privacy-policy.md`** — Paddle row removed from the Sub-processor table in Section 7.
+- **`docs/legal/dpa.md`** — Paddle row removed from Annex 3.
+- **`docs/legal/acceptable-use-policy.md`** — Section 7.2 wording revised: removed reference to Paddle as a third remediation option for Stripe-restricted customers; replaced with "if Driftstack subsequently engages an additional payment processor (e.g. a merchant-of-record alternative), customers will be notified per the Sub-processor amendment mechanism in the DPA." Same effect, no specific provider name.
+
+**Hosting sub-processors added** (per the CLAUDE.md exception extension's locked sub-processor list):
+- **`docs/legal/definitions.md`** — added entries for Hetzner (Germany), Neon (US corp / EU Frankfurt data residency), Upstash (US corp / EU Frankfurt data residency), Cloudflare (US corp / EU jurisdiction), Postmark (US, EU sending region), Sentry (US corp / EU region).
+- **`docs/legal/privacy-policy.md`** — Sub-processor table extended with the same six entries, with transfer mechanisms (EEA-internal for Hetzner; 2021 SCCs Module 2 + EU-US DPF for the others, with "counsel verifies current certification status" annotations).
+- **`docs/legal/dpa.md`** — Annex 3 table extended with the same six entries.
+
+**Anthropic kept** as conditional Sub-processor (per founder direction: real planned feature, opt-in, real Sub-processor relationship).
+
+**BV name placeholders kept** ([BV LEGAL NAME], [KvK NUMBER], [BTW NUMBER], [REGISTERED ADDRESS]) for post-KvK find-replace per founder direction.
+
+**Version bump:**
+- All five bound documents (definitions, ToS, Privacy Policy, DPA, AUP) bumped from `0.1.0-draft` to `0.1.1-draft`. Effective date stays at 2026-05-03 (same revision day).
+- README updated with the bump rationale + 0.1.0/0.1.1 history.
+
+### Empirical findings
+
+1. **Removing Paddle as a "conditional Sub-processor" is the right call.** "Conditional" sub-processors create disclosure obligations and customer confusion: customers reading the Privacy Policy or DPA see a name they may not recognise, accompanied by uncertainty about when it activates. The cleaner posture is "we have a single payment processor (Stripe) plus a crypto rail (Coinbase Commerce); if Stripe ever declines and we engage an alternative, you'll get the standard 30-day Sub-processor notice." That clause already exists in the DPA Section 3.4. Paddle stays in engineering scoping docs (when those land) and in the founder's contingency planning; it does not appear in customer-facing legal text.
+
+2. **Adding hosting sub-processors at this stage is appropriate.** The CLAUDE.md exception extension (commit 8996c87) locks the sub-processor list to: Hetzner, Neon, Upstash, Cloudflare, Postmark, Sentry, Stripe, Coinbase Commerce, Anthropic (BYOK opt-in only), Moneybird, MacStadium. Pre-V-048, only Stripe / Coinbase / Anthropic / Moneybird / MacStadium / Paddle (now removed) were listed. The hosting providers were missing because they were notionally "infrastructure-internal" — but a customer reading the DPA needs to know where their data sits, and "EU Frankfurt data residency on Neon" / "EU jurisdiction on Cloudflare" / "EU region on Sentry" are exactly the kinds of facts that distinguish a GDPR-aligned offering from a US-default offering.
+
+3. **All US-corp / EU-data sub-processors marked with "counsel verifies current certification status".** The DPF self-certification list at https://www.dataprivacyframework.gov/list moves; counsel must verify each sub-processor's current status at review time. Agent does not verify (cannot browse).
+
+4. **No D-entry needed.** The decisions are L-001-adjacent (customer-facing text shape) but not new locked decisions; they're applications of the founder's documented preferences.
+
+### Verify chain
+
+- Format check: clean. No code touched.
+- Test counts unchanged (this is a docs-only revision).
+
+### Status
+
+A1 done. Legal documents are at v0.1.1-draft, Paddle-free, hosting sub-processors documented. Counsel review still required before first paying customer; same blocker as V-046.
+
+### Next
+
+A2 (V-049): API-key-issuance-block enforcement. Block `ApiKeysService.create` when `LegalService.required(accountId)` is non-empty.

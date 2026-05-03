@@ -8,7 +8,7 @@
 > document represents the BV's intended position; defects from baseline
 > drafting are founder's risk.
 
-**Version:** 0.1.0-draft · **Effective:** 2026-05-03
+**Version:** 0.1.1-draft · **Effective:** 2026-05-03
 
 These Terms of Service ("**ToS**") govern Customer's access to and
 use of the Service offered by Driftstack. Capitalised terms are

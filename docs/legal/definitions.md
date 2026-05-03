@@ -8,7 +8,7 @@
 > document represents the BV's intended position; defects from baseline
 > drafting are founder's risk.
 
-**Version:** 0.1.0-draft · **Effective:** 2026-05-03
+**Version:** 0.1.1-draft · **Effective:** 2026-05-03
 
 This file is the source of truth for terminology used across the
 Driftstack legal document set: the [Terms of Service](terms-of-service.md),
@@ -218,11 +218,6 @@ payment processor for cryptocurrency Subscription Fees, accepting
 USDC, USDT, BTC, and ETH payments fixed in USD-equivalent at
 invoicing.
 
-**"Paddle"** means Paddle.com Market Limited (UK) and its affiliates,
-a merchant-of-record alternative to Stripe that may serve as a
-contingency processor if Stripe declines underwriting. Paddle's
-sub-processor status is conditional on activation.
-
 **"Moneybird"** means Moneybird B.V. (Dutch entity, Utrecht), the
 accounting and invoicing platform used to generate VAT-compliant
 invoices for Subscription Fees.
@@ -231,6 +226,35 @@ invoices for Subscription Fees.
 center operator of record for Driftstack's mac mini fleet at launch.
 Future migration to self-hosted infrastructure does not retroactively
 alter prior Sub-processor relationships.
+
+**"Hetzner"** means Hetzner Online GmbH (Gunzenhausen, Germany), the
+provider of the Cloud VM hosting Driftstack's control plane, admin
+panel, and onboarding API surface.
+
+**"Neon"** means Neon, Inc. (Delaware, USA), the managed Postgres
+provider for Driftstack's control-plane database. Data residency is
+the EU Frankfurt region.
+
+**"Upstash"** means Upstash, Inc. (Delaware, USA), the managed Redis
+provider for caches, rate-limit buckets, and ephemeral session state.
+Data residency is the EU Frankfurt region.
+
+**"Cloudflare"** means Cloudflare, Inc. (Delaware, USA), the provider
+of DNS, CDN, edge routing (`driftstack.dev` and subdomains), R2
+object storage (Recordings durability + cross-device access), and
+Pages hosting (the marketing site). EU jurisdiction is selected on
+Driftstack's Cloudflare account.
+
+**"Postmark"** means the transactional email service operated by
+ActiveCampaign LLC (Delaware, USA), used by Driftstack for signup
+verification, password reset, billing receipts, and support
+correspondence. EU sending region selected.
+
+**"Sentry"** means the error tracking and performance monitoring
+service operated by Functional Software, Inc. (Delaware, USA), used
+by Driftstack for diagnostics on the API server, the GUI Client, and
+the marketing site. EU region selected on Driftstack's Sentry
+account.
 
 **"Anthropic"** means Anthropic, PBC (Delaware, USA), the provider of
 the Claude family of large language models that Driftstack may

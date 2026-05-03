@@ -70,7 +70,18 @@ follows these rules:
   to clients running on the prior version.
 
 The current version of every document at the time of this commit is
-`0.1.0-draft`. The `-draft` suffix retires when counsel review lands.
+`0.1.1-draft`. The `-draft` suffix retires when counsel review lands.
+
+History:
+
+- `0.1.0-draft` (2026-05-03, V-046): inaugural baseline drafts.
+- `0.1.1-draft` (2026-05-03, V-048): Paddle removed from
+  customer-facing legal text per founder direction (conditional
+  sub-processor created disclosure obligations and customer
+  confusion; treat as proper Art 28(2) sub-processor amendment if
+  Paddle ever activates). Hosting sub-processors added to the
+  Privacy Policy + DPA Annex 3 + definitions.md (Hetzner, Neon,
+  Upstash, Cloudflare, Postmark, Sentry).
 
 ## Cross-document consistency
 

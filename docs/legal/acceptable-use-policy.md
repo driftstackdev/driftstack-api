@@ -8,7 +8,7 @@
 > document represents the BV's intended position; defects from baseline
 > drafting are founder's risk.
 
-**Version:** 0.1.0-draft · **Effective:** 2026-05-03
+**Version:** 0.1.1-draft · **Effective:** 2026-05-03
 
 This Acceptable Use Policy ("**AUP**") governs Customer's use of the
 Service. The AUP is incorporated into the [Terms of Service](terms-of-service.md) by reference. Capitalised terms are defined in
@@ -269,9 +269,10 @@ by its own Sub-processors:
    un-billable through Stripe even if the use otherwise satisfies
    Section 1 and Section 2 of this AUP. In that case, Driftstack's
    options are (a) require Customer to migrate to the cryptocurrency
-   payment rail, (b) migrate Customer to the Paddle merchant-of-
-   record rail (if Paddle accepts the Customer), or (c) terminate
-   the Subscription.
+   payment rail, or (b) terminate the Subscription. If Driftstack
+   subsequently engages an additional payment processor (e.g. a
+   merchant-of-record alternative), customers will be notified per
+   the Sub-processor amendment mechanism in the DPA.
 3. **Coinbase Commerce's AUP** for the cryptocurrency payment rail.
    Similarly restrictive on certain industries.
 
