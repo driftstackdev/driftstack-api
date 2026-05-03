@@ -32,6 +32,11 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
     return Promise.resolve(this.accounts.get(id) ?? null);
   }
 
+  /** Test seam: snapshot of all account rows. Used by InMemoryAccountsAdminRepo.list. */
+  allAccounts(): AccountRow[] {
+    return Array.from(this.accounts.values());
+  }
+
   touchApiKeyLastUsed(id: string, at: Date): Promise<void> {
     const row = this.keysById.get(id);
     if (row) {

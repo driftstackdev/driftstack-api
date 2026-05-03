@@ -13,13 +13,24 @@
 // an audit row before re-throwing so the attempt is visible.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 import {
+  AccountStatusSchema,
+  AccountTierSchema,
   ChangeTierRequestSchema,
   ClearQuotaOverrideQuerySchema,
   SetQuotaOverrideRequestSchema,
   SuspendAccountRequestSchema,
   UnsuspendAccountRequestSchema,
 } from '@driftstack/api-types';
+
+const ListAdminAccountsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().optional(),
+  status: AccountStatusSchema.optional(),
+  tier: AccountTierSchema.optional(),
+  email_contains: z.string().min(1).max(254).optional(),
+});
 import type { AccountsAdminService } from '../services/admin-accounts.js';
 import type { AdminAuditService, AdminAuditAction } from '../services/admin-audit.js';
 import type { AccountRow } from '../services/auth.js';
@@ -205,6 +216,60 @@ export function registerAdminAccountsRoutes(
         () => accountsAdmin.unsuspend(ctx, accountId),
       );
       return publicAccount(updated);
+    },
+  );
+
+  // ── GET /v1/admin/accounts ──────────────────────────────────────────────
+  // List accounts with optional filters: status, tier, email substring.
+  // Cursor pagination via `acc_<uuid>` cursor token. Admin scope only.
+  app.get(
+    '/v1/admin/accounts',
+    {
+      preHandler: [app.requireAuth, app.rateLimit('global')],
+    },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+
+      const parsed = ListAdminAccountsQuerySchema.safeParse(request.query);
+      if (!parsed.success) throw new BadRequestError('Invalid query parameters.');
+
+      const cursorUuid =
+        parsed.data.cursor !== undefined
+          ? uuidFromPrefixedId(parsed.data.cursor, 'acc')
+          : undefined;
+
+      const page = await accountsAdmin.list(ctx, {
+        limit: parsed.data.limit,
+        ...(cursorUuid !== undefined ? { cursor: cursorUuid } : {}),
+        ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
+        ...(parsed.data.tier !== undefined ? { tier: parsed.data.tier } : {}),
+        ...(parsed.data.email_contains !== undefined
+          ? { emailContains: parsed.data.email_contains }
+          : {}),
+      });
+
+      return {
+        data: page.data.map(publicAccount),
+        has_more: page.hasMore,
+        next_cursor: page.nextCursor !== null ? `acc_${page.nextCursor}` : null,
+      };
+    },
+  );
+
+  // ── GET /v1/admin/accounts/:id ──────────────────────────────────────────
+  // Single-account detail view. Admin scope only; 404 if account doesn't exist.
+  app.get<{ Params: { id: string } }>(
+    '/v1/admin/accounts/:id',
+    {
+      preHandler: [app.requireAuth, app.rateLimit('global')],
+    },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const accountId = uuidFromPrefixedId(request.params.id, 'acc');
+      const target = await accountsAdmin.getAccount(ctx, accountId);
+      return publicAccount(target);
     },
   );
 

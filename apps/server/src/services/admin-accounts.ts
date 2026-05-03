@@ -17,6 +17,24 @@ import type { AccountRow } from './auth.js';
 import type { AuthCache } from './auth-cache.js';
 import { NotFoundError, requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
 
+export interface ListAccountsArgs {
+  /** Cursor is the prior page's last `id` (created_at desc + id desc tie-break). */
+  cursor?: string;
+  limit?: number;
+  /** Filter by account status. Default: no filter. */
+  status?: 'active' | 'suspended' | 'deleted';
+  /** Filter by tier. Default: no filter. */
+  tier?: AccountTier;
+  /** Substring filter on email (lowercased). Default: no filter. */
+  emailContains?: string;
+}
+
+export interface ListAccountsPage {
+  data: AccountRow[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
 export interface AccountsAdminRepo {
   findById(id: string): Promise<AccountRow | null>;
   setTier(id: string, tier: AccountTier, at: Date): Promise<AccountRow | null>;
@@ -25,6 +43,7 @@ export interface AccountsAdminRepo {
     status: 'active' | 'suspended' | 'deleted',
     at: Date,
   ): Promise<AccountRow | null>;
+  list(args: ListAccountsArgs): Promise<ListAccountsPage>;
 }
 
 export class AccountsAdminService {
@@ -38,6 +57,11 @@ export class AccountsAdminService {
     const row = await this.repo.findById(accountId);
     if (!row) throw new NotFoundError(`Account "${accountId}" not found.`);
     return row;
+  }
+
+  async list(ctx: AccountContext, args: ListAccountsArgs): Promise<ListAccountsPage> {
+    throwIfMissingScope(ctx, 'admin');
+    return this.repo.list(args);
   }
 
   async changeTier(

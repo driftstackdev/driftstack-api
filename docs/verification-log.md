@@ -5075,3 +5075,77 @@ In-memory `BillingProvider` records every customer / checkout / portal call into
 ### Next
 
 Per the never-stop rule: continuing to V-083 (admin panel API — list accounts, account detail, suspend/unsuspend, tier-change, audit-log, leads) per Priority 6 of the overnight queue. V-070-visual remains uncommitted in working tree pending founder review.
+
+---
+
+## V-083 — Admin panel API: list accounts + account detail (Routine — Workstream C P6)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Round out the admin-account API surface so the admin panel UI (Workstream C, pending) can render an accounts list + drill into a single account. The other admin operations on accounts already exist as of earlier verification entries — `POST /:id/tier`, `POST /:id/suspend`, `POST /:id/unsuspend`, `GET /:id/usage`, `POST /:id/quota-override`, `DELETE /:id/quota-override`, `GET /v1/admin/audit-log`, `GET /v1/admin/webhook-deliveries/...`. The two missing pieces — list (`GET /v1/admin/accounts`) and detail (`GET /v1/admin/accounts/:id`) — land here.
+
+The "leads" surface (signup-intent leads from the marketing site) is out of scope for V-083; there's no schema for it yet, and the marketing site's lead-capture form lands in Workstream B's iteration after the visual restructure review.
+
+### What changed
+
+**Service (`apps/server/src/services/admin-accounts.ts`):**
+
+- New `ListAccountsArgs` + `ListAccountsPage` types on the repo interface.
+- `AccountsAdminService.list(ctx, args)` enforces admin scope then delegates to the repo.
+
+**Drizzle repo (`apps/server/src/db/admin-accounts-repo.ts`):**
+
+- `list(args)` builds a filter chain (status / tier / `ilike` email substring) + cursor pagination (created_at desc + id desc tie-break), reads `limit + 1` to compute `hasMore`. Cursor format mirrors the V-081 profiles convention — `acc_<uuid>` parsed at the route boundary, raw UUID inside the repo.
+
+**Route (`apps/server/src/routes/admin-accounts.ts`):**
+
+- New `ListAdminAccountsQuerySchema` (Zod) — `limit` 1-100, optional `cursor`, optional `status` / `tier` / `email_contains`.
+- `GET /v1/admin/accounts` → list page with `data`, `has_more`, `next_cursor`.
+- `GET /v1/admin/accounts/:id` → account detail (admin scope, 404 on unknown, 400 on malformed id).
+
+**In-memory test repo (`tests/integration/_helpers/in-memory-admin-accounts-repo.ts`):**
+
+- `list(args)` with the same filtering + pagination shape as the Drizzle implementation. Reuses `InMemoryAuthRepo.allAccounts()` (newly added test seam) for the source-of-truth snapshot.
+
+### How verified
+
+- `npm run typecheck`: clean across all 5 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 423/423 passing (was 413; +10 new admin list/detail integration tests). Tests cover:
+  1. Default-limit list returns all accounts.
+  2. Filter by `tier=team_manual`.
+  3. Filter by `status=suspended`.
+  4. Filter by `email_contains=` (case-insensitive substring).
+  5. Cursor pagination round-trip (limit=1, two accounts, no overlap).
+  6. List 403 without admin scope.
+  7. Detail 200 for owned + admin caller.
+  8. Detail 404 on unknown id.
+  9. Detail 400 on malformed id.
+  10. Detail 403 without admin scope.
+
+### Decisions made (no new D-entries)
+
+- **No "leads" endpoint at this iteration.** Lead capture flow (Workstream B follow-on) needs schema + a lead-source enum + admin notification routing; landing it now would be premature without the marketing form spec. When the form lands, a follow-on V-NNN adds `leads` table + `GET /v1/admin/leads` + `POST /v1/admin/leads/:id/promote` (convert lead → account) in one motion.
+- **Cursor format reuses public-id prefix.** Same convention as V-081 profiles: `next_cursor: "acc_<uuid>"`. The route layer's `uuidFromPrefixedId` decodes; the Drizzle repo does a second SELECT to find the cursor row's `created_at` for the comparison clause.
+- **`email_contains` uses Postgres `ilike`** (case-insensitive). For dev the in-memory repo lowercases both sides and uses `String.includes`.
+
+### Files added
+
+- `apps/server/tests/integration/admin-list-accounts.test.ts`
+
+### Files modified
+
+- `apps/server/src/services/admin-accounts.ts` (ListAccountsArgs / ListAccountsPage types + list method on service)
+- `apps/server/src/db/admin-accounts-repo.ts` (Drizzle list implementation)
+- `apps/server/src/routes/admin-accounts.ts` (Zod query schema + 2 new endpoints)
+- `apps/server/tests/integration/_helpers/in-memory-admin-accounts-repo.ts` (in-memory list)
+- `apps/server/tests/integration/_helpers/in-memory-auth-repo.ts` (allAccounts test seam)
+
+### Next
+
+Per the never-stop rule: continuing to V-084 (customer dashboard stack proposal doc) per Priority 7 of the overnight queue. Markdown-only Tier 1 work — the doc is for founder review of the dashboard stack choice (Astro + React islands vs Next.js vs SvelteKit). V-070-visual remains uncommitted in working tree pending founder review.
