@@ -191,24 +191,18 @@ type NavigateResponse struct {
 // constructors (NewTapAction, NewTypeAction, ...) to build one.
 //
 // This is the customer-facing intent-only surface (L-001). Coordinate
-// primitives (tap_at / type_focused) live on the gui-control plane
-// and are NOT part of this SDK — they're internal to the self-hosted
-// GUI workflow and gated behind the `gui_control` API-key scope.
+// primitives (tap_at / type_focused / tap.offset) live on the
+// gui-control plane and are NOT part of this SDK — they're internal
+// to the self-hosted GUI workflow and gated behind the `gui_control`
+// API-key scope.
 type InteractAction struct {
-	Kind     string  `json:"kind"`               // tap | type | scroll | press
-	Selector string  `json:"selector,omitempty"` // tap, type, scroll
-	Text     string  `json:"text,omitempty"`     // type
-	DelayMs  *int    `json:"delay_ms,omitempty"` // type
-	DeltaX   int     `json:"delta_x,omitempty"`  // scroll
-	DeltaY   int     `json:"delta_y,omitempty"`  // scroll
-	Key      string  `json:"key,omitempty"`      // press
-	Offset   *Offset `json:"offset,omitempty"`   // tap
-}
-
-// Offset is a 2D pixel offset (used by tap actions).
-type Offset struct {
-	X int `json:"x"`
-	Y int `json:"y"`
+	Kind     string `json:"kind"`               // tap | type | scroll | press
+	Selector string `json:"selector,omitempty"` // tap, type, scroll
+	Text     string `json:"text,omitempty"`     // type
+	DelayMs  *int   `json:"delay_ms,omitempty"` // type
+	DeltaX   int    `json:"delta_x,omitempty"`  // scroll
+	DeltaY   int    `json:"delta_y,omitempty"`  // scroll
+	Key      string `json:"key,omitempty"`      // press
 }
 
 func NewTapAction(selector string) InteractAction {

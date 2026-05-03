@@ -82,14 +82,12 @@ export type NavigateResponse = z.infer<typeof NavigateResponseSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 // Customer-facing InteractAction is intent-only per L-001 — coordinate
-// primitives (tap_at, etc.) live on the gui_control plane, not here.
-// See docs/locked-decisions.md.
+// primitives (tap_at, tap.offset, etc.) live on the gui_control plane,
+// not here. See docs/locked-decisions.md.
 export const InteractActionSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('tap'),
     selector: z.string().min(1),
-    // Optional offset within the element (px).
-    offset: z.object({ x: z.number().int(), y: z.number().int() }).optional(),
   }),
   z.object({
     kind: z.literal('type'),

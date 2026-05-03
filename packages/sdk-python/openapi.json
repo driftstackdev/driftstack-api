@@ -475,18 +475,6 @@
                   "selector": {
                     "type": "string",
                     "minLength": 1
-                  },
-                  "offset": {
-                    "type": "object",
-                    "properties": {
-                      "x": {
-                        "type": "integer"
-                      },
-                      "y": {
-                        "type": "integer"
-                      }
-                    },
-                    "required": ["x", "y"]
                   }
                 },
                 "required": ["kind", "selector"]
@@ -1649,18 +1637,6 @@
                           "selector": {
                             "type": "string",
                             "minLength": 1
-                          },
-                          "offset": {
-                            "type": "object",
-                            "properties": {
-                              "x": {
-                                "type": "integer"
-                              },
-                              "y": {
-                                "type": "integer"
-                              }
-                            },
-                            "required": ["x", "y"]
                           }
                         },
                         "required": ["kind", "selector"]

@@ -2369,11 +2369,11 @@ V-037 noted drizzle-kit 0.30.6 errored out when generating migrations with "Plea
 
 ### Status of the three V-037 follow-ups
 
-| Item | Status |
-|---|---|
-| `tap.offset` keep-with-bounds vs remove | **needs founder call** — borderline L-001 case, no autonomous edit |
-| TS SDK CHANGELOG | **done** (this entry) |
-| drizzle-kit upgrade | **deferred** — real ask is drizzle-orm 0.38→0.45 major bump; not a clean-window change. Surface above. |
+| Item                                    | Status                                                                                                 |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `tap.offset` keep-with-bounds vs remove | **needs founder call** — borderline L-001 case, no autonomous edit                                     |
+| TS SDK CHANGELOG                        | **done** (this entry)                                                                                  |
+| drizzle-kit upgrade                     | **deferred** — real ask is drizzle-orm 0.38→0.45 major bump; not a clean-window change. Surface above. |
 
 ### Verify chain
 
@@ -2388,3 +2388,71 @@ V-037 follow-ups partially closed. One needs founder, one needs a bigger session
 ### Next
 
 Proxy field end-to-end is blocked on Agent 1 (SOCKS5 UDP ASSOCIATE + QUIC routing). Idle on the standing queue otherwise.
+
+---
+
+## V-042 — Remove tap.offset from public InteractAction (L-001)
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Contract correction (founder direction).
+
+Per founder direction after V-037 audit: `tap.offset` is the same L-001 vector as `tap_at` — a coordinate primitive on the customer-facing surface. Bounded coordinates are still coordinates. Re-cut: removed from public InteractAction across all four SDKs.
+
+### What changed
+
+**Customer-facing surface (api-types) — reverted:**
+- **`packages/api-types/src/sessions.ts`** — `tap` variant of `InteractActionSchema` no longer accepts `offset`. Comment updated to flag tap.offset alongside tap_at as gui-control-plane territory.
+- **`@driftstack/api-types@0.1.3`** published to npm.
+
+**SDKs — coordinate primitive removed across all four:**
+- **TypeScript** (`@driftstack/sdk@0.1.4`): types regenerated from cleaned api-types. `wire-shape.test.ts` updated — the test that previously asserted `tap` accepted `offset` now asserts Zod strips the unknown key. Customer surface has no `offset` on tap.
+- **Python** (`driftstack-sdk@0.1.3`): Pydantic models regenerated; `_version.py` bumped. New test `test_interact_tap_strips_offset` asserts Pydantic drops the unknown key. Published to PyPI.
+- **Go** (`packages/sdk-go/v0.1.4`): `Offset` struct removed; `InteractAction.Offset` field dropped. The `NewTapAction` constructor signature was already selector-only, so no constructor changes. Tag pushed.
+
+**CHANGELOG trail (matches the L-001 trail format from the tap_at reversion in V-036):**
+- TS SDK: 0.1.4 entry with explicit "Removed" + "Migration" sections including before/after code examples.
+- Python SDK: backfilled all entries (was previously sparse) — 0.1.0 (PyPI publish), 0.1.1 (re-cut tap_at/type_focused per V-036), 0.1.2 (wire-shape tests), 0.1.3 (this removal).
+- Go SDK: backfilled 0.1.1 (scroll bug fix + tap_at/type_focused added then removed in 0.1.2), 0.1.2 (tap_at/type_focused removal per V-036), 0.1.3 (NewTimeCondition `time_ms` → `time` fix + NavigateRequest TimeoutMS), 0.1.4 (this removal).
+
+The CHANGELOGs are now an honest paper trail of L-001 enforcement: anyone reading sees the policy correction explicitly, not a silent revert.
+
+### Empirical findings
+
+1. **Behavior of unknown keys is the right migration path.** Both Zod and Pydantic strip unknown object keys by default — meaning a customer who passes `offset` against a 0.1.4+ SDK gets a silent drop, not a thrown ValidationError. Server-side, the InteractAction route layer parses through Zod first, so the offset is gone before it reaches the driver. This is migration-friendly: customers who never read the CHANGELOG have their code keep working, just without the offset effect. Customers who notice "my offset isn't doing anything anymore" check the CHANGELOG and re-express through selector specificity.
+
+2. **Selector specificity is the correct intent-shaped answer.** The legitimate use cases for `offset` were "I want to hit the icon inside the button, not the button center" — which is `button.cta .icon-arrow`, not `button.cta` + `offset(50, 0)`. Documented in all three SDK CHANGELOG migration sections with before/after code.
+
+3. **GUI manual-control path was already on the gui-control plane.** No GUI code change needed — the GUI uses `sendGUIInput()` for tap_at (V-036), and tap.offset was never exposed in the GUI's manual-control flow because the GUI sends raw coordinates via `tap_at`, not selector-based taps with offsets.
+
+4. **Bundle stayed stable.** GUI bundle 203 KB JS / 17 KB CSS unchanged (the GUI doesn't use tap with or without offset — it uses tap_at). Server build unchanged.
+
+### Verify chain
+
+- typecheck/lint/format: all clean.
+- `npm test`: 312/312 passing.
+- Python: **96/96** passing (was 95; +1 for `test_interact_tap_strips_offset`).
+- Go: round-trip tests pass.
+
+### Publish
+
+- `@driftstack/api-types@0.1.3` ✓ npm.
+- `@driftstack/sdk@0.1.4` ✓ npm.
+- `driftstack-sdk@0.1.3` ✓ PyPI.
+- Go tag `packages/sdk-go/v0.1.4` pushed alongside the commit below.
+
+### Decisions made
+
+No new D-entries — L-001 (recorded in `docs/locked-decisions.md`) is the load-bearing decision. V-042 is the second enforcement of L-001 against drift; the first was V-036 (tap_at/type_focused). Pattern is now stable: contract drift surfaces, founder calls it as drift, agent reverts in one commit + four republishes.
+
+### Status
+
+All known L-001 violations on the customer-facing surface are now closed. Customer SDKs ship intent-only.
+
+### Next
+
+Working through standing queue per founder direction:
+- (a) GUI in-memory state audit — sessions / proxies / settings persistence coverage check.
+- (b) CAPABILITIES.md hygiene — watching for V-145/V-146/V-147/V-148 commits in main repo.
+- (c) SDK error-path coverage audit.
+- (d) GUI first-run / empty-state polish walkthrough.

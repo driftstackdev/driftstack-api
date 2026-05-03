@@ -11,6 +11,79 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 - `0.0.1` is the inaugural alpha. Versioning will move to SemVer
   proper once the SDK is published to PyPI (gated on entity setup).
 
+## [0.1.3] - 2026-05-03
+
+### Removed
+
+- `tap.offset` field stripped from the public `InteractAction.tap`
+  shape. Same L-001 vector as `tap_at`: a coordinate primitive on
+  the customer-facing schema lets the customer bypass the
+  behavioral simulation layer. Bounded coordinates are still
+  coordinates. See `docs/locked-decisions.md` L-001 in the
+  control-plane repo and V-042 [control].
+
+### Migration
+
+If your code passes `offset={"x": ..., "y": ...}` to a `tap`
+action, the value is now silently dropped (Pydantic strips unknown
+keys by default). Re-express the intent through selector
+specificity — better selectors, child-element targeting, ARIA-role
+qualifiers, text-content matching:
+
+```python
+# Before (0.1.x):
+client.sessions.interact(
+    session_id,
+    InteractRequest(action={"kind": "tap", "selector": "button.cta", "offset": {"x": 0, "y": 50}}),
+)
+
+# After (0.1.3+):
+client.sessions.interact(
+    session_id,
+    InteractRequest(action={"kind": "tap", "selector": "button.cta .icon-arrow"}),
+)
+```
+
+Coordinate-level addressing for screenshot-driven workflows lives
+on the gui-control plane (separate endpoint gated behind the
+`gui_control` API-key scope), not exposed in this SDK.
+
+## [0.1.2] - 2026-05-03
+
+### Added
+
+- Wire-shape regression tests at `tests/test_wire_shape.py` (10
+  tests). Locks the canonical JSON shape for `InteractRequest`,
+  `WaitRequest`, `NavigateRequest`. Asserts L-001 rejection of
+  `tap_at` / `type_focused` (these live on the gui-control plane).
+
+### Fixed
+
+- `tests/test_client.py::test_version_string_matches_pyproject_default`
+  was pinning `__version__ == "0.0.1"` (stale from the pre-publish
+  era). Fixed to assert SemVer shape, not exact value.
+
+## [0.1.1] - 2026-05-02
+
+### Changed
+
+- Re-cut: `tap_at` and `type_focused` removed from
+  `InteractAction`. They were briefly added in 0.1.0+ for the
+  self-hosted GUI's manual-control input forwarding; reverted per
+  L-001. Customer-facing schemas stay intent-only — coordinate
+  primitives bypass the behavioral simulation layer and erode the
+  moat. See V-036 in the control-plane repo. The GUI now uses a
+  separate, scope-gated endpoint
+  (`/v1/sessions/:id/gui-input`).
+
+## [0.1.0] - 2026-05-02
+
+### Added
+
+- Inaugural PyPI publish (under `joeltheunissen89` personal account
+  pre-entity; will transfer to BV-owned account post-KvK closure).
+- Pydantic models regenerated from updated OpenAPI spec.
+
 ## [0.0.1] - 2026-05-02
 
 ### Added

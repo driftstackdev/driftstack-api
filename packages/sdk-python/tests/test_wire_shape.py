@@ -72,7 +72,7 @@ def test_interact_press_round_trip() -> None:
 
 
 def test_interact_rejects_coordinate_primitives() -> None:
-    """L-001 — tap_at / type_focused are NOT on the customer-facing surface."""
+    """L-001 — tap_at / type_focused / tap.offset are NOT on the customer-facing surface."""
     with pytest.raises(ValidationError):
         InteractRequest.model_validate(
             {"action": {"kind": "tap_at", "x": 100, "y": 100}}
@@ -81,6 +81,18 @@ def test_interact_rejects_coordinate_primitives() -> None:
         InteractRequest.model_validate(
             {"action": {"kind": "type_focused", "text": "x"}}
         )
+
+
+def test_interact_tap_strips_offset() -> None:
+    """tap.offset was on the public surface in 0.1.x → 0.1.4 — removed in 0.1.5
+    per L-001. Pydantic strips unknown keys by default; the parsed shape
+    has no ``offset`` field regardless of input."""
+    req = InteractRequest.model_validate(
+        {"action": {"kind": "tap", "selector": "#go", "offset": {"x": 4, "y": -2}}}
+    )
+    payload = json.loads(req.model_dump_json(exclude_none=True))
+    assert payload == {"action": {"kind": "tap", "selector": "#go"}}
+    assert "offset" not in payload["action"]
 
 
 # ─── WaitCondition wire shape ─────────────────────────────────────

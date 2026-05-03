@@ -19,6 +19,44 @@ discovers a wire-shape divergence. **Breaking changes** that affect
 shipping customer code are deferred until 1.0; pre-1.0 customers
 should pin against `^0.1.0` rather than an exact version.
 
+## [0.1.4] - 2026-05-03
+
+### Removed
+
+- `InteractAction.tap.offset` removed from the public surface. Same
+  L-001 vector as `tap_at`: a coordinate primitive on the
+  customer-facing schema lets a customer bypass the behavioral
+  simulation layer for the offset portion of the interaction. Bounded
+  coordinates are still coordinates. See `docs/locked-decisions.md`
+  L-001 in the control-plane repo and V-042 [control].
+
+### Migration
+
+If existing code passes `offset: { x, y }` to `tap`, the value is now
+silently stripped (Zod's default unknown-key behavior on object
+schemas). Re-express the intent through selector specificity:
+better selectors, child-element targeting, ARIA-role qualifiers, or
+text-content matching. Examples:
+
+```ts
+// Before (0.1.x):
+client.sessions.interact(id, {
+  action: { kind: 'tap', selector: 'button.cta', offset: { x: 0, y: 50 } },
+});
+
+// After (0.1.4+):
+// Identify the actual sub-element you wanted to hit:
+client.sessions.interact(id, {
+  action: { kind: 'tap', selector: 'button.cta .icon-arrow' },
+});
+```
+
+If your app genuinely needs coordinate-level addressing (because
+you're driving the session from a screenshot, not from DOM
+selectors), that lives on the gui-control plane — a separate
+endpoint gated behind the `gui_control` API-key scope and not
+exposed in this SDK.
+
 ## [0.1.3] - 2026-05-03
 
 ### Added

@@ -12,6 +12,90 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
   `packages/sdk-go/v0.1.0` (Go modules sub-directory tagging
   convention) once the first publish lands.
 
+## [0.1.4] - 2026-05-03
+
+### Removed
+
+- `Offset` struct removed; `InteractAction.Offset` field dropped
+  from the public surface. Same L-001 vector as `tap_at`: a
+  coordinate primitive on the customer-facing schema lets the
+  customer bypass the behavioral simulation layer for the offset
+  portion of the interaction. Bounded coordinates are still
+  coordinates. See `docs/locked-decisions.md` L-001 + V-042 in the
+  control-plane repo.
+
+### Migration
+
+If your code constructs `InteractAction{Kind: "tap", Selector: ...,
+Offset: &Offset{...}}` directly, drop the `Offset` field. The
+`NewTapAction` constructor signature is unchanged (was already
+selector-only). Re-express the intent through selector specificity:
+
+```go
+// Before (0.1.x):
+action := InteractAction{
+    Kind:     "tap",
+    Selector: "button.cta",
+    Offset:   &Offset{X: 0, Y: 50},
+}
+
+// After (0.1.4+):
+action := NewTapAction("button.cta .icon-arrow")
+```
+
+Coordinate-level addressing for screenshot-driven workflows lives
+on the gui-control plane and is not exposed in this SDK.
+
+## [0.1.3] - 2026-05-03
+
+### Fixed
+
+- `NewTimeCondition(ms)` now emits `kind: "time"` on the wire (was
+  `"time_ms"`, which the server's discriminated-union parser
+  rejected with 400). Every Go customer call to
+  `client.Wait(ctx, sid, NewTimeCondition(...))` was silently
+  failing in 0.1.0–0.1.2.
+- `NavigateRequest` gained the `TimeoutMS` field
+  (`json:"timeout_ms,omitempty"`). The Zod schema accepts an
+  optional `timeout_ms` in 1000–120000 ms range; TS/Python SDKs
+  both expose it. Go customers can now set per-call navigate
+  timeout overrides. Range validation happens server-side.
+
+### Added
+
+- `TestWaitConditionConstructors` and `TestNavigateRequestMarshalling`
+  in `types_test.go`. Wire-shape regression coverage now matches
+  the InteractAction tests added in 0.1.1.
+
+## [0.1.2] - 2026-05-03
+
+### Changed
+
+- Re-cut: `Offset` struct kept for backwards-source-compat but
+  `tap_at` / `type_focused` constructors removed (`NewTapAtAction`,
+  `NewTypeFocusedAction`). Per L-001, customer-facing schemas stay
+  intent-only. See V-036 in the control-plane repo.
+- The `gui_control` API-key scope was added on the server side; it
+  is a server-internal surface and doesn't appear in this SDK.
+
+## [0.1.1] - 2026-05-02
+
+### Fixed
+
+- `NewScrollAction(x, y)` was emitting `{"x", "y"}` on the wire
+  instead of `{"delta_x", "delta_y"}` — silently no-op'd by the
+  server's `delta_x: 0, delta_y: 0` defaults. Renamed struct fields
+  to `DeltaX`/`DeltaY` with proper JSON tags. Constructor signature
+  is parameter-name-only — calls still type-check.
+
+### Added
+
+- `tap_at` and `type_focused` constructors briefly added (subsequently
+  removed in 0.1.2 per L-001).
+- `types_test.go` with marshalling round-trip tests for all
+  `InteractAction` constructors. Catches the silent-noop class of
+  bug locally before customer prod.
+
 ## [0.1.0] - 2026-05-02
 
 ### Added

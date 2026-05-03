@@ -25,13 +25,19 @@ describe('InteractAction wire shape', () => {
     expect(action).toEqual({ kind: 'tap', selector: '#go' });
   });
 
-  it('tap with offset', () => {
-    const action = InteractActionSchema.parse({
+  it('tap rejects offset (L-001 — coordinate primitive removed)', () => {
+    // tap.offset was on the public surface in 0.1.x → 0.1.4. Same L-001
+    // failure mode as tap_at — bounded coordinates are still coordinates.
+    // Removed in 0.1.5; selector specificity is the intent-shaped answer.
+    const parsed = InteractActionSchema.parse({
       kind: 'tap',
       selector: '#go',
       offset: { x: 4, y: -2 },
     });
-    expect(action).toEqual({ kind: 'tap', selector: '#go', offset: { x: 4, y: -2 } });
+    // Zod strips unknown keys by default on object schemas — assert the
+    // parsed shape has no `offset` field, regardless of input.
+    expect(parsed).toEqual({ kind: 'tap', selector: '#go' });
+    expect('offset' in parsed).toBe(false);
   });
 
   it('type variant', () => {
