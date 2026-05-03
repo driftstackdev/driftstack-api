@@ -5725,3 +5725,42 @@ ADR is **Proposed** — pending founder review. Per Decision authority in CLAUDE
 ### Next
 
 Continuing to V-095 — ADR-006 audit log retention + export proposal.
+
+---
+
+## V-095 — ADR-006 audit log retention + export (Tier 2 draft, founder review)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Capture the retention + archive + export model for the four audit-shaped tables (admin_audit_log, processed_stripe_events, legal_acceptances, webhook_deliveries). Founder calibration: 90 days hot Postgres / R2 archive after / JSON Lines / admin-only initially.
+
+### What changed
+
+- New file `docs/adr/ADR-006-audit-log-retention-export.md`. Recommends:
+  - 90-day hot retention in Postgres.
+  - Monthly archive sweep to R2 (Cloudflare, already on sub-processor list).
+  - JSON Lines + gzip, partitioned `YYYY/MM/`. Chosen over Parquet for human-readability + no schema-evolution friction.
+  - 7-year retention SLA (aligns with Dutch BV fiscale bewaarplicht + GDPR Art 17(3)(b) legal-obligation exception + Stripe transaction-history expectations).
+  - Phase 1 admin-only export endpoint at launch; Phase 2 customer-facing endpoint deferred until first enterprise contract.
+  - Customer-erasure interaction documented: hot rows cascade-delete on account delete; archive files retain unchanged per GDPR exception; customer can request export under data-portability right.
+
+### Status
+
+ADR is **Proposed** — pending founder review. No code changes yet; the audit_archive_runs ledger schema + AuditArchiveService + monthly cron + admin export endpoint all land as follow-on V-NNN once approved.
+
+### How verified
+
+- `npm run format:check`: clean.
+- No code changes.
+
+### Files added
+
+- `docs/adr/ADR-006-audit-log-retention-export.md`
+
+### Next
+
+Continuing to V-096 — docs/decisions.md sync to capture D-NNN entries for V-079 through V-095.
