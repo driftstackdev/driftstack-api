@@ -15,7 +15,7 @@ export interface RecordingsViewProps {
 }
 
 export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
-  const { recordings, deleteRecording } = useRecordings();
+  const { recordings, deleteRecording, loading } = useRecordings();
   const list = Array.from(recordings.values()).sort((a, b) => b.startedAt - a.startedAt);
 
   return (
@@ -35,7 +35,7 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
       </header>
 
       {list.length === 0 ? (
-        <Empty />
+        <Empty loading={loading} />
       ) : (
         <div className="overflow-auto rounded border border-surface-divider">
           <table className="w-full">
@@ -117,12 +117,18 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
   );
 }
 
-function Empty(): JSX.Element {
+function Empty({ loading }: { loading: boolean }): JSX.Element {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded border border-dashed border-surface-divider px-8 py-12 text-center">
-      <span className="section-label">No recordings yet</span>
+      <span className="section-label">{loading ? 'Loading recordings…' : 'No recordings yet'}</span>
       <p className="max-w-md text-sm text-ink-secondary">
-        Open a live session and click <span className="mono">Record</span> to capture frames.
+        {loading ? (
+          'Reading the recordings index from disk.'
+        ) : (
+          <>
+            Open a live session and click <span className="mono">Record</span> to capture frames.
+          </>
+        )}
       </p>
     </div>
   );

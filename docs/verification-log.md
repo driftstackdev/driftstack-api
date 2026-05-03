@@ -2402,15 +2402,18 @@ Per founder direction after V-037 audit: `tap.offset` is the same L-001 vector a
 ### What changed
 
 **Customer-facing surface (api-types) — reverted:**
+
 - **`packages/api-types/src/sessions.ts`** — `tap` variant of `InteractActionSchema` no longer accepts `offset`. Comment updated to flag tap.offset alongside tap_at as gui-control-plane territory.
 - **`@driftstack/api-types@0.1.3`** published to npm.
 
 **SDKs — coordinate primitive removed across all four:**
+
 - **TypeScript** (`@driftstack/sdk@0.1.4`): types regenerated from cleaned api-types. `wire-shape.test.ts` updated — the test that previously asserted `tap` accepted `offset` now asserts Zod strips the unknown key. Customer surface has no `offset` on tap.
 - **Python** (`driftstack-sdk@0.1.3`): Pydantic models regenerated; `_version.py` bumped. New test `test_interact_tap_strips_offset` asserts Pydantic drops the unknown key. Published to PyPI.
 - **Go** (`packages/sdk-go/v0.1.4`): `Offset` struct removed; `InteractAction.Offset` field dropped. The `NewTapAction` constructor signature was already selector-only, so no constructor changes. Tag pushed.
 
 **CHANGELOG trail (matches the L-001 trail format from the tap_at reversion in V-036):**
+
 - TS SDK: 0.1.4 entry with explicit "Removed" + "Migration" sections including before/after code examples.
 - Python SDK: backfilled all entries (was previously sparse) — 0.1.0 (PyPI publish), 0.1.1 (re-cut tap_at/type_focused per V-036), 0.1.2 (wire-shape tests), 0.1.3 (this removal).
 - Go SDK: backfilled 0.1.1 (scroll bug fix + tap_at/type_focused added then removed in 0.1.2), 0.1.2 (tap_at/type_focused removal per V-036), 0.1.3 (NewTimeCondition `time_ms` → `time` fix + NavigateRequest TimeoutMS), 0.1.4 (this removal).
@@ -2452,7 +2455,54 @@ All known L-001 violations on the customer-facing surface are now closed. Custom
 ### Next
 
 Working through standing queue per founder direction:
+
 - (a) GUI in-memory state audit — sessions / proxies / settings persistence coverage check.
 - (b) CAPABILITIES.md hygiene — watching for V-145/V-146/V-147/V-148 commits in main repo.
 - (c) SDK error-path coverage audit.
 - (d) GUI first-run / empty-state polish walkthrough.
+
+---
+
+## V-043 — GUI persistence audit + RecordingsView loading-state fix
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Hygiene pass per founder direction (a).
+
+Per founder: check whether GUI state beyond recordings still lives in-memory and would benefit from disk-backing. Audit conclusion: **no further persistence needed**. Coverage is complete.
+
+### Audit walkthrough
+
+| State source | Type | Persistence | Verdict |
+|---|---|---|---|
+| `lib/settings.ts` | apiKey + baseUrl | tauri-plugin-store (V-027) | ✓ correctly disk-backed |
+| `lib/proxies.ts` | SOCKS5 proxy roster | tauri-plugin-store (V-033) | ✓ correctly disk-backed |
+| `lib/recordings.tsx` | session recordings | tauri-plugin-fs (V-040) | ✓ correctly disk-backed |
+| `App.tsx` `view` route | current sidebar selection | ephemeral; defaults to `sessions` on each open | ✓ correctly NOT persisted (deliberate UX reset; resuming view is a slippery slope) |
+| `SettingsView` `draftKey/draftUrl/reveal` | unsaved form draft | ephemeral; commits to plugin-store on Save | ✓ correctly NOT persisted (security-positive — a forgotten draft never becomes a forgotten unsaved key on disk) |
+| `SessionsView` `state.sessions` | server-fetched list | ephemeral; refetched from API every 5 s + on mount | ✓ server is the truth source |
+| `LiveSessionView` `state.frame / fpsActual / paused / lastTap` | viewport polling state | ephemeral; refetched from server | ✓ correctly NOT persisted |
+| `LiveSessionView` `manualControl / recording` | per-session toggles | ephemeral; default off on every open | ✓ correctly NOT persisted (safety: control toggle off by default) |
+| `RecordingPlayerView` `cursorMs / playing / hydrating` | playback transport | ephemeral | ✓ correctly NOT persisted |
+| `ProxiesView` `editor / draft / validation` | form-modal state | ephemeral | ✓ correctly NOT persisted |
+| `ConnectivityView` `result / running` | last test outcome | ephemeral; point-in-time check | ✓ correctly NOT persisted |
+
+**Conclusion:** every load-bearing state surface is disk-backed where it should be; every ephemeral surface is correctly NOT persisted (including a few that are deliberately ephemeral for safety/UX reasons — manual-control toggle defaults off, settings form drafts don't survive crash, current view resets on app open).
+
+### One small fix landed in passing
+
+- **`apps/gui-client/src/views/RecordingsView.tsx`** — was showing "No recordings yet" during the initial disk-load (before the index hydration resolved), which read like data loss. Now consumes the `loading` flag from `RecordingsContextValue` (added in V-040 but not previously wired in this view). During load it shows "Loading recordings… / Reading the recordings index from disk." Then transitions to either the table (if any) or the actual empty state.
+
+### Verify chain
+
+- typecheck/lint/format all clean.
+- 312/312 vitest unchanged.
+- No SDK changes; no republish.
+
+### Status
+
+GUI state persistence is complete. Marking the standing-queue (a) item closed.
+
+### Next
+
+(b) CAPABILITIES.md hygiene pass — watching for V-145/V-146/V-147/V-148 in main repo. Quick poll of the main-repo verification log before moving on; if those entries have landed I pull closures in immediately.
