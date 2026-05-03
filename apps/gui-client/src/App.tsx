@@ -77,7 +77,10 @@ function CurrentView({
   switch (view.kind) {
     case 'sessions':
       return (
-        <SessionsView onView={(sessionId) => onNavigate({ kind: 'live-session', sessionId })} />
+        <SessionsView
+          onView={(sessionId) => onNavigate({ kind: 'live-session', sessionId })}
+          onGoToSettings={() => onNavigate({ kind: 'settings' })}
+        />
       );
     case 'live-session':
       return (

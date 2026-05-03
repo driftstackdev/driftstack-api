@@ -21,9 +21,10 @@ interface SessionsState {
 
 export interface SessionsViewProps {
   onView: (sessionId: string) => void;
+  onGoToSettings: () => void;
 }
 
-export function SessionsView({ onView }: SessionsViewProps): JSX.Element {
+export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX.Element {
   const { client, settings } = useSettings();
   const [state, setState] = useState<SessionsState>({
     sessions: [],
@@ -90,7 +91,7 @@ export function SessionsView({ onView }: SessionsViewProps): JSX.Element {
   }
 
   if (!client) {
-    return <EmptyConnect baseUrl={settings.baseUrl} />;
+    return <EmptyConnect baseUrl={settings.baseUrl} onGoToSettings={onGoToSettings} />;
   }
 
   return (
@@ -155,14 +156,27 @@ export function SessionsView({ onView }: SessionsViewProps): JSX.Element {
 
 // ─── subcomponents ────────────────────────────────────────────────
 
-function EmptyConnect({ baseUrl }: { baseUrl: string }): JSX.Element {
+function EmptyConnect({
+  baseUrl,
+  onGoToSettings,
+}: {
+  baseUrl: string;
+  onGoToSettings: () => void;
+}): JSX.Element {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
+    <div className="flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
       <span className="section-label">Not connected</span>
       <p className="max-w-md text-sm text-ink-secondary">
-        Add an API key under <span className="mono">Settings</span> to connect to{' '}
-        <span className="mono">{baseUrl}</span>.
+        Add an API key to connect to <span className="mono">{baseUrl}</span>.
       </p>
+      <div className="flex items-center gap-3">
+        <button type="button" className="btn-primary" onClick={onGoToSettings}>
+          Open settings
+        </button>
+        <span className="text-2xs text-ink-muted">
+          or press <span className="mono">⌘ ,</span>
+        </span>
+      </div>
     </div>
   );
 }

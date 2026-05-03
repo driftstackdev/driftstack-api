@@ -2523,31 +2523,34 @@ Audit pass on each SDK's coverage for the five canonical error scenarios — aut
 
 **Coverage matrix:**
 
-| Scenario | TS SDK | Python SDK | Go SDK |
-|---|---|---|---|
-| Auth missing | ✓ AuthError + test | ✓ AuthError + test | ✓ AuthError + test |
-| Auth malformed | ✓ InvalidKeyError + test | ✓ InvalidKeyError + test | ✓ InvalidKeyError + test |
-| Auth revoked | ✓ RevokedKeyError + **test backfilled this entry** | ✓ RevokedKeyError + test | ✓ RevokedKeyError + test |
-| Auth expired | ✓ ExpiredKeyError + **test backfilled this entry** | ✓ ExpiredKeyError + test | ✓ ExpiredKeyError + test |
-| Rate limit | ✓ RateLimitError + retryAfterSeconds + test | ✓ RateLimitError + retry_after_seconds + test | ✓ RateLimitError + RetryAfterSeconds + test |
-| Concurrency limit | ✓ ConcurrencyLimitError + payload | ✓ ConcurrencyLimitError + payload | ✓ ConcurrencyLimitError + payload |
+| Scenario            | TS SDK                                             | Python SDK                                          | Go SDK                                             |
+| ------------------- | -------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------- |
+| Auth missing        | ✓ AuthError + test                                 | ✓ AuthError + test                                  | ✓ AuthError + test                                 |
+| Auth malformed      | ✓ InvalidKeyError + test                           | ✓ InvalidKeyError + test                            | ✓ InvalidKeyError + test                           |
+| Auth revoked        | ✓ RevokedKeyError + **test backfilled this entry** | ✓ RevokedKeyError + test                            | ✓ RevokedKeyError + test                           |
+| Auth expired        | ✓ ExpiredKeyError + **test backfilled this entry** | ✓ ExpiredKeyError + test                            | ✓ ExpiredKeyError + test                           |
+| Rate limit          | ✓ RateLimitError + retryAfterSeconds + test        | ✓ RateLimitError + retry_after_seconds + test       | ✓ RateLimitError + RetryAfterSeconds + test        |
+| Concurrency limit   | ✓ ConcurrencyLimitError + payload                  | ✓ ConcurrencyLimitError + payload                   | ✓ ConcurrencyLimitError + payload                  |
 | **Session timeout** | ✓ **SessionTimeoutError + timeoutMs + test (NEW)** | ✓ **SessionTimeoutError + timeout_ms + test (NEW)** | ✓ **SessionTimeoutError + TimeoutMs + test (NEW)** |
-| Malformed proxy | n/a — proxy field not on CreateSessionRequest yet | n/a | n/a |
+| Malformed proxy     | n/a — proxy field not on CreateSessionRequest yet  | n/a                                                 | n/a                                                |
 
 ### What changed
 
 **Server-side:**
+
 - **`packages/api-types/src/problem.ts`** — added `SessionTimeout: 'https://errors.driftstack.dev/session-timeout'` to the stable URI catalog. Additive (new entry, no rename).
 - **`apps/server/src/lib/errors.ts`** — new `SessionTimeoutError` class. Status 504. Extension `timeout_ms` carries the bound the server actually applied.
 - **`apps/server/src/drivers/mock.ts`** — mock driver's two timeout sites (navigate `host === TRIGGER_HOSTS.timeout`, interact `selector === TRIGGER_SELECTORS.hangs`) now throw `SessionTimeoutError` instead of `DriverError`. Customers calling those triggers used to get a generic 502; they now get a specific 504 with `timeout_ms`.
 - New server integration test in `sessions.test.ts` covering the `#hangs` selector → 504 path with body assertions on `type` and `timeout_ms`.
 
 **SDKs — `SessionTimeoutError` added across all three:**
+
 - **TypeScript** (`@driftstack/sdk@0.1.5`): new class extending `DriftstackError`, `kind: 'session_timeout'`, `timeoutMs: number | undefined`. Mapped in `TYPE_TO_CTOR`. Test in `tests/unit/http.test.ts` covers the 504 → SessionTimeoutError path.
 - **Python** (`driftstack-sdk@0.1.4`): new class with `timeout_ms: int | None`, mapped in `PROBLEM_TYPE_TO_ERROR`, extracted in `_error_from_response_data`, re-exported from `driftstack` package root for `isinstance` ergonomics. Test in `tests/test_errors.py`.
 - **Go** (`packages/sdk-go/v0.1.5`): new struct with `TimeoutMs int`, sentinel `ErrSessionTimeout`, builder `buildSessionTimeout`, mapped in `problemTypeToFactory`. Compile-time interface check added. Test in `errors_test.go`.
 
 **Tests backfilled (V-037 audit gap closure):**
+
 - TS SDK: added `RevokedKeyError` + `ExpiredKeyError` + `SessionTimeoutError` http-layer tests at `tests/unit/http.test.ts`. The first two were the V-037 gap; the third is the new error type.
 - Python SDK: added `SessionTimeoutError` extraction test.
 - Go SDK: added `TestSessionTimeoutExtractsTimeoutMs` covering both `errors.As` and `errors.Is`.
@@ -2591,3 +2594,65 @@ Standing-queue (c) closed. Customer-trust error coverage is now uniform.
 ### Next
 
 (d) GUI first-run / empty-state polish walkthrough. Cold-start UX audit: open the GUI fresh with no API key, no sessions, no recordings, no proxies — what does the user see?
+
+---
+
+## V-045 — GUI first-run polish: dead-end fix + onboarding hint
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Customer-trust hygiene per founder direction (d).
+
+Cold-start UX walkthrough for a fresh `.app` install with no API key, no sessions, no recordings, no proxies. The previous flow had two rough edges; closed both.
+
+### Walkthrough findings
+
+1. **`SessionsView` "Not connected" was a dead-end.** When `client === null` (no API key yet), the view rendered "Add an API key under Settings to connect to …" with no clickable path forward. The user had to spot the sidebar and click Settings themselves. For a first-run engineer, that's friction; for a less-technical evaluator, it can read as broken.
+2. **`SettingsView` had no first-run guidance.** The form has two empty inputs and a Save button. Nothing tells a fresh user *where to get* an API key. The answer is "run `npm run admin:create-key` on your self-hosted server" but the GUI didn't mention it.
+3. **Other empty states are already clean.** `RecordingsView` (V-043 fix), `ProxiesView`, `SessionsView`'s `EmptyList`, and `ConnectivityView` all have proper guidance. The two above were the only rough patches.
+
+### What changed
+
+- **`apps/gui-client/src/views/SessionsView.tsx`**:
+  - `EmptyConnect` now has an "Open settings" primary-action button and a `⌘ ,` keyboard-shortcut hint.
+  - New required prop `onGoToSettings` on `SessionsView`. Wired through `App.tsx`'s view-routing as `() => onNavigate({ kind: 'settings' })`.
+  - Copy tightened: "Add an API key to connect to <baseUrl>" (was "Add an API key under Settings to connect to <baseUrl>" — the explicit "under Settings" pointer is now a button, not prose).
+- **`apps/gui-client/src/views/SettingsView.tsx`**:
+  - First-run banner appears above the form when `settings.apiKey === null`. Oxblood-accent styling so it's noticeable but not alarming. Copy: *"Don't have an API key yet? Mint one against your self-hosted server with `npm run admin:create-key` in the `driftstack-api` repo, or `POST /v1/admin/accounts/<id>/keys` against a running instance."*
+  - Hides automatically once any API key has been saved (tracked via the existing `settings.apiKey` value, no new persistence).
+- **`apps/gui-client/src/App.tsx`**:
+  - `CurrentView` passes `onGoToSettings` to `SessionsView`.
+
+### Empirical findings
+
+1. **No new state is required for "first run" detection.** `settings.apiKey === null` is sufficient — the banner appears for any user without a saved key, including someone who deletes their key. That's correct behavior: if you're back to no-key state, you probably want the setup hint again. Saves wiring a `hasCompletedFirstRun` flag through plugin-store.
+
+2. **Bundle delta minimal.** GUI bundle went from 203.4 KB → 204.7 KB JS (+1.3 KB), CSS from 17.08 → 17.18 KB. Just the new banner copy + button. Well under the 200 KB watch line was already crossed earlier — currently 204 KB. If we want to claw back, code-splitting `RecordingPlayerView` is still the easy win (V-035 noted; not urgent).
+
+3. **Decided NOT to add a connectivity-test prompt after settings save.** Considered offering "Test connection now?" after Save lands. Rejected: would add an interaction the user didn't ask for, and the connectivity test view is one sidebar click away. Engineers know to verify their config; non-engineers can be guided by docs separately.
+
+4. **Decided NOT to wire a welcome / onboarding flow.** The self-hosted GUI is sold to engineers who run their own server (per CLAUDE.md positioning). They can read empty states. Welcome carousels would feel patronising.
+
+### Verify chain
+
+- typecheck/lint/format/test all clean.
+- 316/316 vitest unchanged. 97/97 pytest unchanged. Go tests clean.
+- GUI bundle: 204.7 KB JS / 17.2 KB CSS (61.5 KB / 3.7 KB gzipped).
+
+### Status
+
+Standing-queue (d) closed. The cold-start UX has a working CTA at every dead-end and contextual setup guidance on the first-run path.
+
+### Next
+
+Standing queue is now empty of immediate items:
+- (a) GUI persistence audit — V-043, done.
+- (b) CAPABILITIES.md hygiene — waiting for V-145/V-146/V-147/V-148 in main repo (not yet landed).
+- (c) SDK error-path audit — V-044, done.
+- (d) GUI first-run polish — this V-entry, done.
+
+Open items on the queue:
+- Proxy field end-to-end (#100) — blocked on Agent 1 SOCKS5 UDP work.
+- CAPABILITIES.md hygiene (#103) — watching for Agent 1 commits.
+
+Idling on the queue otherwise.

@@ -23,6 +23,8 @@ export function SettingsView(): JSX.Element {
     );
   }
 
+  const isFirstRun = settings.apiKey === null;
+
   async function handleSave(): Promise<void> {
     setSaving(true);
     try {
@@ -47,6 +49,19 @@ export function SettingsView(): JSX.Element {
           Point the GUI at your Driftstack API server and authenticate with an API key.
         </p>
       </header>
+
+      {isFirstRun && (
+        <div className="max-w-xl rounded border border-accent/30 bg-accent-subtle/40 px-4 py-3">
+          <span className="section-label text-accent">First run</span>
+          <p className="mt-1 text-sm text-ink-secondary">
+            Don't have an API key yet? Mint one against your self-hosted server with{' '}
+            <span className="mono">npm run admin:create-key</span> in the{' '}
+            <span className="mono">driftstack-api</span> repo, or{' '}
+            <span className="mono">POST /v1/admin/accounts/&lt;id&gt;/keys</span> against a running
+            instance.
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-col gap-4 max-w-xl">
         <Field label="API key">
