@@ -12,6 +12,10 @@ The codebase is **pure engineering**. Business and legal/compliance content live
 
 If a technical decision genuinely depends on something outside the agent's scope (e.g., "this stage is gated on KvK closure"), surface as an open dependency.
 
+**Exception (effective 2026-05-03):** legal/compliance baseline drafts are in-scope when explicitly directed by founder. These drafts are starting points for counsel review, not final bound documents. Founder accepts that AI-generated legal text carries risk that counsel review may not catch and treats all generated legal content as revisable. Acceptance machinery (version hash, timestamp, customer ID, re-accept on bump) follows standard engineering scope.
+
+The exception is opt-in per direction. Default behavior remains "surface against legal/compliance asks." Triggers for invoking the exception: explicit founder directive citing this clause. Documents land at `docs/legal/*.md` with a header marking them as AI-generated baseline drafts under this exception. Sub-processor lists, retention windows, jurisdiction, liability terms, and DPO necessity are factual claims that come from founder; agent does not extrapolate on them.
+
 **Out of scope (separate workstreams or future phases):**
 
 - ~~GUI client (Electron/Tauri)~~ — **moved to active scope** (see file 128 / GUI workstream below). Self-hosted GUI is the higher-tier ($3k+) product surface and the founder's immediate dev tool for debugging WebKit-fork sessions + SOCKS5 proxy management.
