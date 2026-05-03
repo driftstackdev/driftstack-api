@@ -3226,3 +3226,50 @@ Network architecture doc fully reflects founder-decided architecture. Three load
 ### Next
 
 Workstream A iteration 2: R2 + Postmark + Sentry SDK integrations, plus real readiness checks (`SELECT 1` / `PING` / R2 HEAD) wired into `AppDeps.readinessChecks`. After Workstream A iter 2: parallel kickoff on Workstream B (marketing site), Workstream C (admin panel), Workstream D revision (Stripe-only — Coinbase scaffolding dropped per V-052), Workstream E (Moneybird scoping), Workstream F (onboarding flow). Mac Mini fleet integration coordinates with Agent 1 and lands when Agent 1's WebKit fork Phase 2 closes.
+
+## V-055 — ADR pattern at `docs/adr/` + ADR-001 (Hetzner control-plane hosting)
+
+**Date:** 2026-05-03
+**Author:** Driftstack Agent #2
+**Phase:** Decision-log enrichment. Founder direction: capture the Hetzner deviation in a long-form ADR alongside the existing one-paragraph `D-NNN` entries.
+
+V-051 landed the deploy pipeline targeting Hetzner without a corresponding decision-log entry; V-055 closes that gap. Founder framed the ADR as a Tier 2 founder-approved deviation from the originally planned PaaS approach (Railway / Fly.io). The new `docs/adr/` directory introduces a long-form pattern for decisions whose rationale is too rich for the one-paragraph `D-NNN` summaries — used for deviations from planned approaches, decisions with non-obvious tradeoffs, and decisions with explicit revisit triggers.
+
+### What changed
+
+- **`docs/adr/README.md`** (NEW) — explains the ADR format, when to use it (vs `D-NNN`), the standard template (Status / Date / Tier / Context / Decision / Consequences / Alternatives considered / Revisit triggers), and the numbering rule (sequential, never reused even on supersession).
+- **`docs/adr/ADR-001-control-plane-hosting-hetzner.md`** (NEW) — full Hetzner ADR. Captures:
+  - **Context:** initial plan was Railway or Fly.io (PaaS); founder reconsidered before Workstream A landed.
+  - **Decision:** two Hetzner CCX13 VMs (staging + production, Falkenstein), ~€50/mo total. Cloudflare Tunnel for edge HTTPS; mTLS for fleet endpoint terminates on Hetzner directly (per V-054 decision 1A).
+  - **Consequences:** EU-only data residency without footnotes; cost predictability; VM-level control for future co-tenant infrastructure (CI runner, WireGuard concentrator per V-054 v2). Rules out zero-touch ops + auto-scaling.
+  - **Operational load split:** founder owns SSH/OS/disk/firewall; agent owns deploy + Sentry + readiness probes.
+  - **Alternatives considered:** Railway (rejected — GCP underlay + US corporate entity adds GDPR-posture footnotes), Fly.io (rejected — US corporate entity + reliability concerns; WireGuard primitive remains a re-evaluation factor for V-054 v2), MacStadium (rejected — wrong tool, US jurisdiction, macOS-specialized, expensive).
+  - **Revisit triggers:** fleet ≥5 nodes or multi-region, founder ops load >4h/month, Hetzner adverse event affecting EU posture, enterprise compliance requirement (SOC 2 / ISO 27001 of host), cost >€500/mo for control plane.
+- **`docs/decisions.md`** — new `D-026` entry pointing at ADR-001 + V-055. Inserted in reverse-chronological order at the top of the body (D-025 was previously the newest).
+
+### Empirical findings
+
+1. **ADR pattern complements rather than replaces `decisions.md`.** Routine decisions inside the locked stack continue to land as one-paragraph `D-NNN` entries — fast to write, fast to scan. ADRs are reserved for the decisions where future-you (or a reviewing counsel / engineer) will need to reconstruct a richer rationale. The `D-026` entry points at the ADR rather than duplicating the content; the decision-log remains the single chronological index, the ADR carries the depth.
+
+2. **The "planned vs actual" framing is the load-bearing part.** A Tier 2 deviation isn't just "we picked vendor X" — it's "we picked vendor X instead of Y, and here's why the planned Y was rejected." Without that asymmetry captured, future-self has to reconstruct from commit history why we walked away from the obvious PaaS choice. The ADR pins the asymmetry so it can't be lost.
+
+3. **Revisit triggers are the second load-bearing part.** "Re-evaluate at fleet ≥5 nodes" is testable against `fleet_nodes` count. "Re-evaluate if founder ops load exceeds 4h/month" is testable at quarterly review. Without explicit triggers, decisions stay decided forever even when the conditions that justified them have changed. ADR-001 enumerates 5 triggers covering scale, ops load, vendor risk, compliance, and cost.
+
+4. **Choice to skip backfilling earlier ADRs.** D-001 through D-025 are all small enough for the existing summary format; backfilling them into ADRs would be busywork without commensurate value. The pattern starts at ADR-001 = Hetzner; earlier decisions stay in `decisions.md` summary form unless a specific one needs the long-form treatment retrospectively.
+
+### Verify chain
+
+- typecheck/lint/format all clean (docs-only change, no code touched).
+- `npm test`: **328/328** unchanged.
+
+### Decisions made
+
+`D-026` — Control-plane hosting on Hetzner Cloud. Tier 2 founder-approved deviation. Full context in ADR-001.
+
+### Status
+
+ADR pattern landed. Future Tier 2 deviations + load-bearing contextual decisions land at `docs/adr/ADR-NNN-*.md`; routine decisions continue at `docs/decisions.md`.
+
+### Next
+
+Workstream A iter 2 SDK integrations (R2 / Postmark / Sentry) + real readiness checks land in V-056 / V-057 / V-058 / V-059.

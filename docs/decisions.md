@@ -129,6 +129,14 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Tier:** 2 (vendor / structural choice; matches founder direction in coordination response).
 - **V-log:** V-013.
 
+## D-026 — Control-plane hosting on Hetzner Cloud (Tier 2 deviation from PaaS plan)
+
+- **Decision:** host the control plane on Hetzner Cloud (two CCX13 VMs, Falkenstein region, ~€50/mo total) rather than a PaaS (Railway / Fly.io were the planned candidates).
+- **Reasoning:** EU-jurisdiction posture for the privacy-policy sub-processor list is materially simpler with a German hyperscaler-adjacent provider; cost predictability at low scale; VM-level control for future co-tenant infrastructure (CI runner, WireGuard concentrator per V-054 v2); direct mTLS termination on the VM (V-054 decision 1A) without depending on a paid Cloudflare API Shield plan. Datastore decoupling (Neon Postgres + Upstash Redis + Cloudflare R2) neutralises the "managed-add-ons" PaaS advantage. Tradeoff accepted: more founder ops surface (SSH key hygiene, OS patching, monitoring) than a PaaS would impose. Mitigated by the bare-bones host posture (only Cloudflare Tunnel + unattended-upgrades alongside the application container).
+- **Tier:** 2 (vendor / structural; founder-approved deviation from the originally-planned PaaS).
+- **ADR:** [ADR-001](adr/ADR-001-control-plane-hosting-hetzner.md) — full context + alternatives + revisit triggers.
+- **V-log:** V-051 (network architecture doc + deploy pipeline targeting Hetzner), V-055 (ADR pattern + this entry).
+
 ## D-025 — Admin tooling: scope model, audit logging, cache invalidation, rate-limit override
 
 - **Decision:** the operational-tooling workstream introduces:
