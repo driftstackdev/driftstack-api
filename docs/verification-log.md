@@ -7052,3 +7052,46 @@ No semantic changes — purely line-length / whitespace / import-order. `pytest`
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-122 — TS SDK pagination example (Routine — SDK examples)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+V-118 + V-119 added `iterate()` / `iterateDeliveries()` to TS SDK resources but no example demonstrated them. Added `examples/pagination.ts` so SDK consumers see the canonical for-await pattern: walk every session, walk every profile, walk DLQ deliveries for the first webhook endpoint.
+
+### What changed
+
+`packages/sdk-typescript/examples/pagination.ts` (new) — three demonstration sections:
+
+- `listAllSessions()` — uses `client.sessions.iterate({ limit: 50 })` to count + sample-print sessions.
+- `listProfiles()` — uses `client.profiles.iterate()` (default page size).
+- `dlqDeliveriesForFirstWebhook()` — uses `client.webhooks.iterateDeliveries(id, { status: 'dlq', limit: 100 })` to enumerate the DLQ for replay tooling. Skips gracefully if no endpoints configured.
+
+Style matches existing examples (`quickstart.ts`, `error-handling.ts`, etc): bash-runnable via `DRIFTSTACK_API_KEY=... npx tsx examples/pagination.ts`, simple console output, exits 1 on uncaught error.
+
+### Build dependency surfaced
+
+The example imports from `@driftstack/sdk` (resolved through the workspace symlink to `packages/sdk-typescript/dist/`). After V-118 + V-119 added `iterate` methods to source, the dist was stale — typecheck failed with `Property 'iterateDeliveries' does not exist on type 'WebhooksResource'`. Rebuilt via `npm run build --workspace packages/sdk-typescript` (tsup ESM + CJS + .d.ts emit). CI's `Build SDK` step in `.github/workflows/ci.yml` already does this — local working state had drifted between V-119 source and last build.
+
+### How verified
+
+- `npm run build --workspace packages/sdk-typescript`: clean (tsup ESM + DTS).
+- `npm run typecheck`: clean across all 5 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 515/515 passing.
+- Example NOT executed live — would require a real account + API key. The compile + types check is the strongest verification we get without a sandbox account.
+
+### Files added
+
+- `packages/sdk-typescript/examples/pagination.ts`
+
+### Next
+
+Continuing per never-stop rule.
