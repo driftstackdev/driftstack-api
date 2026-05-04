@@ -22,6 +22,10 @@
 //   https://errors.driftstack.dev/driver-error         → DriverError
 //   https://errors.driftstack.dev/driver-not-integrated → DriverNotIntegratedError
 //   https://errors.driftstack.dev/internal             → InternalError
+//   https://errors.driftstack.dev/email-already-registered → EmailAlreadyRegisteredError
+//   https://errors.driftstack.dev/invalid-credentials  → InvalidCredentialsError
+//   https://errors.driftstack.dev/invalid-auth-token   → InvalidAuthTokenError
+//   https://errors.driftstack.dev/email-not-verified   → EmailNotVerifiedError
 //
 // Anything else (network failure, parse error, etc.) surfaces as a
 // `DriftstackError` with `kind: 'transport'` set on the instance.
@@ -47,6 +51,10 @@ export type DriftstackErrorKind =
   | 'driver_error'
   | 'driver_not_integrated'
   | 'internal'
+  | 'email_already_registered'
+  | 'invalid_credentials'
+  | 'invalid_auth_token'
+  | 'email_not_verified'
   | 'transport';
 
 export class DriftstackError extends Error {
@@ -246,6 +254,38 @@ export class InternalError extends DriftstackError {
   }
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// Auth-flow errors (V-079; SDK normalization V-114)
+// ───────────────────────────────────────────────────────────────────────────
+
+export class EmailAlreadyRegisteredError extends DriftstackError {
+  constructor(p: Problem) {
+    super(toOpts('email_already_registered', p));
+    this.name = 'EmailAlreadyRegisteredError';
+  }
+}
+
+export class InvalidCredentialsError extends DriftstackError {
+  constructor(p: Problem) {
+    super(toOpts('invalid_credentials', p));
+    this.name = 'InvalidCredentialsError';
+  }
+}
+
+export class InvalidAuthTokenError extends DriftstackError {
+  constructor(p: Problem) {
+    super(toOpts('invalid_auth_token', p));
+    this.name = 'InvalidAuthTokenError';
+  }
+}
+
+export class EmailNotVerifiedError extends DriftstackError {
+  constructor(p: Problem) {
+    super(toOpts('email_not_verified', p));
+    this.name = 'EmailNotVerifiedError';
+  }
+}
+
 /** Network / parse / non-Problem failure — server didn't return a structured error. */
 export class TransportError extends DriftstackError {
   constructor(message: string, status = 0, cause?: unknown) {
@@ -284,6 +324,11 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
   'https://errors.driftstack.dev/driver-error': (p) => new DriverError(p),
   'https://errors.driftstack.dev/driver-not-integrated': (p) => new DriverNotIntegratedError(p),
   'https://errors.driftstack.dev/internal': (p) => new InternalError(p),
+  'https://errors.driftstack.dev/email-already-registered': (p) =>
+    new EmailAlreadyRegisteredError(p),
+  'https://errors.driftstack.dev/invalid-credentials': (p) => new InvalidCredentialsError(p),
+  'https://errors.driftstack.dev/invalid-auth-token': (p) => new InvalidAuthTokenError(p),
+  'https://errors.driftstack.dev/email-not-verified': (p) => new EmailNotVerifiedError(p),
 };
 
 /**

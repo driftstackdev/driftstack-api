@@ -6639,3 +6639,56 @@ New `apps/server/tests/unit/slow-query-log.test.ts` — 6 tests:
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-114 — SDK error normalization for V-079 auth-flow problem types (Routine — SDK expansion)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+PHASE 7 of the autopilot directive calls for "error normalization across all 17 RFC 7807 problem types." Audit found 4 server problem types from V-079 (auth flows) had no dedicated SDK error class — they fell through to a generic `DriftstackError`. Closing the gap so consumers can `catch (e instanceof EmailNotVerifiedError)` etc. without parsing the problem URI string.
+
+### Audit context
+
+`packages/api-types/src/problem.ts` defines 22 distinct problem types (not 17 — directive count is stale). Pre-V-114 the SDK had typed classes for 17 of them; the 4 missing were V-079 additions:
+
+- `email-already-registered`
+- `invalid-credentials`
+- `invalid-auth-token`
+- `email-not-verified`
+
+(The 22nd, `validation-failed`, is already typed as `ValidationError`.)
+
+### What changed
+
+- `packages/sdk-typescript/src/errors.ts`:
+  - Added 4 new `DriftstackErrorKind` discriminants: `email_already_registered`, `invalid_credentials`, `invalid_auth_token`, `email_not_verified`.
+  - Added 4 new error classes: `EmailAlreadyRegisteredError`, `InvalidCredentialsError`, `InvalidAuthTokenError`, `EmailNotVerifiedError` — each extending `DriftstackError` with `name` set and the appropriate kind.
+  - Added 4 new entries to `TYPE_TO_CTOR` so `errorFromProblem` returns the typed class.
+  - Updated the mapping comment block at the top of the file.
+- `packages/sdk-typescript/src/index.ts`: re-exports the 4 new classes alphabetically.
+
+No server-side changes needed — the error problem types already exist (`apps/server/src/lib/errors.ts:280-326`) and route handlers (`apps/server/src/routes/auth.ts:85-91`) already throw them. SDK was the only side missing.
+
+### How verified
+
+5 new tests in `packages/sdk-typescript/tests/unit/errors.test.ts` — one per new class plus one verifying the verbatim problem URI is preserved on the typed error. Existing 11 tests untouched.
+
+- `npm run typecheck`: clean across all 5 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 497/497 passing (was 492; +5 new).
+
+### Files modified
+
+- `packages/sdk-typescript/src/errors.ts`
+- `packages/sdk-typescript/src/index.ts`
+- `packages/sdk-typescript/tests/unit/errors.test.ts`
+
+### Next
+
+Continuing per never-stop rule. Python SDK has parallel error normalization at `packages/sdk-python/src/driftstack/errors.py` — spot-check whether it needs the same V-114 fill in a follow-up.

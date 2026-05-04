@@ -5,7 +5,11 @@ import {
   BadRequestError,
   ConcurrencyLimitError,
   DriftstackError,
+  EmailAlreadyRegisteredError,
+  EmailNotVerifiedError,
   errorFromProblem,
+  InvalidAuthTokenError,
+  InvalidCredentialsError,
   InvalidKeyError,
   NotFoundError,
   RateLimitError,
@@ -134,5 +138,65 @@ describe('TransportError', () => {
     expect(e).toBeInstanceOf(DriftstackError);
     expect(e.kind).toBe('transport');
     expect(e.status).toBe(0);
+  });
+});
+
+// V-114: SDK normalization for V-079 auth-flow problem types. Before V-114
+// these mapped to a generic DriftstackError; after V-114 each has a
+// dedicated class so consumers can catch on the specific failure mode
+// (e.g. distinguishing "wrong password" from "email not verified" without
+// reading the problem URI).
+describe('errorFromProblem — auth-flow problem types (V-114)', () => {
+  it('maps email-already-registered → EmailAlreadyRegisteredError (status 409)', () => {
+    const e = errorFromProblem(
+      {
+        type: PROBLEM_TYPES.EmailAlreadyRegistered,
+        title: 'Email already registered',
+        status: 409,
+      },
+      null,
+    );
+    expect(e).toBeInstanceOf(EmailAlreadyRegisteredError);
+    expect(e).toBeInstanceOf(DriftstackError);
+    expect(e.kind).toBe('email_already_registered');
+    expect(e.status).toBe(409);
+  });
+
+  it('maps invalid-credentials → InvalidCredentialsError (status 401)', () => {
+    const e = errorFromProblem(
+      { type: PROBLEM_TYPES.InvalidCredentials, title: 'Invalid credentials', status: 401 },
+      null,
+    );
+    expect(e).toBeInstanceOf(InvalidCredentialsError);
+    expect(e.kind).toBe('invalid_credentials');
+    expect(e.status).toBe(401);
+  });
+
+  it('maps invalid-auth-token → InvalidAuthTokenError (status 400)', () => {
+    const e = errorFromProblem(
+      { type: PROBLEM_TYPES.InvalidAuthToken, title: 'Invalid auth token', status: 400 },
+      null,
+    );
+    expect(e).toBeInstanceOf(InvalidAuthTokenError);
+    expect(e.kind).toBe('invalid_auth_token');
+    expect(e.status).toBe(400);
+  });
+
+  it('maps email-not-verified → EmailNotVerifiedError (status 403)', () => {
+    const e = errorFromProblem(
+      { type: PROBLEM_TYPES.EmailNotVerified, title: 'Email not verified', status: 403 },
+      null,
+    );
+    expect(e).toBeInstanceOf(EmailNotVerifiedError);
+    expect(e.kind).toBe('email_not_verified');
+    expect(e.status).toBe(403);
+  });
+
+  it('preserves the verbatim problem URI on the typed error', () => {
+    const e = errorFromProblem(
+      { type: PROBLEM_TYPES.EmailNotVerified, title: 'Email not verified', status: 403 },
+      null,
+    );
+    expect(e.type).toBe('https://errors.driftstack.dev/email-not-verified');
   });
 });
