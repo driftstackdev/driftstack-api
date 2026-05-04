@@ -45,6 +45,11 @@ import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
 import { registerBillingRoutes } from '../routes/billing.js';
 import { registerAdminForceActionRoutes } from '../routes/admin-force-actions.js';
+import {
+  wireSentryErrorHandler,
+  wireSentryRequestBreadcrumbs,
+  type SentryClient,
+} from './sentry.js';
 
 export interface ReadinessCheck {
   /** Display name surfaced in the /ready response (e.g. "postgres", "redis", "r2"). */
@@ -120,6 +125,16 @@ export interface AppDeps {
   readinessChecks?: ReadinessCheck[];
   /** When true, register a permissive CORS policy. Production locks this down. */
   permissiveCors?: boolean;
+  /**
+   * V-117: optional Sentry client. When provided, the app installs:
+   *   - `wireSentryErrorHandler` (V-094) — onError hook captures
+   *     exceptions with request context.
+   *   - `wireSentryRequestBreadcrumbs` (V-116) — onRequest +
+   *     onResponse hooks emit per-request breadcrumbs.
+   * Both hooks are no-ops when `sentry.isInitialized` is false.
+   * Tests routinely omit this — Sentry stays out of the test path.
+   */
+  sentry?: SentryClient;
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
@@ -146,6 +161,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   await app.register(requestIdPlugin);
+
+  // V-117: install Sentry hooks BEFORE auth/rate-limit so breadcrumbs
+  // capture every request — including ones that fail at the auth or
+  // rate-limit gate.
+  if (deps.sentry !== undefined) {
+    wireSentryRequestBreadcrumbs(app, deps.sentry);
+    wireSentryErrorHandler(app, deps.sentry);
+  }
+
   await app.register(authPlugin, {
     authRepo: deps.authRepo,
     authCache: deps.authCache,

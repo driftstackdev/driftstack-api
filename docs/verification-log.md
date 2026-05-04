@@ -6801,3 +6801,50 @@ Existing test (`wireSentryErrorHandler`) updated to add `addBreadcrumb: () => {}
 ### Next
 
 Continuing per never-stop rule. Follow-up Tier 1 candidate: extend `AppDeps` with `sentry?: SentryClient` and call `wireSentryErrorHandler` + `wireSentryRequestBreadcrumbs` from `buildApp` when provided. Plus pass `sentry` into `buildApp` from `bootstrap.ts`.
+
+---
+
+## V-117 — Wire Sentry hooks into buildApp from bootstrap (Routine — observability)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+V-116 left the Sentry breadcrumb + error helpers as exported functions that nothing was calling — except for `wireSentryErrorHandler` in `index.ts` which was a stop-gap wiring outside the app factory. V-117 closes the loop: `buildApp` itself installs both hooks when given a `SentryClient`, production wires through `bootstrap.ts → buildApp(deps)`, and `index.ts` no longer needs the explicit wireSentryErrorHandler call.
+
+### What changed
+
+- `apps/server/src/lib/app.ts`:
+  - Added `sentry?: SentryClient` to `AppDeps` (optional — tests omit it).
+  - Imported `wireSentryErrorHandler`, `wireSentryRequestBreadcrumbs`, `SentryClient` from `./sentry.js`.
+  - Inside `buildApp`, after `requestIdPlugin` registers and BEFORE auth/rate-limit, install both hooks when `deps.sentry !== undefined`. Order matters: breadcrumbs precede auth so failed-auth requests still appear in the Sentry trail.
+- `apps/server/src/lib/bootstrap.ts`: `createProductionDeps` now sets `sentry` on the returned `AppDeps`.
+- `apps/server/src/index.ts`: removed the explicit `wireSentryErrorHandler(app, handles.sentry)` call (now redundant) and the import. `handles` was unused at this level once that line was removed; trimmed from the destructure. Comment notes that `teardown` still references `handles.sentry` via the bootstrap closure for flush/close on shutdown.
+
+### Why hooks land before auth/rate-limit
+
+A Sentry trail of "200 GET /v1/health, 401 POST /v1/sessions, ERROR POST /v1/sessions" is more useful than one starting after auth. If hooks landed AFTER `authPlugin`, requests that fail at the auth gate (missing key, invalid key) would never get a breadcrumb. The earlier the hook the better the context, and `wireSentryRequestBreadcrumbs` itself does no I/O so cost is negligible.
+
+### How verified
+
+No new tests — V-116 already covers the helpers' behavior with fake `SentryClient` recorders. V-117 only wires existing tested functions. Existing test surface:
+
+- Integration tests (`apps/server/tests/integration/_helpers/build-test-app.ts`) build `AppDeps` without `sentry`, exercising the `if (deps.sentry !== undefined)` skip branch.
+- Sentry unit tests (`apps/server/tests/unit/sentry.test.ts`) directly exercise both hooks via fake apps.
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 505/505 passing.
+
+### Files modified
+
+- `apps/server/src/lib/app.ts`
+- `apps/server/src/lib/bootstrap.ts`
+- `apps/server/src/index.ts`
+
+### Next
+
+Continuing per never-stop rule.

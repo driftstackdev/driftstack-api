@@ -11,7 +11,6 @@ import { loadConfig } from './lib/config.js';
 import { createLogger } from './lib/logger.js';
 import { createProductionDeps } from './lib/bootstrap.js';
 import { buildApp } from './lib/app.js';
-import { wireSentryErrorHandler } from './lib/sentry.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -34,9 +33,12 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const { deps, handles, teardown } = bootstrap;
+  const { deps, teardown } = bootstrap;
+  // V-117: Sentry hooks (error-handler + request breadcrumbs) are now
+  // installed inside buildApp from `deps.sentry`. teardown holds the
+  // SentryClient reference for flush/close on shutdown via the
+  // bootstrap closure.
   const app = await buildApp(deps);
-  wireSentryErrorHandler(app, handles.sentry);
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ component: 'lifecycle', signal }, 'shutdown signal received');

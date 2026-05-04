@@ -313,6 +313,10 @@ export async function createProductionDeps(
     ...(billingService !== undefined ? { billingService } : {}),
     readinessChecks,
     permissiveCors: false,
+    // V-117: pass through to buildApp so it installs the Sentry
+    // error-capture + breadcrumb hooks. Both are no-ops when
+    // sentry.isInitialized is false (i.e. SENTRY_DSN unset).
+    sentry,
   };
 
   let torn = false;
