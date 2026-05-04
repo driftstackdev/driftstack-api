@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { seedProfiles } from './_helpers/scenarios.js';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 
 interface ProfileResponse {
@@ -129,14 +130,7 @@ describe('GET /v1/profiles', () => {
 
   it('200 lists profiles for the calling account', async () => {
     fx = await buildTestApp();
-    for (const n of ['a', 'b', 'c']) {
-      await fx.app.inject({
-        method: 'POST',
-        url: '/v1/profiles',
-        headers: { authorization: `Bearer ${fx.plaintext}` },
-        payload: { name: n },
-      });
-    }
+    await seedProfiles(fx, 3, { names: ['a', 'b', 'c'] });
     const res = await fx.app.inject({
       method: 'GET',
       url: '/v1/profiles',

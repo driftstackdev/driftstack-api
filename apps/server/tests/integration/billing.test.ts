@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { seedActiveSubscription } from './_helpers/scenarios.js';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 
 interface CheckoutResponse {
@@ -208,19 +209,7 @@ describe('GET /v1/billing', () => {
 
   it('reflects a subscription mirror row', async () => {
     fx = await buildTestApp();
-    fx.billingRepo.upsertSubscription({
-      id: '00000000-0000-4000-8000-000000000sub',
-      accountId: fx.accountId,
-      stripeSubscriptionId: 'sub_test_123',
-      stripePriceId: 'price_api_builder_monthly',
-      tier: 'api_builder',
-      status: 'active',
-      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-      cancelAtPeriodEnd: false,
-      canceledAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    seedActiveSubscription(fx, { tier: 'api_builder' });
 
     const res = await fx.app.inject({
       method: 'GET',

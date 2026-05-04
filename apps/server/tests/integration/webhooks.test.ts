@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { seedWebhookEndpoints } from './_helpers/scenarios.js';
 
 let fx: TestAppFixture;
 
@@ -73,18 +74,7 @@ describe('POST /v1/webhooks', () => {
 describe('GET /v1/webhooks', () => {
   it('lists endpoints, never includes plaintext secret', async () => {
     fx = await buildTestApp();
-    await fx.app.inject({
-      method: 'POST',
-      url: '/v1/webhooks',
-      headers: auth(fx),
-      payload: { url: 'https://x.test/h1', events: ['session.completed'] },
-    });
-    await fx.app.inject({
-      method: 'POST',
-      url: '/v1/webhooks',
-      headers: auth(fx),
-      payload: { url: 'https://x.test/h2', events: ['api_key.revoked'] },
-    });
+    await seedWebhookEndpoints(fx, 2, { urls: ['https://x.test/h1', 'https://x.test/h2'] });
 
     const res = await fx.app.inject({
       method: 'GET',

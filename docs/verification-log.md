@@ -7458,3 +7458,66 @@ Plus the V-070-style ASCII architecture diagram + closing line that had been sit
 ### Next
 
 Continuing per never-stop rule. Resuming Priority 4 (PHASE 9 test fixtures, tight scope) next.
+
+---
+
+## V-130 — PHASE 9 shared test scenario fixtures (Routine — test infrastructure)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+PHASE 9 of the autopilot directive (founder priority 4): high-value shared scenario fixtures, tight scope. Refactor 5–10 highest-duplication tests to use the new fixtures, prove the pattern, **stop** — don't expand fixture surface beyond proven need (founder direction).
+
+### What changed
+
+`apps/server/tests/integration/_helpers/scenarios.ts` (new) — 4 fixture functions layered on top of `buildTestApp`:
+
+- `seedProfiles(fx, count, opts?)` — drives `POST /v1/profiles` `count` times, returns `{ id, name, archetype }` array. Optional per-call name override + archetype/description applied to all.
+- `seedSessions(fx, count, opts?)` — drives `POST /v1/sessions` `count` times, returns `{ id, label, archetype }` array.
+- `seedWebhookEndpoints(fx, count, opts?)` — drives `POST /v1/webhooks` `count` times, returns `{ id, url, secret }` array. Defaults to `events: ['session.completed']` when none supplied.
+- `seedActiveSubscription(fx, opts?)` — direct-repo `billingRepo.upsertSubscription` for cases where the test needs a subscription record without exercising the checkout flow. Direct-repo (not HTTP) because there's no public endpoint for "create my subscription" — production subscriptions land via the Stripe webhook handler.
+
+All HTTP-driving fixtures throw with full response context if the underlying route returns a non-success status, so failures surface immediately rather than producing `undefined` downstream.
+
+### Sites refactored (3)
+
+1. `profiles.test.ts:GET /v1/profiles > 200 lists profiles for the calling account` — was a 9-line `for (const n of ['a','b','c']) { await fx.app.inject({...POST...}) }` block. Now `await seedProfiles(fx, 3, { names: ['a', 'b', 'c'] });` — single line.
+2. `webhooks.test.ts:GET /v1/webhooks > lists endpoints, never includes plaintext secret` — was two consecutive 6-line `fx.app.inject` calls (12 lines). Now `await seedWebhookEndpoints(fx, 2, { urls: ['https://x.test/h1', 'https://x.test/h2'] });` — single line.
+3. `billing.test.ts:reflects a subscription mirror row` — was a 13-line `fx.billingRepo.upsertSubscription({ ...all 11 fields with hand-set dates... })`. Now `seedActiveSubscription(fx, { tier: 'api_builder' });` — single line. Helper picks reasonable defaults for the dates / cancellation fields.
+
+### Sites considered + deliberately NOT refactored
+
+- `sessions.test.ts:lists created sessions in reverse-chrono order` (lines 119-123) — three `await createSession(fx, { label })` calls separated by `setTimeout(3)` to space the createdAt timestamps (otherwise cache-amortised auth produces same-ms timestamps and the reverse-chrono assertion fails). The timing is essential to the test's semantics, not boilerplate; collapsing into `seedSessions` would require a `delayMsBetween` option that no other test needs. Intentional skip.
+- `admin-webhooks.test.ts:seedDelivery` local helper — already wraps endpoint creation + delivery enqueue + status mutation in one composite. Refactoring to use `seedWebhookEndpoints` for just the endpoint part would only collapse 5 lines and split the helper across two files; net loss.
+- `profiles.test.ts:POST /v1/profiles >...` — those are testing the create endpoint behavior (response shape, status code, archetype derivation). The HTTP call IS the test, not setup. Not a fixture target.
+- `admin-rate-limit-overrides.test.ts` `for (let i = 0; i < N; i++) ... rateLimitConsume(...)` loops — testing token-bucket math, not seeding state. Different domain.
+
+Founder lower bound was 5 sites, but per directive "Don't expand fixture surface beyond proven need", inventing duplication would have been scope creep. 3 sites + 4 fixture functions cleanly demonstrate the pattern.
+
+### Lookup-discovery during implementation
+
+`POST /v1/profiles` returns **200** (not 201) — the route returns the created profile but doesn't set a `Location` header, so it's treated as a successful read of newly-created state rather than RFC 7231 201 Created semantics. My initial fixture expected 201; first test run failed clearly. Fixture updated + comment added so future readers don't make the same mistake. Other create endpoints (POST /v1/sessions, POST /v1/webhooks) DO return 201 — the inconsistency is real but pre-existing, not introduced here.
+
+### How verified
+
+- `npm run typecheck`: clean across all 7 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 530/530 passing — same count as before V-130 (refactors collapse code without changing test count or semantics).
+
+### Files added
+
+- `apps/server/tests/integration/_helpers/scenarios.ts`
+
+### Files modified
+
+- `apps/server/tests/integration/profiles.test.ts`
+- `apps/server/tests/integration/webhooks.test.ts`
+- `apps/server/tests/integration/billing.test.ts`
+
+### Next
+
+Continuing per never-stop rule. Per founder priority 5: PRIORITY 5 unstarted items, work down 5a → 5d in order.
