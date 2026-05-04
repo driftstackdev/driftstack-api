@@ -5,6 +5,7 @@
     { "path": "./packages/api-types" },
     { "path": "./packages/behavioural-simulation" },
     { "path": "./packages/recipe-library" },
-    { "path": "./packages/sdk-typescript" }
+    { "path": "./packages/sdk-typescript" },
+    { "path": "./packages/webhook-delivery" }
   ]
 }

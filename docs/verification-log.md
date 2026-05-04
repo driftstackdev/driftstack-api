@@ -8185,3 +8185,77 @@ Founder's 5d spec also lists "login flow polish / session creation form / embedd
 ### Next
 
 Continuing per never-stop rule. PRIORITY 7 next: PHASE 11 webhook delivery system stub (workspace + interface + mock).
+
+---
+
+## V-144 — @driftstack/webhook-delivery workspace stub (PHASE 11)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder overnight directive PRIORITY 7. Same V-127 pattern (behavioural-simulation + recipe-library stubs): scaffold workspace + types + interfaces + mock; NO domain logic.
+
+Distinction from existing implementation: `apps/server/src/services/webhooks.ts` + `webhook-worker.ts` already deliver webhooks in production. The `@driftstack/webhook-delivery` workspace models the **internal delivery mechanics** (queue, retry curve, DLQ management) as a forward-looking seam — a future "more sophisticated delivery system" (multi-region replication, batching, ordering guarantees, etc.) drops in behind the same interface without touching call sites.
+
+### What changed
+
+New workspace `packages/webhook-delivery/`:
+
+- `package.json` + `tsconfig.json` matching V-127 conventions.
+- `src/types.ts`:
+  - `DeliveryEndpoint` (config + signing secret + active flag + optional per-endpoint `DeliveryConfig` overrides).
+  - `DeliveryConfig` (timeout, max attempts, backoff base — all optional with documented defaults).
+  - `DeliveryPayload` (event id + type + emitted timestamp + serialized body).
+  - `DeliveryAttempt` (per-attempt outcome including discriminated `'success' | 'http_error' | 'transport_error' | 'timeout'` outcome).
+  - `DeliveryStatus` discriminator + `DeliveryRecord` aggregate (id + status + attempts + nextAttemptAtMs).
+  - `DlqEntry` for dead-letter records.
+- `src/interfaces.ts`:
+  - `WebhookDeliveryService` — top-level: `enqueue`, `get`, `list`, `replay`.
+  - `DlqManager` — `list`, `get`, `requeue`, `discard`. Audit-row creation kept at call site (not this interface — keeps this layer pure).
+  - `DeliveryQueue` — underlying queue primitive: `push`, `pull` (with leasing for worker pool), `recordAttempt`. Implementations could be in-memory (testing), Postgres outbox (current production), or Redis Streams (future).
+- `src/mock.ts`:
+  - `MockWebhookDeliveryService` — every enqueue resolves immediately to a `delivered` record. Doesn't model retry; meant for shape-contract testing only.
+  - `MockDlqManager` — in-memory entry map with `seedEntry()` test seam, full requeue + discard semantics.
+- `src/index.ts` — re-exports.
+- `tests/mock.test.ts` — 13 tests covering enqueue/get/list/replay/requeue/discard happy paths + error paths.
+
+`tsconfig.json` (root): added `./packages/webhook-delivery` to `references`.
+
+`npm install` picked up the workspace via the existing `packages/*` glob.
+
+### Why distinct types from `@driftstack/api-types` `WebhookEndpoint` / `WebhookDelivery`
+
+The api-types shapes are **wire types** — what customers see at `/v1/webhooks/*`. They expose customer-facing field names (`secret_prefix`, `last_response_status`, etc.) and snake_case JSON.
+
+The webhook-delivery types are **internal delivery mechanics** — what the queue + worker pool read. They use camelCase TypeScript fields, model attempt logs as arrays, and carry the plaintext signing secret (which never appears in wire types).
+
+Same conceptual surface, different model layer. Mapping happens at the route handler.
+
+### How verified
+
+- `npm run typecheck`: clean across all 9 workspaces (was 8; +1 for webhook-delivery).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 543/543 passing (was 530; +13 new — 7 service tests + 6 DLQ manager tests).
+
+### Files added
+
+- `packages/webhook-delivery/package.json`
+- `packages/webhook-delivery/tsconfig.json`
+- `packages/webhook-delivery/src/types.ts`
+- `packages/webhook-delivery/src/interfaces.ts`
+- `packages/webhook-delivery/src/mock.ts`
+- `packages/webhook-delivery/src/index.ts`
+- `packages/webhook-delivery/tests/mock.test.ts`
+
+### Files modified
+
+- `tsconfig.json` (root references)
+- `package-lock.json` (workspace resolution)
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 8: SDK examples expansion — Python pagination example (parallel to V-122 TS).
