@@ -1,0 +1,179 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Security"
+  description="How Driftstack protects customer keys, traffic, and content. mTLS termination, customer-controlled egress, scrypt-hashed API keys, webhook signature verification, no-customer-data-access posture."
+>
+  <!-- Header -->
+  <section class="bg-gradient-to-b from-white to-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Security</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+        We don't see your traffic. We can't read your keys.
+      </h1>
+      <p class="mt-6 max-w-prose text-lg text-slate-600">
+        Driftstack's security posture starts from a single principle:
+        Driftstack should never have a copy of anything that would let us
+        impersonate you, intercept your traffic, or replay your sessions.
+        The architecture below enforces that — not as policy, as code.
+      </p>
+    </div>
+  </section>
+
+  <!-- Five-pillar layout -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <div class="grid gap-12 md:grid-cols-2">
+        <!-- Pillar 1 -->
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+            01 · Transport
+          </p>
+          <h2 class="mt-3 text-2xl font-semibold text-slate-900">mTLS, end to end.</h2>
+          <p class="mt-3 text-slate-600">
+            Every connection between your fleet, the control plane, and our
+            edge terminates mutual TLS. Cloudflare fronts the public edge;
+            client-cert validation runs at our origin. No plaintext HTTP
+            on any path — including health checks, internal control-plane
+            traffic, and metric scrapes.
+          </p>
+        </div>
+
+        <!-- Pillar 2 -->
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+            02 · Egress
+          </p>
+          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+            Customer-controlled. Always.
+          </h2>
+          <p class="mt-3 text-slate-600">
+            Session traffic egresses through proxies you configure — SOCKS5
+            with UDP, WireGuard, or OpenVPN. We never see your destination
+            URLs, never store response bodies, never act as the egress
+            point. The control plane orchestrates session lifecycle; the
+            session itself is yours.
+          </p>
+        </div>
+
+        <!-- Pillar 3 -->
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+            03 · API keys
+          </p>
+          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+            scrypt at rest, never in plaintext.
+          </h2>
+          <p class="mt-3 text-slate-600">
+            API keys are hashed with scrypt (logN=15) before they touch
+            the database. Plaintext is returned exactly once, on creation;
+            after that there is no path — admin, support, ops — to recover
+            it. A database breach surfaces hashes, not keys. Auth runtime
+            uses a 30-second sha256-keyed cache so verification stays
+            fast without weakening at-rest strength.
+          </p>
+        </div>
+
+        <!-- Pillar 4 -->
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+            04 · Webhooks
+          </p>
+          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+            HMAC-SHA256, replay-windowed.
+          </h2>
+          <p class="mt-3 text-slate-600">
+            Outbound webhook deliveries carry a Driftstack-Signature header
+            in the form <code class="font-mono">t=&lt;timestamp&gt;,v1=&lt;hex&gt;</code>.
+            Customers verify with the SDK's
+            <code class="font-mono">verifyWebhookSignature</code> helper
+            (constant-time compare). The default 5-minute timestamp
+            tolerance protects against replay; secrets rotate per-endpoint
+            without touching the rest of your account.
+          </p>
+        </div>
+
+        <!-- Pillar 5 — full width -->
+        <div class="md:col-span-2">
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+            05 · No-customer-data-access posture
+          </p>
+          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+            Driftstack staff cannot read your sessions.
+          </h2>
+          <p class="mt-3 max-w-prose text-slate-600">
+            Driftstack's control plane stores license metadata, session
+            metadata (id, lifecycle status, timestamps), and aggregate
+            usage counters. It does not store the session content itself.
+            URLs visited, form data submitted, screenshots captured, DOM
+            snapshots, browser cookies — these never reach our infra. For
+            self-hosted deployments, even the metadata stays inside your
+            network; only license-validity heartbeats reach our servers.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- What we don't claim -->
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        What we don't claim
+      </p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+        Honest scope.
+      </h2>
+      <ul class="mt-8 grid gap-4 md:grid-cols-2">
+        <li class="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-700">
+          <strong class="block text-slate-900">No SOC 2.</strong>
+          We're a small team and SOC 2 is a future-quarter goal once
+          revenue justifies the audit cost. We say so plainly rather
+          than implying compliance via vague "enterprise-grade"
+          language.
+        </li>
+        <li class="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-700">
+          <strong class="block text-slate-900">No ISO 27001.</strong>
+          Same answer. The framework's posture matters; the certificate
+          itself follows when the audit fits the budget.
+        </li>
+        <li class="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-700">
+          <strong class="block text-slate-900">Sub-processors are listed.</strong>
+          Hetzner, Neon, Upstash, Cloudflare, Postmark, Sentry, Stripe,
+          Anthropic, Moneybird, MacStadium. Full list with purpose +
+          jurisdiction at <a href="/trust/sub-processors" class="text-oxblood-700 underline">/trust/sub-processors</a>.
+        </li>
+        <li class="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-700">
+          <strong class="block text-slate-900">Data residency is EU-default.</strong>
+          Compute, database, object storage all in the EU (Hetzner FSN
+          + Neon EU + Upstash EU + Cloudflare R2 EU). Session execution
+          may run elsewhere under SCCs + EU-US DPF. Detail in the same
+          sub-processors list.
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <div class="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 class="text-2xl font-semibold text-slate-900">
+            Specific question your security team is asking?
+          </h2>
+          <p class="mt-3 max-w-prose text-slate-600">
+            Email security@driftstack.dev with the question. We answer
+            everything in writing — no NDAs to read a one-paragraph
+            answer about scrypt parameters or TLS cipher suites.
+          </p>
+        </div>
+        <a href="mailto:security@driftstack.dev?subject=Security%20question" class="btn-primary"
+          >Email security</a
+        >
+      </div>
+    </div>
+  </section>
+</BaseLayout>

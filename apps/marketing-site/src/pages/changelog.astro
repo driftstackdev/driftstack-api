@@ -1,0 +1,117 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+// Placeholder entries. Once the verification log + tagged GitHub
+// releases stabilize, this file becomes a build-time generator that
+// reads from a manually-maintained markdown source under
+// `apps/marketing-site/src/data/changelog.md` and renders entries
+// here. Until then, the entries below are hand-authored highlights
+// of customer-facing changes.
+
+interface ChangelogEntry {
+  date: string;
+  category: 'launch' | 'sdk' | 'docs' | 'security' | 'pricing' | 'self-hosted';
+  title: string;
+  body: string;
+}
+
+const ENTRIES: readonly ChangelogEntry[] = [
+  {
+    date: '2026-05-04',
+    category: 'sdk',
+    title: 'Pagination iterators land in TypeScript + Python SDKs',
+    body: 'sessions.iterate(), profiles.iterate(), and webhooks.iterateDeliveries() walk every page of a cursor-paginated list automatically. Sync + async parity in Python.',
+  },
+  {
+    date: '2026-05-03',
+    category: 'pricing',
+    title: 'Two-ladder pricing live',
+    body: 'Manual ($79/mo Solo / $249/mo Team / $699/mo Agency) and API ($149/mo Starter / $499/mo Builder / $1,499/mo Scale + custom Enterprise). Trial pack stays $2.99 / 16 hours.',
+  },
+  {
+    date: '2026-05-03',
+    category: 'security',
+    title: 'Crypto payment rail deferred to post-launch',
+    body: 'Coinbase Commerce closed for non-US/Singapore merchants 2026-03-31. Stripe is sole launch payment rail (fiat-only). Crypto re-evaluates against actual transaction volume.',
+  },
+];
+
+const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
+  launch: 'bg-oxblood-700 text-white',
+  sdk: 'bg-slate-900 text-white',
+  docs: 'bg-slate-200 text-slate-900',
+  security: 'bg-red-100 text-red-900',
+  pricing: 'bg-amber-100 text-amber-900',
+  'self-hosted': 'bg-emerald-100 text-emerald-900',
+};
+---
+
+<BaseLayout
+  title="Changelog"
+  description="What changed in Driftstack — pricing, SDK releases, security posture, self-hosted updates."
+>
+  <!-- Header -->
+  <section class="bg-gradient-to-b from-white to-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Changelog</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+        What changed.
+      </h1>
+      <p class="mt-6 max-w-prose text-lg text-slate-600">
+        Customer-facing changes, in reverse-chronological order. SDK
+        releases, pricing changes, security posture updates,
+        self-hosted-tier adjustments. Engineering-internal changes
+        (refactors, test fixtures, observability work) live in the
+        verification log inside the repo, not here.
+      </p>
+    </div>
+  </section>
+
+  <!-- Entries -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <ol class="space-y-10">
+        {
+          ENTRIES.map((entry) => (
+            <li class="border-b border-slate-100 pb-8 last:border-b-0">
+              <div class="flex items-center gap-3">
+                <time class="font-mono text-xs text-slate-500" datetime={entry.date}>
+                  {entry.date}
+                </time>
+                <span class={`inline-flex rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest ${CATEGORY_COLOR[entry.category]}`}>
+                  {entry.category}
+                </span>
+              </div>
+              <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
+                {entry.title}
+              </h2>
+              <p class="mt-3 max-w-prose text-slate-600">{entry.body}</p>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </section>
+
+  <!-- Subscribe banner -->
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-12">
+      <div class="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 class="text-xl font-semibold text-slate-900">
+            Want changelog entries delivered?
+          </h2>
+          <p class="mt-2 max-w-prose text-sm text-slate-600">
+            Email <a
+              href="mailto:hello@driftstack.dev?subject=Changelog%20subscribe"
+              class="text-oxblood-700 underline">hello@driftstack.dev</a> to
+            get added to the customer changelog list. Roughly one email
+            every 2-4 weeks; only material changes (no internal-noise
+            spam).
+          </p>
+        </div>
+        <a href="/docs" class="btn-secondary">See docs →</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

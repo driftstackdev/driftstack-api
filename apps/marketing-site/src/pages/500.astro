@@ -1,0 +1,28 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="500 · Driftstack" description="Something went wrong on our end.">
+  <section class="bg-white">
+    <div class="mx-auto max-w-3xl px-6 py-32 text-center">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">500</p>
+      <h1 class="mt-4 text-4xl font-semibold tracking-tight text-slate-900">
+        Something went wrong on our end.
+      </h1>
+      <p class="mt-4 text-slate-600">
+        This is on us, not you. The error has been captured; we'll look at
+        it. If this is blocking something time-sensitive, email
+        <a href="mailto:support@driftstack.dev" class="text-oxblood-700 underline">support@driftstack.dev</a>
+        with the URL you were on.
+      </p>
+      <div class="mt-8 flex justify-center gap-4">
+        <a href="/" class="btn-primary">Back home</a>
+        <a href="https://status.driftstack.dev" class="btn-secondary">See status</a>
+      </div>
+      <p class="mt-8 text-xs text-slate-500">
+        Status page lives at status.driftstack.dev when it lands. Until
+        then, check the Twitter/X account or email support.
+      </p>
+    </div>
+  </section>
+</BaseLayout>

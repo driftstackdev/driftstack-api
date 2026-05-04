@@ -1,0 +1,158 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="About"
+  description="Driftstack is a solo-founder Dutch BV building iPhone Safari sessions on demand. EU-resident, customer-controlled egress, no behavioural data collection."
+>
+  <!-- Header -->
+  <section class="bg-gradient-to-b from-white to-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">About</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+        A small Dutch company building one product well.
+      </h1>
+      <p class="mt-6 max-w-prose text-lg text-slate-600">
+        Driftstack ships iPhone Safari sessions on demand — same engine
+        as the device, no patches, no detection-vendor surface area.
+        We're solo-founded, EU-headquartered, and intentionally narrow:
+        one product, two ladders, no land-grab.
+      </p>
+    </div>
+  </section>
+
+  <!-- What + why -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <div class="grid gap-12 md:grid-cols-2">
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+            What we're building
+          </p>
+          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+            iPhone Safari fidelity, on demand.
+          </h2>
+          <p class="mt-3 text-slate-600">
+            Most stealth browsers patch JavaScript at runtime to fake an
+            iOS fingerprint. Detection vendors built their industry on
+            catching exactly that. Driftstack modifies WebKit's C++ source
+            instead — there's nothing at the JavaScript layer to detect,
+            because nothing was changed there. The fingerprint your code
+            reads is the fingerprint a real iPhone reads.
+          </p>
+        </div>
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+            Why we exist
+          </p>
+          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+            Stealth browsing matures.
+          </h2>
+          <p class="mt-3 text-slate-600">
+            For the last decade, the field has been a runtime patching
+            arms race that always favoured the detector. We think the
+            next decade looks different: source-modified engines, real
+            archetypes, customer-controlled egress, transparent
+            metering. Driftstack ships that future for iPhone Safari
+            first because that's the device that matters most for
+            commerce, ticketing, and account workflows.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Posture -->
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Posture</p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+        Things you'll notice.
+      </h2>
+      <div class="mt-10 grid gap-6 md:grid-cols-3">
+        <div>
+          <h3 class="font-semibold text-slate-900">EU-resident, by default</h3>
+          <p class="mt-3 text-sm text-slate-600">
+            Compute in Hetzner Falkenstein. Database on Neon EU. Object
+            storage on Cloudflare R2 EU. Email through Postmark EU
+            sending region. No silent transatlantic data flows.
+          </p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-900">No behavioural data collection</h3>
+          <p class="mt-3 text-sm text-slate-600">
+            We don't log your destination URLs, response bodies, or
+            session content. We don't train models on your traffic. We
+            don't sell datasets. The control plane sees session metadata
+            and license validity — that's the entire surface we touch.
+          </p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-900">Honest scope</h3>
+          <p class="mt-3 text-sm text-slate-600">
+            We say no to things we can't ship well. Behavioural simulation
+            and recipe libraries are Phase 3 — we'll talk about them when
+            they ship, not before. SOC 2 is a future-revenue milestone, not
+            today's marketing line.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Company facts -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        Company facts
+      </p>
+      <dl class="mt-8 grid gap-6 md:grid-cols-2">
+        <div class="flex gap-4 border-b border-slate-100 pb-4">
+          <dt class="w-40 shrink-0 text-sm text-slate-500">Entity</dt>
+          <dd class="text-sm text-slate-900">Dutch BV (Besloten Vennootschap)</dd>
+        </div>
+        <div class="flex gap-4 border-b border-slate-100 pb-4">
+          <dt class="w-40 shrink-0 text-sm text-slate-500">Headquarters</dt>
+          <dd class="text-sm text-slate-900">Netherlands</dd>
+        </div>
+        <div class="flex gap-4 border-b border-slate-100 pb-4">
+          <dt class="w-40 shrink-0 text-sm text-slate-500">Team size</dt>
+          <dd class="text-sm text-slate-900">Solo founder + contractors</dd>
+        </div>
+        <div class="flex gap-4 border-b border-slate-100 pb-4">
+          <dt class="w-40 shrink-0 text-sm text-slate-500">Funding</dt>
+          <dd class="text-sm text-slate-900">Bootstrapped — no VC</dd>
+        </div>
+        <div class="flex gap-4 border-b border-slate-100 pb-4">
+          <dt class="w-40 shrink-0 text-sm text-slate-500">Sub-processors</dt>
+          <dd class="text-sm text-slate-900">
+            <a href="/trust/sub-processors" class="text-oxblood-700 underline"
+              >/trust/sub-processors</a
+            >
+          </dd>
+        </div>
+        <div class="flex gap-4 border-b border-slate-100 pb-4">
+          <dt class="w-40 shrink-0 text-sm text-slate-500">Contact</dt>
+          <dd class="text-sm text-slate-900">hello@driftstack.dev</dd>
+        </div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <div class="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 class="text-2xl font-semibold text-slate-900">Want to try it?</h2>
+          <p class="mt-3 max-w-prose text-slate-600">
+            $2.99 buys 16 hours of iPhone Safari sessions to evaluate.
+            Used once per account, 14-day window, no card-charging surprises.
+          </p>
+        </div>
+        <a href="/pricing#trial-pack" class="btn-primary">Get started — $2.99</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

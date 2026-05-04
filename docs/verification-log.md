@@ -7930,3 +7930,46 @@ NOT redlined here — judgment call rather than ADR-004 drift. Surfaced for foun
 ### Next
 
 Continuing per never-stop rule. PRIORITY 3: batch-commit Tier 3 drafts — 5a marketing additions + 5b customer-dashboard pages + 5c admin-panel pages.
+
+---
+
+## V-138 — 5a marketing-site Tier 3 batch (founder-approved drafts)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder overnight directive PRIORITY 3 — Tier 3 drafts in working tree are approved per the directive. Batch commit for 5a (marketing-site additions). Per the marketing-copy review cadence, this is a Tier 3 commit landing approved drafts.
+
+### What changed
+
+6 new pages under `apps/marketing-site/src/pages/`:
+
+- `security.astro` — security posture writeup, 5 pillars (Transport mTLS / Egress customer-controlled / API keys scrypt / Webhooks HMAC / no-customer-data-access) + "what we don't claim" section (no SOC 2 / no ISO 27001 / sub-processors listed / EU-default residency).
+- `about.astro` — solo Dutch BV positioning, what+why, posture (EU-resident, no behavioural data, honest scope), company facts.
+- `500.astro` — polished error page (parallel to /404). Returns HTTP 500 status per Astro convention. Points at status.driftstack.dev (future) + support@driftstack.dev fallback.
+- `docs.astro` — landing with 6 category cards (Quickstart / API reference / SDKs / Webhooks / Self-hosted / Recipe library). Some sub-category targets (`/docs/quickstart`, `/docs/sdk`, `/docs/webhooks`, `/docs/recipes`) don't yet exist as routes — drafted as forward-looking landing.
+- `api-reference.astro` — surface map (Sessions / Profiles / API keys / Webhooks / Auth flows / Billing) + link to live Scalar UI at api.driftstack.dev/docs. Future iteration: build-time fetch + embed Scalar bundle directly.
+- `changelog.astro` — 3 placeholder entries with category badges (sdk / pricing / security). Frontmatter comment notes this becomes a build-time generator from a markdown source once stable.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Browser dev-server check: all 6 routes return HTTP 200 (except /500 which returns 500 — Astro's intentional behavior for status-code pages).
+
+### Files added
+
+- `apps/marketing-site/src/pages/security.astro`
+- `apps/marketing-site/src/pages/about.astro`
+- `apps/marketing-site/src/pages/500.astro`
+- `apps/marketing-site/src/pages/docs.astro`
+- `apps/marketing-site/src/pages/api-reference.astro`
+- `apps/marketing-site/src/pages/changelog.astro`
+
+### Next
+
+Continuing per never-stop rule. V-139: 5b customer-dashboard batch.
