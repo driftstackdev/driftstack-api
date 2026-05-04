@@ -7574,3 +7574,45 @@ Picked (b). Adds ~20 lines to pricing.ts but eliminates a guaranteed-future-drif
 ### Next
 
 Continuing per never-stop rule. Resuming Priority 5a marketing-site Tier 3 drafts — already 5 in working tree (/security, /about, /500, /docs, /changelog) ready for surfacing.
+
+---
+
+## V-132 — BaseLayout SEO meta enhancements (Tier 1 engineering scaffolding)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+Priority 5a sub-item: "Improved &lt;head&gt; SEO meta + OpenGraph + Twitter cards on all marketing pages." Per the marketing-copy cadence rule, scaffolding behind brand surfaces is push-to-main Tier 1 — only customer-facing copy stays Tier 3 working-tree. BaseLayout's `<head>` block is meta scaffolding, not brand surface, so this lands directly.
+
+### What changed
+
+`apps/marketing-site/src/layouts/BaseLayout.astro` — added missing meta tags:
+
+- `<meta name="robots" content="index,follow">` — explicit indexing posture (had been implicit/default).
+- OpenGraph: added `og:site_name`, `og:image`, `og:image:width`, `og:image:height`. Image defaults to `/og-default.png` at the site root; per-page override available via the new `ogImage?: string` prop on `Props`.
+- Twitter / X card: added `twitter:title`, `twitter:description`, `twitter:image`. Existing `twitter:card: summary_large_image` retained.
+- OG image URL is resolved to absolute via `new URL(... , Astro.site)` so social crawlers don't trip on path-resolution edge cases.
+
+Section comments (`<!-- OpenGraph ... -->`, `<!-- Twitter / X -->`) added so the head block stays browseable as it grows.
+
+### Outstanding work
+
+- `apps/marketing-site/public/og-default.png` does NOT yet exist. The `<meta property="og:image">` will 404 for social crawlers until the founder drops in a real 1200×630 PNG. HTML still renders correctly; only social-card preview will fail. Surfaced as a follow-up: ship a brand-on-image og-default.png + per-page custom OG images for /pricing + /self-hosted.
+
+### How verified
+
+- `npm run typecheck`: clean across all 7 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Browser dev-server check: `curl http://127.0.0.1:4321/` returns the head block with all new meta tags rendered correctly. Sample: `<meta name="robots" content="index,follow">`, `<meta property="og:image" content="https://driftstack.dev/og-default.png">`, `<meta name="twitter:title" content="Driftstack">`, etc.
+
+### Files modified
+
+- `apps/marketing-site/src/layouts/BaseLayout.astro`
+
+### Next
+
+Continuing per never-stop rule. Tier 3 drafts in working tree (/security, /about, /500, /docs, /changelog, /api-reference) all pick up the new meta automatically.
