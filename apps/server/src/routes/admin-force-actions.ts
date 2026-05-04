@@ -104,7 +104,7 @@ export function registerAdminForceActionRoutes(
   // ── POST /v1/admin/sessions/:id/destroy ───────────────────────────────
   app.post<{ Params: { id: string } }>(
     '/v1/admin/sessions/:id/destroy',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireScope('admin'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
@@ -168,7 +168,7 @@ export function registerAdminForceActionRoutes(
   // ── POST /v1/admin/api-keys/:id/revoke ────────────────────────────────
   app.post<{ Params: { id: string } }>(
     '/v1/admin/api-keys/:id/revoke',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireScope('admin'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');

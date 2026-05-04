@@ -154,7 +154,7 @@ export function registerAdminAccountsRoutes(
   app.post<{ Params: { id: string } }>(
     '/v1/admin/accounts/:id/tier',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;
@@ -177,7 +177,7 @@ export function registerAdminAccountsRoutes(
   app.post<{ Params: { id: string } }>(
     '/v1/admin/accounts/:id/suspend',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;
@@ -200,7 +200,7 @@ export function registerAdminAccountsRoutes(
   app.post<{ Params: { id: string } }>(
     '/v1/admin/accounts/:id/unsuspend',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;
@@ -225,7 +225,7 @@ export function registerAdminAccountsRoutes(
   app.get(
     '/v1/admin/accounts',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;
@@ -262,7 +262,7 @@ export function registerAdminAccountsRoutes(
   app.get<{ Params: { id: string } }>(
     '/v1/admin/accounts/:id',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;
@@ -281,7 +281,7 @@ export function registerAdminAccountsRoutes(
   app.get<{ Params: { id: string } }>(
     '/v1/admin/accounts/:id/usage',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;
@@ -302,7 +302,7 @@ export function registerAdminAccountsRoutes(
   app.post<{ Params: { id: string } }>(
     '/v1/admin/accounts/:id/quota-override',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;
@@ -349,7 +349,7 @@ export function registerAdminAccountsRoutes(
   app.delete<{ Params: { id: string } }>(
     '/v1/admin/accounts/:id/quota-override',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
     },
     async (request, reply) => {
       const ctx = request.account;

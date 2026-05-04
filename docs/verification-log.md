@@ -7664,3 +7664,68 @@ The marketing site is pure-static Astro with no client-side JS. A hamburger togg
 ### Next
 
 Continuing per never-stop rule. 5a remaining work — surface batch 2 (/api-reference + the BaseLayout/Header improvements) and continue to Priority 5b (customer dashboard mockups).
+
+---
+
+## V-134 — Admin scope centralized to Fastify preHandler (Tier 1 security defense-in-depth)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+Founder direction (Priority 5c): "Centralized requireScope('admin') middleware ... is actually load-bearing for admin panel. Land at same time as admin panel scaffolding." Also closes the deferred surface item I'd flagged earlier as defense-in-depth.
+
+Pre-V-134, admin scope checks were per-handler / per-service-method calls (`throwIfMissingScope(ctx, 'admin')` inline). Working but easy to forget on new admin routes. Centralized: every `/v1/admin/*` route gets the check at the preHandler level via the existing `app.requireScope` decorator.
+
+### What changed
+
+Migrated 15 admin routes across 4 files from `[app.requireAuth, app.rateLimit('global')]` to `[app.requireScope('admin'), app.rateLimit('global')]`:
+
+- `apps/server/src/routes/admin-accounts.ts` — 8 routes (tier, suspend, unsuspend, list, detail, usage, quota-override GET/DELETE).
+- `apps/server/src/routes/admin-audit-log.ts` — 1 route (audit-log read).
+- `apps/server/src/routes/admin-webhooks.ts` — 4 routes (delivery get/replay, dlq list/requeue).
+- `apps/server/src/routes/admin-force-actions.ts` — 2 routes (session destroy, api-key revoke).
+
+`apps/server/src/routes/admin.ts` was NOT migrated — that file misleadingly named "admin" actually serves customer-facing routes (`/v1/api-keys`, `/v1/usage`) which must NOT require Driftstack admin scope. Path-scoped centralization is correct here; the file name is the misleader, not the wiring.
+
+The `app.requireScope` decorator (defined in `middleware/auth.ts:52`) already handles the auth fallback — calls `requireAuth` if `request.account` is null, then enforces scope. So preHandler can drop `app.requireAuth` since requireScope covers it.
+
+Existing inline `throwIfMissingScope(ctx, 'admin')` calls in services (`admin-accounts.ts`, `admin-force-actions.ts`) and routes (`admin-audit-log.ts`) stay as defense-in-depth — if a future code path bypasses the preHandler, the service still rejects.
+
+### Behavioral semantics changed: 403 audit row no longer written
+
+Pre-V-134, calling `/v1/admin/accounts/:id/tier` without `admin` scope produced **HTTP 403 + an `error: forbidden` audit row**. The audit captured the attempt.
+
+Post-V-134, the same call produces **HTTP 403 with NO audit row** — the preHandler rejects before the service code (and `withAudit` wrapper) runs.
+
+This is a deliberate security trade-off:
+
+- **Lost**: visibility into "non-admin tried to call admin endpoint" attempts.
+- **Gained**: non-admin callers can't probe admin endpoints to glean target existence via audit log inflation. Admin-attempt audit fires on `requireAuth` succeeded + scope missing — but pre-V-134, the audit row contained `targetAccountId`, leaking that the target account was at least known.
+
+Updated `apps/server/tests/integration/admin-accounts.test.ts:'403 when admin scope is missing'` to expect zero audit rows post-V-134, with a comment documenting the security rationale.
+
+### Hardened test coverage
+
+The same test (`403 when admin scope is missing`) continues to verify the 403 response. With the preHandler change it now also implicitly verifies the preHandler order — if `requireScope('admin')` were placed AFTER `rateLimit('global')` in the array, rate-limited 429 could mask the 403; explicit ordering puts scope first.
+
+### How verified
+
+- `npm run typecheck`: clean across all 7 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 530/530 passing (after fixing the one test that expected an audit row for the 403; new behavior is no-audit-on-preHandler-reject).
+
+### Files modified
+
+- `apps/server/src/routes/admin-accounts.ts` (8 preHandlers migrated)
+- `apps/server/src/routes/admin-audit-log.ts` (1)
+- `apps/server/src/routes/admin-webhooks.ts` (4)
+- `apps/server/src/routes/admin-force-actions.ts` (2)
+- `apps/server/tests/integration/admin-accounts.test.ts` (test expectation updated for new 403-no-audit semantics)
+
+### Next
+
+Continuing per never-stop rule. apps/admin-panel/ Astro app scaffolding next (Tier 1 build infra; Tier 3 visual UX stays in working tree).

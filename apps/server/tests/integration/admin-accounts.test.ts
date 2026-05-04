@@ -62,12 +62,15 @@ describe('POST /v1/admin/accounts/:id/tier', () => {
       payload: { tier: 'api_scale' },
     });
     expect(res.statusCode).toBe(403);
-    // Audit row written even on the 403 — it's an admin action attempt.
-    // (Note: the scope check happens INSIDE the service; the
-    // audit-on-error path catches it.)
+    // V-134: scope check moved to a Fastify preHandler — fires before the
+    // route handler runs. By design, no audit row is written for
+    // preHandler-rejected requests — that prevents non-admin callers
+    // from probing admin endpoints to glean target existence via audit
+    // log inflation. Service-level `throwIfMissingScope` calls remain as
+    // defense-in-depth; if a future code path bypasses the preHandler
+    // (shouldn't be possible) the service still rejects + records.
     const all = fx.adminAuditRepo.getAll();
-    expect(all).toHaveLength(1);
-    expect(all[0]?.result).toMatch(/^error: forbidden/);
+    expect(all).toHaveLength(0);
   });
 
   it('404 for unknown account id', async () => {

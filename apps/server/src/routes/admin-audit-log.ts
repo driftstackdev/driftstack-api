@@ -52,7 +52,7 @@ export function registerAdminAuditLogRoutes(
   app.get(
     '/v1/admin/audit-log',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;
