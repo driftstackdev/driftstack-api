@@ -41,4 +41,10 @@ export default defineConfig({
       },
     },
   },
+  benchmark: {
+    // V-120: bench files run via `npm run bench`. Excluded from the
+    // standard `npm test` `include` glob above so unit tests stay fast.
+    include: ['apps/**/tests/bench/**/*.bench.ts'],
+    exclude: ['**/node_modules/**', '**/dist/**'],
+  },
 });

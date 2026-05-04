@@ -6958,3 +6958,55 @@ V-118 follow-up: extend the cursor-iterator pattern to the remaining cursor-pagi
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-120 — Auth path microbenchmark + bench harness (Routine — performance baseline)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+PHASE 8 of the autopilot directive lists "auth path perf microbenchmark — auth cache hit + miss latency." Establishes baseline numbers so future regressions in the hot path are detectable. Per directive, NOT a CI gate (bench results on shared runners are too noisy to fail builds on); baseline lives in `docs/benchmarks/auth-path.md` for reference.
+
+### What changed
+
+- `vitest.config.ts`: added a `benchmark` block with `include: 'apps/**/tests/bench/**/*.bench.ts'`. Bench files are excluded from the standard test glob, so `npm test` stays fast.
+- `package.json`: added `npm run bench` → `vitest bench --run`.
+- New `apps/server/tests/bench/auth-cache.bench.ts` — 3 benches:
+  - `sha256(plaintext)` — cache-key derivation (every authed request).
+  - `InMemoryAuthCache.get()` — cache hit (the dominant hot path).
+  - Miss → set → hit roundtrip (in-memory cost only; excludes scrypt + DB).
+- New `docs/benchmarks/auth-path.md` — baseline snapshot from local dev hardware. Documents what's NOT benched (Redis, scrypt verify, full request roundtrip) and why.
+
+### Baseline numbers (Apple M-class, 2026-05-04)
+
+- `sha256` 2.4M ops/s, p99 0.7µs.
+- `cache hit` 9.1M ops/s, p99 0.2µs.
+- Miss → set → hit roundtrip 1.6M ops/s, p99 0.8µs.
+
+Cold path (scrypt + DB) excluded — different benchmark scope, owns its own future doc.
+
+### How verified
+
+- `npm run bench` runs cleanly, produces structured output (hz / min / max / mean / p75 / p99 / p999 / rme / samples per bench).
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` on the new markdown).
+- `npm test`: 515/515 passing — bench files excluded from the test glob so the unit-test suite is unchanged.
+
+### Files added
+
+- `apps/server/tests/bench/auth-cache.bench.ts`
+- `docs/benchmarks/auth-path.md`
+
+### Files modified
+
+- `vitest.config.ts` (new `benchmark` block)
+- `package.json` (new `bench` script)
+
+### Next
+
+Continuing per never-stop rule. Future bench candidates: rate-limit token-bucket consume operations, OpenAPI-spec validation cost, webhook-signature verify.
