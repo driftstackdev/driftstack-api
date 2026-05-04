@@ -42,7 +42,7 @@
     "@types/supertest": "^6.0.0",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
-    "drizzle-kit": "^0.30.0",
+    "drizzle-kit": "^0.31.10",
     "supertest": "^7.0.0"
   }
 }
