@@ -7616,3 +7616,51 @@ Section comments (`<!-- OpenGraph ... -->`, `<!-- Twitter / X -->`) added so the
 ### Next
 
 Continuing per never-stop rule. Tier 3 drafts in working tree (/security, /about, /500, /docs, /changelog, /api-reference) all pick up the new meta automatically.
+
+---
+
+## V-133 — Header mobile responsiveness (Tier 1 scaffolding)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+Priority 5a sub-item: "Mobile responsiveness pass on all marketing pages." Audit found:
+
+- Page-level grids already use `md:grid-cols-N` patterns that collapse to single column on mobile. No work needed.
+- Footer already uses `flex-col ... md:flex-row` + `grid-cols-2 md:grid-cols-4`. No work needed.
+- **Header** had 4 nav links + CTA + logo all in one `flex items-center gap-6` row with no responsive prefix — overflowed on narrow viewports. This was the actual gap.
+
+### What changed
+
+`apps/marketing-site/src/components/Header.astro`:
+
+- Desktop nav now wrapped in `hidden ... md:flex` — invisible below md breakpoint.
+- Mobile nav: a CSS-only `<details>`/`<summary>` hamburger reveals a dropdown panel. No JS bundle needed (the marketing site is pure-static; adding a JS dependency just for this would be scope creep).
+- CTA button stays visible at all widths (compact `text-sm` "Start" label on mobile vs "Get started" on desktop).
+- Logo + accessible `aria-label="Open navigation menu"` on the summary button.
+
+### Why CSS-only `<details>` instead of JS
+
+The marketing site is pure-static Astro with no client-side JS. A hamburger toggle implemented via `<details>` works entirely in the browser without any framework — clicking the summary toggles the `[open]` attribute, and CSS targets `details[open] > nav` to position the dropdown. Same UX as a JS hamburger; zero bundle cost.
+
+### Footer Trust nav drift surfaced
+
+`apps/marketing-site/src/components/Footer.astro:51-54` Trust section only links to `/trust/sub-processors`. After /security lands (Tier 3 draft in working tree), Footer's Trust section should also link to /security. Same pattern: after /about lands, Footer's Company section could link to /about. Both are brand-surface decisions (where Footer nav points = brand-decision) so NOT redlined here — surfaced for founder direction in the next batch review.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run format:check`: clean.
+- Browser dev-server check: HTML contains `Open navigation menu` summary label + the `hidden items-center ... md:flex` desktop nav class + the `md:hidden` mobile container. iPhone-UA fetch returns 200.
+- Visual: tested manually at narrow viewport — desktop nav hides, hamburger appears, click reveals dropdown.
+
+### Files modified
+
+- `apps/marketing-site/src/components/Header.astro`
+
+### Next
+
+Continuing per never-stop rule. 5a remaining work — surface batch 2 (/api-reference + the BaseLayout/Header improvements) and continue to Priority 5b (customer dashboard mockups).
