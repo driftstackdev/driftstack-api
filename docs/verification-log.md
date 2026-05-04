@@ -8758,3 +8758,43 @@ Two definitions = drift risk. If the founder re-prices a tier, only the api-type
 ### Next
 
 Continuing per never-stop rule. PRIORITY 12 ongoing.
+
+---
+
+## V-156 — TIER_CONCURRENT_SESSION_LIMITS exported from api-types
+
+### Date
+
+2026-05-05
+
+### Goal
+
+V-155 consolidated `PROFILES_PER_TIER` to api-types as single source of truth. `TIER_CONCURRENT_SESSION_LIMITS` was the symmetric case — defined locally in `apps/server/src/services/sessions.ts:35`, with the marketing-site copy (`pricing.ts` field `concurrent`) hardcoded separately. Same drift risk: re-pricing requires touching multiple sites.
+
+V-156 lifts the concurrent-limits table into `@driftstack/api-types` alongside `PROFILES_PER_TIER` so future cross-workspace consumers (customer-dashboard tier-info display, admin-panel account-detail concurrent-cap surfaces) can import the canonical source.
+
+### What changed
+
+`packages/api-types/src/common.ts`:
+
+- Added `TIER_CONCURRENT_SESSION_LIMITS: Record<AccountTier, number>` constant with full doc-comment (locked per ADR-004 + mirroring rule + Enterprise sentinel-floor explanation).
+
+`apps/server/src/services/sessions.ts`:
+
+- Imports `TIER_CONCURRENT_SESSION_LIMITS` from api-types.
+- Removed the local definition. `concurrentSessionLimitFor()` retained as the small helper to keep call sites stable.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm test`: 556/556 passing.
+
+### Files modified
+
+- `packages/api-types/src/common.ts`
+- `apps/server/src/services/sessions.ts`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 12 ongoing.

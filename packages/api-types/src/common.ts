@@ -118,6 +118,34 @@ export const PROFILES_PER_TIER: Record<AccountTier, number | 'custom'> = {
 };
 
 /**
+ * Concurrent session limit per tier — the primary metering primitive
+ * on paid tiers. A customer can have up to N sessions in `creating` /
+ * `ready` / `busy` state simultaneously; creating an (N+1)th triggers
+ * `concurrency_limit_exceeded` (HTTP 429).
+ *
+ * Locked per ADR-004. Values mirrored in
+ * `apps/marketing-site/src/data/pricing.ts:API_TIERS` field
+ * `concurrent`. `enterprise: 32` is a sentinel floor for the smallest
+ * custom contract; per-account overrides via the rate-limit-overrides
+ * path bump real Enterprise customers higher.
+ *
+ * The server-side enforcement at session-create time reads from this
+ * constant via `concurrentSessionLimitFor()`. Cross-workspace consumers
+ * (customer-dashboard /sessions tier-info, admin-panel account-detail)
+ * can import directly.
+ */
+export const TIER_CONCURRENT_SESSION_LIMITS: Record<AccountTier, number> = {
+  trial_pack: 1,
+  solo_manual: 1,
+  team_manual: 3,
+  agency_manual: 8,
+  api_starter: 2,
+  api_builder: 8,
+  api_scale: 24,
+  enterprise: 32,
+};
+
+/**
  * Currently-locked archetype identifier + human-readable label.
  *
  * The identifier (`iphone16pro_ios18_7_safari26_4`) is what the API
