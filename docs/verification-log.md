@@ -8540,3 +8540,40 @@ V-134 (admin scope centralized to preHandler) and V-142 (team roles taxonomy doc
 ### Next
 
 Continuing per never-stop rule. PRIORITY 12 ongoing.
+
+---
+
+## V-151 — Go SDK pagination example (cross-SDK example parity)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Cross-SDK example parity: the TS SDK has `examples/pagination.ts` (V-118 / V-122) and Python has `examples/pagination.py` (V-126), but the Go SDK has none. Without a worked example, callers ship their own page-loop boilerplate per integration and tend to forget the `page.NextCursor == nil` exit condition (silent bug — pages stop returning data but the loop never exits if you only check `len(page.Data)`).
+
+Go pre-1.23 has no generators / range-over-func, so the SDK exposes the raw `List(...)` per-page methods rather than an `Iterate(...)` generator. The example documents the canonical loop shape so integrators copy a known-good pattern.
+
+### What changed
+
+`packages/sdk-go/examples/pagination/main.go` (new):
+
+- **Pattern 1 — full walk**: paginate every session for the calling account using `client.Sessions.List` with `Limit: 50`, exit when `page.NextCursor == nil`. Demonstrates the canonical exit condition.
+- **Pattern 2 — early-exit / find-first**: walk pages until a session matching `FIND_SESSION_LABEL` is found; demonstrates that cursor pagination is page-aligned so the loop body controls walk aggressiveness.
+
+Doc-comment notes the same pattern applies 1:1 to webhook deliveries (`client.Webhooks.ListDeliveries`) — same Page shape (`Data` + `NextCursor` + `has_more`).
+
+### How verified
+
+- `go build ./examples/pagination` (from `packages/sdk-go/`): clean.
+- `go vet ./examples/pagination`: clean.
+- `npm test` from repo root: 556/556 (unchanged — no regression).
+
+### Files added
+
+- `packages/sdk-go/examples/pagination/main.go`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 12 ongoing.
