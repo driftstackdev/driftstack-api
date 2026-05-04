@@ -8,6 +8,30 @@ const HARDWARE_BY_SKU: Record<string, string> = {
   self_hosted_enterprise: 'Mac Studio Ultra / Mac Pro / multi-node cluster',
 };
 
+// V-128: license-tier differentiators (NOT customer deployment choices).
+// Multi-region + multi-node clustering removed — those are deployment
+// shapes the customer chooses with their own hardware, not gated by
+// license tier. Customer with one Mac mini at home doesn't have multi-
+// region anything regardless of which SKU they bought.
+
+const SOFTWARE_UPDATES_BY_SKU: Record<string, string> = {
+  self_hosted_solo: 'Quarterly',
+  self_hosted_pro: 'Continuous',
+  self_hosted_enterprise: 'Continuous + bespoke patches',
+};
+
+const ARCHETYPE_UPDATES_BY_SKU: Record<string, string> = {
+  self_hosted_solo: 'Major iOS only',
+  self_hosted_pro: 'All releases',
+  self_hosted_enterprise: 'All + early access',
+};
+
+const SOURCE_ACCESS_BY_SKU: Record<string, string> = {
+  self_hosted_solo: 'Build artifacts',
+  self_hosted_pro: 'Build artifacts',
+  self_hosted_enterprise: 'Full repository (read-only audit)',
+};
+
 function fmtUsd(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
   return value % 1 === 0 ? `$${value.toLocaleString('en-US')}` : `$${value.toFixed(2)}`;
@@ -43,14 +67,14 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
 
 <BaseLayout
   title="Self-Hosted"
-  description="Run Driftstack on your own Apple silicon. Privacy-required workloads, sustained high-volume usage, full data sovereignty. Contact Sales for early access; GA within 6 months of API public launch."
+  description="Run Driftstack on your own infrastructure. Privacy-required workloads, sustained high-concurrency operations, full data sovereignty. Contact Sales for early access; GA within 6 months of API public launch."
 >
   <!-- Header -->
   <section class="bg-gradient-to-b from-white to-slate-50">
     <div class="mx-auto max-w-6xl px-6 py-20">
       <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Self-hosted</p>
       <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
-        Run Driftstack on your own Apple silicon.
+        Run Driftstack on your own infrastructure.
       </h1>
       <p class="mt-6 max-w-prose text-lg text-slate-600">
         Same SDK, same archetypes, same iPhone Safari fidelity — just running
@@ -66,6 +90,52 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
       <p class="mt-3 text-xs text-slate-500">
         Available "Contact Sales" from day 0. Self-hosted GA within 6 months
         of API public launch.
+      </p>
+    </div>
+  </section>
+
+  <!-- Architecture diagram -->
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Architecture</p>
+      <h2
+        class="mt-4 max-w-3xl text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl"
+        style="letter-spacing: -0.02em;"
+      >
+        Two boxes. One secure channel. Your hardware, our orchestration.
+      </h2>
+      <p class="mt-6 max-w-prose text-base text-slate-600">
+        Self-hosted is one piece of Driftstack software running on Mac
+        hardware you own. The control plane orchestrates sessions, exposes
+        the SDK + GUI, and never holds your session content.
+      </p>
+
+      <div
+        class="mt-10 overflow-x-auto rounded-lg border border-slate-200 bg-slate-900 p-8 font-mono text-sm leading-6 text-slate-200"
+      >
+        <pre class="whitespace-pre">{`  YOUR INFRA                                 DRIFTSTACK ORCHESTRATION
+  ──────────                                 ────────────────────────
+
+  ┌──────────────────┐                       ┌──────────────────────┐
+  │  Mac fleet       │ ◀──── secure ───────▶ │  Control plane       │
+  │  (M4 / Studio /  │       channel         │  (license, API keys, │
+  │   multi-node)    │       (mTLS)          │   session metadata)  │
+  └──────────────────┘                       └──────────────────────┘
+        │
+        │  WebKit sessions, customer-controlled egress
+        ▼
+  ┌──────────────────┐
+  │  Customer-owned  │
+  │  proxies         │
+  │  (SOCKS5 / WG /  │
+  │   OpenVPN)       │
+  └──────────────────┘`}</pre>
+      </div>
+
+      <p class="mt-6 max-w-prose text-sm text-slate-500">
+        Session content (URLs, form data, captures, recordings) stays inside
+        your network. Driftstack's control plane sees license + session
+        metadata, never the session itself.
       </p>
     </div>
   </section>
@@ -89,12 +159,15 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         </div>
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Volume</p>
-          <h3 class="mt-3 text-xl font-semibold text-slate-900">Unit economics flip past 5,000 hr/mo</h3>
+          <h3 class="mt-3 text-xl font-semibold text-slate-900">
+            Sustained high-concurrency operations
+          </h3>
           <p class="mt-3 text-sm text-slate-600">
-            Sustained usage above ~5,000 browser-hours per month makes owned
-            hardware cheaper on a per-hour basis than the metered cloud rate
-            — even after accounting for hardware amortisation, electricity,
-            and your own ops time. We'll model the break-even with your team.
+            When your fleet runs at consistently high concurrent-session
+            counts (sustained 10+ concurrent across the month), owned
+            hardware unit economics flip favorably against equivalent
+            cloud-tier subscriptions. We'll model the break-even with your
+            team based on your actual concurrency profile.
           </p>
         </div>
         <div>
@@ -164,12 +237,16 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
                 <dd class="text-right text-slate-900">{fmtArchetypes(sku.archetypesMax)}</dd>
               </div>
               <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
-                <dt class="text-slate-500">Multi-region</dt>
-                <dd class="text-right text-slate-700">{sku.multiRegion ? 'Yes' : 'No'}</dd>
+                <dt class="text-slate-500">Software updates</dt>
+                <dd class="text-right text-slate-700">{SOFTWARE_UPDATES_BY_SKU[sku.id]}</dd>
               </div>
               <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
-                <dt class="text-slate-500">Multi-node clustering</dt>
-                <dd class="text-right text-slate-700">{sku.multiNodeClustering ? 'Yes' : 'No'}</dd>
+                <dt class="text-slate-500">Archetype updates</dt>
+                <dd class="text-right text-slate-700">{ARCHETYPE_UPDATES_BY_SKU[sku.id]}</dd>
+              </div>
+              <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <dt class="text-slate-500">Source code access</dt>
+                <dd class="text-right text-slate-700">{SOURCE_ACCESS_BY_SKU[sku.id]}</dd>
               </div>
               <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
                 <dt class="text-slate-500">Custom archetype dev</dt>

@@ -7406,3 +7406,55 @@ Plus the working-tree V-077 / V-070-style restructure that had been sitting in t
 ### Next
 
 Continuing per never-stop rule. /self-hosted redlines next as V-129.
+
+---
+
+## V-129 — /self-hosted Tier 3 redline pass: hero + matrix + volume (Tier 3 → committed)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+Founder review of the working-tree /self-hosted.astro draft surfaced three drifts:
+
+- **REDLINE 6 (hero infrastructure-language leak):** draft re-introduced `Run Driftstack on your own Apple silicon` after V-069 directive removed Apple-silicon language for genericity ("infrastructure" / "hardware"). Same drift in the BaseLayout `description` meta string.
+- **REDLINE 7 (matrix nonsense rows):** the SKU comparison matrix had `Multi-region` and `Multi-node clustering` rows toggled per-tier. Founder direction: these are CUSTOMER deployment choices, NOT license-tier differentiators. Replace with three real differentiators: Software updates (Quarterly / Continuous / Continuous + bespoke patches), Archetype updates (Major iOS only / All releases / All + early access), Source code access (Build artifacts / Build artifacts / Full repository read-only audit).
+- **REDLINE 8 (volume card hours-meter framing):** "Unit economics flip past 5,000 hr/mo" + "metered cloud rate" + "per-hour basis" all reference dead hours-metering model. ADR-004 is concurrent-only.
+
+### What changed
+
+`apps/marketing-site/src/pages/self-hosted.astro`:
+
+- **BaseLayout `description`** — "Apple silicon" → "infrastructure", and "sustained high-volume usage" → "sustained high-concurrency operations" so the meta tag matches the redlined hero.
+- **Hero `<h1>`** — same "infrastructure" replacement (REDLINE 6 explicit).
+- **Matrix lookup dicts** — added `SOFTWARE_UPDATES_BY_SKU`, `ARCHETYPE_UPDATES_BY_SKU`, `SOURCE_ACCESS_BY_SKU` keyed by sku.id (parallels existing `HARDWARE_BY_SKU` pattern). Hardcoded values per founder spec; not threaded into `pricing.ts` (data-source change would be larger scope).
+- **Matrix rows** — removed Multi-region + Multi-node-clustering `<dl>` rows. Inserted Software updates / Archetype updates / Source code access rows in their place.
+- **Volume card** — heading "Unit economics flip past 5,000 hr/mo" → "Sustained high-concurrency operations". Body rewritten to concurrent-session framing per founder spec.
+
+Plus the V-070-style ASCII architecture diagram + closing line that had been sitting in the working-tree draft across the resume — landing here as part of the same Tier 3 commit.
+
+### Surfaced drift, NOT applied (founder direction needed)
+
+- `apps/marketing-site/src/pages/self-hosted.astro:289` — Process step 01 still reads "Email sales@... with workload shape + monthly browser-hour volume." Same hours-meter drift REDLINE 8 fixed for the Volume card. Wasn't explicitly in REDLINE scope; left as-is pending direction.
+
+### Stale fields surfaced
+
+`pricing.ts:SELF_HOSTED_SKUS` still carries `multiRegion: boolean` and `multiNodeClustering: boolean` per-SKU. After REDLINE 7 these fields are unused — pure data noise. NOT removed in this commit (would be a separate refactor that touches pricing.ts data and any other places those fields are read). Surfacing for follow-up cleanup. The unused fields don't cause typecheck/lint errors today; just cruft.
+
+### How verified
+
+- `npm run typecheck`: clean across all 7 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 530/530 (Astro pages outside vitest scope).
+- Browser dev-server check: `curl http://127.0.0.1:4321/self-hosted` returns the redlined content. Positive: `Run Driftstack on your own infrastructure`, `Software updates`, `Sustained high-concurrency`, `Source code access` all present. Negative: `Apple silicon`, `Multi-region`, `Multi-node clustering` all 0.
+
+### Files modified
+
+- `apps/marketing-site/src/pages/self-hosted.astro`
+
+### Next
+
+Continuing per never-stop rule. Resuming Priority 4 (PHASE 9 test fixtures, tight scope) next.
