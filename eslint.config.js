@@ -21,6 +21,8 @@ export default tseslint.config(
       // Files are typechecked via `astro check`, not by the eslint
       // config.
       'apps/customer-dashboard/**',
+      // Admin panel — same Astro-project pattern (V-135).
+      'apps/admin-panel/**',
     ],
   },
   js.configs.recommended,

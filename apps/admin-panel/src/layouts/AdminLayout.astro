@@ -1,0 +1,80 @@
+---
+import '../styles/base.css';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const {
+  title,
+  description = 'Driftstack admin panel — Driftstack staff only.',
+} = Astro.props;
+
+const fullTitle = `${title} · Driftstack admin`;
+const pathname = Astro.url.pathname;
+
+const navItems = [
+  { href: '/', label: 'Overview' },
+  { href: '/accounts', label: 'Accounts' },
+  { href: '/audit-log', label: 'Audit log' },
+  { href: '/leads', label: 'Leads' },
+  { href: '/sessions', label: 'Sessions' },
+  { href: '/api-keys', label: 'API keys' },
+  { href: '/webhook-dlq', label: 'Webhook DLQ' },
+  { href: '/rate-limit-overrides', label: 'Rate limits' },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <!-- Admin panel must NEVER be indexed; staff-only surface. -->
+    <meta name="robots" content="noindex,nofollow" />
+  </head>
+  <body class="bg-slate-50 text-slate-900">
+    <div class="flex min-h-screen">
+      <aside class="hidden w-56 shrink-0 border-r border-slate-200 bg-white md:block">
+        <div class="flex h-16 items-center justify-between px-6 border-b border-slate-200">
+          <a href="/" class="font-semibold text-slate-900">Driftstack</a>
+          <span
+            class="rounded-full bg-oxblood-50 px-2 py-0.5 font-mono text-xs uppercase tracking-wide text-oxblood-700"
+          >
+            admin
+          </span>
+        </div>
+        <nav class="px-4 py-6">
+          <ul class="space-y-1">
+            {
+              navItems.map((item) => (
+                <li>
+                  <a
+                    href={item.href}
+                    class:list={[
+                      'block rounded-md px-3 py-2 text-sm transition-colors',
+                      pathname === item.href || pathname.startsWith(item.href + '/')
+                        ? 'bg-oxblood-50 font-medium text-oxblood-700'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                    ]}
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              ))
+            }
+          </ul>
+        </nav>
+        <div class="border-t border-slate-200 px-6 py-4 text-xs text-slate-500">
+          <p>Staff-only surface. All actions audit-logged.</p>
+        </div>
+      </aside>
+      <main class="flex-1">
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>

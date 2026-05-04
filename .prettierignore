@@ -14,3 +14,5 @@ apps/marketing-site/.astro/
 apps/marketing-site/dist/
 apps/customer-dashboard/.astro/
 apps/customer-dashboard/dist/
+apps/admin-panel/.astro/
+apps/admin-panel/dist/

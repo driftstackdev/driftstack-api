@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tokens shared with apps/marketing-site/src/styles/base.css. Keep
+   synchronised — customer experience reads as one product. */
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    @apply bg-slate-50 text-slate-900;
+    font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply min-h-screen flex flex-col;
+  }
+
+  code,
+  pre,
+  kbd {
+    font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;
+    font-feature-settings: normal;
+  }
+
+  ::selection {
+    @apply bg-oxblood-700 text-white;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-md bg-oxblood-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-oxblood-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-oxblood-700;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-oxblood-700;
+  }
+
+  .nav-link {
+    @apply text-sm text-slate-600 transition-colors hover:text-oxblood-700;
+  }
+
+  .dashboard-card {
+    @apply rounded-lg border border-slate-200 bg-white p-6 shadow-sm;
+  }
+}

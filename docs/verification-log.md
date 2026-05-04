@@ -7729,3 +7729,79 @@ The same test (`403 when admin scope is missing`) continues to verify the 403 re
 ### Next
 
 Continuing per never-stop rule. apps/admin-panel/ Astro app scaffolding next (Tier 1 build infra; Tier 3 visual UX stays in working tree).
+
+---
+
+## V-135 — apps/admin-panel/ scaffold (Tier 1 build infra + AdminLayout + Overview)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+Priority 5c continuation. Separate Astro app at admin.driftstack.dev for Driftstack-staff-only operations — distinct security boundary from the customer-dashboard at app.driftstack.dev (different DNS, different audience, different API scope requirement).
+
+### What changed
+
+New workspace `apps/admin-panel/`:
+
+- `package.json` — `@driftstack/admin-panel@0.0.1`, private, same Astro 5 + Tailwind 3 stack as customer-dashboard.
+- `astro.config.mjs` — `site: 'https://admin.driftstack.dev'`, `output: 'static'`. Cloudflare Pages deploy target.
+- `tailwind.config.mjs` — design tokens copied from customer-dashboard (oxblood + slate + Geist + Berkeley Mono).
+- `tsconfig.json` — extends customer-dashboard pattern.
+- `src/styles/base.css` — copied from customer-dashboard.
+- `src/layouts/AdminLayout.astro` — sidebar nav with 8 entries (Overview / Accounts / Audit log / Leads / Sessions / API keys / Webhook DLQ / Rate limits) + an `[admin]` chip in the sidebar header. Sets `<meta name="robots" content="noindex,nofollow">`.
+- `src/data/mocks.ts` — admin-specific mock data: `MOCK_ACCOUNTS`, `MOCK_AUDIT_LOG`, `MOCK_LEADS`.
+- `src/pages/index.astro` — Overview home with 4 top tiles + recent admin activity.
+- `.gitignore` — `.astro/` + `dist/`.
+
+Wired into root tooling:
+
+- `eslint.config.js` — added `apps/admin-panel/**` to ignores (same Astro-project pattern as marketing-site + customer-dashboard).
+- `.prettierignore` — added `apps/admin-panel/.astro/` + `apps/admin-panel/dist/`.
+- npm workspaces glob `apps/*` auto-picks up admin-panel.
+
+Tier 3 visual drafts NOT committed in V-135 (working tree only, awaiting founder review):
+
+- `apps/admin-panel/src/pages/accounts.astro`
+- `apps/admin-panel/src/pages/audit-log.astro`
+
+### Why separate Astro app, not customer-dashboard route
+
+Founder direction: "different security boundary, different audience". Concrete reasons:
+
+- DNS-level separation (admin.driftstack.dev) means a leaked customer-dashboard session cookie cannot authenticate the admin panel.
+- Admin panel's auth scope is `admin` (V-134 preHandler); customer dashboard's session-based auth doesn't carry that scope at all. Mixing them in one Astro app would create an "if scope === 'admin' then show extra pages" branch that's easier to bug on.
+- Cloudflare Access SSO (planned) gates the entire admin.driftstack.dev origin — easier to wire when the origin is one app.
+
+### How verified
+
+- `npm install`: workspace picked up (8 workspaces total).
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 530/530 passing — admin-panel has no tests yet (scaffold-only).
+- Dev server: `astro dev --host 0.0.0.0 --port 4323` running; `/`, `/accounts`, `/audit-log` all HTTP 200.
+
+### Files added
+
+- `apps/admin-panel/package.json`
+- `apps/admin-panel/astro.config.mjs`
+- `apps/admin-panel/tailwind.config.mjs`
+- `apps/admin-panel/tsconfig.json`
+- `apps/admin-panel/.gitignore`
+- `apps/admin-panel/src/styles/base.css`
+- `apps/admin-panel/src/layouts/AdminLayout.astro`
+- `apps/admin-panel/src/data/mocks.ts`
+- `apps/admin-panel/src/pages/index.astro`
+
+### Files modified
+
+- `eslint.config.js`
+- `.prettierignore`
+- `package-lock.json`
+
+### Next
+
+Continuing per never-stop rule. /accounts + /audit-log stay Tier 3 working-tree drafts. Continuing 5c with /leads + /sessions + /webhook-dlq + /rate-limit-overrides drafts.
