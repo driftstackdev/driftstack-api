@@ -8839,3 +8839,45 @@ V-157 adds 3 contract tests that catch all three cases at unit-test time instead
 ### Next
 
 Continuing per never-stop rule. PRIORITY 12 ongoing.
+
+---
+
+## V-158 — env-vars.md sync: 5 missing Stripe vars added
+
+### Date
+
+2026-05-05
+
+### Goal
+
+`docs/deployment/env-vars.md` is the canonical schema for env vars the control plane reads — referenced from CLAUDE.md as the source of truth for deployment configuration. Audited the doc against `apps/server/src/lib/config.ts:171` (`loadConfig`) and found 5 Stripe-related env vars that the server reads but the doc didn't list:
+
+- `STRIPE_API_VERSION` — pinned `Stripe-Version` header.
+- `STRIPE_SUCCESS_URL` — Checkout Session success redirect.
+- `STRIPE_CANCEL_URL` — Checkout Session cancel redirect.
+- `STRIPE_PORTAL_RETURN_URL` — Billing Portal return URL.
+- `STRIPE_TRIAL_PACK_PRICE_ID` — one-time price ID for the $2.99 trial pack (distinct from the subscription `DRIFTSTACK_TIER_PRICE_IDS` map).
+
+Without these in the doc, deployment config could omit them silently and the customer portal redirects would fall back to hardcoded staging URLs in production.
+
+### What changed
+
+`docs/deployment/env-vars.md`:
+
+- Added 5 entries to the Stripe section table with required/optional + per-env/shared + example + notes columns matching existing doc style.
+- `STRIPE_TRIAL_PACK_PRICE_ID` flagged `required at deploy` — it's the only path the customer can use to start a $2.99 trial; missing means trial-pack purchase is broken. Added note distinguishing it from the subscription tier price IDs.
+- `STRIPE_SUCCESS_URL` / `CANCEL_URL` / `PORTAL_RETURN_URL` flagged `optional` — server falls back to defaults; doc-comment notes the fallback behavior.
+
+### How verified
+
+- Doc-only commit; no code changes.
+- `npm run format:check` (via lint-staged on commit): clean.
+- Spot-checked: re-ran the `env-vars.md` ↔ `config.ts` diff — the 5 added entries close the gap; remaining "in-doc-but-not-in-config" entries are intentional (CI-time vars like `DEPLOY_DOTENV_BASE64`, business identifiers like `BV_KVK_NUMBER`, future-feature vars like `FLEET_NODE_PUBLIC_KEY_CACHE_TTL_SECONDS`).
+
+### Files modified
+
+- `docs/deployment/env-vars.md`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 12 ongoing.
