@@ -8722,3 +8722,39 @@ NOT modified (intentional — historical preservation):
 ### Next
 
 Continuing per never-stop rule. PRIORITY 12 ongoing.
+
+---
+
+## V-155 — Consolidate `PROFILES_PER_TIER` to api-types single source of truth
+
+### Date
+
+2026-05-05
+
+### Goal
+
+V-136 added `PROFILES_PER_TIER` to `packages/api-types/src/common.ts` as the canonical record (typed `Record<AccountTier, number | 'custom'>`). The customer-dashboard /profiles page already imports it (V-136). But `apps/server/src/services/sessions.ts:55` still had a local `PROFILES_PER_TIER` (typed `Record<AccountTier, number | null>`) — equivalent values except for `enterprise: null` vs `enterprise: 'custom'` sentinels.
+
+Two definitions = drift risk. If the founder re-prices a tier, only the api-types record gets updated and the server-side enforcement keeps the old value silently. Consolidate to api-types as single source of truth.
+
+### What changed
+
+`apps/server/src/services/sessions.ts`:
+
+- Imports `PROFILES_PER_TIER` from `@driftstack/api-types`.
+- Removed the local `PROFILES_PER_TIER: Record<AccountTier, number | null>` constant.
+- `profileLimitFor(tier)` now reads the api-types record + translates the `'custom'` sentinel → `null` for the existing legacy contract that `/v1/profiles` enforcement code expects.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm test`: 556/556 passing (existing `profileLimitFor` tests in e2e/profile-limit.spec.ts still pass — the api-types values match the deleted local values 1:1).
+
+### Files modified
+
+- `apps/server/src/services/sessions.ts`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 12 ongoing.

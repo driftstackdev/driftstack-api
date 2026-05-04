@@ -8,6 +8,7 @@
 
 import {
   LOCKED_ARCHETYPE_ID,
+  PROFILES_PER_TIER,
   type AccountTier,
   type CaptureKind,
   type CaptureRequest,
@@ -48,24 +49,14 @@ export function concurrentSessionLimitFor(tier: AccountTier): number {
 }
 
 // Profile count limit per tier — enforced at the /v1/profiles
-// creation gate (route lands in a future Workstream; constant +
-// helper land here per ADR-004 enforcement plan). Manual ladder
-// uses profile count as the tier-defining metric; API ladder also
-// caps profiles to prevent unbounded growth at lower tiers.
-// Enterprise is `null` = unlimited (per-contract overrides apply).
-const PROFILES_PER_TIER: Record<AccountTier, number | null> = {
-  trial_pack: 1,
-  solo_manual: 10,
-  team_manual: 50,
-  agency_manual: 200,
-  api_starter: 25,
-  api_builder: 100,
-  api_scale: 500,
-  enterprise: null,
-};
-
+// creation gate. Single source of truth lives in api-types
+// (PROFILES_PER_TIER, V-136). The api-types record uses the
+// 'custom' sentinel for enterprise; this helper translates to
+// null for the legacy null-means-unlimited contract that the
+// /v1/profiles enforcement code expects.
 export function profileLimitFor(tier: AccountTier): number | null {
-  return PROFILES_PER_TIER[tier];
+  const limit = PROFILES_PER_TIER[tier];
+  return limit === 'custom' ? null : limit;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
