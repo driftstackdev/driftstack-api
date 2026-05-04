@@ -1,0 +1,166 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { MOCK_ACCOUNTS, MOCK_AUDIT_LOG } from '../../data/mocks.ts';
+
+export function getStaticPaths() {
+  return MOCK_ACCOUNTS.map((account) => ({ params: { id: account.id } }));
+}
+
+const { id } = Astro.params;
+const account = MOCK_ACCOUNTS.find((a) => a.id === id);
+
+if (!account) {
+  // Astro static-build pre-renders only listed paths; this branch never
+  // hits in production. Kept for the dev-server case where someone hits
+  // an unlisted id.
+  return Astro.redirect('/accounts');
+}
+
+const auditSlice = MOCK_AUDIT_LOG.filter((e) => e.targetAccountId === account.id);
+
+function fmtIso(iso: string | null): string {
+  if (iso === null) return '—';
+  return new Date(iso).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+}
+
+const STATUS_BADGE: Record<string, string> = {
+  active: 'bg-emerald-50 text-emerald-700',
+  suspended: 'bg-amber-50 text-amber-700',
+  deleted: 'bg-slate-100 text-slate-600',
+};
+---
+
+<AdminLayout title={account.email}>
+  <div class="mx-auto max-w-5xl px-6 py-10">
+    <header class="mb-10">
+      <p class="text-sm text-slate-500">
+        <a href="/accounts" class="text-oxblood-700 hover:underline">← Back to accounts</a>
+      </p>
+      <div class="mt-2 flex items-start justify-between gap-6">
+        <div>
+          <h1 class="text-3xl font-semibold tracking-tight text-slate-900">
+            {account.name ?? account.email}
+          </h1>
+          {account.name !== null && (
+            <p class="mt-1 text-sm text-slate-500">{account.email}</p>
+          )}
+          <p class="mt-2 font-mono text-xs text-slate-500">{account.id}</p>
+        </div>
+        <span
+          class:list={[
+            'inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide',
+            STATUS_BADGE[account.status],
+          ]}
+        >
+          {account.status}
+        </span>
+      </div>
+    </header>
+
+    <!-- Account facts -->
+    <section class="dashboard-card">
+      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Account</p>
+      <dl class="mt-4 grid gap-4 md:grid-cols-2">
+        <div class="flex justify-between border-b border-slate-100 pb-2">
+          <dt class="text-sm text-slate-500">Tier</dt>
+          <dd class="font-mono text-sm text-slate-900">{account.tier}</dd>
+        </div>
+        <div class="flex justify-between border-b border-slate-100 pb-2">
+          <dt class="text-sm text-slate-500">Status</dt>
+          <dd class="font-mono text-sm text-slate-900">{account.status}</dd>
+        </div>
+        <div class="flex justify-between border-b border-slate-100 pb-2">
+          <dt class="text-sm text-slate-500">Created</dt>
+          <dd class="font-mono text-sm text-slate-900">{fmtIso(account.createdAt)}</dd>
+        </div>
+        <div class="flex justify-between border-b border-slate-100 pb-2">
+          <dt class="text-sm text-slate-500">Last seen</dt>
+          <dd class="font-mono text-sm text-slate-900">{fmtIso(account.lastSeenAt)}</dd>
+        </div>
+      </dl>
+    </section>
+
+    <!-- Admin actions -->
+    <section class="dashboard-card mt-6">
+      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+        Admin actions
+      </p>
+      <h2 class="mt-2 text-xl font-semibold text-slate-900">Manual operations</h2>
+      <p class="mt-2 text-sm text-slate-500">
+        All actions audit-logged with admin id + reason. Tier change applies
+        immediately; suspend revokes all sessions + keys until unsuspend.
+      </p>
+
+      <div class="mt-6 flex flex-wrap gap-3">
+        <a href={`#tier-${account.id}`} class="btn-secondary text-sm">
+          Change tier
+        </a>
+        {account.status === 'active' ? (
+          <a
+            href={`#suspend-${account.id}`}
+            class="btn-secondary text-sm border-amber-300 text-amber-800 hover:bg-amber-50"
+          >
+            Suspend account
+          </a>
+        ) : account.status === 'suspended' ? (
+          <a
+            href={`#unsuspend-${account.id}`}
+            class="btn-secondary text-sm border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+          >
+            Unsuspend account
+          </a>
+        ) : null}
+        <a
+          href={`#quota-override-${account.id}`}
+          class="btn-secondary text-sm"
+        >
+          Set rate-limit override
+        </a>
+        <a
+          href={`#impersonate-${account.id}`}
+          class="btn-secondary text-sm border-red-300 text-red-700 hover:bg-red-50"
+        >
+          Read-only impersonate
+        </a>
+      </div>
+    </section>
+
+    <!-- Per-account audit slice -->
+    <section class="dashboard-card mt-6">
+      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Audit slice</p>
+      <h2 class="mt-2 text-xl font-semibold text-slate-900">Admin actions on this account</h2>
+      {
+        auditSlice.length === 0 ? (
+          <p class="mt-3 text-sm text-slate-500">No admin actions on record.</p>
+        ) : (
+          <ul class="mt-4 divide-y divide-slate-100">
+            {auditSlice.map((entry) => (
+              <li class="flex items-start justify-between gap-4 py-3">
+                <div class="min-w-0">
+                  <p class="font-mono text-xs text-slate-500">{fmtIso(entry.ts)}</p>
+                  <p class="mt-1 text-sm text-slate-900">
+                    <span class="font-mono text-xs text-slate-700">{entry.adminEmail}</span>{' '}
+                    <code class="font-mono text-xs text-oxblood-700">{entry.action}</code>
+                  </p>
+                </div>
+                <span
+                  class:list={[
+                    'inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
+                    entry.result === 'success'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'bg-red-50 text-red-700',
+                  ]}
+                >
+                  {entry.result}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+      <a href={`/audit-log?account=${account.id}`} class="mt-4 inline-flex text-sm text-oxblood-700 hover:underline">
+        Full audit log for this account →
+      </a>
+    </section>
+  </div>
+</AdminLayout>

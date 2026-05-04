@@ -1,0 +1,97 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import { MOCK_AUDIT_LOG } from '../data/mocks.ts';
+
+function fmtIso(iso: string): string {
+  return new Date(iso).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+}
+---
+
+<AdminLayout title="Audit log">
+  <div class="mx-auto max-w-6xl px-6 py-10">
+    <header class="mb-10">
+      <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Audit log</h1>
+      <p class="mt-2 max-w-prose text-sm text-slate-500">
+        Append-only record of every admin action. Cannot be mutated by admins
+        (D-025). Filter by action, target account, or admin email.
+      </p>
+    </header>
+
+    <!-- Filter bar -->
+    <div class="mb-6 flex flex-wrap items-center gap-3">
+      <input
+        type="search"
+        placeholder="Filter by action or target id…"
+        class="w-72 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+      />
+      <select
+        class="rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+      >
+        <option value="">All admins</option>
+        <option value="staff@driftstack.dev">staff@driftstack.dev</option>
+      </select>
+      <select
+        class="rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+      >
+        <option value="">Any result</option>
+        <option value="success">Success only</option>
+        <option value="error">Errors only</option>
+      </select>
+    </div>
+
+    <!-- Audit table -->
+    <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-slate-200 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+            <th class="px-4 py-3">Timestamp</th>
+            <th class="px-4 py-3">Admin</th>
+            <th class="px-4 py-3">Action</th>
+            <th class="px-4 py-3">Target</th>
+            <th class="px-4 py-3">Result</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {
+            MOCK_AUDIT_LOG.map((entry) => (
+              <tr class="hover:bg-slate-50">
+                <td class="px-4 py-3 font-mono text-xs text-slate-600">{fmtIso(entry.ts)}</td>
+                <td class="px-4 py-3 font-mono text-xs text-slate-700">{entry.adminEmail}</td>
+                <td class="px-4 py-3">
+                  <code class="font-mono text-xs text-oxblood-700">{entry.action}</code>
+                </td>
+                <td class="px-4 py-3">
+                  {entry.targetAccountId !== null && (
+                    <p class="font-mono text-xs text-slate-700">{entry.targetAccountId}</p>
+                  )}
+                  {entry.targetResourceId !== null && (
+                    <p class="mt-0.5 font-mono text-[11px] text-slate-500">
+                      {entry.targetResourceId}
+                    </p>
+                  )}
+                </td>
+                <td class="px-4 py-3">
+                  <span
+                    class:list={[
+                      'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
+                      entry.result === 'success'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-red-50 text-red-700',
+                    ]}
+                  >
+                    {entry.result}
+                  </span>
+                </td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <p class="mt-4 text-xs text-slate-500">
+      Retention 90 days hot in Postgres + R2 archive thereafter (ADR-006). JSON
+      Lines export available via <code class="font-mono">GET /v1/admin/audit-log?format=jsonl</code>.
+    </p>
+  </div>
+</AdminLayout>

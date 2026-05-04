@@ -1,0 +1,116 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import { MOCK_ACCOUNTS } from '../data/mocks.ts';
+
+function fmtIso(iso: string | null): string {
+  if (iso === null) return '—';
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+const STATUS_BADGE: Record<string, string> = {
+  active: 'bg-emerald-50 text-emerald-700',
+  suspended: 'bg-amber-50 text-amber-700',
+  deleted: 'bg-slate-100 text-slate-600',
+};
+---
+
+<AdminLayout title="Accounts">
+  <div class="mx-auto max-w-6xl px-6 py-10">
+    <header class="mb-10 flex items-start justify-between gap-6">
+      <div>
+        <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Accounts</h1>
+        <p class="mt-2 text-sm text-slate-500">
+          All customer accounts. Filter by tier or status; click a row to drill into
+          per-account detail (tier change, suspend, audit log slice).
+        </p>
+      </div>
+    </header>
+
+    <!-- Filter bar -->
+    <div class="mb-6 flex flex-wrap items-center gap-3">
+      <input
+        type="search"
+        placeholder="Search by email or id…"
+        class="w-64 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+      />
+      <select
+        class="rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+      >
+        <option value="">All statuses</option>
+        <option value="active">Active</option>
+        <option value="suspended">Suspended</option>
+        <option value="deleted">Deleted</option>
+      </select>
+      <select
+        class="rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+      >
+        <option value="">All tiers</option>
+        <option value="trial_pack">Trial pack</option>
+        <option value="solo_manual">Solo Manual</option>
+        <option value="team_manual">Team Manual</option>
+        <option value="agency">Agency</option>
+        <option value="api_starter">API Starter</option>
+        <option value="api_builder">API Builder</option>
+        <option value="api_scale">API Scale</option>
+        <option value="enterprise">Enterprise</option>
+      </select>
+    </div>
+
+    <!-- Accounts table -->
+    <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-slate-200 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+            <th class="px-4 py-3">Account</th>
+            <th class="px-4 py-3">Tier</th>
+            <th class="px-4 py-3">Status</th>
+            <th class="px-4 py-3">Created</th>
+            <th class="px-4 py-3">Last seen</th>
+            <th class="px-4 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {
+            MOCK_ACCOUNTS.map((account) => (
+              <tr class="hover:bg-slate-50">
+                <td class="px-4 py-3">
+                  <p class="font-medium text-slate-900">{account.name ?? account.email}</p>
+                  {account.name !== null && (
+                    <p class="mt-0.5 text-xs text-slate-500">{account.email}</p>
+                  )}
+                  <p class="mt-0.5 font-mono text-[11px] text-slate-400">{account.id}</p>
+                </td>
+                <td class="px-4 py-3 font-mono text-xs text-slate-700">{account.tier}</td>
+                <td class="px-4 py-3">
+                  <span
+                    class:list={[
+                      'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
+                      STATUS_BADGE[account.status],
+                    ]}
+                  >
+                    {account.status}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-slate-600">{fmtIso(account.createdAt)}</td>
+                <td class="px-4 py-3 text-slate-600">{fmtIso(account.lastSeenAt)}</td>
+                <td class="px-4 py-3 text-right">
+                  <a
+                    href={`/accounts/${account.id}`}
+                    class="text-sm text-oxblood-700 hover:underline"
+                  >
+                    Open
+                  </a>
+                </td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <p class="mt-4 text-xs text-slate-500">
+      Showing {MOCK_ACCOUNTS.length} of {MOCK_ACCOUNTS.length} accounts. Pagination
+      via cursor when count exceeds page size (50 default).
+    </p>
+  </div>
+</AdminLayout>

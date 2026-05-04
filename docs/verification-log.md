@@ -8021,3 +8021,48 @@ Founder overnight directive PRIORITY 3 — Tier 3 drafts approved per directive.
 ### Next
 
 Continuing per never-stop rule. V-140: 5c admin-panel batch.
+
+---
+
+## V-140 — 5c admin-panel Tier 3 batch (founder-approved drafts)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder overnight directive PRIORITY 3 — Tier 3 drafts approved per directive. Batch commit for 5c (admin-panel pages). /index.astro shipped in V-135 (Tier 1 scaffold) + sessions.astro shipped in V-136 (rename target); this batch covers the remaining 7 pages.
+
+### What changed
+
+7 new pages under `apps/admin-panel/src/pages/`:
+
+- `accounts.astro` — accounts list with tier/status filter bar.
+- `accounts/[id].astro` — drill-down detail. Uses `getStaticPaths()` over MOCK_ACCOUNTS (per DECISION 4: Astro static-build for now; production wiring is per-account JSON fetch via client-side islands). Tier change / suspend-unsuspend / quota-override / read-only impersonate actions.
+- `audit-log.astro` — append-only audit table with admin/result filters. Footer notes 90-day hot retention + R2 archive (ADR-006) + JSONL export.
+- `leads.astro` — pre-signup interest with source badges (pricing_cta / docs_signup / email_inbound / other), Convert/Archive actions, email-reply.
+- `api-keys.astro` — cross-account keys with revoked example (visualized via opacity-60), prominent amber security notice, scope chips, manual-revoke action.
+- `webhook-dlq.astro` — red-bordered DLQ entries (Requeue / Discard distinction documented), bulk requeue-all, footer explains intentional-friction posture (no auto-retry past initial 5).
+- `rate-limit-overrides.astro` — per-account bucket overrides with 14-day default TTL, reason audit, Extend / Clear-now actions. Footer documents the three bucket keys (global / session_create / capture).
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Browser dev-server check on :4323: all 7 routes return HTTP 200 (including dynamic /accounts/<id> for the 3 mock account UUIDs).
+
+### Files added
+
+- `apps/admin-panel/src/pages/accounts.astro`
+- `apps/admin-panel/src/pages/accounts/[id].astro`
+- `apps/admin-panel/src/pages/audit-log.astro`
+- `apps/admin-panel/src/pages/leads.astro`
+- `apps/admin-panel/src/pages/api-keys.astro`
+- `apps/admin-panel/src/pages/webhook-dlq.astro`
+- `apps/admin-panel/src/pages/rate-limit-overrides.astro`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 4 next: footer drift fix (Trust → /security, Company → /about).
