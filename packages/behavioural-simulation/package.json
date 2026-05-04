@@ -1,0 +1,27 @@
+{
+  "name": "@driftstack/behavioural-simulation",
+  "version": "0.0.1",
+  "description": "Behavioural simulation interface + mock implementation. Phase 3 domain logic ships separately and slots into the same interface.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --build"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

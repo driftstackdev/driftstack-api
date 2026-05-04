@@ -7286,3 +7286,77 @@ The pydantic-validated Session and WebhookDelivery models enforce ID format rege
 ### Next
 
 Continuing per never-stop rule. Per founder priority: PHASE 11 stubs (behavioural-simulation + recipe-library workspace packages) next.
+
+---
+
+## V-127 — PHASE 11 stubs: behavioural-simulation + recipe-library workspaces (Routine — workspace scaffolding)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+PHASE 11 of the autopilot directive (founder priority 3): scaffold the two Phase 3 workspaces so consumers (drivers, GUI client, admin panel) can integrate against the seam now while Phase 3 closed-source domain logic ships behind the same interface later. Workspace package + interface + mock implementation only — NO domain logic. Per CLAUDE.md: behavioural simulation library + recipe library are explicitly Phase 3 out-of-scope, only the scaffold is in-scope.
+
+### What changed
+
+`packages/behavioural-simulation/`:
+
+- `package.json`: `@driftstack/behavioural-simulation@0.0.1`, private (UNLICENSED), tsc --build → dist/.
+- `tsconfig.json`: composite, extends root base, rootDir=src, outDir=dist (mirrors api-types convention).
+- `src/types.ts`: `BehaviouralProfile` (mean keystroke delay, mouse speed, scroll velocity, pause probability/duration), `MouseTrajectory` (sampled cubic-bezier path placeholder), `KeyboardCadence` (per-keystroke delay array), `ScrollPattern` (per-tick velocity profile). All types carry a `seed` field for reproducibility.
+- `src/interfaces.ts`: `BehaviouralSimulator` interface — `generateMouseTrajectory`, `generateKeyboardCadence`, `generateScrollPattern`, `listProfiles`. Phase 3 swap-in target.
+- `src/mock.ts`: `MockBehaviouralSimulator` — deterministic linear interpolation for mouse paths, constant-delay keystroke cadence, constant-tick scroll. Same inputs always produce the same output (matches CLAUDE.md mock-driver discipline). Two default profiles: `casual_browser_us`, `fast_typer_dev`.
+- `src/index.ts`: re-exports.
+- `tests/mock.test.ts` — 7 tests: determinism, sample count, midpoint check, seed differentiation, keystroke cadence shape, scroll tick magnitude, default + injected catalogue.
+
+`packages/recipe-library/`:
+
+- Same shape — `package.json`, `tsconfig.json`, `src/{types,interfaces,mock,index}.ts`, `tests/mock.test.ts`.
+- `src/types.ts`: `RecipeStep` discriminated union (navigate / tap / type / scroll / wait / capture), `Recipe` (id + name + category + steps), `RecipeStepResult` (per-step status + duration + error), `RecipeResult` (aggregate run state), `RecipeContext` (sessionId + metadata).
+- `src/interfaces.ts`: `RecipeRegistry` (read-only catalogue: get / list / listByCategory) + `RecipeRunner` (executes a recipe against a session). Real Phase 3 runner drives the SDK + applies behavioural-simulation cadence; mock returns canned per-step results.
+- `src/mock.ts`: `MockRecipeRegistry` (default 2 recipes: `noop_smoke_test`, `login_form_demo`) + `MockRecipeRunner` (constant 50ms per step, deterministic results, rejects on unknown id).
+- `tests/mock.test.ts` — 8 tests: registry default + injected catalogues, list-by-category, runner happy path, unknown-id rejection, determinism, injected-registry honored.
+
+`tsconfig.json` (root): added `./packages/behavioural-simulation` and `./packages/recipe-library` to the `references` list so `tsc --build` from root touches them.
+
+`npm install`: workspaces glob (`packages/*`) auto-picked up the new packages; node_modules symlinks established for `@driftstack/behavioural-simulation` + `@driftstack/recipe-library`.
+
+### Why deliberate-stub mock implementations
+
+Per CLAUDE.md mock-driver discipline ("deterministic; same inputs → same outputs; never fake a success the real driver would fail; never randomise behaviour the real driver wouldn't randomise"), the mocks are intentionally simple linear/constant generators rather than RNG-driven approximations of the real behaviour. The point of the mock is to exercise the interface seam, not to approximate Phase 3 behaviour. Tests can assert exact values; integration consumers know they're using the mock and won't accidentally believe its output is realistic.
+
+### How verified
+
+- `npm install`: workspaces picked up, no warnings beyond the pre-existing always-auth npm config noise.
+- `npm run typecheck`: clean across all 7 workspaces (was 5; +2 new — behavioural-simulation, recipe-library both build via `tsc --build` to dist/).
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` on the 4 new package.json + index + test files).
+- `npm test`: 530/530 passing (was 515; +15 new — 7 behavioural + 8 recipe).
+
+### Files added
+
+- `packages/behavioural-simulation/package.json`
+- `packages/behavioural-simulation/tsconfig.json`
+- `packages/behavioural-simulation/src/types.ts`
+- `packages/behavioural-simulation/src/interfaces.ts`
+- `packages/behavioural-simulation/src/mock.ts`
+- `packages/behavioural-simulation/src/index.ts`
+- `packages/behavioural-simulation/tests/mock.test.ts`
+- `packages/recipe-library/package.json`
+- `packages/recipe-library/tsconfig.json`
+- `packages/recipe-library/src/types.ts`
+- `packages/recipe-library/src/interfaces.ts`
+- `packages/recipe-library/src/mock.ts`
+- `packages/recipe-library/src/index.ts`
+- `packages/recipe-library/tests/mock.test.ts`
+
+### Files modified
+
+- `tsconfig.json` (root references list)
+- `package-lock.json` (npm install workspace resolution)
+
+### Next
+
+Continuing per never-stop rule. Per founder priority: PHASE 9 test fixtures (tight scope) next.

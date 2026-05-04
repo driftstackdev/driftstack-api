@@ -1,0 +1,27 @@
+{
+  "name": "@driftstack/recipe-library",
+  "version": "0.0.1",
+  "description": "Recipe interface + mock runner. Phase 3 ships the recipe catalogue + real runner behind the same interface.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --build"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
