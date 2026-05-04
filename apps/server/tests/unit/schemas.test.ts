@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AccountIdSchema,
+  AccountTierSchema,
   ApiKeyScopeSchema,
   CaptureRequestSchema,
   CreateApiKeyRequestSchema,
@@ -14,10 +15,12 @@ import {
   InteractRequestSchema,
   NavigateRequestSchema,
   PaginationQuerySchema,
-  ProblemSchema,
   PROBLEM_TYPES,
+  PROFILES_PER_TIER,
+  ProblemSchema,
   SessionIdSchema,
   SessionSchema,
+  TIER_CONCURRENT_SESSION_LIMITS,
   UsagePeriodSummarySchema,
   WaitConditionSchema,
 } from '@driftstack/api-types';
@@ -249,5 +252,35 @@ describe('UsagePeriodSummarySchema', () => {
     });
     expect(r.totals.navigate).toBe(12);
     expect(r.quotas.interact).toBeNull();
+  });
+});
+
+describe('Tier records coverage (V-156 invariant)', () => {
+  // Every AccountTier must have an entry in PROFILES_PER_TIER and
+  // TIER_CONCURRENT_SESSION_LIMITS. Adding a new tier without
+  // updating both records would silently break enforcement at the
+  // /v1/profiles + /v1/sessions creation gates — these tests catch
+  // the omission at unit-test time instead of in production.
+  const tiers = AccountTierSchema.options;
+
+  it('every AccountTier has an entry in PROFILES_PER_TIER', () => {
+    for (const tier of tiers) {
+      expect(PROFILES_PER_TIER).toHaveProperty(tier);
+      const v = PROFILES_PER_TIER[tier];
+      expect(typeof v === 'number' || v === 'custom').toBe(true);
+    }
+  });
+
+  it('every AccountTier has an entry in TIER_CONCURRENT_SESSION_LIMITS', () => {
+    for (const tier of tiers) {
+      expect(TIER_CONCURRENT_SESSION_LIMITS).toHaveProperty(tier);
+      expect(typeof TIER_CONCURRENT_SESSION_LIMITS[tier]).toBe('number');
+      expect(TIER_CONCURRENT_SESSION_LIMITS[tier]).toBeGreaterThan(0);
+    }
+  });
+
+  it('records are not over-keyed (no entries beyond AccountTierSchema)', () => {
+    expect(Object.keys(PROFILES_PER_TIER).sort()).toEqual([...tiers].sort());
+    expect(Object.keys(TIER_CONCURRENT_SESSION_LIMITS).sort()).toEqual([...tiers].sort());
   });
 });

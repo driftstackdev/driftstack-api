@@ -8798,3 +8798,44 @@ V-156 lifts the concurrent-limits table into `@driftstack/api-types` alongside `
 ### Next
 
 Continuing per never-stop rule. PRIORITY 12 ongoing.
+
+---
+
+## V-157 — Tier records coverage tests (regression catch for tier additions)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+After V-155 + V-156 consolidated `PROFILES_PER_TIER` + `TIER_CONCURRENT_SESSION_LIMITS` into `@driftstack/api-types` as single source of truth, both records are `Record<AccountTier, ...>` typed — TypeScript catches a missing entry at compile time. But TypeScript can't catch:
+
+- `AccountTier` enum extended (e.g. a new tier `pro_manual`) without updating both records → only the new tier with `as` cast or in a non-strict consumer breaks.
+- An entry added with the wrong shape (e.g. `team_manual: -5` for concurrent limit, which is structurally a number but semantically broken).
+- An over-keyed record (entry for a tier that was renamed but not deleted).
+
+V-157 adds 3 contract tests that catch all three cases at unit-test time instead of in production.
+
+### What changed
+
+`apps/server/tests/unit/schemas.test.ts`:
+
+- New `describe` block "Tier records coverage (V-156 invariant)" with 3 tests:
+  - Every `AccountTier` has an entry in `PROFILES_PER_TIER`; values are `number | 'custom'`.
+  - Every `AccountTier` has an entry in `TIER_CONCURRENT_SESSION_LIMITS`; values are positive numbers.
+  - Records are not over-keyed (key set matches `AccountTierSchema.options` exactly).
+
+### How verified
+
+- Targeted run: `npm test -- apps/server/tests/unit/schemas.test.ts`: 33/33 passing (was 30; +3 new).
+- Full suite: `npm test`: 559/559 passing (was 556; +3).
+- Typecheck + lint clean.
+
+### Files modified
+
+- `apps/server/tests/unit/schemas.test.ts`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 12 ongoing.
