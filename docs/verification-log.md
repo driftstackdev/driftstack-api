@@ -8916,3 +8916,41 @@ This is engineering scaffolding (mock data sourcing), not customer-facing visual
 ### Next
 
 Continuing per never-stop rule. PRIORITY 12 ongoing.
+
+---
+
+## V-160 — Archetype display label tests (V-136 / V-154 invariants)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+V-136 added `LOCKED_ARCHETYPE_ID` + `LOCKED_ARCHETYPE_DISPLAY_LABEL` + `ARCHETYPE_DISPLAY_LABEL` map + `archetypeDisplayLabel()` helper to api-types. V-154 finished the server-side rename. No direct unit-test coverage existed for the helper's contract — a future change to the map (e.g. typo'd lookup, missing locked-archetype entry, identifier-shape regression) wouldn't be caught at test time.
+
+V-160 adds 4 contract tests symmetric to V-157's tier-records-coverage tests.
+
+### What changed
+
+`apps/server/tests/unit/schemas.test.ts`:
+
+- New `describe` block "Archetype display labels (V-136 / V-154 invariant)" with 4 tests:
+  - `archetypeDisplayLabel(LOCKED_ARCHETYPE_ID)` returns `LOCKED_ARCHETYPE_DISPLAY_LABEL`.
+  - `ARCHETYPE_DISPLAY_LABEL[LOCKED_ARCHETYPE_ID]` returns `LOCKED_ARCHETYPE_DISPLAY_LABEL`.
+  - `archetypeDisplayLabel()` falls back to the input identifier on unknown input (no exception).
+  - `LOCKED_ARCHETYPE_ID` matches the documented identifier shape regex (`device_family<model>_iosMAJOR_MINOR_safariMAJOR_MINOR`) per `docs/architecture/archetype-naming-convention.md`.
+
+### How verified
+
+- Targeted run: 37/37 schemas.test.ts (was 33; +4 new).
+- Full suite: `npm test`: 563/563 passing (was 559; +4).
+- Typecheck + lint clean.
+
+### Files modified
+
+- `apps/server/tests/unit/schemas.test.ts`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 12 ongoing.

@@ -8,11 +8,15 @@ import {
   AccountIdSchema,
   AccountTierSchema,
   ApiKeyScopeSchema,
+  ARCHETYPE_DISPLAY_LABEL,
+  archetypeDisplayLabel,
   CaptureRequestSchema,
   CreateApiKeyRequestSchema,
   CreateSessionRequestSchema,
   InteractActionSchema,
   InteractRequestSchema,
+  LOCKED_ARCHETYPE_DISPLAY_LABEL,
+  LOCKED_ARCHETYPE_ID,
   NavigateRequestSchema,
   PaginationQuerySchema,
   PROBLEM_TYPES,
@@ -282,5 +286,25 @@ describe('Tier records coverage (V-156 invariant)', () => {
   it('records are not over-keyed (no entries beyond AccountTierSchema)', () => {
     expect(Object.keys(PROFILES_PER_TIER).sort()).toEqual([...tiers].sort());
     expect(Object.keys(TIER_CONCURRENT_SESSION_LIMITS).sort()).toEqual([...tiers].sort());
+  });
+});
+
+describe('Archetype display labels (V-136 / V-154 invariant)', () => {
+  it('LOCKED_ARCHETYPE_ID resolves to LOCKED_ARCHETYPE_DISPLAY_LABEL', () => {
+    expect(archetypeDisplayLabel(LOCKED_ARCHETYPE_ID)).toBe(LOCKED_ARCHETYPE_DISPLAY_LABEL);
+  });
+
+  it('ARCHETYPE_DISPLAY_LABEL contains the locked archetype', () => {
+    expect(ARCHETYPE_DISPLAY_LABEL[LOCKED_ARCHETYPE_ID]).toBe(LOCKED_ARCHETYPE_DISPLAY_LABEL);
+  });
+
+  it('archetypeDisplayLabel falls back to the identifier on unknown input', () => {
+    expect(archetypeDisplayLabel('unknown_archetype_xyz')).toBe('unknown_archetype_xyz');
+  });
+
+  it('LOCKED_ARCHETYPE_ID matches the documented identifier shape', () => {
+    // device_family_modelN_iosMAJOR_MINOR_safariMAJOR_MINOR
+    // see docs/architecture/archetype-naming-convention.md
+    expect(LOCKED_ARCHETYPE_ID).toMatch(/^[a-z]+\d+[a-z]+_ios\d+_\d+_safari\d+_\d+$/);
   });
 });
