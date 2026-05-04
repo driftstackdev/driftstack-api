@@ -65,9 +65,7 @@ class AsyncProfilesResource:
     async def create(self, body: dict[str, Any]) -> dict[str, Any]:
         return await self._http.request("POST", "/v1/profiles", json_body=coerce_body(body))
 
-    async def list(
-        self, *, limit: int | None = None, cursor: str | None = None
-    ) -> dict[str, Any]:
+    async def list(self, *, limit: int | None = None, cursor: str | None = None) -> dict[str, Any]:
         qs = _encode_query({"limit": limit, "cursor": cursor})
         path = "/v1/profiles" + (f"?{qs}" if qs else "")
         return await self._http.request("GET", path)

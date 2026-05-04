@@ -7010,3 +7010,45 @@ Cold path (scrypt + DB) excluded — different benchmark scope, owns its own fut
 ### Next
 
 Continuing per never-stop rule. Future bench candidates: rate-limit token-bucket consume operations, OpenAPI-spec validation cost, webhook-signature verify.
+
+---
+
+## V-121 — Python SDK ruff hygiene cleanup (Routine — hygiene)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+V-115's audit deferred 4 pre-existing ruff format violations + 2 import-order violations to a focused hygiene commit so they didn't muddy V-115's V-079 gap fill. V-121 is that follow-up: applies the auto-fixable changes that bring the Python SDK to ruff-clean state.
+
+### What changed
+
+Auto-fixes applied via `ruff check . --fix && ruff format .`:
+
+- `packages/sdk-python/src/driftstack/http.py` — import alphabetical re-order in the `from driftstack.errors import` block (LegalAcceptanceRequiredError + SessionTimeoutError were misplaced).
+- `packages/sdk-python/src/driftstack/resources/auth.py` — format pass shrank some long lines.
+- `packages/sdk-python/src/driftstack/resources/profiles.py` — minor format pass.
+- `packages/sdk-python/tests/test_wire_shape.py` — format pass shrank long lines (~50 lines reformatted).
+
+No semantic changes — purely line-length / whitespace / import-order. `pytest`: 101/101 passing (unchanged).
+
+### How verified
+
+- `ruff check .`: clean (was: 2 errors).
+- `ruff format --check .`: clean (was: 3 files would reformat).
+- `pytest`: 101/101 passing.
+- `npm run lint`: clean (TS workspace untouched).
+- `npm run format:check`: clean.
+
+### Files modified
+
+- `packages/sdk-python/src/driftstack/http.py`
+- `packages/sdk-python/src/driftstack/resources/auth.py`
+- `packages/sdk-python/src/driftstack/resources/profiles.py`
+- `packages/sdk-python/tests/test_wire_shape.py`
+
+### Next
+
+Continuing per never-stop rule.

@@ -25,14 +25,11 @@ from driftstack._generated.models import (
     WaitRequest,
 )
 
-
 # ─── InteractAction wire shape ────────────────────────────────────
 
 
 def test_interact_tap_round_trip() -> None:
-    req = InteractRequest.model_validate(
-        {"action": {"kind": "tap", "selector": "#go"}}
-    )
+    req = InteractRequest.model_validate({"action": {"kind": "tap", "selector": "#go"}})
     assert req.action.kind == "tap"
     # Round-trip: serialised JSON has the canonical keys.
     payload = json.loads(req.model_dump_json(exclude_none=True))
@@ -44,9 +41,7 @@ def test_interact_type_round_trip() -> None:
         {"action": {"kind": "type", "selector": "input", "text": "hi"}}
     )
     payload = json.loads(req.model_dump_json(exclude_none=True))
-    assert payload == {
-        "action": {"kind": "type", "selector": "input", "text": "hi"}
-    }
+    assert payload == {"action": {"kind": "type", "selector": "input", "text": "hi"}}
 
 
 def test_interact_scroll_uses_delta_x_delta_y() -> None:
@@ -64,9 +59,7 @@ def test_interact_scroll_uses_delta_x_delta_y() -> None:
 
 
 def test_interact_press_round_trip() -> None:
-    req = InteractRequest.model_validate(
-        {"action": {"kind": "press", "key": "Enter"}}
-    )
+    req = InteractRequest.model_validate({"action": {"kind": "press", "key": "Enter"}})
     payload = json.loads(req.model_dump_json(exclude_none=True))
     assert payload == {"action": {"kind": "press", "key": "Enter"}}
 
@@ -74,13 +67,9 @@ def test_interact_press_round_trip() -> None:
 def test_interact_rejects_coordinate_primitives() -> None:
     """L-001 — tap_at / type_focused / tap.offset are NOT on the customer-facing surface."""
     with pytest.raises(ValidationError):
-        InteractRequest.model_validate(
-            {"action": {"kind": "tap_at", "x": 100, "y": 100}}
-        )
+        InteractRequest.model_validate({"action": {"kind": "tap_at", "x": 100, "y": 100}})
     with pytest.raises(ValidationError):
-        InteractRequest.model_validate(
-            {"action": {"kind": "type_focused", "text": "x"}}
-        )
+        InteractRequest.model_validate({"action": {"kind": "type_focused", "text": "x"}})
 
 
 def test_interact_tap_strips_offset() -> None:
@@ -99,9 +88,7 @@ def test_interact_tap_strips_offset() -> None:
 
 
 def test_wait_selector_round_trip() -> None:
-    req = WaitRequest.model_validate(
-        {"condition": {"kind": "selector", "selector": "#ready"}}
-    )
+    req = WaitRequest.model_validate({"condition": {"kind": "selector", "selector": "#ready"}})
     payload = json.loads(req.model_dump_json(exclude_none=True))
     assert payload == {"condition": {"kind": "selector", "selector": "#ready"}}
 
@@ -112,16 +99,12 @@ def test_wait_time_uses_kind_time_not_time_ms() -> None:
     Go SDK 0.1.0–0.1.1 hardcoded ``time_ms`` and silently broke every
     wait call. Pin the canonical name here.
     """
-    req = WaitRequest.model_validate(
-        {"condition": {"kind": "time", "ms": 5000}}
-    )
+    req = WaitRequest.model_validate({"condition": {"kind": "time", "ms": 5000}})
     payload = json.loads(req.model_dump_json(exclude_none=True))
     assert payload == {"condition": {"kind": "time", "ms": 5000}}
 
     with pytest.raises(ValidationError):
-        WaitRequest.model_validate(
-            {"condition": {"kind": "time_ms", "ms": 5000}}
-        )
+        WaitRequest.model_validate({"condition": {"kind": "time_ms", "ms": 5000}})
 
 
 def test_wait_url_matches_round_trip() -> None:
@@ -129,9 +112,7 @@ def test_wait_url_matches_round_trip() -> None:
         {"condition": {"kind": "url_matches", "pattern": "https://.*"}}
     )
     payload = json.loads(req.model_dump_json(exclude_none=True))
-    assert payload == {
-        "condition": {"kind": "url_matches", "pattern": "https://.*"}
-    }
+    assert payload == {"condition": {"kind": "url_matches", "pattern": "https://.*"}}
 
 
 # ─── NavigateRequest wire shape ───────────────────────────────────
@@ -156,17 +137,9 @@ def test_navigate_request_round_trip() -> None:
 def test_navigate_timeout_ms_bounds() -> None:
     """Spec: 1000 ≤ timeout_ms ≤ 120000."""
     with pytest.raises(ValidationError):
-        NavigateRequest.model_validate(
-            {"url": "https://example.com", "timeout_ms": 999}
-        )
+        NavigateRequest.model_validate({"url": "https://example.com", "timeout_ms": 999})
     with pytest.raises(ValidationError):
-        NavigateRequest.model_validate(
-            {"url": "https://example.com", "timeout_ms": 120_001}
-        )
+        NavigateRequest.model_validate({"url": "https://example.com", "timeout_ms": 120_001})
     # Inside the bounds is fine.
-    NavigateRequest.model_validate(
-        {"url": "https://example.com", "timeout_ms": 1000}
-    )
-    NavigateRequest.model_validate(
-        {"url": "https://example.com", "timeout_ms": 120_000}
-    )
+    NavigateRequest.model_validate({"url": "https://example.com", "timeout_ms": 1000})
+    NavigateRequest.model_validate({"url": "https://example.com", "timeout_ms": 120_000})

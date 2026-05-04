@@ -26,9 +26,7 @@ class AuthResource:
         return self._http.request("POST", "/v1/auth/signup", json_body=coerce_body(body))
 
     def verify_email(self, body: dict[str, Any]) -> dict[str, Any]:
-        return self._http.request(
-            "POST", "/v1/auth/verify-email", json_body=coerce_body(body)
-        )
+        return self._http.request("POST", "/v1/auth/verify-email", json_body=coerce_body(body))
 
     def login(self, body: dict[str, Any]) -> dict[str, Any]:
         return self._http.request("POST", "/v1/auth/login", json_body=coerce_body(body))
@@ -67,9 +65,7 @@ class AsyncAuthResource:
         self._http = http
 
     async def signup(self, body: dict[str, Any]) -> dict[str, Any]:
-        return await self._http.request(
-            "POST", "/v1/auth/signup", json_body=coerce_body(body)
-        )
+        return await self._http.request("POST", "/v1/auth/signup", json_body=coerce_body(body))
 
     async def verify_email(self, body: dict[str, Any]) -> dict[str, Any]:
         return await self._http.request(
@@ -77,9 +73,7 @@ class AsyncAuthResource:
         )
 
     async def login(self, body: dict[str, Any]) -> dict[str, Any]:
-        return await self._http.request(
-            "POST", "/v1/auth/login", json_body=coerce_body(body)
-        )
+        return await self._http.request("POST", "/v1/auth/login", json_body=coerce_body(body))
 
     async def request_magic_link(self, body: dict[str, Any]) -> dict[str, Any]:
         return await self._http.request(
@@ -102,11 +96,7 @@ class AsyncAuthResource:
         )
 
     async def refresh(self, body: dict[str, Any]) -> dict[str, Any]:
-        return await self._http.request(
-            "POST", "/v1/auth/refresh", json_body=coerce_body(body)
-        )
+        return await self._http.request("POST", "/v1/auth/refresh", json_body=coerce_body(body))
 
     async def logout(self, body: dict[str, Any]) -> dict[str, Any]:
-        return await self._http.request(
-            "POST", "/v1/auth/logout", json_body=coerce_body(body)
-        )
+        return await self._http.request("POST", "/v1/auth/logout", json_body=coerce_body(body))
