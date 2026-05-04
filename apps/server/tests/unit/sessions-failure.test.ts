@@ -45,7 +45,7 @@ function buildCtx(): AccountContext {
       expiresAt: null,
       createdAt: new Date('2026-01-01T00:00:00Z'),
     },
-    rateLimitOverrides: [],
+    rateLimitOverrides: {},
   };
 }
 
@@ -99,8 +99,8 @@ class StubRepo implements SessionRepo {
   countActiveSessions(_accountId: string): Promise<number> {
     return Promise.resolve(0);
   }
-  listSessions(): Promise<{ data: SessionRecord[]; hasMore: boolean; nextCursor: string | null }> {
-    return Promise.resolve({ data: [], hasMore: false, nextCursor: null });
+  listSessions(): Promise<{ items: SessionRecord[]; nextCursor: string | null }> {
+    return Promise.resolve({ items: [], nextCursor: null });
   }
   recordEvent(input: SessionEventInput): Promise<void> {
     this.events.push(input);
