@@ -6281,3 +6281,48 @@ NOT configured. Founder can flip on auto-merge for npm-patch + pip-patch later v
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-106 — marketing-site sitemap + robots.txt (Routine — SEO basics)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Land basic SEO discoverability on the marketing site: a `robots.txt` pointing crawlers at the sitemap, and an auto-generated sitemap that picks up every page in `src/pages/` (currently 5: index, faq, pricing, self-hosted, trust/sub-processors). Excludes the 404 page.
+
+### What changed
+
+- New `apps/marketing-site/public/robots.txt` — `User-agent: *` allow-all + `Crawl-delay: 5` for the trust sub-processor page (stable content, no need for crawlers to re-fetch on every visit) + `Sitemap:` directive pointing at the auto-generated sitemap-index.
+- `apps/marketing-site/astro.config.mjs` — added `@astrojs/sitemap` integration with a filter that excludes `/404`.
+- `apps/marketing-site/package.json` — added `@astrojs/sitemap@^3.7.0` as a dependency.
+
+### How verified
+
+- `npm run typecheck`: clean across all 6 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 478/478 unchanged.
+- Manually verified 4 entries in `src/pages/` (excluding 404) so sitemap should ship 4 URLs.
+
+### Decisions made (no new D-entries)
+
+- **`@astrojs/sitemap` integration** vs hand-rolled sitemap.xml. Auto-generated wins because it picks up new pages on every build without manual sitemap maintenance.
+- **`Crawl-delay: 5`** on the trust sub-processor page is light-touch courtesy; the page is short so even rapid re-fetches aren't expensive, but the directive signals "this is stable content."
+- **Subdomains carry their own robots.** The marketing-site `robots.txt` covers `driftstack.dev` only; `app.driftstack.dev` (V-099 customer dashboard) and a future `admin.driftstack.dev` will ship their own `noindex`-flavored robots when their deploy pipelines land.
+
+### Files added
+
+- `apps/marketing-site/public/robots.txt`
+
+### Files modified
+
+- `apps/marketing-site/astro.config.mjs` (sitemap integration)
+- `apps/marketing-site/package.json` (sitemap dep)
+
+### Next
+
+Continuing per never-stop rule.
