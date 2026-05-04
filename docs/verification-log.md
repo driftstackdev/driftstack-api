@@ -8099,3 +8099,38 @@ Founder overnight directive PRIORITY 4 + DECISION 2. After /security and /about 
 ### Next
 
 Continuing per never-stop rule. PRIORITY 5 next: team-roles-taxonomy doc.
+
+---
+
+## V-142 — Team roles taxonomy doc (Tier 1 documentation)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder overnight directive PRIORITY 5 + DECISION 5. /team UI scaffolded in V-139 surfaces a 4-role taxonomy (owner / admin / member / viewer); doc captures the authoritative model so the future engineer wiring multi-seat accounts (currently scaffolded — backend doesn't yet have multi-user support in V-079 schema) lands the right shape.
+
+### What changed
+
+`docs/architecture/team-roles-taxonomy.md` (new):
+
+- Authoritative description of the 4 roles (owner / admin / member / viewer) with capability surfaces per role.
+- Explicit "X cannot" sections so role boundaries are unambiguous.
+- API key scope ↔ team role mapping table — critical: team roles gate dashboard UI; API scopes gate `/v1/*` routes. Member + viewer don't mint keys; admin/owner do, and that audit trail captures the minting identity.
+- Forward-looking backend implementation notes (schema migration, endpoints, email templates) so the future "wire up" V-NNN has a checklist.
+- Rationale for 4-role choice over 3 (loses viewer/stakeholder use case) + 5 (over-engineered billing-only carve-out).
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run format:check`: clean (markdown linting).
+
+### Files added
+
+- `docs/architecture/team-roles-taxonomy.md`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 6 next: 5d GUI client remaining work — ProfilesView landing + visual UX polish.
