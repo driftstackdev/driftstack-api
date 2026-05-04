@@ -6741,3 +6741,63 @@ Note: a separate `ruff format` pass surfaced pre-existing format violations in `
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-116 — Sentry breadcrumb instrumentation (Routine — observability)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+PHASE 8 of the autopilot directive calls for "Sentry breadcrumb instrumentation across services — full request → service → driver → response trace." V-116 lands the foundation: extends the SentryClient interface with `addBreadcrumb` and provides a `wireSentryRequestBreadcrumbs` helper that captures per-request `http.request` + `http.response` breadcrumbs. Service-level breadcrumbs (auth cache miss, billing checkout, driver navigate, etc.) are deliberately deferred — adding them piecemeal as those sites are touched is cleaner than a sweeping cross-service edit.
+
+### Audit context
+
+`apps/server/src/lib/sentry.ts` already exists from V-094 (ADR-005) — `initSentry` + `wireSentryErrorHandler` are defined. Two notable findings during audit:
+
+- `addBreadcrumb` was missing from the SentryClient surface entirely. Sentry receives exceptions but no contextual trail of what happened just before.
+- `wireSentryErrorHandler` is exported but not currently called anywhere. `apps/server/src/lib/app.ts:buildApp` doesn't take a `SentryClient` dep, so neither error nor breadcrumb hooks land on the Fastify instance today. V-116 keeps wiring in scope as **just** "the helpers exist + are unit-tested" — actually wiring them into bootstrap/buildApp belongs to a follow-up so the AppDeps shape change can be reviewed independently.
+
+### What changed
+
+`apps/server/src/lib/sentry.ts`:
+
+- New `SentryBreadcrumb` interface with `category`, `message`, optional `data`, optional `level` (defaults `'info'`).
+- `SentryClient` interface gains `addBreadcrumb(crumb: SentryBreadcrumb): void`.
+- The no-init client returns a no-op `addBreadcrumb`.
+- The init'd client forwards to `Sentry.addBreadcrumb` with the same fire-and-forget swallow-and-log-warn pattern used by `captureException`.
+- New `wireSentryRequestBreadcrumbs(app, sentry)` registers two hooks:
+  - `onRequest` — emits `{ category: 'http.request', message: '<METHOD> <URL>', level: 'info', data: { request_id, method, url } }` and stamps a per-request start-timestamp via a Symbol-keyed field.
+  - `onResponse` — emits `{ category: 'http.response', message: '<STATUS> <METHOD> <URL>', level: <status-derived>, data: { request_id, method, url, status_code, duration_ms } }`. Level is `'info'` for <400, `'warning'` for 4xx, `'error'` for ≥500.
+
+### How verified
+
+8 new tests in `apps/server/tests/unit/sentry.test.ts` (was 9; now 17):
+
+- `addBreadcrumb` forwards to `Sentry.addBreadcrumb` with default level `info`.
+- `addBreadcrumb` preserves an explicit level.
+- `addBreadcrumb` is a no-op when Sentry is not initialized.
+- `addBreadcrumb` swallows SDK errors and logs warn.
+- `wireSentryRequestBreadcrumbs` installs onRequest + onResponse hooks.
+- onRequest emits the expected http.request breadcrumb at level info.
+- onResponse emits the expected http.response breadcrumb with status_code and duration_ms.
+- onResponse uses `level: 'warning'` for 4xx and `level: 'error'` for 5xx.
+
+Existing test (`wireSentryErrorHandler`) updated to add `addBreadcrumb: () => {}` to its fake SentryClient so the new mandatory interface field is satisfied.
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` on the test file).
+- `npm test`: 505/505 passing (was 497; +8 new).
+
+### Files modified
+
+- `apps/server/src/lib/sentry.ts`
+- `apps/server/tests/unit/sentry.test.ts`
+
+### Next
+
+Continuing per never-stop rule. Follow-up Tier 1 candidate: extend `AppDeps` with `sentry?: SentryClient` and call `wireSentryErrorHandler` + `wireSentryRequestBreadcrumbs` from `buildApp` when provided. Plus pass `sentry` into `buildApp` from `bootstrap.ts`.

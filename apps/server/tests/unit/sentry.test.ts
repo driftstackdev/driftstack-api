@@ -10,14 +10,19 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 vi.mock('@sentry/node', () => ({
   init: vi.fn(),
   captureException: vi.fn(),
+  addBreadcrumb: vi.fn(),
   flush: vi.fn().mockResolvedValue(true),
   close: vi.fn().mockResolvedValue(true),
 }));
 
 import * as Sentry from '@sentry/node';
-import { initSentry, wireSentryErrorHandler } from '../../src/lib/sentry.js';
+import {
+  initSentry,
+  wireSentryErrorHandler,
+  wireSentryRequestBreadcrumbs,
+} from '../../src/lib/sentry.js';
 import type { Logger } from '../../src/lib/logger.js';
-import type { SentryClient } from '../../src/lib/sentry.js';
+import type { SentryBreadcrumb, SentryClient } from '../../src/lib/sentry.js';
 import { loadConfig } from '../../src/lib/config.js';
 
 function makeLogger(): Logger {
@@ -40,6 +45,7 @@ function makeLogger(): Logger {
 beforeEach(() => {
   vi.mocked(Sentry.init).mockClear();
   vi.mocked(Sentry.captureException).mockClear();
+  vi.mocked(Sentry.addBreadcrumb).mockClear();
 });
 
 describe('initSentry', () => {
@@ -178,6 +184,7 @@ describe('wireSentryErrorHandler', () => {
       captureException: (err, ctx) => {
         captured.push([err, ctx]);
       },
+      addBreadcrumb: () => {},
       flush: () => Promise.resolve(true),
       close: () => Promise.resolve(true),
     };
@@ -215,5 +222,200 @@ describe('wireSentryErrorHandler', () => {
       url: '/v1/sessions',
       route: '/v1/sessions',
     });
+  });
+});
+
+// V-116: Sentry breadcrumb instrumentation.
+describe('addBreadcrumb', () => {
+  it('forwards to Sentry.addBreadcrumb with default level info', () => {
+    const logger = makeLogger();
+    const sentry = initSentry({
+      config: {
+        dsn: 'https://abc@o123.ingest.de.sentry.io/456',
+        environment: 'test',
+        tracesSampleRate: 0,
+      },
+      logger,
+    });
+    sentry.addBreadcrumb({
+      category: 'auth',
+      message: 'cache miss',
+      data: { account_id: 'acc_123' },
+    });
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(Sentry.addBreadcrumb).mock.calls[0]![0]).toEqual({
+      category: 'auth',
+      message: 'cache miss',
+      level: 'info',
+      data: { account_id: 'acc_123' },
+    });
+  });
+
+  it('preserves an explicit level', () => {
+    const logger = makeLogger();
+    const sentry = initSentry({
+      config: {
+        dsn: 'https://abc@o123.ingest.de.sentry.io/456',
+        environment: 'test',
+        tracesSampleRate: 0,
+      },
+      logger,
+    });
+    sentry.addBreadcrumb({ category: 'billing', message: 'tier change', level: 'warning' });
+    expect(vi.mocked(Sentry.addBreadcrumb).mock.calls[0]![0]).toMatchObject({
+      level: 'warning',
+    });
+  });
+
+  it('is a no-op when Sentry is not initialized', () => {
+    const logger = makeLogger();
+    const sentry = initSentry({ config: null, logger });
+    sentry.addBreadcrumb({ category: 'auth', message: 'whatever' });
+    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
+  });
+
+  it('swallows SDK errors and logs warn', () => {
+    const logger = makeLogger();
+    vi.mocked(Sentry.addBreadcrumb).mockImplementationOnce(() => {
+      throw new Error('sentry SDK exploded');
+    });
+    const sentry = initSentry({
+      config: {
+        dsn: 'https://abc@o123.ingest.de.sentry.io/456',
+        environment: 'test',
+        tracesSampleRate: 0,
+      },
+      logger,
+    });
+    expect(() => sentry.addBreadcrumb({ category: 'auth', message: 'crash test' })).not.toThrow();
+  });
+});
+
+describe('wireSentryRequestBreadcrumbs', () => {
+  function fakeSentryRecorder(): {
+    sentry: SentryClient;
+    crumbs: SentryBreadcrumb[];
+  } {
+    const crumbs: SentryBreadcrumb[] = [];
+    const sentry: SentryClient = {
+      isInitialized: true,
+      captureException: () => {},
+      addBreadcrumb: (c) => crumbs.push(c),
+      flush: () => Promise.resolve(true),
+      close: () => Promise.resolve(true),
+    };
+    return { sentry, crumbs };
+  }
+
+  function fakeApp(): {
+    app: Parameters<typeof wireSentryRequestBreadcrumbs>[0];
+    hooks: Map<string, unknown>;
+  } {
+    const hooks = new Map<string, unknown>();
+    const app = {
+      addHook: (name: string, fn: unknown) => {
+        hooks.set(name, fn);
+      },
+    } as unknown as Parameters<typeof wireSentryRequestBreadcrumbs>[0];
+    return { app, hooks };
+  }
+
+  it('installs onRequest + onResponse hooks', () => {
+    const { sentry } = fakeSentryRecorder();
+    const { app, hooks } = fakeApp();
+    wireSentryRequestBreadcrumbs(app, sentry);
+    expect(hooks.has('onRequest')).toBe(true);
+    expect(hooks.has('onResponse')).toBe(true);
+  });
+
+  it('onRequest emits an http.request breadcrumb at level info', () => {
+    const { sentry, crumbs } = fakeSentryRecorder();
+    const { app, hooks } = fakeApp();
+    wireSentryRequestBreadcrumbs(app, sentry);
+    const onRequest = hooks.get('onRequest') as (
+      req: { id: string; method: string; url: string },
+      reply: unknown,
+      done: () => void,
+    ) => void;
+    let doneCalled = false;
+    onRequest({ id: 'req_xyz', method: 'GET', url: '/v1/sessions/sess_abc' }, {}, () => {
+      doneCalled = true;
+    });
+    expect(doneCalled).toBe(true);
+    expect(crumbs).toHaveLength(1);
+    expect(crumbs[0]).toMatchObject({
+      category: 'http.request',
+      message: 'GET /v1/sessions/sess_abc',
+      level: 'info',
+      data: { request_id: 'req_xyz', method: 'GET', url: '/v1/sessions/sess_abc' },
+    });
+  });
+
+  it('onResponse emits an http.response breadcrumb with status_code and duration_ms', () => {
+    const { sentry, crumbs } = fakeSentryRecorder();
+    const { app, hooks } = fakeApp();
+    wireSentryRequestBreadcrumbs(app, sentry);
+
+    type ReqShape = { id: string; method: string; url: string };
+    const req: ReqShape = { id: 'req_xyz', method: 'GET', url: '/v1/sessions' };
+    const reply = { statusCode: 200 };
+    const onRequest = hooks.get('onRequest') as (
+      r: ReqShape,
+      re: unknown,
+      done: () => void,
+    ) => void;
+    onRequest(req, reply, () => {});
+
+    const onResponse = hooks.get('onResponse') as (
+      r: ReqShape,
+      re: { statusCode: number },
+      done: () => void,
+    ) => void;
+    onResponse(req, reply, () => {});
+
+    expect(crumbs).toHaveLength(2);
+    expect(crumbs[1]).toMatchObject({
+      category: 'http.response',
+      message: '200 GET /v1/sessions',
+      level: 'info',
+      data: {
+        request_id: 'req_xyz',
+        method: 'GET',
+        url: '/v1/sessions',
+        status_code: 200,
+      },
+    });
+    expect(typeof crumbs[1]!.data!.duration_ms).toBe('number');
+  });
+
+  it('onResponse uses level=warning for 4xx and level=error for 5xx', () => {
+    const { sentry, crumbs } = fakeSentryRecorder();
+    const { app, hooks } = fakeApp();
+    wireSentryRequestBreadcrumbs(app, sentry);
+
+    type ReqShape = { id: string; method: string; url: string };
+    const onRequest = hooks.get('onRequest') as (
+      r: ReqShape,
+      re: unknown,
+      done: () => void,
+    ) => void;
+    const onResponse = hooks.get('onResponse') as (
+      r: ReqShape,
+      re: { statusCode: number },
+      done: () => void,
+    ) => void;
+
+    onRequest({ id: 'r1', method: 'GET', url: '/x' }, {}, () => {});
+    onResponse({ id: 'r1', method: 'GET', url: '/x' }, { statusCode: 404 }, () => {});
+
+    onRequest({ id: 'r2', method: 'GET', url: '/y' }, {}, () => {});
+    onResponse({ id: 'r2', method: 'GET', url: '/y' }, { statusCode: 503 }, () => {});
+
+    expect(
+      crumbs.find((c) => c.data?.request_id === 'r1' && c.category === 'http.response')!.level,
+    ).toBe('warning');
+    expect(
+      crumbs.find((c) => c.data?.request_id === 'r2' && c.category === 'http.response')!.level,
+    ).toBe('error');
   });
 });
