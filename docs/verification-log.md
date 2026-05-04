@@ -8296,3 +8296,45 @@ NOT executed live — would require a real account + API key. Compile + AST + ru
 ### Next
 
 Continuing per never-stop rule. PRIORITY 9 next: founder action queue doc.
+
+---
+
+## V-146 — Founder action queue doc (Tier 1 documentation)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder overnight directive PRIORITY 9. Living document capturing every blocking item that requires founder action (not engineering scope) — Hetzner provisioning, Cloudflare Pages projects, Stripe price IDs, Sentry secrets, etc. Engineering keeps it in sync; founder works the queue.
+
+### What changed
+
+`docs/founder-action-queue.md` (new). Categorized action items:
+
+- **Infrastructure**: Hetzner two-VM provisioning, 3 Cloudflare Pages projects (driftstack.dev / app.driftstack.dev / admin.driftstack.dev), Neon EU databases, Upstash EU Redis.
+- **CI/CD secrets**: GitHub Environments (staging/production), Sentry triple (`SENTRY_AUTH_TOKEN` + `SENTRY_ORG` + `SENTRY_PROJECT`), `DEPLOY_DOTENV_BASE64`.
+- **Stripe**: 19 price IDs per ADR-004, `STRIPE_WEBHOOK_SECRET`, Stripe Tax + EU VAT setup.
+- **Pricing values TBD**: BYOK markup multiplier, bundled LLM per-token rate.
+- **Brand assets**: og-default.png 1200×630 PNG, optional per-page custom OG images.
+- **Legal + compliance**: sub-processor list status, legal docs status.
+
+Each entry has Status / Blocks / Action / Reference fields so founder can prioritize.
+
+Also includes an "Engineering-side action queue" section at the bottom — items engineering owns but founder should have visibility into (live wire-up of /v1/team/\*, PROFILES_PER_TIER enforcement at /v1/profiles, real webhook-delivery implementation).
+
+Document lifecycle: resolved entries stay 30 days then archive to `docs/archive/founder-action-queue-resolved.md`.
+
+### How verified
+
+- Document compiles as valid markdown.
+- `npm run format:check`: clean.
+
+### Files added
+
+- `docs/founder-action-queue.md`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 10 next: OpenTelemetry interface-only scaffold.
