@@ -78,8 +78,11 @@ jobs:
       - name: Format check
         run: npm run format:check
 
-      - name: Test (unit + integration)
-        run: npm test
+      - name: Test (unit + integration) with coverage thresholds
+        # V-107: vitest.config.ts enforces coverage thresholds (lines,
+        # statements, functions, branches). CI fails if coverage drops
+        # below the regression gate set in V-107.
+        run: npx vitest run --coverage
 
   e2e:
     name: End-to-end (Playwright against real Postgres + Redis)

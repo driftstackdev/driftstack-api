@@ -6326,3 +6326,52 @@ Land basic SEO discoverability on the marketing site: a `robots.txt` pointing cr
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-107 — Test coverage threshold enforcement (Routine — CI hygiene)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+V-086 audited coverage but didn't enforce thresholds. A future change that drops a test or adds an untested file would slip through. V-107 sets per-metric coverage thresholds in `vitest.config.ts` so CI fails on a regression.
+
+### What changed
+
+`vitest.config.ts`:
+
+- **Refocused `include` glob** to `apps/server/src/**/*.ts` + `packages/sdk-typescript/src/**/*.ts`. Previously the glob covered all workspace src dirs, dragging the global down with files that aren't meaningfully unit-/integration-tested (api-types Zod schemas at 0%, Drizzle repos at 0% — exercised only by e2e, customer-dashboard mock data, etc.). The aggregate now reflects code that's meant to be vitest-tested.
+- **Excludes** `apps/server/src/db/**` (Drizzle repos — e2e only), `apps/server/src/index.ts` (bootstrap entry), `apps/server/src/dump-openapi.ts` (CLI tool).
+- **Thresholds** (regression gate, not aspirational):
+  - lines: 80
+  - statements: 80
+  - functions: 80
+  - branches: 75
+
+Current coverage on the new include scope is 87.05 / 79.89 / 85.46 / 87.05, so thresholds pass with margin.
+
+`.github/workflows/ci.yml`: the `Test (unit + integration)` step now runs `npx vitest run --coverage` instead of `npm test`. The `--coverage` flag triggers the threshold check; the existing test count (478) doesn't change.
+
+### Decisions made (no new D-entries)
+
+- **Regression gate, not aspirational target.** Thresholds set ~5-7% below current baseline so meaningful drops fail CI but small noise doesn't false-positive.
+- **Ratchet upward only.** Future passes that improve coverage should bump the thresholds upward to lock in the improvement. Never ratchet downward to mask a regression.
+- **Drizzle repos excluded from coverage scope** because they're tested by e2e (Playwright), not unit/integration tests. Including them would make the threshold meaningless. The V-086 audit captured this architectural choice; V-107 makes it explicit in the config.
+
+### How verified
+
+- `npx vitest run --coverage`: 478/478 passing, threshold check green at 87.05 / 79.89 / 85.46 / 87.05.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+
+### Files modified
+
+- `vitest.config.ts`
+- `.github/workflows/ci.yml`
+
+### Next
+
+Continuing per never-stop rule.
