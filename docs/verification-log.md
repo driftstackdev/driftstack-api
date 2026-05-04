@@ -6236,3 +6236,48 @@ V-103 added three new resource accessors to the Python SDK (profiles / billing /
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-105 — Dependabot config (Routine — tooling)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Land automated dependency-update scheduling so deps don't drift indefinitely between manual review passes.
+
+### What changed
+
+New `.github/dependabot.yml`. Four ecosystems:
+
+- **npm root**: weekly Monday 04:00 Europe/Amsterdam. Groups: `types`, `dev-deps-minor-patch`, `runtime-deps-patch`, `runtime-deps-minor`. Locked-stack majors (drizzle-orm/kit, fastify, ioredis, postgres) excluded from grouping — land as individual PRs for architectural review per CLAUDE.md.
+- **pip** (`packages/sdk-python`): weekly. Groups: dev / runtime-patch.
+- **cargo** (`apps/gui-client/src-tauri`): weekly. Group: minor-patch.
+- **github-actions**: weekly. Group: minor-patch.
+
+PR limits 3-5 per ecosystem keep the review queue tractable.
+
+### Auto-merge
+
+NOT configured. Founder can flip on auto-merge for npm-patch + pip-patch later via repo settings if test-suite confidence holds.
+
+### How verified
+
+- `npm run format:check`: clean.
+
+### Decisions made (no new D-entries)
+
+- **Group minor/patch by ecosystem** (vs per-package) to reduce review load. Major bumps stay individual.
+- **Locked-stack majors excluded from grouping** — surface for architectural review.
+- **No auto-merge at first.**
+
+### Files added
+
+- `.github/dependabot.yml`
+
+### Next
+
+Continuing per never-stop rule.

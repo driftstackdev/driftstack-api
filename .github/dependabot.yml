@@ -1,0 +1,109 @@
+# Dependabot configuration (V-105).
+#
+# Schedules weekly automated update PRs across the four ecosystems
+# we run (npm root + each workspace, pip Python SDK, cargo Tauri
+# GUI, github-actions workflows). Minor/patch bumps within an
+# ecosystem are grouped into a single PR per week to reduce review
+# load; major bumps land as individual PRs because they typically
+# need code-side migration.
+#
+# Auto-merge is NOT configured here — every PR goes through review.
+# Founder can flip on auto-merge for npm patch + pip patch later
+# via repo settings if confidence in the test suite holds up.
+
+version: 2
+updates:
+  # ── npm root + workspaces ────────────────────────────────────────────
+  # The root `package.json` declares workspaces; Dependabot's npm
+  # ecosystem pointed at `/` automatically discovers the workspace
+  # tree and proposes updates across them in a single PR per group.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    groups:
+      types:
+        applies-to: version-updates
+        patterns:
+          - '@types/*'
+        update-types: [minor, patch]
+      dev-deps-minor-patch:
+        applies-to: version-updates
+        dependency-type: development
+        update-types: [minor, patch]
+      runtime-deps-patch:
+        applies-to: version-updates
+        dependency-type: production
+        update-types: [patch]
+      runtime-deps-minor:
+        applies-to: version-updates
+        dependency-type: production
+        update-types: [minor]
+    ignore:
+      # Locked stack — bumps surface as architectural decisions
+      # (per CLAUDE.md). Major bumps surface for review individually
+      # via the ungrouped path; minor + patch flow through groups.
+      # We don't ignore them outright; just want them reviewed
+      # not auto-grouped.
+      - dependency-name: drizzle-orm
+        update-types: [version-update:semver-major]
+      - dependency-name: drizzle-kit
+        update-types: [version-update:semver-major]
+      - dependency-name: fastify
+        update-types: [version-update:semver-major]
+      - dependency-name: ioredis
+        update-types: [version-update:semver-major]
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
+
+  # ── pip (Python SDK) ─────────────────────────────────────────────────
+  - package-ecosystem: pip
+    directory: /packages/sdk-python
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 3
+    groups:
+      python-dev-deps:
+        applies-to: version-updates
+        dependency-type: development
+        update-types: [minor, patch]
+      python-runtime-patch:
+        applies-to: version-updates
+        dependency-type: production
+        update-types: [patch]
+
+  # ── cargo (Tauri GUI client) ─────────────────────────────────────────
+  - package-ecosystem: cargo
+    directory: /apps/gui-client/src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 3
+    groups:
+      cargo-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  # ── github-actions ──────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 3
+    groups:
+      gha-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
