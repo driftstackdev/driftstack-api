@@ -7095,3 +7095,47 @@ The example imports from `@driftstack/sdk` (resolved through the workspace symli
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-123 — Rate-limit token-bucket microbenchmark (Routine — performance baseline)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+V-120 follow-up. Establishes baseline numbers for the rate-limit hot path so regressions are spottable. Same harness as V-120 (vitest's built-in `bench`); same not-a-CI-gate posture; same docs/benchmarks/ pattern.
+
+### What changed
+
+`apps/server/tests/bench/rate-limit.bench.ts` (new) — three benches:
+
+- `consume(cost=1)` against a fresh bucket (key generated per call so bucket initializes at full capacity).
+- `consume(cost=1)` with refill math on an existing bucket (closest match to production sustained-rate pattern).
+- `consume(cost=1)` when bucket is empty (`allowed: false` + `retryAfterMs` computation).
+
+### Baseline numbers (Apple M-class, 2026-05-04)
+
+- Fresh bucket happy path: 1.6M ops/s, p99 1.1µs (dominated by per-iteration random key allocation; production fresh-bucket consumes don't allocate strings).
+- Refill + consume hot path: 7.9M ops/s, p99 0.3µs.
+- Denied path: 8.9M ops/s, p99 0.2µs.
+
+All three are negligible relative to network roundtrip — the in-process token bucket is essentially free. The Redis-backed production variant adds ~0.5–2ms network cost per call; that bench needs an autocannon-against-server harness, not in scope here.
+
+### How verified
+
+- `npm run bench`: clean, all three benches reported with hz/mean/p99/etc.
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+
+### Files added
+
+- `apps/server/tests/bench/rate-limit.bench.ts`
+- `docs/benchmarks/rate-limit.md`
+
+### Next
+
+Continuing per never-stop rule. With auth + rate-limit benched, the next bench candidates are webhook-signature verify (HMAC-SHA256) and OpenAPI runtime validation.
