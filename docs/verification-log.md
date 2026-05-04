@@ -6521,3 +6521,53 @@ Tests use `mkdtempSync` for a per-test temp dir + `rmSync(..., { recursive: true
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-112 — Pre-commit hook scaffolding (Routine — tooling)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+Standing rules require typecheck + lint + format + vitest before each Tier 1 commit. Forgetting one is silent — CI catches it eventually but blocks downstream work in the meantime. A pre-commit hook on staged files closes the smallest gap (formatting + lint-fixable rules) at zero developer cost. Full typecheck + test stay manual since they're project-wide and cost ~10s+ each.
+
+### What changed
+
+- `husky` 9.1.7 + `lint-staged` 16.4.0 added as devDependencies.
+- `prepare` script (`husky`) added so `npm install` re-installs the hook automatically on fresh clones.
+- `lint-staged` config:
+  - `*.{ts,tsx,js,jsx,mjs,cjs}` → `eslint --fix` then `prettier --write`.
+  - `*.{json,md,yml,yaml,css}` → `prettier --write`.
+  - `.astro` deliberately excluded (no `prettier-plugin-astro` installed; existing `format:check` skips them; adding the plugin would be a separate Tier 3-aware pass over marketing-site files).
+- `.husky/pre-commit` runs `npx lint-staged`.
+
+### Audit finding (PHASE 10 docker-compose health checks)
+
+While auditing PHASE 10 of the autopilot directive: both `docker-compose.yml` (postgres pg_isready / redis ping) and `infra/hetzner/docker-compose.yml` (api node fetch /health) already have health checks. Item already done.
+
+Doc-rot also noted at `infra/hetzner/docker-compose.yml:25` — comment still references `COINBASE_COMMERCE_*` env vars but Coinbase Commerce was dropped 2026-05-03 per CLAUDE.md (Stripe is sole payment rail at launch). Fold into hygiene cleanup batch.
+
+### How verified
+
+- `npx husky init` then replaced default `npm test` content with `npx lint-staged` (default would require docker infra to run pg/redis on every commit attempt, far too heavy).
+- End-to-end: staged a deliberately-malformatted `apps/server/tests/unit/__hookcheck.ts` containing `const  x   =  1; const y= 2; export   {x  ,y}`. Ran `npx lint-staged` directly. After: `const x = 1; const y = 2; export { x, y };`. Both eslint --fix (spacing/comma) and prettier --write (semi/spacing) applied.
+- `npm run typecheck`: clean across all 5 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 486/486 passing.
+
+### Files added
+
+- `.husky/pre-commit`
+
+### Files modified
+
+- `package.json` (devDeps + `prepare` script + `lint-staged` config block)
+- `package-lock.json`
+
+### Next
+
+Continuing per never-stop rule.
