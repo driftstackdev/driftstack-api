@@ -223,14 +223,37 @@ export interface SelfHostedSku {
   profilesMax: number | null;
   /** Archetype slot limit. `null` = unlimited (Enterprise). */
   archetypesMax: number | null;
-  multiRegion: boolean;
-  multiNodeClustering: boolean;
   customArchetypeDevelopment: 'none' | 'limited' | 'unlimited';
   supportTier: 'email_48h' | 'email_slack_12h' | 'dedicated_csm_1h';
   minimumTermMonths: number;
   sourceEscrow: boolean;
   ctaHref: string;
 }
+
+// V-131: license-tier differentiators surfaced in the SKU comparison
+// matrix on /pricing + /self-hosted. Stored here rather than as fields
+// on the SelfHostedSku struct so the type stays narrow + so cosmetic
+// label changes don't ripple into anything that consumes the type.
+// Multi-region + multi-node-clustering were stripped here (V-131) —
+// those were customer deployment choices, not license-tier gates.
+
+export const SELF_HOSTED_SOFTWARE_UPDATES: Record<string, string> = {
+  self_hosted_solo: 'Quarterly',
+  self_hosted_pro: 'Continuous',
+  self_hosted_enterprise: 'Continuous + bespoke patches',
+};
+
+export const SELF_HOSTED_ARCHETYPE_UPDATES: Record<string, string> = {
+  self_hosted_solo: 'Major iOS only',
+  self_hosted_pro: 'All releases',
+  self_hosted_enterprise: 'All + early access',
+};
+
+export const SELF_HOSTED_SOURCE_ACCESS: Record<string, string> = {
+  self_hosted_solo: 'Build artifacts',
+  self_hosted_pro: 'Build artifacts',
+  self_hosted_enterprise: 'Full repository (read-only audit)',
+};
 
 export const SELF_HOSTED_SKUS: SelfHostedSku[] = [
   {
@@ -241,8 +264,6 @@ export const SELF_HOSTED_SKUS: SelfHostedSku[] = [
     annualUsd: 9_600,
     profilesMax: 25,
     archetypesMax: 1,
-    multiRegion: false,
-    multiNodeClustering: false,
     customArchetypeDevelopment: 'none',
     supportTier: 'email_48h',
     minimumTermMonths: 3,
@@ -257,8 +278,6 @@ export const SELF_HOSTED_SKUS: SelfHostedSku[] = [
     annualUsd: 19_200,
     profilesMax: 100,
     archetypesMax: 3,
-    multiRegion: true,
-    multiNodeClustering: false,
     customArchetypeDevelopment: 'limited',
     supportTier: 'email_slack_12h',
     minimumTermMonths: 3,
@@ -273,8 +292,6 @@ export const SELF_HOSTED_SKUS: SelfHostedSku[] = [
     annualUsd: 48_000,
     profilesMax: null,
     archetypesMax: null,
-    multiRegion: true,
-    multiNodeClustering: true,
     customArchetypeDevelopment: 'unlimited',
     supportTier: 'dedicated_csm_1h',
     minimumTermMonths: 12,

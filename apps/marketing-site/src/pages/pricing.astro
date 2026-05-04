@@ -1,6 +1,13 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { API_TIERS, SELF_HOSTED_SKUS, TRIAL_PACK } from '../data/pricing.ts';
+import {
+  API_TIERS,
+  SELF_HOSTED_ARCHETYPE_UPDATES,
+  SELF_HOSTED_SKUS,
+  SELF_HOSTED_SOFTWARE_UPDATES,
+  SELF_HOSTED_SOURCE_ACCESS,
+  TRIAL_PACK,
+} from '../data/pricing.ts';
 import type { LlmBilling } from '../data/pricing.ts';
 
 const trialPack = API_TIERS.find((t) => t.id === 'trial_pack')!;
@@ -52,6 +59,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
       return 'Unlimited';
   }
 }
+
 ---
 
 <BaseLayout
@@ -421,14 +429,16 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
                   <dd class="text-right text-slate-900">{fmtArchetypes(sku.archetypesMax)}</dd>
                 </div>
                 <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
-                  <dt class="text-slate-500">Multi-region</dt>
-                  <dd class="text-right text-slate-700">{sku.multiRegion ? 'Yes' : 'No'}</dd>
+                  <dt class="text-slate-500">Software updates</dt>
+                  <dd class="text-right text-slate-700">{SELF_HOSTED_SOFTWARE_UPDATES[sku.id]}</dd>
                 </div>
                 <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
-                  <dt class="text-slate-500">Multi-node clustering</dt>
-                  <dd class="text-right text-slate-700">
-                    {sku.multiNodeClustering ? 'Yes' : 'No'}
-                  </dd>
+                  <dt class="text-slate-500">Archetype updates</dt>
+                  <dd class="text-right text-slate-700">{SELF_HOSTED_ARCHETYPE_UPDATES[sku.id]}</dd>
+                </div>
+                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                  <dt class="text-slate-500">Source code access</dt>
+                  <dd class="text-right text-slate-700">{SELF_HOSTED_SOURCE_ACCESS[sku.id]}</dd>
                 </div>
                 <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
                   <dt class="text-slate-500">Custom archetype dev</dt>

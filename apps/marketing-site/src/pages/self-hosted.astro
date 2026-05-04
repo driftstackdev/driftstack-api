@@ -1,35 +1,16 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { SELF_HOSTED_SKUS } from '../data/pricing.ts';
+import {
+  SELF_HOSTED_ARCHETYPE_UPDATES,
+  SELF_HOSTED_SKUS,
+  SELF_HOSTED_SOFTWARE_UPDATES,
+  SELF_HOSTED_SOURCE_ACCESS,
+} from '../data/pricing.ts';
 
 const HARDWARE_BY_SKU: Record<string, string> = {
   self_hosted_solo: 'Mac Mini M4 16 GB (customer-purchased)',
   self_hosted_pro: 'Mac Studio M4 Max',
   self_hosted_enterprise: 'Mac Studio Ultra / Mac Pro / multi-node cluster',
-};
-
-// V-128: license-tier differentiators (NOT customer deployment choices).
-// Multi-region + multi-node clustering removed — those are deployment
-// shapes the customer chooses with their own hardware, not gated by
-// license tier. Customer with one Mac mini at home doesn't have multi-
-// region anything regardless of which SKU they bought.
-
-const SOFTWARE_UPDATES_BY_SKU: Record<string, string> = {
-  self_hosted_solo: 'Quarterly',
-  self_hosted_pro: 'Continuous',
-  self_hosted_enterprise: 'Continuous + bespoke patches',
-};
-
-const ARCHETYPE_UPDATES_BY_SKU: Record<string, string> = {
-  self_hosted_solo: 'Major iOS only',
-  self_hosted_pro: 'All releases',
-  self_hosted_enterprise: 'All + early access',
-};
-
-const SOURCE_ACCESS_BY_SKU: Record<string, string> = {
-  self_hosted_solo: 'Build artifacts',
-  self_hosted_pro: 'Build artifacts',
-  self_hosted_enterprise: 'Full repository (read-only audit)',
 };
 
 function fmtUsd(value: number | null | undefined): string {
@@ -238,15 +219,15 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
               </div>
               <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
                 <dt class="text-slate-500">Software updates</dt>
-                <dd class="text-right text-slate-700">{SOFTWARE_UPDATES_BY_SKU[sku.id]}</dd>
+                <dd class="text-right text-slate-700">{SELF_HOSTED_SOFTWARE_UPDATES[sku.id]}</dd>
               </div>
               <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
                 <dt class="text-slate-500">Archetype updates</dt>
-                <dd class="text-right text-slate-700">{ARCHETYPE_UPDATES_BY_SKU[sku.id]}</dd>
+                <dd class="text-right text-slate-700">{SELF_HOSTED_ARCHETYPE_UPDATES[sku.id]}</dd>
               </div>
               <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
                 <dt class="text-slate-500">Source code access</dt>
-                <dd class="text-right text-slate-700">{SOURCE_ACCESS_BY_SKU[sku.id]}</dd>
+                <dd class="text-right text-slate-700">{SELF_HOSTED_SOURCE_ACCESS[sku.id]}</dd>
               </div>
               <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
                 <dt class="text-slate-500">Custom archetype dev</dt>
@@ -286,7 +267,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">01</p>
           <h3 class="mt-3 font-semibold text-slate-900">Contact sales</h3>
           <p class="mt-2 text-sm text-slate-600">
-            Email <a href="mailto:sales@driftstack.dev" class="text-oxblood-700 underline">sales@driftstack.dev</a> with workload shape + monthly browser-hour volume.
+            Email <a href="mailto:sales@driftstack.dev" class="text-oxblood-700 underline">sales@driftstack.dev</a> with workload shape + concurrent-session profile.
             We'll model fit + break-even.
           </p>
         </li>

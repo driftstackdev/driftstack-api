@@ -7521,3 +7521,56 @@ Founder lower bound was 5 sites, but per directive "Don't expand fixture surface
 ### Next
 
 Continuing per never-stop rule. Per founder priority 5: PRIORITY 5 unstarted items, work down 5a → 5d in order.
+
+---
+
+## V-131 — Hours-meter drift cleanup + multiRegion/multiNodeClustering field strip (Tier 1 doc rot)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+Three drift items surfaced (NOT applied) in V-128 + V-129 — founder directed all three fixed as one atomic V-NNN commit:
+
+- **REDLINE A**: `apps/marketing-site/src/pages/index.astro:312` — Self-hosted teaser bullet "Sustained &gt;5,000 browser-hours per month where unit economics favour owned hardware" → "Sustained high-concurrency operations where owned hardware costs less than equivalent cloud-tier subscriptions."
+- **REDLINE B**: `apps/marketing-site/src/pages/self-hosted.astro:289` — Process step 01 "monthly browser-hour volume" → "concurrent-session profile".
+- **REDLINE C**: `apps/marketing-site/src/data/pricing.ts` — strip `multiRegion: boolean` and `multiNodeClustering: boolean` from `SelfHostedSku` type + all 3 SKU rows.
+
+### What changed
+
+- `apps/marketing-site/src/pages/index.astro`: replaced the bullet (REDLINE A).
+- `apps/marketing-site/src/pages/self-hosted.astro`: replaced the line (REDLINE B). Plus de-duplicated the matrix lookup dicts — V-129 had hardcoded `SOFTWARE_UPDATES_BY_SKU` / `ARCHETYPE_UPDATES_BY_SKU` / `SOURCE_ACCESS_BY_SKU` inline; consolidated those to shared `pricing.ts` exports (see below).
+- `apps/marketing-site/src/data/pricing.ts`: stripped the 2 fields from the type + 6 field-value lines (REDLINE C). Added 3 new module exports — `SELF_HOSTED_SOFTWARE_UPDATES`, `SELF_HOSTED_ARCHETYPE_UPDATES`, `SELF_HOSTED_SOURCE_ACCESS` — so /pricing + /self-hosted matrix rows pull from the same source.
+- `apps/marketing-site/src/pages/pricing.astro`: discovered third consumer of the stripped fields — also had Multi-region + Multi-node-clustering rows (would have broken typecheck after the strip). Replaced with the same Software updates / Archetype updates / Source code access rows pulling from the new shared exports. /pricing matrix now matches /self-hosted matrix exactly.
+
+### Why extract to shared exports
+
+Initial V-129 hard-coded the lookup dicts inline in /self-hosted only. After REDLINE C surfaced /pricing as a third consumer, two paths:
+
+(a) Duplicate the dicts in /pricing too — would create silent drift if a future label change only updates one.
+(b) Extract to `pricing.ts` exports — single source of truth, both pages import.
+
+Picked (b). Adds ~20 lines to pricing.ts but eliminates a guaranteed-future-drift smell.
+
+### How verified
+
+- `npm run typecheck`: clean across all 7 workspaces (the strip would have thrown `Property 'multiRegion' does not exist on type 'SelfHostedSku'` if any consumer was missed; clean run confirms full coverage).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 530/530 passing.
+- Browser dev-server check:
+  - Positive: `curl /` matches "Sustained high-concurrency operations" (1); `curl /self-hosted` matches "concurrent-session profile" (1).
+  - Negative: `curl /` "5,000 browser-hours" (0); `curl /self-hosted` "monthly browser-hour" (0); `curl /pricing` "Multi-region|Multi-node" (0).
+
+### Files modified
+
+- `apps/marketing-site/src/pages/index.astro` (REDLINE A)
+- `apps/marketing-site/src/pages/self-hosted.astro` (REDLINE B + dict-extract refactor)
+- `apps/marketing-site/src/pages/pricing.astro` (matrix rows updated to match self-hosted)
+- `apps/marketing-site/src/data/pricing.ts` (REDLINE C: strip 2 fields; add 3 shared exports)
+
+### Next
+
+Continuing per never-stop rule. Resuming Priority 5a marketing-site Tier 3 drafts — already 5 in working tree (/security, /about, /500, /docs, /changelog) ready for surfacing.
