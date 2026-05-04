@@ -6474,3 +6474,50 @@ DNS pointer note: `app.driftstack.dev` maps to the Pages project apex.
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-111 — legal-catalog targeted unit tests (Routine — coverage)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+V-086 audit identified `legal-catalog.ts` at 66.66% as the lowest-covered service. The uncovered branches were the file-system path (`buildLegalCatalog`'s actual disk reads) and the header-parse error branches. V-111 adds targeted unit tests against a tmp-dir fixture.
+
+### What changed
+
+New `apps/server/tests/unit/legal-catalog.test.ts` — 8 tests:
+
+- `buildLegalCatalog` reads + parses a valid document (happy path + asserts hash + byte size).
+- `buildLegalCatalog` throws on missing file.
+- `buildLegalCatalog` throws on missing header line (matches the error message regex).
+- `catalog.get()` returns the right entry per documentKey + undefined for unknowns.
+- `buildLegalCatalog` uses `DEFAULT_SOURCES` when no `sources` arg provided.
+- `buildLegalCatalogFromContent` works without disk reads.
+- `buildLegalCatalogFromContent` propagates header-parse errors.
+- Content hash differs across distinct content.
+
+Tests use `mkdtempSync` for a per-test temp dir + `rmSync(..., { recursive: true })` cleanup; no real production legal docs are touched.
+
+### Coverage delta
+
+- `legal-catalog.ts`: 66.66% → 97.7%
+- Aggregate (focused scope): 87.05/79.89/85.46/87.05 → 87.45/80.11/85.74/87.45
+
+### How verified
+
+- `npm test`: 486/486 passing (was 478; +8 new tests).
+- `npm run lint`: clean (after replacing `require('node:fs')` with ESM `mkdirSync` import).
+- `npm run format:check`: clean (after prettier formatting pass).
+- `npx vitest run --coverage`: thresholds (80/80/80/75) still pass with margin.
+
+### Files added
+
+- `apps/server/tests/unit/legal-catalog.test.ts`
+
+### Next
+
+Continuing per never-stop rule.
