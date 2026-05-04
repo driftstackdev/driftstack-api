@@ -7881,3 +7881,52 @@ Enterprise profile count is contract-negotiated. Modeling as `null` forces every
 ### Next
 
 Continuing per never-stop rule. PRIORITY 2: full /pricing.astro audit + redlines.
+
+---
+
+## V-137 — /pricing.astro audit (clean — no redlines applied)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder overnight directive PRIORITY 2 — full /pricing.astro audit per locked criteria. Surface findings + apply redlines if drift found. No drift found; documenting clean audit.
+
+### Audit criteria + findings
+
+- **Bit-identical parity bar (no "99.X%" / "match rate" / % framing)** — CLEAN. `grep -E "99\.[0-9]|matchRate|matchRatePercentage"` returns 0 hits across pricing.astro.
+- **ADR-004 tier values** ($79/$249/$699 Manual + $149/$499/$1,499 + $4,000+ Enterprise + $1,000/$2,000/$4,000+ self-hosted + $2.99 trial-pack) — CLEAN. All values render from `pricing.ts:API_TIERS` + `SELF_HOSTED_SKUS` + `TRIAL_PACK` data; no hardcoded values in the .astro template.
+- **Concurrent-only metering (no hours-meter / overage / per-call language)** — CLEAN. Two occurrences of "browser-hours" and one of "overage" exist but as ANTI-EXAMPLES explaining WHY concurrent caps (FAQ "Why concurrent caps and not hours?" entry on line 515-522 + positioning band "No surprise overage bills" on line 136). The framing reinforces concurrent-only positioning rather than contradicting it.
+- **Two-ladder Manual + API structure** — CLEAN. Header reads "Two ladders. One trial pack to start." Manual ladder section + API ladder section + visual divider between.
+- **BYOK gating per locked tier matrix** — CLEAN. `fmtAiAgent` helper renders the per-tier `aiAgent` + `llmBilling` fields correctly (BYOK only / BYOK or bundled / BYOK or bundled custom / "—" off entirely).
+- **"AI agent (LLM-driven sessions)" row label per V-075** — CLEAN. Both Manual matrix (line 232) and API matrix (line 331) carry this exact label.
+- **Self-hosted matrix: license differentiators NOT hardware-deployment-choices** — CLEAN. V-129 + V-131 already cleared multi-region + multi-node-clustering rows; matrix now shows Software updates / Archetype updates / Source code access / Custom archetype dev / Source escrow / Support / Minimum term — all license-tier-defining.
+
+### Non-blocking observation (NOT applied)
+
+The Manual + API tier cards include a "Hours" row that reads "Unlimited" for paid tiers (per `tier.hoursLabel` from API_TIERS). The label is technically correct (paid tiers have no hours metering) but having a "Hours" row at all on cards that lead with "concurrent-only metering" positioning could be argued as visually muddy. Two paths if founder wants tightening:
+
+(a) Drop the "Hours" row from paid tier cards (concurrent + AI agent + support is sufficient information).
+(b) Rename the row label to "Session runtime" (value "Unbounded") — the row stays for completeness but the label no longer implies a meter.
+
+NOT redlined here — judgment call rather than ADR-004 drift. Surfaced for founder direction at next review pass.
+
+### How verified
+
+- Manual walk-through against the 8-criterion checklist above.
+- `grep` checks for parity-bar, dead-tier, hours-meter, Apple-silicon, multi-region/node strings — only legitimate occurrences (anti-example FAQ + anti-overage positioning).
+- Browser visual at `http://127.0.0.1:4321/pricing` — hero, trial pack, both ladders, self-hosted matrix, BYOK explainer, FAQ all render correctly per ADR-004.
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 530/530.
+
+### Files modified
+
+- `docs/verification-log.md` (this entry only — audit produced no code changes)
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 3: batch-commit Tier 3 drafts — 5a marketing additions + 5b customer-dashboard pages + 5c admin-panel pages.
