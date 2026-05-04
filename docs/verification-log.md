@@ -8445,8 +8445,66 @@ These are repo-settings configurations the founder enables once; not part of thi
 
 ### Founder action queue addition
 
-`docs/founder-action-queue.md` next-edit: add an entry under CI/CD secrets noting that "Allow auto-merge" needs to be enabled in repo settings for V-148 to take effect. Adding inline.
+`docs/founder-action-queue.md` next-edit: add an entry under CI/CD secrets noting that "Allow auto-merge" needs to be enabled in repo settings for V-148 to take effect. Added inline.
 
 ### Next
 
 Continuing per never-stop rule. PRIORITY 12: when queue exhausts, GENERATE NEW Tier 1 from planning docs.
+
+---
+
+## V-149 — @driftstack/webrtc-streaming workspace stub (PRIORITY 12)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder overnight directive PRIORITY 12 — when queue exhausts, generate new Tier 1 from planning docs. CLAUDE.md "Out of scope" lists "WebRTC streaming layer" as a future surface ("may land inside the GUI workstream if scope allows; otherwise polling-based screenshots for the first iteration"). V-149 lands the seam following the V-127 / V-144 pattern.
+
+### What changed
+
+New workspace `packages/webrtc-streaming/`:
+
+- `package.json` + `tsconfig.json` matching V-127 / V-144 conventions.
+- `src/types.ts`: WebRTC primitives (`SdpPayload`, `IceCandidate`, `IceServer`), `StreamConfig`, `StreamState` discriminator (connecting / connected / reconnecting / closed / failed), `StreamStats` snapshot (frames, fps, bitrate, RTT, packet loss), `StreamEvent` discriminated-union.
+- `src/interfaces.ts`:
+  - `WebRtcStreamingService` — `createStream`, `negotiate`, `submitIceCandidate`, `subscribe` (returns unsubscribe fn), `getStats`, `close`.
+  - `StreamRegistry` — read-only `list` for admin observability.
+- `src/mock.ts`:
+  - `MockWebRtcStreamingService` — deterministic clock + per-stream subscriber set + state-machine transitions. Implements both interfaces.
+  - `advanceClock(deltaMs)` test seam.
+  - Connected streams report 30 fps / 1500 kbps / 35ms RTT (deterministic mock).
+- `src/index.ts` — re-exports.
+- `tests/mock.test.ts` — 9 tests.
+
+`tsconfig.json` (root): added `./packages/webrtc-streaming` to `references`.
+
+### Use case
+
+Live-view a session running on a Driftstack-controlled browser. Screenshots-on-demand work today (`/v1/sessions/:id/capture`). WebRTC unlocks continuous streaming — 30+ fps low-latency video, no per-frame HTTP cost. Phase 3+ work fills in the real implementation; the seam exists so GUI client `LiveSessionView` + customer dashboard live preview can integrate against the contract.
+
+### How verified
+
+- `npm install`: workspace picked up (10 workspaces total).
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 556/556 passing (was 547; +9 new).
+
+### Files added
+
+- `packages/webrtc-streaming/package.json`
+- `packages/webrtc-streaming/tsconfig.json`
+- `packages/webrtc-streaming/src/{types,interfaces,mock,index}.ts`
+- `packages/webrtc-streaming/tests/mock.test.ts`
+
+### Files modified
+
+- `tsconfig.json`
+- `package-lock.json`
+
+### Next
+
+Continuing per never-stop rule. CLAUDE.md "Out of scope" stub catalog now complete: behavioural-simulation (V-127), recipe-library (V-127), webhook-delivery (V-144), webrtc-streaming (V-149). Mac mini fleet is operational (not code-scaffoldable); behavioural data collection is explicitly NOT collected. Continuing with other planning-doc-generated work.
