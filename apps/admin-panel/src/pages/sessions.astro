@@ -1,0 +1,180 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+
+interface MockAdminSession {
+  id: string;
+  accountId: string;
+  accountEmail: string;
+  status: 'creating' | 'ready' | 'busy' | 'destroyed' | 'errored';
+  archetype: string;
+  createdAt: string;
+  destroyedAt: string | null;
+}
+
+const MOCK_SESSIONS: MockAdminSession[] = [
+  {
+    id: 'ses_00000000-0000-4000-8000-0000000000c1',
+    accountId: 'acc_00000000-0000-4000-8000-000000000001',
+    accountEmail: 'tester@driftstack.local',
+    status: 'ready',
+    archetype: 'iphone16pro_ios18_7_safari26_4',
+    createdAt: '2026-05-04T11:30:00Z',
+    destroyedAt: null,
+  },
+  {
+    id: 'ses_00000000-0000-4000-8000-0000000000c2',
+    accountId: 'acc_00000000-0000-4000-8000-000000000002',
+    accountEmail: 'agency@driftstack.local',
+    status: 'busy',
+    archetype: 'iphone16pro_ios18_7_safari26_4',
+    createdAt: '2026-05-04T10:15:00Z',
+    destroyedAt: null,
+  },
+  {
+    id: 'ses_00000000-0000-4000-8000-0000000000c3',
+    accountId: 'acc_00000000-0000-4000-8000-000000000001',
+    accountEmail: 'tester@driftstack.local',
+    status: 'errored',
+    archetype: 'iphone16pro_ios18_7_safari26_4',
+    createdAt: '2026-05-04T08:00:00Z',
+    destroyedAt: null,
+  },
+];
+
+const STATUS_BADGE: Record<string, string> = {
+  creating: 'bg-amber-50 text-amber-700',
+  ready: 'bg-emerald-50 text-emerald-700',
+  busy: 'bg-blue-50 text-blue-700',
+  destroyed: 'bg-slate-100 text-slate-600',
+  errored: 'bg-red-50 text-red-700',
+};
+
+function fmtIso(iso: string | null): string {
+  if (iso === null) return '—';
+  return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+}
+
+const stuckSessions = MOCK_SESSIONS.filter(
+  (s) => s.status === 'errored' || s.status === 'busy',
+);
+---
+
+<AdminLayout title="Sessions">
+  <div class="mx-auto max-w-6xl px-6 py-10">
+    <header class="mb-10">
+      <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Sessions</h1>
+      <p class="mt-2 text-sm text-slate-500">
+        Cross-account session view. Use this for support cases — find a
+        customer's stuck session, force-destroy if the customer can't.
+      </p>
+    </header>
+
+    <!-- Stuck session callout -->
+    {
+      stuckSessions.length > 0 && (
+        <div class="mb-6 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span class="font-mono text-xs uppercase">!</span>
+          <p>
+            <strong class="font-medium">
+              {stuckSessions.length.toString()} stuck session
+              {stuckSessions.length === 1 ? '' : 's'}
+            </strong>{' '}
+            (errored or busy &gt; 5 min). Force-destroy if the customer's own
+            DELETE returns 4xx — captures the underlying driver state for
+            postmortem.
+          </p>
+        </div>
+      )
+    }
+
+    <!-- Filter bar -->
+    <div class="mb-6 flex flex-wrap items-center gap-3">
+      <input
+        type="search"
+        placeholder="Filter by session id, account email…"
+        class="w-72 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+      />
+      <select
+        class="rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+      >
+        <option value="">All statuses</option>
+        <option value="creating">Creating</option>
+        <option value="ready">Ready</option>
+        <option value="busy">Busy</option>
+        <option value="errored">Errored</option>
+        <option value="destroyed">Destroyed</option>
+      </select>
+    </div>
+
+    <!-- Sessions table -->
+    <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-slate-200 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+            <th class="px-4 py-3">Session</th>
+            <th class="px-4 py-3">Account</th>
+            <th class="px-4 py-3">Status</th>
+            <th class="px-4 py-3">Created</th>
+            <th class="px-4 py-3">Destroyed</th>
+            <th class="px-4 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {
+            MOCK_SESSIONS.map((session) => (
+              <tr class="hover:bg-slate-50">
+                <td class="px-4 py-3">
+                  <p class="font-mono text-xs text-slate-900">{session.id}</p>
+                  <p class="mt-1 font-mono text-[11px] text-slate-500">
+                    {session.archetype}
+                  </p>
+                </td>
+                <td class="px-4 py-3">
+                  <p class="text-slate-900">{session.accountEmail}</p>
+                  <p class="mt-1 font-mono text-[11px] text-slate-500">
+                    {session.accountId}
+                  </p>
+                </td>
+                <td class="px-4 py-3">
+                  <span
+                    class:list={[
+                      'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
+                      STATUS_BADGE[session.status],
+                    ]}
+                  >
+                    {session.status}
+                  </span>
+                </td>
+                <td class="px-4 py-3 text-slate-600">{fmtIso(session.createdAt)}</td>
+                <td class="px-4 py-3 text-slate-600">{fmtIso(session.destroyedAt)}</td>
+                <td class="px-4 py-3 text-right">
+                  {session.status !== 'destroyed' ? (
+                    <a
+                      href={`#destroy-${session.id}`}
+                      class="text-sm font-medium text-red-700 hover:underline"
+                    >
+                      Force destroy
+                    </a>
+                  ) : (
+                    <a
+                      href={`#audit-${session.id}`}
+                      class="text-sm text-oxblood-700 hover:underline"
+                    >
+                      Audit
+                    </a>
+                  )}
+                </td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <p class="mt-4 text-xs text-slate-500">
+      Force-destroy fires <code class="font-mono">POST /v1/admin/sessions/:id/destroy</code> with
+      an audit row. Destroyed-by-admin sessions are flagged in the customer's
+      session log so support tickets land with full context.
+    </p>
+  </div>
+</AdminLayout>

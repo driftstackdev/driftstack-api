@@ -7805,3 +7805,79 @@ Founder direction: "different security boundary, different audience". Concrete r
 ### Next
 
 Continuing per never-stop rule. /accounts + /audit-log stay Tier 3 working-tree drafts. Continuing 5c with /leads + /sessions + /webhook-dlq + /rate-limit-overrides drafts.
+
+---
+
+## V-136 — V-177 archetype rename + /profiles tier-limit fix + iOS framing redline
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder overnight directive PRIORITY 1 — coordinated single commit covering DECISION 1 + REDLINE 1 + REDLINE 2:
+
+- **DECISION 1 (V-177 archetype rename)**: customer-facing copy used "iPhone 16 Pro / iOS 26.4.1" framing — wrong. Apple ships Safari independently of iOS major; the locked archetype is iOS 18.7 + Safari 26.4. Internal identifier `iphone16pro_ios26_4_1` likewise wrong → renamed to `iphone16pro_ios18_7_safari26_4`.
+- **REDLINE 1 (/profiles tier-limit footer)**: hardcoded "Solo Manual = 25, Team Manual / API Builder = 100, Agency / API Scale = unlimited" all wrong per ADR-004. Replaced with full per-tier table sourced from a new `PROFILES_PER_TIER` shared export.
+- **REDLINE 2 (/profiles archetype display)**: customer-dashboard rendered raw archetype identifier strings; replaced with friendly label via `archetypeDisplayLabel(id)` helper.
+
+### What changed
+
+`packages/api-types/src/common.ts` (Tier 1 — shared contract):
+
+- Added `PROFILES_PER_TIER: Record<AccountTier, number | 'custom'>` — single source of truth.
+- Added `LOCKED_ARCHETYPE_ID = 'iphone16pro_ios18_7_safari26_4'` + `LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 16 Pro / iOS 18.7 / Safari 26.4'` constants.
+- Added `ARCHETYPE_DISPLAY_LABEL: Record<string, string>` map + `archetypeDisplayLabel(id: string): string` helper.
+
+Customer-facing copy redlines (Tier 3 — committed per founder approval):
+
+- `apps/marketing-site/src/data/capabilities.ts:24` archetypeReference updated.
+- `apps/marketing-site/src/pages/index.astro` cumulative-rig section body + caption updated.
+
+Internal archetype-id rename (Tier 1):
+
+- `apps/customer-dashboard/src/data/mocks.ts` (4 occurrences) renamed.
+- `apps/admin-panel/src/pages/sessions.astro` (3 occurrences) renamed.
+
+`apps/customer-dashboard/src/pages/profiles.astro`:
+
+- Imports `PROFILES_PER_TIER`, `archetypeDisplayLabel`, `AccountTier` from `@driftstack/api-types`.
+- Footer hardcoded sentence replaced with a 7-row `<dl>` table covering every paid tier (Solo Manual / Team Manual / Agency Manual / API Starter / API Builder / API Scale / Enterprise). Each row reads its limit from `PROFILES_PER_TIER`.
+- Per-profile row archetype display now passes `profile.archetype` through `archetypeDisplayLabel(...)`.
+
+`docs/architecture/archetype-naming-convention.md` (new) — captures identifier shape (`<device_family>_<device_model>_ios<major>_<minor>_safari<safari_major>_<safari_minor>`), parallel iOS + Safari versioning rationale (Apple ships Safari independently of iOS major), bump procedure for future iOS major versions, what NOT to include (patch version, build number, region). Future-self note per founder's directive.
+
+### Why `Record<AccountTier, ...>` in api-types and not pricing.ts
+
+`pricing.ts:API_TIERS` already carries `profiles: number | string` per tier — marketing-rendering data. But pricing.ts is in the marketing-site workspace; importing it from customer-dashboard would create a marketing→dashboard workspace dep that violates layer convention. Right home for cross-workspace contract data is `@driftstack/api-types`.
+
+### Why `'custom'` for Enterprise
+
+Enterprise profile count is contract-negotiated. Modeling as `null` forces every consumer to handle "not set" semantics; modeling as `'custom'` (string literal) lets consumers branch on a clear sentinel. TypeScript narrows `number | 'custom'` cleanly.
+
+### How verified
+
+- `npm run build --workspace packages/api-types`: clean.
+- `npm run typecheck`: clean across all 8 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 530/530 passing.
+- Browser dev-server check: `curl http://127.0.0.1:4321/` matches iOS 18.7 + Safari 26.4. Negative for "iOS 26.4.1" returns 0. `curl http://127.0.0.1:4322/profiles` matches "iPhone 16 Pro / iOS 18.7" + all 7 tier names in the new footer table.
+
+### Files added
+
+- `docs/architecture/archetype-naming-convention.md`
+
+### Files modified
+
+- `packages/api-types/src/common.ts`
+- `apps/marketing-site/src/data/capabilities.ts`
+- `apps/marketing-site/src/pages/index.astro`
+- `apps/customer-dashboard/src/data/mocks.ts`
+- `apps/admin-panel/src/pages/sessions.astro`
+- `apps/customer-dashboard/src/pages/profiles.astro`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 2: full /pricing.astro audit + redlines.

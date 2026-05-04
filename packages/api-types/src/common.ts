@@ -94,6 +94,65 @@ export const AccountTierSchema = z.enum([
 ]);
 export type AccountTier = z.infer<typeof AccountTierSchema>;
 
+/**
+ * Profile-count limits per tier — single source of truth for
+ * marketing-site, customer-dashboard, and server-side enforcement.
+ * Numeric tiers expose the concrete cap; `'custom'` means
+ * negotiated-per-contract (Enterprise only).
+ *
+ * Locked per ADR-004. Values mirrored in
+ * `apps/marketing-site/src/data/pricing.ts:API_TIERS` (see field
+ * `profiles`) — the marketing copy uses friendlier display strings
+ * but the numbers are the same. The server-side enforcement at
+ * `/v1/profiles` creation gate reads from this constant.
+ */
+export const PROFILES_PER_TIER: Record<AccountTier, number | 'custom'> = {
+  trial_pack: 1,
+  solo_manual: 10,
+  team_manual: 50,
+  agency_manual: 200,
+  api_starter: 25,
+  api_builder: 100,
+  api_scale: 500,
+  enterprise: 'custom',
+};
+
+/**
+ * Currently-locked archetype identifier + human-readable label.
+ *
+ * The identifier (`iphone16pro_ios18_7_safari26_4`) is what the API
+ * accepts on `/v1/sessions { archetype }` and what the server stores
+ * on session + profile rows. The display label is the customer-facing
+ * string surfaced on dashboards + the marketing site.
+ *
+ * Versioning: every iOS major bump (iOS 19, iOS 20, ...) cycles BOTH
+ * values. Apple ships Safari independently of iOS major; the
+ * Safari version is part of the identifier so we can ship Safari-only
+ * archetype updates without touching iOS framing. Pattern documented
+ * in `docs/architecture/archetype-naming-convention.md`.
+ *
+ * V-136: renamed from the prior `iphone16pro_ios26_4_1` identifier
+ * (which conflated Safari 26.4 with a fictional "iOS 26.4.1") to the
+ * correct `iphone16pro_ios18_7_safari26_4`. Customer-facing copy
+ * also redlined in the same commit.
+ */
+export const LOCKED_ARCHETYPE_ID = 'iphone16pro_ios18_7_safari26_4';
+export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 16 Pro / iOS 18.7 / Safari 26.4';
+
+/**
+ * Map an internal archetype identifier to its human-readable label.
+ * Falls back to the identifier itself when unknown — UIs surface the
+ * raw id rather than crash. Tests can ship known-archetype labels by
+ * extending this record before/after V-136.
+ */
+export const ARCHETYPE_DISPLAY_LABEL: Record<string, string> = {
+  [LOCKED_ARCHETYPE_ID]: LOCKED_ARCHETYPE_DISPLAY_LABEL,
+};
+
+export function archetypeDisplayLabel(id: string): string {
+  return ARCHETYPE_DISPLAY_LABEL[id] ?? id;
+}
+
 // `gui_control` is the scope that gates the manual-control plane
 // (tap_at, type_focused, etc.) — bypasses the behavioral simulation
 // layer, only granted to keys for the self-hosted GUI workflow per

@@ -21,7 +21,7 @@ export const CUMULATIVE_RIG = {
   /** Pre-rounded percentage for marketing-headline display. */
   matchRatePercentage: 99.9,
   /** Reference archetype the cumulative rig measures against. */
-  archetypeReference: 'iPhone 16 Pro / iOS 26.4.1',
+  archetypeReference: 'iPhone 16 Pro / iOS 18.7 / Safari 26.4',
   /** ISO-8601 date of the last numerator/denominator update. */
   lastUpdated: '2026-05-03',
 } as const;

@@ -46,7 +46,7 @@ export const MOCK_PROFILES: Profile[] = [
   {
     id: 'prof_00000000-0000-4000-8000-0000000000a1',
     name: 'work-laptop',
-    archetype: 'iphone16pro_ios26_4_1',
+    archetype: 'iphone16pro_ios18_7_safari26_4',
     description: 'primary work profile',
     last_used_at: '2026-05-02T18:30:00Z',
     created_at: '2026-04-15T09:05:00Z',
@@ -55,7 +55,7 @@ export const MOCK_PROFILES: Profile[] = [
   {
     id: 'prof_00000000-0000-4000-8000-0000000000a2',
     name: 'staging-tester',
-    archetype: 'iphone16pro_ios26_4_1',
+    archetype: 'iphone16pro_ios18_7_safari26_4',
     description: 'integration test rig',
     last_used_at: '2026-05-01T11:15:00Z',
     created_at: '2026-04-20T14:00:00Z',
@@ -127,7 +127,7 @@ export const MOCK_SESSIONS: MockSession[] = [
   {
     id: 'ses_00000000-0000-4000-8000-0000000000c1',
     status: 'ready',
-    archetype: 'iphone16pro_ios26_4_1',
+    archetype: 'iphone16pro_ios18_7_safari26_4',
     profile_id: 'prof_00000000-0000-4000-8000-0000000000a1',
     created_at: '2026-05-03T11:30:00Z',
     destroyed_at: null,
@@ -136,7 +136,7 @@ export const MOCK_SESSIONS: MockSession[] = [
   {
     id: 'ses_00000000-0000-4000-8000-0000000000c2',
     status: 'destroyed',
-    archetype: 'iphone16pro_ios26_4_1',
+    archetype: 'iphone16pro_ios18_7_safari26_4',
     profile_id: 'prof_00000000-0000-4000-8000-0000000000a1',
     created_at: '2026-05-02T18:00:00Z',
     destroyed_at: '2026-05-02T18:30:00Z',
