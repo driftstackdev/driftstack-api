@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 from urllib.parse import quote
 
@@ -15,6 +16,7 @@ from driftstack._generated.models import (
     WebhookEndpoint,
 )
 from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.pagination import aiterate_paginated, iterate_paginated
 from driftstack.resources._common import coerce_body, coerce_query
 
 
@@ -75,6 +77,31 @@ class WebhooksResource:
         )
         return WebhookDeliveryListPage.model_validate(data)
 
+    def iterate_deliveries(
+        self,
+        webhook_id: str,
+        *,
+        limit: int | None = None,
+        status: str | None = None,
+    ) -> Iterator[WebhookDelivery]:
+        """Lazily walk every delivery for an endpoint.
+
+        Filter by ``status`` (e.g. ``'dlq'``) to walk just one bucket;
+        the filter threads through every page.
+        """
+
+        def fetch_page(cursor: str | None) -> WebhookDeliveryListPage:
+            params: dict[str, Any] = {}
+            if limit is not None:
+                params["limit"] = limit
+            if status is not None:
+                params["status"] = status
+            if cursor is not None:
+                params["cursor"] = cursor
+            return self.list_deliveries(webhook_id, params)
+
+        return iterate_paginated(fetch_page)
+
 
 class AsyncWebhooksResource:
     """Async webhooks resource."""
@@ -108,3 +135,24 @@ class AsyncWebhooksResource:
             params=coerce_query(query),
         )
         return WebhookDeliveryListPage.model_validate(data)
+
+    def iterate_deliveries(
+        self,
+        webhook_id: str,
+        *,
+        limit: int | None = None,
+        status: str | None = None,
+    ) -> AsyncIterator[WebhookDelivery]:
+        """Async variant of :meth:`WebhooksResource.iterate_deliveries`."""
+
+        async def fetch_page(cursor: str | None) -> WebhookDeliveryListPage:
+            params: dict[str, Any] = {}
+            if limit is not None:
+                params["limit"] = limit
+            if status is not None:
+                params["status"] = status
+            if cursor is not None:
+                params["cursor"] = cursor
+            return await self.list_deliveries(webhook_id, params)
+
+        return aiterate_paginated(fetch_page)

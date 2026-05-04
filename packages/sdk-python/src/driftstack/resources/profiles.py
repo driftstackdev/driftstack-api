@@ -10,10 +10,12 @@ next regen.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 from urllib.parse import quote, urlencode
 
 from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.pagination import aiterate_paginated, iterate_paginated
 from driftstack.resources._common import coerce_body
 
 
@@ -42,6 +44,14 @@ class ProfilesResource:
         path = "/v1/profiles" + (f"?{qs}" if qs else "")
         return self._http.request("GET", path)
 
+    def iterate(self, *, limit: int | None = None) -> Iterator[dict[str, Any]]:
+        """Lazily walk every profile, handling cursor handoff."""
+
+        def fetch_page(cursor: str | None) -> dict[str, Any]:
+            return self.list(limit=limit, cursor=cursor)
+
+        return iterate_paginated(fetch_page)
+
     def get(self, profile_id: str) -> dict[str, Any]:
         return self._http.request("GET", f"/v1/profiles/{quote(profile_id, safe='')}")
 
@@ -69,6 +79,14 @@ class AsyncProfilesResource:
         qs = _encode_query({"limit": limit, "cursor": cursor})
         path = "/v1/profiles" + (f"?{qs}" if qs else "")
         return await self._http.request("GET", path)
+
+    def iterate(self, *, limit: int | None = None) -> AsyncIterator[dict[str, Any]]:
+        """Async variant of :meth:`ProfilesResource.iterate`."""
+
+        async def fetch_page(cursor: str | None) -> dict[str, Any]:
+            return await self.list(limit=limit, cursor=cursor)
+
+        return aiterate_paginated(fetch_page)
 
     async def get(self, profile_id: str) -> dict[str, Any]:
         return await self._http.request("GET", f"/v1/profiles/{quote(profile_id, safe='')}")

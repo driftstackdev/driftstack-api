@@ -7229,3 +7229,60 @@ V-112 surfaced doc rot at `infra/hetzner/docker-compose.yml:25` — the env-file
 ### Next
 
 Continuing per never-stop rule. Founder priority order: Python SDK iterate() helpers next.
+
+---
+
+## V-126 — Python SDK iterate() helpers (Routine — SDK expansion)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+Symmetry parity with V-118/V-119 TS work (per founder priority 2). Python SDK gains cursor-pagination iterators for the same resources, with both sync (regular generator) and async (async generator) variants since the Python SDK exposes `Driftstack` + `AsyncDriftstack` clients side-by-side.
+
+### What changed
+
+- `packages/sdk-python/src/driftstack/pagination.py` (new):
+  - `iterate_paginated(fetch_page) -> Iterator[T]` — sync generator that walks cursor pages.
+  - `aiterate_paginated(fetch_page) -> AsyncIterator[T]` — async equivalent.
+  - Duck-typed page extraction: accepts pydantic-model-style attribute access (`page.data`, `page.next_cursor`) OR raw-dict-style key access. This matters because typed resources like Sessions return `SessionsListPage` (BaseModel) while untyped resources like Profiles still return `dict[str, Any]` pending a future codegen pass.
+- `packages/sdk-python/src/driftstack/resources/sessions.py`: imports the helpers; adds `SessionsResource.iterate(*, limit=None)` returning `Iterator[Session]` and `AsyncSessionsResource.iterate(...)` returning `AsyncIterator[Session]`.
+- `packages/sdk-python/src/driftstack/resources/profiles.py`: same shape, returns `Iterator[dict[str, Any]]` (untyped pending codegen) + async parallel.
+- `packages/sdk-python/src/driftstack/resources/webhooks.py`: adds `iterate_deliveries(webhook_id, *, limit=None, status=None)` on both sync + async resources. `status` filter threads through every page (so `status='dlq'` walks just the DLQ for replay tooling, mirroring TS V-119).
+
+### How verified
+
+- `packages/sdk-python/tests/test_pagination.py` (new) — 9 tests:
+  - Sync: walks single page, walks multi-page, empty first page, intermediate empty pages, error propagation, consumer-break stops fetching, attribute-style page support.
+  - Async: walks single page, walks multi-page.
+- `packages/sdk-python/tests/test_resources_iterate.py` (new) — 6 tests:
+  - sessions sync + async: walks pages, threads cursor.
+  - profiles sync + async: walks pages.
+  - webhooks deliveries sync (status filter threaded) + async.
+- `pytest`: 116 passing (was 101; +15 new — 9 pagination + 6 resource).
+- `ruff check .`: clean (after `--fix` collapsed `for x in xs: yield x` to `yield from`, and after the import block in the new pagination.py was alphabetized).
+- `ruff format --check .`: clean.
+- `mypy src`: 34 errors remain, **all pre-existing** (verified by stashing V-126 and re-running on origin/main). V-126 surface (`pagination.py`, three `iterate*` methods) adds zero new errors. Pre-existing errors are no-any-return on `auth.py` / `profiles.py` / `billing.py` raw-dict-returning paths — separate hygiene concern.
+- TS workspace not touched; `npm run lint` + `npm run format:check` + `npm test` (515) all clean.
+
+### Test fake gotchas surfaced
+
+The pydantic-validated Session and WebhookDelivery models enforce ID format regex (`ses_<uuid>`, `wdl_<uuid>`, `whk_<uuid>`) and archetype regex (`[a-z0-9_]+` only — no hyphens). Initial test fakes used hyphenated archetype + simple `sess_1` / `del_x` IDs and failed validation. Updated fakes to use UUID-shaped IDs + underscore-only archetypes. Documented here so future test authors don't repeat.
+
+### Files added
+
+- `packages/sdk-python/src/driftstack/pagination.py`
+- `packages/sdk-python/tests/test_pagination.py`
+- `packages/sdk-python/tests/test_resources_iterate.py`
+
+### Files modified
+
+- `packages/sdk-python/src/driftstack/resources/sessions.py`
+- `packages/sdk-python/src/driftstack/resources/profiles.py`
+- `packages/sdk-python/src/driftstack/resources/webhooks.py`
+
+### Next
+
+Continuing per never-stop rule. Per founder priority: PHASE 11 stubs (behavioural-simulation + recipe-library workspace packages) next.

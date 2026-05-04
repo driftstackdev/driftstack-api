@@ -7,6 +7,7 @@ client they call.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 from urllib.parse import quote
 
@@ -28,6 +29,7 @@ from driftstack._generated.models import (
     WaitResponse,
 )
 from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.pagination import aiterate_paginated, iterate_paginated
 from driftstack.resources._common import coerce_body, coerce_query
 
 
@@ -60,6 +62,25 @@ class SessionsResource:
         """List sessions for the current account, newest first."""
         data = self._http.request("GET", "/v1/sessions", params=coerce_query(query))
         return SessionsListPage.model_validate(data)
+
+    def iterate(self, *, limit: int | None = None) -> Iterator[Session]:
+        """Lazily walk every session for the calling account.
+
+        Wraps :meth:`list` with cursor handoff so callers can write::
+
+            for session in client.sessions.iterate(limit=50):
+                ...
+        """
+
+        def fetch_page(cursor: str | None) -> SessionsListPage:
+            params: dict[str, Any] = {}
+            if limit is not None:
+                params["limit"] = limit
+            if cursor is not None:
+                params["cursor"] = cursor
+            return self.list(params)
+
+        return iterate_paginated(fetch_page)
 
     def get(self, session_id: str) -> Session:
         data = self._http.request("GET", _session_path(session_id))
@@ -113,6 +134,22 @@ class AsyncSessionsResource:
     async def list(self, query: PaginationQuery | dict[str, Any] | None = None) -> SessionsListPage:
         data = await self._http.request("GET", "/v1/sessions", params=coerce_query(query))
         return SessionsListPage.model_validate(data)
+
+    def iterate(self, *, limit: int | None = None) -> AsyncIterator[Session]:
+        """Async variant of :meth:`SessionsResource.iterate`.
+
+        Returns an async iterator suitable for ``async for ... in ...``.
+        """
+
+        async def fetch_page(cursor: str | None) -> SessionsListPage:
+            params: dict[str, Any] = {}
+            if limit is not None:
+                params["limit"] = limit
+            if cursor is not None:
+                params["cursor"] = cursor
+            return await self.list(params)
+
+        return aiterate_paginated(fetch_page)
 
     async def get(self, session_id: str) -> Session:
         data = await self._http.request("GET", _session_path(session_id))
