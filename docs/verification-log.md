@@ -7139,3 +7139,58 @@ All three are negligible relative to network roundtrip — the in-process token 
 ### Next
 
 Continuing per never-stop rule. With auth + rate-limit benched, the next bench candidates are webhook-signature verify (HMAC-SHA256) and OpenAPI runtime validation.
+
+---
+
+## V-124 — Webhook signature verify microbenchmark (Routine — performance baseline)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+V-123 follow-up. `verifyWebhookSignature` runs once per inbound webhook delivery on customer infrastructure — its latency is part of the customer's hot path, so a baseline matters. Same harness as V-120/V-123.
+
+### What changed
+
+`packages/sdk-typescript/tests/bench/webhook-signature.bench.ts` (new) — three benches:
+
+- Small body (~70 bytes JSON), valid signature.
+- Small body, invalid signature (constant-time compare still runs to completion).
+- Large body (~10 KB), valid signature.
+
+Plus extended the `vitest.config.ts` bench `include` glob to also cover `packages/**/tests/bench/**/*.bench.ts` so SDK-side benches sit naturally under their package.
+
+### Baseline numbers (Apple M-class, 2026-05-04)
+
+- Small body valid: 54,859 ops/s, p99 26µs (mean 18µs).
+- Small body invalid: 56,478 ops/s, p99 24µs. Tracks valid-path within RME — no observable timing side-channel.
+- Large body (10 KB): 36,796 ops/s, p99 112µs (mean 27µs).
+
+WebCrypto subtle HMAC-SHA256 + per-call `importKey` is the dominant cost. ~18µs mean for small bodies is well above the surrounding network roundtrip — verify is not the customer-side bottleneck.
+
+### Optimization opportunity surfaced
+
+The SDK doesn't cache `subtle.importKey` per (secret) value across calls. Caching would shave ~5–10µs off the mean and is invisible to the API contract. NOT done in V-124 — would muddy the bench commit. File an issue if customer-side latency becomes a real complaint.
+
+### How verified
+
+- `npm run bench`: clean, all benches reported.
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` on the new md + the touched vitest.config.ts).
+- `npm test`: 515/515 passing.
+
+### Files added
+
+- `packages/sdk-typescript/tests/bench/webhook-signature.bench.ts`
+- `docs/benchmarks/webhook-signature.md`
+
+### Files modified
+
+- `vitest.config.ts` (bench include glob extended to packages/)
+
+### Next
+
+Continuing per never-stop rule.
