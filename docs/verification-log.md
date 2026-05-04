@@ -7973,3 +7973,51 @@ Founder overnight directive PRIORITY 3 — Tier 3 drafts in working tree are app
 ### Next
 
 Continuing per never-stop rule. V-139: 5b customer-dashboard batch.
+
+---
+
+## V-139 — 5b customer-dashboard Tier 3 batch (founder-approved drafts)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder overnight directive PRIORITY 3 — Tier 3 drafts approved per directive. Batch commit for 5b (customer-dashboard pages). /profiles already landed in V-136 (rename target); this batch covers the remaining 8 pages.
+
+### What changed
+
+8 new pages under `apps/customer-dashboard/src/pages/`:
+
+- `billing.astro` — subscription / trial pack / invoices placeholder. Status badge maps every Stripe state (incomplete / trialing / active / past_due / canceled / unpaid / paused).
+- `api-keys.astro` — keys list with prominent amber security notice (scrypt-hashed, no admin recovery), masked key display, scope chips.
+- `sessions.astro` — concurrent-cap meter with progress bar, active vs recent split, force-destroy + recording-view per row.
+- `usage.astro` — 4 sparkline tiles (session minutes / navigates / interacts / captures) + capture breakdown. Inline SVG sparklines, deterministic mock series (Math.sin-driven, no JS bundle).
+- `webhooks.astro` — endpoint cards with delivery health (delivered / failed / dlq), event chips, DLQ-requeue link only when dlq > 0.
+- `settings.astro` — profile form + security CTA + active sign-ins (no IPs shown — privacy decision) + email-notifications + danger-zone delete account.
+- `subscription.astro` — drill-down from /billing: current plan + plan history + invoice table.
+- `team.astro` — owner-only solo-account state + amber upsell to Team Manual / Agency / API tiers + 4-role explainer (owner / admin / member / viewer per DECISION 5).
+
+### How verified
+
+- `npm run typecheck`: clean across all 8 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 530/530 passing.
+- Browser dev-server check on :4322: all 8 routes return HTTP 200.
+
+### Files added
+
+- `apps/customer-dashboard/src/pages/billing.astro`
+- `apps/customer-dashboard/src/pages/api-keys.astro`
+- `apps/customer-dashboard/src/pages/sessions.astro`
+- `apps/customer-dashboard/src/pages/usage.astro`
+- `apps/customer-dashboard/src/pages/webhooks.astro`
+- `apps/customer-dashboard/src/pages/settings.astro`
+- `apps/customer-dashboard/src/pages/subscription.astro`
+- `apps/customer-dashboard/src/pages/team.astro`
+
+### Next
+
+Continuing per never-stop rule. V-140: 5c admin-panel batch.

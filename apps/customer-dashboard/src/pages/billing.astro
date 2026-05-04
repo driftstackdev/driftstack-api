@@ -1,0 +1,140 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import {
+  MOCK_ACCOUNT,
+  MOCK_SUBSCRIPTION,
+  MOCK_TRIAL_PACK_STATE,
+} from '../data/mocks.ts';
+
+// V-134 scaffolding: mock data on the page. Real reads against
+// /v1/billing land when the dashboard moves past scaffolding.
+
+function fmtIso(iso: string | null): string {
+  if (iso === null) return '—';
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+function fmtCents(cents: number | null): string {
+  if (cents === null) return '—';
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+const status = MOCK_SUBSCRIPTION?.status ?? 'no_subscription';
+const STATUS_BADGE_CLASS: Record<string, string> = {
+  active: 'bg-emerald-50 text-emerald-700',
+  trialing: 'bg-amber-50 text-amber-700',
+  past_due: 'bg-red-50 text-red-700',
+  canceled: 'bg-slate-100 text-slate-600',
+  unpaid: 'bg-red-50 text-red-700',
+  incomplete: 'bg-amber-50 text-amber-700',
+  incomplete_expired: 'bg-slate-100 text-slate-600',
+  paused: 'bg-slate-100 text-slate-600',
+  no_subscription: 'bg-slate-100 text-slate-600',
+};
+---
+
+<DashboardLayout title="Billing">
+  <div class="mx-auto max-w-5xl px-6 py-10">
+    <header class="mb-10">
+      <p class="text-sm text-slate-500">Account · {MOCK_ACCOUNT.email}</p>
+      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Billing</h1>
+      <p class="mt-2 max-w-prose text-sm text-slate-500">
+        Manage subscription, payment method, invoices, and trial-pack credit.
+        All payment changes redirect to Stripe's secure portal.
+      </p>
+    </header>
+
+    <!-- Subscription card -->
+    <section class="dashboard-card">
+      <div class="flex items-start justify-between gap-6">
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+            Subscription
+          </p>
+          <h2 class="mt-2 text-xl font-semibold text-slate-900">
+            {MOCK_SUBSCRIPTION ? MOCK_SUBSCRIPTION.tier : 'No active subscription'}
+          </h2>
+          <p class="mt-2 text-sm text-slate-600">
+            {
+              MOCK_SUBSCRIPTION
+                ? `Renews ${fmtIso(MOCK_SUBSCRIPTION.current_period_end)} · ${MOCK_SUBSCRIPTION.cancel_at_period_end ? 'set to cancel at period end' : 'auto-renews'}`
+                : 'Upgrade to a paid tier to unlock concurrent caps + archetype access.'
+            }
+          </p>
+        </div>
+        <span
+          class:list={[
+            'inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide',
+            STATUS_BADGE_CLASS[status],
+          ]}
+        >
+          {status.replace(/_/g, ' ')}
+        </span>
+      </div>
+      <div class="mt-6 flex flex-wrap gap-3">
+        <a href="#" class="btn-primary">Manage in Stripe portal</a>
+        <a href="#" class="btn-secondary">Change plan</a>
+        {
+          MOCK_SUBSCRIPTION && !MOCK_SUBSCRIPTION.cancel_at_period_end && (
+            <a href="#" class="btn-secondary text-red-700">
+              Cancel subscription
+            </a>
+          )
+        }
+      </div>
+    </section>
+
+    <!-- Trial pack card -->
+    <section class="dashboard-card mt-6">
+      <div class="flex items-start justify-between gap-6">
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+            Trial pack
+          </p>
+          <h2 class="mt-2 text-xl font-semibold text-slate-900">
+            {MOCK_TRIAL_PACK_STATE.active
+              ? 'Active'
+              : MOCK_TRIAL_PACK_STATE.redeemed
+                ? 'Redeemed'
+                : 'Available'}
+          </h2>
+          <p class="mt-2 text-sm text-slate-600">
+            {
+              MOCK_TRIAL_PACK_STATE.active
+                ? `${fmtCents(MOCK_TRIAL_PACK_STATE.credit_cents_remaining)} of credit remaining · expires ${fmtIso(MOCK_TRIAL_PACK_STATE.expires_at)}`
+                : MOCK_TRIAL_PACK_STATE.redeemed
+                  ? '$2.99 trial pack already used on this account. Once-per-account; the trial does not refresh.'
+                  : 'Buy 16 hours of iPhone Safari sessions for $2.99 — once per account.'
+            }
+          </p>
+        </div>
+      </div>
+      {
+        !MOCK_TRIAL_PACK_STATE.active && !MOCK_TRIAL_PACK_STATE.redeemed && (
+          <div class="mt-6">
+            <a href="#" class="btn-primary">
+              Buy trial pack — $2.99
+            </a>
+          </div>
+        )
+      }
+    </section>
+
+    <!-- Invoices placeholder -->
+    <section class="dashboard-card mt-6">
+      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Invoices</p>
+      <h2 class="mt-2 text-xl font-semibold text-slate-900">Recent invoices</h2>
+      <p class="mt-3 text-sm text-slate-500">
+        No invoices yet. Once your subscription renews or the trial pack is
+        purchased, invoices appear here. Each invoice carries a permanent
+        URL — bookmark for accounting.
+      </p>
+    </section>
+
+    <!-- Tax + receipts hint -->
+    <p class="mt-8 text-xs text-slate-500">
+      All prices in USD. VAT/BTW added per region per applicable EU rules.
+      Stripe handles tax computation + invoicing per ADR-002.
+    </p>
+  </div>
+</DashboardLayout>

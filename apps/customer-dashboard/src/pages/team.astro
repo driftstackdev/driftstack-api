@@ -1,0 +1,176 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import { MOCK_ACCOUNT } from '../data/mocks.ts';
+
+// V-134 scaffolding. Real reads against /v1/team land later.
+// Note: team-management is a Phase 2 product feature — multi-seat
+// accounts. For solo accounts (current default) the page surfaces
+// only the owner; invite flow renders an upsell hint pointing at the
+// Team / Agency tiers.
+
+interface MockTeamMember {
+  id: string;
+  email: string;
+  name: string | null;
+  role: 'owner' | 'admin' | 'member' | 'viewer';
+  invited_at: string;
+  joined_at: string | null;
+}
+
+const MOCK_TEAM: MockTeamMember[] = [
+  {
+    id: MOCK_ACCOUNT.id,
+    email: MOCK_ACCOUNT.email,
+    name: MOCK_ACCOUNT.name,
+    role: 'owner',
+    invited_at: MOCK_ACCOUNT.createdAt,
+    joined_at: MOCK_ACCOUNT.createdAt,
+  },
+];
+
+// Mock — real source: /v1/billing tier capabilities. team_max=1 means
+// no inviting allowed.
+const seatLimit = 1;
+const seatLimitText = seatLimit === 1 ? 'Solo account' : `${seatLimit.toString()} seats`;
+const canInvite = seatLimit > MOCK_TEAM.length;
+
+function fmtIsoDay(iso: string | null): string {
+  if (iso === null) return '—';
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+const ROLE_LABEL: Record<MockTeamMember['role'], string> = {
+  owner: 'Owner',
+  admin: 'Admin',
+  member: 'Member',
+  viewer: 'Viewer',
+};
+
+const ROLE_BADGE_CLASS: Record<MockTeamMember['role'], string> = {
+  owner: 'bg-oxblood-50 text-oxblood-700',
+  admin: 'bg-blue-50 text-blue-700',
+  member: 'bg-slate-100 text-slate-600',
+  viewer: 'bg-slate-100 text-slate-500',
+};
+---
+
+<DashboardLayout title="Team">
+  <div class="mx-auto max-w-4xl px-6 py-10">
+    <header class="mb-10 flex items-start justify-between gap-6">
+      <div>
+        <p class="text-sm text-slate-500">{seatLimitText}</p>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Team</h1>
+        <p class="mt-2 max-w-prose text-sm text-slate-500">
+          Members with access to this Driftstack account. Each member uses
+          their own login + their own dashboard sessions; API keys are
+          account-scoped (shared) but creation is admin-gated.
+        </p>
+      </div>
+      <a
+        href="#invite"
+        class:list={['btn-primary shrink-0', !canInvite && 'pointer-events-none opacity-50']}
+        aria-disabled={!canInvite ? 'true' : undefined}
+      >
+        Invite member
+      </a>
+    </header>
+
+    {
+      !canInvite && (
+        <div class="mb-6 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span class="font-mono text-xs uppercase">!</span>
+          <p>
+            Solo accounts (Solo Manual / API Starter) include 1 seat. Upgrade to{' '}
+            <a href="/subscription#upgrade" class="font-medium underline">
+              Team Manual ($249/mo, 5 seats)
+            </a>
+            ,{' '}
+            <a href="/subscription#upgrade" class="font-medium underline">
+              Agency ($699/mo, 15 seats)
+            </a>
+            , or any API tier (5+ seats) to invite teammates.
+          </p>
+        </div>
+      )
+    }
+
+    <ul class="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
+      {
+        MOCK_TEAM.map((member) => (
+          <li class="flex items-start justify-between gap-6 px-6 py-4">
+            <div class="min-w-0">
+              <p class="text-base font-medium text-slate-900">
+                {member.name ?? member.email}
+              </p>
+              {member.name !== null && (
+                <p class="mt-1 text-sm text-slate-500">{member.email}</p>
+              )}
+              <p class="mt-1 text-xs text-slate-500">
+                Joined {fmtIsoDay(member.joined_at)}
+                {member.joined_at === null && (
+                  <>
+                    {' · invited '}
+                    {fmtIsoDay(member.invited_at)} · pending acceptance
+                  </>
+                )}
+              </p>
+            </div>
+            <div class="flex shrink-0 items-center gap-3">
+              <span
+                class:list={[
+                  'inline-flex rounded-full px-2 py-0.5 text-xs font-medium',
+                  ROLE_BADGE_CLASS[member.role],
+                ]}
+              >
+                {ROLE_LABEL[member.role]}
+              </span>
+              {member.role !== 'owner' && (
+                <a
+                  href={`#remove-${member.id}`}
+                  class="text-sm text-red-700 hover:underline"
+                >
+                  Remove
+                </a>
+              )}
+            </div>
+          </li>
+        ))
+      }
+    </ul>
+
+    <!-- Role explainer -->
+    <section class="mt-10 dashboard-card">
+      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Roles</p>
+      <h2 class="mt-2 text-lg font-semibold text-slate-900">What each role can do</h2>
+      <dl class="mt-6 space-y-4">
+        <div>
+          <dt class="text-sm font-medium text-slate-900">Owner</dt>
+          <dd class="mt-1 text-sm text-slate-600">
+            Full account access including billing + member management. One
+            owner per account; transferable on request.
+          </dd>
+        </div>
+        <div>
+          <dt class="text-sm font-medium text-slate-900">Admin</dt>
+          <dd class="mt-1 text-sm text-slate-600">
+            Manage profiles, sessions, API keys, webhooks. Cannot change
+            billing or invite members.
+          </dd>
+        </div>
+        <div>
+          <dt class="text-sm font-medium text-slate-900">Member</dt>
+          <dd class="mt-1 text-sm text-slate-600">
+            Drive sessions and read profiles + usage. Cannot create or revoke
+            API keys.
+          </dd>
+        </div>
+        <div>
+          <dt class="text-sm font-medium text-slate-900">Viewer</dt>
+          <dd class="mt-1 text-sm text-slate-600">
+            Read-only access for stakeholders monitoring usage + billing.
+          </dd>
+        </div>
+      </dl>
+    </section>
+  </div>
+</DashboardLayout>

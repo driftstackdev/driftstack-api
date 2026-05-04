@@ -1,0 +1,141 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import { MOCK_ACCOUNT } from '../data/mocks.ts';
+
+// V-134 scaffolding. Real reads + writes against /v1/auth/* + /v1/account
+// land later.
+
+function fmtIso(iso: string | null): string {
+  if (iso === null) return '—';
+  return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+}
+---
+
+<DashboardLayout title="Settings">
+  <div class="mx-auto max-w-3xl px-6 py-10">
+    <header class="mb-10">
+      <p class="text-sm text-slate-500">Account · {MOCK_ACCOUNT.id.slice(0, 16)}…</p>
+      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Settings</h1>
+      <p class="mt-2 max-w-prose text-sm text-slate-500">
+        Account profile, security, and the danger zone. Changes here affect
+        all sessions, profiles, and webhooks under this account.
+      </p>
+    </header>
+
+    <!-- Profile -->
+    <section class="dashboard-card">
+      <h2 class="text-lg font-semibold text-slate-900">Profile</h2>
+      <p class="mt-2 text-sm text-slate-500">
+        Display name + email shown on invoices and webhook delivery audit logs.
+      </p>
+      <div class="mt-6 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700" for="name">Name</label>
+          <input
+            id="name"
+            type="text"
+            value={MOCK_ACCOUNT.name ?? ''}
+            class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700" for="email">Email</label>
+          <input
+            id="email"
+            type="email"
+            value={MOCK_ACCOUNT.email}
+            class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+          />
+          <p class="mt-1 text-xs text-slate-500">
+            Verified {fmtIso(MOCK_ACCOUNT.emailVerifiedAt)}. Changing email
+            triggers re-verification.
+          </p>
+        </div>
+        <button class="btn-primary mt-2">Save changes</button>
+      </div>
+    </section>
+
+    <!-- Security -->
+    <section class="dashboard-card mt-6">
+      <h2 class="text-lg font-semibold text-slate-900">Security</h2>
+      <p class="mt-2 text-sm text-slate-500">Password + recovery options.</p>
+      <div class="mt-6 space-y-3">
+        <a href="#change-password" class="btn-secondary inline-flex">Change password</a>
+        <p class="text-xs text-slate-500">
+          We email you a magic link to confirm. The link expires after 15
+          minutes; old sessions stay signed in until they naturally expire.
+        </p>
+      </div>
+    </section>
+
+    <!-- Sessions / devices -->
+    <section class="dashboard-card mt-6">
+      <h2 class="text-lg font-semibold text-slate-900">Active sign-ins</h2>
+      <p class="mt-2 text-sm text-slate-500">
+        Browser sessions where you're signed in to the dashboard. Distinct
+        from your driver sessions on /sessions.
+      </p>
+      <ul class="mt-6 divide-y divide-slate-100">
+        <li class="flex items-start justify-between gap-6 py-3">
+          <div>
+            <p class="text-sm font-medium text-slate-900">macOS · Safari · current</p>
+            <p class="mt-1 text-xs text-slate-500">
+              Signed in {fmtIso('2026-05-04T08:00:00Z')} · IP omitted from
+              dashboard for privacy
+            </p>
+          </div>
+          <span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+            current
+          </span>
+        </li>
+        <li class="flex items-start justify-between gap-6 py-3">
+          <div>
+            <p class="text-sm font-medium text-slate-900">macOS · Safari</p>
+            <p class="mt-1 text-xs text-slate-500">Signed in {fmtIso('2026-05-02T14:30:00Z')}</p>
+          </div>
+          <a href="#revoke-session" class="text-sm text-red-700 hover:underline">Sign out</a>
+        </li>
+      </ul>
+      <button class="btn-secondary mt-6">Sign out all other sessions</button>
+    </section>
+
+    <!-- Notifications -->
+    <section class="dashboard-card mt-6">
+      <h2 class="text-lg font-semibold text-slate-900">Email notifications</h2>
+      <p class="mt-2 text-sm text-slate-500">
+        Transactional emails (billing, security) always go out. Below are
+        opt-in product updates.
+      </p>
+      <div class="mt-6 space-y-3">
+        <label class="flex items-start gap-3">
+          <input type="checkbox" checked class="mt-0.5" />
+          <span class="text-sm text-slate-700">
+            <strong class="block font-medium text-slate-900">Quota warnings</strong>
+            Email when concurrent usage hits 80% / 100% of cap.
+          </span>
+        </label>
+        <label class="flex items-start gap-3">
+          <input type="checkbox" class="mt-0.5" />
+          <span class="text-sm text-slate-700">
+            <strong class="block font-medium text-slate-900">Changelog digest</strong>
+            Roughly every 2-4 weeks; only material changes.
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Danger zone -->
+    <section class="mt-10 rounded-lg border border-red-200 bg-red-50 p-6">
+      <h2 class="text-lg font-semibold text-red-900">Danger zone</h2>
+      <p class="mt-2 text-sm text-red-800">
+        Account deletion is irreversible. All sessions, profiles, API keys,
+        and webhook endpoints are immediately revoked. Recordings are hard-
+        deleted from R2 within 14 days. Invoice history retained per EU tax
+        law (10 years) — not deletable on request.
+      </p>
+      <button class="btn-secondary mt-4 border-red-300 text-red-700 hover:bg-red-100">
+        Delete account
+      </button>
+    </section>
+  </div>
+</DashboardLayout>

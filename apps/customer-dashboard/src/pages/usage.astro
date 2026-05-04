@@ -1,0 +1,171 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import { MOCK_USAGE_SUMMARY } from '../data/mocks.ts';
+
+// V-134 scaffolding. Real reads against /v1/usage land later.
+
+function fmtIsoDay(iso: string): string {
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+// Mock 30-day series for sparklines. Real source: /v1/usage with
+// daily aggregation. Generated deterministically (no Math.random)
+// so the rendered SVG is stable across page loads at scaffolding
+// time — easier to spot real-data integration regressions later.
+function mockSeries(seedBase: number, length: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < length; i += 1) {
+    const v = Math.round(seedBase + Math.sin(i * 0.6) * (seedBase * 0.4) + i * (seedBase * 0.02));
+    out.push(Math.max(0, v));
+  }
+  return out;
+}
+
+const SERIES_LENGTH = 30;
+const series = {
+  navigates: mockSeries(40, SERIES_LENGTH),
+  interacts: mockSeries(180, SERIES_LENGTH),
+  captures: mockSeries(12, SERIES_LENGTH),
+  session_minutes: mockSeries(15, SERIES_LENGTH),
+};
+
+function sparklinePath(values: number[], width: number, height: number): string {
+  if (values.length === 0) return '';
+  const max = Math.max(...values, 1);
+  const stepX = width / (values.length - 1);
+  return values
+    .map((v, i) => {
+      const x = i * stepX;
+      const y = height - (v / max) * height;
+      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(' ');
+}
+
+const SPARK_W = 200;
+const SPARK_H = 48;
+---
+
+<DashboardLayout title="Usage">
+  <div class="mx-auto max-w-5xl px-6 py-10">
+    <header class="mb-10">
+      <p class="text-sm text-slate-500">
+        {fmtIsoDay(MOCK_USAGE_SUMMARY.period_start)} → {fmtIsoDay(MOCK_USAGE_SUMMARY.period_end)} ·
+        {MOCK_USAGE_SUMMARY.tier} tier
+      </p>
+      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Usage</h1>
+      <p class="mt-2 max-w-prose text-sm text-slate-500">
+        Per-resource counts for the current billing period. None of these
+        are billed individually — concurrent cap is the only meter. These
+        numbers help you spot abnormal traffic early.
+      </p>
+    </header>
+
+    <!-- Top tiles -->
+    <section class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div class="dashboard-card">
+        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Session minutes</p>
+        <p class="mt-3 text-3xl font-semibold text-slate-900">
+          {MOCK_USAGE_SUMMARY.totals.session_minute.toLocaleString('en-US')}
+        </p>
+        <svg
+          viewBox={`0 0 ${SPARK_W.toString()} ${SPARK_H.toString()}`}
+          class="mt-3 h-10 w-full text-oxblood-700"
+          aria-hidden="true"
+        >
+          <path
+            d={sparklinePath(series.session_minutes, SPARK_W, SPARK_H)}
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          />
+        </svg>
+      </div>
+      <div class="dashboard-card">
+        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Navigates</p>
+        <p class="mt-3 text-3xl font-semibold text-slate-900">
+          {MOCK_USAGE_SUMMARY.totals.navigate.toLocaleString('en-US')}
+        </p>
+        <svg
+          viewBox={`0 0 ${SPARK_W.toString()} ${SPARK_H.toString()}`}
+          class="mt-3 h-10 w-full text-oxblood-700"
+          aria-hidden="true"
+        >
+          <path
+            d={sparklinePath(series.navigates, SPARK_W, SPARK_H)}
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          />
+        </svg>
+      </div>
+      <div class="dashboard-card">
+        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Interacts</p>
+        <p class="mt-3 text-3xl font-semibold text-slate-900">
+          {MOCK_USAGE_SUMMARY.totals.interact.toLocaleString('en-US')}
+        </p>
+        <svg
+          viewBox={`0 0 ${SPARK_W.toString()} ${SPARK_H.toString()}`}
+          class="mt-3 h-10 w-full text-oxblood-700"
+          aria-hidden="true"
+        >
+          <path
+            d={sparklinePath(series.interacts, SPARK_W, SPARK_H)}
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          />
+        </svg>
+      </div>
+      <div class="dashboard-card">
+        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Captures</p>
+        <p class="mt-3 text-3xl font-semibold text-slate-900">
+          {(
+            MOCK_USAGE_SUMMARY.totals.state_capture +
+            MOCK_USAGE_SUMMARY.totals.screenshot_capture
+          ).toLocaleString('en-US')}
+        </p>
+        <svg
+          viewBox={`0 0 ${SPARK_W.toString()} ${SPARK_H.toString()}`}
+          class="mt-3 h-10 w-full text-oxblood-700"
+          aria-hidden="true"
+        >
+          <path
+            d={sparklinePath(series.captures, SPARK_W, SPARK_H)}
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          />
+        </svg>
+      </div>
+    </section>
+
+    <!-- Capture breakdown -->
+    <section class="mt-10 dashboard-card">
+      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+        Capture breakdown
+      </p>
+      <h2 class="mt-2 text-xl font-semibold text-slate-900">Captures by kind</h2>
+      <dl class="mt-6 grid gap-6 md:grid-cols-2">
+        <div class="flex justify-between border-b border-slate-100 pb-3">
+          <dt class="text-sm text-slate-500">Screenshots</dt>
+          <dd class="font-mono text-sm text-slate-900">
+            {MOCK_USAGE_SUMMARY.totals.screenshot_capture.toLocaleString('en-US')}
+          </dd>
+        </div>
+        <div class="flex justify-between border-b border-slate-100 pb-3">
+          <dt class="text-sm text-slate-500">DOM snapshots</dt>
+          <dd class="font-mono text-sm text-slate-900">
+            {MOCK_USAGE_SUMMARY.totals.state_capture.toLocaleString('en-US')}
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <p class="mt-8 text-xs text-slate-500">
+      None of these counters drive billing. Concurrent caps are the only meter
+      per ADR-004. We surface counts so you can spot pipeline regressions —
+      e.g. a sudden 10× spike in navigates may indicate a runaway script.
+    </p>
+  </div>
+</DashboardLayout>

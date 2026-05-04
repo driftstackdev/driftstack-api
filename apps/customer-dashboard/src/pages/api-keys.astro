@@ -1,0 +1,117 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import { MOCK_API_KEYS } from '../data/mocks.ts';
+
+// V-134 scaffolding. Real reads against /v1/api-keys land later.
+
+function fmtIso(iso: string | null): string {
+  if (iso === null) return 'never';
+  const d = new Date(iso);
+  const now = new Date();
+  const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return 'today';
+  if (diffDays === 1) return 'yesterday';
+  if (diffDays < 30) return `${diffDays.toString()} days ago`;
+  return d.toISOString().slice(0, 10);
+}
+
+const SCOPE_LABEL: Record<string, string> = {
+  read: 'read',
+  write: 'write',
+  admin: 'admin',
+  gui_control: 'gui',
+};
+---
+
+<DashboardLayout title="API keys">
+  <div class="mx-auto max-w-5xl px-6 py-10">
+    <header class="mb-10 flex items-start justify-between gap-6">
+      <div>
+        <p class="text-sm text-slate-500">Bearer tokens · scoped + revocable</p>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">API keys</h1>
+        <p class="mt-2 max-w-prose text-sm text-slate-500">
+          Pass as <code class="font-mono">Authorization: Bearer &lt;key&gt;</code>.
+          Plaintext is shown ONCE on creation — store it now; we can't recover it
+          later. Revocation is immediate.
+        </p>
+      </div>
+      <a href="#" class="btn-primary shrink-0">New key</a>
+    </header>
+
+    <!-- Security notice -->
+    <div
+      class="mb-6 flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+    >
+      <span class="font-mono text-xs uppercase">!</span>
+      <p>
+        API keys are scrypt-hashed at rest. Driftstack staff cannot read your
+        keys — a database breach surfaces hashes, not keys. If a key leaks,
+        revoke + rotate; no admin recovery path exists.
+      </p>
+    </div>
+
+    {
+      MOCK_API_KEYS.length === 0 ? (
+        <div class="dashboard-card text-center">
+          <h2 class="text-lg font-semibold text-slate-900">No keys yet</h2>
+          <p class="mx-auto mt-2 max-w-prose text-sm text-slate-500">
+            Create a key to start driving sessions from your code. Most
+            customers create one key per environment (dev / staging / prod) —
+            scopes are key-level, so a leaked dev key can't touch prod state.
+          </p>
+          <a href="#" class="btn-primary mt-6 inline-flex">
+            Create your first key
+          </a>
+        </div>
+      ) : (
+        <ul class="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
+          {MOCK_API_KEYS.map((key) => (
+            <li class="px-6 py-4">
+              <div class="flex items-start justify-between gap-6">
+                <div class="min-w-0">
+                  <p class="text-base font-medium text-slate-900">{key.name}</p>
+                  <p class="mt-1 font-mono text-xs text-slate-700">
+                    {key.key_prefix}
+                    <span class="text-slate-400">
+                      …
+                      <span aria-hidden="true">
+                        {'•'.repeat(24)}
+                      </span>
+                    </span>
+                  </p>
+                  <p class="mt-2 text-xs text-slate-500">
+                    Created {fmtIso(key.created_at)} · last used {fmtIso(key.last_used_at)}
+                  </p>
+                </div>
+                <div class="flex shrink-0 flex-col items-end gap-3">
+                  <div class="flex flex-wrap gap-1">
+                    {key.scopes.map((scope) => (
+                      <span class="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-700">
+                        {SCOPE_LABEL[scope] ?? scope}
+                      </span>
+                    ))}
+                  </div>
+                  <a
+                    href={`#revoke-${key.id}`}
+                    class="text-sm text-red-700 hover:underline"
+                  >
+                    Revoke
+                  </a>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+
+    <p class="mt-8 text-xs text-slate-500">
+      Scopes: <code class="font-mono">read</code> (list/get-only),
+      <code class="font-mono">write</code> (create sessions, navigate, interact),
+      <code class="font-mono">admin</code> (manage webhooks, billing, team
+      members), <code class="font-mono">gui_control</code> (drive the GUI
+      client's manual sessions). Always create the narrowest-scoped key the
+      job needs.
+    </p>
+  </div>
+</DashboardLayout>
