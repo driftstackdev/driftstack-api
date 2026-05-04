@@ -8881,3 +8881,38 @@ Without these in the doc, deployment config could omit them silently and the cus
 ### Next
 
 Continuing per never-stop rule. PRIORITY 12 ongoing.
+
+---
+
+## V-159 — customer-dashboard mocks: consume TIER_CONCURRENT_SESSION_LIMITS from api-types
+
+### Date
+
+2026-05-05
+
+### Goal
+
+V-156 added `TIER_CONCURRENT_SESSION_LIMITS` to `@driftstack/api-types` as the cross-workspace concurrent-cap source of truth. `apps/customer-dashboard/src/data/mocks.ts:113` had `concurrent_limit: 8` hardcoded for the api_builder mock account — visually correct (matches the locked value) but a drift-risk vector if pricing changes.
+
+This is engineering scaffolding (mock data sourcing), not customer-facing visual change. The displayed layout is identical. Tier 1 / push-to-main.
+
+### What changed
+
+`apps/customer-dashboard/src/data/mocks.ts`:
+
+- Imports `TIER_CONCURRENT_SESSION_LIMITS` from `@driftstack/api-types`.
+- `MOCK_USAGE_SUMMARY.concurrent_limit` now reads `TIER_CONCURRENT_SESSION_LIMITS.api_builder` instead of the hardcoded `8`.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm test`: 559/559 passing.
+
+### Files modified
+
+- `apps/customer-dashboard/src/data/mocks.ts`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 12 ongoing.

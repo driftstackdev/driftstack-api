@@ -4,7 +4,13 @@
 // state — gated on the customer-dashboard-stack proposal in
 // docs/architecture/customer-dashboard-stack.md.
 
-import type { AccountTier, Profile, Subscription, TrialPackState } from '@driftstack/api-types';
+import {
+  TIER_CONCURRENT_SESSION_LIMITS,
+  type AccountTier,
+  type Profile,
+  type Subscription,
+  type TrialPackState,
+} from '@driftstack/api-types';
 
 export interface MockAccount {
   id: string;
@@ -110,7 +116,7 @@ export const MOCK_USAGE_SUMMARY: MockUsageSummary = {
     screenshot_capture: 189,
   },
   concurrent_now: 2,
-  concurrent_limit: 8,
+  concurrent_limit: TIER_CONCURRENT_SESSION_LIMITS.api_builder,
 };
 
 export interface MockSession {
