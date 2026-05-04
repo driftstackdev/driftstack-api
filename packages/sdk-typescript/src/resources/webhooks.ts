@@ -9,6 +9,7 @@ import type {
   WebhookEndpoint,
 } from '@driftstack/api-types';
 import type { HttpClient } from '../http.js';
+import { iteratePaginated } from '../pagination.js';
 
 export interface WebhookEndpointList {
   data: WebhookEndpoint[];
@@ -74,5 +75,23 @@ export class WebhooksResource {
         ...(query.status !== undefined ? { status: query.status } : {}),
       },
     });
+  }
+
+  /**
+   * Lazily iterate every delivery for a webhook endpoint, walking cursor
+   * pages automatically. Filter by status to walk just one bucket
+   * (e.g. `{ status: 'dlq' }` to enumerate the DLQ for replay tooling).
+   */
+  iterateDeliveries(
+    id: string,
+    opts: { limit?: number; status?: WebhookDeliveryStatus } = {},
+  ): AsyncGenerator<WebhookDelivery, void, void> {
+    return iteratePaginated<WebhookDelivery>((cursor) =>
+      this.listDeliveries(id, {
+        ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+        ...(opts.status !== undefined ? { status: opts.status } : {}),
+        ...(cursor !== null ? { cursor } : {}),
+      }),
+    );
   }
 }

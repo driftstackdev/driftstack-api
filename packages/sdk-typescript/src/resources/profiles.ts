@@ -7,6 +7,7 @@ import type {
   UpdateProfileRequest,
 } from '@driftstack/api-types';
 import type { HttpClient } from '../http.js';
+import { iteratePaginated } from '../pagination.js';
 
 export interface ProfilesListPage {
   data: Profile[];
@@ -36,6 +37,19 @@ export class ProfilesResource {
         ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
       },
     });
+  }
+
+  /**
+   * Lazily iterate every profile for the calling account, walking
+   * cursor pages automatically. See `iteratePaginated` for semantics.
+   */
+  iterate(opts: { limit?: number } = {}): AsyncGenerator<Profile, void, void> {
+    return iteratePaginated<Profile>((cursor) =>
+      this.list({
+        ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+        ...(cursor !== null ? { cursor } : {}),
+      }),
+    );
   }
 
   /** Get a single profile. */

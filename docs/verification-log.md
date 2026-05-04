@@ -6912,3 +6912,49 @@ PHASE 7 of the autopilot directive calls for "pagination iterator helper." Hand-
 ### Next
 
 Continuing per never-stop rule. Follow-up: wire `iterate()` into profiles, webhooks (endpoints + deliveries) — same one-line pattern as sessions. Bundling them in a single follow-up keeps the diff focused per resource.
+
+---
+
+## V-119 — iterate() on profiles + webhook deliveries (Routine — SDK expansion)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+V-118 follow-up: extend the cursor-iterator pattern to the remaining cursor-paginated resources. Audit:
+
+- `sessions.list` — paginated → V-118 `sessions.iterate()`.
+- `profiles.list` — paginated → V-119 `profiles.iterate()`.
+- `webhooks.listDeliveries` — paginated → V-119 `webhooks.iterateDeliveries(id, opts)`.
+- `webhooks.list` (endpoints) — NOT paginated (just `data: WebhookEndpoint[]`); no iterator added.
+- `apiKeys.list` — NOT paginated; no iterator added.
+
+### What changed
+
+- `packages/sdk-typescript/src/resources/profiles.ts`: imports `iteratePaginated` and adds `iterate({ limit? })` method delegating to `this.list({ limit, cursor })`.
+- `packages/sdk-typescript/src/resources/webhooks.ts`: imports `iteratePaginated` and adds `iterateDeliveries(id, { limit?, status? })` method that threads `status` through every page (so `{ status: 'dlq' }` walks just the DLQ).
+
+### How verified
+
+2 new tests, one per resource: walks pages, asserts cursor + status filter threading, asserts both pages and order.
+
+- `npm run typecheck`: clean (after fixing my fake `Profile` and `WebhookDelivery` shapes — initial fakes had wrong fields; cross-checked against `packages/api-types/src/profiles.ts:ProfileSchema` and `packages/api-types/src/webhooks.ts:WebhookDeliverySchema`).
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` on the two new test files).
+- `npm test`: 515/515 passing (was 513; +2 new).
+
+### Files modified
+
+- `packages/sdk-typescript/src/resources/profiles.ts`
+- `packages/sdk-typescript/src/resources/webhooks.ts`
+
+### Files added
+
+- `packages/sdk-typescript/tests/unit/profiles-iterate.test.ts`
+- `packages/sdk-typescript/tests/unit/webhooks-iterate-deliveries.test.ts`
+
+### Next
+
+Continuing per never-stop rule.
