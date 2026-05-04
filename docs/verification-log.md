@@ -7360,3 +7360,49 @@ Per CLAUDE.md mock-driver discipline ("deterministic; same inputs → same outpu
 ### Next
 
 Continuing per never-stop rule. Per founder priority: PHASE 9 test fixtures (tight scope) next.
+
+---
+
+## V-128 — /index Tier 3 redline pass: parity bar + metering + pricing (Tier 3 → committed)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+Founder review of the working-tree /index.astro draft surfaced three P0 drifts that had to be redlined before commit:
+
+- **REDLINE 1 (cumulative rig section, P0 parity-bar violation):** the draft displayed `99.9%+` and `1,252 of 1,253 measured surfaces validated` framing. Per the parity-bar directive (no `99.X%` framing on customer-facing pages — bit-identical is binary, not gradient), this had to go. The "1252 of 1253" ratio also communicates "1 in 1253 sessions detected" — inverse of intended product positioning. Founder picked Option B: reframe with binary claim.
+- **REDLINE 2 (metering card, P0 ADR-004 violation):** draft said "Browser-hours are the meter. A 5-minute session costs less than a 60-minute one... the per-hour meter without upcharge." ADR-004 locked concurrent-only metering — there is no per-hour meter on paid tiers.
+- **REDLINE 3 (pricing teaser, P0 ADR-004 + tier-floor drift):** draft listed `$29/mo Starter` (retired tier) and "One transparent price ladder" (we have two — Manual + API).
+
+### What changed
+
+`apps/marketing-site/src/pages/index.astro`:
+
+- **Cumulative rig section** — removed the `CUMULATIVE_RIG` import; replaced the `99.9%+` headline with `Bit-identical.` (same `text-7xl ... md:text-8xl` weight, with `letter-spacing: -0.03em` for tighter glyph packing). Body now reads "Validated against the full reference iPhone Safari iOS 26.4.1 fingerprint surface. Every measured signal returns the exact reference value — not approximate, not within tolerance. Match or P0 finding." Caption points at `/trust/cumulative-rig` (when it lands) for methodology.
+- **Metering card** — headline "Pay per concurrent session, not per call.". Body rewritten for concurrent-only framing: "Concurrent caps are the only meter. Run as many hours as you want within your concurrent cap. No per-call markup, no per-element fees, no hourly metering that turns idle browsers into surprise overage charges. Read 50 elements or navigate 200 pages on the same session — same line item, same price." The visual data-point treatment ("Concurrent cap = the only thing you pay for" with vertical oxblood accent) was kept verbatim — already on-brand and accurate.
+- **Pricing teaser** — headline "Two ladders. One trial pack to start.". Body: "$2.99 buys 16 hours of iPhone Safari sessions to evaluate the platform. Then choose: Manual from $79/mo for humans clicking in the GUI, or API from $149/mo for code calling the SDK. Same engine, same archetypes, different access surface. Annual contracts save 20%."
+
+Plus the working-tree V-077 / V-070-style restructure that had been sitting in this draft across the whole resume (Stack section split into full-width statement, Metering + Compliance reformatted as asymmetric cards with code-style egress block) — landing here as part of the same Tier 3 commit.
+
+### Surfaced drift, NOT applied (founder direction needed)
+
+- `apps/marketing-site/src/pages/index.astro:312` — bullet inside the "When self-hosted makes sense" teaser still reads "Sustained &gt;5,000 browser-hours per month where unit economics favour owned hardware." Same hours-meter drift REDLINE 8 fixed for /self-hosted's Volume card. Wasn't explicitly in REDLINE scope; left as-is pending direction. Likely should be replaced with concurrent-session framing on a follow-up.
+
+### How verified
+
+- `npm run typecheck`: clean (Astro check on the marketing-site workspace).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 530/530 (Astro pages aren't in the vitest scope; this is a no-op confirmation).
+- Browser dev-server check: `curl http://127.0.0.1:4321/` returns the redlined content. Positive matches for `Bit-identical`, `Two ladders`, `Pay per concurrent` (3); negative checks for `99.9` / `Browser-hours are the meter` / `29/mo Starter` (0/0/0).
+
+### Files modified
+
+- `apps/marketing-site/src/pages/index.astro`
+
+### Next
+
+Continuing per never-stop rule. /self-hosted redlines next as V-129.
