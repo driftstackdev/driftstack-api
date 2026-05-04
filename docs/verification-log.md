@@ -8609,3 +8609,38 @@ No code changes; doc-only. No verify-chain run needed (markdown + format:check v
 ### Next
 
 Continuing per never-stop rule. PRIORITY 12 ongoing.
+
+---
+
+## V-153 — architecture.md decision cross-reference expansion (D-024 → D-036 + ADR-005/006)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+`docs/architecture.md` — referenced from CLAUDE.md as the system-shape doc — has a "Decisions (cross-reference)" section that listed only 6 entries (D-019 + D-020/D-025 + D-023 + D-027 + ADR-001 + ADR-003). Several Tier 2 architectural decisions landed since the last update without a cross-reference: D-024 (auth coalescer), D-028 (opaque web sessions), D-029 (hand-rolled Stripe), D-030 (Stripe idempotency), D-031 (session.failed semantics), D-032 (profile name uniqueness), D-033/ADR-006 (audit retention), D-034/ADR-005 (Sentry-first), D-035 (admin scope at preHandler — V-150), D-036 (team roles taxonomy — V-150).
+
+A reader following the "where do I look for X?" trail from architecture.md was hitting a wall on those topics. Cross-reference now points at every Tier 2+ decision.
+
+### What changed
+
+`docs/architecture.md`:
+
+- Replaced flat 6-bullet list with category-grouped cross-reference: Pricing + commercial / Auth + security / Webhooks / Infrastructure + observability / Schema + naming.
+- Added 11 new entries covering D-024, D-028, D-029, D-030, D-031, D-032, D-033/ADR-006, D-034/ADR-005, D-035, D-036, plus a pointer to `docs/architecture/archetype-naming-convention.md`.
+
+Doc-only commit; no code changes.
+
+### How verified
+
+- `npm run format:check` (via lint-staged on commit): clean.
+
+### Files modified
+
+- `docs/architecture.md`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 12 ongoing.

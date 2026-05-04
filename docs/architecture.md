@@ -204,11 +204,36 @@ Two ladders (Manual + API), concurrent-only metering on paid tiers, hours meteri
 
 ## Decisions (cross-reference)
 
+Pricing + commercial:
+
 - **D-019 / ADR-004** — Two-ladder pricing + concurrent-only metering. Supersedes file-127 single-ladder hours-with-overage.
-- **D-020 / D-025** — Auth cache invalidation pattern (sha256-keyed Redis cache, 30s TTL, account-version increment on tier-change / suspend / revoke).
-- **D-023** — Outbound-webhook signing secrets stored plaintext at rest.
 - **D-027 / ADR-002** — Stripe-only payment rail at launch.
-- **ADR-001** — Hetzner for control-plane hosting.
 - **ADR-003** — Paid trial pack ($2.99 / 14 days / $0.18-per-hour decrement) replaces a free tier.
+
+Auth + security:
+
+- **D-020 / D-025** — Auth cache invalidation pattern (sha256-keyed Redis cache, 30s TTL, account-version increment on tier-change / suspend / revoke).
+- **D-024** — Process-local single-flight coalescer for the auth slow path.
+- **D-028** — Web sessions are opaque sha256-hashed tokens (not JWT).
+- **D-035** — Admin scope enforcement at Fastify preHandler (not service layer).
+- **D-036** — Team roles taxonomy (4-role model; gates dashboard UI only, not `/v1/*`).
+
+Webhooks:
+
+- **D-023** — Outbound-webhook signing secrets stored plaintext at rest.
+- **D-029** — Hand-rolled Stripe HTTP client (no `stripe` npm SDK dep).
+- **D-030** — Inbound Stripe webhook idempotency via `processed_stripe_events` PK.
+- **D-031** — `session.failed` first-failure-only emission semantic.
+
+Infrastructure + observability:
+
+- **ADR-001** — Hetzner for control-plane hosting.
+- **D-033 / ADR-006** — Audit-log retention pattern (90d hot Postgres / R2 archive / 7y total).
+- **D-034 / ADR-005** — Sentry-first observability destination.
+
+Schema + naming:
+
+- **D-032** — Profile name uniqueness scoped to `(account_id, name)`.
+- See `docs/architecture/archetype-naming-convention.md` (V-136) for archetype identifier shape.
 
 Long-form ADRs live under `docs/adr/`. Short D-NNN entries with autonomy levels live in `docs/decisions.md`.
