@@ -34,7 +34,7 @@ describe('POST /v1/profiles', () => {
     const body = res.json<ProfileResponse>();
     expect(body.id).toMatch(/^prof_[0-9a-f-]{36}$/);
     expect(body.name).toBe('work-laptop');
-    expect(body.archetype).toBe('iphone16pro_ios26_4_1');
+    expect(body.archetype).toBe('iphone16pro_ios18_7_safari26_4');
     expect(body.description).toBeNull();
   });
 

@@ -8,8 +8,8 @@ const fastDriver = (): MockDriver =>
 describe('MockDriver — session lifecycle', () => {
   it('createSession returns a deterministic, monotonically increasing id', async () => {
     const driver = fastDriver();
-    const a = await driver.createSession({ archetype: 'iphone16pro_ios26_4_1' });
-    const b = await driver.createSession({ archetype: 'iphone16pro_ios26_4_1' });
+    const a = await driver.createSession({ archetype: 'iphone16pro_ios18_7_safari26_4' });
+    const b = await driver.createSession({ archetype: 'iphone16pro_ios18_7_safari26_4' });
     expect(a.driverSessionId).toMatch(/^mock_ses_\d{8}$/);
     expect(b.driverSessionId).toMatch(/^mock_ses_\d{8}$/);
     expect(b.driverSessionId > a.driverSessionId).toBe(true);
@@ -211,8 +211,8 @@ describe('MockDriver — determinism', () => {
   it('two drivers with the same op sequence return matching state', async () => {
     const a = fastDriver();
     const b = fastDriver();
-    const sa = await a.createSession({ archetype: 'iphone16pro_ios26_4_1' });
-    const sb = await b.createSession({ archetype: 'iphone16pro_ios26_4_1' });
+    const sa = await a.createSession({ archetype: 'iphone16pro_ios18_7_safari26_4' });
+    const sb = await b.createSession({ archetype: 'iphone16pro_ios18_7_safari26_4' });
     expect(sa.driverSessionId).toBe(sb.driverSessionId); // first id is identical
 
     const ra = await a.navigate(sa.driverSessionId, {

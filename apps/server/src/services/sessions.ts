@@ -6,14 +6,15 @@
 // — a session belongs to exactly one account, and only that account's keys
 // can operate on it.
 
-import type {
-  AccountTier,
-  CaptureKind,
-  CaptureRequest,
-  CreateSessionRequest,
-  InteractRequest,
-  NavigateRequest,
-  WaitRequest,
+import {
+  LOCKED_ARCHETYPE_ID,
+  type AccountTier,
+  type CaptureKind,
+  type CaptureRequest,
+  type CreateSessionRequest,
+  type InteractRequest,
+  type NavigateRequest,
+  type WaitRequest,
 } from '@driftstack/api-types';
 import type { AccountContext } from './auth.js';
 import type { Driver } from '../drivers/types.js';
@@ -163,7 +164,7 @@ export class SessionsService {
       throw new ConcurrencyLimitError(active, limit);
     }
 
-    const archetype = body.archetype ?? 'iphone16pro_ios26_4_1';
+    const archetype = body.archetype ?? LOCKED_ARCHETYPE_ID;
     const driverResult = await this.deps.driver.createSession({
       archetype,
       ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),

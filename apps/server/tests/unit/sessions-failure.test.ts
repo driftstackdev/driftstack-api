@@ -218,7 +218,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
   it('navigate driver throw → session.errored + session.failed webhook + re-throw', async () => {
     const { service, repo, driver, webhookEvents } = buildService();
     const ctx = buildCtx();
-    const session = await service.create(ctx, { archetype: 'iphone16pro_ios26_4_1' });
+    const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
 
     driver.primeNextThrow({ name: 'DriverError', message: 'WebKit handle gone' });
 
@@ -248,7 +248,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
   it('subsequent op on errored session 410s without re-firing webhook', async () => {
     const { service, repo, driver, webhookEvents } = buildService();
     const ctx = buildCtx();
-    const session = await service.create(ctx, { archetype: 'iphone16pro_ios26_4_1' });
+    const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
 
     // First failure
     driver.primeNextThrow({ name: 'DriverError', message: 'first fail' });
@@ -276,7 +276,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     for (const op of ['interact', 'wait', 'capture', 'state'] as const) {
       const { service, repo, driver, webhookEvents } = buildService();
       const ctx = buildCtx();
-      const session = await service.create(ctx, { archetype: 'iphone16pro_ios26_4_1' });
+      const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
       driver.primeNextThrow({ name: 'DriverError', message: `${op} boom` });
 
       try {
@@ -309,7 +309,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
   it('successful ops do NOT emit session.failed', async () => {
     const { service, webhookEvents } = buildService();
     const ctx = buildCtx();
-    const session = await service.create(ctx, { archetype: 'iphone16pro_ios26_4_1' });
+    const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
 
     await service.navigate(ctx, session.id, { url: 'https://example.com', wait_until: 'load' });
     await service.getState(ctx, session.id);

@@ -23,7 +23,7 @@ export interface SeededProfile {
 export interface SeedProfilesOpts {
   /** Per-profile name overrides; length must equal `count` if supplied. */
   names?: readonly string[];
-  /** Archetype applied to every seeded profile. Default `'iphone16pro_ios26_4_1'`. */
+  /** Archetype applied to every seeded profile. Default `'iphone16pro_ios18_7_safari26_4'`. */
   archetype?: string;
   /** Optional description applied to every profile. */
   description?: string;

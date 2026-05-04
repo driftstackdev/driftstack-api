@@ -85,6 +85,13 @@
       "when": 1778891200000,
       "tag": "0011_admin_force_audit_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1778891600000,
+      "tag": "0012_archetype_default_rename",
+      "breakpoints": true
     }
   ]
 }

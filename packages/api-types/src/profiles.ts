@@ -35,10 +35,10 @@ export type Profile = z.infer<typeof ProfileSchema>;
 export const CreateProfileRequestSchema = z.object({
   name: ProfileNameSchema,
   /**
-   * Archetype slug — defaults to the current default
-   * (`iphone16pro_ios26_4_1`) server-side if omitted. Customers may
-   * pin a profile to an older archetype for behavioural-stability
-   * reasons.
+   * Archetype slug — defaults to `LOCKED_ARCHETYPE_ID`
+   * (`iphone16pro_ios18_7_safari26_4`) server-side if omitted.
+   * Customers may pin a profile to an older archetype for
+   * behavioural-stability reasons.
    */
   archetype: z.string().min(1).max(120).optional(),
   description: z.string().max(2048).optional(),

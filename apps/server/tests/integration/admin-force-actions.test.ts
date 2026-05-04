@@ -30,7 +30,7 @@ describe('POST /v1/admin/sessions/:id/destroy', () => {
       method: 'POST',
       url: '/v1/sessions',
       headers: auth(fx),
-      payload: { archetype: 'iphone16pro_ios26_4_1' },
+      payload: { archetype: 'iphone16pro_ios18_7_safari26_4' },
     });
     const sessionId = create.json<{ id: string }>().id;
 
@@ -62,7 +62,7 @@ describe('POST /v1/admin/sessions/:id/destroy', () => {
       method: 'POST',
       url: '/v1/sessions',
       headers: auth(fx),
-      payload: { archetype: 'iphone16pro_ios26_4_1' },
+      payload: { archetype: 'iphone16pro_ios18_7_safari26_4' },
     });
     const sessionId = create.json<{ id: string }>().id;
 
@@ -107,7 +107,7 @@ describe('POST /v1/admin/sessions/:id/destroy', () => {
       method: 'POST',
       url: '/v1/sessions',
       headers: auth(fx),
-      payload: { archetype: 'iphone16pro_ios26_4_1' },
+      payload: { archetype: 'iphone16pro_ios18_7_safari26_4' },
     });
     const sessionId = create.json<{ id: string }>().id;
 
@@ -135,7 +135,7 @@ describe('POST /v1/admin/sessions/:id/destroy', () => {
       method: 'POST',
       url: '/v1/sessions',
       headers: { authorization: `Bearer ${second.plaintext}` },
-      payload: { archetype: 'iphone16pro_ios26_4_1' },
+      payload: { archetype: 'iphone16pro_ios18_7_safari26_4' },
     });
     const sessionId = create.json<{ id: string }>().id;
 

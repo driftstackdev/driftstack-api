@@ -226,7 +226,7 @@ describe('SessionSchema', () => {
       account_id: 'acc_b1c2d3e4-1111-2222-3333-444455556666',
       api_key_id: 'key_c1c2d3e4-1111-2222-3333-444455556666',
       status: 'ready',
-      archetype: 'iphone16pro_ios26_4_1',
+      archetype: 'iphone16pro_ios18_7_safari26_4',
       label: null,
       metadata: null,
       created_at: now,

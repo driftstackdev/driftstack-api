@@ -8644,3 +8644,81 @@ Doc-only commit; no code changes.
 ### Next
 
 Continuing per never-stop rule. PRIORITY 12 ongoing.
+
+---
+
+## V-154 — V-177 archetype rename: server-side completion (defaults + schema + tests)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+V-136 renamed the customer-facing archetype identifier from `iphone16pro_ios26_4_1` to `iphone16pro_ios18_7_safari26_4` (rationale: Apple ships Safari independently of iOS major; bundling iOS-only versioning into the slug was misleading). V-136 migrated:
+
+- `packages/api-types/src/common.ts` (added `LOCKED_ARCHETYPE_ID` constant + display-label helper)
+- `apps/marketing-site/src/data/capabilities.ts` + `index.astro` (customer-facing copy)
+- `apps/customer-dashboard/src/data/mocks.ts` (4 occurrences)
+- `apps/admin-panel/src/pages/sessions.astro` (3 occurrences)
+
+V-136 did NOT migrate:
+
+- Server-side default archetype constants (`apps/server/src/services/profiles.ts:67` `DEFAULT_ARCHETYPE`, `apps/server/src/services/sessions.ts:166` archetype fallback).
+- Postgres column DEFAULTs in `apps/server/src/db/schema.ts:310` (profiles.archetype) + `:444` (sessions.archetype).
+- Production tests asserting on the literal: schemas / sessions / profiles / mock-driver / sessions-failure / admin-force-actions / e2e sessions.spec.
+- SDK fixtures: `packages/sdk-python/tests/test_resources_sessions.py`, `tests/test_integration_workflow.py`, `examples/pytest_fixture.py`, `packages/sdk-go/client_test.go`.
+- Doc-comment in `apps/server/src/drivers/types.ts:23`.
+- Doc-comment in `packages/api-types/src/profiles.ts:39` (CreateProfileRequestSchema archetype field jsdoc).
+
+Net effect pre-V-154: a customer creating a profile or session without specifying archetype got the OLD (wrong) identifier saved in their DB row. V-154 finishes the migration started by V-136.
+
+### What changed
+
+Migration:
+
+- `apps/server/src/db/migrations/0012_archetype_default_rename.sql` (new) — `ALTER TABLE profiles ALTER COLUMN archetype SET DEFAULT 'iphone16pro_ios18_7_safari26_4'` + same for `sessions`. Existing rows are NOT migrated (they represent state-at-insert and the driver-layer interpretation is the same physical archetype).
+- `apps/server/src/db/migrations/meta/_journal.json` — added idx 12 entry.
+
+Production code:
+
+- `apps/server/src/db/schema.ts:310` + `:444` — column DEFAULTs updated; comment refreshed to reference `LOCKED_ARCHETYPE_ID` + naming-convention doc.
+- `apps/server/src/services/profiles.ts` — imports `LOCKED_ARCHETYPE_ID` from `@driftstack/api-types`; `DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID`.
+- `apps/server/src/services/sessions.ts` — imports `LOCKED_ARCHETYPE_ID`; archetype fallback uses the constant (no more string literal).
+- `apps/server/src/drivers/types.ts:23` — doc-comment refreshed.
+- `packages/api-types/src/profiles.ts:39` — doc-comment refreshed to reference `LOCKED_ARCHETYPE_ID`.
+
+Tests:
+
+- `apps/server/tests/unit/{schemas,mock-driver,sessions-failure}.test.ts` — fixture archetypes updated.
+- `apps/server/tests/integration/{profiles,sessions,admin-force-actions}.test.ts` — assertions + payloads updated.
+- `apps/server/tests/integration/_helpers/scenarios.ts` — doc-comment updated.
+- `apps/server/tests/e2e/sessions.spec.ts` — assertion updated.
+- `packages/sdk-python/tests/test_resources_sessions.py` + `test_integration_workflow.py` — fixture updated.
+- `packages/sdk-python/examples/pytest_fixture.py` — fixture updated.
+- `packages/sdk-go/client_test.go` — fixture updated.
+
+NOT modified (intentional — historical preservation):
+
+- `apps/server/src/db/migrations/0009_profiles.sql` + `0000_gray_northstar.sql` — historical migrations preserve the original DEFAULT; V-154's migration `0012` is the live one.
+- `apps/server/src/db/migrations/meta/0006_snapshot.json` — Drizzle snapshot of historical schema state.
+- `docs/architecture/archetype-naming-convention.md` — references old identifier as historical context (intentional).
+- `packages/api-types/src/common.ts:134` — comment on `archetypeDisplayLabel` map intentionally references the V-136 rename.
+- `docs/verification-log.md` historical V-log entries — append-only.
+
+### How verified
+
+- `npm run typecheck`: clean across all 10 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 556/556 passing.
+- `go test ./...` from `packages/sdk-go/`: ok.
+- Python SDK tests not run locally (Python 3.10 + pytest needed; CI runs them — change is a string-replace in fixtures, semantically a no-op).
+
+### Files modified
+
+(See "What changed" above — 17 files modified, 2 added.)
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 12 ongoing.

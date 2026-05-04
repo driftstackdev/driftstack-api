@@ -10,7 +10,7 @@
 // IndexedDB) lives in the WebKit driver layer — none of that flows
 // through this service. We store only the metadata.
 
-import type { AccountTier } from '@driftstack/api-types';
+import { LOCKED_ARCHETYPE_ID, type AccountTier } from '@driftstack/api-types';
 import { ConflictError, NotFoundError, TierLimitError } from '../lib/errors.js';
 import { profileLimitFor } from './sessions.js';
 
@@ -64,7 +64,7 @@ export interface ProfilesRepo {
   touch(args: { id: string; accountId: string; at: Date }): Promise<void>;
 }
 
-const DEFAULT_ARCHETYPE = 'iphone16pro_ios26_4_1';
+const DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID;
 
 export interface CreateProfileArgs {
   accountId: string;

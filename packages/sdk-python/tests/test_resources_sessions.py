@@ -31,7 +31,7 @@ SESSION_FIXTURE: dict = {
     "account_id": "acc_00000000-0000-4000-8000-000000000001",
     "api_key_id": "key_00000000-0000-4000-8000-000000000001",
     "status": "ready",
-    "archetype": "iphone16pro_ios26_4_1",
+    "archetype": "iphone16pro_ios18_7_safari26_4",
     "label": None,
     "metadata": None,
     "created_at": "2026-05-02T10:00:00Z",

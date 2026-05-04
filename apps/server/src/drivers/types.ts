@@ -20,7 +20,7 @@ import type { GUIInputAction } from '../schemas/gui-input.js';
 export type DriverSessionId = string;
 
 export interface CreateSessionInput {
-  /** iPhone archetype slug, e.g. "iphone16pro_ios26_4_1". */
+  /** iPhone archetype slug, e.g. "iphone16pro_ios18_7_safari26_4". */
   archetype: string;
   /** Free-form metadata supplied by the customer. Driver may ignore. */
   metadata?: Record<string, unknown>;
