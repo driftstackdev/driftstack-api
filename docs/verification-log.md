@@ -6439,3 +6439,38 @@ V-087 fully synced architecture.md against V-079..V-086. V-099 (customer-dashboa
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-110 — Customer dashboard env-vars documented (Routine — documentation)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+V-099 added the customer-dashboard workspace; V-108 added its README mentioning the eventual deploy pattern. The deploy-time env-var block was missing from `docs/deployment/env-vars.md` (the canonical schema for "every env var anything in this repo reads"). V-110 fills it.
+
+### What changed
+
+`docs/deployment/env-vars.md`: new `### Customer dashboard (Cloudflare Pages — build-time only)` subsection ahead of the V-079 auth-flow block. Lists:
+
+- `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` (shared with marketing-site deploy — same Cloudflare account).
+- `CLOUDFLARE_PAGES_DASHBOARD_PROJECT_NAME` repository variable (separate Pages project from marketing-site so DNS / cache / analytics scope independently).
+- `PUBLIC_API_BASE_URL` build-time variable (Astro `import.meta.env.PUBLIC_*`) defaulting to `https://api.driftstack.dev`.
+
+DNS pointer note: `app.driftstack.dev` maps to the Pages project apex.
+
+### How verified
+
+- `npm run format:check`: clean (after prettier formatting pass).
+- No code changes.
+
+### Files modified
+
+- `docs/deployment/env-vars.md`
+
+### Next
+
+Continuing per never-stop rule.

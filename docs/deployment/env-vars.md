@@ -181,6 +181,24 @@ not by env / secrets:
 - `www.driftstack.dev` — CNAME alias to the Pages project
 - DNS records live in Cloudflare DNS for the `driftstack.dev` zone
 
+### Customer dashboard (Cloudflare Pages — build-time only)
+
+The customer dashboard (`apps/customer-dashboard/`, V-099) is an Astro static-build deployed to Cloudflare Pages at `app.driftstack.dev`. Mirror of the marketing-site deploy pattern. Both share the same Cloudflare account; the dashboard uses a **separate Pages project** so DNS + cache + analytics scope to it independently.
+
+| Name                                      | Type     | Required for deploy   | Example                         | Notes                                                                                                                                                                                                             |
+| ----------------------------------------- | -------- | --------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`                    | secret   | shared with marketing | (same token as marketing)       | Same secret as marketing; the token's `Cloudflare Pages — Edit` permission covers all Pages projects in the account.                                                                                              |
+| `CLOUDFLARE_ACCOUNT_ID`                   | secret   | shared                | (same as marketing)             | Same account.                                                                                                                                                                                                     |
+| `CLOUDFLARE_PAGES_DASHBOARD_PROJECT_NAME` | variable | required if deploy    | `driftstack-customer-dashboard` | Pre-create the project in the CF dashboard before the first deploy. Set as a **repository variable**, not a secret.                                                                                               |
+| `PUBLIC_API_BASE_URL`                     | variable | optional              | `https://api.driftstack.dev`    | Astro `import.meta.env.PUBLIC_API_BASE_URL` — the URL the dashboard's auth + data-fetch code points at. Defaults to `https://api.driftstack.dev` when unset. Override for staging (`api-staging.driftstack.dev`). |
+
+The deploy workflow at `.github/workflows/deploy-customer-dashboard.yml` lands when the founder confirms the dashboard-stack proposal. Until then, the dashboard builds via `npm run build --workspace apps/customer-dashboard` but does not auto-deploy.
+
+Custom domains + DNS:
+
+- `app.driftstack.dev` — apex of the Pages project
+- DNS records live in Cloudflare DNS for the `driftstack.dev` zone
+
 ### User-facing auth flow (V-079)
 
 | Name                      | Required                 | Per-env? | Example                                          | Notes                                                                                                                                                                                                                                              |
