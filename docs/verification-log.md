@@ -8066,3 +8066,36 @@ Founder overnight directive PRIORITY 3 — Tier 3 drafts approved per directive.
 ### Next
 
 Continuing per never-stop rule. PRIORITY 4 next: footer drift fix (Trust → /security, Company → /about).
+
+---
+
+## V-141 — Footer drift fix (Trust + Company nav additions)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder overnight directive PRIORITY 4 + DECISION 2. After /security and /about lands in V-138, the marketing-site Footer's Trust + Company sections were stale (only listed /trust/sub-processors + email links).
+
+### What changed
+
+`apps/marketing-site/src/components/Footer.astro`:
+
+- **Trust section** — added `/security` link as the first entry (above /trust/sub-processors).
+- **Company section** — added `/about` link as the first entry (above existing /faq + email links). Plus `/changelog` for symmetry — V-138 landed /changelog and it had no nav surface to it.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run format:check`: clean.
+- Manual: footer renders correctly on every marketing page (BaseLayout includes Footer; all 6 V-138 pages + existing /index, /pricing, /self-hosted, /faq inherit).
+
+### Files modified
+
+- `apps/marketing-site/src/components/Footer.astro`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 5 next: team-roles-taxonomy doc.
