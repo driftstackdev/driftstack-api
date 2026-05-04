@@ -8338,3 +8338,49 @@ Document lifecycle: resolved entries stay 30 days then archive to `docs/archive/
 ### Next
 
 Continuing per never-stop rule. PRIORITY 10 next: OpenTelemetry interface-only scaffold.
+
+---
+
+## V-147 — OpenTelemetry interface-only scaffold (PHASE 8 follow-on)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder overnight directive PRIORITY 10. Scaffold ONLY (no actual OTel wiring). Interface skeleton + no-op default + activation procedure documented inline. NO new runtime dep — `@opentelemetry/api` would be a Tier 2 surface change.
+
+### What changed
+
+`apps/server/src/lib/otel.ts` (new):
+
+- `Span` / `Tracer` / `OtelService` interfaces using a plain-TS subset of @opentelemetry/api shapes.
+- `NoopOtelService` default — accepts all calls, emits nothing. Used while OTel is unwired so call sites stay identical between activated + unwired.
+- `createOtelService()` factory — returns no-op; documented branch point for future activation via `OTEL_EXPORTER_OTLP_ENDPOINT` env var presence.
+- Inline activation procedure for the future flip (4 steps). All mechanical work once founder approves.
+- Bottom-of-file note: request-id propagation is currently middleware/request-id.ts UUID + x-request-id header; will become trace id (or derivative) when OTel wires up.
+
+`apps/server/tests/unit/otel.test.ts` (new) — 4 contract tests covering NoopOtelService.
+
+### Why interface-only
+
+Founder's direction was "Default to interface-only." Real SDK-backed impl with `@opentelemetry/api` dep would require Tier 2 approval + bundle size cost for a feature unused at launch. Not justified pre-launch.
+
+The chosen path lets the future activation V-NNN focus on real wiring rather than retroactively defining the interface.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 547/547 passing (was 543; +4 new).
+
+### Files added
+
+- `apps/server/src/lib/otel.ts`
+- `apps/server/tests/unit/otel.test.ts`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 11 next: hygiene + tooling improvements.
