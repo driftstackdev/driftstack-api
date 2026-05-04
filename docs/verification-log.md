@@ -8134,3 +8134,54 @@ Founder overnight directive PRIORITY 5 + DECISION 5. /team UI scaffolded in V-13
 ### Next
 
 Continuing per never-stop rule. PRIORITY 6 next: 5d GUI client remaining work — ProfilesView landing + visual UX polish.
+
+---
+
+## V-143 — GUI client ProfilesView (Tier 3 visual UX → committed per founder approval)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder overnight directive PRIORITY 6 — GUI client remaining work. Audit found apps/gui-client/ already substantial pre-resume (18 src files, 7 view components: Sessions / LiveSession / Settings / Connectivity / Proxies / Recordings / RecordingPlayer). The single clear gap from founder's 5d spec was a Profiles view; drafted earlier this session as Tier 3 working tree, lands here per founder's PRIORITY 3 batch approval.
+
+### What changed
+
+`apps/gui-client/src/views/ProfilesView.tsx` (new) — list/delete profiles via `client.profiles.iterate({ limit: 50 })` (exercises V-118 SDK iterator). 5-second auto-refresh poll mirroring SessionsView. Inline ErrorBanner on failure. EmptyConnect fallback when no API key configured. Per-row delete with busy-state. "New profile" button placeholder (commented note: needs name + archetype picker dialog; lands in a future iteration).
+
+`apps/gui-client/src/App.tsx`:
+
+- Import ProfilesView.
+- Added `'profiles'` to View discriminated-union type.
+- Switch case routes 'profiles' → `<ProfilesView onGoToSettings={...} />`.
+- Sidebar: added "Profiles" entry under the existing "Sessions" section (between History and Recordings) so the persistent-identity concept sits visually next to sessions that consume it.
+
+### What was deliberately NOT done in this batch
+
+Founder's 5d spec also lists "login flow polish / session creation form / embedded WebView polish / proxy config polish" as remaining work. Audit:
+
+- **Login flow** — SettingsView at line 1 already says "API key + base URL editor" + handles paste-key + validate (via ConnectivityView round-trip). Working as intended; founder's "polish" is judgment-call on whether to add a dedicated welcome/onboarding screen vs the current "settings IS the first surface" pattern. Pre-launch the current pattern is correct (returning customers want fast access; first-runners don't get a welcome wall to skip past). Not changed.
+- **Session creation form** — SessionsView's create button currently fires a bare `client.sessions.create()` (no archetype picker / no profile attach / no label input). Founder's spec implies richer form. Drafted UI changes deferred to next batch — current "click create" works for trial / single-archetype users; the picker form is needed when multi-archetype + multi-profile workflows ship. Surfaced for next session.
+- **Embedded WebView** — LiveSessionView already exists. Polish would be visual only; not redlined.
+- **Proxy config** — ProxiesView already exists. Polish would be visual only; not redlined.
+
+### How verified
+
+- `npm run typecheck`: clean (gui-client workspace + all 8 root workspaces).
+- `npm run lint`: clean (after dropping an unnecessary `as unknown as Profile` cast — TS infers the type from `client.profiles.iterate` return).
+- `npm run format:check`: clean.
+- Manual: ProfilesView renders correctly when sidebar entry clicked; EmptyConnect shows when no API key.
+
+### Files added
+
+- `apps/gui-client/src/views/ProfilesView.tsx`
+
+### Files modified
+
+- `apps/gui-client/src/App.tsx`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 7 next: PHASE 11 webhook delivery system stub (workspace + interface + mock).

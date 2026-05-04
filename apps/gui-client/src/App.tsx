@@ -11,6 +11,7 @@ import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { ConnectivityView } from './views/ConnectivityView';
 import { LiveSessionView } from './views/LiveSessionView';
+import { ProfilesView } from './views/ProfilesView';
 import { ProxiesView } from './views/ProxiesView';
 import { RecordingPlayerView } from './views/RecordingPlayerView';
 import { RecordingsView } from './views/RecordingsView';
@@ -21,6 +22,7 @@ type View =
   | { kind: 'sessions' }
   | { kind: 'live-session'; sessionId: string }
   | { kind: 'sessions-history' }
+  | { kind: 'profiles' }
   | { kind: 'recordings' }
   | { kind: 'recording-player'; recordingId: string }
   | { kind: 'proxies' }
@@ -108,6 +110,8 @@ function CurrentView({
       );
     case 'connectivity':
       return <ConnectivityView />;
+    case 'profiles':
+      return <ProfilesView onGoToSettings={() => onNavigate({ kind: 'settings' })} />;
     case 'sessions-history':
     case 'fleet':
       return <NotYet label={view.kind} />;
@@ -165,6 +169,12 @@ function Sidebar({ current, onNavigate }: SidebarProps): JSX.Element {
           onClick={() => onNavigate({ kind: 'sessions-history' })}
         >
           History
+        </SidebarItem>
+        <SidebarItem
+          active={current.kind === 'profiles'}
+          onClick={() => onNavigate({ kind: 'profiles' })}
+        >
+          Profiles
         </SidebarItem>
         <SidebarItem
           active={current.kind === 'recordings'}
