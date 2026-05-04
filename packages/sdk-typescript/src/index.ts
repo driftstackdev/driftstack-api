@@ -3,6 +3,7 @@
 export { Driftstack, type DriftstackOptions } from './client.js';
 export type { RetryConfig } from './retry.js';
 export type { HttpClientConfig, RequestOptions } from './http.js';
+export { iteratePaginated, type CursorPage } from './pagination.js';
 export type { SessionsListPage } from './resources/sessions.js';
 export type { ApiKeyList } from './resources/api-keys.js';
 export type { WebhookEndpointList, WebhookDeliveryListPage } from './resources/webhooks.js';

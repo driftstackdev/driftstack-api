@@ -1,0 +1,50 @@
+// V-118: cursor-pagination async-iterator helper.
+//
+// Every Driftstack list endpoint returns the same envelope shape:
+//   { data: T[], next_cursor: string | null }
+//
+// Hand-rolled while-loops over `next_cursor` are easy to write but easy
+// to bug-on (off-by-one cursor handoff, forgetting to break on null,
+// double-fetch on first page). This helper wraps the pattern as an
+// AsyncGenerator so consumer code reads as `for await (const item of
+// client.sessions.iterate())`.
+//
+// Resources expose a thin `.iterate(opts)` method that calls
+// `iteratePaginated` with the resource's own `list` as `fetchPage`.
+
+/** Shape of a Driftstack list endpoint response. */
+export interface CursorPage<T> {
+  data: readonly T[];
+  next_cursor: string | null;
+}
+
+/**
+ * Lazily walk every page of a cursor-paginated list endpoint.
+ *
+ * `fetchPage` is called with `null` for the first page and with each
+ * subsequent `next_cursor`. The generator stops as soon as
+ * `next_cursor` is null. Errors from `fetchPage` propagate to the
+ * caller (consumer's `try { for await ... } catch`).
+ *
+ * @example
+ *   for await (const session of iteratePaginated((cursor) =>
+ *     client.sessions.list(cursor !== null ? { cursor } : {}),
+ *   )) {
+ *     // ...
+ *   }
+ */
+export async function* iteratePaginated<T>(
+  fetchPage: (cursor: string | null) => Promise<CursorPage<T>>,
+): AsyncGenerator<T, void, void> {
+  let cursor: string | null = null;
+  while (true) {
+    const page = await fetchPage(cursor);
+    for (const item of page.data) {
+      yield item;
+    }
+    if (page.next_cursor === null) {
+      return;
+    }
+    cursor = page.next_cursor;
+  }
+}

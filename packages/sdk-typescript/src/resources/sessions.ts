@@ -15,6 +15,7 @@ import type {
   WaitResponse,
 } from '@driftstack/api-types';
 import type { HttpClient } from '../http.js';
+import { iteratePaginated } from '../pagination.js';
 
 export interface SessionsListPage {
   data: Session[];
@@ -40,6 +41,26 @@ export class SessionsResource {
         ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
       },
     });
+  }
+
+  /**
+   * Lazily iterate every session for the calling account, walking
+   * cursor pages automatically. `opts.limit` controls per-page size;
+   * the iterator transparently fetches the next page once the current
+   * one is exhausted, and stops on `next_cursor: null`.
+   *
+   * @example
+   *   for await (const session of client.sessions.iterate({ limit: 50 })) {
+   *     console.log(session.id);
+   *   }
+   */
+  iterate(opts: { limit?: number } = {}): AsyncGenerator<Session, void, void> {
+    return iteratePaginated<Session>((cursor) =>
+      this.list({
+        ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+        ...(cursor !== null ? { cursor } : {}),
+      }),
+    );
   }
 
   /** Navigate the session to a URL. */

@@ -6848,3 +6848,67 @@ No new tests — V-116 already covers the helpers' behavior with fake `SentryCli
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-118 — SDK pagination async-iterator helper (Routine — SDK expansion)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+PHASE 7 of the autopilot directive calls for "pagination iterator helper." Hand-rolled while-loops over `next_cursor` are easy to write but easy to bug-on (cursor handoff, forgetting to break on null, double-fetch on first page). V-118 lands a generic `iteratePaginated<T>` helper plus wires `sessions.iterate()` as the first resource using it. Other resources (profiles, webhooks, deliveries) can adopt the same pattern in piecemeal follow-ups.
+
+### What changed
+
+`packages/sdk-typescript/src/pagination.ts` (new):
+
+- Exports `CursorPage<T>` interface — the shape every Driftstack list endpoint returns (`{ data, next_cursor }`).
+- Exports `iteratePaginated<T>(fetchPage)` — `AsyncGenerator<T>` that walks the cursor chain. First call passes `null` as cursor; subsequent calls pass the previous page's `next_cursor`. Stops when `next_cursor === null`. Errors from `fetchPage` propagate (consumer handles in try/catch around the for-await loop). Consumer-break is honored — generator's lazy semantics mean no further fetches after `break`.
+
+`packages/sdk-typescript/src/resources/sessions.ts`:
+
+- Imports `iteratePaginated` from `../pagination.js`.
+- Adds `iterate({ limit? })` method that delegates to `iteratePaginated` with `this.list({ limit, cursor })` as `fetchPage`.
+
+`packages/sdk-typescript/src/index.ts`:
+
+- Re-exports `iteratePaginated` + `CursorPage` so consumers can use the helper directly with their own `fetchPage` closures (e.g. for resources that haven't been wrapped yet, or for custom multi-page aggregations).
+
+### How verified
+
+`packages/sdk-typescript/tests/unit/pagination.test.ts` — 6 tests:
+
+1. Single full page, stops on null cursor.
+2. Multi-page sequence walks all cursors in order.
+3. Empty first page (data: [], next_cursor: null) yields no items, single fetch.
+4. Intermediate empty pages (no items but more cursors) — generator continues.
+5. Errors from fetchPage propagate to the consumer.
+6. Consumer break stops further fetches.
+
+`packages/sdk-typescript/tests/unit/sessions-iterate.test.ts` — 2 tests:
+
+1. `sessions.iterate({ limit: 2 })` walks pages and passes both `limit` and `cursor` correctly.
+2. Single-page result terminates cleanly.
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean (after switching test fakes to `Promise.resolve(...)` form rather than `async () => ...` to avoid `require-await`, and dropping a redundant `as Session` since the literal already matches the type).
+- `npm run format:check`: clean.
+- `npm test`: 513/513 passing (was 505; +8 new — 6 pagination + 2 sessions-iterate).
+
+### Files added
+
+- `packages/sdk-typescript/src/pagination.ts`
+- `packages/sdk-typescript/tests/unit/pagination.test.ts`
+- `packages/sdk-typescript/tests/unit/sessions-iterate.test.ts`
+
+### Files modified
+
+- `packages/sdk-typescript/src/resources/sessions.ts` (new `iterate` method)
+- `packages/sdk-typescript/src/index.ts` (export the helper)
+
+### Next
+
+Continuing per never-stop rule. Follow-up: wire `iterate()` into profiles, webhooks (endpoints + deliveries) — same one-line pattern as sessions. Bundling them in a single follow-up keeps the diff focused per resource.
