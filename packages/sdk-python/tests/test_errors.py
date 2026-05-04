@@ -11,8 +11,12 @@ from driftstack.errors import (
     ConflictError,
     DriftstackError,
     DriverError,
+    EmailAlreadyRegisteredError,
+    EmailNotVerifiedError,
     ExpiredKeyError,
     ForbiddenError,
+    InvalidAuthTokenError,
+    InvalidCredentialsError,
     InvalidKeyError,
     NotFoundError,
     QuotaExceededError,
@@ -44,6 +48,15 @@ def test_subclass_relationships() -> None:
     assert issubclass(SessionDestroyedError, DriftstackError)
     assert issubclass(DriverError, DriftstackError)
     assert issubclass(TransportError, DriftstackError)
+    # V-115 — auth-flow inheritance: InvalidCredentialsError extends AuthError
+    # so existing `except AuthError` blocks already catch wrong-password
+    # failures; EmailNotVerifiedError extends ForbiddenError because the
+    # server returns 403 and the semantic is "you authenticated but you're
+    # not allowed in yet."
+    assert issubclass(EmailAlreadyRegisteredError, DriftstackError)
+    assert issubclass(InvalidCredentialsError, AuthError)
+    assert issubclass(InvalidAuthTokenError, DriftstackError)
+    assert issubclass(EmailNotVerifiedError, ForbiddenError)
 
 
 def test_every_problem_type_maps_to_a_subclass() -> None:
@@ -68,6 +81,11 @@ def test_every_problem_type_maps_to_a_subclass() -> None:
         ("https://errors.driftstack.dev/tier-limit", QuotaExceededError),
         ("https://errors.driftstack.dev/session-destroyed", SessionDestroyedError),
         ("https://errors.driftstack.dev/driver-error", DriverError),
+        # V-115 — V-079 auth-flow problem types.
+        ("https://errors.driftstack.dev/email-already-registered", EmailAlreadyRegisteredError),
+        ("https://errors.driftstack.dev/invalid-credentials", InvalidCredentialsError),
+        ("https://errors.driftstack.dev/invalid-auth-token", InvalidAuthTokenError),
+        ("https://errors.driftstack.dev/email-not-verified", EmailNotVerifiedError),
     ],
 )
 def test_error_from_response_maps_problem_type(

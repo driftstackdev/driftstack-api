@@ -6692,3 +6692,52 @@ No server-side changes needed — the error problem types already exist (`apps/s
 ### Next
 
 Continuing per never-stop rule. Python SDK has parallel error normalization at `packages/sdk-python/src/driftstack/errors.py` — spot-check whether it needs the same V-114 fill in a follow-up.
+
+---
+
+## V-115 — Python SDK error normalization for V-079 auth-flow problem types (Routine — SDK expansion)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+V-114's "Next" called for spot-checking the Python SDK for the same V-079 auth-flow gap. Confirmed: `packages/sdk-python/src/driftstack/errors.py`'s `PROBLEM_TYPE_TO_ERROR` mapping was missing the same 4 problem types. V-115 closes the parity gap.
+
+### Audit context
+
+The Python SDK's mapping shape and naming conventions diverge from the TS SDK in a few stable, internally-consistent ways (e.g. `tier-limit` → `QuotaExceededError` in Python; `tier-limit` → `TierLimitError` in TS; `bad-request` + `validation-failed` both → `ValidationError` in Python). V-115 does NOT touch those — they're SDK-specific naming choices that already work and would risk consumer breakage.
+
+### What changed
+
+- `packages/sdk-python/src/driftstack/errors.py`:
+  - 4 new error classes (with deliberate inheritance choices):
+    - `EmailAlreadyRegisteredError(DriftstackError)` — server returns 409.
+    - `InvalidCredentialsError(AuthError)` — extends `AuthError` so existing `except AuthError:` blocks already catch wrong-password failures.
+    - `InvalidAuthTokenError(DriftstackError)` — token verification/magic-link/password-reset.
+    - `EmailNotVerifiedError(ForbiddenError)` — extends `ForbiddenError` because the server returns 403 and the semantic is "you authenticated but not allowed in yet."
+  - 4 new entries in `PROBLEM_TYPE_TO_ERROR`.
+- `packages/sdk-python/src/driftstack/__init__.py`: re-exports + `__all__` extension.
+- `packages/sdk-python/tests/test_errors.py`:
+  - 4 new parametrized cases in `test_error_from_response_maps_problem_type`.
+  - `test_subclass_relationships` extended with the 4 new inheritance assertions.
+
+### How verified
+
+- `pytest tests/test_errors.py`: 26/26 passing (was 22; +4 parametrized cases).
+- `ruff check` on the 3 V-115 files: clean (after shortening `InvalidAuthTokenError` docstring by 4 chars to fit the line-length cap).
+- `ruff format --check` on the same files: clean.
+- TS workspace not touched; `npm run lint` + `npm run format:check` re-run for safety, both clean.
+
+Note: a separate `ruff format` pass surfaced pre-existing format violations in `http.py`, `resources/auth.py`, `resources/profiles.py`, `test_wire_shape.py`. Those were reverted out of V-115 (would muddy the diff with cleanup unrelated to the V-079 gap fill). Folding into a follow-up hygiene commit if they actually break CI on a clean run.
+
+### Files modified
+
+- `packages/sdk-python/src/driftstack/errors.py`
+- `packages/sdk-python/src/driftstack/__init__.py`
+- `packages/sdk-python/tests/test_errors.py`
+
+### Next
+
+Continuing per never-stop rule.

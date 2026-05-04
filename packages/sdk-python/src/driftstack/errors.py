@@ -213,6 +213,25 @@ class TransportError(DriftstackError):
     """
 
 
+# ── Auth-flow errors (V-079; SDK normalization V-115) ────────────────────
+
+
+class EmailAlreadyRegisteredError(DriftstackError):
+    """Signup attempted with an email already on file."""
+
+
+class InvalidCredentialsError(AuthError):
+    """Login failed — email or password incorrect."""
+
+
+class InvalidAuthTokenError(DriftstackError):
+    """Token (verification, magic link, password reset) is invalid, expired, or already used."""
+
+
+class EmailNotVerifiedError(ForbiddenError):
+    """Login attempted before email verification step completed."""
+
+
 # ── Mapping problem-type URI → subclass ──────────────────────────────────
 
 # Keep the mapping in one place for ease of audit + extension. The HTTP
@@ -237,4 +256,9 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/driver-error": DriverError,
     "https://errors.driftstack.dev/driver-not-integrated": DriverError,
     "https://errors.driftstack.dev/validation-failed": ValidationError,
+    # V-115: V-079 auth-flow problem types.
+    "https://errors.driftstack.dev/email-already-registered": EmailAlreadyRegisteredError,
+    "https://errors.driftstack.dev/invalid-credentials": InvalidCredentialsError,
+    "https://errors.driftstack.dev/invalid-auth-token": InvalidAuthTokenError,
+    "https://errors.driftstack.dev/email-not-verified": EmailNotVerifiedError,
 }
