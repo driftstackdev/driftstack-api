@@ -291,3 +291,17 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Reasoning:** Sentry already on locked sub-processor list (V-052) + EU region wired (V-058). Adding a vendor requires DPA Annex 3 amendment + 30-day customer notice — meaningful cost for marginal benefit at launch volume. Single pane of glass for errors / performance / structured logs / breadcrumbs. Cost predictable at launch scale.
 - **Tier:** 2 (architectural — vendor surface). Status: proposed.
 - **V-log:** V-094. ADR: `docs/adr/ADR-005-observability-sentry-first.md`.
+
+## D-035 — Admin scope enforcement at Fastify preHandler, not service layer
+
+- **Decision:** every `/v1/admin/*` route uses `[app.requireScope('admin'), app.rateLimit('global')]` as its preHandler chain. Service-layer `throwIfMissingScope(ctx, 'admin')` calls remain as defense-in-depth but are no longer the primary gate. Order matters: `requireScope` must precede `rateLimit` so a non-admin caller gets 403, not a 429 that masks the scope violation.
+- **Reasoning:** centralizing the check at the route boundary makes "did I forget the admin gate?" a code-review question with a one-line answer (the preHandler array) instead of a service-method audit. It also closes a probing leak — the prior service-layer check ran inside `withAudit`, so a non-admin attempt produced an `error: forbidden` audit row containing `targetAccountId`, leaking that the caller's target was a known account. Post-V-134, the preHandler rejects before audit machinery runs; the audit-row leak is gone in exchange for losing visibility into "non-admin tried admin endpoint" attempts. Acceptable trade — the inverse leak (target enumeration via audit inflation) is more costly than the missing visibility, which can be reconstructed from access logs if ever needed. Note: `apps/server/src/routes/admin.ts` is misnamed — it serves customer routes (`/v1/api-keys`, `/v1/usage`) and is correctly NOT migrated.
+- **Tier:** 2 (architectural — security pattern; security trade-off documented).
+- **V-log:** V-134.
+
+## D-036 — Team roles taxonomy: 4-role model (owner / admin / member / viewer), gates dashboard UI only
+
+- **Decision:** account membership uses 4 roles — **owner** (single per account; billing + transfer + delete), **admin** (full operational; cannot delete account or transfer ownership), **member** (create/manage profiles + sessions; cannot manage billing or invite), **viewer** (read-only). Roles gate dashboard UI only. `/v1/*` API routes continue to gate on API-key scopes (`read` / `write` / `admin`); the team role determines who can mint a key and what scopes they can grant. Multi-seat schema (`account_users`, `account_invites`) is not yet implemented — the V-079 schema is still single-user-per-account.
+- **Reasoning:** 4 roles cover the realistic shape of small-to-mid B2B accounts (1–20 humans). 3 roles loses the read-only auditor / stakeholder slot (compliance + observer use cases). 5+ roles introduces a billing-only carve-out that's better solved by per-feature flags than another role tier. Keeping API auth on scopes (not roles) preserves the K-of-N invariant — an automation key minted by an admin can be revoked without affecting the human admin's dashboard access. Documented forward-looking schema + endpoint sketch in `docs/architecture/team-roles-taxonomy.md` so the future "wire up multi-seat" V-NNN has a checklist instead of a blank page.
+- **Tier:** 2 (architectural — auth model + future schema shape).
+- **V-log:** V-142.

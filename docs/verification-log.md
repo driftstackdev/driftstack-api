@@ -8508,3 +8508,35 @@ Live-view a session running on a Driftstack-controlled browser. Screenshots-on-d
 ### Next
 
 Continuing per never-stop rule. CLAUDE.md "Out of scope" stub catalog now complete: behavioural-simulation (V-127), recipe-library (V-127), webhook-delivery (V-144), webrtc-streaming (V-149). Mac mini fleet is operational (not code-scaffoldable); behavioural data collection is explicitly NOT collected. Continuing with other planning-doc-generated work.
+
+---
+
+## V-150 — D-035 + D-036 decision-log entries (capture V-134 + V-142 architectural decisions)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+V-134 (admin scope centralized to preHandler) and V-142 (team roles taxonomy doc) are both architectural decisions that shipped without a corresponding D-NNN entry in `docs/decisions.md`. Capture them now so the decision log is the durable summary the V-log promised — V-log carries the empirical detail; decisions.md carries the one-line entry future readers consult first.
+
+### What changed
+
+`docs/decisions.md`:
+
+- **D-035** — Admin scope enforcement at Fastify preHandler, not service layer. Captures the centralization pattern, the preHandler ordering invariant (`requireScope` before `rateLimit`), the security trade-off (lost: 403-attempt visibility; gained: closed target-enumeration leak via audit-row inflation), the deliberate non-migration of the misnamed `apps/server/src/routes/admin.ts` file. Tier 2.
+- **D-036** — Team roles taxonomy: 4-role model (owner / admin / member / viewer), gates dashboard UI only. Captures the 4-role choice, the team-role-vs-API-scope split (roles gate UI; scopes gate `/v1/*`), the K-of-N invariant preserved by the split, the forward-looking schema sketch (still not implemented in V-079 single-user-per-account schema). Tier 2.
+
+### How verified
+
+- `npm run format:check`: clean (after a `prettier --write` pass — markdown line-wrapping).
+- No code changes; doc-only commit.
+
+### Files modified
+
+- `docs/decisions.md`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 12 ongoing.
