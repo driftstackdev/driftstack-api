@@ -59,6 +59,12 @@ months in.
 | `MOCK_NAVIGATE_LATENCY_MS` | optional | shared   | `120`   | Used by `MockDriver` to simulate navigate latency. Defaults to 120ms. Tests set to 0 via `fastForwardLatency`. |
 | `MOCK_INTERACT_LATENCY_MS` | optional | shared   | `40`    | Same shape, interact path. Default 40ms.                                                                       |
 
+### Slow-query log (Postgres observability)
+
+| Name                          | Required | Per-env | Example | Notes                                                                                                                                                                                   |
+| ----------------------------- | -------- | ------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SLOW_QUERY_LOG_THRESHOLD_MS` | optional | per-env | `100`   | When set, postgres-js queries at or above this duration emit a warn-level structured `slow_query` log via `apps/server/src/lib/slow-query-log.ts`. Unset = disabled (default dev/test). |
+
 ### Cloudflare R2 (object storage, EU jurisdiction)
 
 For session Recording uploads (V-040 in-memory ring → R2 mirror, lands

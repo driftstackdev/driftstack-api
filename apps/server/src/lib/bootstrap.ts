@@ -85,9 +85,28 @@ export async function createProductionDeps(
 
   // Postgres pool. Fail-fast probe `SELECT 1` so a misconfigured
   // DATABASE_URL surfaces at boot, not on the first request.
-  const dbHandle = createDb(config.databaseUrl);
+  const dbHandle = createDb(config.databaseUrl, {
+    ...(config.slowQueryLogThresholdMs !== undefined
+      ? {
+          slowQueryLog: {
+            thresholdMs: config.slowQueryLogThresholdMs,
+            logger,
+          },
+        }
+      : {}),
+  });
   await dbHandle.client`SELECT 1`;
-  logger.info({ component: 'postgres' }, 'postgres connected');
+  if (config.slowQueryLogThresholdMs !== undefined) {
+    logger.info(
+      {
+        component: 'postgres',
+        slowQueryLogThresholdMs: config.slowQueryLogThresholdMs,
+      },
+      'postgres connected (slow-query log enabled)',
+    );
+  } else {
+    logger.info({ component: 'postgres' }, 'postgres connected');
+  }
 
   // Redis (single client for both auth cache + rate limit store —
   // they share the same connection but use distinct key prefixes).

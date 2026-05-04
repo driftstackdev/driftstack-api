@@ -6571,3 +6571,71 @@ Doc-rot also noted at `infra/hetzner/docker-compose.yml:25` — comment still re
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-113 — Slow-query log instrumentation (Routine — observability)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+PHASE 8 of the autopilot directive calls for "slow-query log integration — log queries >100ms with stack trace." Production observability: when a query takes longer than expected, we want a structured log entry surfaced via Sentry / log search rather than waiting for a customer report. Threshold is configurable per-env via `SLOW_QUERY_LOG_THRESHOLD_MS`; unset = disabled (default dev/test).
+
+### Audit context
+
+PHASE 8 directive references "V-101 auth path perf microbenchmark" but actual V-101 went to SDK resource accessors. Slow-query log was the next-clearest unbuilt PHASE 8 item.
+
+### What changed
+
+New `apps/server/src/lib/slow-query-log.ts` exports `instrumentSlowQueryLogging(client, { thresholdMs, logger, maxSqlLength? })`:
+
+- Mutates `client.unsafe` on a postgres-js Sql callable in place.
+- Times the resulting Pending via a Proxy that intercepts `then` on the Pending object.
+- On query resolution: if `performance.now() - startedAt >= thresholdMs`, emits a warn-level structured log with fields `{ component: 'db', event: 'slow_query', durationMs, thresholdMs, sql (truncated to 500 chars by default with single-char ellipsis), paramCount }`.
+- Failures are intentionally NOT logged via this path — failures already have their own logging paths upstream (driver error handlers, Sentry capture, etc.). This module flags _completed-but-slow_ queries only.
+
+Why instrument `client.unsafe` and not the tagged-template callable: drizzle-orm's postgres-js adapter routes every parameterized query through `client.unsafe(queryString, params)`. Tagged-template direct queries (`sql\`SELECT 1\``) are only used at boot (`bootstrap.ts` SELECT 1 probe) and during migrations — both outside the request critical path. The gap is documented and acceptable.
+
+Why a Proxy on Pending and not `await`-wrapping the unsafe call: postgres-js's Pending<T> is a chainable cursor object exposing `.cursor()`, `.execute()`, `.values()`, etc. drizzle awaits it directly today, but Proxy preserves the full Pending surface for any future code path that uses chained methods.
+
+### Wiring
+
+- `apps/server/src/db/client.ts` — `createDb(databaseUrl, opts?)` now accepts an optional `slowQueryLog` config and instruments the client when provided.
+- `apps/server/src/lib/config.ts` — added `slowQueryLogThresholdMs` (`z.coerce.number().int().positive().optional()`), read from `SLOW_QUERY_LOG_THRESHOLD_MS` env var.
+- `apps/server/src/lib/bootstrap.ts` — when `config.slowQueryLogThresholdMs` is set, passes through to `createDb` and logs a "slow-query log enabled" boot message with the threshold value.
+- `docs/deployment/env-vars.md` — documents the new env var in a dedicated "Slow-query log" subsection.
+
+### How verified
+
+New `apps/server/tests/unit/slow-query-log.test.ts` — 6 tests:
+
+1. Below-threshold query produces no log.
+2. Above-threshold query produces a structured log with all expected fields and the SQL preserved verbatim.
+3. SQL longer than `maxSqlLength` is truncated with a 1-char ellipsis (`'…'`).
+4. Non-`then` properties on the Pending are passed through (proxy passthrough — `readableMarker` symbol survives).
+5. Underlying query rejection still rejects the wrapped Pending; `warn` is NOT called for errors.
+6. `durationMs` is rounded to ≤2 decimals.
+
+- `npm run typecheck`: clean across all 5 workspaces.
+- `npm run lint`: clean (after a `Reflect.get` return type widening to `unknown`, an `instanceof Error` narrow in the test fake's reject path, and a `[fields, msg] as [SlowQueryLogFields, string]` cast at mock-call inspection points).
+- `npm run format:check`: clean.
+- `npm test`: 492/492 passing (was 486; +6 new).
+
+### Files added
+
+- `apps/server/src/lib/slow-query-log.ts`
+- `apps/server/tests/unit/slow-query-log.test.ts`
+
+### Files modified
+
+- `apps/server/src/db/client.ts` (accept slow-query opts)
+- `apps/server/src/lib/config.ts` (`slowQueryLogThresholdMs` + env read)
+- `apps/server/src/lib/bootstrap.ts` (wire instrumentation when threshold set, boot log differentiates enabled/disabled)
+- `docs/deployment/env-vars.md` (`SLOW_QUERY_LOG_THRESHOLD_MS` documented)
+
+### Next
+
+Continuing per never-stop rule.

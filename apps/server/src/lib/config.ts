@@ -10,6 +10,10 @@ const ConfigSchema = z.object({
   driver: z.enum(['mock', 'webkit']).default('mock'),
   mockNavigateLatencyMs: z.coerce.number().int().nonnegative().default(120),
   mockInteractLatencyMs: z.coerce.number().int().nonnegative().default(40),
+  // V-113: Slow-query log threshold. When set, queries at or above this
+  // duration emit a warn-level structured log via postgres-js client
+  // instrumentation. Unset = disabled (default for dev/test).
+  slowQueryLogThresholdMs: z.coerce.number().int().positive().optional(),
   // Cloudflare R2 — recordings durability + cross-device access. All
   // four required to enable R2; if any is missing, R2 is disabled and
   // the readiness probe skips the R2 check (logged at boot).
@@ -175,6 +179,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     driver: env.DRIVER,
     mockNavigateLatencyMs: env.MOCK_NAVIGATE_LATENCY_MS,
     mockInteractLatencyMs: env.MOCK_INTERACT_LATENCY_MS,
+    slowQueryLogThresholdMs: env.SLOW_QUERY_LOG_THRESHOLD_MS,
     r2: readR2Config(env),
     postmark: readPostmarkConfig(env),
     sentry: readSentryConfig(env),
