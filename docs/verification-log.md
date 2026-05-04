@@ -6406,3 +6406,36 @@ Two small fills for the V-099 customer-dashboard scaffolding: workspace README (
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-109 — docs/architecture.md V-099 + V-100 catch-up (Routine — documentation)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+V-087 fully synced architecture.md against V-079..V-086. V-099 (customer-dashboard workspace) and V-100 (admin force-actions) landed after that sync and weren't reflected in the architecture doc. Catch up.
+
+### What changed
+
+`docs/architecture.md`:
+
+- Header refresh-line updated to note V-109 catch-up additions.
+- Public API surfaces: `Admin` row extended to mention the V-100 force-actions (`/v1/admin/sessions/:id/destroy`, `/v1/admin/api-keys/:id/revoke`).
+- Layers section: `lib/` description includes `stripe-api` (V-088 hand-rolled HTTP client) which had been omitted in V-087.
+- New `### Workspaces beyond apps/server/` subsection: lists marketing-site (V-064+ + V-106 SEO), customer-dashboard (V-099 scaffolding + customer-dashboard-stack proposal cross-reference), gui-client, sdk-typescript (7 accessors as of V-101), sdk-python (same 7 accessors as of V-103), sdk-go, api-types.
+
+### How verified
+
+- `npm run format:check`: clean (after prettier formatting pass).
+
+### Files modified
+
+- `docs/architecture.md`
+
+### Next
+
+Continuing per never-stop rule.

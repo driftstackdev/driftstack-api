@@ -2,7 +2,7 @@
 
 > Living document. Reflects the state on the date noted below; updated alongside V-NNN entries that change system shape.
 
-**Last refresh:** 2026-05-03 (V-087 — full sync covering V-079 through V-086 additions). Prior baseline was Phase-1 minimal and significantly out of date.
+**Last refresh:** 2026-05-03 (V-087 full sync covering V-079..V-086; V-109 catch-up adding V-099 customer-dashboard workspace + V-100 admin force-actions). Prior baseline was Phase-1 minimal and significantly out of date.
 
 ## System shape
 
@@ -80,24 +80,34 @@
 - **Drivers** (`apps/server/src/drivers/`) — Abstraction over the WebKit substrate. Two implementations: `mock` (in-memory, deterministic, fast-forwardable latency) and `webkit` (real fork, scaffolded but not yet integrated — throws `DriverNotIntegratedError` until the fork hands off).
 - **DB layer** (`apps/server/src/db/`) — Drizzle ORM. `schema.ts` is the single TS source of truth; SQL migrations under `migrations/` apply via Drizzle's journal-driven migrator. In-memory test repos in `tests/integration/_helpers/` shadow the Drizzle implementations one-for-one.
 - **Middleware** (`apps/server/src/middleware/`) — `request-id`, `auth` (API key extraction → AccountContext), `rate-limit` (Redis token bucket per account+bucket), `error-handler` (RFC 7807 problem+json formatter).
-- **Lib** (`apps/server/src/lib/`) — Cross-cutting utilities: `config`, `logger` (Pino), `errors` (ApiError taxonomy), `api-keys` (scrypt + base32), `auth-tokens` (V-079 tokens + password hashing), `stripe-signing` (V-080 HMAC verification, no SDK dep), `webhook-signing` (outbound signature emission), `r2`, `sentry`, `redis-rate-limit-store` / `memory-rate-limit-store`.
+- **Lib** (`apps/server/src/lib/`) — Cross-cutting utilities: `config`, `logger` (Pino), `errors` (ApiError taxonomy), `api-keys` (scrypt + base32), `auth-tokens` (V-079 tokens + password hashing), `stripe-signing` (V-080 HMAC verification, no SDK dep), `stripe-api` (V-088 hand-rolled Stripe HTTP client), `webhook-signing` (outbound signature emission), `r2`, `sentry`, `redis-rate-limit-store` / `memory-rate-limit-store`.
 - **Schemas** (`apps/server/src/schemas/`) — Server-internal Zod shapes that aren't part of the public contract. Public-contract schemas live in `packages/api-types/`.
+
+### Workspaces beyond `apps/server/`
+
+- `apps/marketing-site/` — Astro static-build for `driftstack.dev` (V-064+). SEO basics in `public/robots.txt` + `@astrojs/sitemap` integration (V-106).
+- `apps/customer-dashboard/` — Astro static-build scaffolding for `app.driftstack.dev` (V-099). Sidebar + DashboardLayout + mock-data layer; sub-pages pending Tier 3 review per the customer-dashboard-stack proposal in `docs/architecture/customer-dashboard-stack.md` (PROPOSED).
+- `apps/gui-client/` — Tauri desktop client. Separate workstream.
+- `packages/sdk-typescript/` — `@driftstack/sdk` with 7 resource accessors as of V-101 (sessions / api-keys / usage / webhooks / profiles / billing / auth).
+- `packages/sdk-python/` — Python SDK; same 7 resource accessors as of V-103.
+- `packages/sdk-go/` — Go SDK (planned).
+- `packages/api-types/` — Public Zod schemas + inferred TS types. Single source of truth for the API contract.
 
 ## Public API surfaces
 
-| Surface            | Routes                                                                                                                                            | Auth                                    | Lands in        |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | --------------- |
-| Sessions           | `POST /v1/sessions`, navigate, interact, wait, capture, destroy, list                                                                             | Bearer API key                          | Phase 1+        |
-| API keys           | `POST /v1/api-keys`, `GET /v1/api-keys`, `DELETE /v1/api-keys/:id`                                                                                | Admin scope                             | Phase 2         |
-| Usage              | `GET /v1/usage`                                                                                                                                   | Bearer                                  | Phase 2         |
-| Profiles           | `POST/GET /v1/profiles`, `GET/PATCH/DELETE /v1/profiles/:id`                                                                                      | Bearer                                  | V-081           |
-| Auth flow          | `POST /v1/auth/{signup,verify-email,login,magic-link/{request,consume},password-reset/{request,confirm},refresh,logout}`                          | **Public**                              | V-079           |
-| Billing            | `POST /v1/billing/{checkout-session,trial-pack,portal-session}`, `GET /v1/billing`                                                                | Bearer                                  | V-082           |
-| Outbound webhooks  | `POST/GET /v1/webhooks`, `DELETE /v1/webhooks/:id`, `GET /v1/webhooks/:id/deliveries`                                                             | Bearer (admin scope)                    | Phase 5         |
-| Inbound Stripe     | `POST /v1/webhooks/stripe`                                                                                                                        | **Stripe-Signature header IS the auth** | V-080           |
-| Admin              | `GET/POST /v1/admin/accounts/{,:id,:id/{tier,suspend,unsuspend,usage,quota-override}}`, `/v1/admin/webhook-deliveries/...`, `/v1/admin/audit-log` | Bearer (admin scope)                    | Phase 5 + V-083 |
-| Legal              | `GET /v1/legal/{documents,required}`, `POST /v1/legal/accept`                                                                                     | Bearer                                  | V-046+          |
-| Health / readiness | `GET /health`, `GET /ready`, `GET /openapi.json`, `GET /docs`                                                                                     | **Public**                              | Phase 1         |
+| Surface            | Routes                                                                                                                                                                                                                         | Auth                                    | Lands in                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- | ----------------------- |
+| Sessions           | `POST /v1/sessions`, navigate, interact, wait, capture, destroy, list                                                                                                                                                          | Bearer API key                          | Phase 1+                |
+| API keys           | `POST /v1/api-keys`, `GET /v1/api-keys`, `DELETE /v1/api-keys/:id`                                                                                                                                                             | Admin scope                             | Phase 2                 |
+| Usage              | `GET /v1/usage`                                                                                                                                                                                                                | Bearer                                  | Phase 2                 |
+| Profiles           | `POST/GET /v1/profiles`, `GET/PATCH/DELETE /v1/profiles/:id`                                                                                                                                                                   | Bearer                                  | V-081                   |
+| Auth flow          | `POST /v1/auth/{signup,verify-email,login,magic-link/{request,consume},password-reset/{request,confirm},refresh,logout}`                                                                                                       | **Public**                              | V-079                   |
+| Billing            | `POST /v1/billing/{checkout-session,trial-pack,portal-session}`, `GET /v1/billing`                                                                                                                                             | Bearer                                  | V-082                   |
+| Outbound webhooks  | `POST/GET /v1/webhooks`, `DELETE /v1/webhooks/:id`, `GET /v1/webhooks/:id/deliveries`                                                                                                                                          | Bearer (admin scope)                    | Phase 5                 |
+| Inbound Stripe     | `POST /v1/webhooks/stripe`                                                                                                                                                                                                     | **Stripe-Signature header IS the auth** | V-080                   |
+| Admin              | `GET/POST /v1/admin/accounts/{,:id,:id/{tier,suspend,unsuspend,usage,quota-override}}`, `/v1/admin/webhook-deliveries/...`, `/v1/admin/audit-log`, `POST /v1/admin/sessions/:id/destroy`, `POST /v1/admin/api-keys/:id/revoke` | Bearer (admin scope)                    | Phase 5 + V-083 + V-100 |
+| Legal              | `GET /v1/legal/{documents,required}`, `POST /v1/legal/accept`                                                                                                                                                                  | Bearer                                  | V-046+                  |
+| Health / readiness | `GET /health`, `GET /ready`, `GET /openapi.json`, `GET /docs`                                                                                                                                                                  | **Public**                              | Phase 1                 |
 
 ## Auth model
 
