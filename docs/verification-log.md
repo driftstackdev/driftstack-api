@@ -8259,3 +8259,40 @@ Same conceptual surface, different model layer. Mapping happens at the route han
 ### Next
 
 Continuing per never-stop rule. PRIORITY 8: SDK examples expansion — Python pagination example (parallel to V-122 TS).
+
+---
+
+## V-145 — Python SDK pagination example (parallel to V-122 TS)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder overnight directive PRIORITY 8. Mirror the TS V-122 pagination example for the Python SDK so developers landing in either language find the same pattern documented.
+
+### What changed
+
+`packages/sdk-python/examples/pagination.py` (new):
+
+- Sync sections demonstrating `client.sessions.iterate(limit=50)`, `client.profiles.iterate()`, and `client.webhooks.iterate_deliveries(id, limit=100, status='dlq')` — the three iterator surfaces V-126 added.
+- Async section demonstrating `async for ... in aclient.sessions.iterate(...)` so consumers see both `Driftstack` (sync) and `AsyncDriftstack` (async) usage in one file.
+- Notes inline that profiles still return raw dicts (untyped pending codegen pass) and the iterator handles both attribute-style + dict-style page shapes via duck typing — same point I documented in V-126's pagination.py docstring.
+- Style matches existing `quickstart.py` etc.: argv-light env-var-driven, descriptive prints, exit code 1 on missing env.
+
+### How verified
+
+- `ruff check examples/pagination.py`: clean.
+- `ruff format --check examples/pagination.py`: clean (after `ruff format` collapsed a multiline iterate_deliveries call).
+- Python AST parse: clean (`python -c "import ast; ast.parse(open('examples/pagination.py').read())"`).
+
+NOT executed live — would require a real account + API key. Compile + AST + ruff is the strongest verification absent a sandbox account.
+
+### Files added
+
+- `packages/sdk-python/examples/pagination.py`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 9 next: founder action queue doc.
