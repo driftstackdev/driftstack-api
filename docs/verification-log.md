@@ -8577,3 +8577,35 @@ Doc-comment notes the same pattern applies 1:1 to webhook deliveries (`client.We
 ### Next
 
 Continuing per never-stop rule. PRIORITY 12 ongoing.
+
+---
+
+## V-152 — Founder action queue: engineering-side updates for V-149 + V-142 + D-035/D-036
+
+### Date
+
+2026-05-05
+
+### Goal
+
+`docs/founder-action-queue.md` engineering-side section was last updated through V-144 (webhook-delivery stub). Three subsequent items belong on the visibility list:
+
+- **V-149 webrtc-streaming stub → real implementation**: pattern matches V-144 entry; future Phase 3+ work.
+- **V-142 multi-seat schema → wire-up**: forward-looking design landed in `docs/architecture/team-roles-taxonomy.md`; `/v1/team/*` endpoints depend on the migration.
+- **D-035 + D-036 long-form ADRs**: low-priority; V-log + decisions.md already carry the empirical detail. Marked low priority because most ADRs were written for architectural _deviations_; D-035/D-036 are extensions.
+
+### What changed
+
+`docs/founder-action-queue.md`:
+
+- Added 3 entries under "Engineering-side action queue (not founder's)".
+
+No code changes; doc-only. No verify-chain run needed (markdown + format:check via lint-staged).
+
+### Files modified
+
+- `docs/founder-action-queue.md`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 12 ongoing.
