@@ -22,8 +22,14 @@ services:
     env_file:
       .env # populated by the deploy pipeline from
       #   DEPLOY_DOTENV_BASE64. Contains DATABASE_URL, REDIS_URL,
-      #   R2_*, POSTMARK_*, SENTRY_DSN, STRIPE_*, COINBASE_COMMERCE_*,
-      #   per the Workstream A locked sub-processor list.
+      #   R2_*, POSTMARK_*, SENTRY_DSN, STRIPE_*, per the Workstream A
+      #   locked sub-processor list.
+      #
+      # Crypto payment processor deferred to post-launch (ADR-002).
+      # Coinbase Commerce dropped 2026-05-03 for non-US/Singapore
+      # merchants. Alternative processor selection + env vars will land
+      # when the crypto rail re-evaluates against actual transaction
+      # volume. Stripe is sole launch payment rail (fiat-only).
     environment:
       NODE_ENV: production
       PORT: 7780

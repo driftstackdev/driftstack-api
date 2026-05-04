@@ -7194,3 +7194,38 @@ The SDK doesn't cache `subtle.importKey` per (secret) value across calls. Cachin
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-125 — Coinbase doc-rot strip in Hetzner compose comment (Routine — hygiene)
+
+### Date
+
+2026-05-04
+
+### Goal
+
+V-112 surfaced doc rot at `infra/hetzner/docker-compose.yml:25` — the env-file comment still listed `COINBASE_COMMERCE_*` after Coinbase Commerce was dropped 2026-05-03 (CLAUDE.md Crypto-rail-dropped-from-launch note). Founder direction is NOT to strip + leave nothing — crypto rail is **deferred** to post-launch per ADR-002, not abandoned. Pre-naming env vars for an unselected processor would just create the same kind of doc rot when a different processor lands.
+
+### What changed
+
+`infra/hetzner/docker-compose.yml:23-31`: removed the trailing `COINBASE_COMMERCE_*,` token from the env-var enumeration comment. Added a follow-up note explaining the post-launch deferral — that crypto-processor env vars will land when the rail re-evaluates, that Stripe is the sole fiat launch rail, and pointing at ADR-002 for the underlying decision.
+
+### Repo-wide rescan
+
+`grep -rIn 'COINBASE\\|coinbase'` across `*.ts | *.md | *.yml | *.yaml | *.json` (excluding verification-log historical entries + memory files): zero remaining references. The env-var doc + the verification log entries are now the only places where the Coinbase-Commerce decision history surfaces, and both are appropriately preserved.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (compose comment is yaml — prettier doesn't reformat).
+- `npm test`: 515/515 passing.
+
+### Files modified
+
+- `infra/hetzner/docker-compose.yml`
+
+### Next
+
+Continuing per never-stop rule. Founder priority order: Python SDK iterate() helpers next.
