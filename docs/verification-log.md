@@ -6375,3 +6375,34 @@ Current coverage on the new include scope is 87.05 / 79.89 / 85.46 / 87.05, so t
 ### Next
 
 Continuing per never-stop rule.
+
+---
+
+## V-108 — customer-dashboard README + 404 page (Routine — scaffolding fill)
+
+### Date
+
+2026-05-03
+
+### Goal
+
+Two small fills for the V-099 customer-dashboard scaffolding: workspace README (stack / local dev / layout / auth / deploy) + 404.astro using DashboardLayout with no sidebar.
+
+### What changed
+
+- New `apps/customer-dashboard/README.md` — mirrors apps/marketing-site README pattern.
+- New `apps/customer-dashboard/src/pages/404.astro` — DashboardLayout with `withSidebar: false`, oxblood "404" eyebrow, "Back to dashboard" CTA.
+
+### How verified
+
+- `npm run typecheck --workspace apps/customer-dashboard`: 6 files, 0 errors.
+- `npm run format:check`: clean.
+
+### Files added
+
+- `apps/customer-dashboard/README.md`
+- `apps/customer-dashboard/src/pages/404.astro`
+
+### Next
+
+Continuing per never-stop rule.
