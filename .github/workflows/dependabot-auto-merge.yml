@@ -1,0 +1,70 @@
+# V-148 — Dependabot auto-merge for patch updates.
+#
+# Auto-approves + auto-merges Dependabot PRs that:
+#   - Are PATCH version bumps (not minor / not major)
+#   - Pass the existing CI suite (the workflow can't merge until checks
+#     pass; GitHub enforces branch protection)
+#
+# Why patch-only auto-merge:
+#   - Patch bumps are by SemVer convention bug-fix only — low blast radius.
+#   - Minor bumps occasionally introduce subtle behavior changes (Sentry
+#     SDK 8.x → 8.1.0 changed default sample rate semantics, etc.). Worth a
+#     human eye.
+#   - Major bumps are always API-breaking; never auto-merge.
+#
+# Why a workflow + not Dependabot's built-in auto-merge:
+#   - Dependabot's auto-merge config triggers AS SOON AS a PR is opened,
+#     before CI completes. Branch protection rules would block the merge,
+#     but the PR sits in a confusing "merged on green" state.
+#   - The workflow approach reads the Dependabot metadata + waits for
+#     CI to pass + then enables GitHub's PR auto-merge feature, which is
+#     a cleaner state machine.
+#
+# Activation: requires `gh` CLI auth (provided automatically by the
+# GitHub Actions environment via GITHUB_TOKEN with the right scopes).
+# Repo settings → "Allow auto-merge" must be enabled for the auto-merge
+# call to succeed; if disabled the workflow logs a clear error and the PR
+# stays open for manual review.
+
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  dependabot:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: '${{ secrets.GITHUB_TOKEN }}'
+
+      - name: Approve patch bumps
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for patch bumps
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment on minor / major bumps
+        if: steps.metadata.outputs.update-type != 'version-update:semver-patch'
+        run: |
+          gh pr comment "$PR_URL" --body "Dependabot bump type: \`${{ steps.metadata.outputs.update-type }}\`. Auto-merge applies to patch bumps only — this needs manual review."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

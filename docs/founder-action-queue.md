@@ -88,6 +88,16 @@ the founder needs to do.
   `docs/deployment/env-vars.md`, base64-encode it, and add as the
   GitHub repo secret `DEPLOY_DOTENV_BASE64` (per environment).
 
+### Allow auto-merge in repo settings (V-148)
+
+- **Status:** PENDING
+- **Blocks:** V-148 Dependabot patch-only auto-merge workflow taking
+  effect. Workflow degrades gracefully if disabled (logs clear error,
+  PR stays open for manual merge) but auto-merge is the whole point.
+- **Action:** Repo settings → General → "Allow auto-merge" → enable.
+  One-click.
+- **Reference:** `.github/workflows/dependabot-auto-merge.yml` (V-148).
+
 ---
 
 ## Stripe (ADR-002)
