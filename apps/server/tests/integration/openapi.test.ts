@@ -37,6 +37,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/admin/api-keys',
         '/v1/admin/audit-log',
         '/v1/admin/overview',
+        '/v1/admin/rate-limit-overrides',
         '/v1/admin/sessions',
         '/v1/admin/webhook-deliveries/{id}',
         '/v1/admin/webhook-deliveries/{id}/replay',

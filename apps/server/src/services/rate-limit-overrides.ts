@@ -47,6 +47,18 @@ export interface RateLimitOverridesRepo {
   upsert(input: SetOverrideInput): Promise<RateLimitOverrideRecord>;
   /** Returns true if a row was deleted, false if no override existed. */
   clear(accountId: string, bucketKey: string): Promise<boolean>;
+  /**
+   * Cross-account list for admin tooling. Filters by accountId
+   * optionally; supports cursor pagination by createdAt DESC. Optional
+   * `includeExpired` (default false) — when false, only overrides
+   * whose expiresAt is in the future are returned.
+   */
+  listAll(opts: {
+    limit: number;
+    cursor?: string;
+    accountId?: string;
+    includeExpired?: boolean;
+  }): Promise<{ items: RateLimitOverrideRecord[]; nextCursor: string | null }>;
 }
 
 const MIN_REFILL = 0.01; // matches centi quantum
@@ -106,6 +118,14 @@ export class RateLimitOverridesService {
       );
     }
     await this.invalidateCache(accountId);
+  }
+
+  async listAll(
+    ctx: AccountContext,
+    opts: { limit: number; cursor?: string; accountId?: string; includeExpired?: boolean },
+  ): Promise<{ items: RateLimitOverrideRecord[]; nextCursor: string | null }> {
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    return this.repo.listAll(opts);
   }
 
   private async invalidateCache(accountId: string): Promise<void> {

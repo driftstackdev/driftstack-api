@@ -1,6 +1,14 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
 
+// V-194 — progressive-enhancement against /v1/admin/rate-limit-
+// overrides (new in V-194). SSG renders a placeholder mock; an inline
+// <script> fetches with bearer auth, replaces the list, and wires
+// Clear-now (DELETE) action against /v1/admin/accounts/:id/quota-
+// override?bucket_key=<bucket>. New override / Extend require a target
+// account first — surfaced as deep-links into the per-account detail
+// page rather than re-implementing the form here.
+
 interface MockOverride {
   id: string;
   accountId: string;
@@ -39,10 +47,19 @@ function fmtIso(iso: string | null): string {
   if (iso === null) return 'permanent';
   return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 ---
 
 <AdminLayout title="Rate-limit overrides">
-  <div class="mx-auto max-w-6xl px-6 py-10">
+  <div class="mx-auto max-w-6xl px-6 py-10" data-page="admin-overrides">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
         <h1 class="text-3xl font-semibold tracking-tight text-slate-900">
@@ -52,95 +69,83 @@ function fmtIso(iso: string | null): string {
           Per-account bucket overrides that supersede the tier defaults. Used
           for time-boxed capacity bumps during migrations + production
           incidents. All overrides are auditable + auto-expire if a TTL is
-          set.
+          set. To set a new override, open the per-account page (Accounts →
+          select account).
         </p>
       </div>
-      <a href="#new" class="btn-primary shrink-0">New override</a>
     </header>
 
     <!-- Filter -->
     <div class="mb-6 flex flex-wrap items-center gap-3">
       <input
         type="search"
-        placeholder="Filter by account email or reason…"
+        data-field="account-id"
+        placeholder="Account id (acc_<uuid>)"
         class="w-72 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
       />
       <label class="flex items-center gap-2 text-sm text-slate-600">
-        <input type="checkbox" class="rounded" />
-        Hide expired
+        <input type="checkbox" data-field="include-expired" class="rounded" />
+        Include expired
       </label>
     </div>
 
-    {
-      MOCK_OVERRIDES.length === 0 ? (
-        <div class="dashboard-card text-center">
-          <h2 class="text-lg font-semibold text-slate-900">No active overrides</h2>
-          <p class="mx-auto mt-2 max-w-prose text-sm text-slate-500">
-            All accounts are running on tier defaults. New overrides time-box
-            best (default 14 days) so cleanup happens automatically.
-          </p>
-        </div>
-      ) : (
-        <ul class="space-y-3">
-          {MOCK_OVERRIDES.map((override) => (
-            <li class="dashboard-card">
-              <div class="flex items-start justify-between gap-6">
-                <div class="min-w-0">
-                  <div class="flex items-center gap-3">
-                    <p class="text-base font-medium text-slate-900">
-                      {override.accountEmail}
-                    </p>
-                    <span class="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-blue-700">
-                      {BUCKET_LABEL[override.bucketKey] ?? override.bucketKey}
-                    </span>
+    <div data-region="empty" class="hidden">
+      <div class="dashboard-card text-center">
+        <h2 class="text-lg font-semibold text-slate-900">No overrides</h2>
+        <p class="mx-auto mt-2 max-w-prose text-sm text-slate-500">
+          No active overrides match the current filter. New overrides default
+          to a 14-day TTL via the per-account page.
+        </p>
+      </div>
+    </div>
+
+    <ul class="space-y-3" data-list="overrides">
+      {
+        MOCK_OVERRIDES.map((override) => (
+          <li class="dashboard-card">
+            <div class="flex items-start justify-between gap-6">
+              <div class="min-w-0">
+                <div class="flex items-center gap-3">
+                  <p class="text-base font-medium text-slate-900">{override.accountEmail}</p>
+                  <span class="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-blue-700">
+                    {BUCKET_LABEL[override.bucketKey] ?? override.bucketKey}
+                  </span>
+                </div>
+                <p class="mt-1 font-mono text-[11px] text-slate-500">{override.accountId}</p>
+                <p class="mt-3 text-sm text-slate-700">{override.reason}</p>
+                <dl class="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                  <div>
+                    <dt class="text-slate-500">Capacity</dt>
+                    <dd class="font-mono text-slate-900">
+                      {override.capacity.toLocaleString('en-US')}
+                    </dd>
                   </div>
-                  <p class="mt-1 font-mono text-[11px] text-slate-500">
-                    {override.accountId}
-                  </p>
-                  <p class="mt-3 text-sm text-slate-700">{override.reason}</p>
-                  <dl class="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs">
-                    <div>
-                      <dt class="text-slate-500">Capacity</dt>
-                      <dd class="font-mono text-slate-900">
-                        {override.capacity.toLocaleString('en-US')}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt class="text-slate-500">Refill / sec</dt>
-                      <dd class="font-mono text-slate-900">{override.refillPerSecond}</dd>
-                    </div>
-                    <div>
-                      <dt class="text-slate-500">Expires</dt>
-                      <dd class="font-mono text-slate-900">
-                        {fmtIso(override.expiresAt)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt class="text-slate-500">Set by</dt>
-                      <dd class="font-mono text-slate-900">{override.createdBy}</dd>
-                    </div>
-                  </dl>
-                </div>
-                <div class="flex shrink-0 flex-col gap-2">
-                  <a
-                    href={`#extend-${override.id}`}
-                    class="text-sm text-oxblood-700 hover:underline"
-                  >
-                    Extend
-                  </a>
-                  <a
-                    href={`#clear-${override.id}`}
-                    class="text-sm text-red-700 hover:underline"
-                  >
-                    Clear now
-                  </a>
-                </div>
+                  <div>
+                    <dt class="text-slate-500">Refill / sec</dt>
+                    <dd class="font-mono text-slate-900">{override.refillPerSecond}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-slate-500">Expires</dt>
+                    <dd class="font-mono text-slate-900">{fmtIso(override.expiresAt)}</dd>
+                  </div>
+                </dl>
               </div>
-            </li>
-          ))}
-        </ul>
-      )
-    }
+              <div class="flex shrink-0 flex-col gap-2">
+                <button
+                  type="button"
+                  data-action="clear"
+                  data-account-id={override.accountId}
+                  data-bucket-key={override.bucketKey}
+                  class="text-sm text-red-700 hover:underline"
+                >
+                  Clear now
+                </button>
+              </div>
+            </div>
+          </li>
+        ))
+      }
+    </ul>
 
     <p class="mt-8 text-xs text-slate-500">
       New overrides default to 14-day TTL. Permanent overrides allowed but
@@ -149,4 +154,198 @@ function fmtIso(iso: string | null): string {
       only), <code class="font-mono">capture</code> (screenshot/DOM/PDF only).
     </p>
   </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="admin-overrides"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const list = root.querySelector('[data-list="overrides"]');
+      const emptyRegion = root.querySelector('[data-region="empty"]');
+      const accountIdEl = root.querySelector('[data-field="account-id"]');
+      const includeExpiredEl = root.querySelector('[data-field="include-expired"]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      const BUCKET_LABEL = {
+        global: 'Global',
+        session_create: 'Session create',
+        capture: 'Capture',
+      };
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+      function hideBanner() {
+        if (!banner) return;
+        banner.classList.add('hidden');
+      }
+      function escapeHtml(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c],
+        );
+      }
+      function fmtIso(iso) {
+        if (!iso) return 'permanent';
+        return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+
+      function rowHtml(o) {
+        const bucketLabel = BUCKET_LABEL[o.bucket_key] || o.bucket_key;
+        const reasonFrag = o.reason
+          ? '<p class="mt-3 text-sm text-slate-700">' + escapeHtml(o.reason) + '</p>'
+          : '';
+        return (
+          '<li class="dashboard-card">' +
+          '<div class="flex items-start justify-between gap-6">' +
+          '<div class="min-w-0">' +
+          '<div class="flex items-center gap-3">' +
+          '<p class="font-mono text-[11px] text-slate-500">' +
+          escapeHtml(o.account_id) +
+          '</p>' +
+          '<span class="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-blue-700">' +
+          escapeHtml(bucketLabel) +
+          '</span></div>' +
+          reasonFrag +
+          '<dl class="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs">' +
+          '<div><dt class="text-slate-500">Capacity</dt><dd class="font-mono text-slate-900">' +
+          escapeHtml(String(o.capacity)) +
+          '</dd></div>' +
+          '<div><dt class="text-slate-500">Refill / sec</dt><dd class="font-mono text-slate-900">' +
+          escapeHtml(String(o.refill_per_second)) +
+          '</dd></div>' +
+          '<div><dt class="text-slate-500">Expires</dt><dd class="font-mono text-slate-900">' +
+          escapeHtml(fmtIso(o.expires_at)) +
+          '</dd></div>' +
+          '</dl></div>' +
+          '<div class="flex shrink-0 flex-col gap-2">' +
+          '<button type="button" data-action="clear" data-account-id="' +
+          escapeHtml(o.account_id) +
+          '" data-bucket-key="' +
+          escapeHtml(o.bucket_key) +
+          '" class="text-sm text-red-700 hover:underline">Clear now</button>' +
+          '</div></div></li>'
+        );
+      }
+
+      function buildQuery() {
+        const params = new URLSearchParams();
+        params.set('limit', '50');
+        if (accountIdEl && accountIdEl.value.trim())
+          params.set('account_id', accountIdEl.value.trim());
+        if (includeExpiredEl && includeExpiredEl.checked)
+          params.set('include_expired', 'true');
+        return params;
+      }
+
+      let inFlight = 0;
+      function load() {
+        if (!token) return;
+        const myReq = ++inFlight;
+        const params = buildQuery();
+        fetch(apiBaseUrl + '/v1/admin/rate-limit-overrides?' + params.toString(), {
+          headers: { authorization: 'Bearer ' + token },
+          credentials: 'include',
+        })
+          .then((r) => {
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then((body) => {
+            if (myReq !== inFlight) return;
+            const rows = body.data || [];
+            if (rows.length === 0) {
+              if (list) list.classList.add('hidden');
+              if (emptyRegion) emptyRegion.classList.remove('hidden');
+            } else {
+              if (list) {
+                list.classList.remove('hidden');
+                list.innerHTML = rows.map(rowHtml).join('');
+              }
+              if (emptyRegion) emptyRegion.classList.add('hidden');
+            }
+            hideBanner();
+          })
+          .catch((err) => {
+            if (myReq !== inFlight) return;
+            const msg = err && err.message ? err.message : 'network error';
+            if (msg === 'forbidden') {
+              showBanner(
+                'Access denied — admin scope required. You are signed in as a customer account.',
+              );
+            } else {
+              showBanner("Couldn't load overrides (" + msg + '). Showing preview data below.');
+            }
+          });
+      }
+
+      function clear(prefixedAccountId, bucketKey) {
+        if (!token) return;
+        const proceed = window.confirm(
+          'Clear the ' + bucketKey + ' override for ' + prefixedAccountId + '?',
+        );
+        if (!proceed) return;
+        showBanner('Clearing override…');
+        fetch(
+          apiBaseUrl +
+            '/v1/admin/accounts/' +
+            encodeURIComponent(prefixedAccountId) +
+            '/quota-override?bucket_key=' +
+            encodeURIComponent(bucketKey),
+          {
+            method: 'DELETE',
+            headers: { authorization: 'Bearer ' + token },
+            credentials: 'include',
+          },
+        )
+          .then((r) => {
+            if (r.status === 204 || r.ok) return null;
+            return Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then(() => {
+            showBanner('Override cleared. Refreshing…');
+            load();
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't clear (" + msg + ').');
+          });
+      }
+
+      root.addEventListener('click', (ev) => {
+        const target = ev.target;
+        if (!target || !target.closest) return;
+        const btn = target.closest('[data-action="clear"]');
+        if (!btn) return;
+        ev.preventDefault();
+        const accountId = btn.getAttribute('data-account-id');
+        const bucketKey = btn.getAttribute('data-bucket-key');
+        if (accountId && bucketKey) clear(accountId, bucketKey);
+      });
+
+      let debounce = 0;
+      function scheduleLoad() {
+        clearTimeout(debounce);
+        debounce = setTimeout(load, 200);
+      }
+      if (accountIdEl) accountIdEl.addEventListener('input', scheduleLoad);
+      if (includeExpiredEl) includeExpiredEl.addEventListener('change', scheduleLoad);
+
+      if (!token) {
+        showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+        return;
+      }
+
+      load();
+    })();
+  </script>
 </AdminLayout>

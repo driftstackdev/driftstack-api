@@ -54,4 +54,26 @@ export class InMemoryRateLimitOverridesRepo implements RateLimitOverridesRepo {
   getAll(): RateLimitOverrideRecord[] {
     return Array.from(this.rows.values());
   }
+
+  listAll(opts: {
+    limit: number;
+    cursor?: string;
+    accountId?: string;
+    includeExpired?: boolean;
+  }): Promise<{ items: RateLimitOverrideRecord[]; nextCursor: string | null }> {
+    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
+    const now = new Date();
+    const all = Array.from(this.rows.values())
+      .filter((r) => (opts.accountId ? r.accountId === opts.accountId : true))
+      .filter((r) => (opts.includeExpired ? true : r.expiresAt > now))
+      .filter((r) => (cursorDate ? r.createdAt < cursorDate : true))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const items = all.slice(0, opts.limit);
+    const last = items[items.length - 1];
+    const hasMore = all.length > opts.limit;
+    return Promise.resolve({
+      items,
+      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+    });
+  }
 }

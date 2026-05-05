@@ -592,6 +592,33 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // Cross-account rate-limit overrides list (admin)
+  const ListAdminOverridesQueryOpenApi = z.object({
+    limit: z.number().int().min(1).max(100).optional(),
+    cursor: z.string().optional(),
+    account_id: z.string().optional(),
+    include_expired: z.enum(['true', 'false']).optional(),
+  });
+  const PaginatedAdminOverridesSchema = z.object({
+    data: z.array(QuotaOverrideResponseSchema),
+    next_cursor: z.string().nullable(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/rate-limit-overrides',
+    summary: 'Cross-account rate-limit override list (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: { query: ListAdminOverridesQueryOpenApi },
+    responses: {
+      200: {
+        description: 'Paginated cross-account rate-limit overrides.',
+        content: { 'application/json': { schema: PaginatedAdminOverridesSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+
   // Cross-account API keys list (admin)
   const ListAdminApiKeysQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),

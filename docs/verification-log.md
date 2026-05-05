@@ -11014,3 +11014,63 @@ PRIORITY C phase 7 — admin /api-keys was 100% mock; staff couldn't see live ke
 ### Next
 
 V-194 — admin /rate-limit-overrides cross-account list endpoint + page wiring (mirror of V-192/V-193 pattern; /leads page stays mock — no leads infra).
+
+## V-194 — admin /rate-limit-overrides cross-account list + page wiring (PRIORITY C phase 8)
+
+### What
+
+Built `GET /v1/admin/rate-limit-overrides` cross-account list endpoint and wired the admin /rate-limit-overrides dashboard page against it:
+
+1. Endpoint: paginated list of `rate_limit_overrides` rows with optional `account_id` and `include_expired` filters. Default behaviour excludes expired overrides (which the worker hasn't yet swept).
+2. `RateLimitOverridesRepo.listAll` + `RateLimitOverridesService.listAll` — admin-scope-gated cross-account list (same pattern as V-192/V-193).
+3. Drizzle and in-memory implementations.
+4. OpenAPI registration + 3 integration tests (active list, expired exclusion, 403 without admin scope).
+5. Dashboard wiring — `apps/admin-panel/src/pages/rate-limit-overrides.astro` fetches live + filters by account_id text input + Include-expired checkbox; Clear-now button DELETEs against existing `/v1/admin/accounts/:id/quota-override?bucket_key=<bucket>` with confirm prompt.
+
+### Why
+
+PRIORITY C phase 8 — closes the third (and final) cross-account list-surface gap from the admin panel. With V-192/V-193/V-194 the panel now reads real per-page data for sessions, api-keys, and rate-limit overrides; the only remaining mock-only admin page is /leads (no leads infra; documented as out-of-scope until a leads table lands).
+
+### Files
+
+- `apps/server/src/services/rate-limit-overrides.ts` — adds `listAll` to repo + service.
+- `apps/server/src/db/rate-limit-overrides-repo.ts` — Drizzle filter composition with `gt(expiresAt, now())` excluding expired by default.
+- `apps/server/tests/integration/_helpers/in-memory-rate-limit-overrides-repo.ts` — in-memory variant.
+- `apps/server/src/routes/admin-rate-limit-overrides.ts` — new route file with `publicOverride` projection.
+- `apps/server/src/lib/app.ts` — register call.
+- `apps/server/src/lib/openapi.ts` — `/v1/admin/rate-limit-overrides` registration with reused `QuotaOverrideResponseSchema`.
+- `apps/server/tests/integration/openapi.test.ts` — added path (64 → 65).
+- `apps/server/tests/integration/admin-rate-limit-overrides-list.test.ts` — 3 tests.
+- `apps/admin-panel/src/pages/rate-limit-overrides.astro` — full progressive-enhancement rewrite. New override / Extend dropped (require target account first; staff start from /accounts → detail page). Clear-now wired via existing DELETE endpoint.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 637 / 637 passing across 65 files.
+
+### Notes
+
+- "New override" and "Extend" buttons present on the mock are removed from the live view because both actions require selecting a target account first. Staff are now directed to start from /accounts → select → use the per-account detail surface for setting overrides; this avoids re-implementing a duplicate form on this page. Add as a follow-up Tier 3 visual surface if staff find the redirect awkward in practice.
+- Default behaviour excludes expired rows — the worker hasn't yet swept them but they're functionally inactive. Toggle Include-expired to surface them when investigating "why was this account capped at X?" history.
+- Reason field displays as a paragraph block under the bucket label. Empty reasons render no block.
+- The integration test for expired exclusion uses a 1-second TTL + `await new Promise((r) => setTimeout(r, 1100))` to wait past the deadline rather than mocking the clock — keeps the test honest at the cost of ~1.3s wall time. Acceptable for one test.
+
+### PRIORITY C status
+
+Eight admin-panel pages now read live data:
+
+- /accounts list (V-187), /accounts/[id] detail + actions (V-191)
+- /audit-log (V-188)
+- /webhook-dlq + Requeue (V-189)
+- index overview tiles + recent activity (V-190, with new /v1/admin/overview endpoint)
+- /sessions cross-account + force-destroy (V-192, with new /v1/admin/sessions endpoint)
+- /api-keys cross-account + revoke (V-193, with new /v1/admin/api-keys endpoint)
+- /rate-limit-overrides cross-account + clear (V-194, with new /v1/admin/rate-limit-overrides endpoint)
+
+Remaining mock-only admin page: /leads (no leads infra — documented as out-of-scope).
+
+### Next
+
+V-195 — PRIORITY D phase 1: production-readiness sweep (health checks, rate-limit override admin enrich, Stripe webhook signature e2e test, DB migration rehearsal docs, DR runbook).

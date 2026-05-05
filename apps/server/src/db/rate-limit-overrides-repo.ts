@@ -1,7 +1,7 @@
 // Drizzle-backed RateLimitOverridesRepo. Upsert by (account_id,
 // bucket_key) — re-setting the same bucket replaces the prior override.
 
-import { and, eq } from 'drizzle-orm';
+import { type SQL, and, desc, eq, gt, lt } from 'drizzle-orm';
 import type {
   RateLimitOverrideRecord,
   RateLimitOverridesRepo,
@@ -53,6 +53,35 @@ export class DrizzleRateLimitOverridesRepo implements RateLimitOverridesRepo {
       )
       .returning({ id: rateLimitOverrides.id });
     return result.length > 0;
+  }
+
+  async listAll(opts: {
+    limit: number;
+    cursor?: string;
+    accountId?: string;
+    includeExpired?: boolean;
+  }): Promise<{ items: RateLimitOverrideRecord[]; nextCursor: string | null }> {
+    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
+    const filters: SQL[] = [];
+    if (cursorDate) filters.push(lt(rateLimitOverrides.createdAt, cursorDate));
+    if (opts.accountId) filters.push(eq(rateLimitOverrides.accountId, opts.accountId));
+    if (!opts.includeExpired) filters.push(gt(rateLimitOverrides.expiresAt, new Date()));
+    const whereClause = filters.length === 0 ? undefined : and(...filters);
+
+    const rows = await this.database.db
+      .select()
+      .from(rateLimitOverrides)
+      .where(whereClause)
+      .orderBy(desc(rateLimitOverrides.createdAt))
+      .limit(opts.limit + 1);
+
+    const hasMore = rows.length > opts.limit;
+    const items = hasMore ? rows.slice(0, opts.limit) : rows;
+    const last = items[items.length - 1];
+    return {
+      items: items.map(toRecord),
+      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+    };
   }
 }
 
