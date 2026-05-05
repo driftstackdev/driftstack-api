@@ -12305,3 +12305,57 @@ GENERATE-5. Three problems addressed: (a) SDK consumers couldn't read the same c
 ### Next
 
 V-220 — API versioning strategy doc (GENERATE-7, ~1hr Tier 1).
+
+> **HOLD + RENUMBER** received from founder: V-219\* (Tier 3 visual-consistency cycle) inserts ahead of GENERATE queue. V-219 (per-tier rate-limit policy) already landed at `df102f0` before the redirect arrived; V-log keeps that number (append-only). GENERATE entries renumber going forward: V-220 = API versioning doc, V-221 = CDN strategy, V-222 = architecture cross-references audit. The api-versioning.md draft I'd started before the redirect is held uncommitted in working tree and lands at V-220 when the queue resumes.
+
+## V-219\* — customer-dashboard + admin-panel visual-consistency audit (PHASE 1)
+
+### What
+
+PHASE 1 of the V-219\* Tier 3 visual-consistency cycle: walked the customer-dashboard + admin-panel surfaces against the marketing-site reference design tokens, captured gaps, surfaced PHASE 2 redline candidates. Pure audit doc; no code changes.
+
+Audit findings at `docs/marketing/dashboard-admin-visual-audit.md`:
+
+- **Token-level alignment already done.** `apps/customer-dashboard/src/styles/base.css` and `apps/admin-panel/src/styles/base.css` are byte-for-byte identical and define the same tokens marketing uses (Geist Sans + Berkeley Mono, oxblood-700 selection, `.btn-primary` / `.btn-secondary` / `.nav-link`).
+- **Brand-treatment gap on app headers (Gap 1)** — marketing has the oxblood-700 "D" badge + lowercase font-mono "driftstack" wordmark; dashboard + admin sidebars have plain sans-serif "Driftstack". Three different treatments across three surfaces.
+- **Onboarding flow brand-presence gap (Gap 2)** — `withSidebar={false}` mode hides side-nav AND header, leaving onboarding pages without wordmark presence.
+- **Empty-state copy tone (Gap 3)** — already on-tone; no redline.
+- **Loading/pending pattern (Gap 4)** — V-180 banner pattern consistent; no redline.
+- **Status badge palette (Gap 5)** — values consistent (emerald/amber/red/slate/blue semantics); each page redeclares the literal locally. Optional refactor; not load-bearing.
+- **Anonymity compliance (Gap 6)** — clean. Zero personal-name hits across both apps.
+- **Customer-dashboard footer gap (Gap 7)** — no legal-doc links on signed-in pages. Recommend minimal slate-500 footer.
+
+### PHASE 2 plan (working-tree only until founder approves)
+
+Three layout files for the redline pass:
+
+1. `apps/customer-dashboard/src/layouts/DashboardLayout.astro` — D-badge + lowercase mono wordmark; minimal footer with legal-doc links.
+2. `apps/admin-panel/src/layouts/AdminLayout.astro` — D-badge + lowercase mono wordmark, keeping the existing "admin" pill alongside.
+3. `DashboardLayout.astro` `withSidebar={false}` branch — minimal horizontal header with the wordmark when sidebar is hidden.
+
+Optional 4th: hoist STATUS_BADGE constants into shared `lib/badge-colors.ts`. Defer if scope tight.
+
+### Why
+
+V-219\* directive: customer dashboard + admin panel visual style match marketing site, small scope (apply existing tokens, not new brand work). Audit found gaps tightly bounded — base.css alignment already done from V-134 era. Anonymity per V-211 also clean.
+
+### Files
+
+- `docs/marketing/dashboard-admin-visual-audit.md` — new audit doc.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after prettier --write on new doc + held api-versioning.md draft).
+- `npm test`: 679 / 679 passing across 71 files.
+
+### Notes
+
+- V-219 (rate-limit policy at `df102f0`) already pushed before the renumber arrived. V-log keeps that V-219 slot; V-219\* slots the visual audit alongside per founder's notation.
+- The api-versioning.md draft is held uncommitted in working tree, prettier-formatted. Lands at V-220 when GENERATE queue resumes after V-219\* PHASE 2/3 close.
+
+### Next
+
+V-219\* PHASE 2 — apply the proposed layout edits as working-tree drafts, NOT committed until founder redline pass.
