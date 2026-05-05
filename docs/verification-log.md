@@ -9810,3 +9810,83 @@ Decision 2), V-174 (scope architecture split per founder Decision
 1 — account_owner + driftstack_internal_admin, ~2-3hr including
 migration + tests), V-175 (api-types dist/ staleness hygiene fix,
 ~30min).
+
+---
+
+## V-172 — DrizzleArchiveTableRepo + DrizzleArchiveLedgerRepo (V-163 follow-on, Decision 4)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder Decision 4 — fold V-163's deferred Drizzle repos into the
+queue. V-163 landed `AuditArchiveService` + interfaces +
+in-memory-tested unit coverage; the Postgres-backed repo
+implementations were deferred to a separate commit. V-172 lands
+them so the service can run against real DB at deploy time.
+
+### What changed
+
+`apps/server/src/db/audit-archive-repo.ts` (new):
+
+- `DrizzleArchiveTableRepo.selectArchivableRows(tableName, olderThan)`:
+  - Switch over the four `ArchiveTableName` values.
+  - Per table: SELECT \* FROM <table> WHERE <timestampCol> < olderThan
+    ORDER BY <timestampCol> ASC, <idCol> ASC.
+  - **`processed_stripe_events` quirk**: PK is `event_id` (not `id`).
+    `AuditArchiveService.extractId()` reads `row.id`. Repo projects
+    `event_id` → `id` at SELECT time so the row shape is uniform
+    across tables. Documented inline.
+- `DrizzleArchiveTableRepo.deleteRowsById(tableName, ids)`:
+  - DELETE FROM <table> WHERE <pkCol> IN (...).
+  - For `processed_stripe_events` the WHERE clause uses `event_id`
+    (the actual PK column).
+  - Returns `rowCount` from the driver result.
+- `DrizzleArchiveLedgerRepo.insertRun(args)`:
+  - INSERT INTO audit_archive_runs ... RETURNING id.
+  - `deletedFromPostgres = false` at insert; `markDeletedFromPostgres()`
+    flips it after successful DELETE.
+- `DrizzleArchiveLedgerRepo.markDeletedFromPostgres(runId)`:
+  - UPDATE audit_archive_runs SET deleted_from_postgres = true WHERE id = $1.
+
+### What's NOT in V-172
+
+- **Real-DB integration test for the Drizzle repos**. The service-
+  level behavior is tested in V-163 unit tests (against in-memory
+  fakes via `ArchiveTableRepo`/`ArchiveLedgerRepo` interfaces). The
+  Drizzle repos are validated by:
+  1. Type system (TypeScript enforces interface conformance).
+  2. Schema column references (compile error if a column is renamed).
+  3. (Future) E2E Playwright test that the cron invokes once deploy
+     lands.
+     Adding a real-DB integration test for these repos here would
+     duplicate that coverage; deferred to the deployment-wiring V-NNN
+     that lands the cron.
+- **Bootstrap wiring** — `AuditArchiveService` instance construction
+  in `apps/server/src/lib/bootstrap.ts`. Bootstrap can land in the
+  same V-NNN as the cron / scheduled-job wiring; without an external
+  scheduler invoking it, the service has nothing to do.
+- **Cron / scheduled-job runner**. Deployment-time concern; ADR-006
+  §3 specifies "monthly cron-driven service runs on the 1st of each
+  month at 02:00 UTC." Whether that's K8s CronJob, GitHub Actions
+  schedule, Hetzner systemd timer, or Stripe Scheduler — separate
+  deploy V-NNN.
+
+### How verified
+
+- `npm run typecheck`: clean across all 10 workspaces (Drizzle
+  references resolve correctly against the schema).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 608/608 (unchanged — no test files touched).
+
+### Files added
+
+- `apps/server/src/db/audit-archive-repo.ts`
+
+### Next
+
+V-173 (next): Postgres-backed webhook delivery (founder Decision 2,
+~3-4hr).
