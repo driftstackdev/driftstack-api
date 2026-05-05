@@ -10642,3 +10642,45 @@ Per founder cadence: "Tier 3 visual UX surfaces as Tier 3 working-tree drafts fo
 ### Next
 
 V-184b — surface Tier 3 visual UX drafts for founder review (working-tree only, NOT commit). Then V-185 (/v1/webhooks aggregate delivery_counts), V-186 (/sessions concurrent meter live wiring).
+
+## V-185 — /v1/webhooks aggregate delivery_counts (GAP 1 close)
+
+### What
+
+Endpoints in `GET /v1/webhooks` previously returned `delivery_counts: { delivered: 0, failed: 0, dlq: 0 }` as static placeholder zeros — the dashboard rendered `'—'` for those columns. V-185 wires real aggregate counts from `webhook_deliveries` (status = `delivered` / `failed`) and the in-band `dlq` status (terminal-failed deliveries past max attempts), surfaced per endpoint via a single GROUP BY query.
+
+### Why
+
+GAP 1 from V-181 carry-forward: dashboard `/webhooks` page fields were deliberately left as `—` until aggregate counts existed end-to-end. Approved as ~1hr Tier 1 in the founder triage that landed V-184a. Closes the gap so endpoint health is visible at a glance without round-trips to the deliveries detail page.
+
+### Files
+
+- `apps/server/src/services/webhooks.ts`
+  - Added `EndpointDeliveryCounts` interface (`delivered: number; failed: number; dlq: number`).
+  - Added `deliveryCountsByEndpoint(accountId): Promise<Map<string, EndpointDeliveryCounts>>` to `WebhooksRepo` interface.
+  - Added `listWithCounts(ctx)` to `WebhooksService` running parallel `listEndpoints` + `deliveryCountsByEndpoint`, joining by endpoint id.
+- `apps/server/src/db/webhooks-repo.ts`
+  - Implemented `deliveryCountsByEndpoint` as a Drizzle GROUP BY: `select(webhookId, status, count(*)::int).from(webhookDeliveries).innerJoin(webhookEndpoints, eq(...)).where(eq(webhookEndpoints.accountId, accountId)).groupBy(webhookDeliveries.webhookId, webhookDeliveries.status)`. Builds `Map<endpointId, counts>` from result rows.
+- `apps/server/tests/integration/_helpers/in-memory-webhooks-repo.ts`
+  - Implemented in-memory variant by iterating the deliveries map filtered to endpoints owned by `accountId`.
+- `apps/server/src/routes/webhooks.ts`
+  - `publicEndpoint(row, counts?)` — counts defaulted to all-zero so `POST /v1/webhooks` and the per-id GET keep current behaviour without an extra query.
+  - `GET /v1/webhooks` calls `service.listWithCounts(ctx)` and threads counts through `publicEndpoint`.
+- `apps/customer-dashboard/src/pages/webhooks.astro`
+  - `endpointCard()` now reads `e.delivery_counts` and renders real numeric values for delivered/failed/dlq columns. dlq cell uses red text class when > 0 and adds a "Requeue DLQ" link to `/webhooks/{id}/deliveries?status=dlq`.
+
+### Verify
+
+- `npm run typecheck`: clean across all 11 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` on `webhooks-repo.ts`).
+- `npm test`: 625 / 625 passing across 61 files.
+
+### Notes
+
+- The aggregate query is per-`GET /v1/webhooks` only — single endpoint reads (`GET /v1/webhooks/:id`) and creation still skip the count query for latency. If we later see endpoints with hundreds of millions of deliveries the GROUP BY can be replaced by a denormalised counter on `webhook_endpoints` updated by the worker; not needed at current scale.
+- DLQ count is sourced from `webhook_deliveries` status='dlq' rather than a separate DLQ table — matches the existing terminal-status convention used by V-173 durable delivery.
+
+### Next
+
+V-186 — customer-dashboard `/sessions` concurrent-meter live wiring (~1hr Tier 1).

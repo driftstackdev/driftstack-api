@@ -20,7 +20,14 @@ function uuidFromPrefixedId(value: string, expectedPrefix: string): string {
   return match[1];
 }
 
-function publicEndpoint(row: WebhookEndpointRow): Record<string, unknown> {
+function publicEndpoint(
+  row: WebhookEndpointRow,
+  counts: { delivered: number; failed: number; dlq: number } = {
+    delivered: 0,
+    failed: 0,
+    dlq: 0,
+  },
+): Record<string, unknown> {
   return {
     id: `whk_${row.id}`,
     url: row.url,
@@ -32,6 +39,8 @@ function publicEndpoint(row: WebhookEndpointRow): Record<string, unknown> {
     last_success_at: row.lastSuccessAt ? row.lastSuccessAt.toISOString() : null,
     last_failure_at: row.lastFailureAt ? row.lastFailureAt.toISOString() : null,
     disabled_at: row.disabledAt ? row.disabledAt.toISOString() : null,
+    /** V-185 — aggregate per-endpoint delivery counts. */
+    delivery_counts: counts,
     created_at: row.createdAt.toISOString(),
   };
 }
@@ -85,8 +94,8 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
-      const rows = await service.list(ctx);
-      return { data: rows.map(publicEndpoint) };
+      const rowsWithCounts = await service.listWithCounts(ctx);
+      return { data: rowsWithCounts.map((r) => publicEndpoint(r.endpoint, r.counts)) };
     },
   );
 

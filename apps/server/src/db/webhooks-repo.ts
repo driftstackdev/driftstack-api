@@ -2,6 +2,7 @@
 
 import { and, desc, eq, lt, sql } from 'drizzle-orm';
 import type {
+  EndpointDeliveryCounts,
   ListDeliveriesPage,
   NewWebhookDeliveryInput,
   NewWebhookEndpointInput,
@@ -40,6 +41,32 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
       .where(eq(webhookEndpoints.accountId, accountId))
       .orderBy(desc(webhookEndpoints.createdAt));
     return rows.map(toEndpointRow);
+  }
+
+  async deliveryCountsByEndpoint(accountId: string): Promise<Map<string, EndpointDeliveryCounts>> {
+    // GROUP BY endpoint_id + status — one row per (endpoint, status)
+    // tuple. Only counts statuses we care about for the dashboard
+    // surface; pending / in_flight aren't aggregated here.
+    const rows = await this.database.db
+      .select({
+        webhookId: webhookDeliveries.webhookId,
+        status: webhookDeliveries.status,
+        cnt: sql<number>`count(*)::int`,
+      })
+      .from(webhookDeliveries)
+      .innerJoin(webhookEndpoints, eq(webhookDeliveries.webhookId, webhookEndpoints.id))
+      .where(eq(webhookEndpoints.accountId, accountId))
+      .groupBy(webhookDeliveries.webhookId, webhookDeliveries.status);
+
+    const result = new Map<string, EndpointDeliveryCounts>();
+    for (const r of rows) {
+      const existing = result.get(r.webhookId) ?? { delivered: 0, failed: 0, dlq: 0 };
+      if (r.status === 'delivered') existing.delivered = r.cnt;
+      else if (r.status === 'failed') existing.failed = r.cnt;
+      else if (r.status === 'dlq') existing.dlq = r.cnt;
+      result.set(r.webhookId, existing);
+    }
+    return result;
   }
 
   async findEndpoint(id: string, accountId: string): Promise<WebhookEndpointRow | null> {

@@ -244,8 +244,18 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         const activeBadge =
           'inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
           (e.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600');
-        // Live API doesn't yet expose aggregate delivery_counts.
-        // Render dashes + a footnote.
+        // V-185 — aggregate delivery counts now in /v1/webhooks
+        // response. Falls back to zeros if missing.
+        const counts = e.delivery_counts || { delivered: 0, failed: 0, dlq: 0 };
+        const dlqClass = counts.dlq > 0 ? 'text-red-700' : 'text-slate-400';
+        const requeueLink =
+          counts.dlq > 0
+            ? '<a href="#requeue-' +
+              escapeHtml(e.id) +
+              '" class="text-sm font-medium text-red-700 hover:underline">Requeue DLQ (' +
+              counts.dlq +
+              ')</a>'
+            : '';
         return (
           '<li class="dashboard-card">' +
           '<div class="flex items-start justify-between gap-6">' +
@@ -281,17 +291,25 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           '</div>' +
           '<dl class="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 text-center">' +
           '<div><dt class="text-xs text-slate-500">Delivered</dt>' +
-          '<dd class="mt-1 font-mono text-lg font-medium text-slate-400">—</dd></div>' +
+          '<dd class="mt-1 font-mono text-lg font-medium text-emerald-700">' +
+          counts.delivered.toLocaleString('en-US') +
+          '</dd></div>' +
           '<div><dt class="text-xs text-slate-500">Failed</dt>' +
-          '<dd class="mt-1 font-mono text-lg font-medium text-slate-400">—</dd></div>' +
+          '<dd class="mt-1 font-mono text-lg font-medium text-amber-700">' +
+          counts.failed.toLocaleString('en-US') +
+          '</dd></div>' +
           '<div><dt class="text-xs text-slate-500">DLQ</dt>' +
-          '<dd class="mt-1 font-mono text-lg font-medium text-slate-400">—</dd></div>' +
+          '<dd class="mt-1 font-mono text-lg font-medium ' +
+          dlqClass +
+          '">' +
+          counts.dlq.toLocaleString('en-US') +
+          '</dd></div>' +
           '</dl>' +
-          '<p class="mt-2 text-center text-xs text-slate-400">Aggregate delivery counts coming soon</p>' +
           '<div class="mt-4 flex items-center justify-between">' +
           '<a href="#deliveries-' +
           escapeHtml(e.id) +
           '" class="text-sm text-oxblood-700 hover:underline">View delivery log →</a>' +
+          requeueLink +
           '</div>' +
           '</li>'
         );

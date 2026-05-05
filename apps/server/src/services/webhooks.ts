@@ -87,6 +87,13 @@ export interface ListDeliveriesPage {
 // Repo interface
 // ───────────────────────────────────────────────────────────────────────────
 
+/** V-185 — aggregate counts per endpoint. delivered + failed + dlq. */
+export interface EndpointDeliveryCounts {
+  delivered: number;
+  failed: number;
+  dlq: number;
+}
+
 export interface WebhooksRepo {
   // Management
   insertEndpoint(input: NewWebhookEndpointInput): Promise<WebhookEndpointRow>;
@@ -95,6 +102,14 @@ export interface WebhooksRepo {
   countActiveEndpoints(accountId: string): Promise<number>;
   /** Soft-delete: set disabled_at + active=false. */
   disableEndpoint(id: string, at: Date): Promise<void>;
+
+  /**
+   * V-185 — aggregate per-endpoint delivery counts (delivered, failed,
+   * dlq) for an account. One GROUP BY query in Drizzle; iterates the
+   * in-memory map in tests. Returns a Map keyed by endpoint id (uuid,
+   * NOT prefixed). Endpoints with zero deliveries return zeros.
+   */
+  deliveryCountsByEndpoint(accountId: string): Promise<Map<string, EndpointDeliveryCounts>>;
 
   // Event emission
   enqueueDelivery(input: NewWebhookDeliveryInput): Promise<void>;
@@ -196,6 +211,24 @@ export class WebhooksService {
 
   list(ctx: AccountContext): Promise<WebhookEndpointRow[]> {
     return this.repo.listEndpoints(ctx.account.id);
+  }
+
+  /**
+   * V-185 — list endpoints + per-endpoint aggregate delivery counts
+   * (delivered / failed / dlq). Customer dashboard /webhooks page
+   * consumes this via /v1/webhooks; no separate endpoint needed.
+   */
+  async listWithCounts(
+    ctx: AccountContext,
+  ): Promise<Array<{ endpoint: WebhookEndpointRow; counts: EndpointDeliveryCounts }>> {
+    const [endpoints, countsMap] = await Promise.all([
+      this.repo.listEndpoints(ctx.account.id),
+      this.repo.deliveryCountsByEndpoint(ctx.account.id),
+    ]);
+    return endpoints.map((endpoint) => ({
+      endpoint,
+      counts: countsMap.get(endpoint.id) ?? { delivered: 0, failed: 0, dlq: 0 },
+    }));
   }
 
   async get(ctx: AccountContext, id: string): Promise<WebhookEndpointRow> {

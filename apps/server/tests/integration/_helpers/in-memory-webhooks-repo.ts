@@ -2,6 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type {
+  EndpointDeliveryCounts,
   ListDeliveriesPage,
   NewWebhookDeliveryInput,
   NewWebhookEndpointInput,
@@ -43,6 +44,20 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       .filter((r) => r.accountId === accountId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     return Promise.resolve(rows);
+  }
+
+  deliveryCountsByEndpoint(accountId: string): Promise<Map<string, EndpointDeliveryCounts>> {
+    const result = new Map<string, EndpointDeliveryCounts>();
+    for (const d of this.deliveries.values()) {
+      const ep = this.endpoints.get(d.webhookId);
+      if (!ep || ep.accountId !== accountId) continue;
+      const existing = result.get(d.webhookId) ?? { delivered: 0, failed: 0, dlq: 0 };
+      if (d.status === 'delivered') existing.delivered += 1;
+      else if (d.status === 'failed') existing.failed += 1;
+      else if (d.status === 'dlq') existing.dlq += 1;
+      result.set(d.webhookId, existing);
+    }
+    return Promise.resolve(result);
   }
 
   findEndpoint(id: string, accountId: string): Promise<WebhookEndpointRow | null> {
