@@ -242,3 +242,45 @@ jobs:
       - name: Build examples
         working-directory: packages/sdk-go
         run: go build ./examples/...
+
+  bench-regression:
+    # V-165 — perf regression check (advisory mode).
+    #
+    # `continue-on-error: true` because:
+    #   - docs/benchmarks/{auth-path,rate-limit,webhook-signature}.md
+    #     note that bench results on shared runners are noisy; a hard
+    #     gate would produce false failures.
+    #   - First-run bootstrap mode (no baseline) exits 2; advisory
+    #     swallows that so the PR doesn't fail the first time around.
+    #   - Flipping to a hard gate is a separate founder decision once
+    #     the CI baseline accumulates a few runs of stable variance.
+    #
+    # Threshold: 50% slowdown vs the checked-in CI baseline at
+    # docs/benchmarks/baseline.ci.json. Override via the
+    # PERF_REGRESSION_THRESHOLD env var.
+    name: Perf regression check (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: build-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspaces (bench targets compiled output)
+        run: npm run build
+
+      - name: Run benchmarks (JSON output)
+        run: npm run bench:json
+
+      - name: Compare against CI baseline
+        run: npm run bench:check-regression

@@ -25,6 +25,11 @@ test-results/
 playwright-report/
 playwright/.cache/
 
+# Bench artifacts (V-165) — bench output is recorded per-run; only
+# the canonical baseline at docs/benchmarks/baseline.ci.json is
+# committed.
+tmp/
+
 # Drizzle
 drizzle/.migrations-applied
 

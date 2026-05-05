@@ -1,0 +1,51 @@
+{
+  "recordedAtIso": "2026-05-05T08:21:28.628Z",
+  "note": "V-165 starter baseline — recorded on Apple M-class dev workstation, NOT a CI runner. CI runners produce different numbers; the 50% slowdown threshold (PERF_REGRESSION_THRESHOLD env, default 0.50) accommodates the divergence. Recalibrate on first stable CI run by deleting this file + letting the bench-regression CI step (advisory mode) record a fresh baseline via the script's bootstrap path, then commit the new file.",
+  "benchmarks": [
+    {
+      "key": "apps/server/tests/bench/auth-cache.bench.ts > sha256(plaintext) — cache key derivation :: createHash sha256 hex digest",
+      "hz": 2278838.5233126148,
+      "mean": 0.0004388200347545285
+    },
+    {
+      "key": "apps/server/tests/bench/auth-cache.bench.ts > InMemoryAuthCache — hot path :: get() — cache hit",
+      "hz": 9353869.120737243,
+      "mean": 0.00010690763224204521
+    },
+    {
+      "key": "apps/server/tests/bench/auth-cache.bench.ts > InMemoryAuthCache — cold path :: miss → set → hit roundtrip",
+      "hz": 1624187.6036982234,
+      "mean": 0.0006156924223057927
+    },
+    {
+      "key": "apps/server/tests/bench/rate-limit.bench.ts > MemoryRateLimitStore.consume — happy path (bucket has tokens) :: consume(cost=1) when bucket has capacity",
+      "hz": 1589599.997104036,
+      "mean": 0.000629089080159675
+    },
+    {
+      "key": "apps/server/tests/bench/rate-limit.bench.ts > MemoryRateLimitStore.consume — refill + consume :: consume(cost=1) with refill math on existing bucket",
+      "hz": 7337645.970648556,
+      "mean": 0.00013628348982768005
+    },
+    {
+      "key": "apps/server/tests/bench/rate-limit.bench.ts > MemoryRateLimitStore.consume — denied path (over budget) :: consume(cost=1) when bucket is empty (allowed=false)",
+      "hz": 8531387.812310802,
+      "mean": 0.00011721422375817907
+    },
+    {
+      "key": "packages/sdk-typescript/tests/bench/webhook-signature.bench.ts > verifyWebhookSignature — small body (~70 bytes) :: valid signature, small body",
+      "hz": 53209.89022785315,
+      "mean": 0.018793498646921505
+    },
+    {
+      "key": "packages/sdk-typescript/tests/bench/webhook-signature.bench.ts > verifyWebhookSignature — small body (~70 bytes) :: invalid signature, small body (constant-time compare still runs)",
+      "hz": 56118.97414514967,
+      "mean": 0.017819285103350905
+    },
+    {
+      "key": "packages/sdk-typescript/tests/bench/webhook-signature.bench.ts > verifyWebhookSignature — large body (~10 KB) :: valid signature, large body",
+      "hz": 35215.10321218051,
+      "mean": 0.028396906690141725
+    }
+  ]
+}
