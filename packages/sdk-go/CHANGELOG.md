@@ -12,6 +12,43 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
   `packages/sdk-go/v0.1.0` (Go modules sub-directory tagging
   convention) once the first publish lands.
 
+## [0.2.0] - 2026-05-05
+
+### Added
+
+- **`AuthResource`** — new `client.Auth` for `/v1/auth/*` flows:
+  `Signup`, `VerifyEmail`, `Login`, `RequestMagicLink`,
+  `ConsumeMagicLink`, `RequestPasswordReset`, `ConfirmPasswordReset`,
+  `Refresh`, `Logout`. Mirrors the TypeScript + Python SDK shape.
+- **`BillingResource`** — new `client.Billing` for `/v1/billing`:
+  `GetState`, `CreateCheckoutSession`, `StartTrialPack`,
+  `CreatePortalSession`. Subscription + trial-pack state shapes
+  added (`Subscription`, `TrialPackState`, `GetBillingStateResponse`).
+- **`ProfilesResource`** — new `client.Profiles` for `/v1/profiles`:
+  `Create`, `List`, `Iterate`, `Get`, `Update`, `Delete`. Iterator
+  walks cursor pages; callback returns `(continue, error)`.
+- **`SessionPurpose`** type + constants
+  (`PurposeProductionCustomer`, `PurposeRecaptureRun`,
+  `PurposeFingerprintProbe`, `PurposeBehaviouralCapture`) +
+  `DefaultSessionPurpose` matching V-169 server-side schema.
+  `CreateSessionRequest.Purpose` and `Session.Purpose` fields exposed.
+- **`examples/billing_flow/main.go`** — server-side billing self-
+  serve example.
+
+### Changed
+
+- **BREAKING — `AccountTier` enum** — replaced legacy values
+  (`free`, `starter`, `solo`, `builder`, `scale`, `enterprise`) with
+  the V-148 two-ladder restructure (`trial_pack`, `solo_manual`,
+  `team_manual`, `agency_manual`, `api_starter`, `api_builder`,
+  `api_scale`, `enterprise`). Old constants removed; consumers
+  must update. Pre-1.0 SemVer permits the breakage.
+- **`APIKeyScope` enum** — added `ScopeAccountOwner`,
+  `ScopeDriftstackInternalAdmin`, `ScopeGUIControl` per V-174 split.
+  The legacy `ScopeAdmin` token remains a compat alias.
+- **`CreateSessionRequest.Archetype`** field exposed (server defaults
+  to the locked archetype if empty, matching schema).
+
 ## [0.1.5] - 2026-05-03
 
 ### Added

@@ -36,6 +36,9 @@ type Client struct {
 	APIKeys  *APIKeysResource
 	Usage    *UsageResource
 	Webhooks *WebhooksResource
+	Profiles *ProfilesResource
+	Billing  *BillingResource
+	Auth     *AuthResource
 }
 
 // Option is the functional-options shape for [New].
@@ -88,6 +91,9 @@ func New(apiKey string, opts ...Option) *Client {
 	c.APIKeys = &APIKeysResource{client: c}
 	c.Usage = &UsageResource{client: c}
 	c.Webhooks = &WebhooksResource{client: c}
+	c.Profiles = &ProfilesResource{client: c}
+	c.Billing = &BillingResource{client: c}
+	c.Auth = &AuthResource{client: c}
 	return c
 }
 

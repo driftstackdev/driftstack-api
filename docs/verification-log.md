@@ -11331,3 +11331,82 @@ Deploy automation will need to detect that build output now includes a `_worker.
 ### Next
 
 V-201 — Go SDK feature parity (LOCKED launch-blocking, ~10–12hr).
+
+## V-201 — Go SDK feature parity with TypeScript + Python (LOCKED launch-blocking)
+
+### What
+
+Closes the launch-blocking gap where the Go SDK was missing three resources present in the TypeScript and Python SDKs. Go SDK is now feature-parallel with the others for customer-facing endpoints. Bumped Go SDK version to `0.2.0` (pre-1.0 breaking-change pattern; SemVer permits the AccountTier enum replacement).
+
+Three new resources + types + tests + an example:
+
+1. **`AuthResource`** (`client.Auth`) — 9 methods covering `/v1/auth/*`: `Signup`, `VerifyEmail`, `Login`, `RequestMagicLink`, `ConsumeMagicLink`, `RequestPasswordReset`, `ConfirmPasswordReset`, `Refresh`, `Logout`. Mirrors TS `AuthResource`.
+2. **`BillingResource`** (`client.Billing`) — 4 methods: `GetState`, `CreateCheckoutSession`, `StartTrialPack`, `CreatePortalSession`. Subscription + trial-pack types + the V-082 endpoint shapes.
+3. **`ProfilesResource`** (`client.Profiles`) — 5 methods + iterator: `Create`, `List`, `Iterate`, `Get`, `Update`, `Delete`. Iterator walks cursor pages; callback returns `(continue bool, err error)` for early-stop semantics.
+
+Plus type-level updates to bring the SDK current with V-148 (tier restructure) + V-169 (session purpose) + V-174 (scope split):
+
+- `AccountTier` enum replaced (`free` / `starter` / etc. → `trial_pack` / `solo_manual` / `team_manual` / `agency_manual` / `api_starter` / `api_builder` / `api_scale` / `enterprise`). Old constants removed; consumers must update.
+- `APIKeyScope` adds `ScopeAccountOwner`, `ScopeDriftstackInternalAdmin`, `ScopeGUIControl`. Legacy `ScopeAdmin` retained as compat alias.
+- `SessionPurpose` enum + `DefaultSessionPurpose` constant; `Session.Purpose` and `CreateSessionRequest.Purpose` fields exposed.
+- `CreateSessionRequest.Archetype` field exposed (defaults server-side if empty).
+
+### Why
+
+Founder direction: V-201 LOCKED launch-blocking — Go SDK feature parity with TypeScript + Python is required before commercial activation. Customers integrating from Go (a meaningful slice of the API target market) need access to billing self-serve, profile management, and the auth flow without dropping to raw HTTP.
+
+The breaking AccountTier change is the right move pre-1.0 — keeping the legacy enum values would invent a parallel reality where Go callers reference tiers that don't exist server-side. Pre-1.0 SemVer permits the breakage; the CHANGELOG flags it explicitly.
+
+### Files
+
+- `packages/sdk-go/types.go` — AccountTier replacement, APIKeyScope additions, SessionPurpose new enum, CreateSessionRequest.Archetype + .Purpose, full Profile / Billing / Auth shapes (~190 new lines).
+- `packages/sdk-go/auth.go` — new file (`AuthResource` + 9 methods).
+- `packages/sdk-go/billing.go` — new file (`BillingResource` + 4 methods).
+- `packages/sdk-go/profiles.go` — new file (`ProfilesResource` + 6 methods incl. Iterate).
+- `packages/sdk-go/client.go` — wired the three new resources into `Client` struct + `New()`.
+- `packages/sdk-go/auth_test.go` — new (4 tests).
+- `packages/sdk-go/billing_test.go` — new (4 tests).
+- `packages/sdk-go/profiles_test.go` — new (5 tests including pagination walk).
+- `packages/sdk-go/client_test.go` — updated `TierBuilder` reference to `TierAPIBuilder` (fallout from AccountTier replacement).
+- `packages/sdk-go/examples/billing_flow/main.go` — new server-side billing-flow example.
+- `packages/sdk-go/version.go` — bumped to `0.2.0`.
+- `packages/sdk-go/CHANGELOG.md` — `[0.2.0]` entry with Added + Changed sections; BREAKING flag on AccountTier.
+
+### Verify
+
+- `go build ./...`: clean.
+- `go test ./...`: passes (13 new tests across auth / billing / profiles all green).
+- `npm run typecheck`: clean (Go SDK is outside the npm typecheck scope but the workspace tooling stays clean).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 652 / 652 passing across 67 files (no server-side changes).
+
+### Notes
+
+- The Auth resource accepts an empty API key in `New("")` because /v1/auth/\* doesn't validate the bearer header; explicitly noted in the doc comment so customers don't waste time figuring out the right "key" for signup flows.
+- `Profiles.Iterate` differs from the TS pattern (which uses an `AsyncGenerator`). Go has no native generator type, so the callback `func(*Profile) (bool, error)` is the idiomatic shape — early-stop on `false` return; error propagation from the callback short-circuits.
+- Tests use `httptest.Server` with route assertions, mirroring the existing SDK-go test pattern. Each new resource gets at minimum: happy-path serialization, query-string params (where applicable), partial-update semantics (where applicable). Total test count: 13 new + the existing suite passes unchanged.
+- Pre-1.0 breakage policy: AccountTier removed values rather than deprecating them. Any Go consumer importing `TierFree` / `TierBuilder` / etc. fails to compile loud after upgrading. Acceptable per the SDK-versioning policy doc V-177 — pre-1.0 we'd rather break the build than silently mismap to wrong values.
+- No new examples for Auth or Profiles — the existing `quickstart` and `pagination` examples cover the patterns; the billing flow was added because it has unique semantics (Stripe redirect URL handling) not present in the existing example set.
+
+### PRIORITY D status
+
+Six PRIORITY D entries landed (V-195 through V-201, with the SSR conversion V-200 in between):
+
+- V-195: `/version` endpoint + ops runbook skeleton
+- V-196: quota-override form on per-account detail page
+- V-197: Stripe webhook reference-vector tests + ops procedures
+- V-198: DB migration rehearsal procedure
+- V-199: DR runbook (seven scenarios)
+- V-200: `@astrojs/cloudflare` SSR adapter for both Astro apps
+- V-201: Go SDK feature parity
+
+**Backend launch-blocking is COMPLETE.** What remains:
+
+- V-184b — Tier 3 onboarding flow visual UX drafts (working-tree only, founder review)
+- Status page frontend Tier 3 visual (carry-forward, founder review pending)
+- Post-launch parking-lot items: admin email enrichment for audit columns, DLQ list owner+url enrichment, /rate-limit-overrides UX feedback (deferred per Decisions 2/3/4)
+
+### Next
+
+V-184b — surface Tier 3 onboarding flow visual UX drafts for founder review (working-tree only, NOT commit until redline pass), per the standing marketing-cadence convention.

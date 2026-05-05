@@ -195,7 +195,7 @@ func TestUsage_CurrentPeriod(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"period_start": "2026-05-01T00:00:00Z",
 			"period_end":   "2026-06-01T00:00:00Z",
-			"tier":         "builder",
+			"tier":         "api_builder",
 			"totals":       map[string]int{"navigate": 5},
 			"quotas":       map[string]int{"navigate": 25000},
 		})
@@ -205,7 +205,7 @@ func TestUsage_CurrentPeriod(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Tier != TierBuilder {
+	if got.Tier != TierAPIBuilder {
 		t.Errorf("tier=%q", got.Tier)
 	}
 }

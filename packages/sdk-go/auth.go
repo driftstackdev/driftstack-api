@@ -1,0 +1,148 @@
+package driftstack
+
+import "context"
+
+// AuthResource handles /v1/auth/* endpoints (V-079).
+//
+// These endpoints don't require an API key — they ARE the auth gate.
+// The SDK still routes them through the same client.do path so users
+// get retry, rate-limit handling, and structured-error parsing for
+// free; the Authorization header is set unconditionally but the
+// server ignores it for these routes.
+//
+// Typical usage from a server-side flow (e.g., a CLI signup helper):
+//
+//	c := driftstack.New("") // empty key is fine for auth flows
+//	resp, err := c.Auth.Signup(ctx, &driftstack.SignupRequest{
+//		Email:    "user@example.com",
+//		Password: "...",
+//	})
+type AuthResource struct {
+	client *Client
+}
+
+// Signup creates a new account.
+func (r *AuthResource) Signup(ctx context.Context, body *SignupRequest) (*SignupResponse, error) {
+	var out SignupResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/signup",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// VerifyEmail consumes a verify-email token + returns a session token.
+func (r *AuthResource) VerifyEmail(ctx context.Context, body *VerifyEmailRequest) (*VerifyEmailResponse, error) {
+	var out VerifyEmailResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/verify-email",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Login exchanges email + password for a session token.
+func (r *AuthResource) Login(ctx context.Context, body *LoginRequest) (*LoginResponse, error) {
+	var out LoginResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/login",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RequestMagicLink emails a one-time login link to the address.
+func (r *AuthResource) RequestMagicLink(ctx context.Context, body *MagicLinkRequest) (*MagicLinkRequestResponse, error) {
+	var out MagicLinkRequestResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/magic-link/request",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ConsumeMagicLink redeems a magic-link token for a session.
+func (r *AuthResource) ConsumeMagicLink(ctx context.Context, body *MagicLinkConsumeRequest) (*MagicLinkConsumeResponse, error) {
+	var out MagicLinkConsumeResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/magic-link/consume",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RequestPasswordReset emails a reset link to the address.
+func (r *AuthResource) RequestPasswordReset(ctx context.Context, body *PasswordResetRequest) (*PasswordResetRequestResponse, error) {
+	var out PasswordResetRequestResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/password-reset/request",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ConfirmPasswordReset sets a new password using a reset token.
+func (r *AuthResource) ConfirmPasswordReset(ctx context.Context, body *PasswordResetConfirmRequest) (*PasswordResetConfirmResponse, error) {
+	var out PasswordResetConfirmResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/password-reset/confirm",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Refresh exchanges an existing session token for a new one + extended expiry.
+func (r *AuthResource) Refresh(ctx context.Context, body *RefreshSessionRequest) (*RefreshSessionResponse, error) {
+	var out RefreshSessionResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/refresh",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Logout invalidates the supplied session token.
+func (r *AuthResource) Logout(ctx context.Context, body *LogoutRequest) (*LogoutResponse, error) {
+	var out LogoutResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/logout",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
