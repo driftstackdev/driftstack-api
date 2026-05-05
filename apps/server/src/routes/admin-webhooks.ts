@@ -104,7 +104,7 @@ export function registerAdminWebhookRoutes(
   app.get<{ Params: { id: string } }>(
     '/v1/admin/webhook-deliveries/:id',
     {
-      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;
@@ -119,7 +119,7 @@ export function registerAdminWebhookRoutes(
   app.post<{ Params: { id: string } }>(
     '/v1/admin/webhook-deliveries/:id/replay',
     {
-      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;
@@ -140,7 +140,7 @@ export function registerAdminWebhookRoutes(
   app.get(
     '/v1/admin/webhook-dlq',
     {
-      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;
@@ -162,7 +162,7 @@ export function registerAdminWebhookRoutes(
   app.post<{ Params: { id: string } }>(
     '/v1/admin/webhook-dlq/:id/requeue',
     {
-      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;

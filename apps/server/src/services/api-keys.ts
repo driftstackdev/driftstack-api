@@ -8,7 +8,12 @@
 //   - revoke: marks a key revoked (idempotent — revoking a revoked key is
 //     a no-op, but revoking a non-existent key is 404).
 //
-// Both create and revoke require the 'admin' scope on the calling key.
+// V-174 — both create and revoke require 'account_owner' scope on the
+// calling key. Pre-V-174 this was 'admin'; the new scope split carved
+// 'admin' into 'account_owner' (customer-account control) and
+// 'driftstack_internal_admin' (Driftstack-staff-only). The 'admin'
+// scope retains compat-alias semantics during migration via
+// requireScope() — existing 'admin'-scoped keys keep working.
 
 import type { ApiKeyScope } from '@driftstack/api-types';
 import type { AccountContext } from './auth.js';
@@ -74,7 +79,7 @@ export class ApiKeysService {
   ) {}
 
   async create(ctx: AccountContext, input: CreateApiKeyServiceInput): Promise<CreatedApiKey> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'account_owner');
 
     // Block issuance until the account has accepted all currently-required
     // legal documents. Production wiring supplies the gate; tests that
@@ -114,7 +119,7 @@ export class ApiKeysService {
   }
 
   async revoke(ctx: AccountContext, keyId: string): Promise<void> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'account_owner');
 
     const key = await this.repo.findApiKey(keyId, ctx.account.id);
     if (!key) throw new NotFoundError(`API key "${keyId}" not found.`);

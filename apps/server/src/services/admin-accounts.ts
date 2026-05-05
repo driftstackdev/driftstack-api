@@ -53,14 +53,14 @@ export class AccountsAdminService {
   ) {}
 
   async getAccount(ctx: AccountContext, accountId: string): Promise<AccountRow> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
     const row = await this.repo.findById(accountId);
     if (!row) throw new NotFoundError(`Account "${accountId}" not found.`);
     return row;
   }
 
   async list(ctx: AccountContext, args: ListAccountsArgs): Promise<ListAccountsPage> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
     return this.repo.list(args);
   }
 
@@ -69,7 +69,7 @@ export class AccountsAdminService {
     accountId: string,
     newTier: AccountTier,
   ): Promise<AccountRow> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
     const updated = await this.repo.setTier(accountId, newTier, new Date());
     if (!updated) throw new NotFoundError(`Account "${accountId}" not found.`);
     await this.invalidateCache(accountId);
@@ -77,7 +77,7 @@ export class AccountsAdminService {
   }
 
   async suspend(ctx: AccountContext, accountId: string): Promise<AccountRow> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
     const updated = await this.repo.setStatus(accountId, 'suspended', new Date());
     if (!updated) throw new NotFoundError(`Account "${accountId}" not found.`);
     await this.invalidateCache(accountId);
@@ -85,7 +85,7 @@ export class AccountsAdminService {
   }
 
   async unsuspend(ctx: AccountContext, accountId: string): Promise<AccountRow> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
     const updated = await this.repo.setStatus(accountId, 'active', new Date());
     if (!updated) throw new NotFoundError(`Account "${accountId}" not found.`);
     await this.invalidateCache(accountId);

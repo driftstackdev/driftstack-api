@@ -52,12 +52,12 @@ export function registerAdminAuditLogRoutes(
   app.get(
     '/v1/admin/audit-log',
     {
-      preHandler: [app.requireScope('admin'), app.rateLimit('global')],
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
-      throwIfMissingScope(ctx, 'admin');
+      throwIfMissingScope(ctx, 'driftstack_internal_admin');
 
       const rawQuery = (request.query ?? {}) as ListAuditLogQueryInput;
       const query = ListAuditLogQuerySchema.parse(rawQuery);

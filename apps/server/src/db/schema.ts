@@ -31,7 +31,14 @@ export const accountTier = pgEnum('account_tier', [
 
 export const accountStatus = pgEnum('account_status', ['active', 'suspended', 'deleted']);
 
-export const apiKeyScope = pgEnum('api_key_scope', ['read', 'write', 'admin', 'gui_control']);
+export const apiKeyScope = pgEnum('api_key_scope', [
+  'read',
+  'write',
+  'admin', // V-174 compat alias; deprecated after migration window.
+  'account_owner', // V-174 customer-account control.
+  'driftstack_internal_admin', // V-174 Driftstack-staff-only.
+  'gui_control',
+]);
 
 export const sessionStatus = pgEnum('session_status', [
   'creating',

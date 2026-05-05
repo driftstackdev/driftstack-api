@@ -9968,3 +9968,105 @@ Migration to fully replace `webhooks.ts` is a separate future V-NNN — needs so
 ### Next
 
 V-174 (next): scope architecture split (founder Decision 1 from this round — account_owner + driftstack_internal_admin, ~2-3hr including migration script + tests).
+
+---
+
+## V-174 — Scope architecture split (Decision 1: account_owner + driftstack_internal_admin)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder Decision 1 (locked, this round). Closes the V-168-surfaced gap: pre-V-174 the `'admin'` scope conflated two unrelated concerns — customer-account control (mint keys, manage subscription) AND Driftstack-staff-only operations (`/v1/admin/*` cross-account routes). V-174 splits 'admin' into `'account_owner'` + `'driftstack_internal_admin'`.
+
+### What changed
+
+`packages/api-types/src/common.ts`:
+
+- `ApiKeyScopeSchema` extended to include `'account_owner'` + `'driftstack_internal_admin'`. `'admin'` retained as compat alias during migration window.
+- Doc-comment explains the new scope semantics + the migration path.
+
+`apps/server/src/db/migrations/0016_scope_split_v174.sql` (new):
+
+- `ALTER TYPE api_key_scope ADD VALUE IF NOT EXISTS 'account_owner';`
+- `ALTER TYPE api_key_scope ADD VALUE IF NOT EXISTS 'driftstack_internal_admin';`
+- IF NOT EXISTS for idempotency on re-runs.
+
+`apps/server/src/db/schema.ts`:
+
+- `apiKeyScope` pgEnum extended with the new values.
+
+`apps/server/src/services/auth.ts::requireScope`:
+`apps/server/src/lib/errors-helpers.ts::requireScope`:
+
+- Compat path: an `'admin'`-scoped key satisfies `'account_owner'` and `'driftstack_internal_admin'` checks during the migration window. Existing `'admin'`-scoped API keys keep working on every endpoint they used to. Both `requireScope` impls (auth.ts decorator-side + errors-helpers.ts service-side) updated identically.
+
+`apps/server/src/services/auth.ts::slowPathWebSession`:
+
+- V-168 web-session synthetic key scope: `['read', 'write', 'admin']` → `['read', 'write', 'account_owner']`. Web sessions now have full customer-account control but NOT cross-account `/v1/admin/*` access. The V-168 surfaced gap is closed (web sessions can't act on /v1/admin/\*).
+
+`apps/server/src/routes/admin-accounts.ts` + `admin-audit-log.ts` + `admin-force-actions.ts` + `admin-webhooks.ts`:
+
+- Bulk-replaced `'admin'` → `'driftstack_internal_admin'` in all preHandler `app.requireScope(...)` calls + service-layer `throwIfMissingScope(ctx, ...)` calls. Routes are explicitly Driftstack-staff-only now.
+
+`apps/server/src/services/admin-accounts.ts` + `admin-audit.ts`:
+
+- Same bulk-replace at the service layer.
+
+`apps/server/src/services/api-keys.ts`:
+
+- `throwIfMissingScope(ctx, 'admin')` → `throwIfMissingScope(ctx, 'account_owner')` in both `create()` and `revoke()`. File-header comment updated.
+
+### What did NOT change
+
+- **'admin' scope removal**. Kept as compat alias — a separate founder-driven migration script (V-NNN follow-on) re-scopes existing API keys to the explicit new values, then `'admin'` deprecates. Per founder direction: "Surface migration list for founder approval BEFORE auto-promoting any internal admin keys."
+- **`apps/server/src/routes/admin.ts`** — that file is misnamed (it serves CUSTOMER routes `/v1/api-keys` + `/v1/usage`, not /v1/admin/\*). The scope check happens at the service layer (`api-keys.ts::create + revoke`); already updated above.
+- **CompatPath observable behavior** — every existing `'admin'`-scoped test fixture continues to pass unchanged.
+- **`requireScope` test coverage** — V-174 doesn't add unit tests for the alias predicate itself; the integration tests below cover the route-level behavior end-to-end.
+
+### New tests in V-174
+
+`apps/server/tests/integration/admin-accounts.test.ts` — 5 new tests:
+
+1. `'account_owner'` scope alone CANNOT call /v1/admin/\* — gap closure verified. 403 with detail referencing 'driftstack_internal_admin'.
+2. `'driftstack_internal_admin'` scope CAN call /v1/admin/\*.
+3. `'admin'` compat alias still works on /v1/admin/\* during migration.
+4. `'account_owner'` scope alone CAN mint API keys (customer-account control preserved).
+5. `'driftstack_internal_admin'` WITHOUT `'account_owner'` CANNOT mint API keys (the converse). 403 with detail referencing 'account_owner'.
+
+### How verified
+
+- `npm run typecheck`: clean across all 10 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Targeted: `npm test -- admin-accounts.test.ts`: 18/18 (was 13; +5 new).
+- Full suite: `npm test`: 613/613 (was 608; +5 new).
+- Compat-alias verified: every existing test that used `'admin'`-scoped fixture continues to pass without modification. The compat path in `requireScope` makes the migration silent for existing rows.
+
+### Files modified
+
+- `packages/api-types/src/common.ts`
+- `apps/server/src/db/schema.ts`
+- `apps/server/src/db/migrations/0016_scope_split_v174.sql` (new)
+- `apps/server/src/db/migrations/meta/_journal.json`
+- `apps/server/src/services/auth.ts` (requireScope alias + web-session synthetic key scope)
+- `apps/server/src/lib/errors-helpers.ts` (requireScope alias)
+- `apps/server/src/routes/admin-accounts.ts` (bulk replace)
+- `apps/server/src/routes/admin-audit-log.ts` (bulk replace)
+- `apps/server/src/routes/admin-force-actions.ts` (bulk replace)
+- `apps/server/src/routes/admin-webhooks.ts` (bulk replace)
+- `apps/server/src/services/admin-accounts.ts` (bulk replace)
+- `apps/server/src/services/admin-audit.ts` (bulk replace)
+- `apps/server/src/services/api-keys.ts` (throwIfMissingScope sites)
+- `apps/server/tests/integration/admin-accounts.test.ts` (5 new tests)
+
+### Next
+
+V-175: api-types dist/ staleness hygiene fix (~30min) — auto-rebuild
+pre-test step.
+
+Then per execution order: V-176 status page, V-177 SDK versioning,
+V-178 cross-SDK example parity, V-179 recapture automation, V-180+
+generate-from-planning-docs.

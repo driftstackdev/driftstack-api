@@ -113,6 +113,13 @@
       "when": 1778892800000,
       "tag": "0015_webhook_delivery_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1778893200000,
+      "tag": "0016_scope_split_v174",
+      "breakpoints": true
     }
   ]
 }
