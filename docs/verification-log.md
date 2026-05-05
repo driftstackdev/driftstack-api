@@ -11934,3 +11934,46 @@ V-207 stripped the trailer only. V-211 locked the new git identity for forward c
 ### Next
 
 V-213 — `/about` Dutch-BV-only commit (REVISED scope per founder anonymity decision; drop the Founder section from the working-tree draft, commit only the Dutch-BV jargon trim).
+
+## V-213 — /about Dutch-BV jargon trim (founder anonymity revision)
+
+### What
+
+Revised the V-209 working-tree draft per the founder anonymity decision. **Dropped** the Founder section + `[FOUNDER NAME]` / `[BACKGROUND]` placeholders entirely — anonymity policy says no personal-name attribution on customer-facing surfaces, including no "Driftstack is built by [name]" framing.
+
+**Committed**: just the small Dutch BV jargon trim from V-209 (single line diff in `apps/marketing-site/src/pages/about.astro` removing "(Besloten Vennootschap)" parenthetical from the Entity row).
+
+### Diff
+
+```
+- <dd class="text-sm text-slate-900">Dutch BV (Besloten Vennootschap)</dd>
++ <dd class="text-sm text-slate-900">Dutch BV</dd>
+```
+
+### Why
+
+Founder direction with the V-205→V-209 ack: anonymity policy locked. /about gets NO Founder section. The Dutch BV trim survives the revision because it's a jargon clarity improvement, not anonymity-related.
+
+The current /about page is already in solid company voice with no personal name. Posture, What-we're-building, Why-we-exist, Company-facts sections all use "we" / "Driftstack" voice. After V-213 trim, the page reads cleaner without the redundant Dutch parenthetical that visitors won't recognize.
+
+### Files
+
+- `apps/marketing-site/src/pages/about.astro` — single line trim.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 662 / 662 passing.
+- `npx astro check` on marketing-site: 0 errors / warnings / hints.
+
+### Notes
+
+- Page section background-color rhythm unchanged (white-slate-white-slate alternation preserved); my V-209 working-tree had transient changes that I reverted before this commit.
+- If founder later wants a "How to reach us" subsection (founder anonymity-compatible "we" voice rather than personal Founder section), that's a follow-up surface — Tier 3 working-tree draft, redline before commit. Skipped here to keep V-213 strictly the trim.
+
+### Next
+
+V-214 — marketing site visitor-density audit + Tier 3 drafts for `/index` + `/pricing` + `/faq` (~3-5hr Tier 3 working-tree drafts, founder redline before commit).
