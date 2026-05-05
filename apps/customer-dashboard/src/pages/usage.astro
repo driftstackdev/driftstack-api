@@ -2,11 +2,33 @@
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 import { MOCK_USAGE_SUMMARY } from '../data/mocks.ts';
 
-// V-134 scaffolding. Real reads against /v1/usage land later.
+// V-171 — page progressively enhances from mock-rendered SSG to
+// real /v1/usage + /v1/usage/series fetches via inline <script>.
+// Render path:
+//   1. Astro emits the static HTML using MOCK_USAGE_SUMMARY (below).
+//      User sees mock numbers immediately while JS loads.
+//   2. <script is:inline> runs on DOMContentLoaded, reads
+//      `ds_web_session_token` from localStorage.
+//   3. Token present → fetch totals (/v1/usage) + series
+//      (/v1/usage/series?days=30) with credentials, replace DOM.
+//   4. Token absent → small banner: "Sign in to see live usage."
+//      Mock data stays visible as preview. (Production: signup/login
+//      UI sets the token; not yet wired — V-NNN follow-on.)
+//   5. Fetch fails (network / 401 / 5xx) → small banner
+//      "Couldn't load live usage. Showing preview data." Mock stays.
+//
+// Config: PUBLIC_API_BASE_URL (Astro public env). Defaults to
+// `http://localhost:3000` for local dev, overridden in production.
+//
+// Today usage_records writers aren't wired (V-014/V-015 amendment),
+// so /v1/usage + /v1/usage/series return zeros for everyone. The
+// fetch path is real; the data is empty until writers land.
 
 function fmtIsoDay(iso: string): string {
   return new Date(iso).toISOString().slice(0, 10);
 }
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 
 // Mock 30-day series for sparklines. Real source: /v1/usage with
 // daily aggregation. Generated deterministically (no Math.random)
@@ -47,11 +69,11 @@ const SPARK_H = 48;
 ---
 
 <DashboardLayout title="Usage">
-  <div class="mx-auto max-w-5xl px-6 py-10">
+  <div class="mx-auto max-w-5xl px-6 py-10" data-page="usage">
     <header class="mb-10">
-      <p class="text-sm text-slate-500">
+      <p class="text-sm text-slate-500" data-field="period">
         {fmtIsoDay(MOCK_USAGE_SUMMARY.period_start)} → {fmtIsoDay(MOCK_USAGE_SUMMARY.period_end)} ·
-        {MOCK_USAGE_SUMMARY.tier} tier
+        <span data-field="tier">{MOCK_USAGE_SUMMARY.tier}</span> tier
       </p>
       <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Usage</h1>
       <p class="mt-2 max-w-prose text-sm text-slate-500">
@@ -61,11 +83,22 @@ const SPARK_H = 48;
       </p>
     </header>
 
+    <!--
+      V-171 — banner is hidden by default (mock-rendered SSG path);
+      progressive-enhance script reveals + populates on fetch
+      success/failure / no-token state.
+    -->
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    ></div>
+
     <!-- Top tiles -->
     <section class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <div class="dashboard-card">
         <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Session minutes</p>
-        <p class="mt-3 text-3xl font-semibold text-slate-900">
+        <p class="mt-3 text-3xl font-semibold text-slate-900" data-stat="session_minute">
           {MOCK_USAGE_SUMMARY.totals.session_minute.toLocaleString('en-US')}
         </p>
         <svg
@@ -74,6 +107,7 @@ const SPARK_H = 48;
           aria-hidden="true"
         >
           <path
+            data-spark="session_minute"
             d={sparklinePath(series.session_minutes, SPARK_W, SPARK_H)}
             fill="none"
             stroke="currentColor"
@@ -83,7 +117,7 @@ const SPARK_H = 48;
       </div>
       <div class="dashboard-card">
         <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Navigates</p>
-        <p class="mt-3 text-3xl font-semibold text-slate-900">
+        <p class="mt-3 text-3xl font-semibold text-slate-900" data-stat="navigate">
           {MOCK_USAGE_SUMMARY.totals.navigate.toLocaleString('en-US')}
         </p>
         <svg
@@ -92,6 +126,7 @@ const SPARK_H = 48;
           aria-hidden="true"
         >
           <path
+            data-spark="navigate"
             d={sparklinePath(series.navigates, SPARK_W, SPARK_H)}
             fill="none"
             stroke="currentColor"
@@ -101,7 +136,7 @@ const SPARK_H = 48;
       </div>
       <div class="dashboard-card">
         <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Interacts</p>
-        <p class="mt-3 text-3xl font-semibold text-slate-900">
+        <p class="mt-3 text-3xl font-semibold text-slate-900" data-stat="interact">
           {MOCK_USAGE_SUMMARY.totals.interact.toLocaleString('en-US')}
         </p>
         <svg
@@ -110,6 +145,7 @@ const SPARK_H = 48;
           aria-hidden="true"
         >
           <path
+            data-spark="interact"
             d={sparklinePath(series.interacts, SPARK_W, SPARK_H)}
             fill="none"
             stroke="currentColor"
@@ -119,7 +155,7 @@ const SPARK_H = 48;
       </div>
       <div class="dashboard-card">
         <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Captures</p>
-        <p class="mt-3 text-3xl font-semibold text-slate-900">
+        <p class="mt-3 text-3xl font-semibold text-slate-900" data-stat="captures_total">
           {(
             MOCK_USAGE_SUMMARY.totals.state_capture +
             MOCK_USAGE_SUMMARY.totals.screenshot_capture
@@ -131,6 +167,7 @@ const SPARK_H = 48;
           aria-hidden="true"
         >
           <path
+            data-spark="captures"
             d={sparklinePath(series.captures, SPARK_W, SPARK_H)}
             fill="none"
             stroke="currentColor"
@@ -149,13 +186,13 @@ const SPARK_H = 48;
       <dl class="mt-6 grid gap-6 md:grid-cols-2">
         <div class="flex justify-between border-b border-slate-100 pb-3">
           <dt class="text-sm text-slate-500">Screenshots</dt>
-          <dd class="font-mono text-sm text-slate-900">
+          <dd class="font-mono text-sm text-slate-900" data-stat="screenshot_capture">
             {MOCK_USAGE_SUMMARY.totals.screenshot_capture.toLocaleString('en-US')}
           </dd>
         </div>
         <div class="flex justify-between border-b border-slate-100 pb-3">
           <dt class="text-sm text-slate-500">DOM snapshots</dt>
-          <dd class="font-mono text-sm text-slate-900">
+          <dd class="font-mono text-sm text-slate-900" data-stat="state_capture">
             {MOCK_USAGE_SUMMARY.totals.state_capture.toLocaleString('en-US')}
           </dd>
         </div>
@@ -168,4 +205,121 @@ const SPARK_H = 48;
       e.g. a sudden 10× spike in navigates may indicate a runaway script.
     </p>
   </div>
+
+  <!--
+    V-171 — progressive-enhancement script. Reads a web-session token
+    from localStorage, fetches /v1/usage + /v1/usage/series with
+    credentials, replaces tile values + sparkline paths.
+
+    Production wires the token via the (future) signup/login flow that
+    sets `localStorage.ds_web_session_token`. Local dev: paste the
+    token in DevTools console:
+      localStorage.setItem('ds_web_session_token', '<token>')
+    then reload.
+  -->
+  <script is:inline define:vars={{ apiBaseUrl, SPARK_W, SPARK_H }}>
+    (function () {
+      const root = document.querySelector('[data-page="usage"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+
+      if (!token) {
+        showBanner('Sign in to see live usage. Showing preview data below.');
+        return;
+      }
+
+      const headers = { authorization: 'Bearer ' + token };
+
+      Promise.all([
+        fetch(apiBaseUrl + '/v1/usage', { headers, credentials: 'include' }).then((r) =>
+          r.ok ? r.json() : Promise.reject(new Error('summary HTTP ' + r.status)),
+        ),
+        fetch(apiBaseUrl + '/v1/usage/series?days=30', { headers, credentials: 'include' }).then(
+          (r) => (r.ok ? r.json() : Promise.reject(new Error('series HTTP ' + r.status))),
+        ),
+      ])
+        .then(([summary, series]) => {
+          // Update period + tier label.
+          const tierEl = root.querySelector('[data-field="tier"]');
+          if (tierEl) tierEl.textContent = summary.tier;
+          const periodEl = root.querySelector('[data-field="period"]');
+          if (periodEl) {
+            const start = summary.period_start.slice(0, 10);
+            const end = summary.period_end.slice(0, 10);
+            periodEl.textContent = start + ' → ' + end + ' · ' + summary.tier + ' tier';
+          }
+
+          // Update tile totals.
+          const totals = summary.totals || {};
+          for (const key of [
+            'session_minute',
+            'navigate',
+            'interact',
+            'screenshot_capture',
+            'state_capture',
+          ]) {
+            const el = root.querySelector('[data-stat="' + key + '"]');
+            if (el) el.textContent = (totals[key] || 0).toLocaleString('en-US');
+          }
+          // Captures combined tile.
+          const capturesTotalEl = root.querySelector('[data-stat="captures_total"]');
+          if (capturesTotalEl) {
+            capturesTotalEl.textContent = (
+              (totals.state_capture || 0) + (totals.screenshot_capture || 0)
+            ).toLocaleString('en-US');
+          }
+
+          // Build sparkline paths from the series buckets.
+          const buckets = series.buckets || [];
+          const seriesByMetric = {
+            session_minute: buckets.map((b) => (b.totals && b.totals.session_minute) || 0),
+            navigate: buckets.map((b) => (b.totals && b.totals.navigate) || 0),
+            interact: buckets.map((b) => (b.totals && b.totals.interact) || 0),
+            captures: buckets.map(
+              (b) =>
+                ((b.totals && b.totals.state_capture) || 0) +
+                ((b.totals && b.totals.screenshot_capture) || 0),
+            ),
+          };
+
+          for (const [metric, values] of Object.entries(seriesByMetric)) {
+            const path = root.querySelector('[data-spark="' + metric + '"]');
+            if (!path) continue;
+            const max = Math.max(1, ...values);
+            const stepX = SPARK_W / Math.max(1, values.length - 1);
+            const d = values
+              .map((v, i) => {
+                const x = i * stepX;
+                const y = SPARK_H - (v / max) * SPARK_H;
+                return (i === 0 ? 'M' : 'L') + ' ' + x.toFixed(1) + ' ' + y.toFixed(1);
+              })
+              .join(' ');
+            path.setAttribute('d', d);
+          }
+
+          // Empty-data state — let the user know real data is loaded
+          // but everything is zero (writers not yet wired).
+          const allZero = Object.values(totals).every((v) => !v || v === 0);
+          if (allZero) {
+            showBanner(
+              'Live usage loaded. No activity in the current period yet — counts will populate as you run sessions.',
+            );
+          }
+        })
+        .catch((err) => {
+          showBanner(
+            "Couldn't load live usage (" +
+              (err && err.message ? err.message : 'network error') +
+              '). Showing preview data below.',
+          );
+        });
+    })();
+  </script>
 </DashboardLayout>

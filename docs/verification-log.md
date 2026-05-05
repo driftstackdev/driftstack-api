@@ -9712,3 +9712,101 @@ This is a pre-existing footgun separate from V-170 (V-122 hit the same thing for
 V-171 (next): customer-dashboard `/usage` wiring — switch from MOCK_USAGE_SUMMARY + mockSeries() to client-side fetch against `/v1/usage` + `/v1/usage/series`. Empty-state UI when data is zero. Tier 1 (engineering scaffolding; visual layout unchanged).
 
 After V-171: V-172 = V-163 follow-on (DrizzleAuditArchive + DrizzleArchiveLedgerRepo).
+
+---
+
+## V-171 — Customer-dashboard /usage live wiring (Decision 1, Option A — frontend half)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder Decision 1 Option A — frontend half. V-170 landed the
+backend (`/v1/usage` + `/v1/usage/series`); V-171 wires the
+customer-dashboard `/usage` page to those endpoints via
+progressive-enhancement.
+
+Pattern (matches founder's "mock fallback for offline-dev mode"
+guidance from prior clipboard):
+
+1. Astro emits the static HTML using `MOCK_USAGE_SUMMARY` so the
+   page renders immediately while JS loads.
+2. Inline `<script>` runs on DOMContentLoaded, reads
+   `localStorage.ds_web_session_token`.
+3. Token present → `fetch(API_BASE + '/v1/usage')` + `fetch(API_BASE
+   - '/v1/usage/series?days=30')`with`Authorization: Bearer
+     <token>`+`credentials: 'include'`. On success, replaces tile
+values + sparkline `<path d="...">` attributes with real data.
+4. Token absent → small banner: "Sign in to see live usage. Showing
+   preview data below." Mock data stays visible.
+5. Fetch fails (401, network, CORS) → small banner with the error
+   shape. Mock stays visible.
+6. All-zero totals (today's reality — `usage_records` writers not
+   wired) → small banner: "Live usage loaded. No activity in the
+   current period yet — counts will populate as you run sessions."
+
+### What changed
+
+`apps/customer-dashboard/src/pages/usage.astro`:
+
+- Frontmatter: read `import.meta.env.PUBLIC_API_BASE_URL` (defaults
+  to `http://localhost:3000` for local dev).
+- DOM annotated with `data-page="usage"` + per-tile `data-stat="<key>"`
+  - per-sparkline `data-spark="<metric>"` + `data-banner` + `data-field`
+    for the period/tier header.
+- New `<div data-banner hidden>` element above the tile grid for
+  status messages.
+- Inline `<script is:inline define:vars={{ apiBaseUrl, SPARK_W, SPARK_H }}>`
+  at the bottom of the page does the fetch + DOM replacement.
+- Sparkline path computation matches the SSG-side `sparklinePath()`
+  helper (max-scale + step-x); 30 buckets from the series response.
+
+### Production deployment notes
+
+- **CORS**: production needs `app.driftstack.dev` added to the
+  Fastify CORS allow-list (currently localhost-only in dev). Founder
+  added to `docs/founder-action-queue.md` as a Cloudflare Pages
+  config item; not blocking dashboard work in local dev.
+- **Token storage**: production wires
+  `localStorage.ds_web_session_token` via the (future) signup/login
+  flow that lives in the customer-dashboard. Today there's no UI
+  for that — local dev paste pattern documented inline in the
+  Astro frontmatter comment.
+
+### What's still mock
+
+- `MOCK_USAGE_SUMMARY` still drives the SSG output. JS replaces the
+  values when fetch succeeds; mock remains the fallback path. This
+  matches the founder's "mock data stays as fallback for offline-dev
+  mode" directive.
+- Capture-breakdown section's "DOM snapshots" + "Screenshots" rows
+  now have `data-stat` annotations and get populated from real data
+  on fetch success.
+
+### How verified
+
+- `npm run typecheck`: clean across all 10 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 608/608 (unchanged — no test files touched).
+- Dev server: `astro dev --host 0.0.0.0 --port 4322` starts; `curl
+http://localhost:4322/usage` renders 200; grep against rendered
+  HTML confirms `data-stat`, `data-spark`, `data-banner`, "preview
+  data" markers all present.
+
+### Files modified
+
+- `apps/customer-dashboard/src/pages/usage.astro`
+
+### Next
+
+V-172 (next): V-163 follow-on — DrizzleAuditArchive +
+DrizzleArchiveLedgerRepo (R2 archive policy implementation, ~2-3hr).
+
+Then V-173 (Postgres-backed webhook delivery, ~3-4hr per founder
+Decision 2), V-174 (scope architecture split per founder Decision
+1 — account_owner + driftstack_internal_admin, ~2-3hr including
+migration + tests), V-175 (api-types dist/ staleness hygiene fix,
+~30min).
