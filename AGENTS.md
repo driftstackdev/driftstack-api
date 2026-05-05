@@ -1,8 +1,30 @@
 # Driftstack API — repository context
 
+## ⚠️ Founder anonymity policy
+
+Driftstack does not attribute work to a specific named person on customer-facing surfaces. All public-facing copy refers to "Driftstack" as the entity, never to a personal founder name.
+
+- **DO NOT** include personal founder name on `/about`, `/security`, `/docs`, marketing site, customer dashboard, admin panel, FAQ, or any public-facing surface.
+- **DO NOT** include personal founder bio paragraphs ("Driftstack is built by [name]" framing).
+- **DO** use "Driftstack" / "the Driftstack team" / "we" framing for company voice.
+- **DO** use generic role descriptions where founder context is needed (e.g. "founded in 2026 in the Netherlands").
+
+Internal documentation, `docs/decisions.md`, V-log entries, and engineering scaffolding can reference founder context for engineering accuracy. Customer-facing surfaces stay anonymous.
+
+## ⚠️ Git identity policy
+
+All commits in this repo use the Driftstack-branded git identity, not a personal name + email.
+
+```
+git config --local user.name "Driftstack"
+git config --local user.email "dev@driftstack.dev"
+```
+
+The local config above is set per-clone; verify with `git config --local user.name` after cloning. Existing commits with the prior personal identity are rewritten via the V-207 force-push runbook (`docs/founder-actions/v207-force-push-attribution-cleanup.md`).
+
 ## ⚠️ Commit attribution policy
 
-Commits are attributed to the founder, not to AI development tooling.
+Commits are attributed to the Driftstack identity (per the git identity policy above), not to AI development tooling.
 
 - **DO NOT** include `Co-Authored-By: Claude <noreply@anthropic.com>` (or any other AI-tool name) trailer on commits.
 - **DO NOT** include `🤖 Generated with [Claude Code]` (or any equivalent) footer on commits.
@@ -20,9 +42,10 @@ Marketing site, customer dashboard, admin panel, FAQ, docs, and any public-facin
 - **DO NOT** reference AI / AI-assisted development / AI tooling on customer-facing copy.
 - **DO NOT** mention Claude / Anthropic / OpenAI / specific AI tools.
 - **DO NOT** use "AI-powered" or "AI-built" framing.
+- **DO NOT** include personal founder name (per the Founder anonymity policy above).
 - Driftstack is the product; the development tooling that produced it is not customer-facing information.
 
-Internal documentation (architecture docs, planning docs, `decisions.md`) can reference tooling for engineering accuracy. Customer-facing surfaces stay product-focused.
+Internal documentation (architecture docs, planning docs, `docs/decisions.md`) can reference tooling for engineering accuracy. Customer-facing surfaces stay product-focused.
 
 The Anthropic API used as a BYO bundled LLM (per the sub-processor list below) is product surface, not development-tooling reference — that's allowed when documenting customer-facing capability.
 

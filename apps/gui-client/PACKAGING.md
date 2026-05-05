@@ -28,12 +28,12 @@ both for distribution).
 
 The `tauri build` step reads these from the environment:
 
-| Env var                  | What                                    | Example                                                  |
-| ------------------------ | --------------------------------------- | -------------------------------------------------------- |
-| `APPLE_SIGNING_IDENTITY` | The cert's common name                  | `Developer ID Application: Joël Theunissen (XXXXXXXXXX)` |
-| `APPLE_ID`               | Apple ID email                          | `your@apple.id`                                          |
-| `APPLE_PASSWORD`         | App-specific password from setup step 3 | `xxxx-xxxx-xxxx-xxxx`                                    |
-| `APPLE_TEAM_ID`          | Team id from setup step 4               | `XXXXXXXXXX`                                             |
+| Env var                  | What                                    | Example                                                        |
+| ------------------------ | --------------------------------------- | -------------------------------------------------------------- |
+| `APPLE_SIGNING_IDENTITY` | The cert's common name                  | `Developer ID Application: <YOUR DEVELOPER NAME> (XXXXXXXXXX)` |
+| `APPLE_ID`               | Apple ID email                          | `your@apple.id`                                                |
+| `APPLE_PASSWORD`         | App-specific password from setup step 3 | `xxxx-xxxx-xxxx-xxxx`                                          |
+| `APPLE_TEAM_ID`          | Team id from setup step 4               | `XXXXXXXXXX`                                                   |
 
 Do **not** commit any of these. Keep them in `~/.driftstack/build.env`
 or similar and `source` it before building:

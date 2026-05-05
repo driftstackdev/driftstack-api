@@ -11846,3 +11846,54 @@ The literal filename `CLAUDE.md` at repo root is an AI-tooling tell visible on g
 ### Next
 
 V-211 — founder anonymity policy + git identity policy locked in AGENTS.md + public-surface audit for personal-name references (~30 min Tier 1).
+
+## V-211 — founder anonymity + git identity policy + public-surface personal-name audit
+
+### What
+
+Three things in one V-entry:
+
+1. **Founder anonymity policy** added to AGENTS.md as a new top-level section. Driftstack does not attribute work to a specific named person on customer-facing surfaces. All public-facing copy refers to "Driftstack" / "we" / "the Driftstack team" — never a personal name. Internal docs (V-log, decisions.md, architecture, planning) retain personal references for engineering accuracy.
+
+2. **Git identity policy** added to AGENTS.md. All commits use `Driftstack <dev@driftstack.dev>` per local repo config. Documents the exact `git config --local` commands. References the V-207 runbook for rewriting existing-history commit identity.
+
+3. **Public-surface personal-name audit** + cleanup. Findings:
+   - `LICENSE`: clean (`Copyright (c) 2026 driftstackdev` — GitHub org, not personal).
+   - All `package.json` files: clean (no `author` fields with personal names).
+   - All customer-facing app sources (`apps/marketing-site/src/**`, `apps/customer-dashboard/src/**`, `apps/admin-panel/src/**`, `apps/gui-client/src/**`): clean — zero personal-name references.
+   - `apps/gui-client/PACKAGING.md`: had a personal-name example value for `APPLE_SIGNING_IDENTITY` (`Developer ID Application: Joël Theunissen (XXXXXXXXXX)`). **CLEANED** — replaced with `<YOUR DEVELOPER NAME>` placeholder.
+   - `docs/entity-org-transition.md`: internal-doc references (KvK + Apple Developer ID transition tracking). **KEPT** per policy carve-out.
+   - `docs/verification-log.md`: internal V-log references. **KEPT** per policy carve-out.
+
+The commit-attribution policy section was tightened to cross-reference the new git identity policy ("Commits are attributed to the Driftstack identity per the git identity policy above") rather than the prior "founder" framing.
+
+### Why
+
+Founder direction received with the V-205→V-209 ack: Driftstack maintains anonymity on public surfaces. No personal founder name on customer-facing copy. Locks the policy in AGENTS.md so future-self (and other agents on context inheritance) cannot accidentally re-introduce a personal-name "About the founder" section on /about or similar.
+
+The git identity policy locks the local commit-author identity to Driftstack-branded form; V-205's commit-attribution rule said "no AI-tool trailer" but didn't explicitly cover the author identity field — V-211 closes that gap.
+
+### Files
+
+- `AGENTS.md` — three new/updated policy sections (founder anonymity, git identity, commit attribution cross-ref).
+- `apps/gui-client/PACKAGING.md` — replaced personal-name example in the env-var table.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` on PACKAGING.md).
+- `npm test`: 662 / 662 passing.
+- `git config --local user.name && git config --local user.email`: returns `Driftstack` and `dev@driftstack.dev`.
+- `grep -rn -i "joël\|theunissen\|joeltheunissen"` across customer-facing app sources: zero hits.
+
+### Notes
+
+- Tools that auto-load `CLAUDE.md` continue working as long as Claude Code recognizes `AGENTS.md` (it does). Other tooling that hard-codes the old name needs a symlink (`ln -s AGENTS.md CLAUDE.md`) — not needed today.
+- The V-207 runbook (`docs/founder-actions/v207-force-push-attribution-cleanup.md`) needs updating to include the additional `--name-callback` + `--email-callback` scope so the founder force-push rewrites both the trailer AND the author identity. That's V-212.
+- Internal docs that retain personal-name references are not exhaustively audited here — the policy says they're allowed, not required to be removed. If founder wants those scrubbed too, that's a separate slice.
+
+### Next
+
+V-212 — update V-207 runbook with name+email rewrite scope (~15 min, surface for founder ack before founder executes).
