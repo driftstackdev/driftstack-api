@@ -1,0 +1,154 @@
+# Driftstack API — operational runbook
+
+Drafted V-195 as the standing baseline for incident response and ops
+plays. Pre-launch — most procedures are forward-looking until real
+production traffic exists; the structure is in place so an incident
+in the first weeks of paid traffic doesn't catch us flat-footed.
+
+> **Status**: pre-launch. Everything in `[TODO]` is a known gap and
+> should be filled before the first paying customer (see CLAUDE.md
+> "publish vs commercial activation" — commercial activation is gated
+> on entity registration, but ops infra needs to be ready when that
+> gate opens).
+
+## Quick triage
+
+When something looks broken:
+
+1. **Hit `/version` on the prod host** — confirm which build is running.
+2. **Hit `/ready`** — every readiness check (postgres, redis, r2 if
+   configured) reports `ok` + latency. A `503` means at least one
+   dependency is unreachable; the response body names the failing
+   dep.
+3. **Check Sentry** — error rate spike + most-frequent message.
+4. **Check Pino logs** (Hetzner journalctl or wherever the server
+   stdout is captured) — last 200 lines around the spike timestamp.
+5. **Check Stripe dashboard** — webhook deliveries and subscription
+   state if billing-related.
+
+## Known endpoints for ops
+
+| Path                | Auth | Purpose                                                     |
+| ------------------- | ---- | ----------------------------------------------------------- |
+| `GET /health`       | none | liveness — returns `{ ok: true }` always                    |
+| `GET /healthz`      | none | alias of `/health`                                          |
+| `GET /ready`        | none | readiness — 200 if every check passes, 503 otherwise        |
+| `GET /version`      | none | build version + git sha + started_at + node version         |
+| `GET /v1/status`    | none | aggregate readiness — operational / degraded / major_outage |
+| `GET /openapi.json` | none | spec                                                        |
+| `GET /docs/`        | none | Scalar UI                                                   |
+
+## Standard incidents
+
+### Postgres unreachable
+
+Symptoms: `/ready` returns 503 with `postgres` failing.
+
+1. Confirm Neon is up (status.neon.tech).
+2. Check `DATABASE_URL` env didn't get rotated without restart.
+3. If transient, restart the server (Hetzner systemd restart).
+4. If persistent, switch read traffic to a Neon branch if available;
+   surface customer impact.
+
+### Redis unreachable
+
+Symptoms: `/ready` returns 503 with `redis` failing. Auth still works
+because the in-process auth cache mirrors a 30s TTL window — but
+rate-limit consume may degrade.
+
+1. Confirm Upstash is up (status.upstash.com).
+2. Validate `REDIS_URL` connectivity from Hetzner host.
+3. Restart if transient.
+4. **[TODO]** Document graceful-degradation posture for rate limiting
+   when Redis is down (open: do we open the buckets, close them, or
+   revert to memory-store?).
+
+### Stripe webhook delivery failures
+
+Symptoms: customers paying but subscription state not updating.
+
+1. Stripe Dashboard → Webhooks → look at recent delivery attempts.
+2. Check audited Stripe webhook table: `processed_stripe_events`
+   row should exist with the event_id.
+3. Replay the failed delivery from Stripe Dashboard.
+4. If signature verification is failing, the webhook signing secret
+   in `STRIPE_WEBHOOK_SIGNING_SECRET` is out of sync with the
+   Dashboard endpoint config — rotate via Hetzner SSH-write per
+   the locked stripe-credential-handling memory.
+
+### DLQ growth (webhook deliveries to customer endpoints)
+
+Symptoms: admin /webhook-dlq page shows growing queue, customer
+reports missing notifications.
+
+1. Open admin /webhook-dlq (admin.driftstack.dev/webhook-dlq).
+2. Inspect last_error column — usually `connect ECONNREFUSED` or
+   `HTTP 5xx`.
+3. If transient (5xx burst from a customer's endpoint that's now
+   recovered), use Requeue.
+4. If persistent (DNS gone, customer endpoint is dead), reach out
+   to customer; do not silently retry forever.
+
+### Account abuse / leaked key
+
+1. Admin /api-keys page — find the key by prefix or account id.
+2. Click Revoke — reason field is required and is logged + surfaced
+   to the customer.
+3. If broader sweep needed (multiple keys across an account), use
+   the per-account detail page Suspend button.
+
+## Restore + DR
+
+> **[TODO]** Full DR rehearsal scheduled before commercial activation.
+> Targets:
+>
+> - Point-in-time restore from Neon (test on a branch first)
+> - Redis: ephemeral, no DR — rebuild on cold start
+> - R2: durability is Cloudflare's responsibility; no key data is
+>   single-source on R2 (audit archives have Postgres truth)
+> - Hetzner host: cattle, not pet — replace via deployment automation
+
+### Database restore checklist (skeleton)
+
+1. Identify the recovery target time (post-incident timestamp).
+2. Create a Neon branch from the target time.
+3. Run app pointed at the new branch in staging.
+4. Verify customer-data invariants (sample checks: every
+   active subscription has a stripe_customer_id; every session row
+   has a valid account_id).
+5. Cut DNS or `DATABASE_URL` over to the restored branch.
+6. Notify affected customers via Postmark.
+
+## Migration rehearsal
+
+> **[TODO]** Ahead of every Drizzle migration that touches a non-empty
+> production table:
+>
+> 1. Snapshot Neon (point-in-time on a branch).
+> 2. Run the migration against the snapshot branch with prod-shape
+>    data.
+> 3. Time the migration; document expected wall time.
+> 4. Confirm rollback strategy (DDL changes that can't be reversed
+>    without data loss require explicit approval).
+> 5. Land the migration in the deploy window with the snapshot
+>    branch ready as a fallback.
+
+## Standing observability
+
+- **Pino structured logs** — JSON to stdout; Hetzner journalctl ships
+  to whatever observability sink is configured (`[TODO]` configure
+  Sentry breadcrumbs for severe errors).
+- **Sentry** — server errors auto-reported; trace IDs included in the
+  Pino log line via `request.id`.
+- **Stripe Dashboard** — payment + subscription events; webhook
+  delivery failures surface here first.
+- **Cloudflare** — origin-shield + DNS; status.cloudflare.com.
+
+## What to do if you can't reach the founder
+
+This is a solo operation pre-launch. If a decision needs to be made
+that exceeds routine triage (customer-facing communication, rolling
+back a migration, suspending an account suspected of abuse, ANY
+financial action), wait for the founder to authorize. Document the
+issue, take read-only diagnostic steps, and surface for explicit
+approval per the locked decision-authority policy in CLAUDE.md.

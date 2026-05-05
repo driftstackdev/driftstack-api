@@ -252,6 +252,23 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get('/health', () => ({ ok: true }));
   app.get('/healthz', () => ({ ok: true }));
 
+  // V-195 — public version endpoint for ops tooling. Reports server
+  // version (from package.json env), git sha (from GIT_SHA env at
+  // deploy time, "unknown" otherwise), and process start time.
+  // Public + unauthenticated so deploy automation + uptime probes can
+  // confirm "what's running where" without needing a key. Lives at
+  // /version (not /v1/*) because it has no auth — /v1/* routes are
+  // contractually authed per the OpenAPI security check.
+  const startedAt = new Date().toISOString();
+  const buildVersion = process.env.npm_package_version ?? '0.0.0';
+  const gitSha = process.env.GIT_SHA ?? 'unknown';
+  app.get('/version', () => ({
+    version: buildVersion,
+    git_sha: gitSha,
+    started_at: startedAt,
+    node_version: process.version,
+  }));
+
   // Readiness endpoint — public, no auth, no rate limit. Returns 200
   // only when the dependencies the server needs to serve traffic are
   // reachable. Designed for orchestrator readiness probes (the

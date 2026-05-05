@@ -592,6 +592,26 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // V-195 — public version endpoint. No auth.
+  const VersionResponseSchema = z.object({
+    version: z.string(),
+    git_sha: z.string(),
+    started_at: z.string(),
+    node_version: z.string(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/version',
+    summary: 'Build + runtime metadata (public)',
+    tags: ['public'],
+    responses: {
+      200: {
+        description: 'Server version, git sha, start time, node version.',
+        content: { 'application/json': { schema: VersionResponseSchema } },
+      },
+    },
+  });
+
   // Cross-account rate-limit overrides list (admin)
   const ListAdminOverridesQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),

@@ -11074,3 +11074,41 @@ Remaining mock-only admin page: /leads (no leads infra — documented as out-of-
 ### Next
 
 V-195 — PRIORITY D phase 1: production-readiness sweep (health checks, rate-limit override admin enrich, Stripe webhook signature e2e test, DB migration rehearsal docs, DR runbook).
+
+## V-195 — `/version` endpoint + ops runbook (PRIORITY D phase 1)
+
+### What
+
+Two production-readiness slices landed in one V-entry:
+
+1. **New `GET /version` public endpoint** — returns `{ version, git_sha, started_at, node_version }`. Server version sourced from `process.env.npm_package_version` (set automatically by npm at runtime), git SHA from `GIT_SHA` env var (defaults to `"unknown"` when unset), `started_at` captured at app build time, `node_version` from `process.version`. Lives at `/version` (not `/v1/version`) because it's intentionally public + unauthenticated; the OpenAPI security check enforces every `/v1/*` path requires bearer auth.
+2. **`docs/deployment/runbook.md`** — operational runbook with quick-triage steps, ops endpoint inventory, standard incident plays (postgres unreachable, redis unreachable, Stripe webhook failures, DLQ growth, account abuse / leaked key), restore+DR skeleton, migration rehearsal checklist, and observability pointers. Multiple `[TODO]` markers flag known gaps to fill before commercial activation.
+
+### Why
+
+PRIORITY D phase 1 — production-readiness. Pre-launch the most acute gap was "no way to confirm what's running where" — deploy automation, uptime probes, and the future on-call rotation all need a public, auth-free build-info endpoint. The runbook is forward-looking but the structure being in place ahead of the first paid customer is itself the value: an incident in week 1 of paid traffic doesn't catch us flat-footed.
+
+### Files
+
+- `apps/server/src/lib/app.ts` — registers `app.get('/version', ...)`. Captures `startedAt` at construction time.
+- `apps/server/src/lib/openapi.ts` — registers `/version` with inline `VersionResponseSchema` (`tags: ['public']`).
+- `apps/server/tests/integration/openapi.test.ts` — added `/version` to the expected-paths list.
+- `apps/server/tests/integration/version.test.ts` — new file. 3 tests: shape happy path, GIT_SHA env override, default `"unknown"` when unset.
+- `docs/deployment/runbook.md` — new file (~150 lines). Skeleton incident plays + DR + migration rehearsal sections. Cross-links to admin pages now that V-187..V-194 wired them live.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 640 / 640 passing across 66 files (3 new version-endpoint tests pass).
+
+### Notes
+
+- `process.env.npm_package_version` is auto-injected by npm only when the server is started via an npm script (`npm start`, `npm run dev`). Direct invocation via `node dist/index.js` would surface `0.0.0` per the fallback. Acceptable since prod boot is via the Hetzner systemd unit which runs `npm start`. If we ever switch to bare-node prod boot, replace with a build-time injection.
+- The runbook is in working-tree commit form rather than the Tier 3 marketing-cadence path — engineering ops documentation isn't customer-facing copy and falls under the standard push-to-main pattern.
+- `started_at` is captured at _app construction_ time (when `buildApp()` runs), not at module load. This matches the operational meaning: "when did this server actually start serving traffic." A long-running pre-init phase doesn't shift the timestamp.
+
+### Next
+
+V-196 — admin /rate-limit-overrides "set new override" form (currently the dashboard redirects to per-account page). OR: V-197 Stripe webhook signature e2e test. OR: continue PRIORITY D toward V-200+ Go SDK parity.

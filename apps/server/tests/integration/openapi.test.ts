@@ -29,6 +29,7 @@ describe('OpenAPI spec generation', () => {
     expect(paths).toEqual(
       [
         '/health',
+        '/version',
         '/v1/admin/accounts/{id}/quota-override',
         '/v1/admin/accounts/{id}/suspend',
         '/v1/admin/accounts/{id}/tier',
