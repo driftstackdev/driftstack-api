@@ -11661,3 +11661,44 @@ Follow-on to V-205. V-205 stopped the bleeding (no new commits attribute to AI t
 ### Next
 
 V-207 — founder force-push history rewrite (founder action; Agent 2 surfaces the filter-repo command + impact summary).
+
+## V-207 — surface filter-repo + impact summary for founder force-push
+
+### What
+
+Added `docs/founder-actions/v207-force-push-attribution-cleanup.md` — runbook for the founder to execute the force-push that strips `Co-Authored-By: Claude` trailer from all 218 affected commits in this repo's history.
+
+The doc is a runbook, not an executor. Agent 2 does NOT run filter-repo or force-push — that's founder-action-only per the standing rule. The runbook gives the founder the exact commands to run, the impact summary, the pre-flight checklist, the post-action recovery steps for things that break (dependabot PRs, local clones, CI caches), and a rollback procedure if the rewrite goes wrong.
+
+### Why
+
+V-205 stopped the bleeding (no new commits attribute). V-206 cleaned live customer-facing surfaces. V-207 closes the loop on existing history — without it, every prior commit message on github.com/driftstackdev/driftstack-api still carries the `Co-Authored-By: Claude` trailer. Surfacing the runbook (rather than executing) preserves the standing rule that destructive operations like force-push to main require explicit founder action.
+
+### Repo state captured at the time of writing (commit `42a78a0`)
+
+- **Total commits in history**: 229.
+- **Commits affected**: 218 (carry the trailer). The 11 unaffected commits are pre-AI-attribution commits + the V-205/V-206 commits themselves which already landed clean.
+- **🤖 footer**: 0 commits — the AI-tool footer was never added in this flow, so nothing to strip there.
+- **Tags**: 7 (`packages/sdk-go/v0.1.0` through `v0.1.6`). filter-repo rewrites tag refs to point at rewritten commits; tag names preserved.
+- **Forks**: 0.
+- **Open PRs**: 7 (all dependabot bumps — these will become invalid after force-push and need to be closed + recreated by dependabot's next scan).
+
+### Files
+
+- `docs/founder-actions/v207-force-push-attribution-cleanup.md` — new runbook.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run format:check`: clean.
+- `git log --all --format=%B | grep -c "Co-Authored-By: Claude"` returns 218 (pre-rewrite baseline). After founder runs filter-repo + force-push, expected to return 0.
+
+### Notes
+
+- Cross-repo coordination: same policy applies to Agent 1's repos (`driftstack`, `webkit-driftstack`). Each needs an independent filter-repo run. Founder coordinates Agent 1's repos separately; this V-entry covers driftstack-api only.
+- The V-205/V-206 commits themselves don't need to be rewritten — they were the first clean commits and pass the policy already. The filter-repo callback is a no-op on commits without the trailer; safe to run across the full history.
+- Standing rule reminder: I will not execute the force-push, even if the runbook is on disk. Founder runs the script when ready.
+
+### Next
+
+V-208 — customer-facing AI framing removal sweep + policy doc reinforcement (~1hr Tier 1).
