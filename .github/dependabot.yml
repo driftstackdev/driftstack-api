@@ -46,7 +46,7 @@ updates:
         update-types: [minor]
     ignore:
       # Locked stack — bumps surface as architectural decisions
-      # (per CLAUDE.md). Major bumps surface for review individually
+      # (per AGENTS.md). Major bumps surface for review individually
       # via the ungrouped path; minor + patch flow through groups.
       # We don't ignore them outright; just want them reviewed
       # not auto-grouped.

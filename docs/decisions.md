@@ -2,7 +2,7 @@
 
 Chronological record of decisions affecting the `driftstack-api` repo. Each entry is summary-level; full rationale lives in the V-log entry (when evidence-based) or in a planning doc (when strategic).
 
-Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the decision, the reasoning, and the decision-authority level per `CLAUDE.md`:
+Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the decision, the reasoning, and the decision-authority level per `AGENTS.md`:
 
 - **Routine** — implementation detail inside the locked stack; landed and recorded
 - **Architectural** — vendor / dependency / structural; surface for review before commit

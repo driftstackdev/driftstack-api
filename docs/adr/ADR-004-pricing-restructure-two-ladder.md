@@ -129,7 +129,7 @@ Concrete enforcement implications (handled in V-072 / V-073):
 ### Per-archetype premium pricing (charge more for iPhone Safari archetype)
 
 - **Pro:** captures the premium nature of the iPhone Safari fidelity Driftstack uniquely delivers.
-- **Con:** iPhone Safari is the **only** archetype at v1 (per CAPABILITIES.md / V-141 progress). Charging a premium for the only thing the product does is just charging more, with extra steps. Multi-archetype premium pricing becomes meaningful only when a second archetype lands (deferred per CLAUDE.md).
+- **Con:** iPhone Safari is the **only** archetype at v1 (per CAPABILITIES.md / V-141 progress). Charging a premium for the only thing the product does is just charging more, with extra steps. Multi-archetype premium pricing becomes meaningful only when a second archetype lands (deferred per AGENTS.md).
 - **Why rejected:** wait for the second archetype before pricing differentiates per-archetype. ADR-004 prices the platform; archetype-tier premium pricing is a future ADR if/when warranted.
 
 ## Revisit triggers

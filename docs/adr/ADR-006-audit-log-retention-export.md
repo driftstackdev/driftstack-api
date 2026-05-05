@@ -131,4 +131,4 @@ When a customer fully exits (account deleted), the cascade is:
 
 ## Decision authority
 
-This is **architectural / workflow + storage** — surfaces for founder review per the Decision authority section in CLAUDE.md. No new code lands until founder confirms the recommendation (or redirects on retention period, archive format, or vendor choice).
+This is **architectural / workflow + storage** — surfaces for founder review per the Decision authority section in AGENTS.md. No new code lands until founder confirms the recommendation (or redirects on retention period, archive format, or vendor choice).

@@ -31,7 +31,7 @@ Format: `V-NNN — title`. Date in body.
   - `.nvmrc` pinned to 22; `engines: ">=22"` (D-006)
 - `docker-compose.yml` with Postgres 17 + Redis 7 services (D-009)
 - GitHub Actions CI: typecheck, lint, format-check, build, test on push/PR to main; runs Postgres 17 + Redis 7 service containers
-- Documentation scaffolds: `README.md`, `CLAUDE.md`, `docs/architecture.md`, `docs/decisions.md`, this log
+- Documentation scaffolds: `README.md`, `AGENTS.md`, `docs/architecture.md`, `docs/decisions.md`, this log
 
 ### What tests verify it
 
@@ -1233,7 +1233,7 @@ OT workstream complete. All endpoints from the founder's locked OT scope landed:
 Surfacing for next-batch direction. Per prior coordination, options at this point:
 
 - recordUsage + quota events workstream (when customer onboarding approaches; not now)
-- Customer dashboard frontend (out of CLAUDE.md scope unless founder relaxes)
+- Customer dashboard frontend (out of AGENTS.md scope unless founder relaxes)
 - Billing scaffolding (gated on KvK May 21)
 - Documentation site / API reference cleanup (housekeeping)
 - Wait for WebKit fork Phase 2 closure for driver swap
@@ -1434,9 +1434,9 @@ No new D-entries — PY4 is build polish, not architecture.
 
 ### Coordination update logged here
 
-The founder revised the SDK-publishing gate: **technical publish to npm / PyPI / Go module registries is NOT gated on KvK** — it's a neutral artifact, not commercial activity. **Commercial activation** (signups, billing, paid customer onboarding) IS gated on KvK closure (May 21). **Advertise** (marketing site live) gates on commercial activation. CLAUDE.md updated; auto-memory entry `publish_vs_commercial.md` saved so future sessions inherit the rule.
+The founder revised the SDK-publishing gate: **technical publish to npm / PyPI / Go module registries is NOT gated on KvK** — it's a neutral artifact, not commercial activity. **Commercial activation** (signups, billing, paid customer onboarding) IS gated on KvK closure (May 21). **Advertise** (marketing site live) gates on commercial activation. AGENTS.md updated; auto-memory entry `publish_vs_commercial.md` saved so future sessions inherit the rule.
 
-`CLAUDE.md` also relaxed the GUI-client out-of-scope entry per the file-128 directive: self-hosted GUI moves to active scope as the upcoming workstream after SDKs publish.
+`AGENTS.md` also relaxed the GUI-client out-of-scope entry per the file-128 directive: self-hosted GUI moves to active scope as the upcoming workstream after SDKs publish.
 
 ### What was built (Go SDK, GO1 → GO4 in one session)
 
@@ -1502,7 +1502,7 @@ Total: **33 Go tests**, ~1900 LOC of Go (production + test + examples).
 
 Three SDKs landed: TypeScript (V-013), Python (V-023 → V-025), Go (V-026). All publish-ready. Per founder coordination, **all three publish to registries this batch** (TypeScript → npm, Python → PyPI, Go → git tag). Pre-flight name-availability checks first; surface to founder if any package name is taken.
 
-After publish: self-hosted GUI client per file 128 (Tauri scaffold → React + Tailwind brand identity → API integration → live viewport → manual control → SOCKS5 proxy management → session recording → macOS native packaging → polish). 30-50 sessions, multi-week. CLAUDE.md updated to reflect the active scope shift.
+After publish: self-hosted GUI client per file 128 (Tauri scaffold → React + Tailwind brand identity → API integration → live viewport → manual control → SOCKS5 proxy management → session recording → macOS native packaging → polish). 30-50 sessions, multi-week. AGENTS.md updated to reflect the active scope shift.
 
 ---
 
@@ -2215,7 +2215,7 @@ Entity-org transition prep (KvK 2026-05-21, 18 days out). Scope what the geruisl
 **Author:** Driftstack Agent #2
 **Phase:** Pre-cutover scoping. KvK closure target is 18 days out.
 
-Per founder direction: scope what the geruisloze omzetting touches platform-side. Founder handles the legal track separately (out of scope per `CLAUDE.md`).
+Per founder direction: scope what the geruisloze omzetting touches platform-side. Founder handles the legal track separately (out of scope per `AGENTS.md`).
 
 ### What changed
 
@@ -2631,7 +2631,7 @@ Cold-start UX walkthrough for a fresh `.app` install with no API key, no session
 
 3. **Decided NOT to add a connectivity-test prompt after settings save.** Considered offering "Test connection now?" after Save lands. Rejected: would add an interaction the user didn't ask for, and the connectivity test view is one sidebar click away. Engineers know to verify their config; non-engineers can be guided by docs separately.
 
-4. **Decided NOT to wire a welcome / onboarding flow.** The self-hosted GUI is sold to engineers who run their own server (per CLAUDE.md positioning). They can read empty states. Welcome carousels would feel patronising.
+4. **Decided NOT to wire a welcome / onboarding flow.** The self-hosted GUI is sold to engineers who run their own server (per AGENTS.md positioning). They can read empty states. Welcome carousels would feel patronising.
 
 ### Verify chain
 
@@ -2661,13 +2661,13 @@ Idling on the queue otherwise.
 
 ---
 
-## V-046 — Legal baseline drafts placed at docs/legal/\* (CLAUDE.md exception)
+## V-046 — Legal baseline drafts placed at docs/legal/\* (AGENTS.md exception)
 
 **Date:** 2026-05-03
 **Author:** Driftstack Agent #2
-**Phase:** Founder-directed under CLAUDE.md legal-content exception (commit af4dd76).
+**Phase:** Founder-directed under AGENTS.md legal-content exception (commit af4dd76).
 
-Six legal documents drafted and placed per founder direction. Path A from the surface in this conversation: CLAUDE.md updated with the exception clause first (greppable), facts supplied, documents generated against those facts.
+Six legal documents drafted and placed per founder direction. Path A from the surface in this conversation: AGENTS.md updated with the exception clause first (greppable), facts supplied, documents generated against those facts.
 
 ### What changed
 
@@ -2714,7 +2714,7 @@ Six new files at `docs/legal/`:
 
 ### Decisions made
 
-No new D-entries beyond L-001 (already documented). The legal documents are in-scope because of the CLAUDE.md exception (commit af4dd76); they are not themselves stack/architecture decisions.
+No new D-entries beyond L-001 (already documented). The legal documents are in-scope because of the AGENTS.md exception (commit af4dd76); they are not themselves stack/architecture decisions.
 
 ### What's still pending
 
@@ -2817,7 +2817,7 @@ CAPABILITIES.md hygiene pass — V-145/V-146/V-147/V-148 weren't landed in main 
 
 **Date:** 2026-05-03
 **Author:** Driftstack Agent #2
-**Phase:** Founder-directed revision under CLAUDE.md exception. Companion to the CLAUDE.md exception extension (commit 8996c87).
+**Phase:** Founder-directed revision under AGENTS.md exception. Companion to the AGENTS.md exception extension (commit 8996c87).
 
 ### What changed
 
@@ -2828,7 +2828,7 @@ CAPABILITIES.md hygiene pass — V-145/V-146/V-147/V-148 weren't landed in main 
 - **`docs/legal/dpa.md`** — Paddle row removed from Annex 3.
 - **`docs/legal/acceptable-use-policy.md`** — Section 7.2 wording revised: removed reference to Paddle as a third remediation option for Stripe-restricted customers; replaced with "if Driftstack subsequently engages an additional payment processor (e.g. a merchant-of-record alternative), customers will be notified per the Sub-processor amendment mechanism in the DPA." Same effect, no specific provider name.
 
-**Hosting sub-processors added** (per the CLAUDE.md exception extension's locked sub-processor list):
+**Hosting sub-processors added** (per the AGENTS.md exception extension's locked sub-processor list):
 
 - **`docs/legal/definitions.md`** — added entries for Hetzner (Germany), Neon (US corp / EU Frankfurt data residency), Upstash (US corp / EU Frankfurt data residency), Cloudflare (US corp / EU jurisdiction), Postmark (US, EU sending region), Sentry (US corp / EU region).
 - **`docs/legal/privacy-policy.md`** — Sub-processor table extended with the same six entries, with transfer mechanisms (EEA-internal for Hetzner; 2021 SCCs Module 2 + EU-US DPF for the others, with "counsel verifies current certification status" annotations).
@@ -2847,7 +2847,7 @@ CAPABILITIES.md hygiene pass — V-145/V-146/V-147/V-148 weren't landed in main 
 
 1. **Removing Paddle as a "conditional Sub-processor" is the right call.** "Conditional" sub-processors create disclosure obligations and customer confusion: customers reading the Privacy Policy or DPA see a name they may not recognise, accompanied by uncertainty about when it activates. The cleaner posture is "we have a single payment processor (Stripe) plus a crypto rail (Coinbase Commerce); if Stripe ever declines and we engage an alternative, you'll get the standard 30-day Sub-processor notice." That clause already exists in the DPA Section 3.4. Paddle stays in engineering scoping docs (when those land) and in the founder's contingency planning; it does not appear in customer-facing legal text.
 
-2. **Adding hosting sub-processors at this stage is appropriate.** The CLAUDE.md exception extension (commit 8996c87) locks the sub-processor list to: Hetzner, Neon, Upstash, Cloudflare, Postmark, Sentry, Stripe, Coinbase Commerce, Anthropic (BYOK opt-in only), Moneybird, MacStadium. Pre-V-048, only Stripe / Coinbase / Anthropic / Moneybird / MacStadium / Paddle (now removed) were listed. The hosting providers were missing because they were notionally "infrastructure-internal" — but a customer reading the DPA needs to know where their data sits, and "EU Frankfurt data residency on Neon" / "EU jurisdiction on Cloudflare" / "EU region on Sentry" are exactly the kinds of facts that distinguish a GDPR-aligned offering from a US-default offering.
+2. **Adding hosting sub-processors at this stage is appropriate.** The AGENTS.md exception extension (commit 8996c87) locks the sub-processor list to: Hetzner, Neon, Upstash, Cloudflare, Postmark, Sentry, Stripe, Coinbase Commerce, Anthropic (BYOK opt-in only), Moneybird, MacStadium. Pre-V-048, only Stripe / Coinbase / Anthropic / Moneybird / MacStadium / Paddle (now removed) were listed. The hosting providers were missing because they were notionally "infrastructure-internal" — but a customer reading the DPA needs to know where their data sits, and "EU Frankfurt data residency on Neon" / "EU jurisdiction on Cloudflare" / "EU region on Sentry" are exactly the kinds of facts that distinguish a GDPR-aligned offering from a US-default offering.
 
 3. **All US-corp / EU-data sub-processors marked with "counsel verifies current certification status".** The DPF self-certification list at https://www.dataprivacyframework.gov/list moves; counsel must verify each sub-processor's current status at review time. Agent does not verify (cannot browse).
 
@@ -3063,13 +3063,13 @@ Architecture inputs flagged in the prior surface still pending from founder (per
 
 **Date:** 2026-05-03
 **Author:** Driftstack Agent #2
-**Phase:** Legal-doc revision under the CLAUDE.md legal-content exception. Founder direction.
+**Phase:** Legal-doc revision under the AGENTS.md legal-content exception. Founder direction.
 
 Founder dropped the crypto rail from launch entirely: Coinbase Commerce closed for non-US/Singapore merchants 2026-03-31, Coinbase Business unavailable in NL. Stripe is the sole payment rail at launch (fiat-only). Crypto rail re-entry deferred post-KvK pending evaluation against actual transaction volume — candidates are Stripe's native USDC/USDB if EU merchant eligibility is confirmed, or EU-friendly alternatives (CoinGate, NOWPayments, BVNK, Triple-A). All customer-facing legal text revised; sub-processor list lock revised.
 
 ### What changed
 
-**Sub-processor list lock (CLAUDE.md):**
+**Sub-processor list lock (AGENTS.md):**
 
 - Removed Coinbase Commerce from the locked sub-processor list. New list: Hetzner, Neon, Upstash, Cloudflare (R2 + Pages + DNS), Postmark, Sentry, Stripe, Anthropic (BYO bundled LLM only, opt-in), Moneybird, MacStadium.
 - Added explicit "Crypto rail dropped from launch" block citing Coinbase Commerce closure date, NL unavailability of Coinbase Business, Stripe's USDC/USDB path as the post-KvK candidate, and EU-friendly alternative processors as deferred fallbacks.
@@ -3090,7 +3090,7 @@ Founder dropped the crypto rail from launch entirely: Coinbase Commerce closed f
 
 ### Empirical findings
 
-1. **`grep -rln Coinbase docs/legal/` returns empty after the revision.** Confirmed by post-edit sweep: the only remaining `Coinbase` references in the repo are (a) `docs/legal/README.md` history block (intentional — versioning history), (b) `CLAUDE.md` history block (intentional — sub-processor lock evolution + crypto-rail deferral rationale). Customer-facing legal text contains zero Coinbase references.
+1. **`grep -rln Coinbase docs/legal/` returns empty after the revision.** Confirmed by post-edit sweep: the only remaining `Coinbase` references in the repo are (a) `docs/legal/README.md` history block (intentional — versioning history), (b) `AGENTS.md` history block (intentional — sub-processor lock evolution + crypto-rail deferral rationale). Customer-facing legal text contains zero Coinbase references.
 
 2. **Document-level versioning forces re-acceptance under conservative posture.** Per `docs/legal/README.md` versioning rules, minor bumps (`0.1.x` → `0.2.0`) force re-acceptance; patch bumps (`0.1.1` → `0.1.2`) do not. This revision is patch-level: the substantive change for any current customer is "the sub-processor list shrank by one entry whose service the customer never actually consumed." No re-acceptance trigger fires. If counsel reviews and decides Coinbase removal is material enough to require re-acceptance, version moves to 0.2.0-draft and re-accept fires through the existing V-047 machinery.
 
@@ -3105,7 +3105,7 @@ Founder dropped the crypto rail from launch entirely: Coinbase Commerce closed f
 
 ### Decisions made
 
-No new D-entries. Sub-processor list and payment-rail composition are operational facts, not architecture decisions. The revised CLAUDE.md sub-processor lock is the source of truth.
+No new D-entries. Sub-processor list and payment-rail composition are operational facts, not architecture decisions. The revised AGENTS.md sub-processor lock is the source of truth.
 
 ### Status
 
@@ -3667,7 +3667,7 @@ Workstream B (marketing site at `apps/marketing-site/`). Astro on Cloudflare Pag
 **Author:** Driftstack Agent #2
 **Phase:** Founder course-correction. Pre-Workstream-B scaffolding cleanup so marketing-site copy ships with the right framing.
 
-Three coupled changes: (1) ADR-003 captures the deviation from parent driftstack repo file 127 §6 (free trial → $2.99 paid trial pack); (2) `usage.ts` gains a future-self comment block annotating the deferred `session_minute` → `browser_hour` rename so a future reviewer doesn't need to reconstruct the rationale; (3) `CLAUDE.md` gains an "External services + credentials" pointer to the parent driftstack repo's `external-state.md` master register, eliminating the need for a per-repo external-state register.
+Three coupled changes: (1) ADR-003 captures the deviation from parent driftstack repo file 127 §6 (free trial → $2.99 paid trial pack); (2) `usage.ts` gains a future-self comment block annotating the deferred `session_minute` → `browser_hour` rename so a future reviewer doesn't need to reconstruct the rationale; (3) `AGENTS.md` gains an "External services + credentials" pointer to the parent driftstack repo's `external-state.md` master register, eliminating the need for a per-repo external-state register.
 
 ### What changed
 
@@ -3680,7 +3680,7 @@ Three coupled changes: (1) ADR-003 captures the deviation from parent driftstack
   - **Notes:** schema (`accounts.trial_pack_purchased_at` + `trial_pack_credit_cents` + `trial_pack_expires_at` + `trial_pack_redeemed`) lands in Workstream D alongside Stripe Checkout integration. Marketing copy (this ADR drives the framing) lands in Workstream B (active). Admin-panel visibility per account in Workstream C. Onboarding flow in Workstream F. Moneybird accounting line separation (one-time revenue vs subscription MRR) in Workstream E.
 - **`docs/adr/README.md`** — index updated to include ADR-003.
 - **`apps/server/src/services/usage.ts`** — added a "FUTURE-SELF NOTE" comment block above the `UsageRecordType` union explaining: (a) `session_minute` stores minutes, not hours; (b) the customer-facing meter is browser-hours per file 127 + V-061; (c) rename to `browser_hour` is deferred to Workstream D and bundles cleanly with Stripe Meter integration since both are coordinated breaking changes (Postgres enum migration + 3-SDK regen + OpenAPI version bump). The comment matches founder direction: "future-self protection."
-- **`CLAUDE.md`** — two additions:
+- **`AGENTS.md`** — two additions:
   - `docs/adr/` and `docs/deployment/env-vars.md` added to the "What's where" section (closes a doc-discoverability gap).
   - New "External services + credentials" section with explicit pointer: external services + credential locations are tracked in the parent driftstack repo at `docs/external-state.md` (founder-maintained master register); this repo references env vars per `docs/deployment/env-vars.md`. Cross-repo write coordination is the founder's role; agent does not edit the parent register.
 
@@ -3690,7 +3690,7 @@ Three coupled changes: (1) ADR-003 captures the deviation from parent driftstack
 
 2. **`usage.ts` future-self note is 12 lines and pays for itself the first time someone asks "why does this say minute when the cap is in hours."** The original sweep (V-061) updated the values without the explanatory annotation. A reviewer reading the file in 2027 would have to reconstruct the rationale from the V-061 V-log entry; the annotation makes it self-documenting. Cost: 12 lines of comment. Benefit: zero future-self confusion. Trade favourable.
 
-3. **External-state-register-in-parent-repo eliminates a duplication surface.** A `driftstack-api/docs/external-state.md` would have to be maintained against the parent register on every credential rotation, every sub-processor add/remove, every login URL change. The CLAUDE.md pointer eliminates the duplication while preserving discoverability. Founder explicit: "single source of truth in driftstack repo."
+3. **External-state-register-in-parent-repo eliminates a duplication surface.** A `driftstack-api/docs/external-state.md` would have to be maintained against the parent register on every credential rotation, every sub-processor add/remove, every login URL change. The AGENTS.md pointer eliminates the duplication while preserving discoverability. Founder explicit: "single source of truth in driftstack repo."
 
 4. **The trial-pack ADR enumerates 5 revisit triggers with measurable thresholds.** Conversion-rate threshold (<8%), competitor-pricing event, abuse-defence SaaS maturation, trial-pack-revenue / fleet-spend ratio (<0.5), audience composition shift. Each is testable; none rely on subjective judgement at re-evaluation time. ADR-002 had similar discipline; the pattern is settling into a repeatable shape.
 
@@ -3754,7 +3754,7 @@ The marketing site is a static-built Astro project. No SSR, no Workers, no edge 
 
 4. **Geist + Berkeley Mono fallbacks intentional.** Both fonts are commercial / restricted-license — actual webfont files don't ship in this commit. The CSS declares them with `ui-sans-serif` / `ui-monospace` system fallbacks so the site renders correctly on first deploy; founder-side action is to procure the licensed fonts and add `@font-face` declarations + the `.woff2` files to `public/fonts/` when ready. The site is shipping-ready without them.
 
-5. **Trail of cross-references between marketing copy and backend invariants is clean.** Browser-hour-metering framing matches V-061 sweep + the future-self comment in `usage.ts`. Trial-pack framing matches ADR-003. Sub-processor list lock matches CLAUDE.md + V-052. Marketing copy isn't asserting any commercial commitment that backend code or legal text doesn't already back.
+5. **Trail of cross-references between marketing copy and backend invariants is clean.** Browser-hour-metering framing matches V-061 sweep + the future-self comment in `usage.ts`. Trial-pack framing matches ADR-003. Sub-processor list lock matches AGENTS.md + V-052. Marketing copy isn't asserting any commercial commitment that backend code or legal text doesn't already back.
 
 6. **No tests added** — the marketing site is static content. Visual regressions and copy correctness will be caught by reviewer PRs (and, post-launch, by Sentry replays from real users). Adding a Playwright check for "loads + has 200 status" is possible but doesn't catch the failure modes that actually matter for a marketing site (broken copy, broken links, mis-rendered pricing).
 
@@ -4000,7 +4000,7 @@ V-068 is the leakage purge and the new public-trust artifact.
 
 **New page + data module:**
 
-- **`apps/marketing-site/src/data/sub-processors.ts`** (NEW) — `SUB_PROCESSORS` array mirroring DPA Annex 3 + CLAUDE.md sub-processor lock. 10 entries: Hetzner Cloud / Neon / Upstash / Cloudflare R2 / Postmark / Sentry / Stripe / Anthropic / Moneybird / MacStadium. Each tagged with EU-resident-or-transfer-mechanism.
+- **`apps/marketing-site/src/data/sub-processors.ts`** (NEW) — `SUB_PROCESSORS` array mirroring DPA Annex 3 + AGENTS.md sub-processor lock. 10 entries: Hetzner Cloud / Neon / Upstash / Cloudflare R2 / Postmark / Sentry / Stripe / Anthropic / Moneybird / MacStadium. Each tagged with EU-resident-or-transfer-mechanism.
 - **`apps/marketing-site/src/pages/trust/sub-processors.astro`** (NEW) — `/trust/sub-processors`. Header (eyebrow + H1 + framing + Art 28(2) notice mention + cross-link to `/legal/dpa` + last-updated timestamp) + 4-column data-driven table + "How sub-processor changes work" explainer + privacy@ contact.
 
 **Footer Trust column:**
@@ -4080,9 +4080,9 @@ V-069 draft delivery via clipboard. New copy lives in working tree (not staged, 
   - `lastUpdated: '2026-05-03'`
     Comment block in the file documents the source (parent driftstack repo `/docs/progress/phase-2.md` cumulative-rig snapshot, probes-with-iPhone-reference denominator, NOT raw which includes ref=None pinned post-V-141 capture) and the update protocol (founder relays new numbers, agent lands as Tier 1 maintenance).
 
-**Standing-convention lock in CLAUDE.md:**
+**Standing-convention lock in AGENTS.md:**
 
-- **`CLAUDE.md`** — new "Tier 3 marketing-copy + brand-surface cadence (standing convention)" subsection under "Operational discipline." Codifies the draft-surface-before-commit flow founder confirmed: agent drafts in working tree, surfaces full block in next status update, founder reviews + redlines, agent commits approved version, V-NNN entry notes "draft surfaced + founder approved before commit." Applies to customer-facing pages, brand surface treatments, customer-facing copy in transactional emails, customer-facing onboarding flow text. Engineering scaffolding behind those surfaces follows standard push-to-main. Factual technical-state numbers (capabilities.ts) are explicit exception — Tier 1 maintenance, no draft review.
+- **`AGENTS.md`** — new "Tier 3 marketing-copy + brand-surface cadence (standing convention)" subsection under "Operational discipline." Codifies the draft-surface-before-commit flow founder confirmed: agent drafts in working tree, surfaces full block in next status update, founder reviews + redlines, agent commits approved version, V-NNN entry notes "draft surfaced + founder approved before commit." Applies to customer-facing pages, brand surface treatments, customer-facing copy in transactional emails, customer-facing onboarding flow text. Engineering scaffolding behind those surfaces follows standard push-to-main. Factual technical-state numbers (capabilities.ts) are explicit exception — Tier 1 maintenance, no draft review.
 
 **What stays purged (not restored):**
 
@@ -4105,7 +4105,7 @@ Hetzner / Neon / Upstash / Cloudflare R2 / MacStadium / Postmark / Sentry / Mone
 
 3. **Bundled-LLM rate stays provider-neutral.** Both pricing BYOK section + FAQ "What is the bundled LLM?" entry name Anthropic only on the BYOK path; the bundled rate stays "Driftstack at a markup over the published per-token price" without naming the provider. Per founder direction: "Founder hasn't committed to Anthropic specifically as the bundled provider; might keep multi-provider option or rename to 'Bundled' tier-agnostic."
 
-4. **CLAUDE.md cadence lock makes V-069 + V-070 process predictable.** Future marketing-copy V-entries (and any Workstream F onboarding-flow text) will follow the same draft-surface-before-commit pattern. Engineering work continues push-to-main. The factual-technical-state exception (capabilities.ts) ensures cumulative-rig number updates don't get gated behind unnecessary review.
+4. **AGENTS.md cadence lock makes V-069 + V-070 process predictable.** Future marketing-copy V-entries (and any Workstream F onboarding-flow text) will follow the same draft-surface-before-commit pattern. Engineering work continues push-to-main. The factual-technical-state exception (capabilities.ts) ensures cumulative-rig number updates don't get gated behind unnecessary review.
 
 ### Verify chain
 
@@ -4118,11 +4118,11 @@ Hetzner / Neon / Upstash / Cloudflare R2 / MacStadium / Postmark / Sentry / Mone
 
 ### Decisions made
 
-No new D-entries. The cadence lock in CLAUDE.md is operational discipline (Tier 1) — codifies a founder direction rather than originating a decision.
+No new D-entries. The cadence lock in AGENTS.md is operational discipline (Tier 1) — codifies a founder direction rather than originating a decision.
 
 ### Status
 
-V-068.1 closes the leak-purge debate. Marketing site is content-correct: customer-touch vendors named where they aid customer UX (Stripe + Anthropic-for-BYOK), infrastructure vendors absent, trust page exhaustive. capabilities.ts constant is in place for V-069's headline number. CLAUDE.md cadence locked.
+V-068.1 closes the leak-purge debate. Marketing site is content-correct: customer-touch vendors named where they aid customer UX (Stripe + Anthropic-for-BYOK), infrastructure vendors absent, trust page exhaustive. capabilities.ts constant is in place for V-069's headline number. AGENTS.md cadence locked.
 
 ### Next
 
@@ -4132,7 +4132,7 @@ V-069 draft delivery via clipboard. Hero copy options A/B + headline number pres
 
 **Date:** 2026-05-03
 **Author:** Driftstack Agent #2
-**Phase:** Workstream B v2 iteration 2 — Tier 3 marketing copy. Drafts surfaced via clipboard pbcopy 2026-05-03; founder approved with revisions; commit follows the standing-convention cadence (V-068.1 CLAUDE.md addition).
+**Phase:** Workstream B v2 iteration 2 — Tier 3 marketing copy. Drafts surfaced via clipboard pbcopy 2026-05-03; founder approved with revisions; commit follows the standing-convention cadence (V-068.1 AGENTS.md addition).
 
 ### What changed
 
@@ -4197,13 +4197,13 @@ V-069 draft delivery via clipboard. Hero copy options A/B + headline number pres
    - **Gate 1 (infrastructure-language grep on customer-facing pages):** 0/0/0/0 across `/index`, `/pricing`, `/faq`, `/404`. `/self-hosted` and `/trust/sub-processors` excluded (procurement detail / compliance artifact respectively).
    - **Gate 2 (negative-framing leaks):** 0/0/0/0/0 across all 5 customer-facing pages.
    - **Gate 3 (capabilities.ts values):** match founder confirmation (1252 / 1253 / 99.9 / iPhone 16 Pro / iOS 26.4.1 / 2026-05-03).
-   - **Gate 4 (Card 3 egress claims):** "SOCKS5 with UDP, WireGuard, or OpenVPN" present on `/index`, matching CLAUDE.md proxy-spec convention (V-006 + customer-onboarding mandate).
+   - **Gate 4 (Card 3 egress claims):** "SOCKS5 with UDP, WireGuard, or OpenVPN" present on `/index`, matching AGENTS.md proxy-spec convention (V-006 + customer-onboarding mandate).
 
 2. **Hardware procurement detail moved to `/self-hosted` only.** The shared `SELF_HOSTED_SKUS` data structure exposes `hardwareRequired` for both `/pricing` and `/self-hosted`; `/pricing` template now ignores the field and points at `/self-hosted` for the detail. Single source of truth in data; render-level filter per page surface — same pattern as `/trust/sub-processors` mirroring DPA Annex 3.
 
 3. **CTA text "Get started — $2.99" beats "Get started — $2.99 trial pack" for first-impression clarity.** A casual visitor reading the hero CTA scans "$2.99" instantly; "trial pack" requires a beat to interpret. The trial-pack semantics (16 hours, 14-day window, once per account) live in the subline immediately below the CTA pair, so customers parse the price first then the terms. Founder direction explicit on this.
 
-4. **Cumulative-rig section is data-driven from `capabilities.ts`** — when the cumulative rig number moves, only the constant updates; the rendered section auto-reflows. Tier 1 maintenance per the V-068.1 cadence-lock in CLAUDE.md.
+4. **Cumulative-rig section is data-driven from `capabilities.ts`** — when the cumulative rig number moves, only the constant updates; the rendered section auto-reflows. Tier 1 maintenance per the V-068.1 cadence-lock in AGENTS.md.
 
 5. **Card 3 egress positioning is genuinely distinctive.** Most cloud browser services route through their own egress IPs; Driftstack mandates customer-controlled egress via SOCKS5 with UDP / WireGuard / OpenVPN. The "We never see your destination URLs" claim is concrete and verifiable (the destination URL never reaches the control plane — it goes from the WebKit driver through the customer's proxy directly). This is a positioning move competitors can't easily match without re-architecting.
 
@@ -4334,7 +4334,7 @@ ADR-004 itself is the decision record. No new D-NNN entry created; D-019 ("Six-t
 
 ### Status
 
-Pricing restructure direction locked + reasoning persisted. V-072 follows immediately with the data-layer rewrite (`pricing.ts` + `AccountTierSchema` + Postgres enum + Drizzle migration + test fixtures), V-073 with the enforcement rewrite (`sessions.ts` / `usage.ts` concurrent-only + profile counts), V-074 with E2E test updates (`concurrency-limit.spec.ts` + new `profile-limit.spec.ts`). Marketing site B v3 (V-075+) follows the engineering layer with draft-surface-before-commit cadence per CLAUDE.md.
+Pricing restructure direction locked + reasoning persisted. V-072 follows immediately with the data-layer rewrite (`pricing.ts` + `AccountTierSchema` + Postgres enum + Drizzle migration + test fixtures), V-073 with the enforcement rewrite (`sessions.ts` / `usage.ts` concurrent-only + profile counts), V-074 with E2E test updates (`concurrency-limit.spec.ts` + new `profile-limit.spec.ts`). Marketing site B v3 (V-075+) follows the engineering layer with draft-surface-before-commit cadence per AGENTS.md.
 
 ### Next
 
@@ -4407,13 +4407,13 @@ Backend tier-limit values, AccountTier enum, Postgres schema, and Drizzle migrat
 
 V-074 — E2E test updates: full rewrite of `apps/server/tests/e2e/concurrency-limit.spec.ts` (already partially landed in V-073 to satisfy typecheck; V-074 finalises) + new `apps/server/tests/e2e/profile-limit.spec.ts` (placeholder until /v1/profiles route lands; can assert via direct DB write that tier exceeded would fire).
 
-V-075+ — Marketing site B v3 rewrite (Tier 3, draft-surface cadence per CLAUDE.md).
+V-075+ — Marketing site B v3 rewrite (Tier 3, draft-surface cadence per AGENTS.md).
 
 ## V-075 — Marketing site B v3 pricing page rewrite (founder approved)
 
 **Date:** 2026-05-03
 **Author:** Driftstack Agent #2
-**Phase:** Workstream B v3 — Tier 3 marketing copy + Tier 1 data shape. Drafts surfaced via clipboard pbcopy 2026-05-03; founder approved with answers to 8 review questions; commit follows the standing-convention cadence (V-068.1 CLAUDE.md addition).
+**Phase:** Workstream B v3 — Tier 3 marketing copy + Tier 1 data shape. Drafts surfaced via clipboard pbcopy 2026-05-03; founder approved with answers to 8 review questions; commit follows the standing-convention cadence (V-068.1 AGENTS.md addition).
 
 ### What changed
 
@@ -4500,7 +4500,7 @@ Workstream E (Moneybird scoping) noted as already landed at V-070 (commit b569e5
 
 **Date:** 2026-05-03
 **Author:** Driftstack Agent #2
-**Phase:** Workstream B v3 follow-on. Tier 1 maintenance — push-to-main per CLAUDE.md cadence (engineering scaffolding, not customer-facing copy).
+**Phase:** Workstream B v3 follow-on. Tier 1 maintenance — push-to-main per AGENTS.md cadence (engineering scaffolding, not customer-facing copy).
 
 ### What changed
 
@@ -4544,7 +4544,7 @@ V-076 (public repo hygiene pass) — Tier 1 push-to-main. Then V-077 (/index two
 
 **Customer-facing / contributor-facing files swept:**
 
-- **`CLAUDE.md`** — major rewrite. Removed: "Agent #1 / Agent #2" naming + multi-agent coordination section + founder/Tier-1/Tier-2/Tier-3 framing + `pbcopy` clipboard convention + `[Agent 2 — Driftstack API + control plane]` clipboard tag + `joeltheunissen89` personal account reference + `/Users/john/code/webkit-driftstack` personal path. New shape: standard B2B engineering context — repo scope, locked tech stack, operational discipline (V-log + D-log + ADRs + push-to-main + marketing-copy cadence), decision authority levels (Routine / Architectural / Contractual), build cycle, directory map, external services pointer (generic), WebKit driver boundary (named-by-repo not by-agent-label).
+- **`AGENTS.md`** — major rewrite. Removed: "Agent #1 / Agent #2" naming + multi-agent coordination section + founder/Tier-1/Tier-2/Tier-3 framing + `pbcopy` clipboard convention + `[Agent 2 — Driftstack API + control plane]` clipboard tag + `joeltheunissen89` personal account reference + `/Users/john/code/webkit-driftstack` personal path. New shape: standard B2B engineering context — repo scope, locked tech stack, operational discipline (V-log + D-log + ADRs + push-to-main + marketing-copy cadence), decision authority levels (Routine / Architectural / Contractual), build cycle, directory map, external services pointer (generic), WebKit driver boundary (named-by-repo not by-agent-label).
 - **`README.md`** — "Contributing" section rewritten: removed "single-founder project" + "Agent #2 (this codebase) and Agent #1 (WebKit fork)" framing. New copy frames the repo as small-team push-to-main on internal commits with standard PR flow for external contributions.
 - **`docs/decisions.md`** — header rewritten to use Routine / Architectural / Contractual decision levels (replaces Tier 1 / 2 / 3 numerical labels). Body D-NNN entries swept via sed for: `founder-approved → approved`, `founder direction → spec direction`, `founder set → set in spec`, `founder confirmed → confirmed`, `Agent #1 → the WebKit fork repo`, `Agent #2 → this repo`, `Single founder → Small team`, `BV KvK → company entity`, `Tier N (founder ...) → <level> (...)`. The decision-authority semantic is preserved; only the labels change.
 - **`docs/adr/ADR-001/002/003/004` + `docs/adr/README.md`** — same sed sweep as decisions.md plus context-specific cleanups: `at BV KvK-onboarding → at company-onboarding`, `Driftstack BV → the Driftstack legal entity`, `solo entrepreneur → small team`, `solo engineering team → small engineering team`, `the founder reconsidered → the team reconsidered`, etc. Decision-record content (rationale, alternatives, revisit triggers) preserved verbatim.
@@ -4569,7 +4569,7 @@ V-076 (public repo hygiene pass) — Tier 1 push-to-main. Then V-077 (/index two
 
 3. **WebKit fork now consistently named as a separate repository.** The "Agent #2" / "Agent #1" labels were internal multi-agent terminology; from the public repo's perspective, the WebKit fork is just "a separate repository on a separate stack." Driver-interface boundary message preserved without the agent-numbering distraction.
 
-4. **`/Users/john/code/webkit-driftstack` reference removed from CLAUDE.md** — that path is specific to one developer's machine. Replaced with "a separate repository" — accurate enough, generic enough.
+4. **`/Users/john/code/webkit-driftstack` reference removed from AGENTS.md** — that path is specific to one developer's machine. Replaced with "a separate repository" — accurate enough, generic enough.
 
 5. **Final grep verification** (excluding `verification-log.md` historical record):
    - `/Users/john`: 0 hits
@@ -5160,7 +5160,7 @@ Per the never-stop rule: continuing to V-084 (customer dashboard stack proposal 
 
 ### Goal
 
-Capture the four candidate stacks for the customer dashboard / admin panel / onboarding flow surfaces, the trade-offs each makes, and a recommendation. The doc is a **proposal** — Decision authority for the stack choice is "architectural / structural" per CLAUDE.md, so the actual stack pick is founder-reviewed before any code lands. V-084 is just the markdown.
+Capture the four candidate stacks for the customer dashboard / admin panel / onboarding flow surfaces, the trade-offs each makes, and a recommendation. The doc is a **proposal** — Decision authority for the stack choice is "architectural / structural" per AGENTS.md, so the actual stack pick is founder-reviewed before any code lands. V-084 is just the markdown.
 
 ### What changed
 
@@ -5168,7 +5168,7 @@ Capture the four candidate stacks for the customer dashboard / admin panel / onb
 
 ### Why this is a markdown-only commit
 
-The proposal is for founder review. No code changes; no test surface affected. Per the "draft-surface" cadence in CLAUDE.md the marketing-copy + brand-surface gate doesn't apply to internal architecture docs (this isn't customer-facing copy), so this commits as a Tier 1 / Routine doc. The actual stack-choice decision and any subsequent dashboard scaffolding await founder review.
+The proposal is for founder review. No code changes; no test surface affected. Per the "draft-surface" cadence in AGENTS.md the marketing-copy + brand-surface gate doesn't apply to internal architecture docs (this isn't customer-facing copy), so this commits as a Tier 1 / Routine doc. The actual stack-choice decision and any subsequent dashboard scaffolding await founder review.
 
 ### How verified
 
@@ -5711,7 +5711,7 @@ Capture the destination + retention + query-model decision for the structured lo
 
 ### Status
 
-ADR is **Proposed** — pending founder review. Per Decision authority in CLAUDE.md, vendor-level architectural decisions surface for founder approval before any production change. The structured-log fields landed in V-080 onward are already shaped for log-aggregation querying, so no re-instrumentation will be needed when the chosen vendor flips on.
+ADR is **Proposed** — pending founder review. Per Decision authority in AGENTS.md, vendor-level architectural decisions surface for founder approval before any production change. The structured-log fields landed in V-080 onward are already shaped for log-aggregation querying, so no re-instrumentation will be needed when the chosen vendor flips on.
 
 ### How verified
 
@@ -5800,7 +5800,7 @@ Capture the architectural / contractual decisions that landed in V-079 through V
 
 ### Next
 
-Continuing to V-097 — CAPABILITIES.md audit (read-only; surface drift in V-log per CLAUDE.md "do not edit without explicit direction").
+Continuing to V-097 — CAPABILITIES.md audit (read-only; surface drift in V-log per AGENTS.md "do not edit without explicit direction").
 
 ---
 
@@ -5812,7 +5812,7 @@ Continuing to V-097 — CAPABILITIES.md audit (read-only; surface drift in V-log
 
 ### Goal
 
-Per CLAUDE.md: "`docs/CAPABILITIES.md` (when it exists) defines what the API claims to do — every documented capability must work end-to-end. Read it before claiming any capability; do **not** edit it without explicit direction. If implementation deviates from CAPABILITIES.md, surface the gap rather than silently changing scope."
+Per AGENTS.md: "`docs/CAPABILITIES.md` (when it exists) defines what the API claims to do — every documented capability must work end-to-end. Read it before claiming any capability; do **not** edit it without explicit direction. If implementation deviates from CAPABILITIES.md, surface the gap rather than silently changing scope."
 
 V-097 is the audit: read CAPABILITIES.md, surface any drift between the document and current control-plane reality, do NOT edit.
 
@@ -5834,7 +5834,7 @@ Every CAPABILITIES.md entry is fingerprint-residual / WebKit-engine-side, not co
 
 ### Decision
 
-**No edit to CAPABILITIES.md.** Founder maintains; agent surfaces drift via this V-log entry per CLAUDE.md. The single stale line about control-plane V-log range is not blocking — it's a meta-note about V-log numbering, not a capability claim.
+**No edit to CAPABILITIES.md.** Founder maintains; agent surfaces drift via this V-log entry per AGENTS.md. The single stale line about control-plane V-log range is not blocking — it's a meta-note about V-log numbering, not a capability claim.
 
 ### How verified
 
@@ -5844,7 +5844,7 @@ Every CAPABILITIES.md entry is fingerprint-residual / WebKit-engine-side, not co
 
 ### Files modified
 
-None. Read-only audit per CLAUDE.md exception.
+None. Read-only audit per AGENTS.md exception.
 
 ### Next
 
@@ -5900,7 +5900,7 @@ Audit + refresh top-level README + packages/api-types README. Surface staleness;
 
 ### Next
 
-Continuing to V-099 — onboarding flow page scaffolding (Astro pages, working-tree only per Tier 3 / customer-facing copy). Per CLAUDE.md: page structure can land Tier 1, customer-visible copy stays draft. Will draft signup → verify-email → legal-accept → tier-select → payment-redirect → first-key as a multi-page onboarding flow.
+Continuing to V-099 — onboarding flow page scaffolding (Astro pages, working-tree only per Tier 3 / customer-facing copy). Per AGENTS.md: page structure can land Tier 1, customer-visible copy stays draft. Will draft signup → verify-email → legal-accept → tier-select → payment-redirect → first-key as a multi-page onboarding flow.
 
 ---
 
@@ -5949,7 +5949,7 @@ Scaffold the `apps/customer-dashboard/` Astro project per the customer-dashboard
 
 ### What's deferred (intentional Tier 3 drafts)
 
-Customer-visible copy + visual treatments on the onboarding flow pages (signup / verify-email / legal-accept / tier-select / payment-redirect / first-key) and the sub-page content for Profiles / Sessions / API keys / Usage / Billing / Webhooks / Team / Settings — these stay as working-tree drafts (Tier 3) per CLAUDE.md's marketing-copy + brand-surface cadence. The page scaffolding (route shells, design tokens, mock data wiring) lands as Tier 1.
+Customer-visible copy + visual treatments on the onboarding flow pages (signup / verify-email / legal-accept / tier-select / payment-redirect / first-key) and the sub-page content for Profiles / Sessions / API keys / Usage / Billing / Webhooks / Team / Settings — these stay as working-tree drafts (Tier 3) per AGENTS.md's marketing-copy + brand-surface cadence. The page scaffolding (route shells, design tokens, mock data wiring) lands as Tier 1.
 
 ### Files added
 
@@ -6253,7 +6253,7 @@ Land automated dependency-update scheduling so deps don't drift indefinitely bet
 
 New `.github/dependabot.yml`. Four ecosystems:
 
-- **npm root**: weekly Monday 04:00 Europe/Amsterdam. Groups: `types`, `dev-deps-minor-patch`, `runtime-deps-patch`, `runtime-deps-minor`. Locked-stack majors (drizzle-orm/kit, fastify, ioredis, postgres) excluded from grouping — land as individual PRs for architectural review per CLAUDE.md.
+- **npm root**: weekly Monday 04:00 Europe/Amsterdam. Groups: `types`, `dev-deps-minor-patch`, `runtime-deps-patch`, `runtime-deps-minor`. Locked-stack majors (drizzle-orm/kit, fastify, ioredis, postgres) excluded from grouping — land as individual PRs for architectural review per AGENTS.md.
 - **pip** (`packages/sdk-python`): weekly. Groups: dev / runtime-patch.
 - **cargo** (`apps/gui-client/src-tauri`): weekly. Group: minor-patch.
 - **github-actions**: weekly. Group: minor-patch.
@@ -6548,7 +6548,7 @@ Standing rules require typecheck + lint + format + vitest before each Tier 1 com
 
 While auditing PHASE 10 of the autopilot directive: both `docker-compose.yml` (postgres pg_isready / redis ping) and `infra/hetzner/docker-compose.yml` (api node fetch /health) already have health checks. Item already done.
 
-Doc-rot also noted at `infra/hetzner/docker-compose.yml:25` — comment still references `COINBASE_COMMERCE_*` env vars but Coinbase Commerce was dropped 2026-05-03 per CLAUDE.md (Stripe is sole payment rail at launch). Fold into hygiene cleanup batch.
+Doc-rot also noted at `infra/hetzner/docker-compose.yml:25` — comment still references `COINBASE_COMMERCE_*` env vars but Coinbase Commerce was dropped 2026-05-03 per AGENTS.md (Stripe is sole payment rail at launch). Fold into hygiene cleanup batch.
 
 ### How verified
 
@@ -7205,7 +7205,7 @@ Continuing per never-stop rule.
 
 ### Goal
 
-V-112 surfaced doc rot at `infra/hetzner/docker-compose.yml:25` — the env-file comment still listed `COINBASE_COMMERCE_*` after Coinbase Commerce was dropped 2026-05-03 (CLAUDE.md Crypto-rail-dropped-from-launch note). Founder direction is NOT to strip + leave nothing — crypto rail is **deferred** to post-launch per ADR-002, not abandoned. Pre-naming env vars for an unselected processor would just create the same kind of doc rot when a different processor lands.
+V-112 surfaced doc rot at `infra/hetzner/docker-compose.yml:25` — the env-file comment still listed `COINBASE_COMMERCE_*` after Coinbase Commerce was dropped 2026-05-03 (AGENTS.md Crypto-rail-dropped-from-launch note). Founder direction is NOT to strip + leave nothing — crypto rail is **deferred** to post-launch per ADR-002, not abandoned. Pre-naming env vars for an unselected processor would just create the same kind of doc rot when a different processor lands.
 
 ### What changed
 
@@ -7297,7 +7297,7 @@ Continuing per never-stop rule. Per founder priority: PHASE 11 stubs (behavioura
 
 ### Goal
 
-PHASE 11 of the autopilot directive (founder priority 3): scaffold the two Phase 3 workspaces so consumers (drivers, GUI client, admin panel) can integrate against the seam now while Phase 3 closed-source domain logic ships behind the same interface later. Workspace package + interface + mock implementation only — NO domain logic. Per CLAUDE.md: behavioural simulation library + recipe library are explicitly Phase 3 out-of-scope, only the scaffold is in-scope.
+PHASE 11 of the autopilot directive (founder priority 3): scaffold the two Phase 3 workspaces so consumers (drivers, GUI client, admin panel) can integrate against the seam now while Phase 3 closed-source domain logic ships behind the same interface later. Workspace package + interface + mock implementation only — NO domain logic. Per AGENTS.md: behavioural simulation library + recipe library are explicitly Phase 3 out-of-scope, only the scaffold is in-scope.
 
 ### What changed
 
@@ -7307,7 +7307,7 @@ PHASE 11 of the autopilot directive (founder priority 3): scaffold the two Phase
 - `tsconfig.json`: composite, extends root base, rootDir=src, outDir=dist (mirrors api-types convention).
 - `src/types.ts`: `BehaviouralProfile` (mean keystroke delay, mouse speed, scroll velocity, pause probability/duration), `MouseTrajectory` (sampled cubic-bezier path placeholder), `KeyboardCadence` (per-keystroke delay array), `ScrollPattern` (per-tick velocity profile). All types carry a `seed` field for reproducibility.
 - `src/interfaces.ts`: `BehaviouralSimulator` interface — `generateMouseTrajectory`, `generateKeyboardCadence`, `generateScrollPattern`, `listProfiles`. Phase 3 swap-in target.
-- `src/mock.ts`: `MockBehaviouralSimulator` — deterministic linear interpolation for mouse paths, constant-delay keystroke cadence, constant-tick scroll. Same inputs always produce the same output (matches CLAUDE.md mock-driver discipline). Two default profiles: `casual_browser_us`, `fast_typer_dev`.
+- `src/mock.ts`: `MockBehaviouralSimulator` — deterministic linear interpolation for mouse paths, constant-delay keystroke cadence, constant-tick scroll. Same inputs always produce the same output (matches AGENTS.md mock-driver discipline). Two default profiles: `casual_browser_us`, `fast_typer_dev`.
 - `src/index.ts`: re-exports.
 - `tests/mock.test.ts` — 7 tests: determinism, sample count, midpoint check, seed differentiation, keystroke cadence shape, scroll tick magnitude, default + injected catalogue.
 
@@ -7325,7 +7325,7 @@ PHASE 11 of the autopilot directive (founder priority 3): scaffold the two Phase
 
 ### Why deliberate-stub mock implementations
 
-Per CLAUDE.md mock-driver discipline ("deterministic; same inputs → same outputs; never fake a success the real driver would fail; never randomise behaviour the real driver wouldn't randomise"), the mocks are intentionally simple linear/constant generators rather than RNG-driven approximations of the real behaviour. The point of the mock is to exercise the interface seam, not to approximate Phase 3 behaviour. Tests can assert exact values; integration consumers know they're using the mock and won't accidentally believe its output is realistic.
+Per AGENTS.md mock-driver discipline ("deterministic; same inputs → same outputs; never fake a success the real driver would fail; never randomise behaviour the real driver wouldn't randomise"), the mocks are intentionally simple linear/constant generators rather than RNG-driven approximations of the real behaviour. The point of the mock is to exercise the interface seam, not to approximate Phase 3 behaviour. Tests can assert exact values; integration consumers know they're using the mock and won't accidentally believe its output is realistic.
 
 ### How verified
 
@@ -8461,7 +8461,7 @@ Continuing per never-stop rule. PRIORITY 12: when queue exhausts, GENERATE NEW T
 
 ### Goal
 
-Founder overnight directive PRIORITY 12 — when queue exhausts, generate new Tier 1 from planning docs. CLAUDE.md "Out of scope" lists "WebRTC streaming layer" as a future surface ("may land inside the GUI workstream if scope allows; otherwise polling-based screenshots for the first iteration"). V-149 lands the seam following the V-127 / V-144 pattern.
+Founder overnight directive PRIORITY 12 — when queue exhausts, generate new Tier 1 from planning docs. AGENTS.md "Out of scope" lists "WebRTC streaming layer" as a future surface ("may land inside the GUI workstream if scope allows; otherwise polling-based screenshots for the first iteration"). V-149 lands the seam following the V-127 / V-144 pattern.
 
 ### What changed
 
@@ -8507,7 +8507,7 @@ Live-view a session running on a Driftstack-controlled browser. Screenshots-on-d
 
 ### Next
 
-Continuing per never-stop rule. CLAUDE.md "Out of scope" stub catalog now complete: behavioural-simulation (V-127), recipe-library (V-127), webhook-delivery (V-144), webrtc-streaming (V-149). Mac mini fleet is operational (not code-scaffoldable); behavioural data collection is explicitly NOT collected. Continuing with other planning-doc-generated work.
+Continuing per never-stop rule. AGENTS.md "Out of scope" stub catalog now complete: behavioural-simulation (V-127), recipe-library (V-127), webhook-delivery (V-144), webrtc-streaming (V-149). Mac mini fleet is operational (not code-scaffoldable); behavioural data collection is explicitly NOT collected. Continuing with other planning-doc-generated work.
 
 ---
 
@@ -8620,7 +8620,7 @@ Continuing per never-stop rule. PRIORITY 12 ongoing.
 
 ### Goal
 
-`docs/architecture.md` — referenced from CLAUDE.md as the system-shape doc — has a "Decisions (cross-reference)" section that listed only 6 entries (D-019 + D-020/D-025 + D-023 + D-027 + ADR-001 + ADR-003). Several Tier 2 architectural decisions landed since the last update without a cross-reference: D-024 (auth coalescer), D-028 (opaque web sessions), D-029 (hand-rolled Stripe), D-030 (Stripe idempotency), D-031 (session.failed semantics), D-032 (profile name uniqueness), D-033/ADR-006 (audit retention), D-034/ADR-005 (Sentry-first), D-035 (admin scope at preHandler — V-150), D-036 (team roles taxonomy — V-150).
+`docs/architecture.md` — referenced from AGENTS.md as the system-shape doc — has a "Decisions (cross-reference)" section that listed only 6 entries (D-019 + D-020/D-025 + D-023 + D-027 + ADR-001 + ADR-003). Several Tier 2 architectural decisions landed since the last update without a cross-reference: D-024 (auth coalescer), D-028 (opaque web sessions), D-029 (hand-rolled Stripe), D-030 (Stripe idempotency), D-031 (session.failed semantics), D-032 (profile name uniqueness), D-033/ADR-006 (audit retention), D-034/ADR-005 (Sentry-first), D-035 (admin scope at preHandler — V-150), D-036 (team roles taxonomy — V-150).
 
 A reader following the "where do I look for X?" trail from architecture.md was hitting a wall on those topics. Cross-reference now points at every Tier 2+ decision.
 
@@ -8850,7 +8850,7 @@ Continuing per never-stop rule. PRIORITY 12 ongoing.
 
 ### Goal
 
-`docs/deployment/env-vars.md` is the canonical schema for env vars the control plane reads — referenced from CLAUDE.md as the source of truth for deployment configuration. Audited the doc against `apps/server/src/lib/config.ts:171` (`loadConfig`) and found 5 Stripe-related env vars that the server reads but the doc didn't list:
+`docs/deployment/env-vars.md` is the canonical schema for env vars the control plane reads — referenced from AGENTS.md as the source of truth for deployment configuration. Audited the doc against `apps/server/src/lib/config.ts:171` (`loadConfig`) and found 5 Stripe-related env vars that the server reads but the doc didn't list:
 
 - `STRIPE_API_VERSION` — pinned `Stripe-Version` header.
 - `STRIPE_SUCCESS_URL` — Checkout Session success redirect.
@@ -11562,12 +11562,12 @@ V-205 — customer-facing API audit log (GENERATE-6, ~2-3hr Tier 1).
 
 ### What
 
-Two policy sections appended to the top of `/CLAUDE.md`:
+Two policy sections appended to the top of `/AGENTS.md`:
 
 1. **Commit attribution policy** — no `Co-Authored-By: Claude` trailer, no `🤖 Generated with [Claude Code]` footer, no AI/Anthropic/Claude reference in commit messages. Applies to every commit going forward without exception.
 2. **Customer-facing copy policy** — no AI / Anthropic / Claude / tooling references on any customer-facing surface (marketing site, dashboards, admin panel, FAQ, docs). Internal docs can reference tooling for engineering accuracy.
 
-The policy lands at the **top** of CLAUDE.md (above "Read this first") so it's the first thing future-self sees on context inheritance. This is THE thing to not miss.
+The policy lands at the **top** of AGENTS.md (above "Read this first") so it's the first thing future-self sees on context inheritance. This is THE thing to not miss.
 
 ### Why
 
@@ -11577,7 +11577,7 @@ This is presentation, not compliance. EU/Netherlands jurisdiction has no AI-assi
 
 ### Files
 
-- `CLAUDE.md` — two new policy sections at the top.
+- `AGENTS.md` — two new policy sections at the top.
 - `docs/verification-log.md` — this V-entry, plus a HARD RESET marker noting the queue renumber.
 
 ### Verify
@@ -11586,7 +11586,7 @@ This commit itself is the verification of the commit-attribution part. The commi
 
 ### Notes
 
-- Going forward I will use plain heredoc commit messages with **no trailer**. The bash tool's example template that pastes `Co-Authored-By: Claude` is overridden by this CLAUDE.md policy and the founder's explicit direction.
+- Going forward I will use plain heredoc commit messages with **no trailer**. The bash tool's example template that pastes `Co-Authored-By: Claude` is overridden by this AGENTS.md policy and the founder's explicit direction.
 - The Anthropic API as a customer-facing BYO bundled LLM (per the sub-processor list) is product surface, not development-tooling reference — that's allowed where documenting customer-facing capability. Distinct from "we built this product using Claude," which is not allowed on customer-facing copy.
 - V-206 (audit + clean public-surface AI references) and V-207 (founder force-push history rewrite) follow.
 
@@ -11606,26 +11606,26 @@ Full repo audit for AI / Claude / Anthropic mentions, then a cleanup pass on the
 
 2. **Allowed (legitimate sub-processor)**: Anthropic mentions in `apps/marketing-site/src/pages/{faq,pricing,security}.astro`, `docs/legal/{dpa,privacy-policy,acceptable-use-policy,terms-of-service,definitions,README}.md`, and `apps/marketing-site/src/data/sub-processors.ts`. These describe the BYO-bundled-LLM customer feature where customers bring their own Anthropic API key — product surface, not development tooling. Per the V-205 policy carve-out.
 
-3. **Cleanup required (7 customer-facing/public-package surfaces)**: 7 files mentioned the literal filename `CLAUDE.md` in a place visible to outside readers. Cleaned up.
+3. **Cleanup required (7 customer-facing/public-package surfaces)**: 7 files mentioned the literal filename `AGENTS.md` in a place visible to outside readers. Cleaned up.
 
 **Cleanup pass:**
 
-- `README.md` — removed "See `CLAUDE.md` for the full operational discipline" sentence from the Contributing section. The verification log + decisions log links remain.
-- `apps/customer-dashboard/README.md` — replaced "per CLAUDE.md's marketing-copy + brand-surface cadence" with "per the standing marketing-copy + brand-surface cadence."
-- `packages/webrtc-streaming/package.json` — rewrote the description (visible on npm registry) to drop the CLAUDE.md reference.
+- `README.md` — removed "See `AGENTS.md` for the full operational discipline" sentence from the Contributing section. The verification log + decisions log links remain.
+- `apps/customer-dashboard/README.md` — replaced "per AGENTS.md's marketing-copy + brand-surface cadence" with "per the standing marketing-copy + brand-surface cadence."
+- `packages/webrtc-streaming/package.json` — rewrote the description (visible on npm registry) to drop the AGENTS.md reference.
 - `packages/webrtc-streaming/src/types.ts` — header comment rewrite.
-- `packages/webhook-delivery/src/mock.ts` — replaced "matches CLAUDE.md mock-driver discipline" with "matches the mock-driver discipline used elsewhere in the repo."
+- `packages/webhook-delivery/src/mock.ts` — replaced "matches AGENTS.md mock-driver discipline" with "matches the mock-driver discipline used elsewhere in the repo."
 - `packages/behavioural-simulation/src/mock.ts` — same pattern.
-- `apps/marketing-site/src/data/sub-processors.ts` — replaced "sub-processor lock from CLAUDE.md" with "locked sub-processor list."
+- `apps/marketing-site/src/data/sub-processors.ts` — replaced "sub-processor lock from AGENTS.md" with "locked sub-processor list."
 
-After cleanup, `grep -rln "CLAUDE.md" --include="*.md" --include="*.ts" ...` outside `docs/` and `CLAUDE.md` itself returns zero hits.
+After cleanup, `grep -rln "AGENTS.md" --include="*.md" --include="*.ts" ...` outside `docs/` and `AGENTS.md` itself returns zero hits.
 
 ### Surfaced for founder decision (NOT executed unilaterally)
 
-The file is **literally named `CLAUDE.md`** at repo root. Visible on github.com/driftstackdev/driftstack-api file listing — the filename itself is an AI-tooling tell. Open question: rename to `AGENTS.md` (emerging cross-tool standard, recognized by Claude Code, Cursor, Codex, et al.) OR keep the current name?
+The file is **literally named `AGENTS.md`** at repo root. Visible on github.com/driftstackdev/driftstack-api file listing — the filename itself is an AI-tooling tell. Open question: rename to `AGENTS.md` (emerging cross-tool standard, recognized by Claude Code, Cursor, Codex, et al.) OR keep the current name?
 
 - **Pro rename**: completes the V-205 policy intent. Customer-facing repo no longer signals tool choice via filename.
-- **Pro keep**: 25 internal-doc references update. AGENTS.md is becoming convention-shared but isn't yet universal; CLAUDE.md is still the most-recognized name in some tools.
+- **Pro keep**: 25 internal-doc references update. AGENTS.md is becoming convention-shared but isn't yet universal; AGENTS.md is still the most-recognized name in some tools.
 
 Surfaced as V-NNN candidate (renumbered into the queue if accepted). Not executed in V-206 because the rename is a non-trivial scope shift across 25 files + the file itself, and "presentation, not capability disclosure" is the founder's framing — the call is theirs.
 
@@ -11650,13 +11650,13 @@ Follow-on to V-205. V-205 stopped the bleeding (no new commits attribute to AI t
 - `npm run lint`: clean.
 - `npm run format:check`: clean.
 - `npm test`: 662 / 662 passing across 68 files.
-- `grep -rln "CLAUDE.md" --include="*.md" --include="*.ts" --include="*.tsx" --include="*.astro" --include="*.go" --include="*.py" --include="*.json" --include="*.sql" | grep -v node_modules | grep -v dist/ | grep -v "^docs/" | grep -v "^CLAUDE.md$"`: zero hits.
+- `grep -rln "AGENTS.md" --include="*.md" --include="*.ts" --include="*.tsx" --include="*.astro" --include="*.go" --include="*.py" --include="*.json" --include="*.sql" | grep -v node_modules | grep -v dist/ | grep -v "^docs/" | grep -v "^AGENTS.md$"`: zero hits.
 
 ### Notes
 
 - Anthropic mentions in `apps/marketing-site/src/pages/{faq,pricing,security}.astro` describe the BYO bundled LLM feature (customer-facing capability). Kept per the V-205 policy carve-out.
 - `docs/legal/*.md` "AI-generated baseline draft" markers kept — those are explicit working-tree warnings to the founder + counsel that the docs need legal review before publication. They are NOT meant to survive into the published, counsel-approved final docs; counsel will rewrite/approve before any customer sees them.
-- The CLAUDE.md filename itself is the remaining tell. Surfaced for founder decision rather than unilaterally renamed.
+- The AGENTS.md filename itself is the remaining tell. Surfaced for founder decision rather than unilaterally renamed.
 
 ### Next
 
@@ -11721,13 +11721,13 @@ Per the V-205 policy carve-out:
 
 ### Files
 
-No file changes — audit-confirmation V-entry. Policy already documented in CLAUDE.md per V-205.
+No file changes — audit-confirmation V-entry. Policy already documented in AGENTS.md per V-205.
 
 `docs/verification-log.md` — this entry.
 
 ### Verify
 
-- `grep -rn -i "ai-built|ai-powered|ai-assisted|built with claude|powered by claude|generated by claude|using claude"` across customer-facing source dirs (excluding `docs/legal/`, `docs/verification-log`, `CLAUDE.md`): zero hits.
+- `grep -rn -i "ai-built|ai-powered|ai-assisted|built with claude|powered by claude|generated by claude|using claude"` across customer-facing source dirs (excluding `docs/legal/`, `docs/verification-log`, `AGENTS.md`): zero hits.
 - Existing AI agent feature mentions in `apps/marketing-site/src/pages/{index,pricing,faq}.astro`, `apps/marketing-site/src/data/pricing.ts`, `apps/marketing-site/src/data/sub-processors.ts` are all product-feature copy, not development-tooling framing. Per the V-205 policy.
 
 ### Notes
@@ -11800,3 +11800,49 @@ Working-tree state captured by `git diff apps/marketing-site/src/pages/about.ast
 ### Next
 
 V-210 — marketing site visitor-density audit + Tier 3 drafts for `/index` + `/pricing` + `/faq` (~3-5hr Tier 3 working-tree drafts, founder redline before commit).
+
+> **RENUMBER** from V-205→V-209 ack + founder anonymity directive. New queue: V-210 = AGENTS.md rename; V-211 = anonymity policy + git identity + public-surface audit; V-212 = V-207 runbook update for name+email rewrite scope; V-213 = /about Dutch-BV-only commit; V-214 = marketing density audit (was old V-210); V-215 = post-force-push verification. Then V-216+ resumes GENERATE queue.
+
+## V-210 — CLAUDE.md → AGENTS.md rename
+
+### What
+
+`git mv CLAUDE.md AGENTS.md`. AGENTS.md is the cross-tool standard recognized by Claude Code, Cursor, Codex, and other coding agents.
+
+Updated 26 references across the repo:
+
+- 18 internal docs (`docs/architecture.md`, `docs/founder-action-queue.md`, `docs/onboarding-for-future-developers.md`, `docs/entity-org-transition.md`, `docs/decisions.md`, `docs/architecture/customer-dashboard-stack.md`, `docs/adr/{README,ADR-004,ADR-005,ADR-006}.md`, `docs/legal/{README,dpa,privacy-policy,terms-of-service,acceptable-use-policy,definitions}.md`, `docs/deployment/runbook.md`).
+- 1 CI config (`.github/dependabot.yml` comment).
+- `docs/verification-log.md` — this entry.
+
+After: `grep -rln "CLAUDE.md"` across the repo returns zero hits.
+
+This commit is the **first commit under the Driftstack-branded git identity** locally configured ahead of it:
+
+```
+git config --local user.name "Driftstack"
+git config --local user.email "dev@driftstack.dev"
+```
+
+V-211 follows with the policy doc lock + public-surface audit.
+
+### Why
+
+The literal filename `CLAUDE.md` at repo root is an AI-tooling tell visible on github.com/driftstackdev/driftstack-api. Founder approved the rename per the V-205→V-209 ack. AGENTS.md is the cross-tool convention emerging across coding agents — neutral name, broader recognition.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 662 / 662 passing.
+- `grep -rln "CLAUDE.md"` across the repo: zero hits.
+
+### Notes
+
+- `git mv` preserves history (file shows as renamed in `git log --follow AGENTS.md`).
+- Tools auto-loading `CLAUDE.md` will need to also support `AGENTS.md`. Claude Code reads both. If a future tool only reads CLAUDE.md, a `ln -s AGENTS.md CLAUDE.md` symlink would re-establish compatibility without re-introducing the filename to the public listing — not needed today.
+
+### Next
+
+V-211 — founder anonymity policy + git identity policy locked in AGENTS.md + public-surface audit for personal-name references (~30 min Tier 1).

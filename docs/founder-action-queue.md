@@ -191,7 +191,7 @@ the founder needs to do.
 - **Status:** LOCKED 2026-05-03 (V-052)
 - **Reference:** Hetzner / Neon / Upstash / Cloudflare / Postmark /
   Sentry / Stripe / Anthropic / Moneybird / MacStadium per
-  `CLAUDE.md`. Adding a new sub-processor = directional question
+  `AGENTS.md`. Adding a new sub-processor = directional question
   first, never silent.
 
 ### Legal documents

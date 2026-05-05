@@ -3,7 +3,7 @@
 **Target date:** geruisloze omzetting completes ~2026-05-21 (KvK).
 **Founder track:** legal entity setup (eenmanszaak → BV), Stripe/Mollie
 billing entity, ToS authoring entity, Moneybird invoicing — all
-**out of scope** for this repo per `CLAUDE.md`.
+**out of scope** for this repo per `AGENTS.md`.
 
 This document scopes only the **platform-side configuration**
 changes — what stuff in this repo + the published artifacts has to

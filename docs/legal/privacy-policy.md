@@ -1,6 +1,6 @@
 # Driftstack — Privacy Policy
 
-> **AI-generated baseline draft.** Generated 2026-05-03 under CLAUDE.md
+> **AI-generated baseline draft.** Generated 2026-05-03 under AGENTS.md
 > legal-content exception. Founder-directed; counsel review required
 > before first paying customer. Revision triggers: any material business
 > model change, any new sub-processor, any new jurisdiction served,

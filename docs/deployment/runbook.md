@@ -6,7 +6,7 @@ production traffic exists; the structure is in place so an incident
 in the first weeks of paid traffic doesn't catch us flat-footed.
 
 > **Status**: pre-launch. Everything in `[TODO]` is a known gap and
-> should be filled before the first paying customer (see CLAUDE.md
+> should be filled before the first paying customer (see AGENTS.md
 > "publish vs commercial activation" — commercial activation is gated
 > on entity registration, but ops infra needs to be ready when that
 > gate opens).
@@ -133,4 +133,4 @@ that exceeds routine triage (customer-facing communication, rolling
 back a migration, suspending an account suspected of abuse, ANY
 financial action), wait for the founder to authorize. Document the
 issue, take read-only diagnostic steps, and surface for explicit
-approval per the locked decision-authority policy in CLAUDE.md.
+approval per the locked decision-authority policy in AGENTS.md.

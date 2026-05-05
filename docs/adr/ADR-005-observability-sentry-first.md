@@ -81,4 +81,4 @@ Trigger any of the following → re-open this ADR:
 
 ## Decision authority
 
-This is **architectural / vendor-level** — surfaces for founder review per the Decision authority section in CLAUDE.md. No production change until founder confirms the recommendation (or redirects to one of the alternatives).
+This is **architectural / vendor-level** — surfaces for founder review per the Decision authority section in AGENTS.md. No production change until founder confirms the recommendation (or redirects to one of the alternatives).

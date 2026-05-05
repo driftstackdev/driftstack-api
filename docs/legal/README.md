@@ -3,7 +3,7 @@
 **Status:** AI-generated baseline drafts. Counsel review required before
 first paying customer.
 
-**Generated:** 2026-05-03 under the CLAUDE.md legal-content exception.
+**Generated:** 2026-05-03 under the AGENTS.md legal-content exception.
 
 This directory holds the four bound legal documents for the Driftstack
 service plus a shared definitions file:
@@ -19,7 +19,7 @@ service plus a shared definitions file:
 ## Provenance + revision policy
 
 These documents are **AI-generated baseline drafts** produced under the
-[CLAUDE.md legal-content exception](../../CLAUDE.md#%E2%9A%A0%EF%B8%8F-repository-scope) (effective 2026-05-03). They are starting points for
+[AGENTS.md legal-content exception](../../AGENTS.md#%E2%9A%A0%EF%B8%8F-repository-scope) (effective 2026-05-03). They are starting points for
 counsel review, **not final bound documents**. The founder accepts that
 AI-generated legal text carries risk that counsel review may not catch
 and treats all generated content as revisable.
@@ -163,7 +163,7 @@ Annotated for the reviewing counsel:
 ## What's NOT in this set
 
 - **Customer-facing onboarding copy** (signup flow, email templates,
-  in-product banners). Lives outside this repo per CLAUDE.md;
+  in-product banners). Lives outside this repo per AGENTS.md;
   marketing track.
 - **Sub-processor agreements** themselves (e.g. the actual contract
   between Driftstack BV and Stripe Ireland). Out of scope; each

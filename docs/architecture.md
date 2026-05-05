@@ -157,7 +157,7 @@ Configured per `docs/deployment/env-vars.md`:
 | Moneybird     | Accounting / invoicing                                                             | Pending Workstream E                                                      |
 | MacStadium    | Mac fleet hosting (gated on first paying customer)                                 | Future                                                                    |
 
-Sub-processor list locked per V-052 / CLAUDE.md. Adding a vendor outside this list = directional question first.
+Sub-processor list locked per V-052 / AGENTS.md. Adding a vendor outside this list = directional question first.
 
 ## Request lifecycle (Bearer-API-key path)
 
@@ -196,7 +196,7 @@ interface Driver {
 }
 ```
 
-`apps/server/src/drivers/index.ts` factory returns `mock` when `DRIVER=mock` (default in dev / staging / pre-fork-integration production) and `webkit` otherwise. The `webkit` implementation throws `DriverNotIntegratedError` until the WebKit fork's Phase 2 closes. Driver-interface changes are coordinated explicitly with the WebKit fork (separate repo, see CLAUDE.md WebKit driver boundary section).
+`apps/server/src/drivers/index.ts` factory returns `mock` when `DRIVER=mock` (default in dev / staging / pre-fork-integration production) and `webkit` otherwise. The `webkit` implementation throws `DriverNotIntegratedError` until the WebKit fork's Phase 2 closes. Driver-interface changes are coordinated explicitly with the WebKit fork (separate repo, see AGENTS.md WebKit driver boundary section).
 
 ## Tier model (ADR-004)
 

@@ -29,7 +29,7 @@ load-bearing contextual decisions.
 
 **Status:** Accepted | Superseded by ADR-MMM | Deprecated
 **Date:** YYYY-MM-DD
-**Tier:** 1 | 2 | 3 (per CLAUDE.md autonomy tiers)
+**Tier:** 1 | 2 | 3 (per AGENTS.md autonomy tiers)
 **Related D-entry:** D-NNN (if applicable)
 **Related V-entry:** V-NNN (if applicable)
 

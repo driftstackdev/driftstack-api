@@ -98,7 +98,7 @@ Three docs you'll consult:
 - **`docs/verification-log.md`** — V-NNN entries. Append-only empirical log of every substantive change. Pairs with each commit's V-NNN tag in its message. The "next" section at the end usually tells you what's coming.
 - **`docs/adr/`** — long-form ADRs for architectural deviations from the planned approach. Read these when working in their domain (ADR-001 hosting, ADR-002 Stripe-only, ADR-003 trial pack, ADR-004 two-ladder pricing, ADR-005 observability draft, ADR-006 audit retention draft).
 
-CLAUDE.md at the repo root captures the full operational discipline: test standards, marketing-copy review cadence, decision-authority levels (Routine / Architectural / Contractual), commit pattern (push-to-main with V-NNN tag), what's in scope vs out of scope.
+AGENTS.md at the repo root captures the full operational discipline: test standards, marketing-copy review cadence, decision-authority levels (Routine / Architectural / Contractual), commit pattern (push-to-main with V-NNN tag), what's in scope vs out of scope.
 
 ## Common things you might want to do
 
@@ -133,9 +133,9 @@ Same as above plus:
 
 ### Add a new sub-processor (vendor)
 
-This is a Tier 2 architectural decision per CLAUDE.md. Surface for approval first; don't silently add. Once approved:
+This is a Tier 2 architectural decision per AGENTS.md. Surface for approval first; don't silently add. Once approved:
 
-1. Update `CLAUDE.md` sub-processor list.
+1. Update `AGENTS.md` sub-processor list.
 2. Update `docs/legal/dpa.md` Annex 3 sub-processor table.
 3. Update `docs/legal/privacy-policy.md` sub-processor disclosure.
 4. Bump legal-doc version (forces re-acceptance).
