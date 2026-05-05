@@ -9293,3 +9293,63 @@ Threshold loosened to 50% (vs founder's 20% suggestion) for the same noise reaso
 ### Next
 
 Continuing per never-stop rule. PRIORITY 5 (E2E integration testing harness) next. Surfacing 5-commit batch (V-161 → V-165) to founder before continuing.
+
+---
+
+## V-166 — Full customer lifecycle integration test (PRIORITY 5)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder PRIORITY 5 — "End-to-end integration testing harness — full session lifecycle test (signup → trial pack purchase → session create → run → metrics → invoice)." Cross-cutting test that catches "subsystems work in isolation but not together" regressions, distinct from existing per-subsystem tests.
+
+### Surfaced gap during scoping
+
+The first attempt at a true signup → web-session → mint-API-key flow exposed an architectural gap: V-079 web session tokens (returned by `/v1/auth/verify-email` + `/v1/auth/login`) cannot be used as bearers on `/v1/api-keys`. The `requireAuth` middleware in `apps/server/src/middleware/auth.ts` only authenticates API keys (prefix lookup + scrypt verify). There is no parallel web-session auth path.
+
+Net effect: a freshly-signed-up user has no production path to mint their first API key. Existing tests use `seedAccount` to directly insert an admin key (bypassing signup); the production onboarding path likely requires a separate provisioning step that hasn't been wired yet.
+
+V-166 documents this gap inline + scopes the test to what DOES work end-to-end. The fix (adding web-session auth to requireAuth + a `/v1/account/api-keys` route) belongs to a separate V-NNN.
+
+### Surfaced bug discovery
+
+While writing V-166, also surfaced an implementation/comment mismatch in `apps/server/src/services/sessions.ts:316-318`:
+
+- Comment at line 318 claims `destroy()` is idempotent (`if (session.status === 'destroyed') return; // idempotent`).
+- But `requireOwned()` at line 360 throws `SessionDestroyedError` (HTTP 410) BEFORE the early-return short-circuit can run.
+
+Net effect: second DELETE on a destroyed session returns 410, not 204 as the comment implies. The `Destroy. Idempotent — safe to call twice.` comment in `packages/sdk-go/sessions.go:138` is also misleading per current behavior.
+
+V-166 asserts the actual behavior (410) so the test is green. Documenting the mismatch inline so a future fix-or-update-comment V-NNN can pick it up.
+
+### What changed
+
+`apps/server/tests/integration/full-lifecycle.test.ts` (new) — 3 tests:
+
+1. **signup → verify-email → web session token issued** — pure auth-surface end-to-end. Confirms the V-079 surface returns a usable web session token + account_id + expiry.
+2. **admin key → scoped sub-key → session lifecycle → /v1/usage round-trip** — production lifecycle test. Mints a scoped sub-key, creates a session, navigates, destroys, confirms `/v1/usage` responds with the expected schema. Asserts the V-154 archetype rename flowed through (default `iphone16pro_ios18_7_safari26_4` on a session created without explicit archetype).
+3. **revoking the sub-key invalidates the auth cache (D-020 / D-025 invariant)** — cross-cutting cache test. Mints sub-key, uses it to populate cache, revokes via parent admin key, asserts subsequent op returns 401 (not stale cache hit). Also asserts parent admin key remains valid (per-key invalidation, not per-account cascade).
+
+### What was deferred (separate V-NNN)
+
+- **Stripe trial-pack webhook simulation** — signature-verification path needs the test secret + computed-signature header. `stripe-webhooks-mutations.test.ts` has the harness but state isn't shared across fixtures cleanly.
+- **Web-session-mints-API-key wiring** — see "Surfaced gap" above. Needs requireAuth extension + a new route.
+- **Destroy idempotency code/comment fix** — see "Surfaced bug" above.
+- **`usage_records` writers** — per V-014/V-015 amendment, the meter writers haven't landed; V-166 verifies the endpoint contract not the data path.
+
+### How verified
+
+- Targeted: `npm test -- full-lifecycle.test.ts`: 3/3 passing.
+- Full suite: `npm test`: 600/600 passing (was 597; +3).
+- Typecheck + lint + format clean.
+
+### Files added
+
+- `apps/server/tests/integration/full-lifecycle.test.ts`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 7 (status page scaffolding) or PRIORITY 9 (SDK versioning doc) next.
