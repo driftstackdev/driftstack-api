@@ -2,6 +2,17 @@
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { MOCK_ACCOUNTS, MOCK_AUDIT_LOG } from '../../data/mocks.ts';
 
+// V-191 — progressive-enhancement against /v1/admin/accounts/:id +
+// per-account audit slice + admin-action POSTs (change tier, suspend,
+// unsuspend). Static-build constraint: getStaticPaths only emits
+// pages for the mock IDs. Direct deep-links to live (non-mock) UUIDs
+// 404 from Cloudflare Pages until the admin-panel converts to SSR or
+// adopts a query-string-based detail route. Mitigation today: the
+// /accounts list page only lists live UUIDs in dev once a token is
+// present, and staff land on the [id] page via that link (which
+// works in dev because Astro dev-server serves dynamic routes; in
+// production the live row would 404). Surfaced as follow-up V-NNN.
+
 export function getStaticPaths() {
   return MOCK_ACCOUNTS.map((account) => ({ params: { id: account.id } }));
 }
@@ -10,9 +21,6 @@ const { id } = Astro.params;
 const account = MOCK_ACCOUNTS.find((a) => a.id === id);
 
 if (!account) {
-  // Astro static-build pre-renders only listed paths; this branch never
-  // hits in production. Kept for the dev-server case where someone hits
-  // an unlisted id.
   return Astro.redirect('/accounts');
 }
 
@@ -28,25 +36,41 @@ const STATUS_BADGE: Record<string, string> = {
   suspended: 'bg-amber-50 text-amber-700',
   deleted: 'bg-slate-100 text-slate-600',
 };
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+const accountId = account.id;
 ---
 
 <AdminLayout title={account.email}>
-  <div class="mx-auto max-w-5xl px-6 py-10">
+  <div
+    class="mx-auto max-w-5xl px-6 py-10"
+    data-page="admin-account-detail"
+    data-account-id={accountId}
+  >
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
     <header class="mb-10">
       <p class="text-sm text-slate-500">
         <a href="/accounts" class="text-oxblood-700 hover:underline">← Back to accounts</a>
       </p>
       <div class="mt-2 flex items-start justify-between gap-6">
         <div>
-          <h1 class="text-3xl font-semibold tracking-tight text-slate-900">
+          <h1
+            class="text-3xl font-semibold tracking-tight text-slate-900"
+            data-field="title-name"
+          >
             {account.name ?? account.email}
           </h1>
-          {account.name !== null && (
-            <p class="mt-1 text-sm text-slate-500">{account.email}</p>
-          )}
-          <p class="mt-2 font-mono text-xs text-slate-500">{account.id}</p>
+          <p class="mt-1 text-sm text-slate-500" data-field="title-email">{account.email}</p>
+          <p class="mt-2 font-mono text-xs text-slate-500">acc_{account.id}</p>
         </div>
         <span
+          data-field="status-badge"
           class:list={[
             'inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide',
             STATUS_BADGE[account.status],
@@ -63,19 +87,23 @@ const STATUS_BADGE: Record<string, string> = {
       <dl class="mt-4 grid gap-4 md:grid-cols-2">
         <div class="flex justify-between border-b border-slate-100 pb-2">
           <dt class="text-sm text-slate-500">Tier</dt>
-          <dd class="font-mono text-sm text-slate-900">{account.tier}</dd>
+          <dd class="font-mono text-sm text-slate-900" data-field="tier">{account.tier}</dd>
         </div>
         <div class="flex justify-between border-b border-slate-100 pb-2">
           <dt class="text-sm text-slate-500">Status</dt>
-          <dd class="font-mono text-sm text-slate-900">{account.status}</dd>
+          <dd class="font-mono text-sm text-slate-900" data-field="status">{account.status}</dd>
         </div>
         <div class="flex justify-between border-b border-slate-100 pb-2">
           <dt class="text-sm text-slate-500">Created</dt>
-          <dd class="font-mono text-sm text-slate-900">{fmtIso(account.createdAt)}</dd>
+          <dd class="font-mono text-sm text-slate-900" data-field="created">
+            {fmtIso(account.createdAt)}
+          </dd>
         </div>
         <div class="flex justify-between border-b border-slate-100 pb-2">
-          <dt class="text-sm text-slate-500">Last seen</dt>
-          <dd class="font-mono text-sm text-slate-900">{fmtIso(account.lastSeenAt)}</dd>
+          <dt class="text-sm text-slate-500">Last updated</dt>
+          <dd class="font-mono text-sm text-slate-900" data-field="updated">
+            {fmtIso(account.lastSeenAt)}
+          </dd>
         </div>
       </dl>
     </section>
@@ -91,37 +119,30 @@ const STATUS_BADGE: Record<string, string> = {
         immediately; suspend revokes all sessions + keys until unsuspend.
       </p>
 
-      <div class="mt-6 flex flex-wrap gap-3">
-        <a href={`#tier-${account.id}`} class="btn-secondary text-sm">
+      <div class="mt-6 flex flex-wrap gap-3" data-field="action-row">
+        <button type="button" data-action="change-tier" class="btn-secondary text-sm">
           Change tier
-        </a>
-        {account.status === 'active' ? (
-          <a
-            href={`#suspend-${account.id}`}
-            class="btn-secondary text-sm border-amber-300 text-amber-800 hover:bg-amber-50"
-          >
-            Suspend account
-          </a>
-        ) : account.status === 'suspended' ? (
-          <a
-            href={`#unsuspend-${account.id}`}
-            class="btn-secondary text-sm border-emerald-300 text-emerald-800 hover:bg-emerald-50"
-          >
-            Unsuspend account
-          </a>
-        ) : null}
-        <a
-          href={`#quota-override-${account.id}`}
-          class="btn-secondary text-sm"
+        </button>
+        <button
+          type="button"
+          data-action="suspend"
+          class:list={[
+            'btn-secondary text-sm border-amber-300 text-amber-800 hover:bg-amber-50',
+            account.status === 'active' ? '' : 'hidden',
+          ]}
         >
-          Set rate-limit override
-        </a>
-        <a
-          href={`#impersonate-${account.id}`}
-          class="btn-secondary text-sm border-red-300 text-red-700 hover:bg-red-50"
+          Suspend account
+        </button>
+        <button
+          type="button"
+          data-action="unsuspend"
+          class:list={[
+            'btn-secondary text-sm border-emerald-300 text-emerald-800 hover:bg-emerald-50',
+            account.status === 'suspended' ? '' : 'hidden',
+          ]}
         >
-          Read-only impersonate
-        </a>
+          Unsuspend account
+        </button>
       </div>
     </section>
 
@@ -129,12 +150,12 @@ const STATUS_BADGE: Record<string, string> = {
     <section class="dashboard-card mt-6">
       <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Audit slice</p>
       <h2 class="mt-2 text-xl font-semibold text-slate-900">Admin actions on this account</h2>
-      {
-        auditSlice.length === 0 ? (
-          <p class="mt-3 text-sm text-slate-500">No admin actions on record.</p>
-        ) : (
-          <ul class="mt-4 divide-y divide-slate-100">
-            {auditSlice.map((entry) => (
+      <ul class="mt-4 divide-y divide-slate-100" data-list="account-audit">
+        {
+          auditSlice.length === 0 ? (
+            <li class="py-3 text-sm text-slate-500">No admin actions on record.</li>
+          ) : (
+            auditSlice.map((entry) => (
               <li class="flex items-start justify-between gap-4 py-3">
                 <div class="min-w-0">
                   <p class="font-mono text-xs text-slate-500">{fmtIso(entry.ts)}</p>
@@ -154,13 +175,272 @@ const STATUS_BADGE: Record<string, string> = {
                   {entry.result}
                 </span>
               </li>
-            ))}
-          </ul>
-        )
-      }
-      <a href={`/audit-log?account=${account.id}`} class="mt-4 inline-flex text-sm text-oxblood-700 hover:underline">
+            ))
+          )
+        }
+      </ul>
+      <a
+        href={`/audit-log?account=acc_${account.id}`}
+        class="mt-4 inline-flex text-sm text-oxblood-700 hover:underline"
+      >
         Full audit log for this account →
       </a>
     </section>
   </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="admin-account-detail"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const list = root.querySelector('[data-list="account-audit"]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      // Derive the live UUID from the URL path rather than the SSG-baked
+      // attribute so a fallback / SSR conversion works without changing
+      // this script.
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      const accountUuid = pathParts[pathParts.length - 1] || '';
+      const prefixedId = 'acc_' + accountUuid;
+
+      const STATUS_BADGE = {
+        active: 'bg-emerald-50 text-emerald-700',
+        suspended: 'bg-amber-50 text-amber-700',
+        deleted: 'bg-slate-100 text-slate-600',
+      };
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+      function hideBanner() {
+        if (!banner) return;
+        banner.classList.add('hidden');
+      }
+      function setText(field, text) {
+        const el = root.querySelector('[data-field="' + field + '"]');
+        if (el) el.textContent = text;
+      }
+      function escapeHtml(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c],
+        );
+      }
+      function fmtIso(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+      }
+
+      function authedFetch(path, init = {}) {
+        return fetch(apiBaseUrl + path, {
+          ...init,
+          headers: {
+            ...(init.headers || {}),
+            authorization: 'Bearer ' + token,
+            'content-type': 'application/json',
+          },
+          credentials: 'include',
+        });
+      }
+
+      function applyAccount(a) {
+        const titleName = a.name || a.email;
+        setText('title-name', titleName);
+        setText('title-email', a.email);
+        setText('tier', a.tier);
+        setText('status', a.status);
+        setText('created', fmtIso(a.created_at));
+        setText('updated', fmtIso(a.updated_at));
+        const badge = root.querySelector('[data-field="status-badge"]');
+        if (badge) {
+          badge.textContent = a.status;
+          badge.className =
+            'inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide ' +
+            (STATUS_BADGE[a.status] || '');
+        }
+        const suspendBtn = root.querySelector('[data-action="suspend"]');
+        const unsuspendBtn = root.querySelector('[data-action="unsuspend"]');
+        if (suspendBtn) {
+          if (a.status === 'active') suspendBtn.classList.remove('hidden');
+          else suspendBtn.classList.add('hidden');
+        }
+        if (unsuspendBtn) {
+          if (a.status === 'suspended') unsuspendBtn.classList.remove('hidden');
+          else unsuspendBtn.classList.add('hidden');
+        }
+      }
+
+      function renderAudit(entries) {
+        if (!list) return;
+        if (entries.length === 0) {
+          list.innerHTML =
+            '<li class="py-3 text-sm text-slate-500">No admin actions on record.</li>';
+          return;
+        }
+        list.innerHTML = entries
+          .map((entry) => {
+            const resultClass =
+              entry.result === 'success'
+                ? 'bg-emerald-50 text-emerald-700'
+                : 'bg-red-50 text-red-700';
+            return (
+              '<li class="flex items-start justify-between gap-4 py-3">' +
+              '<div class="min-w-0">' +
+              '<p class="font-mono text-xs text-slate-500">' +
+              escapeHtml(fmtIso(entry.timestamp)) +
+              '</p>' +
+              '<p class="mt-1 text-sm text-slate-900">' +
+              '<span class="font-mono text-xs text-slate-700">' +
+              escapeHtml(entry.admin_account_id) +
+              '</span> ' +
+              '<code class="font-mono text-xs text-oxblood-700">' +
+              escapeHtml(entry.action) +
+              '</code></p></div>' +
+              '<span class="inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
+              resultClass +
+              '">' +
+              escapeHtml(entry.result) +
+              '</span></li>'
+            );
+          })
+          .join('');
+      }
+
+      function load() {
+        if (!token) return;
+        const accountP = authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId))
+          .then((r) => {
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            if (r.status === 404) return Promise.reject(new Error('not-found'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then(applyAccount);
+
+        const auditP = authedFetch(
+          '/v1/admin/audit-log?limit=20&target_id=' + encodeURIComponent(prefixedId),
+        )
+          .then((r) => {
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then((body) => renderAudit(body.data || []));
+
+        Promise.all([accountP, auditP])
+          .then(() => hideBanner())
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            if (msg === 'forbidden') {
+              showBanner(
+                'Access denied — admin scope required. You are signed in as a customer account.',
+              );
+            } else if (msg === 'not-found') {
+              showBanner('Account not found. Showing preview shell.');
+            } else {
+              showBanner("Couldn't load account (" + msg + '). Showing preview data below.');
+            }
+          });
+      }
+
+      function changeTier() {
+        const tier = window.prompt(
+          'New tier (one of trial_pack / solo_manual / team_manual / agency_manual / api_starter / api_builder / api_scale / enterprise):',
+        );
+        if (!tier) return;
+        const reason = window.prompt('Reason for tier change (optional, max 500 chars):') || '';
+        const body = { tier: tier.trim() };
+        if (reason.trim()) body.reason = reason.trim();
+        showBanner('Changing tier to ' + tier + '…');
+        authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/tier', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((updated) => {
+            applyAccount(updated);
+            showBanner('Tier changed to ' + updated.tier + '.');
+            // Refresh audit slice to surface the just-recorded entry.
+            load();
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't change tier (" + msg + ').');
+          });
+      }
+
+      function suspend() {
+        const reason = window.prompt('Reason for suspending this account (optional, max 500 chars):') || '';
+        const body = {};
+        if (reason.trim()) body.reason = reason.trim();
+        showBanner('Suspending account…');
+        authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/suspend', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((updated) => {
+            applyAccount(updated);
+            showBanner('Account suspended.');
+            load();
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't suspend (" + msg + ').');
+          });
+      }
+
+      function unsuspend() {
+        const reason = window.prompt('Reason for unsuspending (optional, max 500 chars):') || '';
+        const body = {};
+        if (reason.trim()) body.reason = reason.trim();
+        showBanner('Unsuspending account…');
+        authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/unsuspend', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((updated) => {
+            applyAccount(updated);
+            showBanner('Account unsuspended.');
+            load();
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't unsuspend (" + msg + ').');
+          });
+      }
+
+      root.addEventListener('click', (ev) => {
+        const target = ev.target;
+        if (!target || !target.closest) return;
+        const btn = target.closest('[data-action]');
+        if (!btn) return;
+        const action = btn.getAttribute('data-action');
+        if (!action) return;
+        ev.preventDefault();
+        if (!token) {
+          showBanner('Sign in with a staff admin account to perform this action.');
+          return;
+        }
+        if (action === 'change-tier') changeTier();
+        else if (action === 'suspend') suspend();
+        else if (action === 'unsuspend') unsuspend();
+      });
+
+      if (!token) {
+        showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+        return;
+      }
+
+      load();
+    })();
+  </script>
 </AdminLayout>

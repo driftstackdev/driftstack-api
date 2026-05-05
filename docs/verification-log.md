@@ -10885,3 +10885,39 @@ PRIORITY C phase 4 — admin index was 100% mock. The tiles + recent activity ar
 ### Next
 
 V-191 — admin /accounts/[id] detail page live wiring (existing endpoint, ~1.5hr Tier 1).
+
+## V-191 — admin-panel /accounts/[id] detail live wiring + actions (PRIORITY C phase 5)
+
+### What
+
+Wired the per-account detail page on `apps/admin-panel/src/pages/accounts/[id].astro` to live data and live actions:
+
+- **Read path**: derives the live UUID from `window.location.pathname` (rather than the SSG-baked `Astro.params.id`) and fetches `GET /v1/admin/accounts/acc_<uuid>` + `GET /v1/admin/audit-log?target_id=acc_<uuid>&limit=20` in parallel. Replaces title, status badge, account-fact dl values, and audit list with live data.
+- **Action path**: Change tier, Suspend, Unsuspend buttons are now real `<button>` elements with `data-action` attrs. A click handler delegated at the page root prompts for tier/reason via `window.prompt` and POSTs to the corresponding `/v1/admin/accounts/:id/{tier,suspend,unsuspend}` endpoint. On success the page re-fetches both the account state and audit slice so the just-recorded mutation surfaces immediately.
+
+### Why
+
+PRIORITY C phase 5 — the per-account detail page is the surface staff hit to apply remediations (tier upgrades for retention concessions, suspends for incident response). Endpoints existed; this slice closes the dashboard loop so admins don't have to drop to curl. Mutating actions are POST-with-prompt rather than full forms — tight enough for the staff use case while keeping the slice in scope.
+
+### Files
+
+- `apps/admin-panel/src/pages/accounts/[id].astro` — full progressive-enhancement rewrite. `data-page="admin-account-detail"` root, `data-field` attrs on every dynamic value, `data-action` on the three operation buttons. Inline script (~250 lines) handles read-path fetches + write-path POSTs + delegated click handling. Quota-override and read-only impersonate buttons removed for now (no slice-scoped UI for either action yet).
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 628 / 628 passing.
+- `astro check` on admin-panel: 0 errors / warnings / hints.
+
+### Notes
+
+- **Static-build constraint**: `getStaticPaths()` only emits pages for the mock IDs. In production direct deep-links to live (non-mock) UUIDs return 404 from Cloudflare Pages because the static path doesn't exist. Today's mitigation: staff land on the detail page by clicking from `/accounts` (V-187), which works in dev because the Astro dev-server serves the dynamic route. **Production deep-link fix** = either convert admin-panel to SSR (with @astrojs/cloudflare adapter) or add a Cloudflare Pages 404→template fallback. Tracked as a separate gap; the V-191 wiring is what unblocks the page once the routing fix lands.
+- `window.prompt` is intentionally minimal UX for staff actions. A modal-with-validation is a Tier 3 visual surface; this slice keeps the operational primitive working without burning Tier 3 review cycles. Replace with proper UI in V-184b-equivalent surface review.
+- Quota-override and read-only impersonate buttons were dropped from the page rather than left dead — the buttons existed only as href anchors in the mock with no implementation hook. When `POST /v1/admin/accounts/:id/quota-override` flow is needed in the dashboard, add it as a fresh slice with proper inputs (capacity, refill rate, reason, expires_at).
+- The audit-slice fetch passes `target_id=acc_<uuid>` rather than the bare UUID — the `ListAuditLogQuerySchema` accepts either a prefixed id or raw UUID via `maybeUuidFromInput`.
+
+### Next
+
+V-192 — admin-panel /sessions live wiring (no admin sessions list endpoint exists today; either add one or surface as gap and skip to V-193).
