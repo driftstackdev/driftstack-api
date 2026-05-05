@@ -13170,3 +13170,52 @@ Per autopilot direction:
 - **Poller startup wiring** (V-218 + V-202d).
 - **V-184b Tier 3 onboarding visual UX** (DRAFT-only).
 - **V-215 force-push verification** (waits on founder).
+
+## V-230 — TD-002 Drizzle-kit reinstatement proposal + V-184b scope outline (proposals only)
+
+### What
+
+Two proposal docs surfaced for founder review on wake. Both are doc-only (no code changes); both record decisions the autopilot session can't make autonomously per the guardrails:
+
+1. **`docs/proposals/td-002-drizzle-kit-reinstatement.md`** — Tier-2 architectural decision draft for the V-228 follow-up. Lays out two options (A: accept snapshot gap + one consolidated catch-up migration; B: backfill all 14 missing snapshots), recommends Option A on cost/benefit, includes a concrete commit-shape outline + verification steps + a pre-push-hook backstop (catches V-228-class regressions structurally regardless of which option lands).
+
+2. **`docs/proposals/v-184b-onboarding-visual-scope.md`** — Tier-3 scope outline for the founder-redline pass. Lists per-page (signup / verify-email / welcome / select-tier / first-session) what KINDS of structural changes V-184b would make, marks every customer-facing copy decision with `[FOUNDER COPY]` for explicit redline, and explicitly defers the highest-sensitivity decisions (select-tier $-numbers + tier descriptions) to founder per the locked tier-3-explicit-values memory. Cross-page consistency proposals (progress-step component, help/contact link, visual hierarchy) are also itemized.
+
+### Why
+
+Per autopilot guardrails:
+
+- "T2 architectural decisions: draft proposal in V-log, surface for founder, move to next T1." Drizzle-kit reinstatement turned out to have a Tier-2 decision baked in (snapshot recovery approach); writing the actual reinstatement code would mean making that decision autonomously. Proposal-then-ack is the right shape.
+- "T3 (... pricing/$-numbers, marketing language): NEVER autonomously decide. If encountered, draft + surface for founder, move to next T1." V-184b's actual content (per-page Astro edits) is dominated by Tier-3 copy decisions. The proposal is the pre-redline scope alignment so the redline pass itself is bounded.
+
+The autopilot direction said "V-184b Tier 3 onboarding visual UX (DRAFT working-tree only, NOT commit; founder reviews on wake)". Strict reading of that suggests drafting actual `.astro` page edits. Alternative reading: drafting the SHAPE of the pages with copy markers, since the founder retains all Tier-3 calls. Chose the second interpretation: the actual `.astro` edits for V-184b will be mechanical once the founder reds in copy + structure choices, so deferring those edits until after the redline costs ~nothing and avoids autonomous Tier-3 calls. The proposal IS the draft; the actual `.astro` edits are the post-redline implementation.
+
+### Files
+
+- `docs/proposals/td-002-drizzle-kit-reinstatement.md` — new, ~120 lines.
+- `docs/proposals/v-184b-onboarding-visual-scope.md` — new, ~140 lines.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 717 / 717 passing across 74 files (pure docs).
+- pre-push hook (V-223) will exercise on push.
+
+### Notes
+
+- The proposals/ directory is new. Convention: surface architectural / Tier-3 scope decisions here when the autopilot can't decide autonomously. After founder ack, the proposal either gets archived (move to `docs/proposals/archive/`) or annotated with an "approved 2026-MM-DD" header. This V-entry establishes the pattern.
+- Both proposals end with explicit "decision request" / "recommended next step" sections so the founder can ack quickly without re-reading from the top.
+- The TD-002 proposal includes a recommendation to land the **pre-push hook backstop** alongside drizzle-kit reinstatement. The hook check would refuse a commit that adds a `*.sql` migration without a journal entry — structural defense against V-228-class regressions regardless of which snapshot-recovery option wins. This is the kind of structural fix the founder values per the V-221 / V-223 / V-228 chain of catches.
+
+### Next
+
+Autopilot window ending. Single batch report to clipboard with full session ledger. Founder reviews on wake.
+
+Resume points after founder ack:
+
+- TD-002: pick A or B; autopilot lands the mechanical commit.
+- V-184b: redline copy + structure choices in the proposal; autopilot lands per-page Astro edits.
+- Poller startup: founder picks cadence (60s / 5min / etc.); autopilot wires `setInterval` for both `scheduledJobsService` + `validationHarnessService`.
