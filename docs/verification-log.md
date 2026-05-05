@@ -12793,3 +12793,47 @@ All V-216 deferred emit wires now landed. Remaining queue:
 - V-215 post-force-push verification (founder fires V-207/V-212 runbook; Agent 2 verifies — waiting on founder).
 - V-202b/c/d email-trigger wires (Stripe webhook handlers + first-failure dedup + trial-pack expiry job).
 - V-227 follow-up candidates (staff-driven tier-change audit emit; audit payload key-case normalisation).
+
+## V-227 — audit payload key-case normalisation
+
+### What
+
+Renamed three multi-word camelCase keys to snake_case across the V-224 audit emit sites in `auth-flows.ts`:
+
+- `issuedFromIp` → `issued_from_ip` (3 sites: verifyEmail, login, confirmPasswordReset)
+- `userAgent` → `user_agent` (same 3 sites)
+- `sessionId` → `session_id` (1 site: logout)
+
+V-225 (profiles + webhook_endpoints) and V-226 (subscription tier_changed) payloads were either single-word keys (`name`, `archetype`, `url`, `events`) or already snake_case (`stripe_event_type`, `stripe_event_id`) — no change needed there.
+
+### Why
+
+Surfaced as a follow-up in the V-226 V-log Notes section. The customer-facing API contract (V-018) is uniformly snake_case for all JSON keys; the audit log payload is JSON returned via `GET /v1/account/audit-log`, so it should match the rest of the surface. V-224 inadvertently used camelCase because the implementer (this agent) was thinking in TypeScript-variable-name terms rather than wire-format terms. V-226 used snake_case because by then the contract was clearer.
+
+Catching this now is preferable to waiting because:
+
+1. No production data exists yet — pre-launch — so renaming the keys isn't a wire-format breaking change (no customer is parsing `payload.userAgent` from production data because there is no production data).
+2. The longer the inconsistency lives, the more downstream code grows around it (SDKs, dashboard rendering, customer integrations). Fixing now is free; fixing later costs SDK contract churn.
+3. The four payload fields affected are all internal-context (IP / UA / session id / login-method) — none of them are documented in any external API spec yet, so the rename is invisible to anyone outside this repo.
+
+### Files
+
+- `apps/server/src/services/auth-flows.ts` — 4 emit-site payload object literals updated.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 690 / 690 passing across 71 files (no test changes needed — audit-emission tests in `auth-flows.test.ts` only assert single-word keys like `payload.method` and `payload.via`, which are unaffected).
+- pre-push hook (V-223) will exercise on push.
+
+### Notes
+
+- Did NOT also normalise the email-preferences payload keys or any other JSON surfaces. That's out of scope here; V-018 contract enforcement is broader and would be a separate audit (likely V-228 candidate if it surfaces).
+- The other half of the V-227 candidate list (staff-driven tier-change audit emit) remains deferred. Same reasoning as V-226 Notes: pre-launch the founder is the only staff member; admin-driven mutations are captured in `admin_audit_log`. The customer-facing audit emit for staff-driven tier changes only matters once Driftstack has a multi-staff org doing customer-account interventions, which won't happen until well after commercial activation.
+
+### Next
+
+Continuing V-202b/c/d email-trigger wires queue (next session candidate — V-202b non-trivial: 4-5 wire-points in `stripe-webhooks.ts` + customer email lookup at each site since Stripe events don't carry the local account email through). V-184b Tier 3 onboarding visual UX (founder-redline). V-215 post-force-push verification (founder fires V-207/V-212 runbook).

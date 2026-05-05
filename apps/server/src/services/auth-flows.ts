@@ -350,8 +350,8 @@ export class AuthFlowsService {
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
 
     await this.emitAuditBestEffort(account.id, 'account.email_verified', {
-      issuedFromIp: args.issuedFromIp,
-      userAgent: args.userAgent,
+      issued_from_ip: args.issuedFromIp,
+      user_agent: args.userAgent,
     });
 
     // V-202 — fire signup-welcome email after the verify lands. Derive
@@ -388,8 +388,8 @@ export class AuthFlowsService {
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
     await this.emitAuditBestEffort(account.id, 'account.login', {
       method: 'password',
-      issuedFromIp: args.issuedFromIp,
-      userAgent: args.userAgent,
+      issued_from_ip: args.issuedFromIp,
+      user_agent: args.userAgent,
     });
     return { account, session };
   }
@@ -509,8 +509,8 @@ export class AuthFlowsService {
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
     await this.emitAuditBestEffort(account.id, 'account.password_changed', {
       via: 'password_reset',
-      issuedFromIp: args.issuedFromIp,
-      userAgent: args.userAgent,
+      issued_from_ip: args.issuedFromIp,
+      user_agent: args.userAgent,
     });
     return { account, session };
   }
@@ -550,7 +550,7 @@ export class AuthFlowsService {
       }
     }
     await this.emitAuditBestEffort(row.accountId, 'account.logout', {
-      sessionId: row.id,
+      session_id: row.id,
     });
   }
 
