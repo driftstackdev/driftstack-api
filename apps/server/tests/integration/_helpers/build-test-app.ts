@@ -20,6 +20,8 @@ import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
 import { RateLimitOverridesService } from '../../../src/services/rate-limit-overrides.js';
 import { LegalService } from '../../../src/services/legal.js';
 import { buildLegalCatalogFromContent } from '../../../src/services/legal-catalog.js';
+import { EmailPreferencesService } from '../../../src/services/email-preferences.js';
+import { InMemoryEmailPreferencesRepo } from './in-memory-email-preferences-repo.js';
 import { InMemoryAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { InMemoryAuthRepo } from './in-memory-auth-repo.js';
@@ -229,6 +231,10 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   ]);
   const legalService = new LegalService(legalCatalog, legalRepo);
 
+  // V-204 — email notification preferences.
+  const emailPreferencesRepo = new InMemoryEmailPreferencesRepo();
+  const emailPreferencesService = new EmailPreferencesService(emailPreferencesRepo);
+
   // Pre-seed acceptances for the seeded account so the api-key
   // issuance gate (V-049) doesn't block existing tests that exercise
   // /v1/api-keys without separately accepting docs. Tests that
@@ -390,6 +396,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountsAdminService,
     rateLimitOverridesService,
     legalService,
+    emailPreferencesService,
     authFlowsService,
     stripeWebhooksService,
     stripeWebhookSigningSecret,

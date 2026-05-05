@@ -29,6 +29,8 @@ import { DrizzleUsageRepo } from '../db/usage-repo.js';
 import { DrizzleWebhooksRepo } from '../db/webhooks-repo.js';
 import { DrizzleAdminAuditLogRepo } from '../db/admin-audit-repo.js';
 import { DrizzleAccountsAdminRepo } from '../db/admin-accounts-repo.js';
+import { DrizzleEmailPreferencesRepo } from '../db/email-preferences-repo.js';
+import { EmailPreferencesService } from '../services/email-preferences.js';
 import { DrizzleRateLimitOverridesRepo } from '../db/rate-limit-overrides-repo.js';
 import { DrizzleLegalRepo } from '../db/legal-repo.js';
 import { DrizzleAuthFlowsRepo } from '../db/auth-flows-repo.js';
@@ -151,6 +153,7 @@ export async function createProductionDeps(
   const accountsAdminRepo = new DrizzleAccountsAdminRepo(dbHandle);
   const rateLimitOverridesRepo = new DrizzleRateLimitOverridesRepo(dbHandle);
   const legalRepo = new DrizzleLegalRepo(dbHandle);
+  const emailPreferencesRepo = new DrizzleEmailPreferencesRepo(dbHandle);
 
   // Auth cache + coalescer.
   const authCache = new RedisAuthCache(redis, logger);
@@ -186,6 +189,9 @@ export async function createProductionDeps(
   // V-051 Dockerfile copies these into the image at build time.
   const legalCatalog = buildLegalCatalog({ repoRoot: resolve(process.cwd()) });
   const legalService = new LegalService(legalCatalog, legalRepo);
+
+  // V-204 — email notification preferences.
+  const emailPreferencesService = new EmailPreferencesService(emailPreferencesRepo);
 
   // ApiKeysService needs legalService (V-049 issuance gate).
   const apiKeysService = new ApiKeysService(apiKeysRepo, authCache, webhooksService, legalService);
@@ -304,6 +310,7 @@ export async function createProductionDeps(
     accountsAdminService,
     rateLimitOverridesService,
     legalService,
+    emailPreferencesService,
     authFlowsService,
     profilesService,
     // V-100: admin force-actions take direct repo + driver access.

@@ -612,6 +612,64 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // V-204 — customer email notification preferences.
+  const ListEmailPrefsResponseSchema = z.object({
+    data: z.array(
+      z.object({
+        event_type: z.enum([
+          'signup-welcome',
+          'session-failed-first',
+          'tier-changed',
+          'trial-pack-purchased',
+          'trial-pack-expired',
+          'billing-receipt',
+        ]),
+        opted_in: z.boolean(),
+      }),
+    ),
+  });
+  const SetEmailPrefRequestOpenApi = z.object({
+    event_type: z.enum([
+      'signup-welcome',
+      'session-failed-first',
+      'tier-changed',
+      'trial-pack-purchased',
+      'trial-pack-expired',
+      'billing-receipt',
+    ]),
+    opted_in: z.boolean(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/email-preferences',
+    summary: 'List email notification preferences',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Per-event opt-in state. Defaults to opted-in.',
+        content: { 'application/json': { schema: ListEmailPrefsResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'put',
+    path: '/v1/account/email-preferences',
+    summary: 'Set a single email notification preference',
+    tags: ['account'],
+    security: auth,
+    request: {
+      body: {
+        content: { 'application/json': { schema: SetEmailPrefRequestOpenApi } },
+      },
+    },
+    responses: {
+      204: { description: 'Preference updated.' },
+      ...errors4xx,
+    },
+  });
+
   // Cross-account rate-limit overrides list (admin)
   const ListAdminOverridesQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),

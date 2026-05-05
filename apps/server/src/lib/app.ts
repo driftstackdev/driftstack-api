@@ -21,6 +21,8 @@ import type { AdminAuditService } from '../services/admin-audit.js';
 import type { AccountsAdminService } from '../services/admin-accounts.js';
 import type { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import type { LegalService } from '../services/legal.js';
+import type { EmailPreferencesService } from '../services/email-preferences.js';
+import { registerEmailPreferencesRoutes } from '../routes/email-preferences.js';
 import type { AuthFlowsService } from '../services/auth-flows.js';
 import type { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import type { ProfilesService } from '../services/profiles.js';
@@ -94,6 +96,8 @@ export interface AppDeps {
   accountsAdminService: AccountsAdminService;
   rateLimitOverridesService: RateLimitOverridesService;
   legalService: LegalService;
+  /** V-204: customer email notification preferences. */
+  emailPreferencesService: EmailPreferencesService;
   /**
    * V-079: user-facing auth flows. Optional during the migration window —
    * when omitted, the /v1/auth/* routes are not registered. Once the
@@ -211,6 +215,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     rateLimitOverrides: deps.rateLimitOverridesService,
   });
   registerLegalRoutes(app, deps.legalService);
+  registerEmailPreferencesRoutes(app, { emailPreferences: deps.emailPreferencesService });
   // V-176 — public-facing status endpoint. Reuses the readinessChecks
   // already supplied to /ready; no additional wiring needed at deps
   // level. /v1/status has no auth (public status pages are public).

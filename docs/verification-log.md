@@ -11501,3 +11501,57 @@ The honesty about DECLARED vs LIVE is intentional. `quota.warning_80pct` and `qu
 ### Next
 
 V-204 — customer email notification preferences (GENERATE-4, ~2-3hr Tier 1).
+
+## V-204 — customer email notification preferences (GENERATE-4)
+
+### What
+
+Per-account opt-in/out for the six "lifecycle" emails. Security + financial emails (signup-verification, password-reset, billing-failure, subscription-cancellation, support-ack) intentionally not opt-outable — `OptOutableEmailEventSchema` excludes them so the API surface enforces policy.
+
+Six opt-outable events: `signup-welcome`, `session-failed-first`, `tier-changed`, `trial-pack-purchased`, `trial-pack-expired`, `billing-receipt`.
+
+Storage convention: absence of a row = opted-in (default). Explicit opt-out writes a row with `opted_in=false`. Setting `opted_in=true` deletes the row. Steady-state is zero rows per account.
+
+Endpoints:
+
+- `GET /v1/account/email-preferences` — returns all six events with `opted_in` state.
+- `PUT /v1/account/email-preferences` — body `{ event_type, opted_in }`, 204 on success.
+
+Service-internal `shouldSend()` gate exposed but wire-in into `EmailService` send methods deferred to V-202b/c.
+
+### Why
+
+GENERATE-4 from the V-201 ack queue. Customers receiving the V-202 lifecycle emails need a way to opt out of the noisy ones. Storing prefs server-side keeps the gate authoritative + queryable from admin tooling.
+
+### Files
+
+- `apps/server/src/db/migrations/0017_email_preferences.sql` — Class A migration (V-198 taxonomy).
+- `apps/server/src/db/schema.ts` — `accountEmailPreferences` table.
+- `packages/api-types/src/accounts.ts` — `OptOutableEmailEventSchema` + request/response shapes.
+- `apps/server/src/services/email-preferences.ts` — service + repo interface.
+- `apps/server/src/db/email-preferences-repo.ts` — Drizzle impl with delete-on-true semantics.
+- `apps/server/src/routes/email-preferences.ts` — GET + PUT handlers.
+- `apps/server/src/lib/bootstrap.ts` + `apps/server/src/lib/app.ts` — service + route registered.
+- `apps/server/tests/integration/_helpers/in-memory-email-preferences-repo.ts` — in-memory variant.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — fixture wiring.
+- `apps/server/tests/integration/email-preferences.test.ts` — 5 tests.
+- `apps/server/src/lib/openapi.ts` + `apps/server/tests/integration/openapi.test.ts` — both endpoints registered.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 662 / 662 passing across 68 files.
+
+### Notes
+
+- `OptOutableEmailEventSchema` excludes security + financial events on purpose; customer cannot opt out of them via API.
+- `updatedAt: new Date(0)` for default rows = sentinel "never customised".
+- 6 opt-outable types includes `billing-receipt` — transactional but non-critical confirmation. Distinct from `billing-failure` which is mandatory.
+- Wire-in to `EmailService` send methods deferred to V-202b/c per-email-trigger slices.
+- Class A migration per V-198 — additive new table, no lock impact.
+
+### Next
+
+V-205 — customer-facing API audit log (GENERATE-6, ~2-3hr Tier 1).

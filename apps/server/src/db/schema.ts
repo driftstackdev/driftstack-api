@@ -890,3 +890,28 @@ export const auditArchiveRuns = pgTable(
 
 export type AuditArchiveRun = typeof auditArchiveRuns.$inferSelect;
 export type NewAuditArchiveRun = typeof auditArchiveRuns.$inferInsert;
+
+// V-204 — per-account email notification preferences. Absence of a
+// row means opted-in (the default); explicit opt-out writes a row
+// with opted_in=false. Steady-state cheap: zero rows per account by
+// default.
+export const accountEmailPreferences = pgTable(
+  'account_email_preferences',
+  {
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    eventType: text('event_type').notNull(),
+    optedIn: boolean('opted_in').notNull().default(true),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    primaryKey({ columns: [t.accountId, t.eventType] }),
+    index('account_email_preferences_account_idx').on(t.accountId),
+  ],
+);
+
+export type AccountEmailPreference = typeof accountEmailPreferences.$inferSelect;
+export type NewAccountEmailPreference = typeof accountEmailPreferences.$inferInsert;
