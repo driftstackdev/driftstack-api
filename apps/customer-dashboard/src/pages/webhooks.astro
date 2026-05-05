@@ -1,9 +1,18 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 
-// V-134 scaffolding. Real reads against /v1/webhooks land later.
-// Mock data inline here pending an extension to data/mocks.ts —
-// V-099 mocks didn't include webhook endpoints + delivery counters.
+// V-181 — progressive-enhancement wiring against /v1/webhooks,
+// mirrors V-180 /sessions pattern. SSG renders mock for instant
+// paint; inline <script> replaces the endpoint list with live data
+// when ds_web_session_token is in localStorage.
+//
+// Live /v1/webhooks response shape DOES include endpoint metadata
+// (URL, events, active, description, consecutive_failures,
+// last_success_at, last_failure_at, created_at) but does NOT
+// include aggregate delivery_counts (delivered/failed/dlq). The
+// mock displays delivery_counts; in live mode we render dashes for
+// those cells and surface a note ("Delivery counts coming soon").
+// Adding a delivery-aggregation endpoint is a separate V-NNN.
 
 interface MockWebhookEndpoint {
   id: string;
@@ -39,10 +48,18 @@ const MOCK_WEBHOOKS: MockWebhookEndpoint[] = [
 function fmtIsoDay(iso: string): string {
   return new Date(iso).toISOString().slice(0, 10);
 }
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 ---
 
 <DashboardLayout title="Webhooks">
-  <div class="mx-auto max-w-5xl px-6 py-10">
+  <div class="mx-auto max-w-5xl px-6 py-10" data-page="webhooks">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    ></div>
+
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
         <p class="text-sm text-slate-500">
@@ -60,21 +77,20 @@ function fmtIsoDay(iso: string): string {
       <a href="#new" class="btn-primary shrink-0">New endpoint</a>
     </header>
 
-    {
-      MOCK_WEBHOOKS.length === 0 ? (
-        <div class="dashboard-card text-center">
-          <h2 class="text-lg font-semibold text-slate-900">No webhook endpoints</h2>
-          <p class="mx-auto mt-2 max-w-prose text-sm text-slate-500">
-            Subscribe to events when sessions complete, fail, or quota
-            thresholds trip. POST + URL + event list = endpoint.
-          </p>
-          <a href="#new" class="btn-primary mt-6 inline-flex">
-            Create endpoint
-          </a>
-        </div>
-      ) : (
-        <ul class="space-y-4">
-          {MOCK_WEBHOOKS.map((endpoint) => (
+    <div
+      data-empty
+      class:list={['dashboard-card text-center', MOCK_WEBHOOKS.length === 0 ? '' : 'hidden']}
+    >
+      <h2 class="text-lg font-semibold text-slate-900">No webhook endpoints</h2>
+      <p class="mx-auto mt-2 max-w-prose text-sm text-slate-500">
+        Subscribe to events when sessions complete, fail, or quota thresholds trip. POST + URL +
+        event list = endpoint.
+      </p>
+      <a href="#new" class="btn-primary mt-6 inline-flex">Create endpoint</a>
+    </div>
+    <ul data-list class:list={['space-y-4', MOCK_WEBHOOKS.length === 0 ? 'hidden' : '']}>
+      {
+        MOCK_WEBHOOKS.map((endpoint) => (
             <li class="dashboard-card">
               <div class="flex items-start justify-between gap-6">
                 <div class="min-w-0">
@@ -161,10 +177,9 @@ function fmtIsoDay(iso: string): string {
                 )}
               </div>
             </li>
-          ))}
-        </ul>
-      )
-    }
+          ))
+      }
+    </ul>
 
     <p class="mt-8 text-xs text-slate-500">
       Failed deliveries retry 5× with exponential backoff before landing in
@@ -172,4 +187,147 @@ function fmtIsoDay(iso: string): string {
       initial attempts to avoid storm-on-recovery patterns.
     </p>
   </div>
+
+  <!--
+    V-181 — progressive-enhancement script. Reads
+    ds_web_session_token from localStorage, fetches /v1/webhooks,
+    replaces the endpoint list with live data. Falls back to
+    mock-rendered list when token absent or fetch fails. Mirrors
+    V-180 /sessions pattern.
+  -->
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="webhooks"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const ul = root.querySelector('[data-list]');
+      const empty = root.querySelector('[data-empty]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c],
+        );
+      }
+
+      function fmtIsoDay(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().slice(0, 10);
+      }
+
+      function endpointCard(e) {
+        const events = (e.events || [])
+          .map(
+            (ev) =>
+              '<span class="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-700">' +
+              escapeHtml(ev) +
+              '</span>',
+          )
+          .join('');
+        const description = e.description
+          ? '<p class="mt-2 text-sm text-slate-600">' + escapeHtml(e.description) + '</p>'
+          : '';
+        const activeBadge =
+          'inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
+          (e.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600');
+        // Live API doesn't yet expose aggregate delivery_counts.
+        // Render dashes + a footnote.
+        return (
+          '<li class="dashboard-card">' +
+          '<div class="flex items-start justify-between gap-6">' +
+          '<div class="min-w-0">' +
+          '<div class="flex items-center gap-3">' +
+          '<p class="truncate font-mono text-sm text-slate-900">' +
+          escapeHtml(e.url) +
+          '</p>' +
+          '<span class="' +
+          activeBadge +
+          '">' +
+          (e.active ? 'active' : 'paused') +
+          '</span></div>' +
+          description +
+          '<p class="mt-2 font-mono text-xs text-slate-500">' +
+          escapeHtml(e.id) +
+          ' · created ' +
+          escapeHtml(fmtIsoDay(e.created_at)) +
+          ' · ' +
+          (e.consecutive_failures || 0) +
+          ' consecutive failure(s)</p>' +
+          '</div>' +
+          '<div class="flex shrink-0 flex-col items-end gap-2">' +
+          '<a href="#edit-' +
+          escapeHtml(e.id) +
+          '" class="text-sm text-oxblood-700 hover:underline">Edit</a>' +
+          '<a href="#delete-' +
+          escapeHtml(e.id) +
+          '" class="text-sm text-red-700 hover:underline">Delete</a>' +
+          '</div></div>' +
+          '<div class="mt-4 flex flex-wrap gap-1.5">' +
+          events +
+          '</div>' +
+          '<dl class="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 text-center">' +
+          '<div><dt class="text-xs text-slate-500">Delivered</dt>' +
+          '<dd class="mt-1 font-mono text-lg font-medium text-slate-400">—</dd></div>' +
+          '<div><dt class="text-xs text-slate-500">Failed</dt>' +
+          '<dd class="mt-1 font-mono text-lg font-medium text-slate-400">—</dd></div>' +
+          '<div><dt class="text-xs text-slate-500">DLQ</dt>' +
+          '<dd class="mt-1 font-mono text-lg font-medium text-slate-400">—</dd></div>' +
+          '</dl>' +
+          '<p class="mt-2 text-center text-xs text-slate-400">Aggregate delivery counts coming soon</p>' +
+          '<div class="mt-4 flex items-center justify-between">' +
+          '<a href="#deliveries-' +
+          escapeHtml(e.id) +
+          '" class="text-sm text-oxblood-700 hover:underline">View delivery log →</a>' +
+          '</div>' +
+          '</li>'
+        );
+      }
+
+      if (!token) {
+        showBanner('Sign in to see live webhook endpoints. Showing preview data below.');
+        return;
+      }
+
+      fetch(apiBaseUrl + '/v1/webhooks', {
+        headers: { authorization: 'Bearer ' + token },
+        credentials: 'include',
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+        .then((body) => {
+          const endpoints = body.data || [];
+          if (endpoints.length === 0) {
+            ul.classList.add('hidden');
+            empty.classList.remove('hidden');
+          } else {
+            empty.classList.add('hidden');
+            ul.classList.remove('hidden');
+            ul.innerHTML = endpoints.map(endpointCard).join('');
+          }
+          showBanner(
+            'Live data loaded. Aggregate delivery counts (delivered/failed/DLQ) not yet exposed via /v1/webhooks — coming soon.',
+          );
+        })
+        .catch((err) => {
+          showBanner(
+            "Couldn't load live webhooks (" +
+              (err && err.message ? err.message : 'network error') +
+              '). Showing preview data below.',
+          );
+        });
+    })();
+  </script>
 </DashboardLayout>

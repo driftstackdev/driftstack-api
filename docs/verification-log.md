@@ -10410,3 +10410,58 @@ Founder PRIORITY A.1 (~2-3hr). customer-dashboard `/sessions` progressive-enhanc
 ### Next
 
 V-181 next: customer-dashboard /webhooks live wiring (~2-3hr).
+
+---
+
+## V-181 — customer-dashboard /webhooks live wiring (PRIORITY A.2)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder PRIORITY A.2 (~2-3hr). customer-dashboard `/webhooks` progressive-enhancement against `/v1/webhooks`. Mirrors V-180 `/sessions` pattern.
+
+### What changed
+
+`apps/customer-dashboard/src/pages/webhooks.astro`:
+
+- Frontmatter: `apiBaseUrl` from `import.meta.env.PUBLIC_API_BASE_URL`.
+- Wrapper `<div data-page="webhooks">` + hidden `<div data-banner>`.
+- Endpoint list `<ul data-list>` + empty-state `<div data-empty>`. JS toggles between them based on response shape.
+- Inline `<script is:inline>` (~120 lines):
+  - Reads `localStorage.ds_web_session_token`.
+  - Fetches `apiBaseUrl + '/v1/webhooks'`.
+  - Rebuilds `<ul>` innerHTML with `endpointCard()` builder mirroring SSG-rendered card shape (URL, active/paused badge, description, id, created_at, events tags, edit/delete links).
+  - Live-mode delivery_counts cells render dashes (`—`) with footnote "Aggregate delivery counts coming soon" — the live `/v1/webhooks` shape doesn't include delivered/failed/dlq aggregates today (computing them needs a separate endpoint that joins webhook_deliveries; queued as separate V-NNN).
+  - HTML escaping for user-controlled values (URL, description, id, events).
+
+### Live-vs-mock behavior
+
+| State                    | Banner                                                               | List                 |
+| ------------------------ | -------------------------------------------------------------------- | -------------------- |
+| No token                 | "Sign in to see live webhook endpoints. Showing preview data below." | Mock (SSG)           |
+| Fetch fails              | "Couldn't load live webhooks (...). Showing preview data below."     | Mock (SSG)           |
+| Token + fetch ok + empty | "Live data loaded. Aggregate delivery counts ... coming soon."       | Live empty-state     |
+| Token + fetch ok + data  | "Live data loaded. Aggregate delivery counts ... coming soon."       | Live with `—` counts |
+
+### What's still mock / deferred
+
+- **Aggregate delivery_counts** (delivered/failed/dlq per endpoint). Not in current `/v1/webhooks` response. Adding a `delivery_counts` field to the endpoint shape OR a separate `/v1/webhooks/:id/stats` endpoint is the next step. Surfaced as separate V-NNN.
+- **Edit/Delete actions**. Anchor links today (`#edit-...` / `#delete-...`); future onClick handlers wire to PATCH/DELETE endpoints.
+- **Mock fallback**. SSG-rendered list stays visible when token absent or fetch fails — matches V-171/V-180 fallback semantic.
+
+### How verified
+
+- `npm run typecheck`: clean across all 11 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+
+### Files modified
+
+- `apps/customer-dashboard/src/pages/webhooks.astro`
+
+### Next
+
+V-182 next: customer-dashboard /api-keys live wiring (~2-3hr).
