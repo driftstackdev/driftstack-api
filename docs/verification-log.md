@@ -12837,3 +12837,54 @@ Catching this now is preferable to waiting because:
 ### Next
 
 Continuing V-202b/c/d email-trigger wires queue (next session candidate — V-202b non-trivial: 4-5 wire-points in `stripe-webhooks.ts` + customer email lookup at each site since Stripe events don't carry the local account email through). V-184b Tier 3 onboarding visual UX (founder-redline). V-215 post-force-push verification (founder fires V-207/V-212 runbook).
+
+## V-228 — Drizzle migration journal regression caught
+
+### What
+
+While preparing the V-202c migration (first-failure email dedup column), I noticed the Drizzle migration journal at `apps/server/src/db/migrations/meta/_journal.json` was missing entries for the three most recent migrations that landed:
+
+- `0017_email_preferences.sql` (V-204)
+- `0018_account_audit_log.sql` (V-216)
+- `0019_validation_schedules.sql` (V-218)
+
+`drizzle-orm/postgres-js/migrator`'s `migrate()` reads the journal to determine which SQL files to apply and in what order. It does NOT scan the migrations directory for SQL files. So in production, `bootstrap.ts` calls `migrate()` and applies migrations 0000-0016 only — the email-preferences table, account-audit-log table, and validation-schedules table would NOT be created on a fresh deploy. The recently-shipped V-204 / V-216 / V-218 features depend on tables that wouldn't exist.
+
+How this slipped past tests: `npm test` (vitest unit + integration) uses `buildTestApp()` with in-memory repos exclusively. No migrations are applied. `npm run test:e2e` DOES apply migrations against a real Postgres via the e2e helper, but it requires Docker Compose (`apps/server` workspace) and isn't part of the standard pre-commit / pre-push gate (V-223 explicitly excludes e2e for Docker-dependency reasons). So the integration test suite is green even though production deploys would fail to provision the new tables.
+
+Fix: appended idx 17 / 18 / 19 entries to `_journal.json` with `tag` matching the SQL filenames. The drizzle migrator does NOT require companion `<tag>_snapshot.json` files for migration application — snapshots are used by `drizzle-kit` to generate future migrations from schema diffs, but `migrate()` itself only consults the journal + the SQL files. The codebase has been operating without snapshots since 0007 (snapshots only exist for 0000-0006), so this is consistent with the existing posture: snapshots are optional; journal entries are not.
+
+I deliberately did NOT regenerate snapshots — that would require running `drizzle-kit` against a fresh schema diff and could surface unrelated drift. A separate (much larger) cleanup pass would handle that. Snapshots remain a future-work item, but the production blocker is unblocked.
+
+### Why
+
+Caught while attempting V-202c. The pattern matches V-221: a process gap that's silently broken, lurking, and would have bitten on first production deploy. Surfacing as its own V-entry with the fix inline rather than rolling it into V-202c, because:
+
+1. The fix has no application-layer code change — it's a single JSON file edit. Distinct concern from V-202c's emit-wire work.
+2. Tagging the V-entry separately gives a paper trail for "the journal was last out-of-sync at this point," which helps if a future audit asks "what happened to the snapshots between idx 7 and now?"
+3. Prevents V-202c work from carrying the additional risk surface of "did I update the journal correctly when adding 0020?" — V-202c's next-session pickup will land on a healthy journal.
+
+### Files
+
+- `apps/server/src/db/migrations/meta/_journal.json` — added idx 17 / 18 / 19 entries.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 690 / 690 passing across 71 files (unaffected — integration tests don't apply migrations).
+- pre-push gate (V-223): clean.
+
+To verify the fix took effect: `npm run test:e2e` would now apply 0000-0019 against the test Postgres on a fresh boot. Validating that requires Docker Compose, which is out of scope for the autonomous session. Surfacing as an open verification step — needs Founder to confirm e2e applies all 20 migrations cleanly when they next have Docker running.
+
+### Notes
+
+- The `when` timestamps for 17/18/19 are synthesized in the same monotonic-increment pattern as the existing entries (16: 1778893200000 → 17: 1778897000000 → 18: 1778900000000 → 19: 1778903000000). Drizzle's migrator uses `idx` for ordering, not `when`; `when` is informational. The exact value doesn't affect application order.
+- Drizzle-kit isn't installed in this workspace (would have allowed regenerating both journal + snapshots in one shot via `drizzle-kit generate`). Hand-editing the journal is the pragmatic fix here. Adding `drizzle-kit` to `apps/server/package.json` devDeps and re-running it on the existing schema is a candidate for a separate cleanup commit.
+- This finding generalises the V-221 catch: pre-launch is when these gaps surface. The autonomous-loop pattern (run verify chain on every commit; investigate anomalies before ignoring them) is the mechanism that catches them. Without that discipline, both V-221 and V-228 would have shipped to first-customer with broken main / broken deploys.
+
+### Next
+
+Continuing V-202b/c/d (next session pickup — V-202c lands cleanly now that journal is healthy). V-184b Tier 3 onboarding visual UX. V-215 post-force-push verification (founder-side).

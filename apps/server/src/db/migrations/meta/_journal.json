@@ -120,6 +120,27 @@
       "when": 1778893200000,
       "tag": "0016_scope_split_v174",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1778897000000,
+      "tag": "0017_email_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1778900000000,
+      "tag": "0018_account_audit_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1778903000000,
+      "tag": "0019_validation_schedules",
+      "breakpoints": true
     }
   ]
 }
