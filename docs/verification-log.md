@@ -11282,3 +11282,52 @@ What this collectively unlocks: every locked launch-blocking ops gap is document
 ### Next
 
 V-200 — `@astrojs/cloudflare` SSR conversion for admin-panel + customer-dashboard (closes Follow-up 1 from V-185–V-195 founder review, ~2-3hr Tier 1).
+
+## V-200 — `@astrojs/cloudflare` SSR adapter for admin-panel + customer-dashboard
+
+### What
+
+Closes Follow-up 1 from the V-185–V-195 founder review: production deep-link to non-mock UUIDs no longer 404s. Three changes:
+
+1. **`@astrojs/cloudflare` adapter installed** in both `apps/admin-panel` and `apps/customer-dashboard` (v12.6.4 — pinned to the Astro 5 compat range; v13+ requires Astro 6).
+2. **`astro.config.mjs` updated in both apps** to import + register the adapter. `output: 'static'` retained — pages prerender by default; opt-in to SSR per-page via `export const prerender = false`.
+3. **`apps/admin-panel/src/pages/accounts/[id].astro` converted** from `getStaticPaths`-enumerated mock paths to SSR. Page renders for any UUID at request time; the inline script's existing window.location-derived UUID logic continues to work unchanged.
+
+The customer-dashboard adapter is preventive (no current dynamic routes) but the wiring is in place for future `/sessions/[id]` / `/api-keys/[id]` detail pages — adding a new SSR detail page is now `export const prerender = false` rather than re-installing infrastructure.
+
+### Why
+
+Follow-up 1 from the V-185–V-195 founder review locked the SSR direction over Cloudflare 404→template fallback (cleaner, well-supported, fits the small-cohort admin-panel scale, no edge-cache trade-off concerns). This V-entry implements that decision. Until V-200 the admin /accounts → click → /accounts/<live-uuid> path 404'd in production because the static build only emitted pages for the mock UUIDs.
+
+### Files
+
+- `apps/admin-panel/package.json` + `apps/customer-dashboard/package.json` — `@astrojs/cloudflare@^12.6.4` added as dep.
+- `apps/admin-panel/astro.config.mjs` + `apps/customer-dashboard/astro.config.mjs` — adapter registered.
+- `apps/admin-panel/src/pages/accounts/[id].astro` — `getStaticPaths` removed, `export const prerender = false` added, fallback shell for non-mock UUIDs in the SSG branch (the inline script overwrites every value once the live fetch completes).
+- `package-lock.json` — adapter dependency tree resolved.
+
+### Verify
+
+- `npm run typecheck`: clean across all 11 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 652 / 652 passing across 67 files (no test changes — backend untouched).
+- `npx astro check` on admin-panel: 0 errors / warnings / hints.
+- `npx astro check` on customer-dashboard: 0 errors / warnings; one pre-existing hint on unused `selector` param (carried from V-186).
+- `npx astro build` on both apps: succeeds. admin-panel emits `_worker.js` for the SSR /accounts/[id] route; customer-dashboard emits a no-op worker (every page prerendered).
+
+### Notes
+
+- Pinned to `@astrojs/cloudflare@^12.6.4` (latest in the Astro-5-compat 12.x line). v13.x bumps the peer dep to Astro 6; we're on 5. When we move to Astro 6 the bump is one version constraint update.
+- One-time build warning surfaces: `Cloudflare does not support sharp at runtime`. Astro's image service falls back to noop rendering for SSR routes; we don't use `<Image>` on the admin /accounts/[id] page so this is a no-op for V-200. If we add image optimization to a SSR page later, set `image.service: { entrypoint: '@astrojs/cloudflare/image-service' }` in the config.
+- `platformProxy: { enabled: false }` is the default; specified explicitly so future engineers don't mistakenly enable it (which auto-binds Cloudflare KV / D1 / etc. — not relevant for our deployment).
+- The fallback shell for non-mock UUIDs renders an em-dash for the email + null for createdAt/lastSeenAt. The inline script fires on every page-load for any UUID, so the shell is visible only for the ~50ms before the live fetch completes (or longer if /v1/admin/accounts/:id 404s).
+- Customer-dashboard's adapter install is preemptive. No dashboard page uses `prerender = false` today; build output is identical to pre-V-200 except for the no-op worker. When `/sessions/[id]` / `/api-keys/[id]` detail pages land they can be SSR with one line.
+
+### Cloudflare Pages deployment note
+
+Deploy automation will need to detect that build output now includes a `_worker.js` for SSR routes (admin-panel only). Cloudflare Pages auto-detects this when uploading the build directory. **[TODO]** confirm Cloudflare Pages project settings have "Functions / Workers" enabled before the next deploy of admin-panel.
+
+### Next
+
+V-201 — Go SDK feature parity (LOCKED launch-blocking, ~10–12hr).

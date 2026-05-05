@@ -4,25 +4,34 @@ import { MOCK_ACCOUNTS, MOCK_AUDIT_LOG } from '../../data/mocks.ts';
 
 // V-191 — progressive-enhancement against /v1/admin/accounts/:id +
 // per-account audit slice + admin-action POSTs (change tier, suspend,
-// unsuspend). Static-build constraint: getStaticPaths only emits
-// pages for the mock IDs. Direct deep-links to live (non-mock) UUIDs
-// 404 from Cloudflare Pages until the admin-panel converts to SSR or
-// adopts a query-string-based detail route. Mitigation today: the
-// /accounts list page only lists live UUIDs in dev once a token is
-// present, and staff land on the [id] page via that link (which
-// works in dev because Astro dev-server serves dynamic routes; in
-// production the live row would 404). Surfaced as follow-up V-NNN.
+// unsuspend).
+//
+// V-200 — converted from `getStaticPaths` static enumeration to SSR
+// via the @astrojs/cloudflare adapter. The page now serves any UUID
+// at request time; Cloudflare Pages routes /accounts/<uuid> to the
+// Worker which renders this template with `Astro.params.id` set.
+// Mock-id matching for the SSG paint shell is preserved when the URL
+// id matches one of the mock entries; non-mock UUIDs render with
+// minimal placeholder content that the inline script then replaces
+// from /v1/admin/accounts/:id. No more 404 on direct deep-links to
+// live (non-mock) UUIDs from /accounts list page.
 
-export function getStaticPaths() {
-  return MOCK_ACCOUNTS.map((account) => ({ params: { id: account.id } }));
-}
+export const prerender = false;
 
 const { id } = Astro.params;
-const account = MOCK_ACCOUNTS.find((a) => a.id === id);
-
-if (!account) {
-  return Astro.redirect('/accounts');
-}
+const account = MOCK_ACCOUNTS.find((a) => a.id === id) ?? {
+  // Placeholder shell when the URL id isn't in the mock list. The
+  // inline script's `applyAccount(...)` rewrites every value once
+  // the live fetch completes; what's rendered statically here is the
+  // "no token / fetch error" fallback only.
+  id: id ?? '',
+  email: '—',
+  name: null as string | null,
+  tier: '—',
+  status: 'active' as 'active' | 'suspended' | 'deleted',
+  createdAt: null as string | null,
+  lastSeenAt: null as string | null,
+};
 
 const auditSlice = MOCK_AUDIT_LOG.filter((e) => e.targetAccountId === account.id);
 
