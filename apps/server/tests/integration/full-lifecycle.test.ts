@@ -150,7 +150,7 @@ describe('Full customer lifecycle (V-166)', () => {
     expect(navigate.statusCode).toBe(200);
     expect(navigate.json<NavigateResponse>().url).toBe('https://example.com/');
 
-    // ─── 4. Destroy ──────────────────────────────────────────────────────
+    // ─── 4. Destroy (idempotent per V-167) ───────────────────────────────
     const destroy = await fx.app.inject({
       method: 'DELETE',
       url: `/v1/sessions/${session.id}`,
@@ -158,20 +158,16 @@ describe('Full customer lifecycle (V-166)', () => {
     });
     expect(destroy.statusCode).toBe(204);
 
-    // V-166 finding: comment in apps/server/src/services/sessions.ts:318
-    // claims destroy() is idempotent, but requireOwned() at line 360
-    // throws SessionDestroyedError BEFORE the early-return short-circuit
-    // can run. Second DELETE returns 410, not 204. Documented here so
-    // the implementation/comment mismatch is visible. Fixing belongs to
-    // a separate V-NNN — moving the idempotency check ahead of
-    // requireOwned would change observable behavior on the destroy
-    // happy path.
+    // V-167 fix: second DELETE on a destroyed session is a true no-op
+    // returning 204 (REST DELETE idempotency convention). Pre-V-167
+    // this returned 410 because requireOwned() threw before the early-
+    // return short-circuit could run.
     const destroyAgain = await fx.app.inject({
       method: 'DELETE',
       url: `/v1/sessions/${session.id}`,
       headers: { authorization: `Bearer ${subKey.plaintext}` },
     });
-    expect(destroyAgain.statusCode).toBe(410);
+    expect(destroyAgain.statusCode).toBe(204);
 
     // ─── 5. Usage endpoint responds ──────────────────────────────────────
     // Note: usage_records writers are not yet wired in production code

@@ -9353,3 +9353,71 @@ V-166 asserts the actual behavior (410) so the test is green. Documenting the mi
 ### Next
 
 Continuing per never-stop rule. PRIORITY 7 (status page scaffolding) or PRIORITY 9 (SDK versioning doc) next.
+
+---
+
+## V-167 — destroy() true idempotency fix (Decision 3 from V-166 surface)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder Decision 3 (locked) following V-166's bug discovery: move the destroyed-status check ahead of `requireOwned()` so DELETE on a destroyed session returns 204 (REST convention) instead of 410. Bundle-or-separate left to my call; landed separately for cleaner attribution.
+
+### What changed
+
+`apps/server/src/services/sessions.ts:316-323`:
+
+Pre-V-167:
+
+```ts
+async destroy(ctx, sessionId) {
+  const session = await this.requireOwned(ctx, sessionId);  // throws 410 on destroyed
+  if (session.status === 'destroyed') return; // unreachable
+  ...
+}
+```
+
+Post-V-167:
+
+```ts
+async destroy(ctx, sessionId) {
+  const session = await this.deps.repo.findSession(sessionId, ctx.account.id);
+  if (!session) throw new NotFoundError(...);
+  if (session.status === 'destroyed' || session.status === 'errored') return;
+  ...
+}
+```
+
+The early-return now actually runs. 'errored' also short-circuits per V-090 ("a failed session has nothing useful left to destroy"). NotFoundError still fires for unknown session ids (404), and account-scoping still holds (`findSession` is the same query used by `requireOwned`).
+
+`apps/server/tests/integration/full-lifecycle.test.ts:155-170` updated:
+
+- Second DELETE assertion changed from `expect(destroyAgain.statusCode).toBe(410)` to `toBe(204)`.
+- Comment updated to reference V-167 fix.
+
+`packages/sdk-go/sessions.go:138` doc-comment ("Idempotent — calling it twice is safe.") is now accurate post-fix; no change needed.
+
+### What did NOT change
+
+- `requireOwned()` itself stays untouched. Session ops other than destroy (navigate, interact, wait, getState, capture, gui-input) still 410 on destroyed/errored sessions, which is correct — those ops have no useful semantic on a terminal session.
+- No other test asserted 410 on destroy, so no other test files needed updating (verified via grep).
+
+### How verified
+
+- `npm test -- full-lifecycle.test.ts`: 3/3 passing.
+- `npm test`: 600/600 passing (count unchanged from V-166; same 3 tests, behavior shifted from 410→204 in one assertion).
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+
+### Files modified
+
+- `apps/server/src/services/sessions.ts`
+- `apps/server/tests/integration/full-lifecycle.test.ts`
+
+### Next
+
+V-168 next: web-session-auth gap fix (P0 launch-blocking per Decision 2).

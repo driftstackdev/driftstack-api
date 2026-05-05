@@ -314,8 +314,18 @@ export class SessionsService {
   }
 
   async destroy(ctx: AccountContext, sessionId: string): Promise<void> {
-    const session = await this.requireOwned(ctx, sessionId);
-    if (session.status === 'destroyed') return; // idempotent
+    // V-167 — true idempotent destroy. Pre-V-167 this called requireOwned()
+    // which threw SessionDestroyedError (HTTP 410) on already-destroyed
+    // sessions before the early-return short-circuit could run. The
+    // result was DELETE returning 410 on a destroyed session, which
+    // breaks REST idempotency conventions + contradicted the comment
+    // claim. Now: lookup directly + short-circuit on terminal status.
+    const session = await this.deps.repo.findSession(sessionId, ctx.account.id);
+    if (!session) throw new NotFoundError(`Session "${sessionId}" not found.`);
+    // Terminal-status no-ops. 'destroyed' is the obvious one; 'errored'
+    // also short-circuits per V-090 (a failed session has nothing
+    // useful left to destroy).
+    if (session.status === 'destroyed' || session.status === 'errored') return;
     const destroyedAt = new Date();
     await this.deps.driver.destroy(session.driverSessionId);
     await this.deps.repo.updateSessionStatus(session.id, 'destroyed', { destroyedAt });
