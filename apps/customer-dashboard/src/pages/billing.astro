@@ -1,13 +1,12 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import {
-  MOCK_ACCOUNT,
-  MOCK_SUBSCRIPTION,
-  MOCK_TRIAL_PACK_STATE,
-} from '../data/mocks.ts';
+import { MOCK_ACCOUNT, MOCK_SUBSCRIPTION, MOCK_TRIAL_PACK_STATE } from '../data/mocks.ts';
 
-// V-134 scaffolding: mock data on the page. Real reads against
-// /v1/billing land when the dashboard moves past scaffolding.
+// V-183 — progressive-enhancement wiring against /v1/billing.
+// SSG renders mock for instant paint; inline <script> fetches live
+// state + replaces card values. Action buttons (portal / trial pack)
+// POST to the corresponding billing endpoint + redirect to the
+// returned Stripe URL. Mirrors V-180/V-181/V-182.
 
 function fmtIso(iso: string | null): string {
   if (iso === null) return '—';
@@ -31,12 +30,21 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
   paused: 'bg-slate-100 text-slate-600',
   no_subscription: 'bg-slate-100 text-slate-600',
 };
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 ---
 
 <DashboardLayout title="Billing">
-  <div class="mx-auto max-w-5xl px-6 py-10">
+  <div class="mx-auto max-w-5xl px-6 py-10" data-page="billing">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
     <header class="mb-10">
-      <p class="text-sm text-slate-500">Account · {MOCK_ACCOUNT.email}</p>
+      <p class="text-sm text-slate-500" data-field="account-email">Account · {MOCK_ACCOUNT.email}</p>
       <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Billing</h1>
       <p class="mt-2 max-w-prose text-sm text-slate-500">
         Manage subscription, payment method, invoices, and trial-pack credit.
@@ -48,13 +56,11 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
     <section class="dashboard-card">
       <div class="flex items-start justify-between gap-6">
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
-            Subscription
-          </p>
-          <h2 class="mt-2 text-xl font-semibold text-slate-900">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Subscription</p>
+          <h2 class="mt-2 text-xl font-semibold text-slate-900" data-field="sub-tier">
             {MOCK_SUBSCRIPTION ? MOCK_SUBSCRIPTION.tier : 'No active subscription'}
           </h2>
-          <p class="mt-2 text-sm text-slate-600">
+          <p class="mt-2 text-sm text-slate-600" data-field="sub-summary">
             {
               MOCK_SUBSCRIPTION
                 ? `Renews ${fmtIso(MOCK_SUBSCRIPTION.current_period_end)} · ${MOCK_SUBSCRIPTION.cancel_at_period_end ? 'set to cancel at period end' : 'auto-renews'}`
@@ -63,6 +69,7 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
           </p>
         </div>
         <span
+          data-field="sub-status-badge"
           class:list={[
             'inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide',
             STATUS_BADGE_CLASS[status],
@@ -72,15 +79,18 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
         </span>
       </div>
       <div class="mt-6 flex flex-wrap gap-3">
-        <a href="#" class="btn-primary">Manage in Stripe portal</a>
+        <button type="button" class="btn-primary" data-action="portal">Manage in Stripe portal</button>
         <a href="#" class="btn-secondary">Change plan</a>
-        {
-          MOCK_SUBSCRIPTION && !MOCK_SUBSCRIPTION.cancel_at_period_end && (
-            <a href="#" class="btn-secondary text-red-700">
-              Cancel subscription
-            </a>
-          )
-        }
+        <button
+          type="button"
+          data-action="cancel"
+          class:list={[
+            'btn-secondary text-red-700',
+            MOCK_SUBSCRIPTION && !MOCK_SUBSCRIPTION.cancel_at_period_end ? '' : 'hidden',
+          ]}
+        >
+          Cancel subscription
+        </button>
       </div>
     </section>
 
@@ -88,17 +98,17 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
     <section class="dashboard-card mt-6">
       <div class="flex items-start justify-between gap-6">
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
-            Trial pack
-          </p>
-          <h2 class="mt-2 text-xl font-semibold text-slate-900">
-            {MOCK_TRIAL_PACK_STATE.active
-              ? 'Active'
-              : MOCK_TRIAL_PACK_STATE.redeemed
-                ? 'Redeemed'
-                : 'Available'}
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Trial pack</p>
+          <h2 class="mt-2 text-xl font-semibold text-slate-900" data-field="trial-state">
+            {
+              MOCK_TRIAL_PACK_STATE.active
+                ? 'Active'
+                : MOCK_TRIAL_PACK_STATE.redeemed
+                  ? 'Redeemed'
+                  : 'Available'
+            }
           </h2>
-          <p class="mt-2 text-sm text-slate-600">
+          <p class="mt-2 text-sm text-slate-600" data-field="trial-summary">
             {
               MOCK_TRIAL_PACK_STATE.active
                 ? `${fmtCents(MOCK_TRIAL_PACK_STATE.credit_cents_remaining)} of credit remaining · expires ${fmtIso(MOCK_TRIAL_PACK_STATE.expires_at)}`
@@ -109,15 +119,17 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
           </p>
         </div>
       </div>
-      {
-        !MOCK_TRIAL_PACK_STATE.active && !MOCK_TRIAL_PACK_STATE.redeemed && (
-          <div class="mt-6">
-            <a href="#" class="btn-primary">
-              Buy trial pack — $2.99
-            </a>
-          </div>
-        )
-      }
+      <div
+        data-field="trial-buy-wrap"
+        class:list={[
+          'mt-6',
+          !MOCK_TRIAL_PACK_STATE.active && !MOCK_TRIAL_PACK_STATE.redeemed ? '' : 'hidden',
+        ]}
+      >
+        <button type="button" class="btn-primary" data-action="buy-trial-pack">
+          Buy trial pack — $2.99
+        </button>
+      </div>
     </section>
 
     <!-- Invoices placeholder -->
@@ -127,7 +139,8 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
       <p class="mt-3 text-sm text-slate-500">
         No invoices yet. Once your subscription renews or the trial pack is
         purchased, invoices appear here. Each invoice carries a permanent
-        URL — bookmark for accounting.
+        URL — bookmark for accounting. (Live invoice list endpoint TODO —
+        accessible via Stripe Customer Portal in the meantime.)
       </p>
     </section>
 
@@ -137,4 +150,175 @@ const STATUS_BADGE_CLASS: Record<string, string> = {
       Stripe handles tax computation + invoicing per ADR-002.
     </p>
   </div>
+
+  <!--
+    V-183 — progressive-enhancement script. Reads ds_web_session_token
+    from localStorage, fetches /v1/billing for state, wires action
+    buttons (portal / trial-pack purchase) to corresponding POST
+    endpoints with redirect on response.
+  -->
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="billing"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+
+      function setText(field, text) {
+        const el = root.querySelector('[data-field="' + field + '"]');
+        if (el) el.textContent = text;
+      }
+
+      function fmtIso(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().slice(0, 10);
+      }
+      function fmtCents(cents) {
+        if (cents === null || cents === undefined) return '—';
+        return '$' + (cents / 100).toFixed(2);
+      }
+
+      function authedFetch(path, init = {}) {
+        return fetch(apiBaseUrl + path, {
+          ...init,
+          headers: {
+            ...(init.headers || {}),
+            authorization: 'Bearer ' + token,
+            'content-type': 'application/json',
+          },
+          credentials: 'include',
+        });
+      }
+
+      // Wire action buttons regardless of token state — they show a
+      // banner if no token rather than silently no-oping.
+      const portalBtn = root.querySelector('[data-action="portal"]');
+      const cancelBtn = root.querySelector('[data-action="cancel"]');
+      const buyBtn = root.querySelector('[data-action="buy-trial-pack"]');
+
+      function handlePortal() {
+        if (!token) {
+          showBanner('Sign in to manage billing.');
+          return;
+        }
+        authedFetch('/v1/billing/portal-session', { method: 'POST', body: '{}' })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => {
+            if (body.portal_url) window.location.href = body.portal_url;
+          })
+          .catch((err) => {
+            showBanner(
+              "Couldn't open Stripe portal (" +
+                (err && err.message ? err.message : 'network error') +
+                ').',
+            );
+          });
+      }
+
+      function handleBuyTrialPack() {
+        if (!token) {
+          showBanner('Sign in to purchase the trial pack.');
+          return;
+        }
+        const successUrl = window.location.origin + '/billing?trial=ok';
+        const cancelUrl = window.location.origin + '/billing?trial=cancel';
+        authedFetch('/v1/billing/trial-pack', {
+          method: 'POST',
+          body: JSON.stringify({ success_url: successUrl, cancel_url: cancelUrl }),
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => {
+            if (body.checkout_url) window.location.href = body.checkout_url;
+          })
+          .catch((err) => {
+            showBanner(
+              "Couldn't start trial-pack checkout (" +
+                (err && err.message ? err.message : 'network error') +
+                ').',
+            );
+          });
+      }
+
+      if (portalBtn) portalBtn.addEventListener('click', handlePortal);
+      if (cancelBtn) cancelBtn.addEventListener('click', handlePortal); // cancellation goes through Stripe portal
+      if (buyBtn) buyBtn.addEventListener('click', handleBuyTrialPack);
+
+      if (!token) {
+        showBanner('Sign in to see live billing state. Showing preview data below.');
+        return;
+      }
+
+      // Fetch live billing state.
+      authedFetch('/v1/billing', { method: 'GET' })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+        .then((body) => {
+          // Subscription card.
+          if (body.subscription) {
+            const sub = body.subscription;
+            setText('sub-tier', sub.tier);
+            const summary =
+              'Renews ' +
+              fmtIso(sub.current_period_end) +
+              ' · ' +
+              (sub.cancel_at_period_end ? 'set to cancel at period end' : 'auto-renews');
+            setText('sub-summary', summary);
+            setText('sub-status-badge', (sub.status || '').replace(/_/g, ' '));
+            // Cancel button visibility.
+            if (cancelBtn) {
+              if (sub.cancel_at_period_end) cancelBtn.classList.add('hidden');
+              else cancelBtn.classList.remove('hidden');
+            }
+          } else {
+            setText('sub-tier', 'No active subscription');
+            setText(
+              'sub-summary',
+              'Upgrade to a paid tier to unlock concurrent caps + archetype access.',
+            );
+            setText('sub-status-badge', 'no subscription');
+            if (cancelBtn) cancelBtn.classList.add('hidden');
+          }
+
+          // Trial pack card.
+          const tp = body.trial_pack || {};
+          let trialState;
+          let trialSummary;
+          let showBuy = false;
+          if (tp.active) {
+            trialState = 'Active';
+            trialSummary =
+              fmtCents(tp.credit_cents_remaining) +
+              ' of credit remaining · expires ' +
+              fmtIso(tp.expires_at);
+          } else if (tp.redeemed) {
+            trialState = 'Redeemed';
+            trialSummary =
+              '$2.99 trial pack already used on this account. Once-per-account; the trial does not refresh.';
+          } else {
+            trialState = 'Available';
+            trialSummary = 'Buy 16 hours of iPhone Safari sessions for $2.99 — once per account.';
+            showBuy = true;
+          }
+          setText('trial-state', trialState);
+          setText('trial-summary', trialSummary);
+          const buyWrap = root.querySelector('[data-field="trial-buy-wrap"]');
+          if (buyWrap) {
+            if (showBuy) buyWrap.classList.remove('hidden');
+            else buyWrap.classList.add('hidden');
+          }
+        })
+        .catch((err) => {
+          showBanner(
+            "Couldn't load live billing (" +
+              (err && err.message ? err.message : 'network error') +
+              '). Showing preview data below.',
+          );
+        });
+    })();
+  </script>
 </DashboardLayout>

@@ -10515,3 +10515,72 @@ Same banner pattern as V-180/V-181:
 ### Next
 
 V-183 next: customer-dashboard /billing live wiring (~2-3hr).
+
+---
+
+## V-183 — customer-dashboard /billing live wiring (PRIORITY A.4)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder PRIORITY A.4 (~2-3hr). customer-dashboard `/billing` progressive-enhancement against `/v1/billing`. Mirrors V-180/V-181/V-182 pattern + adds action wiring (POST to portal-session + trial-pack endpoints, redirect to returned Stripe URL).
+
+### What changed
+
+`apps/customer-dashboard/src/pages/billing.astro`:
+
+- Frontmatter: `apiBaseUrl` from env.
+- Wrapper `<div data-page="billing">` + hidden `<div data-banner>`.
+- Subscription card annotated with `data-field="sub-tier"`, `data-field="sub-summary"`, `data-field="sub-status-badge"`. Action buttons converted from `<a href="#">` placeholders to `<button data-action="...">`:
+  - `data-action="portal"` → POST `/v1/billing/portal-session` → redirect to `portal_url`
+  - `data-action="cancel"` → same as portal (cancellation via Stripe portal)
+  - `data-action="buy-trial-pack"` → POST `/v1/billing/trial-pack` with `success_url` / `cancel_url` query params → redirect to `checkout_url`
+- Trial pack card annotated with `data-field="trial-state"`, `data-field="trial-summary"`, `data-field="trial-buy-wrap"` (toggles Buy button visibility).
+- Inline `<script is:inline>` (~140 lines):
+  - `authedFetch` helper wraps token + content-type headers + credentials.
+  - On load (token present): GET `/v1/billing` → updates all card fields. Cancel button visibility toggled by `sub.cancel_at_period_end`. Buy-trial-pack button visibility toggled by trial-pack state.
+  - On click: action handlers POST to the right endpoint, parse response, redirect via `window.location.href`. Failure banner with the error message preserves visibility.
+  - No-token state: shows "Sign in to see live billing state. Showing preview data below." and action handlers also surface "Sign in to manage billing." when clicked.
+- Invoices section copy updated to note "Live invoice list endpoint TODO — accessible via Stripe Customer Portal in the meantime."
+
+### What's still mock / deferred
+
+- **"Change plan" button** — anchor link `<a href="#">` placeholder still. Tier picker UI is a Tier 3 visual surface that needs founder review before commit. Wires to POST `/v1/billing/checkout-session` once landed.
+- **Invoice list** — no `/v1/invoices` endpoint today. Customer Portal is the workaround. Adding a dashboard-side invoice list is a separate workstream.
+- **MOCK_SUBSCRIPTION / MOCK_TRIAL_PACK_STATE** — stay as SSG fallback when token absent or fetch fails. Matches V-171/V-180/V-181/V-182 fallback semantic.
+
+### Live-vs-mock states
+
+| State                  | Banner                                                               | Card values |
+| ---------------------- | -------------------------------------------------------------------- | ----------- |
+| No token               | "Sign in to see live billing state. Showing preview data below."     | Mock (SSG)  |
+| Fetch fails            | "Couldn't load live billing (...). Showing preview data below."      | Mock (SSG)  |
+| Token + fetch ok       | (none)                                                               | Live values |
+| Action button no-token | "Sign in to manage billing." / "Sign in to purchase the trial pack." | Stays       |
+| Action button fails    | "Couldn't open Stripe portal (...)" / "Couldn't start trial-pack..." | Stays       |
+
+### How verified
+
+- `npm run typecheck`: clean across all 11 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+
+### Files modified
+
+- `apps/customer-dashboard/src/pages/billing.astro`
+
+### PRIORITY A complete
+
+V-180 → V-183 covers all 4 PRIORITY A customer-dashboard live-data wirings (sessions, webhooks, api-keys, billing). The customer-dashboard is "real-data ready" — every page consumes live `/v1/*` endpoints when the web-session token is present, falls back to mock when not, surfaces banners for the no-token / fetch-error / empty states. CORS allow-list update for `app.driftstack.dev` is the only remaining production-deploy gating item (founder action-queue).
+
+### Next
+
+Per founder execution order:
+
+- PRIORITY B — V-184 onboarding flow Astro pages (signup → verify → welcome → tier-select → first-session). ~4-5hr.
+- PRIORITY C — V-185-V-192 admin panel live-data wiring.
+- PRIORITY D — V-193-V-197 production-readiness.
+- Go SDK feature parity (V-198+, ~10-12hr) per founder LOCKED decision this round.
