@@ -10584,3 +10584,61 @@ Per founder execution order:
 - PRIORITY C — V-185-V-192 admin panel live-data wiring.
 - PRIORITY D — V-193-V-197 production-readiness.
 - Go SDK feature parity (V-198+, ~10-12hr) per founder LOCKED decision this round.
+
+---
+
+## V-184a — Onboarding flow Tier 1 scaffolding (PRIORITY B phase 1)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder PRIORITY B phased — V-184 split into V-184a (Tier 1 scaffolding, push-to-main) + V-184b (Tier 3 visual UX, working-tree drafts for founder review). V-184a lands the 5-page onboarding flow with minimal placeholder content + functional cross-page state handoff via localStorage.
+
+### What changed
+
+5 new pages in `apps/customer-dashboard/src/pages/`:
+
+- **`signup.astro`** — email + password + name(optional) form. POSTs to `/v1/auth/signup`. Stashes signup email in `sessionStorage.ds_signup_email`. Test/dev mode: also stashes `debug_token` for paste-in convenience on the next step. Redirects to `/verify-email`.
+- **`verify-email.astro`** — token input (auto-filled in test/dev mode from `sessionStorage.ds_debug_verify_token`). POSTs to `/v1/auth/verify-email`. Stores returned web-session token in `localStorage.ds_web_session_token`. Cleans up signup-stage sessionStorage. Redirects to `/welcome`.
+- **`welcome.astro`** — minimal "what's next" intro + 2 CTA cards (trial pack / pick a tier). Defensive redirect to `/signup` if no token in localStorage. Redirects to `/select-tier`.
+- **`select-tier.astro`** — Tier picker. Trial pack hero card + paid-tier grid (6 tiers from PROFILES_PER_TIER + TIER_CONCURRENT_SESSION_LIMITS). Trial-pack button POSTs to `/v1/billing/trial-pack` → redirects to Stripe checkout. Tier buttons POST to `/v1/billing/checkout-session` → redirects to Stripe checkout. Reusable as the "Change plan" surface from `/billing` (the post-onboarding entry).
+- **`first-session.astro`** — label-only session-creation form. Two-step flow: (1) mint a default API key via web-session-bearer auth (V-168) on `/v1/api-keys`, (2) use that API key to create a session via `/v1/sessions`. Stashes the new API-key plaintext in `sessionStorage.ds_first_api_key_plaintext` for post-redirect display on `/sessions` or `/api-keys`. Redirects to `/sessions?onboarded=1`.
+
+All 5 pages use `<DashboardLayout title="..." withSidebar={false}>` so the sidebar nav (which assumes auth) is hidden during onboarding.
+
+### Cross-page state
+
+- `localStorage.ds_web_session_token` — set on verify-email, read on welcome / select-tier / first-session. Persistent across page loads + browser sessions until logout.
+- `sessionStorage.ds_signup_email` — set on signup, read on verify-email, cleaned on verify success. Lets verify-email render "We sent a verification token to <email>".
+- `sessionStorage.ds_debug_verify_token` — set on signup in test/dev mode (when server returns `debug_token`), read + auto-fills the verify form, cleaned on verify success. Skipped in production (server omits `debug_token` when `AUTH_EXPOSE_DEBUG_TOKEN` env is false).
+- `sessionStorage.ds_first_api_key_plaintext` — set on first-session, read on the post-redirect view (currently nothing reads it; will land in V-184b draft).
+
+### What's NOT in V-184a (deferred to V-184b draft)
+
+Per founder cadence: "Tier 3 visual UX surfaces as Tier 3 working-tree drafts for review before commit."
+
+- Full UX copy + visual polish (signup welcome screen, brand intro language, tier comparison table with feature rows for AI-agent gating per V-075, first-session tutorial UX, embedded WebView).
+- Resend-verification-email flow (currently the page just says "Token expired? Restart signup").
+- Login flow (`/login` page exists as href but no implementation — onboarding flow assumes signup-only path; returning customers would need login UI which lands in V-184b or separate V-NNN).
+- Customer-account-deletion / data-export flows.
+
+### How verified
+
+- `npm run typecheck`: clean across all 11 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+
+### Files added
+
+- `apps/customer-dashboard/src/pages/signup.astro`
+- `apps/customer-dashboard/src/pages/verify-email.astro`
+- `apps/customer-dashboard/src/pages/welcome.astro`
+- `apps/customer-dashboard/src/pages/select-tier.astro`
+- `apps/customer-dashboard/src/pages/first-session.astro`
+
+### Next
+
+V-184b — surface Tier 3 visual UX drafts for founder review (working-tree only, NOT commit). Then V-185 (/v1/webhooks aggregate delivery_counts), V-186 (/sessions concurrent meter live wiring).

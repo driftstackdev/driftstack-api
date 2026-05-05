@@ -1,0 +1,123 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+import { LOCKED_ARCHETYPE_DISPLAY_LABEL } from '@driftstack/api-types';
+
+// V-184a — onboarding step 5. First session creation. Tier 1 minimal
+// placeholder — full Tier 3 visual UX (tutorial, embedded WebView,
+// "view your first capture" CTA) lands in V-184b draft.
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+---
+
+<DashboardLayout title="First session" withSidebar={false}>
+  <div class="mx-auto max-w-2xl px-6 py-16" data-page="first-session">
+    <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">First session</p>
+    <h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+      Create your first session.
+    </h1>
+    <p class="mt-3 text-sm text-slate-600">
+      A session is a real iOS Safari instance running on Driftstack's fleet.
+      Default archetype: {LOCKED_ARCHETYPE_DISPLAY_LABEL}. Give it a label
+      so you can find it later.
+    </p>
+
+    <div
+      data-banner
+      class="mt-6 hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      role="status"
+    >
+    </div>
+
+    <form data-form="first-session" class="mt-8 space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700" for="session-label">Label</label>
+        <input
+          id="session-label"
+          name="label"
+          type="text"
+          required
+          maxlength="120"
+          placeholder="my-first-session"
+          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <button type="submit" class="btn-primary w-full">Create session</button>
+    </form>
+
+    <p class="mt-8 text-xs text-slate-500">
+      Skip this step? <a href="/" class="text-oxblood-700 underline">Go to dashboard</a>.
+    </p>
+  </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="first-session"]');
+      if (!root) return;
+      const form = root.querySelector('[data-form="first-session"]');
+      const banner = root.querySelector('[data-banner]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      function showBanner(text) {
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+
+      // Defensive redirect if user landed here without a token.
+      if (!token) {
+        window.location.replace('/signup');
+        return;
+      }
+
+      // First-session creation typically uses an API key, not a web
+      // session token. V-168 makes the web-session token usable on
+      // /v1/api-keys (so customer can mint a key) — but for the
+      // session-creation step, a key is needed. The minimal flow:
+      //   1. Mint a "default" API key via web session.
+      //   2. Use that API key to create the session.
+      //   3. Stash the new API key plaintext in sessionStorage so the
+      //      /first-session redirect to /sessions can show it.
+      // V-184b can refine the UX (e.g. dedicated "your first key" step).
+
+      form.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        banner.classList.add('hidden');
+        const fd = new FormData(form);
+        const label = fd.get('label');
+
+        try {
+          // Mint an API key with web session.
+          const mintRes = await fetch(apiBaseUrl + '/v1/api-keys', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+            credentials: 'include',
+            body: JSON.stringify({ name: 'default', scopes: ['read', 'write'] }),
+          });
+          if (!mintRes.ok) {
+            const errBody = await mintRes.json().catch(() => ({}));
+            throw new Error(errBody.detail || 'mint key HTTP ' + mintRes.status);
+          }
+          const apiKey = await mintRes.json();
+          // Stash plaintext for the customer to copy from the
+          // post-onboarding /api-keys redirect view (it's only
+          // returned once).
+          sessionStorage.setItem('ds_first_api_key_plaintext', apiKey.plaintext);
+
+          // Create the session.
+          const sessionRes = await fetch(apiBaseUrl + '/v1/sessions', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: 'Bearer ' + apiKey.plaintext },
+            credentials: 'include',
+            body: JSON.stringify({ label }),
+          });
+          if (!sessionRes.ok) {
+            const errBody = await sessionRes.json().catch(() => ({}));
+            throw new Error(errBody.detail || 'create session HTTP ' + sessionRes.status);
+          }
+          window.location.href = '/sessions?onboarded=1';
+        } catch (err) {
+          showBanner(err && err.message ? err.message : 'Failed to create first session.');
+        }
+      });
+    })();
+  </script>
+</DashboardLayout>

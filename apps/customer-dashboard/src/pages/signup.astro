@@ -1,0 +1,119 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+
+// V-184a — onboarding flow Tier 1 scaffolding. Minimal placeholder
+// UX; full Tier 3 visual lands as V-184b draft for founder review.
+//
+// Flow: signup → verify-email → welcome → select-tier → first-session.
+// Each page uses localStorage.ds_web_session_token for cross-page state.
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+---
+
+<DashboardLayout title="Sign up" withSidebar={false}>
+  <div class="mx-auto max-w-md px-6 py-16" data-page="signup">
+    <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Sign up</h1>
+    <p class="mt-3 text-sm text-slate-600">
+      Create your Driftstack account. After signup we'll email you a verification
+      code; one signup per email.
+    </p>
+
+    <div
+      data-banner
+      class="mt-6 hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      role="status"
+    >
+    </div>
+
+    <form data-form="signup" class="mt-8 space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700" for="signup-email">Email</label>
+        <input
+          id="signup-email"
+          name="email"
+          type="email"
+          required
+          autocomplete="email"
+          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700" for="signup-name">Name (optional)</label>
+        <input
+          id="signup-name"
+          name="name"
+          type="text"
+          autocomplete="name"
+          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700" for="signup-password">Password</label>
+        <input
+          id="signup-password"
+          name="password"
+          type="password"
+          required
+          minlength="12"
+          autocomplete="new-password"
+          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+        />
+        <p class="mt-1 text-xs text-slate-500">12+ characters. Use a passphrase.</p>
+      </div>
+      <button type="submit" class="btn-primary w-full">Create account</button>
+    </form>
+
+    <p class="mt-6 text-xs text-slate-500">
+      Already have an account? <a href="/login" class="text-oxblood-700 underline">Sign in</a>.
+    </p>
+  </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="signup"]');
+      if (!root) return;
+      const form = root.querySelector('[data-form="signup"]');
+      const banner = root.querySelector('[data-banner]');
+
+      function showBanner(text) {
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+
+      form.addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        banner.classList.add('hidden');
+        const fd = new FormData(form);
+        const payload = {
+          email: fd.get('email'),
+          password: fd.get('password'),
+        };
+        const name = fd.get('name');
+        if (name) payload.name = name;
+
+        fetch(apiBaseUrl + '/v1/auth/signup', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+          credentials: 'include',
+        })
+          .then((r) =>
+            r.ok ? r.json() : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+          )
+          .then((body) => {
+            // Stash the email for the verify page (no token yet — that
+            // comes from /v1/auth/verify-email). debug_token is exposed
+            // in test/dev mode for paste-in convenience.
+            sessionStorage.setItem('ds_signup_email', payload.email);
+            if (body.debug_token) {
+              sessionStorage.setItem('ds_debug_verify_token', body.debug_token);
+            }
+            window.location.href = '/verify-email';
+          })
+          .catch((err) => {
+            showBanner(err && err.message ? err.message : 'Signup failed.');
+          });
+      });
+    })();
+  </script>
+</DashboardLayout>
