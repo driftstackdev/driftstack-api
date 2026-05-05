@@ -28,12 +28,12 @@ const groups: FaqGroup[] = [
         a: 'Chromium-cloud services run a Chromium fork with stealth plugins — user-agent strings, JavaScript Proxy traps over canvas / WebGL / navigator, monkeypatched Object.getOwnPropertyDescriptor calls. The fingerprint matches an iPhone if a detector only checks the spoofed surfaces; it doesn\'t match if the detector inspects what\'s underneath (timing, prototype chain, error stacks, GPU primitives). Driftstack runs WebKit\'s actual C++ source — there\'s no underneath. The fingerprint your code reads is the fingerprint a real iPhone reads. Same primitives, all the way down.',
       },
       {
-        q: 'What\'s the difference between concurrent sessions and total sessions per month?',
-        a: 'Concurrency cap = how many sessions you can have running at the same instant (Starter 2, Solo 4, Builder 8, Scale 24, Enterprise custom). Browser-hour cap = your monthly meter, measured across the calendar month UTC. You can run the same number of sessions in a month under either a 2-concurrent or 24-concurrent tier; the concurrency cap controls peak parallelism, not monthly throughput.',
+        q: 'How does concurrent metering work?',
+        a: 'Concurrency cap is the only meter on paid tiers. Solo Manual = 1 concurrent / Team Manual = 3 / Agency Manual = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom. Within your cap, run as many session-hours as you want — same cap covers a 5-minute session and a 6-hour session. The cap controls peak parallelism; monthly throughput is whatever your concurrent fleet runs continuously. No monthly meter, no per-hour metering, no overage line items. The trial pack ($2.99) is the one exception — it uses time-based decrement at $0.18/hr against the prepaid 299¢ credit.',
       },
       {
-        q: 'What happens when I exceed my monthly browser-hours?',
-        a: 'Sessions don\'t block — overage charges apply automatically per metered line item at your tier\'s overage rate ($0.18/hr Starter, $0.16/hr Solo, $0.14/hr Builder, $0.12/hr Scale; Enterprise custom). The next monthly invoice itemises the overage. If you want a hard ceiling, set a usage alert in the Stripe Customer Portal.',
+        q: 'What happens when I hit my concurrent cap?',
+        a: 'Session-creation requests fail with HTTP 429 + a structured RFC 7807 problem-detail pointing at the cap-reached state and (where applicable) the next-tier upgrade path. Existing in-flight sessions are not interrupted. The cap is enforced at session-creation time, not mid-session. To increase concurrent capacity, upgrade to a higher-cap tier or contact sales for Enterprise custom limits.',
       },
       {
         q: 'Are there setup fees on any tier?',
@@ -54,7 +54,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'How many hours do I actually get from the trial pack?',
-        a: 'About 16 hours of session time. The trial pack credits 299¢ to your account; sessions decrement at $0.18/hr (Starter rate). 299 ÷ 18 ≈ 16.6 hours of usage. Unused credit expires 14 days after purchase.',
+        a: 'About 16 hours of session time. The trial pack credits 299¢ to your account; sessions decrement at $0.18 per concurrent-hour (per ADR-003 trial-pack mechanic). 299 ÷ 18 ≈ 16.6 hours of usage. Unused credit expires 14 days after purchase. The trial pack is the only Driftstack product with hour-based metering — paid tiers are concurrent-only.',
       },
       {
         q: 'Can I extend the trial pack?',
@@ -75,7 +75,7 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'Can I upgrade or downgrade mid-month?',
-        a: 'Yes. Stripe prorates the change automatically at the changeover date. New limits apply immediately on the next session-creation gate; the new browser-hour cap kicks in for the remainder of the calendar month.',
+        a: 'Yes. Stripe prorates the price change automatically at the changeover date. New concurrent + profile limits apply immediately on the next session-creation request and the next profile-creation request. Existing sessions and profiles are unaffected at the changeover; only new resources gate against the new tier limits.',
       },
       {
         q: 'What if I cancel?',
@@ -83,7 +83,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'How does Enterprise pricing work?',
-        a: 'Enterprise is custom — from $2,500/mo on annual contracts only. The "from" reflects baseline; actual pricing depends on monthly browser-hour commitment, concurrency requirements, archetype customisation, SLA, and any compliance requirements. Email <a href="mailto:sales@driftstack.dev" class="text-oxblood-700 underline">sales@driftstack.dev</a> with workload shape and your team\'s context.',
+        a: 'Enterprise is custom — from $4,000/mo on annual contracts only. The "from" reflects baseline; actual pricing depends on concurrent capacity, profile count, archetype customisation, SLA tier, dedicated CSM coverage, BYOK + bundled-LLM mix, and any compliance requirements (SOC 2 timeline, custom DPA terms). Email <a href="mailto:sales@driftstack.dev" class="text-oxblood-700 underline">sales@driftstack.dev</a> with workload shape and team context.',
       },
     ],
   },
@@ -151,7 +151,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'What if a session fails?',
-        a: 'Session lifecycle is observable end-to-end via the SDK and the dashboard. Failed sessions return structured error responses (RFC 7807 problem-types); recordings + state captures up to the failure point are still available. We do not bill for sessions that fail in the orchestration layer (driver crashes, fleet unavailability, etc.) — those credit back to your monthly browser-hour cap automatically.',
+        a: 'Session lifecycle is observable end-to-end via the SDK and the dashboard. Failed sessions return structured error responses (RFC 7807 problem-types); recordings + state captures up to the failure point are still available. Sessions that fail in the orchestration layer (driver crashes, fleet unavailability, etc.) do not consume your concurrent slot — the slot frees immediately on failure detection. Trial-pack credit is also unaffected by orchestration-layer failures.',
       },
       {
         q: 'What\'s the uptime SLA?',

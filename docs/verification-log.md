@@ -8954,3 +8954,44 @@ V-160 adds 4 contract tests symmetric to V-157's tier-records-coverage tests.
 ### Next
 
 Continuing per never-stop rule. PRIORITY 12 ongoing.
+
+---
+
+## V-161 — /faq concurrent-only redline (founder-locked Option A)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Apply founder-approved Option A redlines to `apps/marketing-site/src/pages/faq.astro`. The page had 6 stale entries from the deprecated file-127 single-ladder hours-with-overage model. ADR-004 superseded that with concurrent-only paid tiers + hours-only-on-trial-pack. Surface had been pbcopy'd to founder for decision; locked decision: rewrite affected entries to match ADR-004 (preserve Q&A coverage, update answers to contractually-accurate).
+
+### What changed
+
+`apps/marketing-site/src/pages/faq.astro` — 6 entries rewritten per founder-supplied copy:
+
+- **Entry 1** (was: "What's the difference between concurrent sessions and total sessions per month?") → "How does concurrent metering work?" — full rewrite; lists all 7 paid-tier concurrent caps explicitly, names the trial-pack exception.
+- **Entry 2** (was: "What happens when I exceed my monthly browser-hours?") — DEAD entry replaced with "What happens when I hit my concurrent cap?" — HTTP 429 + RFC 7807 problem-detail framing; cap enforced at session-creation time, in-flight unaffected.
+- **Entry 3** (was: "Can I upgrade or downgrade mid-month?") — replace answer; concurrent + profile limits apply on the next create-request, not "browser-hour cap kicks in for the remainder of the month."
+- **Entry 4** (was: "How does Enterprise pricing work?") — replace answer; Enterprise floor moved $2,500 → $4,000/mo annual-only; pricing factors now reference concurrent capacity / profile count / archetype customisation / SLA tier / dedicated CSM / BYOK + bundled-LLM mix / SOC 2 + DPA terms.
+- **Entry 5** (was: "How many hours do I actually get from the trial pack?") — replace answer; "$0.18/hr (Starter rate)" replaced with "$0.18 per concurrent-hour (per ADR-003 trial-pack mechanic)"; explicit "trial pack is the only Driftstack product with hour-based metering" framing.
+- **Entry 6** (was: "What if a session fails?") — replace answer; "credit back to your monthly browser-hour cap" replaced with "do not consume your concurrent slot — the slot frees immediately on failure detection"; trial-pack credit explicitly noted as unaffected.
+
+NOT modified per founder's prior categorization:
+
+- Entry "Why concurrent caps and not hours?" (line 20) — references "~720 browser-hours/month" as a SCENARIO under hours-with-overage (the bad model being argued against). Comparative-framing context; correct as-is.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run format:check`: clean.
+- Dev server (marketing-site, port 4321): `/faq` renders 200; grep against rendered HTML confirms no stale markers (`Solo 4`, `browser-hour cap`, `0.18/hr Starter`, `2,500/mo`, `Starter rate` all gone). Single remaining "browser-hours/month" is the deliberately-preserved scenario reference at line 20.
+
+### Files modified
+
+- `apps/marketing-site/src/pages/faq.astro`
+
+### Next
+
+V-162: full /pricing.astro audit per ADR-004 conventions (100% bit-identical parity bar / two-ladder structure / BYOK gating / self-hosted matrix / $1,000 / $2,000 / $4,000+ self-hosted prices / $2.99 trial pack mechanics).
