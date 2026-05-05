@@ -2,13 +2,30 @@
 import AdminLayout from '../layouts/AdminLayout.astro';
 import { MOCK_AUDIT_LOG } from '../data/mocks.ts';
 
+// V-188 — progressive-enhancement against /v1/admin/audit-log. SSG
+// renders the mock; an inline <script> reads ds_web_session_token
+// from localStorage and replaces the table body with live entries.
+// Filter bar is wired: action substring (server-side `action`),
+// admin id (`admin_id`), result-only filter is client-side post-fetch
+// since the endpoint doesn't accept a result filter today. Banner
+// surfaces no-token / fetch-error / forbidden states.
+
 function fmtIso(iso: string): string {
   return new Date(iso).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
 }
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 ---
 
 <AdminLayout title="Audit log">
-  <div class="mx-auto max-w-6xl px-6 py-10">
+  <div class="mx-auto max-w-6xl px-6 py-10" data-page="admin-audit-log">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
     <header class="mb-10">
       <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Audit log</h1>
       <p class="mt-2 max-w-prose text-sm text-slate-500">
@@ -21,16 +38,18 @@ function fmtIso(iso: string): string {
     <div class="mb-6 flex flex-wrap items-center gap-3">
       <input
         type="search"
-        placeholder="Filter by action or target id…"
+        data-field="action"
+        placeholder="Filter by action (e.g. account.tier_changed)…"
         class="w-72 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
       />
+      <input
+        type="search"
+        data-field="admin-id"
+        placeholder="Admin id (acc_<uuid>)"
+        class="w-64 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+      />
       <select
-        class="rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
-      >
-        <option value="">All admins</option>
-        <option value="staff@driftstack.dev">staff@driftstack.dev</option>
-      </select>
-      <select
+        data-field="result"
         class="rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
       >
         <option value="">Any result</option>
@@ -51,7 +70,7 @@ function fmtIso(iso: string): string {
             <th class="px-4 py-3">Result</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-100">
+        <tbody class="divide-y divide-slate-100" data-list="audit">
           {
             MOCK_AUDIT_LOG.map((entry) => (
               <tr class="hover:bg-slate-50">
@@ -89,9 +108,170 @@ function fmtIso(iso: string): string {
       </table>
     </div>
 
-    <p class="mt-4 text-xs text-slate-500">
+    <p class="mt-4 text-xs text-slate-500" data-field="footnote">
       Retention 90 days hot in Postgres + R2 archive thereafter (ADR-006). JSON
       Lines export available via <code class="font-mono">GET /v1/admin/audit-log?format=jsonl</code>.
     </p>
   </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="admin-audit-log"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const tbody = root.querySelector('[data-list="audit"]');
+      const footnote = root.querySelector('[data-field="footnote"]');
+      const actionEl = root.querySelector('[data-field="action"]');
+      const adminIdEl = root.querySelector('[data-field="admin-id"]');
+      const resultEl = root.querySelector('[data-field="result"]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+      function hideBanner() {
+        if (!banner) return;
+        banner.classList.add('hidden');
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c],
+        );
+      }
+
+      function fmtIso(iso) {
+        return new Date(iso).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+      }
+
+      function rowHtml(e) {
+        const adminFrag =
+          '<p class="font-mono text-xs text-slate-700">' +
+          escapeHtml(e.admin_account_id) +
+          '</p>';
+        const targetFrag =
+          (e.target_account_id
+            ? '<p class="font-mono text-xs text-slate-700">' +
+              escapeHtml(e.target_account_id) +
+              '</p>'
+            : '') +
+          (e.target_resource_id
+            ? '<p class="mt-0.5 font-mono text-[11px] text-slate-500">' +
+              escapeHtml(e.target_resource_id) +
+              '</p>'
+            : '');
+        const resultClass =
+          e.result === 'success'
+            ? 'bg-emerald-50 text-emerald-700'
+            : 'bg-red-50 text-red-700';
+        return (
+          '<tr class="hover:bg-slate-50">' +
+          '<td class="px-4 py-3 font-mono text-xs text-slate-600">' +
+          escapeHtml(fmtIso(e.timestamp)) +
+          '</td>' +
+          '<td class="px-4 py-3">' +
+          adminFrag +
+          '</td>' +
+          '<td class="px-4 py-3"><code class="font-mono text-xs text-oxblood-700">' +
+          escapeHtml(e.action) +
+          '</code></td>' +
+          '<td class="px-4 py-3">' +
+          (targetFrag || '<span class="text-xs text-slate-400">—</span>') +
+          '</td>' +
+          '<td class="px-4 py-3">' +
+          '<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
+          resultClass +
+          '">' +
+          escapeHtml(e.result) +
+          '</span></td></tr>'
+        );
+      }
+
+      function buildQuery() {
+        const params = new URLSearchParams();
+        params.set('limit', '50');
+        if (actionEl && actionEl.value.trim()) params.set('action', actionEl.value.trim());
+        if (adminIdEl && adminIdEl.value.trim()) params.set('admin_id', adminIdEl.value.trim());
+        return params;
+      }
+
+      let inFlight = 0;
+      function load() {
+        if (!token) return;
+        const myReq = ++inFlight;
+        const params = buildQuery();
+        fetch(apiBaseUrl + '/v1/admin/audit-log?' + params.toString(), {
+          headers: { authorization: 'Bearer ' + token },
+          credentials: 'include',
+        })
+          .then((r) => {
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then((body) => {
+            if (myReq !== inFlight) return;
+            let entries = body.data || [];
+            const resultFilter = resultEl ? resultEl.value : '';
+            if (resultFilter) {
+              entries = entries.filter((e) => e.result === resultFilter);
+            }
+            if (tbody) {
+              if (entries.length === 0) {
+                tbody.innerHTML =
+                  '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">No audit entries match the current filter.</td></tr>';
+              } else {
+                tbody.innerHTML = entries.map(rowHtml).join('');
+              }
+            }
+            if (footnote) {
+              footnote.textContent =
+                'Showing ' +
+                entries.length +
+                ' entr' +
+                (entries.length === 1 ? 'y' : 'ies') +
+                '. Retention 90 days hot in Postgres + R2 archive thereafter (ADR-006).';
+            }
+            hideBanner();
+          })
+          .catch((err) => {
+            if (myReq !== inFlight) return;
+            const msg = err && err.message ? err.message : 'network error';
+            if (msg === 'forbidden') {
+              showBanner(
+                'Access denied — admin scope required. You are signed in as a customer account.',
+              );
+            } else {
+              showBanner("Couldn't load audit log (" + msg + '). Showing preview data below.');
+            }
+          });
+      }
+
+      if (!token) {
+        showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+        return;
+      }
+
+      let debounce = 0;
+      function scheduleLoad() {
+        clearTimeout(debounce);
+        debounce = setTimeout(load, 200);
+      }
+
+      if (actionEl) actionEl.addEventListener('input', scheduleLoad);
+      if (adminIdEl) adminIdEl.addEventListener('input', scheduleLoad);
+      if (resultEl) resultEl.addEventListener('change', scheduleLoad);
+
+      load();
+    })();
+  </script>
 </AdminLayout>

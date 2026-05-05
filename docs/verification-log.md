@@ -10762,3 +10762,39 @@ PRIORITY C phase 1 — admin panel was a static-mock surface across 8 pages. `/a
 ### Next
 
 V-188 — admin /audit-log live wiring (existing endpoint, ~1hr Tier 1).
+
+## V-188 — admin-panel /audit-log live wiring (PRIORITY C phase 2)
+
+### What
+
+Replaced the static `MOCK_AUDIT_LOG` table on `apps/admin-panel/src/pages/audit-log.astro` with progressive-enhancement live data sourced from `GET /v1/admin/audit-log`. SSG mock paints first; an inline `<script>` fetches with bearer auth from `ds_web_session_token` and replaces the tbody. Filter bar wired with three controls: action substring (server-side `action` query param), admin id (`admin_id`), and result-only filter (client-side post-fetch since the endpoint doesn't accept `result` as a filter today).
+
+### Why
+
+PRIORITY C phase 2 — second admin page after V-187 /accounts. /audit-log is the second-most-trafficked admin surface (every audit-trail spot-check + post-incident review starts here). Endpoint already exists; this is pure UI wiring.
+
+### Files
+
+- `apps/admin-panel/src/pages/audit-log.astro`
+  - Added `data-page="admin-audit-log"` root, `data-banner`, `data-list="audit"`, `data-field` attrs on action / admin-id / result inputs and footnote.
+  - Inline `<script is:inline define:vars={{ apiBaseUrl }}>` builds the query, fetches, replaces tbody, and surfaces banner messages for no-token / 403 / fetch-error.
+  - Result filter applied post-fetch (server doesn't accept it). Footnote updates with "Showing N entries". Empty state row in tbody when filter result is empty.
+  - HTML escaping on every interpolated field; debounced (200ms) input + change handlers.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 625 / 625 passing.
+- `astro check` on admin-panel: 0 errors / warnings / hints.
+
+### Notes
+
+- Current rendering uses `e.admin_account_id` (prefixed `acc_<uuid>`) rather than the admin email — the public audit shape doesn't expose admin email today. Joining email server-side would require a query change in `AdminAuditService.list()`; deferred to a follow-up V-NNN slice if the prefixed id is hard for staff to scan in practice.
+- `target_account_id` and `target_resource_id` show as separate lines in the Target column (matches mock styling); when both are null the cell renders an em-dash.
+- Result-filter is client-side. Endpoint payload is page-bounded by `limit=50` so applying the filter post-fetch can hide entries that exist further back. Acceptable trade-off for a Tier 1 slice; if staff hit it in practice we add `result` to `ListAuditLogQuerySchema` server-side.
+
+### Next
+
+V-189 — admin /webhook-dlq live wiring (existing endpoint, ~1hr Tier 1).
