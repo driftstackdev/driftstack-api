@@ -956,3 +956,40 @@ export const accountAuditLog = pgTable(
 
 export type AccountAuditLogEntry = typeof accountAuditLog.$inferSelect;
 export type NewAccountAuditLogEntry = typeof accountAuditLog.$inferInsert;
+
+// V-218 — continuous validation harness schedules. One row per
+// archetype that should be periodically recaptured + validated. The
+// harness worker's processTick() finds rows with next_run_at <= now()
+// AND enabled=true, dispatches to RecaptureService.triggerRecapture,
+// then updates last_run_at / next_run_at. Cross-repo: actual probe
+// execution lands when Agent 1's V-203 Phase 2A vendor probes drop;
+// until then, the mock RecaptureService from packages/recapture-
+// automation is the dispatch target.
+export const validationSchedules = pgTable(
+  'validation_schedules',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    archetypeId: text('archetype_id').notNull(),
+    cadenceSeconds: integer('cadence_seconds').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    lastRunAt: timestamp('last_run_at', { withTimezone: true }),
+    nextRunAt: timestamp('next_run_at', { withTimezone: true }).notNull(),
+    lastRunId: text('last_run_id'),
+    reason: text('reason'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('validation_schedules_archetype_unique').on(t.archetypeId),
+    index('validation_schedules_due_idx').on(t.enabled, t.nextRunAt),
+  ],
+);
+
+export type ValidationSchedule = typeof validationSchedules.$inferSelect;
+export type NewValidationSchedule = typeof validationSchedules.$inferInsert;

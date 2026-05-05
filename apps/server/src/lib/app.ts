@@ -25,6 +25,8 @@ import type { EmailPreferencesService } from '../services/email-preferences.js';
 import { registerEmailPreferencesRoutes } from '../routes/email-preferences.js';
 import type { AccountAuditService } from '../services/account-audit.js';
 import { registerAccountAuditRoutes } from '../routes/account-audit.js';
+import type { ValidationHarnessService } from '../services/validation-harness.js';
+import { registerAdminValidationHarnessRoutes } from '../routes/admin-validation-harness.js';
 import type { AuthFlowsService } from '../services/auth-flows.js';
 import type { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import type { ProfilesService } from '../services/profiles.js';
@@ -102,6 +104,8 @@ export interface AppDeps {
   emailPreferencesService: EmailPreferencesService;
   /** V-216: customer-facing audit log. */
   accountAuditService: AccountAuditService;
+  /** V-218: continuous validation harness. */
+  validationHarnessService: ValidationHarnessService;
   /**
    * V-079: user-facing auth flows. Optional during the migration window —
    * when omitted, the /v1/auth/* routes are not registered. Once the
@@ -221,6 +225,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerLegalRoutes(app, deps.legalService);
   registerEmailPreferencesRoutes(app, { emailPreferences: deps.emailPreferencesService });
   registerAccountAuditRoutes(app, { accountAudit: deps.accountAuditService });
+  registerAdminValidationHarnessRoutes(app, { harness: deps.validationHarnessService });
   // V-176 — public-facing status endpoint. Reuses the readinessChecks
   // already supplied to /ready; no additional wiring needed at deps
   // level. /v1/status has no auth (public status pages are public).

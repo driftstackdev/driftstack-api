@@ -20,6 +20,7 @@
 //     reachable-but-failing dep. Health checks are decoupled.
 
 import { Redis } from 'ioredis';
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { createDb, type Database } from '../db/client.js';
 import { DrizzleAccountAuthRepo } from '../db/auth-repo.js';
@@ -33,6 +34,11 @@ import { DrizzleEmailPreferencesRepo } from '../db/email-preferences-repo.js';
 import { EmailPreferencesService } from '../services/email-preferences.js';
 import { DrizzleAccountAuditRepo } from '../db/account-audit-repo.js';
 import { AccountAuditService } from '../services/account-audit.js';
+import { DrizzleValidationSchedulesRepo } from '../db/validation-schedules-repo.js';
+import {
+  ValidationHarnessService,
+  type ValidationHarnessRecaptureBridge,
+} from '../services/validation-harness.js';
 import { DrizzleRateLimitOverridesRepo } from '../db/rate-limit-overrides-repo.js';
 import { DrizzleLegalRepo } from '../db/legal-repo.js';
 import { DrizzleAuthFlowsRepo } from '../db/auth-flows-repo.js';
@@ -157,6 +163,7 @@ export async function createProductionDeps(
   const legalRepo = new DrizzleLegalRepo(dbHandle);
   const emailPreferencesRepo = new DrizzleEmailPreferencesRepo(dbHandle);
   const accountAuditRepo = new DrizzleAccountAuditRepo(dbHandle);
+  const validationSchedulesRepo = new DrizzleValidationSchedulesRepo(dbHandle);
 
   // Auth cache + coalescer.
   const authCache = new RedisAuthCache(redis, logger);
@@ -200,6 +207,20 @@ export async function createProductionDeps(
 
   // V-204 — email notification preferences.
   const emailPreferencesService = new EmailPreferencesService(emailPreferencesRepo);
+
+  // V-218 — continuous validation harness.
+  // The recapture bridge is a stub until Agent 1's V-203 Phase 2A
+  // vendor probes land. Until then, dispatched runs return synthetic
+  // run ids and don't execute actual probe traffic. The schedule +
+  // ledger logic is real; only the validation execution is mocked.
+  const recaptureBridge: ValidationHarnessRecaptureBridge = {
+    triggerRecapture: () => Promise.resolve({ id: `run_${randomUUID()}` }),
+  };
+  const validationHarnessService = new ValidationHarnessService(
+    validationSchedulesRepo,
+    recaptureBridge,
+    { iosVersion: '18.7', safariVersion: '26.4' },
+  );
 
   // ApiKeysService needs legalService (V-049 issuance gate).
   // V-216: also wires accountAuditService for customer-facing audit emit.
@@ -327,6 +348,7 @@ export async function createProductionDeps(
     legalService,
     emailPreferencesService,
     accountAuditService,
+    validationHarnessService,
     authFlowsService,
     profilesService,
     // V-100: admin force-actions take direct repo + driver access.

@@ -7,6 +7,41 @@ import { AccountSchema } from './accounts.js';
 import { AccountTierSchema, Iso8601Schema } from './common.js';
 
 // ───────────────────────────────────────────────────────────────────────────
+// V-218 — continuous validation harness
+// ───────────────────────────────────────────────────────────────────────────
+
+export const ValidationScheduleSchema = z.object({
+  id: z.string().uuid(),
+  archetype_id: z.string(),
+  cadence_seconds: z.number().int().positive(),
+  enabled: z.boolean(),
+  last_run_at: z.string().nullable(),
+  next_run_at: z.string(),
+  last_run_id: z.string().nullable(),
+  reason: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export type ValidationSchedule = z.infer<typeof ValidationScheduleSchema>;
+
+export const UpsertValidationScheduleRequestSchema = z.object({
+  archetype_id: z.string().min(1),
+  cadence_seconds: z
+    .number()
+    .int()
+    .min(60)
+    .max(60 * 60 * 24 * 365),
+  enabled: z.boolean().optional().default(true),
+  reason: z.string().max(500).optional(),
+});
+export type UpsertValidationScheduleRequest = z.infer<typeof UpsertValidationScheduleRequestSchema>;
+
+export const ListValidationSchedulesResponseSchema = z.object({
+  data: z.array(ValidationScheduleSchema),
+});
+export type ListValidationSchedulesResponse = z.infer<typeof ListValidationSchedulesResponseSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
 // Tier change
 // ───────────────────────────────────────────────────────────────────────────
 

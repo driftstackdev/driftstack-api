@@ -612,6 +612,95 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // V-218 — continuous validation harness (admin-only).
+  const ValidationScheduleOpenApi = z.object({
+    id: z.string().uuid(),
+    archetype_id: z.string(),
+    cadence_seconds: z.number().int().positive(),
+    enabled: z.boolean(),
+    last_run_at: z.string().nullable(),
+    next_run_at: z.string(),
+    last_run_id: z.string().nullable(),
+    reason: z.string().nullable(),
+    created_at: z.string(),
+    updated_at: z.string(),
+  });
+  const ListValidationSchedulesResponseOpenApi = z.object({
+    data: z.array(ValidationScheduleOpenApi),
+  });
+  const UpsertValidationScheduleRequestOpenApi = z.object({
+    archetype_id: z.string(),
+    cadence_seconds: z.number().int().min(60),
+    enabled: z.boolean().optional(),
+    reason: z.string().optional(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/validation-schedules',
+    summary: 'List continuous-validation schedules (admin)',
+    tags: ['admin'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'All registered validation schedules.',
+        content: {
+          'application/json': { schema: ListValidationSchedulesResponseOpenApi },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'put',
+    path: '/v1/admin/validation-schedules',
+    summary: 'Upsert a validation schedule (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      body: {
+        content: {
+          'application/json': { schema: UpsertValidationScheduleRequestOpenApi },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'The upserted schedule.',
+        content: { 'application/json': { schema: ValidationScheduleOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/admin/validation-schedules/{archetype}',
+    summary: 'Remove a validation schedule (admin)',
+    tags: ['admin'],
+    security: auth,
+    responses: {
+      204: { description: 'Schedule removed.' },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/validation-schedules/{archetype}/trigger',
+    summary: 'Trigger an immediate validation run (admin)',
+    tags: ['admin'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Run id of the dispatched recapture.',
+        content: {
+          'application/json': {
+            schema: z.object({ run_id: z.string() }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+
   // V-216 — customer-facing audit log.
   const ListAccountAuditQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),

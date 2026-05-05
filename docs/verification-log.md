@@ -12200,3 +12200,64 @@ GENERATE-9 from the V-201 ack queue. V-216 landed the audit endpoint; V-204 land
 ### Next
 
 V-218 — continuous validation harness (GENERATE-1, ~3-4hr Tier 1).
+
+## V-218 — continuous validation harness scaffold (GENERATE-1)
+
+### What
+
+Server-side scheduling + dispatch surface for periodic recapture validation. Harness owns a per-archetype schedule table; `processTick()` finds rows where `next_run_at <= now AND enabled=true` and dispatches them through a `RecaptureService` bridge. Actual probe execution lives in the RecaptureService implementation — V-218 is the scheduler + ledger.
+
+Components:
+
+- Migration `0019_validation_schedules.sql` (Class A additive per V-198) + Drizzle schema entry
+- `ValidationHarnessService` with admin CRUD (list / upsert / remove / trigger-now) + `processTick({ now, batchSize })` worker entry-point
+- Drizzle + in-memory repo impls
+- `ValidationHarnessRecaptureBridge` minimal interface — bootstrap wires a stub returning synthetic run ids until cross-repo dep lands
+- Admin routes `/v1/admin/validation-schedules` (GET / PUT / DELETE / POST `:archetype/trigger`), all `driftstack_internal_admin` scope
+- OpenAPI registration for 4 endpoints
+- 9 integration tests
+- api-types schemas in `packages/api-types/src/admin.ts`
+
+### Cross-repo dep
+
+When Agent 1's V-203 Phase 2A vendor probe vendoring lands, a production `RecaptureService` can wire vendor-probe execution behind the same `triggerRecapture` interface. Until then, the bootstrap stub returns synthetic run ids — schedule + ledger are real, validation execution is mocked. Harness scaffolding doesn't block on Agent 1.
+
+### Periodic tick — bootstrap responsibility
+
+`processTick()` is called externally. Natural placement: `setInterval` alongside the durable webhook worker (V-173). Bootstrap doesn't yet wire that interval — one-line follow-up once Agent 1's Phase 2A makes dispatched runs do meaningful work. Manual triggers via `POST .../:archetype/trigger` exercise the dispatch surface in the meantime.
+
+### Why
+
+File 78 + V-179 recapture-automation called for continuous validation. V-179 landed the package interfaces; V-218 closes the gap with the scheduling layer. Cross-repo split: Agent 2 owns the scheduler, Agent 1 owns the probe execution. Clean ownership boundary.
+
+### Files
+
+- `apps/server/src/db/migrations/0019_validation_schedules.sql` — Class A migration.
+- `apps/server/src/db/schema.ts` — `validationSchedules` table.
+- `apps/server/src/services/validation-harness.ts` — service + bridge interface.
+- `apps/server/src/db/validation-schedules-repo.ts` — Drizzle impl.
+- `apps/server/src/routes/admin-validation-harness.ts` — 4 endpoints.
+- `apps/server/src/lib/bootstrap.ts` + `apps/server/src/lib/app.ts` — wiring.
+- `apps/server/tests/integration/_helpers/in-memory-validation-schedules-repo.ts` — in-memory variant.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — fixture with stub bridge.
+- `apps/server/tests/integration/admin-validation-harness.test.ts` — 9 tests.
+- `apps/server/src/lib/openapi.ts` + `apps/server/tests/integration/openapi.test.ts` — registration.
+- `packages/api-types/src/admin.ts` — schemas.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 676 / 676 passing across 70 files.
+
+### Notes
+
+- Cadence floor 60s (server returns 400 on `cadence_seconds < 60`). Hard floor prevents accidental self-DDoS via misconfigured schedules.
+- Upsert does NOT reset `next_run_at` on update — operators flip enabled to force re-tick rather than getting schedule resets on every tweak.
+- `trigger-now` endpoint is independent of schedule — dispatches `manual_request` without touching `last_run_at` / `next_run_at`.
+- `recaptureBridge` in bootstrap is a one-liner returning synthetic run ids. When real RecaptureService lands, replace the literal; harness never knows.
+
+### Next
+
+V-219 — per-tier rate limit policy refinement (GENERATE-5, ~2-3hr Tier 1).

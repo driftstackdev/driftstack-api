@@ -24,6 +24,12 @@ import { EmailPreferencesService } from '../../../src/services/email-preferences
 import { InMemoryEmailPreferencesRepo } from './in-memory-email-preferences-repo.js';
 import { AccountAuditService } from '../../../src/services/account-audit.js';
 import { InMemoryAccountAuditRepo } from './in-memory-account-audit-repo.js';
+import {
+  ValidationHarnessService,
+  type ValidationHarnessRecaptureBridge,
+} from '../../../src/services/validation-harness.js';
+import { InMemoryValidationSchedulesRepo } from './in-memory-validation-schedules-repo.js';
+import { randomUUID as testRandomUUID } from 'node:crypto';
 import { InMemoryAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { InMemoryAuthRepo } from './in-memory-auth-repo.js';
@@ -195,6 +201,17 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // api-keys can wire it.
   const accountAuditRepo = new InMemoryAccountAuditRepo();
   const accountAuditService = new AccountAuditService(accountAuditRepo);
+
+  // V-218 — validation harness with mock recapture bridge.
+  const validationSchedulesRepo = new InMemoryValidationSchedulesRepo();
+  const recaptureBridge: ValidationHarnessRecaptureBridge = {
+    triggerRecapture: () => Promise.resolve({ id: `run_${testRandomUUID()}` }),
+  };
+  const validationHarnessService = new ValidationHarnessService(
+    validationSchedulesRepo,
+    recaptureBridge,
+    { iosVersion: '18.7', safariVersion: '26.4' },
+  );
 
   // Wire webhooks INTO sessions + api-keys services for event emission.
   const sessionsService = new SessionsService({
@@ -412,6 +429,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     legalService,
     emailPreferencesService,
     accountAuditService,
+    validationHarnessService,
     authFlowsService,
     stripeWebhooksService,
     stripeWebhookSigningSecret,
