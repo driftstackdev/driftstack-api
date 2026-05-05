@@ -10176,3 +10176,41 @@ V-176 lands the backend; Tier 3 frontend draft (marketing-site /status.astro) de
 ### Next
 
 V-177 next: SDK versioning doc (PRIORITY 9, ~1hr).
+
+---
+
+## V-177 — SDK versioning + deprecation policy doc (PRIORITY 9)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder PRIORITY 9 (~1hr). Document the operating contract that the three SDK CHANGELOGs implement: SemVer policy, pre-1.0 stability, deprecation policy, migration paths, cross-SDK consistency, version-pinning recommendations, release process.
+
+### What changed
+
+`docs/architecture/sdk-versioning.md` (new):
+
+- **Versioning** — SemVer 2.0.0 with explicit MAJOR/MINOR/PATCH examples per SDK.
+- **Pre-1.0 stability** — bar is the same as post-1.0 (we don't take advantage of the looser pre-1.0 break rule). 1.0 ships when (1) first paying customer + (2) ≥30 days of stable production use + (3) founder approval.
+- **Deprecation policy** — `@deprecated` JSDoc / Python `DeprecationWarning` / Go doc-comment + CHANGELOG note + minimum-one-MINOR-release deprecation window before removal. Minimum 30 days post-deprecation-release.
+- **Migration paths** — GitHub release post includes migration guide for breaking changes; non-trivial breaks get a migration script in `packages/sdk-<lang>/scripts/`.
+- **Cross-SDK consistency** — three SDKs lockstep on resource/method names, error class hierarchy, webhook-signature helper, OpenAPI schema regeneration.
+- **Version-pinning recommendations** — caret/tilde patterns per language; production should pin exact versions.
+- **Release process** — push-to-main flow for changes; separate version-bump commit; publish gated on founder approval pre-launch, autonomous for MINOR+PATCH post-launch.
+- **Out-of-scope today** — LTS branches, public deprecation timeline doc, deprecated-call telemetry. Future workstreams.
+
+### How verified
+
+- `npm run format:check`: clean (after `prettier --write`).
+- Doc-only commit; no code or test changes.
+
+### Files added
+
+- `docs/architecture/sdk-versioning.md`
+
+### Next
+
+V-178: cross-SDK example parity (PRIORITY 11, ~1-2hr).
