@@ -99,39 +99,21 @@ reports missing notifications.
 
 ## Restore + DR
 
-> **[TODO]** Full DR rehearsal scheduled before commercial activation.
-> Targets:
->
-> - Point-in-time restore from Neon (test on a branch first)
-> - Redis: ephemeral, no DR — rebuild on cold start
-> - R2: durability is Cloudflare's responsibility; no key data is
->   single-source on R2 (audit archives have Postgres truth)
-> - Hetzner host: cattle, not pet — replace via deployment automation
+For full disaster-recovery scenarios (Hetzner host loss, Postgres
+corruption, R2 loss, compromised key, bad deploy) see the dedicated
+DR runbook: `docs/deployment/dr-runbook.md`. The DR doc covers seven
+scenarios with RTO/RPO targets, recovery sequences, and a pre-launch
+dry-run checklist.
 
-### Database restore checklist (skeleton)
-
-1. Identify the recovery target time (post-incident timestamp).
-2. Create a Neon branch from the target time.
-3. Run app pointed at the new branch in staging.
-4. Verify customer-data invariants (sample checks: every
-   active subscription has a stripe_customer_id; every session row
-   has a valid account_id).
-5. Cut DNS or `DATABASE_URL` over to the restored branch.
-6. Notify affected customers via Postmark.
+This document focuses on the routine triage flow — ops scenarios that
+are recoverable without invoking the DR procedures.
 
 ## Migration rehearsal
 
-> **[TODO]** Ahead of every Drizzle migration that touches a non-empty
-> production table:
->
-> 1. Snapshot Neon (point-in-time on a branch).
-> 2. Run the migration against the snapshot branch with prod-shape
->    data.
-> 3. Time the migration; document expected wall time.
-> 4. Confirm rollback strategy (DDL changes that can't be reversed
->    without data loss require explicit approval).
-> 5. Land the migration in the deploy window with the snapshot
->    branch ready as a fallback.
+Every Drizzle migration that runs against a non-empty production
+table follows the standing rehearsal sequence in
+`docs/deployment/migration-rehearsal.md`. Pre-launch (empty prod) the
+checklist is skipped and migrations land directly per push-to-main.
 
 ## Standing observability
 

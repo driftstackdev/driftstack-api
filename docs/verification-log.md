@@ -11225,3 +11225,60 @@ V-185–V-195 acked carry-forward V-198 as part of PRIORITY D. We've been adding
 ### Next
 
 V-199 — full DR runbook expansion (V-195 skeleton has [TODO] markers; expand per file 59 disaster-recovery scenarios).
+
+## V-199 — Disaster-recovery runbook (PRIORITY D phase 5)
+
+### What
+
+New `docs/deployment/dr-runbook.md` (~200 lines after prettier reflow). Standalone disaster-recovery procedures, separate from the routine-triage operational runbook (V-195). Covers seven scenarios:
+
+1. Hetzner host loss
+2. Postgres logical corruption
+3. Postgres / Neon platform outage
+4. Redis (Upstash) loss
+5. R2 object loss
+6. Compromised signing key / secret
+7. Bad deploy of broken code to prod
+
+Plus: RTO/RPO targets table per class, cross-cutting principles (no force-push, every credential via operational register, every recovery has a customer-comms step, document every DR action), and a pre-launch dry-run checklist with one rehearsal task per scenario.
+
+Also updated `docs/deployment/runbook.md` to drop the inline `[TODO]` Restore+DR + Migration rehearsal sections — those live in their own dedicated docs now (`dr-runbook.md` and `migration-rehearsal.md` respectively). The operational runbook is now strictly routine triage; DR is its own surface.
+
+### Why
+
+V-195 landed the operational runbook with `[TODO]` markers for full DR. V-198 carved out migration rehearsal into its own doc. V-199 carves out DR into its own doc, completing the doc structure: routine-triage / planned-deploy / unplanned-disaster as three separate playbooks. This keeps each surface tightly focused — staff hitting an incident page-load doesn't have to scroll past DR procedures, and staff staring at "the host is gone" don't have to skim past triage scripts.
+
+### Files
+
+- `docs/deployment/dr-runbook.md` — new file.
+- `docs/deployment/runbook.md` — replaced inline DR + migration-rehearsal sections with cross-references to the dedicated docs.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 652 / 652 passing across 67 files (no test changes — pure docs).
+
+### Notes
+
+- RTO/RPO targets are aspirational (no contractual SLAs pre-launch). Sets the bar for what good looks like; will firm up post-launch as we observe real incident timing.
+- Scenario 3 (Neon platform outage) has no in-doc resolution beyond "wait for recovery + comms." Multi-region Neon vs self-hosted PG replica is a [TODO] decision pre-launch if Neon platform stability becomes a concern. Surfaced honestly rather than inventing a solution that doesn't exist.
+- Scenario 5 (R2 loss) distinguishes audit archives (Postgres source-of-truth, regenerable) from session recordings (R2 source-of-truth per ADR-006, best-effort recovery). Important distinction for customer comms.
+- Pre-launch dry-run checklist gives 6 of the 7 scenarios concrete rehearsable forms. Scenario 3 (Neon outage) isn't rehearsable on our end — Neon would have to actually go down. Acceptable; the value of including it in the doc is the comms posture.
+
+### PRIORITY D status
+
+Five PRIORITY D entries landed — production-readiness arc complete:
+
+- V-195: `/version` endpoint + ops runbook skeleton
+- V-196: quota-override form on per-account detail page
+- V-197: Stripe webhook reference-vector tests + ops procedures
+- V-198: DB migration rehearsal procedure
+- V-199: DR runbook (seven scenarios)
+
+What this collectively unlocks: every locked launch-blocking ops gap is documented or tested. The remaining backend launch-blocking work is V-200 (SSR conversion) + V-201 (Go SDK parity).
+
+### Next
+
+V-200 — `@astrojs/cloudflare` SSR conversion for admin-panel + customer-dashboard (closes Follow-up 1 from V-185–V-195 founder review, ~2-3hr Tier 1).
