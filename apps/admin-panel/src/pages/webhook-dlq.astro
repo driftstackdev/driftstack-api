@@ -1,6 +1,15 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
 
+// V-189 — progressive-enhancement against /v1/admin/webhook-dlq. SSG
+// renders a single mock entry; an inline <script> fetches the live
+// list, replaces the body, and wires Requeue (POST
+// /v1/admin/webhook-dlq/:id/requeue). Account email + webhook URL
+// aren't part of the DLQ delivery shape today (would need a join in
+// WebhooksAdminService.listDlq), so the live view shows webhook id +
+// event id; enriched display lands as a separate slice once the
+// endpoint exposes owner+url.
+
 interface MockDlqEntry {
   id: string;
   webhookId: string;
@@ -24,10 +33,19 @@ const MOCK_DLQ: MockDlqEntry[] = [
     ageHours: 14,
   },
 ];
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 ---
 
 <AdminLayout title="Webhook DLQ">
-  <div class="mx-auto max-w-6xl px-6 py-10">
+  <div class="mx-auto max-w-6xl px-6 py-10" data-page="admin-dlq">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
     <header class="mb-10">
       <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Webhook DLQ</h1>
       <p class="mt-2 max-w-prose text-sm text-slate-500">
@@ -37,85 +55,67 @@ const MOCK_DLQ: MockDlqEntry[] = [
       </p>
     </header>
 
-    {
-      MOCK_DLQ.length === 0 ? (
-        <div class="dashboard-card text-center">
-          <h2 class="text-lg font-semibold text-slate-900">DLQ empty</h2>
-          <p class="mx-auto mt-2 max-w-prose text-sm text-slate-500">
-            No deliveries have exhausted the retry budget. Healthy posture —
-            customer endpoints are reachable + responding.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div class="mb-6 flex items-center justify-between gap-4">
-            <p class="text-sm text-slate-700">
-              <strong class="font-medium text-red-700">
-                {MOCK_DLQ.length.toString()} entr{MOCK_DLQ.length === 1 ? 'y' : 'ies'}
-              </strong>{' '}
-              · oldest {Math.max(...MOCK_DLQ.map((e) => e.ageHours)).toString()}h
-            </p>
-            <a href="#requeue-all" class="btn-secondary text-sm">
-              Requeue all
-            </a>
-          </div>
+    <div class="hidden" data-region="empty">
+      <div class="dashboard-card text-center">
+        <h2 class="text-lg font-semibold text-slate-900">DLQ empty</h2>
+        <p class="mx-auto mt-2 max-w-prose text-sm text-slate-500">
+          No deliveries have exhausted the retry budget. Healthy posture —
+          customer endpoints are reachable + responding.
+        </p>
+      </div>
+    </div>
 
-          <ul class="space-y-3">
-            {MOCK_DLQ.map((entry) => (
-              <li class="rounded-lg border border-red-200 bg-red-50 p-5">
-                <div class="flex items-start justify-between gap-6">
-                  <div class="min-w-0">
-                    <p class="font-mono text-xs text-slate-700">{entry.id}</p>
-                    <p class="mt-2 truncate font-mono text-sm text-slate-900">
-                      {entry.webhookUrl}
-                    </p>
-                    <p class="mt-1 text-xs text-slate-700">
-                      Customer: {entry.accountEmail}
-                    </p>
-                    <p class="mt-2">
-                      <code class="font-mono text-xs text-oxblood-700">
-                        {entry.eventType}
-                      </code>
-                    </p>
-                  </div>
-                  <div class="flex shrink-0 flex-col items-end gap-2">
-                    <span class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-red-800">
-                      DLQ · {entry.attempts}× tried
-                    </span>
-                    <p class="text-xs text-red-800">{entry.ageHours}h ago</p>
-                  </div>
-                </div>
+    <div data-region="list">
+      <div class="mb-6 flex items-center justify-between gap-4">
+        <p class="text-sm text-slate-700">
+          <strong class="font-medium text-red-700" data-field="summary">
+            {MOCK_DLQ.length.toString()} entr{MOCK_DLQ.length === 1 ? 'y' : 'ies'}
+          </strong>
+        </p>
+      </div>
 
-                <div class="mt-4 rounded border border-red-200 bg-white px-3 py-2">
-                  <p class="font-mono text-xs text-red-900">{entry.lastError}</p>
+      <ul class="space-y-3" data-list="dlq">
+        {
+          MOCK_DLQ.map((entry) => (
+            <li class="rounded-lg border border-red-200 bg-red-50 p-5">
+              <div class="flex items-start justify-between gap-6">
+                <div class="min-w-0">
+                  <p class="font-mono text-xs text-slate-700">{entry.id}</p>
+                  <p class="mt-2 truncate font-mono text-sm text-slate-900">
+                    {entry.webhookUrl}
+                  </p>
+                  <p class="mt-1 text-xs text-slate-700">Customer: {entry.accountEmail}</p>
+                  <p class="mt-2">
+                    <code class="font-mono text-xs text-oxblood-700">{entry.eventType}</code>
+                  </p>
                 </div>
+                <div class="flex shrink-0 flex-col items-end gap-2">
+                  <span class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-red-800">
+                    DLQ · {entry.attempts}× tried
+                  </span>
+                  <p class="text-xs text-red-800">{entry.ageHours}h ago</p>
+                </div>
+              </div>
 
-                <div class="mt-4 flex flex-wrap gap-3">
-                  <a
-                    href={`#requeue-${entry.id}`}
-                    class="text-sm font-medium text-oxblood-700 hover:underline"
-                  >
-                    Requeue
-                  </a>
-                  <a
-                    href={`#payload-${entry.id}`}
-                    class="text-sm text-slate-600 hover:underline"
-                  >
-                    View payload
-                  </a>
-                  <a
-                    href={`#discard-${entry.id}`}
-                    class="text-sm text-red-700 hover:underline"
-                  >
-                    Discard
-                  </a>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </>
-      )
-    }
+              <div class="mt-4 rounded border border-red-200 bg-white px-3 py-2">
+                <p class="font-mono text-xs text-red-900">{entry.lastError}</p>
+              </div>
+
+              <div class="mt-4 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  data-action="requeue"
+                  data-id={entry.id}
+                  class="text-sm font-medium text-oxblood-700 hover:underline"
+                >
+                  Requeue
+                </button>
+              </div>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
 
     <p class="mt-8 text-xs text-slate-500">
       Requeue fires <code class="font-mono">POST /v1/admin/webhook-dlq/:id/requeue</code> —
@@ -124,4 +124,186 @@ const MOCK_DLQ: MockDlqEntry[] = [
       is unrecoverable.
     </p>
   </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="admin-dlq"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const list = root.querySelector('[data-list="dlq"]');
+      const summary = root.querySelector('[data-field="summary"]');
+      const listRegion = root.querySelector('[data-region="list"]');
+      const emptyRegion = root.querySelector('[data-region="empty"]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+      function hideBanner() {
+        if (!banner) return;
+        banner.classList.add('hidden');
+      }
+      function escapeHtml(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c],
+        );
+      }
+
+      function ageStr(createdAt) {
+        if (!createdAt) return '—';
+        const ms = Date.now() - new Date(createdAt).getTime();
+        if (ms < 0) return '—';
+        const min = Math.floor(ms / 60000);
+        if (min < 60) return min + 'm ago';
+        const hr = Math.floor(min / 60);
+        if (hr < 48) return hr + 'h ago';
+        const days = Math.floor(hr / 24);
+        return days + 'd ago';
+      }
+
+      function rowHtml(d) {
+        const errorBlock = d.last_error
+          ? '<div class="mt-4 rounded border border-red-200 bg-white px-3 py-2"><p class="font-mono text-xs text-red-900">' +
+            escapeHtml(d.last_error) +
+            '</p></div>'
+          : '';
+        const respLine =
+          d.last_response_status !== null && d.last_response_status !== undefined
+            ? '<p class="mt-1 text-xs text-slate-700">Last HTTP ' +
+              escapeHtml(String(d.last_response_status)) +
+              '</p>'
+            : '';
+        return (
+          '<li class="rounded-lg border border-red-200 bg-red-50 p-5">' +
+          '<div class="flex items-start justify-between gap-6">' +
+          '<div class="min-w-0">' +
+          '<p class="font-mono text-xs text-slate-700">' +
+          escapeHtml(d.id) +
+          '</p>' +
+          '<p class="mt-2 truncate font-mono text-sm text-slate-900">' +
+          escapeHtml(d.webhook_id) +
+          '</p>' +
+          '<p class="mt-1 text-xs text-slate-700">Event: ' +
+          escapeHtml(d.event_id) +
+          '</p>' +
+          respLine +
+          '<p class="mt-2"><code class="font-mono text-xs text-oxblood-700">' +
+          escapeHtml(d.event_type) +
+          '</code></p>' +
+          '</div>' +
+          '<div class="flex shrink-0 flex-col items-end gap-2">' +
+          '<span class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-red-800">DLQ · ' +
+          escapeHtml(String(d.attempts)) +
+          '× tried</span>' +
+          '<p class="text-xs text-red-800">' +
+          escapeHtml(ageStr(d.created_at)) +
+          '</p></div></div>' +
+          errorBlock +
+          '<div class="mt-4 flex flex-wrap gap-3">' +
+          '<button type="button" data-action="requeue" data-id="' +
+          escapeHtml(d.id) +
+          '" class="text-sm font-medium text-oxblood-700 hover:underline">Requeue</button>' +
+          '</div></li>'
+        );
+      }
+
+      function renderEntries(entries) {
+        if (entries.length === 0) {
+          if (listRegion) listRegion.classList.add('hidden');
+          if (emptyRegion) emptyRegion.classList.remove('hidden');
+          return;
+        }
+        if (listRegion) listRegion.classList.remove('hidden');
+        if (emptyRegion) emptyRegion.classList.add('hidden');
+        if (summary) {
+          summary.textContent =
+            entries.length + ' entr' + (entries.length === 1 ? 'y' : 'ies');
+        }
+        if (list) list.innerHTML = entries.map(rowHtml).join('');
+      }
+
+      let inFlight = 0;
+      function load() {
+        if (!token) return;
+        const myReq = ++inFlight;
+        fetch(apiBaseUrl + '/v1/admin/webhook-dlq?limit=50', {
+          headers: { authorization: 'Bearer ' + token },
+          credentials: 'include',
+        })
+          .then((r) => {
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then((body) => {
+            if (myReq !== inFlight) return;
+            renderEntries(body.data || []);
+            hideBanner();
+          })
+          .catch((err) => {
+            if (myReq !== inFlight) return;
+            const msg = err && err.message ? err.message : 'network error';
+            if (msg === 'forbidden') {
+              showBanner(
+                'Access denied — admin scope required. You are signed in as a customer account.',
+              );
+            } else {
+              showBanner("Couldn't load DLQ (" + msg + '). Showing preview data below.');
+            }
+          });
+      }
+
+      function requeue(id) {
+        if (!token) return;
+        showBanner('Requeueing ' + id + '…');
+        fetch(apiBaseUrl + '/v1/admin/webhook-dlq/' + encodeURIComponent(id) + '/requeue', {
+          method: 'POST',
+          headers: {
+            authorization: 'Bearer ' + token,
+            'content-type': 'application/json',
+          },
+          credentials: 'include',
+          body: '{}',
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(() => {
+            showBanner('Requeued ' + id + '. Refreshing list…');
+            load();
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't requeue " + id + ' (' + msg + ').');
+          });
+      }
+
+      // Event delegation for dynamically-rendered Requeue buttons.
+      if (root) {
+        root.addEventListener('click', (ev) => {
+          const target = ev.target;
+          if (!target || !target.closest) return;
+          const btn = target.closest('[data-action="requeue"]');
+          if (!btn) return;
+          ev.preventDefault();
+          const id = btn.getAttribute('data-id');
+          if (id) requeue(id);
+        });
+      }
+
+      if (!token) {
+        showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+        return;
+      }
+
+      load();
+    })();
+  </script>
 </AdminLayout>

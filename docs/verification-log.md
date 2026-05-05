@@ -10798,3 +10798,39 @@ PRIORITY C phase 2 — second admin page after V-187 /accounts. /audit-log is th
 ### Next
 
 V-189 — admin /webhook-dlq live wiring (existing endpoint, ~1hr Tier 1).
+
+## V-189 — admin-panel /webhook-dlq live wiring (PRIORITY C phase 3)
+
+### What
+
+Replaced the static `MOCK_DLQ` list on `apps/admin-panel/src/pages/webhook-dlq.astro` with progressive-enhancement live data sourced from `GET /v1/admin/webhook-dlq`. Wires the Requeue action to `POST /v1/admin/webhook-dlq/:id/requeue` with auto-refresh on success. Empty / non-empty regions toggle based on the live response. Banner surfaces no-token / 403 forbidden / fetch-error / requeue-status states.
+
+### Why
+
+PRIORITY C phase 3 — the DLQ page is the operational lever staff pull when a customer endpoint exhausts retry budget. Wiring the live list + Requeue action turns the page from static documentation into an actual ops tool. Endpoints already exist; pure UI wiring slice.
+
+### Files
+
+- `apps/admin-panel/src/pages/webhook-dlq.astro`
+  - Added `data-page="admin-dlq"` root, `data-banner`, `data-region="list" / "empty"` toggles, `data-list="dlq"`, `data-field="summary"` summary line.
+  - Each card's Requeue link replaced with a `<button data-action="requeue" data-id="<wdl_...>">` so the inline script can event-delegate and call the requeue endpoint.
+  - Inline `<script is:inline define:vars={{ apiBaseUrl }}>` fetches the list, renders cards via `rowHtml(d)` from the `publicDelivery` shape (id, webhook_id, event_id, event_type, attempts, last_error, last_response_status, created_at), and computes age client-side.
+  - Requeue handler POSTs with bearer auth + reloads the list on 200.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 625 / 625 passing.
+- `astro check` on admin-panel: 0 errors / warnings / hints.
+
+### Notes
+
+- The mock had `webhookUrl` and `accountEmail` fields on each card; the live endpoint's `publicDelivery` shape doesn't include either (would require a join in `WebhooksAdminService.listDlq`). The live cards display `webhook_id` (prefixed) + event id + event type + last HTTP status / error instead. Enriched display lands as a separate slice (V-NNN) once the response shape exposes owner email + endpoint URL — not blocking the operational use case.
+- The "Discard" action present on the mock is intentionally not surfaced on the live view: there's no `DELETE /v1/admin/webhook-dlq/:id` endpoint today and the audit policy (D-025) likely warrants explicit reason capture before hard-deleting payload. Adding it would require a server-side endpoint + UI confirmation flow.
+- Click handler uses event delegation on the page root rather than per-button listeners so dynamically-rendered cards work without re-binding after each `load()`.
+
+### Next
+
+V-190 — admin index overview tiles + recent admin activity wiring (needs aggregate counts; small new endpoint or compute from existing list endpoints).
