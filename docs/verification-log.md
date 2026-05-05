@@ -11410,3 +11410,47 @@ Six PRIORITY D entries landed (V-195 through V-201, with the SSR conversion V-20
 ### Next
 
 V-184b — surface Tier 3 onboarding flow visual UX drafts for founder review (working-tree only, NOT commit until redline pass), per the standing marketing-cadence convention.
+
+## V-202 — email template library expansion (GENERATE-2)
+
+### What
+
+Extended the existing `EmailService` (V-057) with five new transactional templates covering the customer lifecycle gaps the original 6-template set didn't address:
+
+1. **`signup-welcome`** — fires after verify-email token is consumed.
+2. **`session-failed-first`** — first-failure notice per V-090 semantics. Caller-side dedup.
+3. **`tier-changed`** — fires on Stripe `subscription.updated` confirming the tier transition.
+4. **`trial-pack-purchased`** — confirmation after the $2.99 checkout succeeds.
+5. **`trial-pack-expired`** — fires from the trial-pack expiry job.
+
+The factory + no-op stub branch both register the new methods so callers can invoke them safely whether Postmark is configured or not.
+
+Wired `sendSignupWelcome` immediately — fires from `AuthFlowsService.verifyEmail` after token consumption + `markEmailVerified`. Same fire-and-forget posture as `sendSignupVerification`. Dashboard URL derived from `verifyEmailUrl` origin (no new config field needed). The other four wire-points are deferred to V-NNN follow-ups (Stripe webhook handlers + trial-pack expiry job + first-failure dedup column).
+
+### Why
+
+GENERATE-2 from the V-201 ack queue. Customer onboarding currently fires verify-email then drops the customer at the dashboard with no follow-up touch — a welcome email reinforces next-step framing in a place customers reliably check. The other four templates fill lifecycle gaps that should not be silent before commercial activation. Templates landing first means the wire-in slices are tight handler changes rather than design+integrate combo work.
+
+### Files
+
+- `apps/server/src/services/email.ts` — 5 new templates in `TEMPLATES`, 5 new interface methods, stub + real-impl wiring.
+- `apps/server/src/services/auth-flows.ts` — wired `sendSignupWelcome` into `verifyEmail`.
+- `apps/server/tests/unit/email.test.ts` — 5 new unit tests, one per template.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after prettier --write on email.ts).
+- `npm test`: 657 / 657 passing across 67 files (5 new email-template tests).
+
+### Notes
+
+- `sendSessionFailedFirst` dedup is caller-side by design. Adding `has_received_first_failure_email` to `accounts` is a Class A migration (V-198 taxonomy) — lands separately with the wire-in.
+- Trial-pack expiry job doesn't exist in this repo today (no scheduled query, no cron worker). Surfaced as follow-up.
+- `tier-changed` and `trial-pack-purchased` wire-points are both `webhooks-stripe` handlers. Bundling into V-202b (also wires existing billing-receipt/failure/cancellation methods that have lived unwired since V-057).
+- HTML templates are deliberately simple — no images, no responsive layout, no header/footer chrome. If a Tier 3 visual pass on email branding lands, templates reskin without changing wire-points.
+
+### Next
+
+V-203 — webhook event catalog + customer-facing `/api/webhook-events` docs page (GENERATE-3, ~2-3hr Tier 1).

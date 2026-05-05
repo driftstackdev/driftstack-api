@@ -14,11 +14,16 @@
 // Email types defined here (those that actually fire from the
 // control plane):
 //   - signup-verification (magic-link, 30min single-use)
+//   - signup-welcome              (V-202; fires after email verify)
 //   - password-reset
 //   - billing-receipt
 //   - billing-failure
 //   - subscription-cancellation
 //   - support-ack (auto-reply when support@ receives a message)
+//   - session-failed-first        (V-202; first-failure-only, V-090)
+//   - tier-changed                (V-202)
+//   - trial-pack-purchased        (V-202)
+//   - trial-pack-expired          (V-202)
 
 import { ServerClient as PostmarkClient } from 'postmark';
 import type { Logger } from '../lib/logger.js';
@@ -50,6 +55,32 @@ export interface EmailService {
     portalUrl: string;
   }): Promise<void>;
   sendSupportAck(args: { to: string; ticketId: string }): Promise<void>;
+  /** V-202 — onboarding follow-up after email verification succeeds. */
+  sendSignupWelcome(args: { to: string; dashboardUrl: string }): Promise<void>;
+  /** V-202 — first-failure notice (V-090). Caller is responsible for deduplication. */
+  sendSessionFailedFirst(args: {
+    to: string;
+    sessionId: string;
+    errorMessage: string;
+    docsUrl: string;
+  }): Promise<void>;
+  /** V-202 — tier change confirmation; fires on Stripe subscription.updated. */
+  sendTierChanged(args: {
+    to: string;
+    fromTier: string;
+    toTier: string;
+    effectiveAt: Date;
+    portalUrl: string;
+  }): Promise<void>;
+  /** V-202 — trial-pack purchase confirmation. */
+  sendTrialPackPurchased(args: {
+    to: string;
+    creditCentsRemaining: number;
+    expiresAt: Date;
+    dashboardUrl: string;
+  }): Promise<void>;
+  /** V-202 — trial-pack expiry notice. Fires from the expiry job. */
+  sendTrialPackExpired(args: { to: string; upgradeUrl: string }): Promise<void>;
   /** True if the underlying client is configured + initialized. */
   readonly isConfigured: boolean;
 }
@@ -103,6 +134,41 @@ const TEMPLATES = {
     html: (v) =>
       `<p>Thanks — we've received your message and opened ticket <strong>${v.ticketId}</strong>. A human will reply within one business day.</p><p>— Driftstack support</p>`,
   },
+  'signup-welcome': {
+    subject: 'Welcome to Driftstack',
+    text: (v) =>
+      `Your Driftstack account is ready.\n\nNext steps:\n  1. Pick a tier or grab the $2.99 trial pack at ${v.dashboardUrl}\n  2. Mint your first API key from the dashboard\n  3. Run your first session via the SDK\n\nAny questions: reply to this email.\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Your Driftstack account is ready.</p><p>Next steps:</p><ol><li>Pick a tier or grab the <strong>$2.99 trial pack</strong> at <a href="${v.dashboardUrl}">${v.dashboardUrl}</a></li><li>Mint your first API key from the dashboard</li><li>Run your first session via the SDK</li></ol><p>Any questions: reply to this email.</p><p>— Driftstack</p>`,
+  },
+  'session-failed-first': {
+    subject: 'Driftstack — your first session failure',
+    text: (v) =>
+      `One of your Driftstack sessions failed: ${v.sessionId}\n\nError: ${v.errorMessage}\n\nThis is a one-time notice — we don't email on subsequent failures (the dashboard + webhooks track those). Common causes + fixes are documented at ${v.docsUrl}.\n\n— Driftstack`,
+    html: (v) =>
+      `<p>One of your Driftstack sessions failed: <code>${v.sessionId}</code></p><p><strong>Error:</strong> ${v.errorMessage}</p><p>This is a one-time notice — we don't email on subsequent failures (the dashboard + webhooks track those). Common causes + fixes are documented at <a href="${v.docsUrl}">${v.docsUrl}</a>.</p><p>— Driftstack</p>`,
+  },
+  'tier-changed': {
+    subject: 'Driftstack — subscription tier changed',
+    text: (v) =>
+      `Your Driftstack subscription has been changed from ${v.fromTier} to ${v.toTier}, effective ${v.effectiveAt} (UTC).\n\nManage subscription: ${v.portalUrl}\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Your Driftstack subscription has been changed from <strong>${v.fromTier}</strong> to <strong>${v.toTier}</strong>, effective <strong>${v.effectiveAt}</strong> (UTC).</p><p><a href="${v.portalUrl}">Manage subscription</a></p><p>— Driftstack</p>`,
+  },
+  'trial-pack-purchased': {
+    subject: 'Driftstack — $2.99 trial pack purchased',
+    text: (v) =>
+      `Your $2.99 trial pack is active.\n\nCredit remaining: ${v.creditCentsRemaining} cents (~16 hours of iPhone Safari sessions at $0.18/hr)\nExpires: ${v.expiresAt} (UTC, 14 days)\n\nReady when you are: ${v.dashboardUrl}\n\nAfter the trial pack expires, your account stays free — no auto-charge. Pick a paid tier any time.\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Your <strong>$2.99 trial pack</strong> is active.</p><ul><li><strong>Credit remaining:</strong> ${v.creditCentsRemaining} cents (~16 hours of iPhone Safari sessions at $0.18/hr)</li><li><strong>Expires:</strong> ${v.expiresAt} (UTC, 14 days)</li></ul><p>Ready when you are: <a href="${v.dashboardUrl}">${v.dashboardUrl}</a></p><p>After the trial pack expires, your account stays free — no auto-charge. Pick a paid tier any time.</p><p>— Driftstack</p>`,
+  },
+  'trial-pack-expired': {
+    subject: 'Driftstack — trial pack expired',
+    text: (v) =>
+      `Your Driftstack trial pack has expired (14-day window closed). Your account stays active but at $0/month — no charges.\n\nPick a paid tier when you're ready: ${v.upgradeUrl}\n\nThe trial pack is once per account; subsequent activity goes through a regular subscription.\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Your Driftstack trial pack has expired (14-day window closed). Your account stays active but at <strong>$0/month</strong> — no charges.</p><p>Pick a paid tier when you're ready: <a href="${v.upgradeUrl}">${v.upgradeUrl}</a></p><p>The trial pack is once per account; subsequent activity goes through a regular subscription.</p><p>— Driftstack</p>`,
+  },
 } satisfies Record<string, Template>;
 
 type TemplateName = keyof typeof TEMPLATES;
@@ -147,6 +213,11 @@ export function createEmailService({
       sendBillingFailure: async () => {},
       sendSubscriptionCancellation: async () => {},
       sendSupportAck: async () => {},
+      sendSignupWelcome: async () => {},
+      sendSessionFailedFirst: async () => {},
+      sendTierChanged: async () => {},
+      sendTrialPackPurchased: async () => {},
+      sendTrialPackExpired: async () => {},
     };
   }
 
@@ -199,5 +270,22 @@ export function createEmailService({
         portalUrl,
       }),
     sendSupportAck: ({ to, ticketId }) => send('support-ack', to, { ticketId }),
+    sendSignupWelcome: ({ to, dashboardUrl }) => send('signup-welcome', to, { dashboardUrl }),
+    sendSessionFailedFirst: ({ to, sessionId, errorMessage, docsUrl }) =>
+      send('session-failed-first', to, { sessionId, errorMessage, docsUrl }),
+    sendTierChanged: ({ to, fromTier, toTier, effectiveAt, portalUrl }) =>
+      send('tier-changed', to, {
+        fromTier,
+        toTier,
+        effectiveAt: effectiveAt.toISOString(),
+        portalUrl,
+      }),
+    sendTrialPackPurchased: ({ to, creditCentsRemaining, expiresAt, dashboardUrl }) =>
+      send('trial-pack-purchased', to, {
+        creditCentsRemaining: String(creditCentsRemaining),
+        expiresAt: expiresAt.toISOString(),
+        dashboardUrl,
+      }),
+    sendTrialPackExpired: ({ to, upgradeUrl }) => send('trial-pack-expired', to, { upgradeUrl }),
   };
 }

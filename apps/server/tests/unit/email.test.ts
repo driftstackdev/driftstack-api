@@ -192,4 +192,85 @@ describe('createEmailService — configured', () => {
     const c = client.calls[0] as Record<string, string>;
     expect(c.MessageStream).toBe('broadcast');
   });
+
+  // V-202 — new templates added for the onboarding + lifecycle expansion.
+
+  it('signup-welcome template', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendSignupWelcome({
+      to: 'user@example.com',
+      dashboardUrl: 'https://app.driftstack.dev/select-tier',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.Subject).toContain('Welcome');
+    expect(c.TextBody).toContain('https://app.driftstack.dev/select-tier');
+    expect(c.TextBody).toContain('$2.99 trial pack');
+  });
+
+  it('session-failed-first template', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendSessionFailedFirst({
+      to: 'user@example.com',
+      sessionId: 'ses_00000000-0000-4000-8000-000000000001',
+      errorMessage: 'driver_timeout',
+      docsUrl: 'https://docs.driftstack.dev/troubleshooting',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.Subject).toContain('first session failure');
+    expect(c.TextBody).toContain('ses_00000000-0000-4000-8000-000000000001');
+    expect(c.TextBody).toContain('driver_timeout');
+    expect(c.TextBody).toContain('one-time notice');
+  });
+
+  it('tier-changed template', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendTierChanged({
+      to: 'user@example.com',
+      fromTier: 'api_starter',
+      toTier: 'api_builder',
+      effectiveAt: new Date('2026-06-01T00:00:00Z'),
+      portalUrl: 'https://billing.driftstack.dev/portal',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.Subject).toContain('tier changed');
+    expect(c.TextBody).toContain('api_starter');
+    expect(c.TextBody).toContain('api_builder');
+    expect(c.TextBody).toContain('2026-06-01');
+  });
+
+  it('trial-pack-purchased template', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendTrialPackPurchased({
+      to: 'user@example.com',
+      creditCentsRemaining: 299,
+      expiresAt: new Date('2026-05-19T00:00:00Z'),
+      dashboardUrl: 'https://app.driftstack.dev/',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.Subject).toContain('$2.99 trial pack');
+    expect(c.TextBody).toContain('299 cents');
+    expect(c.TextBody).toContain('2026-05-19');
+  });
+
+  it('trial-pack-expired template', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendTrialPackExpired({
+      to: 'user@example.com',
+      upgradeUrl: 'https://app.driftstack.dev/select-tier',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.Subject).toContain('trial pack expired');
+    expect(c.TextBody).toContain('https://app.driftstack.dev/select-tier');
+    expect(c.TextBody).toContain('once per account');
+  });
 });

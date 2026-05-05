@@ -310,6 +310,21 @@ export class AuthFlowsService {
 
     const account = await this.requireAccount(row.accountId);
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
+
+    // V-202 — fire signup-welcome email after the verify lands. Derive
+    // the dashboard origin from `verifyEmailUrl` (the verify link
+    // already lives on the customer dashboard host). Fire-and-forget;
+    // matches the email-service posture used elsewhere.
+    try {
+      const origin = new URL(this.config.verifyEmailUrl).origin;
+      void this.email.sendSignupWelcome({
+        to: account.email,
+        dashboardUrl: `${origin}/select-tier`,
+      });
+    } catch {
+      /* fire-and-forget */
+    }
+
     return { account, session };
   }
 
