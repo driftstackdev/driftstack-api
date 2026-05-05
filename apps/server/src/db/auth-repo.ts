@@ -6,9 +6,10 @@ import type {
   AccountRow,
   ApiKeyRow,
   RateLimitOverride,
+  WebSessionAuthRow,
 } from '../services/auth.js';
 import type { Database } from './client.js';
-import { accounts, apiKeys, rateLimitOverrides } from './schema.js';
+import { accounts, apiKeys, rateLimitOverrides, webSessions } from './schema.js';
 
 export class DrizzleAccountAuthRepo implements AccountAuthRepo {
   constructor(private readonly database: Database) {}
@@ -65,6 +66,39 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
           ),
         ),
       );
+  }
+
+  async findActiveWebSession(args: {
+    tokenHash: string;
+    now: Date;
+  }): Promise<WebSessionAuthRow | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(webSessions)
+      .where(
+        and(
+          eq(webSessions.tokenHash, args.tokenHash),
+          gt(webSessions.expiresAt, args.now),
+          isNull(webSessions.revokedAt),
+        ),
+      )
+      .limit(1);
+    if (!row) return null;
+    return {
+      id: row.id,
+      accountId: row.accountId,
+      expiresAt: row.expiresAt,
+      revokedAt: row.revokedAt,
+      lastUsedAt: row.lastUsedAt,
+      createdAt: row.createdAt,
+    };
+  }
+
+  async touchWebSessionLastUsed(id: string, at: Date): Promise<void> {
+    await this.database.db
+      .update(webSessions)
+      .set({ lastUsedAt: at })
+      .where(eq(webSessions.id, id));
   }
 }
 

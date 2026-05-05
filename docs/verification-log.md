@@ -9421,3 +9421,95 @@ The early-return now actually runs. 'errored' also short-circuits per V-090 ("a 
 ### Next
 
 V-168 next: web-session-auth gap fix (P0 launch-blocking per Decision 2).
+
+---
+
+## V-168 — Web-session-auth gap fix (Decision 2 — P0 launch-blocking)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder Decision 2 (locked, P0 launch-blocking) following V-166's surfaced gap: web-session bearer tokens minted by `/v1/auth/verify-email` + `/v1/auth/login` + `/v1/auth/magic-link/consume` could not authenticate against `/v1/api-keys` (or any route using `requireAuth`). The middleware only handled API keys (prefix lookup + scrypt verify). Net effect: a freshly-signed-up user had no production path to mint their first API key.
+
+V-168 closes the gap. Self-serve onboarding is now end-to-end testable: signup → verify → web session → accept legal → mint first API key.
+
+### What changed
+
+`apps/server/src/services/auth.ts`:
+
+- New `WebSessionAuthRow` interface — minimal projection of `web_sessions` columns the auth path reads.
+- Extended `AccountAuthRepo` with `findActiveWebSession({ tokenHash, now })` + `touchWebSessionLastUsed(id, at)`.
+- `authenticate()` slow path now dispatches by token shape via `isApiKeyShape(plaintext)` (prefix `ds_` → API key path; everything else → web session path). Both paths converge on the same AccountContext + cache write.
+- New `slowPathWebSession()` — sha256 lookup against `web_sessions`, status checks, account fetch, builds an AccountContext with a synthetic `ApiKeyRow` (`id = wsk_<webSessionId>` for audit-log legibility).
+- Synthetic key scope: `['read', 'write', 'admin']` — full customer-account control. Web sessions are dashboard auth; the dashboard user expects to mint + revoke their own API keys without a pre-existing admin key.
+- TTL cap on cache write: `Math.min(CACHE_TTL_SEC, secondsUntilSessionExpiry)`.
+
+`apps/server/src/db/auth-repo.ts`:
+
+- `DrizzleAccountAuthRepo.findActiveWebSession` queries `web_sessions` with `gt(expiresAt, now) AND isNull(revokedAt)`.
+- `DrizzleAccountAuthRepo.touchWebSessionLastUsed` updates `web_sessions.last_used_at`.
+
+`apps/server/src/services/auth-flows.ts`:
+
+- Constructor accepts an optional `AuthCache`.
+- `logout()` now calls `authCache.invalidateAccount(row.accountId)` after revoking the web session, matching the V-016 / D-025 pattern API key revocation uses. Cache failures are logged-and-swallowed (TTL is 30s; the staleness is bounded).
+
+`apps/server/src/lib/bootstrap.ts`: production wiring passes `authCache` to `AuthFlowsService`.
+
+`apps/server/tests/integration/_helpers/in-memory-auth-repo.ts`:
+
+- New `WebSessionFinder` interface: `findActiveWebSession` + optional `touchWebSessionLastUsed` + optional `getAccount`.
+- `InMemoryAuthRepo.setWebSessionFinder()` test seam — buildTestApp wires this to delegate to `InMemoryAuthFlowsRepo` so web sessions issued by AuthFlowsService flow through to the auth path.
+- `getAccount` now consults the finder if local map misses (for accounts created via `AuthFlowsRepo.createAccount`).
+
+`apps/server/tests/integration/_helpers/build-test-app.ts`: wires `setWebSessionFinder` against `authFlowsRepo`'s `findActiveWebSession`/`touchWebSession`/`findAccountById`. Passes `authCache` to `AuthFlowsService`.
+
+`apps/server/tests/integration/auth-coalescer-flow.test.ts`: extended the inline `CountingAuthRepo` with stubs for the two new `AccountAuthRepo` methods (web-session paths return null / no-op).
+
+`apps/server/tests/integration/full-lifecycle.test.ts`:
+
+- New `acceptAllLegalDocs(fx, bearer)` helper — production onboarding interleaves legal acceptance between signup and first-key-issuance; the API-key creation gate (V-049) blocks until done.
+- New test: signup → verify-email → web-session-bearer-mints-API-key (proves V-168 closes the gap).
+- New test: logout invalidates cached web-session AccountContext (D-020 / D-025 invariant).
+- New test: web session can mint admin-scoped sub-key (full customer-account control).
+- Updated header comment to reflect V-168 fix.
+
+### Architectural sub-decisions
+
+1. **Single-bearer route extension vs separate `/v1/account/api-keys`** — chose single-bearer extension. `/v1/api-keys` accepts both API-key and web-session bearers. Less surface area; cleaner DX (one endpoint, two auth modes).
+2. **Web-session caching** — reuse the existing `AuthCache` infrastructure (sha256-keyed Redis cache, 30s TTL, `invalidateAccount` bumps account-version). Same key scheme works for both auth modes since both compute `sha256(plaintext)`.
+3. **Cookie vs Authorization header** — Authorization header (Bearer) per V-079 spec (tokens returned as JSON for client-side storage).
+
+### Surfaced gap (NOT introduced by V-168 — pre-existing, documented inline)
+
+`requireScope('admin')` on `/v1/admin/*` routes also fires for any 'admin'-scoped customer key, including web sessions. A customer with admin scope on their own account could theoretically call `/v1/admin/accounts` and act on OTHER customers' accounts. This was true pre-V-168 (any customer-minted admin key could do the same); V-168 makes it true for every dashboard user.
+
+Operationally mitigated today by `admin.driftstack.dev` being a separate Cloudflare-Access-gated origin per V-135 — the route handlers are not reachable from customer dashboard origin without crossing the SSO gate. But the gap is real at the API level.
+
+Surfaced for a separate scope-architecture refactor: split 'admin' into 'account_owner' + 'driftstack_internal_admin', OR add an `isDriftstackInternal` flag on accounts.
+
+### How verified
+
+- `npm run typecheck`: clean across all 10 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` pass).
+- Targeted: `npm test -- full-lifecycle.test.ts`: 5/5 passing (was 3/3 in V-167; +2 new for V-168).
+- Full suite: `npm test`: 602/602 passing (was 600; +2 new).
+
+### Files modified
+
+- `apps/server/src/services/auth.ts`
+- `apps/server/src/db/auth-repo.ts`
+- `apps/server/src/services/auth-flows.ts`
+- `apps/server/src/lib/bootstrap.ts`
+- `apps/server/tests/integration/_helpers/in-memory-auth-repo.ts`
+- `apps/server/tests/integration/_helpers/build-test-app.ts`
+- `apps/server/tests/integration/auth-coalescer-flow.test.ts` (CountingAuthRepo stub)
+- `apps/server/tests/integration/full-lifecycle.test.ts` (new tests + helper)
+
+### Next
+
+V-169 next: /usage real-data wiring (Decision 1, Option A — wire even if data is zero). Then CF1 (AFP Layer 1 harness-configuration split).

@@ -47,6 +47,21 @@ export interface ApiKeyRow {
   createdAt: Date;
 }
 
+/**
+ * V-168 — minimal web-session shape needed by authenticate(). Mirrors
+ * the columns the auth path reads from `web_sessions`. The full row
+ * (including issuedFromIp, userAgent) lives in the auth-flows repo;
+ * this projection is the auth-surface contract.
+ */
+export interface WebSessionAuthRow {
+  id: string;
+  accountId: string;
+  expiresAt: Date;
+  revokedAt: Date | null;
+  lastUsedAt: Date | null;
+  createdAt: Date;
+}
+
 export interface AccountAuthRepo {
   findApiKeyByPrefix(prefix: string): Promise<ApiKeyRow | null>;
   getAccount(id: string): Promise<AccountRow | null>;
@@ -57,6 +72,16 @@ export interface AccountAuthRepo {
    * inside the AccountContext until the next invalidation.
    */
   findActiveRateLimitOverrides(accountId: string, now: Date): Promise<RateLimitOverride[]>;
+  /**
+   * V-168 — look up an active web session by sha256(token). Returns
+   * null if not found, expired, or revoked. The auth-flows repo
+   * (`DrizzleAuthFlowsRepo.findActiveWebSession`) is the upstream
+   * implementation; this method on AccountAuthRepo is the auth-surface
+   * adapter.
+   */
+  findActiveWebSession(args: { tokenHash: string; now: Date }): Promise<WebSessionAuthRow | null>;
+  /** V-168 — touch the web session's last_used_at on auth success. */
+  touchWebSessionLastUsed(id: string, at: Date): Promise<void>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -135,60 +160,180 @@ export async function authenticate(
     }
   }
 
-  // Slow path: prefix lookup + scrypt verification + account fetch +
-  // touch + cache write. Coalesce concurrent misses for the same sha
-  // through one execution — see auth-coalescer.ts for the why.
-  const slowPath = async (): Promise<AccountContext> => {
-    const prefix = keyPrefixFromPlaintext(plaintext);
-    const apiKey = await repo.findApiKeyByPrefix(prefix);
-    if (!apiKey) throw new InvalidKeyError();
-
-    const matches = await verifyApiKey(plaintext, apiKey.keyHash);
-    if (!matches) throw new InvalidKeyError();
-
-    if (apiKey.revokedAt !== null) throw new RevokedKeyError();
-    if (apiKey.expiresAt !== null && apiKey.expiresAt.getTime() <= now.getTime()) {
-      throw new ExpiredKeyError();
-    }
-
-    const account = await repo.getAccount(apiKey.accountId);
-    if (!account) throw new InvalidKeyError(); // FK invariant — treat as invalid
-    if (account.status === 'suspended') {
-      throw new ForbiddenError('Account is suspended.');
-    }
-    if (account.status === 'deleted') {
-      throw new InvalidKeyError();
-    }
-
-    await repo.touchApiKeyLastUsed(apiKey.id, now);
-
-    const overrideRows = await repo.findActiveRateLimitOverrides(account.id, now);
-    const rateLimitOverrides: Record<string, RateLimitOverride> = {};
-    for (const o of overrideRows) {
-      rateLimitOverrides[o.bucketKey] = o;
-    }
-    const ctx: AccountContext = { account, apiKey, rateLimitOverrides };
-
-    // Cap TTL at expiresAt so the cache entry can never outlive the key.
-    if (cache) {
-      let ttl = CACHE_TTL_SEC;
-      if (apiKey.expiresAt !== null) {
-        const remaining = Math.floor((apiKey.expiresAt.getTime() - now.getTime()) / 1000);
-        if (remaining < ttl) ttl = Math.max(1, remaining);
-      }
-      try {
-        await cache.set(sha, apiKey.id, account.id, ctx, ttl);
-      } catch {
-        // Cache write failed — auth still completed via scrypt path. Drop on
-        // the floor; next request will retry the cache write.
-      }
-    }
-
-    return ctx;
-  };
+  // Slow path: dispatch by token shape.
+  //   - `ds_*` prefix → API key path (prefix lookup + scrypt verify).
+  //   - everything else → V-168 web session path (sha256 lookup against
+  //     `web_sessions` row).
+  // Both paths converge on the same AccountContext + cache write.
+  const slowPath = async (): Promise<AccountContext> =>
+    isApiKeyShape(plaintext)
+      ? slowPathApiKey(repo, plaintext, sha, cache, now)
+      : slowPathWebSession(repo, plaintext, sha, cache, now);
 
   if (coalescer) return coalescer.coalesce(sha, slowPath);
   return slowPath();
+}
+
+/**
+ * V-168 — distinguish API keys from web session tokens by the `ds_`
+ * prefix that {@link generateApiKey} stamps on every key. Web session
+ * tokens are URL-safe base64 random bytes with no prefix.
+ */
+function isApiKeyShape(plaintext: string): boolean {
+  return plaintext.startsWith('ds_');
+}
+
+async function slowPathApiKey(
+  repo: AccountAuthRepo,
+  plaintext: string,
+  sha: string,
+  cache: AuthCache | null,
+  now: Date,
+): Promise<AccountContext> {
+  const prefix = keyPrefixFromPlaintext(plaintext);
+  const apiKey = await repo.findApiKeyByPrefix(prefix);
+  if (!apiKey) throw new InvalidKeyError();
+
+  const matches = await verifyApiKey(plaintext, apiKey.keyHash);
+  if (!matches) throw new InvalidKeyError();
+
+  if (apiKey.revokedAt !== null) throw new RevokedKeyError();
+  if (apiKey.expiresAt !== null && apiKey.expiresAt.getTime() <= now.getTime()) {
+    throw new ExpiredKeyError();
+  }
+
+  const account = await repo.getAccount(apiKey.accountId);
+  if (!account) throw new InvalidKeyError(); // FK invariant — treat as invalid
+  if (account.status === 'suspended') {
+    throw new ForbiddenError('Account is suspended.');
+  }
+  if (account.status === 'deleted') {
+    throw new InvalidKeyError();
+  }
+
+  await repo.touchApiKeyLastUsed(apiKey.id, now);
+
+  const overrideRows = await repo.findActiveRateLimitOverrides(account.id, now);
+  const rateLimitOverrides: Record<string, RateLimitOverride> = {};
+  for (const o of overrideRows) {
+    rateLimitOverrides[o.bucketKey] = o;
+  }
+  const ctx: AccountContext = { account, apiKey, rateLimitOverrides };
+
+  // Cap TTL at expiresAt so the cache entry can never outlive the key.
+  if (cache) {
+    let ttl = CACHE_TTL_SEC;
+    if (apiKey.expiresAt !== null) {
+      const remaining = Math.floor((apiKey.expiresAt.getTime() - now.getTime()) / 1000);
+      if (remaining < ttl) ttl = Math.max(1, remaining);
+    }
+    try {
+      await cache.set(sha, apiKey.id, account.id, ctx, ttl);
+    } catch {
+      // Cache write failed — auth still completed via scrypt path. Drop on
+      // the floor; next request will retry the cache write.
+    }
+  }
+
+  return ctx;
+}
+
+/**
+ * V-168 — web session bearer auth. Token is sha256-hashed for the
+ * lookup (web sessions are opaque sha256-stored per D-028). On
+ * success, builds an AccountContext with a synthetic ApiKeyRow
+ * (`wsk_<webSessionId>`) so downstream code that reads
+ * `ctx.apiKey.id` / `.scopes` / `.accountId` continues to work
+ * uniformly.
+ *
+ * SCOPE: web sessions get `['read', 'write', 'admin']` — full
+ * customer-account control. The 'admin' scope is required by
+ * `/v1/api-keys` POST + DELETE (a customer logged into their own
+ * dashboard expects to mint + revoke their own API keys without
+ * a pre-existing admin key).
+ *
+ * KNOWN GAP (pre-existing, not introduced by V-168):
+ * `requireScope('admin')` on `/v1/admin/*` routes also fires for
+ * any 'admin'-scoped customer key, including web sessions. A
+ * customer with admin scope on their own account could theoretically
+ * call `/v1/admin/accounts` and act on OTHER customers' accounts.
+ * This was true pre-V-168 (any customer-minted admin key could do
+ * the same); V-168 makes it true for every dashboard user. Surfaced
+ * for a separate scope-architecture refactor (split 'admin' into
+ * 'account_owner' + 'driftstack_internal_admin', OR add an
+ * isDriftstackInternal flag on accounts). Operationally mitigated
+ * today by `admin.driftstack.dev` being a separate Cloudflare-Access-
+ * gated origin per V-135 — the route handlers are not reachable from
+ * customer dashboard origin without crossing the SSO gate.
+ */
+async function slowPathWebSession(
+  repo: AccountAuthRepo,
+  _plaintext: string,
+  sha: string,
+  cache: AuthCache | null,
+  now: Date,
+): Promise<AccountContext> {
+  const session = await repo.findActiveWebSession({ tokenHash: sha, now });
+  // findActiveWebSession already filters expired + revoked rows in the
+  // query. A null result here means: token unknown OR expired OR
+  // revoked. We can't distinguish the cases (and shouldn't — same
+  // 401 InvalidKey response avoids leaking session state).
+  if (!session) throw new InvalidKeyError();
+
+  // Defensive: re-check expiry/revocation in case repo impl skips them.
+  if (session.revokedAt !== null) throw new RevokedKeyError();
+  if (session.expiresAt.getTime() <= now.getTime()) throw new ExpiredKeyError();
+
+  const account = await repo.getAccount(session.accountId);
+  if (!account) throw new InvalidKeyError();
+  if (account.status === 'suspended') {
+    throw new ForbiddenError('Account is suspended.');
+  }
+  if (account.status === 'deleted') {
+    throw new InvalidKeyError();
+  }
+
+  await repo.touchWebSessionLastUsed(session.id, now);
+
+  const overrideRows = await repo.findActiveRateLimitOverrides(account.id, now);
+  const rateLimitOverrides: Record<string, RateLimitOverride> = {};
+  for (const o of overrideRows) {
+    rateLimitOverrides[o.bucketKey] = o;
+  }
+
+  // Synthetic ApiKeyRow shape so downstream consumers don't need to
+  // branch on auth mode. `id = wsk_<webSessionId>` makes the auth
+  // mode legible in audit logs (admin_audit_log.admin_key_id starts
+  // with `wsk_`).
+  const syntheticKey: ApiKeyRow = {
+    id: `wsk_${session.id}`,
+    accountId: session.accountId,
+    name: 'web-session',
+    keyPrefix: 'web_session',
+    keyHash: '', // never read for web sessions; defensive empty string
+    scopes: ['read', 'write', 'admin'],
+    lastUsedAt: session.lastUsedAt,
+    revokedAt: session.revokedAt,
+    expiresAt: session.expiresAt,
+    createdAt: session.createdAt,
+  };
+
+  const ctx: AccountContext = { account, apiKey: syntheticKey, rateLimitOverrides };
+
+  // Cap TTL at session expiry so the cache entry can never outlive the
+  // session token. Same shape as the API key path.
+  if (cache) {
+    let ttl = CACHE_TTL_SEC;
+    const remaining = Math.floor((session.expiresAt.getTime() - now.getTime()) / 1000);
+    if (remaining < ttl) ttl = Math.max(1, remaining);
+    try {
+      await cache.set(sha, syntheticKey.id, account.id, ctx, ttl);
+    } catch {
+      // Same graceful-degradation as the API key path.
+    }
+  }
+
+  return ctx;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

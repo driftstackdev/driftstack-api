@@ -39,6 +39,14 @@ class CountingAuthRepo implements AccountAuthRepo {
   findActiveRateLimitOverrides(): Promise<never[]> {
     return Promise.resolve([]);
   }
+  // V-168 — web session methods stubbed; coalescer tests don't exercise
+  // the web-session auth path.
+  findActiveWebSession(): Promise<null> {
+    return Promise.resolve(null);
+  }
+  touchWebSessionLastUsed(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 async function seed(repo: CountingAuthRepo): Promise<{ plaintext: string; accountId: string }> {

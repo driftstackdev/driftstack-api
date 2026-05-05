@@ -1,29 +1,28 @@
-// V-166 — full customer lifecycle integration test (PRIORITY 5).
+// V-166 + V-168 — full customer lifecycle integration test.
 //
 // Walks the customer journey across multiple subsystems on a single
 // fixture, asserting they interlock correctly. Each subsystem is
 // individually tested elsewhere (auth-flows.test.ts, billing.test.ts,
-// stripe-webhooks-mutations.test.ts, sessions.test.ts, etc.); V-166
-// is the cross-cutting test that catches "subsystems work in
-// isolation but not together" regressions.
+// stripe-webhooks-mutations.test.ts, sessions.test.ts, etc.); the
+// cross-cutting tests here catch "subsystems work in isolation but
+// not together" regressions.
 //
-// SURFACED GAP (left unfixed in V-166 — separate workstream): the V-079
-// web session minted by /v1/auth/verify-email cannot be used as a
-// bearer on /v1/api-keys. The requireAuth middleware in
-// apps/server/src/middleware/auth.ts only authenticates API keys
-// (prefix lookup + scrypt verify); there is no parallel web-session
-// auth path. That means a freshly-signed-up user has no path to mint
-// their first API key without a separate provisioning step. Today,
-// tests use the seedAccount fixture (which directly inserts an admin
-// key); production presumably uses a founder-side or onboarding-flow
-// provisioning path that hasn't landed yet.
+// V-166 surfaced + V-168 fixed: web session bearer tokens now
+// authenticate against any route using requireAuth (including
+// /v1/api-keys). Self-serve onboarding works end-to-end:
+//   signup → verify-email → web session →
+//   accept legal docs → mint first API key → use it.
 //
-// V-166 covers the parts that DO work end-to-end:
-//   1. Signup → email verify → web session token returned (auth surface).
-//   2. Pre-seeded admin key → scoped sub-key issuance → session create
-//      → navigate → destroy → usage read (production session lifecycle).
-//   3. Cache-invalidation cross-cutting: revoke the sub-key → next op
-//      with the revoked key → 401 (D-020 / D-025 invariant).
+// Tests:
+//   1. signup → verify → web-session-mints-API-key (V-168 onboarding).
+//   2. logout invalidates the cached web-session AccountContext (V-168
+//      D-020 / D-025 invariant).
+//   3. admin key → scoped sub-key → session create → navigate →
+//      destroy → usage read (production session lifecycle).
+//   4. revoking the sub-key invalidates the auth cache (D-020 / D-025
+//      invariant — symmetric to test 2 but for API keys).
+//   5. web session can mint admin-scoped sub-key (V-168 scope model:
+//      web sessions get full customer-account control).
 //
 // DEFERRED to follow-on V-NNN: Stripe trial-pack webhook simulation
 // + post-purchase tier transition + session-create-on-trial-pack
@@ -73,6 +72,40 @@ interface UsageSummaryResponse {
   quotas: Record<string, number | null>;
 }
 
+interface RequiredLegalDoc {
+  document_key: string;
+  current_version: string;
+  content_hash: string;
+}
+
+/**
+ * V-168 helper — accept all required legal documents for the calling
+ * web-session bearer. Production onboarding does this between signup
+ * and first-key-issuance; the API-key creation gate (V-049) blocks
+ * with 409 LegalAcceptanceRequired until done.
+ */
+async function acceptAllLegalDocs(fx: TestAppFixture, bearer: string): Promise<void> {
+  const required = await fx.app.inject({
+    method: 'GET',
+    url: '/v1/legal/required',
+    headers: { authorization: `Bearer ${bearer}` },
+  });
+  if (required.statusCode !== 200) return;
+  const docs = required.json<{ data: RequiredLegalDoc[] }>().data;
+  for (const doc of docs) {
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/legal/accept',
+      headers: { authorization: `Bearer ${bearer}` },
+      payload: {
+        document_key: doc.document_key,
+        version: doc.current_version,
+        content_hash: doc.content_hash,
+      },
+    });
+  }
+}
+
 describe('Full customer lifecycle (V-166)', () => {
   let fx: TestAppFixture;
 
@@ -80,7 +113,12 @@ describe('Full customer lifecycle (V-166)', () => {
     if (fx) await fx.cleanup();
   });
 
-  it('signup → verify-email → web session token issued (auth surface end-to-end)', async () => {
+  it('signup → verify-email → web-session bearer mints API key (V-168 onboarding)', async () => {
+    // V-168 closed the gap surfaced by V-166's first attempt: web-session
+    // bearer tokens can now authenticate against /v1/api-keys (and any
+    // other route using requireAuth). This test exercises the full
+    // self-serve onboarding path: signup → verify → web session →
+    // mint first API key.
     fx = await buildTestApp();
 
     const signup = await fx.app.inject({
@@ -106,6 +144,100 @@ describe('Full customer lifecycle (V-166)', () => {
     expect(session.token).toBeTruthy();
     expect(session.account_id).toMatch(/^acc_[0-9a-f-]{36}$/);
     expect(new Date(session.expires_at).getTime()).toBeGreaterThan(Date.now());
+
+    // V-049 + V-168 — accept legal docs before key issuance. Production
+    // onboarding interleaves this between signup and first-key.
+    await acceptAllLegalDocs(fx, session.token);
+
+    // V-168 — the web session token authenticates against /v1/api-keys.
+    const mintKey = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: { authorization: `Bearer ${session.token}` },
+      payload: { name: 'first-api-key', scopes: ['read', 'write'] },
+    });
+    expect(mintKey.statusCode).toBe(201);
+    const apiKey = mintKey.json<ApiKeyResponse>();
+    expect(apiKey.id).toMatch(/^key_[0-9a-f-]{36}$/);
+    expect(apiKey.plaintext.startsWith('ds_')).toBe(true);
+    expect(apiKey.scopes).toEqual(['read', 'write']);
+  });
+
+  it('logout invalidates the cached web-session AccountContext (V-168)', async () => {
+    fx = await buildTestApp();
+
+    const signup = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email: 'logout-test@driftstack.local', password: 'correct horse battery staple' },
+    });
+    const verify = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      payload: { token: signup.json<SignupResponse>().debug_token! },
+    });
+    const sessionToken = verify.json<SessionEnvelope>().session.token;
+    await acceptAllLegalDocs(fx, sessionToken);
+
+    // Use the session to populate the auth cache (mint a key — works
+    // because legal docs were just accepted).
+    const populateCache = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: { authorization: `Bearer ${sessionToken}` },
+      payload: { name: 'pre-logout', scopes: ['read', 'write'] },
+    });
+    expect(populateCache.statusCode).toBe(201);
+
+    // Logout.
+    const logout = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/logout',
+      payload: { token: sessionToken },
+    });
+    expect(logout.statusCode).toBe(200);
+
+    // Subsequent op with the logged-out session token MUST 401. Without
+    // invalidation, the cached AccountContext from the prior call would
+    // still serve a successful 201.
+    const postLogout = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: { authorization: `Bearer ${sessionToken}` },
+      payload: { name: 'post-logout', scopes: ['read', 'write'] },
+    });
+    expect(postLogout.statusCode).toBe(401);
+  });
+
+  it('web session can mint admin-scoped sub-key (full customer-account control)', async () => {
+    fx = await buildTestApp();
+
+    const signup = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email: 'scope-test@driftstack.local', password: 'correct horse battery staple' },
+    });
+    const verify = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      payload: { token: signup.json<SignupResponse>().debug_token! },
+    });
+    const sessionToken = verify.json<SessionEnvelope>().session.token;
+    await acceptAllLegalDocs(fx, sessionToken);
+
+    // V-168 — web sessions get ['read', 'write', 'admin'] scope so the
+    // dashboard user has full customer-account control (mint sub-keys
+    // including ones with admin scope, revoke any of their keys, etc).
+    // The pre-existing /v1/admin/* cross-account exposure for any
+    // 'admin'-scoped key is documented inline in slowPathWebSession.
+    const mintAdminKey = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: { authorization: `Bearer ${sessionToken}` },
+      payload: { name: 'sub-admin-key', scopes: ['admin'] },
+    });
+    expect(mintAdminKey.statusCode).toBe(201);
+    expect(mintAdminKey.json<ApiKeyResponse>().scopes).toEqual(['admin']);
   });
 
   it('admin key → scoped sub-key → session lifecycle → /v1/usage round-trip', async () => {

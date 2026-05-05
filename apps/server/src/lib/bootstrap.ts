@@ -192,12 +192,18 @@ export async function createProductionDeps(
 
   // V-079: user-facing auth flows.
   const authFlowsRepo = new DrizzleAuthFlowsRepo(dbHandle);
-  const authFlowsService = new AuthFlowsService(authFlowsRepo, email, logger, {
-    verifyEmailUrl: config.authFlowUrls.verifyEmail,
-    magicLinkUrl: config.authFlowUrls.magicLink,
-    passwordResetUrl: config.authFlowUrls.passwordReset,
-    exposeDebugToken: config.authFlowUrls.exposeDebugToken,
-  });
+  const authFlowsService = new AuthFlowsService(
+    authFlowsRepo,
+    email,
+    logger,
+    {
+      verifyEmailUrl: config.authFlowUrls.verifyEmail,
+      magicLinkUrl: config.authFlowUrls.magicLink,
+      passwordResetUrl: config.authFlowUrls.passwordReset,
+      exposeDebugToken: config.authFlowUrls.exposeDebugToken,
+    },
+    authCache, // V-168 — cache invalidation on logout
+  );
 
   // V-080: inbound Stripe webhook handler. Optional — only wired when
   // STRIPE_WEBHOOK_SECRET is configured. When absent, /v1/webhooks/stripe

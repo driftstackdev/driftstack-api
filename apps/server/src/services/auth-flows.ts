@@ -16,6 +16,7 @@
 
 import type { Logger } from '../lib/logger.js';
 import type { EmailService } from './email.js';
+import type { AuthCache } from './auth-cache.js';
 import {
   AUTH_TOKEN_TTL_MS,
   generateAuthToken,
@@ -251,6 +252,13 @@ export class AuthFlowsService {
     private readonly email: EmailService,
     private readonly logger: Logger,
     private readonly config: AuthFlowsServiceConfig,
+    /**
+     * V-168 — optional auth cache for logout invalidation. When wired,
+     * logout bumps the account-version so any cached web-session
+     * AccountContext misses on the next read (D-020 / D-025 invariant).
+     * Tests that don't exercise the cache pass null (no-op).
+     */
+    private readonly authCache: AuthCache | null = null,
   ) {}
 
   async signup(args: SignupArgs): Promise<SignupResult> {
@@ -463,6 +471,16 @@ export class AuthFlowsService {
     });
     if (row === null) return; // already-revoked / unknown token: no-op
     await this.repo.revokeWebSession(row.id, now);
+    // V-168 — invalidate any cached web-session AccountContext. Same
+    // pattern API key revocation uses (V-016 / D-025). Best-effort —
+    // a cache failure here doesn't undo the DB-level revocation.
+    if (this.authCache) {
+      try {
+        await this.authCache.invalidateAccount(row.accountId);
+      } catch {
+        // Drop on the floor; cache will TTL out within 30s.
+      }
+    }
   }
 
   // ──────────────────── helpers ────────────────────

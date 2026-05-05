@@ -255,11 +255,56 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const testLogger = createTestLogger();
   const authFlowsRepo = new InMemoryAuthFlowsRepo();
   const noopEmail = createEmailService({ config: null, logger: testLogger });
-  const authFlowsService = new AuthFlowsService(authFlowsRepo, noopEmail, testLogger, {
-    verifyEmailUrl: 'http://localhost:5173/auth/verify-email',
-    magicLinkUrl: 'http://localhost:5173/auth/magic-link',
-    passwordResetUrl: 'http://localhost:5173/auth/password-reset',
-    exposeDebugToken: true,
+  const authFlowsService = new AuthFlowsService(
+    authFlowsRepo,
+    noopEmail,
+    testLogger,
+    {
+      verifyEmailUrl: 'http://localhost:5173/auth/verify-email',
+      magicLinkUrl: 'http://localhost:5173/auth/magic-link',
+      passwordResetUrl: 'http://localhost:5173/auth/password-reset',
+      exposeDebugToken: true,
+    },
+    authCache, // V-168 — cache invalidation on logout
+  );
+
+  // V-168 — bridge web sessions issued by AuthFlowsService into the auth
+  // path so a freshly-signed-up user's web-session bearer can authenticate
+  // on routes that use requireAuth (e.g. POST /v1/api-keys). The Drizzle
+  // production wiring queries `web_sessions` directly; the in-memory
+  // fixture delegates through this finder.
+  authRepo.setWebSessionFinder({
+    async findActiveWebSession(args) {
+      const row = await authFlowsRepo.findActiveWebSession(args);
+      if (!row) return null;
+      return {
+        id: row.id,
+        accountId: row.accountId,
+        expiresAt: row.expiresAt,
+        revokedAt: row.revokedAt,
+        lastUsedAt: row.lastUsedAt,
+        createdAt: row.createdAt,
+      };
+    },
+    touchWebSessionLastUsed(id, at) {
+      return authFlowsRepo.touchWebSession(id, at);
+    },
+    // Bridge accounts created by AuthFlowsService.signup so the auth
+    // path's getAccount finds them. Production wiring uses one
+    // accounts table; the in-memory fixture has separate maps.
+    async getAccount(id) {
+      const row = await authFlowsRepo.findAccountById(id);
+      if (!row) return null;
+      return {
+        id: row.id,
+        email: row.email,
+        name: row.name,
+        tier: row.tier,
+        status: row.status,
+        createdAt: row.createdAt,
+        updatedAt: row.createdAt,
+      };
+    },
   });
 
   // V-080 + V-089: Stripe webhook service + a deterministic signing
