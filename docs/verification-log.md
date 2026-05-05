@@ -11977,3 +11977,68 @@ The current /about page is already in solid company voice with no personal name.
 ### Next
 
 V-214 — marketing site visitor-density audit + Tier 3 drafts for `/index` + `/pricing` + `/faq` (~3-5hr Tier 3 working-tree drafts, founder redline before commit).
+
+## V-214 — marketing visitor-density audit + Tier 3 working-tree drafts (NOT committed)
+
+### What
+
+Three things in this V-entry:
+
+1. **Audit doc** at `docs/marketing/v214-density-audit.md` — engineering scaffolding with explicit findings + proposed redlines per page. **Committed** (this is internal documentation of the surface review, not customer-facing copy).
+
+2. **Working-tree drafts** for `/index.astro`, `/pricing.astro`, `/faq.astro` applying the proposed redlines. **NOT committed** until founder redline pass per the marketing-cadence rule.
+
+3. **Scope-out documented** — `/security`, `/docs/*`, `/api-reference/*`, `/developers-quickstart/*`, `/self-hosted`, `/about`, `/trust/sub-processors` left untouched per founder direction (dev-audience appropriate at current density, or already addressed in earlier V-NNN).
+
+### Targeted redlines applied to working tree
+
+**`/index.astro`** — 4 spots:
+
+- Cumulative-rig section: added a visitor-first paragraph explaining what "fingerprint" means (the signals a website reads to identify the device) before the methodology paragraph. Replaced "Match or P0 finding" with "A signal either matches the iPhone reference, or we treat the gap as a launch-blocker bug."
+- Metering section: prepended "Concurrent = how many sessions run at the same time, like browser tabs you'd have open at once." to the metering paragraph. The rest of the paragraph is unchanged.
+- Compliance section: "egresses through proxies you control" → "exits through your network egress (the proxies and VPNs you configure to reach target sites)."
+- Built-for-two API card: "Bundled LLM or BYOK for AI-driven sessions (Builder+)" → "Bundled LLM, or bring your own API key from OpenAI / Anthropic, for AI-driven sessions (Builder+)" (drops the acronym in favor of plain words on first use).
+
+**`/pricing.astro`** — 3 spots:
+
+- Trial-pack hero card: leads with "$2.99 buys ~16 hours of iPhone Safari sessions to evaluate the platform" (human framing first); demoted the credit / decrement mechanics to a sub-paragraph in lighter color for readers who want the math.
+- Positioning band: added a one-line inline definition of "concurrent sessions" below the existing "Pay per concurrent session" headline.
+- API tier section header: added a one-paragraph BYOK / bundled-LLM teaser before the tier table, so visitors encounter the definition before "BYOK" appears in the tier-feature cells.
+
+**`/faq.astro`** — 2 spots:
+
+- "How does concurrent metering work?" answer: prepended "Concurrent = the number of sessions you can run at the same time, like browser tabs you'd have open at once." then existing per-tier numbers.
+- "What is the bundled LLM?" answer: rewrote the BYOK first-mention from "(BYOK, billed by Anthropic directly — generate at console.anthropic.com)" to "BYOK (bring your own API key — get one from your model provider, e.g. console.anthropic.com; billed by the provider directly)". BYOK is then defined and the rest of the section reads naturally.
+
+### What's intentionally left dense (per founder direction)
+
+- `/faq` "How does this compare to Chromium-cloud stealth services?" — technical evaluator audience, depth is correct.
+- `/faq` "What happens when I hit my concurrent cap?" — HTTP 429 + RFC 7807 references are signal of correctness for the developer audience.
+- `/security`, `/docs/*`, `/api-reference/*`, `/developers-quickstart/*`, `/self-hosted` — dev-audience-appropriate.
+
+### Why minimal-not-rewrite
+
+Current copy is mostly in correct company voice + good positioning. Visitor-density problem is jargon-on-first-use, not the surrounding paragraphs. Targeted parenthetical / lead-in additions fix the density without unsettling proven framing. If founder wants a broader rewrite (different positioning, different section ordering), that's a follow-up Tier 3 draft round, separately surfaced.
+
+### Files
+
+- `docs/marketing/v214-density-audit.md` — new (commits).
+- `docs/verification-log.md` — this entry (commits).
+- `apps/marketing-site/src/pages/index.astro` — working tree only, NOT committed.
+- `apps/marketing-site/src/pages/pricing.astro` — working tree only, NOT committed.
+- `apps/marketing-site/src/pages/faq.astro` — working tree only, NOT committed.
+
+### Verify
+
+- `npx astro check` on marketing-site: 0 errors / warnings / hints.
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after prettier --write on the audit doc).
+
+### Surfaced for founder redline
+
+Each working-tree edit is small + targeted. Founder reviews via `git diff apps/marketing-site/src/pages/{index,pricing,faq}.astro` against `HEAD` after V-214 commit lands the audit doc. Apply redlines + commit on approval.
+
+### Next
+
+V-215 — post-force-push verification (Agent 2 surfaces post-founder execution; runs sanity-check commands per V-212 runbook).
