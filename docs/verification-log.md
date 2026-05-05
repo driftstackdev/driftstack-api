@@ -12398,3 +12398,46 @@ Redline verdicts:
 ### Next
 
 V-220 — API versioning strategy doc (GENERATE-7). Draft already held in working tree, prettier-formatted. Review-and-commit pass.
+
+## V-220 — API versioning strategy doc (GENERATE-7)
+
+### What
+
+New `docs/architecture/api-versioning.md` (~210 lines after prettier reflow). Versioning policy for the HTTP API surface, distinct from the SDK versioning policy at `docs/architecture/sdk-versioning.md` (V-177).
+
+Coverage:
+
+- **TL;DR** — one major active at a time (`/v1/*` today); additive changes are free; breaking changes require deprecation cycle; OpenAPI spec is the contract.
+- **Additive vs breaking matrix** — 14-row table covering endpoint additions, request/response field changes, enum changes (server-sent vs client-accepted), validation tightening/loosening, status-code changes, error-type URI changes, rate-limit changes (operational, not contract). Emphasis on the closed-enum-server-sends case as the under-appreciated breaking change.
+- **Deprecation cycle** — 5-step sequence: announce via `Deprecation` + `Sunset` HTTP headers (RFC 8594), document in OpenAPI via `deprecated: true`, email customers using the deprecated surface, minimum 90-day window, then remove.
+- **When `/v2/*` is justified** — explicit yes-cases (unavoidable breakage, batched cuts, architectural shape changes) and no-cases (single field rename, pre-1.0-style restlessness).
+- **Operating two majors simultaneously** — what to expect when `/v2/*` ships.
+- **Per-resource versioning notes** — sessions, api-keys, webhooks, billing, admin, account. Webhook event types get extra discussion on the closed-enum-server-sends concern.
+- **What customers should do** — pin to a major, subscribe explicitly to webhook events, watch `Deprecation` headers, read SDK CHANGELOGs.
+- **What we don't do** — no header-based versioning, no per-account date-based pinning (Stripe-style), no continuous breaking changes on the HTTP API itself (pre-1.0 SDK breakage is fine; HTTP API is post-1.0 from the customer's perspective even though the company is pre-launch).
+
+### Why
+
+GENERATE-7 from the V-201 ack queue. SDK versioning was documented in V-177; the HTTP API contract didn't have a corresponding policy doc. Ahead of the first paying customer, the contract needs explicit shape: customers need to know what to expect (additive-only on a major), what triggers a `/v2/*` cut (rare and justified), and how deprecation flows (90 days, headers, email). Without the doc, the first time a breaking change is needed, the founder has no policy to point at.
+
+### Files
+
+- `docs/architecture/api-versioning.md` — new doc.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 679 / 679 passing across 71 files (no test changes — pure docs).
+
+### Notes
+
+- The doc was originally drafted as part of the GENERATE queue before the V-219\* hold-and-renumber redirect arrived. Held uncommitted in working tree through V-219\*'s three phases; landing now per the renumbered slot.
+- "Webhook event types" gets explicit attention because adding a new event type IS technically breaking for strictly-typed consumers. The mitigation pattern (customers subscribe with explicit `events: [...]`; server only emits subscribed types) is documented in `docs/api/webhook-events.md` (V-203); this doc cross-references it.
+- No header-based versioning: considered + rejected. URL-prefix is more discoverable, easier to debug in logs, matches the industry convention. Documented as an explicit decision.
+
+### Next
+
+V-221 — CDN strategy for marketing site (GENERATE-8, ~1-2hr Tier 1).
