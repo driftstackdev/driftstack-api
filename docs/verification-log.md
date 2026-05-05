@@ -9142,3 +9142,80 @@ These are not blocking changes but the verify chain must stay green throughout p
 ### Next
 
 V-164 next: DrizzleAuditArchiveRepo + DrizzleArchiveLedgerRepo + integration test against Postgres. Then PRIORITY 4 (webhook delivery system real implementation).
+
+---
+
+## V-164 — InMemoryWebhookDelivery (PRIORITY 4 — first real impl of @driftstack/webhook-delivery)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder PRIORITY 4 — "first real implementation of the webhook delivery service per the interface in @driftstack/webhook-delivery." V-144 landed the package as workspace stub + mock (mock short-circuits every enqueue to delivered, doesn't model retry). V-164 adds the first implementation that actually exercises the retry curve, the state machine, signature signing, and DLQ promotion.
+
+In-memory storage was the right scope for first real impl: drop-in for unit tests, GUI-client integration tests, and small self-hosted single-process workloads. A Postgres-backed implementation drops in behind the same interface in a future iteration.
+
+### What changed
+
+`packages/webhook-delivery/src/in-memory.ts` (new — 460 lines):
+
+- `BACKOFF_MS_BY_ATTEMPT` constant: 1min / 5min / 15min / 30min / 60min — matches the production worker (apps/server/src/services/webhook-worker.ts).
+- `DEFAULT_TIMEOUT_MS = 10_000` + `DEFAULT_MAX_ATTEMPTS = 5`.
+- `signPayload(secret, payload)` — v1 signature: HMAC-SHA256 over `<emittedAtSec>.<body>`, hex-encoded. Same shape as production webhook signing.
+- `createInMemoryWebhookDelivery(deps)` — factory returning the matched WebhookDeliveryService + DlqManager pair backed by shared in-memory store. Injectable: `fetch` (HTTP test seam), `now` (deterministic time test seam), `getEndpoint` (caller owns endpoint storage; service does not).
+- `InMemoryWebhookDeliveryService` — implements `WebhookDeliveryService` (enqueue / get / list / replay).
+- `InMemoryDlqManager` — implements `DlqManager` (list / get / requeue / discard).
+- Internal `DeliveryWorker` class (NOT exported) — drives the delivery loop; one tick at a time via `handles.processTick({ batchSize, leaseDurationMs })`. Production deployments would replace this with a Postgres-backed worker using SELECT...FOR UPDATE SKIP LOCKED.
+- `replayShared` helper — round-trips between active queue and DLQ, preserving attempt history for postmortem.
+- Lease pattern: claimed records get `leasedUntilMs = now + leaseMs`; expired leases reclaimed by next tick.
+- DLQ reason text: `"<n>× <last-outcome>: <last-error-message>"` matching V-144 mock format.
+
+`packages/webhook-delivery/src/index.ts`: re-exports `createInMemoryWebhookDelivery` + `InMemoryWebhookDeliveryService` + `InMemoryDlqManager` + constants + `signPayload` helper + `InMemoryWebhookDeliveryHandles` type.
+
+`packages/webhook-delivery/tests/in-memory.test.ts` (new) — 20 tests covering:
+
+- `signPayload` HMAC-SHA256 contract.
+- enqueue / get / list / list pagination + cursor / list status filter.
+- processTick happy path (200 response → delivered, attempt records).
+- v1 signature header injection on outgoing requests.
+- 500 response → retry with BACKOFF_MS_BY_ATTEMPT[1] = 60s scheduling.
+- 5 consecutive failures → DLQ promotion + DlqEntry shape (totalAttempts, attempts trail, reason).
+- transport_error (rejected fetch) outcome capture.
+- Future nextAttemptAtMs gates the next tick from re-pulling.
+- replay re-arms a delivered record (preserves attempts).
+- DlqManager.requeue moves entry from DLQ back to active queue.
+- DlqManager.discard hard-deletes.
+- DlqManager.list newest-first + accountId scope filter.
+- Endpoint-disappeared edge case (immediate DLQ).
+
+### Architectural note — why split into two classes
+
+The package's `WebhookDeliveryService` and `DlqManager` interfaces both define `get` and `list` methods with different signatures. A single class can't `implements` both directly without losing type-safety. Solution: factory function returns two distinct class instances sharing a `SharedDeliveryStore`. Rejected alternatives:
+
+- Single class with `dlqGet` / `dlqList` aliases — breaks the package interface contract (callers expect `DlqManager.get`, not `dlqGet`).
+- Cast away one interface — defeats the type-checking the contract enables.
+
+The factory pattern keeps the runtime store coherent (DLQ promotion in delivery is visible to the DLQ admin surface, replay/requeue round-trips correctly) while letting each class cleanly implement its own interface.
+
+### How verified
+
+- `npm run typecheck`: clean across all 10 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` pass).
+- Targeted: `npm test -- in-memory.test.ts`: 20/20 passing.
+- Full suite: `npm test`: 597/597 passing (was 577; +20 new).
+
+### Files added
+
+- `packages/webhook-delivery/src/in-memory.ts`
+- `packages/webhook-delivery/tests/in-memory.test.ts`
+
+### Files modified
+
+- `packages/webhook-delivery/src/index.ts` (re-exports)
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 5 (E2E integration testing harness) next, OR fold V-164 follow-on (DrizzleAuditArchiveRepo from V-163 deferred work) into a smaller V-NNN.

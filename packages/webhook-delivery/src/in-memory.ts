@@ -1,0 +1,521 @@
+// V-164 — first real implementation of @driftstack/webhook-delivery.
+//
+// Distinct from V-144's mock (which short-circuits every enqueue to
+// `delivered`): this implementation actually exercises the retry
+// curve, the state machine (pending → in_flight → delivered | dlq),
+// signature signing, and DLQ promotion. Storage is in-memory
+// (Map-backed) — sufficient for unit tests, GUI-client integration
+// tests, and small self-hosted single-process workloads.
+//
+// What it does NOT do (out of scope for V-164):
+//   - Persistence across process restarts (Postgres-backed impl
+//     drops in behind the same interface — see V-144 V-log Next).
+//   - SELECT...FOR UPDATE SKIP LOCKED concurrency (single-process).
+//   - Cross-region replication.
+//
+// Backoff curve mirrors apps/server/src/services/webhook-worker.ts:
+// 1min / 5min / 15min / 30min / 60min between attempts. Max 5
+// retries (6 attempts total including initial); 6th failure → DLQ.
+
+import { createHmac } from 'node:crypto';
+import type {
+  DlqManager,
+  EnqueueDeliveryOpts,
+  ListDeliveriesOpts,
+  ListDeliveriesPage,
+  RequeueDlqOpts,
+  WebhookDeliveryService,
+} from './interfaces.js';
+import type {
+  DeliveryAttempt,
+  DeliveryEndpoint,
+  DeliveryPayload,
+  DeliveryRecord,
+  DeliveryStatus,
+  DlqEntry,
+} from './types.js';
+
+/** Backoff schedule matching apps/server/src/services/webhook-worker.ts. */
+export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = {
+  1: 60_000,
+  2: 5 * 60_000,
+  3: 15 * 60_000,
+  4: 30 * 60_000,
+  5: 60 * 60_000,
+};
+
+/** Default per-attempt delivery timeout (10s). */
+export const DEFAULT_TIMEOUT_MS = 10_000;
+/** Default max attempts before DLQ. */
+export const DEFAULT_MAX_ATTEMPTS = 5;
+
+export interface InMemoryWebhookDeliveryDeps {
+  /** Test seam — defaults to global fetch. */
+  fetch?: typeof fetch;
+  /** Test seam — defaults to () => Date.now(). */
+  now?: () => number;
+  /** Lookup an endpoint by id. The delivery service does not own endpoint storage. */
+  getEndpoint: (endpointId: string) => DeliveryEndpoint | null;
+}
+
+/**
+ * Outcome of one process() tick. Returned for test inspection.
+ */
+export interface ProcessTickResult {
+  /** Records pulled this tick. */
+  pulled: number;
+  /** Records that succeeded (status → delivered). */
+  delivered: number;
+  /** Records that failed but stayed in the queue (retry scheduled). */
+  retried: number;
+  /** Records that hit max attempts and entered DLQ. */
+  dlqed: number;
+}
+
+interface QueueEntry {
+  record: DeliveryRecord;
+  endpointId: string;
+  /** Cached for fast access in deliver(). */
+  accountId: string;
+  /** Lease expiry — null when not currently in_flight. */
+  leasedUntilMs: number | null;
+}
+
+/**
+ * Shared state between InMemoryWebhookDeliveryService + InMemoryDlqManager.
+ * The two services hold the same maps so that DLQ promotion in delivery
+ * is visible to the DLQ admin surface, and replay() / requeue() can
+ * round-trip between them.
+ *
+ * Construct via {@link createInMemoryWebhookDelivery} which returns the
+ * pair already wired against the same shared store.
+ */
+export interface SharedDeliveryStore {
+  queue: Map<string, QueueEntry>;
+  dlq: Map<string, DlqEntry>;
+  /** Test-visible shared id counter for stable ids across calls. */
+  idCounter: { value: number };
+}
+
+export interface InMemoryWebhookDeliveryHandles {
+  deliveries: InMemoryWebhookDeliveryService;
+  dlq: InMemoryDlqManager;
+  /** Process one tick of the delivery loop. */
+  processTick(opts?: { batchSize?: number; leaseDurationMs?: number }): Promise<ProcessTickResult>;
+}
+
+/**
+ * Construct an in-memory webhook delivery system. Returns the
+ * WebhookDeliveryService + DlqManager pair plus a `processTick`
+ * method that drives the delivery loop one batch at a time.
+ *
+ * Production deployments would replace this with a Postgres-backed
+ * implementation behind the same two interfaces.
+ */
+export function createInMemoryWebhookDelivery(
+  deps: InMemoryWebhookDeliveryDeps,
+): InMemoryWebhookDeliveryHandles {
+  const store: SharedDeliveryStore = {
+    queue: new Map(),
+    dlq: new Map(),
+    idCounter: { value: 0 },
+  };
+  const fetchFn = deps.fetch ?? globalThis.fetch.bind(globalThis);
+  const now = deps.now ?? (() => Date.now());
+
+  const deliveries = new InMemoryWebhookDeliveryService(store, deps.getEndpoint, now);
+  const dlq = new InMemoryDlqManager(store, deps.getEndpoint, now);
+  const worker = new DeliveryWorker(store, deps.getEndpoint, fetchFn, now);
+
+  return {
+    deliveries,
+    dlq,
+    processTick: (opts) => worker.processTick(opts),
+  };
+}
+
+/**
+ * Implementation of {@link WebhookDeliveryService} backed by the in-memory
+ * shared store. Use {@link createInMemoryWebhookDelivery} rather than
+ * constructing directly — that wires the matching DlqManager + worker.
+ */
+export class InMemoryWebhookDeliveryService implements WebhookDeliveryService {
+  constructor(
+    private readonly store: SharedDeliveryStore,
+    private readonly getEndpoint: (endpointId: string) => DeliveryEndpoint | null,
+    private readonly now: () => number,
+  ) {}
+
+  // ────────────── WebhookDeliveryService ──────────────
+
+  enqueue(opts: EnqueueDeliveryOpts): Promise<DeliveryRecord> {
+    const id = nextId(this.store);
+    const now = this.now();
+    const record: DeliveryRecord = {
+      id,
+      endpointId: opts.endpoint.id,
+      payload: opts.payload,
+      status: 'pending',
+      attempts: [],
+      nextAttemptAtMs: now,
+      createdAtMs: now,
+      completedAtMs: null,
+    };
+    this.store.queue.set(id, {
+      record,
+      endpointId: opts.endpoint.id,
+      accountId: opts.endpoint.accountId,
+      leasedUntilMs: null,
+    });
+    return Promise.resolve(record);
+  }
+
+  get(deliveryId: string): Promise<DeliveryRecord | null> {
+    const entry = this.store.queue.get(deliveryId);
+    return Promise.resolve(entry?.record ?? null);
+  }
+
+  list(opts: ListDeliveriesOpts): Promise<ListDeliveriesPage> {
+    const limit = Math.min(opts.limit ?? 50, 200);
+    let entries = Array.from(this.store.queue.values()).filter(
+      (e) => e.endpointId === opts.endpointId,
+    );
+    if (opts.status !== undefined) {
+      entries = entries.filter((e) => e.record.status === opts.status);
+    }
+    // Newest-first ordering by createdAtMs; ties broken by id.
+    entries.sort((a, b) => {
+      if (a.record.createdAtMs !== b.record.createdAtMs) {
+        return b.record.createdAtMs - a.record.createdAtMs;
+      }
+      return a.record.id.localeCompare(b.record.id);
+    });
+    if (opts.cursor !== undefined) {
+      const idx = entries.findIndex((e) => e.record.id === opts.cursor);
+      if (idx >= 0) entries = entries.slice(idx + 1);
+    }
+    const page = entries.slice(0, limit);
+    const nextCursor = entries.length > limit ? (page[page.length - 1]?.record.id ?? null) : null;
+    return Promise.resolve({
+      data: page.map((e) => e.record),
+      nextCursor,
+    });
+  }
+
+  replay(deliveryId: string): Promise<DeliveryRecord> {
+    return Promise.resolve(replayShared(this.store, this.getEndpoint, this.now, deliveryId));
+  }
+}
+
+/**
+ * Implementation of {@link DlqManager} backed by the in-memory shared store.
+ * Use {@link createInMemoryWebhookDelivery} rather than constructing directly.
+ */
+export class InMemoryDlqManager implements DlqManager {
+  constructor(
+    private readonly store: SharedDeliveryStore,
+    private readonly getEndpoint: (endpointId: string) => DeliveryEndpoint | null,
+    private readonly now: () => number,
+  ) {}
+
+  list(opts: {
+    accountId?: string;
+    limit?: number;
+    cursor?: string;
+  }): Promise<{ data: readonly DlqEntry[]; nextCursor: string | null }> {
+    const limit = Math.min(opts.limit ?? 50, 200);
+    let entries = Array.from(this.store.dlq.values());
+    if (opts.accountId !== undefined) {
+      entries = entries.filter((e) => e.accountId === opts.accountId);
+    }
+    entries.sort((a, b) => b.enteredDlqAtMs - a.enteredDlqAtMs);
+    if (opts.cursor !== undefined) {
+      const idx = entries.findIndex((e) => e.deliveryId === opts.cursor);
+      if (idx >= 0) entries = entries.slice(idx + 1);
+    }
+    const page = entries.slice(0, limit);
+    const nextCursor = entries.length > limit ? (page[page.length - 1]?.deliveryId ?? null) : null;
+    return Promise.resolve({ data: page, nextCursor });
+  }
+
+  get(deliveryId: string): Promise<DlqEntry | null> {
+    return Promise.resolve(this.store.dlq.get(deliveryId) ?? null);
+  }
+
+  requeue(opts: RequeueDlqOpts): Promise<DeliveryRecord> {
+    return Promise.resolve(replayShared(this.store, this.getEndpoint, this.now, opts.deliveryId));
+  }
+
+  discard(deliveryId: string): Promise<void> {
+    this.store.dlq.delete(deliveryId);
+    return Promise.resolve();
+  }
+}
+
+/**
+ * Shared replay path used by both WebhookDeliveryService.replay and
+ * DlqManager.requeue. Re-arms an active queue record OR re-enqueues
+ * a DLQ entry, preserving the attempt history for postmortem.
+ */
+function replayShared(
+  store: SharedDeliveryStore,
+  getEndpoint: (endpointId: string) => DeliveryEndpoint | null,
+  now: () => number,
+  deliveryId: string,
+): DeliveryRecord {
+  const entry = store.queue.get(deliveryId);
+  if (entry !== undefined) {
+    const replayed: DeliveryRecord = {
+      ...entry.record,
+      status: 'pending',
+      attempts: entry.record.attempts,
+      nextAttemptAtMs: now(),
+      completedAtMs: null,
+    };
+    entry.record = replayed;
+    entry.leasedUntilMs = null;
+    return replayed;
+  }
+  const dlqEntry = store.dlq.get(deliveryId);
+  if (dlqEntry !== undefined) {
+    const endpoint = getEndpoint(dlqEntry.endpointId);
+    if (endpoint === null) {
+      throw new Error(`replay: endpoint ${dlqEntry.endpointId} not found`);
+    }
+    const reenqueued: DeliveryRecord = {
+      id: dlqEntry.deliveryId,
+      endpointId: dlqEntry.endpointId,
+      payload: dlqEntry.payload,
+      status: 'pending',
+      attempts: dlqEntry.attempts,
+      nextAttemptAtMs: now(),
+      createdAtMs: now(),
+      completedAtMs: null,
+    };
+    store.queue.set(dlqEntry.deliveryId, {
+      record: reenqueued,
+      endpointId: dlqEntry.endpointId,
+      accountId: dlqEntry.accountId,
+      leasedUntilMs: null,
+    });
+    store.dlq.delete(dlqEntry.deliveryId);
+    return reenqueued;
+  }
+  throw new Error(`replay: delivery ${deliveryId} not found`);
+}
+
+function nextId(store: SharedDeliveryStore): string {
+  store.idCounter.value += 1;
+  return `wdl_${store.idCounter.value.toString().padStart(8, '0')}`;
+}
+
+/**
+ * Internal worker — drives the delivery loop. Not exported. Production
+ * deployments would replace this with a Postgres-backed worker that
+ * uses SELECT...FOR UPDATE SKIP LOCKED for cross-process coordination.
+ */
+class DeliveryWorker {
+  constructor(
+    private readonly store: SharedDeliveryStore,
+    private readonly getEndpoint: (endpointId: string) => DeliveryEndpoint | null,
+    private readonly fetchFn: typeof fetch,
+    private readonly now: () => number,
+  ) {}
+
+  /**
+   * Process up to `batchSize` due deliveries. Each delivery is sent
+   * via fetch with the v1 signature. Outcome updates the record state
+   * machine: 2xx → delivered; non-2xx / network / timeout → retry
+   * (with backoff) or DLQ (if at max attempts).
+   *
+   * Lease pattern: claimed records get `leasedUntilMs = now + leaseMs`.
+   * If the worker crashes mid-delivery, the lease expires and the
+   * record is reclaimed by the next tick.
+   */
+  async processTick(
+    opts: { batchSize?: number; leaseDurationMs?: number } = {},
+  ): Promise<ProcessTickResult> {
+    const batchSize = opts.batchSize ?? 25;
+    const leaseDurationMs = opts.leaseDurationMs ?? 30_000;
+    const now = this.now();
+
+    const due = Array.from(this.store.queue.values())
+      .filter((e) => e.record.status === 'pending')
+      .filter((e) => e.record.nextAttemptAtMs !== null && e.record.nextAttemptAtMs <= now)
+      .filter((e) => e.leasedUntilMs === null || e.leasedUntilMs <= now)
+      .slice(0, batchSize);
+
+    for (const entry of due) {
+      entry.leasedUntilMs = now + leaseDurationMs;
+      entry.record = { ...entry.record, status: 'in_flight' };
+    }
+
+    let delivered = 0;
+    let retried = 0;
+    let dlqed = 0;
+
+    for (const entry of due) {
+      const outcome = await this.deliver(entry);
+      if (outcome === 'delivered') delivered++;
+      else if (outcome === 'dlqed') dlqed++;
+      else retried++;
+    }
+
+    return { pulled: due.length, delivered, retried, dlqed };
+  }
+
+  private async deliver(entry: QueueEntry): Promise<'delivered' | 'retried' | 'dlqed'> {
+    const endpoint = this.getEndpoint(entry.endpointId);
+    if (endpoint === null) {
+      const attempt: DeliveryAttempt = {
+        attempt: entry.record.attempts.length + 1,
+        completedAtMs: this.now(),
+        responseStatus: null,
+        responseExcerpt: null,
+        durationMs: 0,
+        outcome: 'transport_error',
+        errorMessage: 'endpoint not found at delivery time',
+      };
+      this.recordAttempt(entry, attempt, true);
+      return 'dlqed';
+    }
+
+    const cfg = endpoint.config ?? {};
+    const timeoutMs = cfg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const maxAttempts = cfg.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+
+    const startedMs = this.now();
+    const attemptNumber = entry.record.attempts.length + 1;
+    let attempt: DeliveryAttempt;
+
+    try {
+      const response = await this.fetchWithTimeout(endpoint, entry.record.payload, timeoutMs);
+      const text = await response.text().catch(() => '');
+      const durationMs = this.now() - startedMs;
+      attempt = {
+        attempt: attemptNumber,
+        completedAtMs: this.now(),
+        responseStatus: response.status,
+        responseExcerpt: text.slice(0, 200),
+        durationMs,
+        outcome: response.status >= 200 && response.status < 300 ? 'success' : 'http_error',
+        errorMessage:
+          response.status >= 200 && response.status < 300
+            ? null
+            : `HTTP ${response.status.toString()}`,
+      };
+    } catch (err) {
+      const durationMs = this.now() - startedMs;
+      const e = err as { name?: string; message?: string };
+      const isTimeout = e?.name === 'AbortError' || e?.name === 'TimeoutError';
+      attempt = {
+        attempt: attemptNumber,
+        completedAtMs: this.now(),
+        responseStatus: null,
+        responseExcerpt: null,
+        durationMs,
+        outcome: isTimeout ? 'timeout' : 'transport_error',
+        errorMessage: e?.message ?? 'unknown error',
+      };
+    }
+
+    if (attempt.outcome === 'success') {
+      this.recordAttempt(entry, attempt, false);
+      return 'delivered';
+    }
+    if (attemptNumber >= maxAttempts) {
+      this.recordAttempt(entry, attempt, true);
+      return 'dlqed';
+    }
+    this.recordAttempt(entry, attempt, false);
+    return 'retried';
+  }
+
+  private recordAttempt(entry: QueueEntry, attempt: DeliveryAttempt, toDlq: boolean): void {
+    const newAttempts = [...entry.record.attempts, attempt];
+    const now = this.now();
+
+    if (attempt.outcome === 'success') {
+      entry.record = {
+        ...entry.record,
+        status: 'delivered',
+        attempts: newAttempts,
+        nextAttemptAtMs: null,
+        completedAtMs: now,
+      };
+      entry.leasedUntilMs = null;
+      return;
+    }
+
+    if (toDlq) {
+      const dlqEntry: DlqEntry = {
+        deliveryId: entry.record.id,
+        endpointId: entry.endpointId,
+        accountId: entry.accountId,
+        payload: entry.record.payload,
+        totalAttempts: newAttempts.length,
+        attempts: newAttempts,
+        enteredDlqAtMs: now,
+        reason: dlqReasonFromAttempts(newAttempts),
+      };
+      this.store.dlq.set(entry.record.id, dlqEntry);
+      entry.record = {
+        ...entry.record,
+        status: 'dlq',
+        attempts: newAttempts,
+        nextAttemptAtMs: null,
+        completedAtMs: now,
+      };
+      this.store.queue.delete(entry.record.id);
+      return;
+    }
+
+    const backoffMs = BACKOFF_MS_BY_ATTEMPT[attempt.attempt] ?? 60 * 60_000;
+    const nextStatus: DeliveryStatus = 'pending';
+    entry.record = {
+      ...entry.record,
+      status: nextStatus,
+      attempts: newAttempts,
+      nextAttemptAtMs: now + backoffMs,
+      completedAtMs: null,
+    };
+    entry.leasedUntilMs = null;
+  }
+
+  private async fetchWithTimeout(
+    endpoint: DeliveryEndpoint,
+    payload: DeliveryPayload,
+    timeoutMs: number,
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const signature = signPayload(endpoint.signingSecret, payload);
+      return await this.fetchFn(endpoint.url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-driftstack-event-id': payload.eventId,
+          'x-driftstack-event-type': payload.eventType,
+          'x-driftstack-emitted-at': payload.emittedAtSec.toString(),
+          'x-driftstack-signature': signature,
+        },
+        body: payload.body,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
+/** v1 signature: hex-encoded HMAC-SHA256 over `<emittedAtSec>.<body>`. */
+export function signPayload(secret: string, payload: DeliveryPayload): string {
+  const data = `${payload.emittedAtSec.toString()}.${payload.body}`;
+  return createHmac('sha256', secret).update(data, 'utf-8').digest('hex');
+}
+
+function dlqReasonFromAttempts(attempts: readonly DeliveryAttempt[]): string {
+  const last = attempts[attempts.length - 1]!;
+  return `${attempts.length.toString()}× ${last.outcome}: ${last.errorMessage ?? '(no message)'}`;
+}

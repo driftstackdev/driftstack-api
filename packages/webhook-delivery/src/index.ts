@@ -21,3 +21,16 @@ export type {
 } from './interfaces.js';
 
 export { MockDlqManager, MockWebhookDeliveryService } from './mock.js';
+
+export {
+  BACKOFF_MS_BY_ATTEMPT,
+  DEFAULT_MAX_ATTEMPTS,
+  DEFAULT_TIMEOUT_MS,
+  InMemoryDlqManager,
+  InMemoryWebhookDeliveryService,
+  createInMemoryWebhookDelivery,
+  signPayload,
+  type InMemoryWebhookDeliveryDeps,
+  type InMemoryWebhookDeliveryHandles,
+  type ProcessTickResult,
+} from './in-memory.js';
