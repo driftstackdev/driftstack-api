@@ -10465,3 +10465,53 @@ Founder PRIORITY A.2 (~2-3hr). customer-dashboard `/webhooks` progressive-enhanc
 ### Next
 
 V-182 next: customer-dashboard /api-keys live wiring (~2-3hr).
+
+---
+
+## V-182 — customer-dashboard /api-keys live wiring (PRIORITY A.3)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder PRIORITY A.3 (~2-3hr). customer-dashboard `/api-keys` progressive-enhancement against `/v1/api-keys`. Mirrors V-180 / V-181 pattern.
+
+### What changed
+
+`apps/customer-dashboard/src/pages/api-keys.astro`:
+
+- Frontmatter: `apiBaseUrl` from env, `SCOPE_LABEL` map updated to include V-174 scopes (`account_owner` → "account_owner", `driftstack_internal_admin` → "internal_admin").
+- Wrapper `<div data-page="api-keys">` + hidden `<div data-banner>`.
+- Restructured: `<div data-empty>` (no-keys empty state) + `<ul data-list>` (keys list). JS toggles between them.
+- Inline `<script is:inline>` (~110 lines):
+  - Reads `localStorage.ds_web_session_token`.
+  - Fetches `apiBaseUrl + '/v1/api-keys'`.
+  - Rebuilds `<ul>` with `keyLi()` builder. Renders revoked keys with a "revoked YYYY-MM-DD" badge (no Revoke link); active keys show the Revoke link.
+  - Updated scope-label map matches V-174 split.
+  - HTML escapes user-controlled fields (name, key_prefix, dates, scopes).
+- Footer copy updated: `admin` → `account_owner` description per V-174 scope split.
+
+### Live-vs-mock behavior
+
+Same banner pattern as V-180/V-181:
+
+- No token → "Sign in to see live API keys. Showing preview data below."
+- Fetch fails → "Couldn't load live API keys (...). Showing preview data below."
+- Empty → "No API keys yet — create one to get started." + empty-state card.
+- Loaded → list replaced; no banner.
+
+### How verified
+
+- `npm run typecheck`: clean across all 11 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+
+### Files modified
+
+- `apps/customer-dashboard/src/pages/api-keys.astro`
+
+### Next
+
+V-183 next: customer-dashboard /billing live wiring (~2-3hr).
