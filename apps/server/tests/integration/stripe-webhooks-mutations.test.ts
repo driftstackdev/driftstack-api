@@ -415,3 +415,38 @@ describe('V-226 — subscription tier changes emit account audit entries', () =>
     expect(log.data.length).toBe(0);
   });
 });
+
+// V-202b — checkout.session.completed (mode=payment) → trial-pack
+// purchase. Asserts the lifecycle dispatcher fires (the trial_pack_credit
+// state mutation is covered by the V-089 tests above; this slice
+// validates the AccountLifecycleService.emit wire-in fired without
+// breaking the handler).
+describe('V-202b — trial-pack purchase routes through lifecycle dispatcher', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('first checkout.session.completed (payment) does NOT add a tier_changed audit row', async () => {
+    fx = await buildTestApp({ tier: 'trial_pack' });
+    const raw = buildCheckoutEvent({
+      eventId: 'evt_v202b_trial_first',
+      mode: 'payment',
+      stripeCustomerId: 'cus_test_default',
+      clientReferenceId: fx.accountId,
+    });
+    const result = (await postEvent(fx, raw)) as { statusCode: number; body: { outcome: string } };
+    expect(result.body.outcome).toBe('handled');
+    // Trial-pack purchase doesn't flip the tier (the customer stays on
+    // trial_pack and just gains credit). So no subscription.tier_changed
+    // audit row should appear.
+    const auditRes = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=subscription.tier_changed',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(auditRes.statusCode).toBe(200);
+    expect(auditRes.json<{ data: unknown[] }>().data.length).toBe(0);
+  });
+});

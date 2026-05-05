@@ -187,15 +187,24 @@ export async function createProductionDeps(
   // V-202c lifecycle service consumes it for opt-out checks.
   const emailPreferencesService = new EmailPreferencesService(emailPreferencesRepo);
 
-  // V-202c — account lifecycle dispatcher (paired audit emit + email
-  // send for events that have both surfaces). Currently wires
-  // `session.failed.first`; V-202b will extend the union.
+  // V-202c / V-202b — account lifecycle dispatcher (paired audit emit +
+  // email send for events that have both surfaces). Wires
+  // `session.failed.first`, `subscription.tier_changed`,
+  // `subscription.trial_pack_purchased`. V-202b moved the V-226
+  // tier-change audit emit from StripeWebhooksService into
+  // lifecycle.handleTierChanged so the audit + email pair lives behind
+  // one call (founder verdict 2026-05-05).
   const accountLifecycleService = new AccountLifecycleService(
     accountLifecycleRepo,
     email,
     emailPreferencesService,
     logger,
-    { docsBaseUrl: 'https://driftstack.dev/docs' },
+    {
+      docsBaseUrl: 'https://driftstack.dev/docs',
+      billingPortalUrl: config.stripe?.portalReturnUrl ?? 'https://app.driftstack.dev/billing',
+      dashboardUrl: 'https://app.driftstack.dev',
+    },
+    accountAuditService, // V-202b — required for tier_changed audit emit
   );
 
   // Webhooks first so sessions + api-keys can wire it.
@@ -291,7 +300,7 @@ export async function createProductionDeps(
       logger,
       priceToTier,
     },
-    accountAuditService, // V-226 — emit subscription.tier_changed
+    accountLifecycleService, // V-202b — fans out tier_changed audit + email at one call site
   );
 
   // V-081: Profiles service.

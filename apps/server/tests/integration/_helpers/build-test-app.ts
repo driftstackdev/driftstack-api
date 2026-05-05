@@ -213,7 +213,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     noopEmail,
     emailPreferencesService,
     testLogger,
-    { docsBaseUrl: 'https://driftstack.local/docs' },
+    {
+      docsBaseUrl: 'https://driftstack.local/docs',
+      billingPortalUrl: 'http://localhost:5173/billing',
+      dashboardUrl: 'http://localhost:5173',
+    },
+    accountAuditService, // V-202b — tier_changed audit emit
   );
 
   const webhooksRepo = new InMemoryWebhooksRepo();
@@ -406,7 +411,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
         price_api_scale_annual: 'api_scale',
       },
     },
-    accountAuditService, // V-226 — emit subscription.tier_changed
+    accountLifecycleService, // V-202b — fans out tier_changed audit + email at one call site
   );
   const stripeWebhookSigningSecret = 'whsec_test_fixture_secret';
 

@@ -12963,3 +12963,74 @@ The atomic mark-before-send order is deliberate: if the email send fails AFTER t
 ### Next
 
 V-202b — Stripe handler email wires. Extends `LifecycleEvent` with subscription/billing event kinds; hooks at the matching points in `StripeWebhooksService.handleSubscriptionUpsert` / `handleSubscriptionDeleted` / `handleCheckoutCompleted`. Each new kind reuses the lifecycle dispatcher rather than duplicating the lookup pattern. Then V-202d (trial-pack expiry job — V-173-pattern extension with `scheduled_jobs` table). Then V-184b Tier 3 onboarding visual UX.
+
+## V-202b — Stripe handler email wires + V-226 audit emit relocation
+
+### What
+
+Per founder verdicts on V-202c follow-up (2026-05-05):
+
+**Q1 verdict applied (V-226 emit relocation):** Moved the `subscription.tier_changed` audit emit out of `StripeWebhooksService.emitTierChangeBestEffort` and into `AccountLifecycleService.handleTierChanged`. Stripe handler points (`handleSubscriptionUpsert`, `handleSubscriptionDeleted`) now call `accountLifecycle.emit({ kind: 'subscription.tier_changed', ... })` which fans out into BOTH the audit emit (via `AccountAuditService`) and the `sendTierChanged` email at one call site. The lifecycle handler is the single emission point for paired audit + email outputs.
+
+`StripeWebhooksService` no longer takes `accountAudit`; it takes `accountLifecycle` instead. The V-226 tests in `stripe-webhooks-mutations.test.ts` continue to pass unchanged — they assert the audit row appears in `/v1/account/audit-log`, which is true regardless of whether the emit happens in stripe-webhooks or in the lifecycle handler.
+
+**Q2 verdict applied (skip billing receipts):** Did NOT wire `sendBillingReceipt` / `sendBillingFailure`. Stripe's auto-receipt infrastructure stays as the receipt source. Updated the existing comment at `invoice.payment_*` dispatch to record the decision rationale + reference TD-001 in the new tech-debt ledger. New `docs/tech-debt.md` introduces the TD-NNN convention, with TD-001 (billing receipts) and TD-002 (drizzle-kit reinstatement, V-228 follow-up) as the first two entries.
+
+**New `LifecycleEvent` kinds:**
+
+- `subscription.tier_changed` — `{ fromTier, toTier, effectiveAt, stripeEventType, stripeEventId }`. Handler: short-circuits when `fromTier === toTier` (no-op transition); audit-emit (system actor) + opt-out-aware tier-changed email send. Audit emit failure no longer skips the email path (was tightly coupled in V-226's stripe-webhooks impl); the email path runs independently and only depends on `findForLifecycle` resolving.
+- `subscription.trial_pack_purchased` — `{ creditCents, expiresAt }`. Handler: opt-out-aware email send only (no audit emit — trial-pack purchase doesn't flip the tier in the current flow, so no `subscription.tier_changed` semantic applies).
+
+Wire-in points:
+
+- `handleSubscriptionUpsert` (line ~327): `accountLifecycle.emit({ kind: 'subscription.tier_changed', ... })` after `setAccountTier`. Replaces the V-226 `emitTierChangeBestEffort` call.
+- `handleSubscriptionDeleted` (line ~370): same shape — emit after the downgrade `setAccountTier`. Replaces the V-226 emit.
+- `handleCheckoutCompleted` (mode=payment trial-pack path, line ~445): `accountLifecycle.emit({ kind: 'subscription.trial_pack_purchased', ... })` ONLY when `applied=true` (the repo's idempotency gate). Skips on duplicate Stripe event re-deliveries.
+
+`AccountLifecycleServiceConfig` extended with two new fields:
+
+- `billingPortalUrl` — surfaced in the `tier-changed` email's portal link. Production sources from `config.stripe.portalReturnUrl`; tests use `http://localhost:5173/billing`.
+- `dashboardUrl` — surfaced in the `trial-pack-purchased` email's dashboard link. Production hardcodes `https://app.driftstack.dev`; tests use `http://localhost:5173`.
+
+Test coverage: 6 new unit tests in `account-lifecycle.test.ts` (3 for `tier_changed`, 2 for `trial_pack_purchased`, 1 audit-failure-doesn't-block-email assertion). Plus 1 new integration assertion in `stripe-webhooks-mutations.test.ts` confirming the trial-pack checkout flow does NOT emit a `tier_changed` audit row (because the tier doesn't actually flip on trial-pack purchase). Plus 11 existing V-226 stripe-webhooks-mutations tests continue to pass unchanged through the new lifecycle path — important: confirms the relocation preserves observable behavior.
+
+### Why
+
+Founder approved Option (b) of the relocation question: the lifecycle service is the single emission point for paired lifecycle outputs. Splitting `tier_changed` across two services (audit in stripe-webhooks, email in lifecycle) defeats the abstraction. The reasoning was confirmed by what the relocation revealed: V-226's audit emit was tightly coupled to the stripe-webhooks-specific `previousTier` capture; moving it into the lifecycle handler made the audit-emit and email-send paths independently failable, which matches the "best-effort by contract" pattern the rest of the lifecycle service already follows.
+
+The TD-001 deferral (Driftstack-branded billing receipts) is the kind of decision that should be recorded with WHY for future-you. The tech-debt ledger format gives a stable id (TD-NNN), revisit triggers, and an implementation outline so the next session that picks it up has full context. TD-002 captures the V-228 drizzle-kit follow-up similarly.
+
+V-202b closes the V-202 deferred-wires list except for V-202d (trial-pack expiry job), which needs the `scheduled_jobs` table + processTick worker introduction (founder-approved V-173-pattern extension).
+
+### Files
+
+- `apps/server/src/services/account-lifecycle.ts` — new `LifecycleEvent` kinds (`subscription.tier_changed`, `subscription.trial_pack_purchased`); new `handleTierChanged` + `handleTrialPackPurchased`; constructor gains optional 6th arg `accountAudit?: AccountAuditService | null`; config gains `billingPortalUrl` + `dashboardUrl`.
+- `apps/server/src/services/stripe-webhooks.ts` — removed `accountAudit` ctor arg + `emitTierChangeBestEffort` private helper; added `accountLifecycle?` ctor arg; emit wires at the 3 handler points; updated invoice-event comment to reference TD-001.
+- `apps/server/src/lib/bootstrap.ts` — wires `accountLifecycleService` into both `AccountLifecycleService` (as the audit emitter) and `StripeWebhooksService` (replacing the V-226 audit wire); added `billingPortalUrl` + `dashboardUrl` config values.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — same wiring pattern for the test fixture.
+- `apps/server/tests/e2e/helpers/server.ts` — same for e2e helper.
+- `apps/server/tests/unit/account-lifecycle.test.ts` — `+6` tests for `tier_changed` (real flip / no-op short-circuit / opt-out / audit-failure-fallback) and `trial_pack_purchased` (happy path / opt-out).
+- `apps/server/tests/integration/stripe-webhooks-mutations.test.ts` — `+1` test confirming trial-pack purchase doesn't emit a tier-changed audit row (would be a regression if trial-pack accidentally flipped the tier).
+- `docs/tech-debt.md` — new tech-debt ledger; TD-001 (billing receipts) + TD-002 (drizzle-kit reinstatement).
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 703 / 703 passing across 72 files (+7 over the V-202c 696 baseline; 6 new lifecycle unit tests + 1 stripe-webhooks-mutations integration test).
+- pre-push hook (V-223) will exercise on push.
+
+### Notes
+
+- The `tier_changed` audit emit no longer requires the email path to succeed. In V-226's coupled implementation, an audit-emit failure would log warn but still proceed to the rest of the handler. In V-202b's lifecycle implementation, audit-emit failures are caught + logged INSIDE the lifecycle handler, then the email-send path runs independently. Net behavior: same audit-success rate; better email-send rate (audit-DB-down doesn't block emails).
+- Considered adding a `subscription.canceled` `LifecycleEvent` kind (paired with `sendSubscriptionCancellation`) for the `handleSubscriptionDeleted` path. Decided against: the existing `tier_changed` emit already informs the customer "your tier dropped to trial_pack" which carries the cancellation semantic. A separate cancellation email would duplicate that signal. If a future review wants distinct messaging (e.g. "we'll keep your data; here's how to come back"), it'd be a new lifecycle event kind, not a refactor of the existing handlers.
+- The `billingPortalUrl` and `dashboardUrl` are now hardcoded in production wiring (the same way `docsBaseUrl` was hardcoded in V-202c). If a Tier 3 marketing flip changes the dashboard host, that's a one-line bootstrap.ts edit. Not adding env-var indirection until there's a second consumer.
+- The new `tier-changed` email's `fromTier` field passes the AccountTier enum value directly (e.g. "trial_pack", "api_builder"). The customer sees the raw enum strings. If/when a Tier 3 visual pass on email branding lands, those should map to display names ("Trial Pack" / "API Builder") in the template — not in the lifecycle service. The template layer is the right place for human-readable formatting.
+
+### Next
+
+V-202d — trial-pack expiry job. Per founder-approved V-173-pattern extension: introduce a generic `scheduled_jobs` table (job_type + payload + run_at + locked_by + completed_at), a `setInterval` poller in bootstrap (alongside V-173 webhook worker + V-218 validation harness `processTick`), multi-replica safe via `SELECT FOR UPDATE SKIP LOCKED`. Trial-pack expiry is one `job_type`; future cron-shaped work fits the same table. Email path uses the lifecycle dispatcher (new event kind: `subscription.trial_pack_expired`).
+
+Then V-184b Tier 3 onboarding visual UX (founder-redline). Then V-215 force-push verification (waits on founder firing V-207/V-212 runbook).

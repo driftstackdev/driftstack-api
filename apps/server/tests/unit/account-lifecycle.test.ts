@@ -9,12 +9,18 @@ import {
 import { createTestLogger } from '../../src/lib/logger.js';
 import type { EmailService } from '../../src/services/email.js';
 import type { EmailPreferencesService } from '../../src/services/email-preferences.js';
+import type { AccountAuditService } from '../../src/services/account-audit.js';
 
 interface TestDeps {
   service: AccountLifecycleService;
   repo: TestRepo;
-  email: { sendSessionFailedFirst: ReturnType<typeof vi.fn> };
+  email: {
+    sendSessionFailedFirst: ReturnType<typeof vi.fn>;
+    sendTierChanged: ReturnType<typeof vi.fn>;
+    sendTrialPackPurchased: ReturnType<typeof vi.fn>;
+  };
   prefs: { shouldSend: ReturnType<typeof vi.fn> };
+  audit: { record: ReturnType<typeof vi.fn> };
 }
 
 class TestRepo implements AccountLifecycleRepo {
@@ -55,9 +61,14 @@ function build(opts: { firstFailureSent?: Date | null; shouldSend?: boolean } = 
 
   const email = {
     sendSessionFailedFirst: vi.fn().mockResolvedValue(undefined),
+    sendTierChanged: vi.fn().mockResolvedValue(undefined),
+    sendTrialPackPurchased: vi.fn().mockResolvedValue(undefined),
   };
   const prefs = {
     shouldSend: vi.fn().mockResolvedValue(opts.shouldSend ?? true),
+  };
+  const audit = {
+    record: vi.fn().mockResolvedValue({}),
   };
 
   const service = new AccountLifecycleService(
@@ -65,9 +76,14 @@ function build(opts: { firstFailureSent?: Date | null; shouldSend?: boolean } = 
     email as unknown as EmailService,
     prefs as unknown as EmailPreferencesService,
     createTestLogger(),
-    { docsBaseUrl: 'https://example.test/docs/' },
+    {
+      docsBaseUrl: 'https://example.test/docs/',
+      billingPortalUrl: 'https://example.test/billing',
+      dashboardUrl: 'https://example.test',
+    },
+    audit as unknown as AccountAuditService,
   );
-  return { service, repo, email, prefs };
+  return { service, repo, email, prefs, audit };
 }
 
 describe('AccountLifecycleService — session.failed.first', () => {
@@ -157,5 +173,112 @@ describe('AccountLifecycleService — session.failed.first', () => {
     // the second caller skips the send. Net: exactly one email.
     expect(email.sendSessionFailedFirst).toHaveBeenCalledTimes(1);
     expect(repo.read('acc_test')?.firstFailureEmailSentAt).toBeInstanceOf(Date);
+  });
+});
+
+describe('AccountLifecycleService — subscription.tier_changed (V-202b)', () => {
+  it('emits audit + tier-changed email on a real tier flip', async () => {
+    const { service, audit, email } = build();
+    await service.emit('acc_test', {
+      kind: 'subscription.tier_changed',
+      fromTier: 'trial_pack',
+      toTier: 'api_builder',
+      effectiveAt: new Date('2026-05-05T12:00:00Z'),
+      stripeEventType: 'customer.subscription.created',
+      stripeEventId: 'evt_xyz',
+    });
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: 'acc_test',
+        actorType: 'system',
+        action: 'subscription.tier_changed',
+        payload: {
+          from: 'trial_pack',
+          to: 'api_builder',
+          stripe_event_type: 'customer.subscription.created',
+          stripe_event_id: 'evt_xyz',
+        },
+      }),
+    );
+    expect(email.sendTierChanged).toHaveBeenCalledTimes(1);
+    expect(email.sendTierChanged).toHaveBeenCalledWith({
+      to: 'first-failure@driftstack.local',
+      fromTier: 'trial_pack',
+      toTier: 'api_builder',
+      effectiveAt: new Date('2026-05-05T12:00:00Z'),
+      portalUrl: 'https://example.test/billing',
+    });
+  });
+
+  it('short-circuits BOTH audit and email when fromTier === toTier', async () => {
+    const { service, audit, email } = build();
+    await service.emit('acc_test', {
+      kind: 'subscription.tier_changed',
+      fromTier: 'api_builder',
+      toTier: 'api_builder',
+      effectiveAt: new Date(),
+      stripeEventType: 'customer.subscription.updated',
+      stripeEventId: 'evt_noop',
+    });
+    expect(audit.record).not.toHaveBeenCalled();
+    expect(email.sendTierChanged).not.toHaveBeenCalled();
+  });
+
+  it('audit fires but email skipped when customer opted out of tier-changed', async () => {
+    const { service, audit, email } = build({ shouldSend: false });
+    await service.emit('acc_test', {
+      kind: 'subscription.tier_changed',
+      fromTier: 'trial_pack',
+      toTier: 'api_starter',
+      effectiveAt: new Date(),
+      stripeEventType: 'customer.subscription.updated',
+      stripeEventId: 'evt_optout',
+    });
+    expect(audit.record).toHaveBeenCalledTimes(1);
+    expect(email.sendTierChanged).not.toHaveBeenCalled();
+  });
+
+  it('email still fires when audit emit throws (audit failure swallowed)', async () => {
+    const { service, audit, email } = build();
+    audit.record.mockRejectedValueOnce(new Error('db down'));
+    await service.emit('acc_test', {
+      kind: 'subscription.tier_changed',
+      fromTier: 'trial_pack',
+      toTier: 'api_builder',
+      effectiveAt: new Date(),
+      stripeEventType: 'customer.subscription.created',
+      stripeEventId: 'evt_audit_fail',
+    });
+    expect(email.sendTierChanged).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AccountLifecycleService — subscription.trial_pack_purchased (V-202b)', () => {
+  it('sends the trial-pack email; no audit emit', async () => {
+    const { service, email, audit } = build();
+    await service.emit('acc_test', {
+      kind: 'subscription.trial_pack_purchased',
+      creditCents: 299,
+      expiresAt: new Date('2026-05-19T00:00:00Z'),
+    });
+    expect(email.sendTrialPackPurchased).toHaveBeenCalledTimes(1);
+    expect(email.sendTrialPackPurchased).toHaveBeenCalledWith({
+      to: 'first-failure@driftstack.local',
+      creditCentsRemaining: 299,
+      expiresAt: new Date('2026-05-19T00:00:00Z'),
+      dashboardUrl: 'https://example.test',
+    });
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('skips email when customer opted out', async () => {
+    const { service, email } = build({ shouldSend: false });
+    await service.emit('acc_test', {
+      kind: 'subscription.trial_pack_purchased',
+      creditCents: 299,
+      expiresAt: new Date(),
+    });
+    expect(email.sendTrialPackPurchased).not.toHaveBeenCalled();
   });
 });

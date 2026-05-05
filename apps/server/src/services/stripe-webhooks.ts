@@ -18,7 +18,7 @@
 import { createHash } from 'node:crypto';
 import type { AccountTier } from '@driftstack/api-types';
 import type { Logger } from '../lib/logger.js';
-import type { AccountAuditService } from './account-audit.js';
+import type { AccountLifecycleService } from './account-lifecycle.js';
 
 /**
  * Minimal parsed-Stripe-event shape. We don't depend on the `stripe`
@@ -156,51 +156,17 @@ export class StripeWebhooksService {
     private readonly repo: StripeWebhooksRepo,
     private readonly config: StripeWebhooksServiceConfig,
     /**
-     * V-226 — optional customer-facing audit log. When wired, emits a
-     * `subscription.tier_changed` entry whenever a Stripe subscription
-     * event flips an account's tier. `actor_type: 'system'` because the
-     * trigger is Stripe's webhook delivery, not a customer action.
-     * Best-effort; failures never block the Stripe handler (Stripe
-     * retries are idempotency-protected by the event-ledger anyway).
+     * V-226 / V-202b — optional account-lifecycle dispatcher. When wired,
+     * Stripe handler points emit lifecycle events
+     * (`subscription.tier_changed`, `subscription.trial_pack_purchased`)
+     * which fan out into audit log + transactional email at one call
+     * site. V-226 originally did the audit emit directly here; V-202b
+     * relocated the emit into `AccountLifecycleService.handleTierChanged`
+     * per founder verdict (single abstraction for paired audit+email
+     * outputs). Best-effort; failures never block the Stripe handler.
      */
-    private readonly accountAudit: AccountAuditService | null = null,
+    private readonly accountLifecycle: AccountLifecycleService | null = null,
   ) {}
-
-  private async emitTierChangeBestEffort(args: {
-    accountId: string;
-    previousTier: AccountTier | null;
-    newTier: AccountTier;
-    eventType: string;
-    eventId: string;
-  }): Promise<void> {
-    if (this.accountAudit === null) return;
-    if (args.previousTier === args.newTier) return; // no-op transition
-    try {
-      await this.accountAudit.record({
-        accountId: args.accountId,
-        actorType: 'system',
-        actorAccountId: null,
-        actorKeyId: null,
-        action: 'subscription.tier_changed',
-        targetResourceId: null,
-        payload: {
-          from: args.previousTier,
-          to: args.newTier,
-          stripe_event_type: args.eventType,
-          stripe_event_id: args.eventId,
-        },
-      });
-    } catch (err) {
-      this.config.logger.warn(
-        {
-          component: 'stripe-webhooks',
-          eventId: args.eventId,
-          err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
-        },
-        'subscription.tier_changed audit emit failed (best-effort, swallowed)',
-      );
-    }
-  }
 
   /**
    * Process a verified Stripe event. Idempotent — repeated calls with
@@ -260,8 +226,14 @@ export class StripeWebhooksService {
         case 'invoice.payment_succeeded':
         case 'invoice.payment_failed':
         case 'invoice.finalized':
-          // Invoice events log only at scaffolding time; receipt
-          // emails are fired by Stripe's own infrastructure.
+          // V-202b decision (founder verdict 2026-05-05): receipt emails
+          // fire from Stripe's own infrastructure. Driftstack-branded
+          // billing receipts deferred post-launch — see TD-001 in
+          // docs/tech-debt.md. Augmenting (Stripe + Driftstack both fire)
+          // would create two-emails-per-charge → spam; replacing would
+          // create a Driftstack-side delivery dependency on every charge.
+          // Skip is reversible: post-launch we can flip on the wire-in
+          // and either augment or replace based on customer feedback.
           this.logEvent(event, 'invoice');
           return 'handled';
         case 'customer.created':
@@ -359,13 +331,19 @@ export class StripeWebhooksService {
     // gets the tier; Stripe handles the dunning).
     if (tier !== undefined && (status === 'active' || status === 'trialing')) {
       const { previousTier } = await this.repo.setAccountTier({ accountId, tier, at });
-      await this.emitTierChangeBestEffort({
-        accountId,
-        previousTier,
-        newTier: tier,
-        eventType: event.type,
-        eventId: event.id,
-      });
+      // V-202b — lifecycle dispatcher fans this out into audit emit +
+      // tier-changed email at one call site. Short-circuits internally
+      // when previousTier === newTier (no-op transition).
+      if (this.accountLifecycle !== null) {
+        await this.accountLifecycle.emit(accountId, {
+          kind: 'subscription.tier_changed',
+          fromTier: previousTier,
+          toTier: tier,
+          effectiveAt: at,
+          stripeEventType: event.type,
+          stripeEventId: event.id,
+        });
+      }
     }
 
     this.logEvent(event, `subscription ${status}`);
@@ -403,13 +381,16 @@ export class StripeWebhooksService {
       tier: downgradeTier,
       at,
     });
-    await this.emitTierChangeBestEffort({
-      accountId,
-      previousTier,
-      newTier: downgradeTier,
-      eventType: event.type,
-      eventId: event.id,
-    });
+    if (this.accountLifecycle !== null) {
+      await this.accountLifecycle.emit(accountId, {
+        kind: 'subscription.tier_changed',
+        fromTier: previousTier,
+        toTier: downgradeTier,
+        effectiveAt: at,
+        stripeEventType: event.type,
+        stripeEventId: event.id,
+      });
+    }
 
     this.logEvent(event, 'subscription canceled');
     return 'handled';
@@ -453,12 +434,24 @@ export class StripeWebhooksService {
     const expiresAt = new Date(
       at.getTime() + (this.config.trialPackWindowMs ?? DEFAULT_TRIAL_PACK_WINDOW_MS),
     );
+    const creditCents = this.config.trialPackCreditCents ?? DEFAULT_TRIAL_PACK_CREDIT_CENTS;
     const { applied } = await this.repo.applyTrialPackPurchase({
       accountId,
-      creditCents: this.config.trialPackCreditCents ?? DEFAULT_TRIAL_PACK_CREDIT_CENTS,
+      creditCents,
       expiresAt,
       at,
     });
+
+    // V-202b — fire trial-pack-purchased email only on first apply
+    // (the repo's idempotency gate ensures `applied=false` on a
+    // duplicate Stripe event re-delivery, so this skips correctly).
+    if (applied && this.accountLifecycle !== null) {
+      await this.accountLifecycle.emit(accountId, {
+        kind: 'subscription.trial_pack_purchased',
+        creditCents,
+        expiresAt,
+      });
+    }
 
     this.logEvent(event, applied ? 'trial-pack provisioned' : 'trial-pack already provisioned');
     return 'handled';

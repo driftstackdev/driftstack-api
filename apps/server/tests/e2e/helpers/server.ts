@@ -160,7 +160,12 @@ export async function startTestServer(): Promise<TestServer> {
     noopEmail,
     emailPreferencesService,
     logger,
-    { docsBaseUrl: 'https://driftstack.local/docs' },
+    {
+      docsBaseUrl: 'https://driftstack.local/docs',
+      billingPortalUrl: 'http://localhost:5173/billing',
+      dashboardUrl: 'http://localhost:5173',
+    },
+    accountAuditService, // V-202b — tier_changed audit emit
   );
 
   const sessionsService = new SessionsService({
