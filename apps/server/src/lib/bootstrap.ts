@@ -34,6 +34,8 @@ import { DrizzleEmailPreferencesRepo } from '../db/email-preferences-repo.js';
 import { EmailPreferencesService } from '../services/email-preferences.js';
 import { DrizzleAccountAuditRepo } from '../db/account-audit-repo.js';
 import { AccountAuditService } from '../services/account-audit.js';
+import { DrizzleAccountLifecycleRepo } from '../db/account-lifecycle-repo.js';
+import { AccountLifecycleService } from '../services/account-lifecycle.js';
 import { DrizzleValidationSchedulesRepo } from '../db/validation-schedules-repo.js';
 import {
   ValidationHarnessService,
@@ -164,6 +166,7 @@ export async function createProductionDeps(
   const emailPreferencesRepo = new DrizzleEmailPreferencesRepo(dbHandle);
   const accountAuditRepo = new DrizzleAccountAuditRepo(dbHandle);
   const validationSchedulesRepo = new DrizzleValidationSchedulesRepo(dbHandle);
+  const accountLifecycleRepo = new DrizzleAccountLifecycleRepo(dbHandle);
 
   // Auth cache + coalescer.
   const authCache = new RedisAuthCache(redis, logger);
@@ -180,6 +183,21 @@ export async function createProductionDeps(
   // profiles) can wire it.
   const accountAuditService = new AccountAuditService(accountAuditRepo);
 
+  // V-204 — email notification preferences. Constructed early because
+  // V-202c lifecycle service consumes it for opt-out checks.
+  const emailPreferencesService = new EmailPreferencesService(emailPreferencesRepo);
+
+  // V-202c — account lifecycle dispatcher (paired audit emit + email
+  // send for events that have both surfaces). Currently wires
+  // `session.failed.first`; V-202b will extend the union.
+  const accountLifecycleService = new AccountLifecycleService(
+    accountLifecycleRepo,
+    email,
+    emailPreferencesService,
+    logger,
+    { docsBaseUrl: 'https://driftstack.dev/docs' },
+  );
+
   // Webhooks first so sessions + api-keys can wire it.
   // V-225 — accountAudit wired for webhook_endpoint.{created,deleted}.
   const webhooksService = new WebhooksService(webhooksRepo, accountAuditService);
@@ -191,6 +209,7 @@ export async function createProductionDeps(
     driver,
     webhooks: webhooksService,
     accountAudit: accountAuditService,
+    accountLifecycle: accountLifecycleService,
   });
   const usageService = new UsageService(usageRepo);
 
@@ -206,9 +225,6 @@ export async function createProductionDeps(
   // V-051 Dockerfile copies these into the image at build time.
   const legalCatalog = buildLegalCatalog({ repoRoot: resolve(process.cwd()) });
   const legalService = new LegalService(legalCatalog, legalRepo);
-
-  // V-204 — email notification preferences.
-  const emailPreferencesService = new EmailPreferencesService(emailPreferencesRepo);
 
   // V-218 — continuous validation harness.
   // The recapture bridge is a stub until Agent 1's V-203 Phase 2A

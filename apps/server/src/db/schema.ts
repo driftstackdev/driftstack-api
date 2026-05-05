@@ -146,6 +146,10 @@ export const accounts = pgTable(
     trialPackCreditCents: integer('trial_pack_credit_cents'),
     trialPackExpiresAt: timestamp('trial_pack_expires_at', { withTimezone: true }),
     trialPackRedeemed: boolean('trial_pack_redeemed').notNull().default(false),
+    // V-202c — set to the wall clock when we send `session-failed-first`
+    // to this account. Null until the first session.failed ever; one-shot
+    // by design (subsequent failures don't email).
+    firstFailureEmailSentAt: timestamp('first_failure_email_sent_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

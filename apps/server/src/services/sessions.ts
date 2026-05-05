@@ -159,6 +159,18 @@ export interface SessionsServiceDeps {
       payload?: Record<string, unknown> | null;
     }) => Promise<unknown>;
   } | null;
+  /**
+   * V-202c: optional lifecycle dispatcher. When wired, the first
+   * session.failed for an account triggers `session-failed-first`
+   * email (deduped via `accounts.first_failure_email_sent_at`).
+   * Subsequent failures no-op at the dedup gate.
+   */
+  accountLifecycle?: {
+    emit: (
+      accountId: string,
+      event: { kind: 'session.failed.first'; sessionId: string; errorMessage: string },
+    ) => Promise<void>;
+  } | null;
 }
 
 export class SessionsService {
@@ -521,6 +533,23 @@ export class SessionsService {
           });
         } catch {
           /* webhook enqueue is best-effort */
+        }
+      }
+
+      // V-202c — dispatch the first-failure lifecycle event. Internal
+      // dedup gate ensures exactly one email per account regardless of
+      // how many failures fire concurrently across sessions. Best-effort:
+      // a lifecycle dispatch failure must NEVER mask the original
+      // driver error from the customer.
+      if (this.deps.accountLifecycle) {
+        try {
+          await this.deps.accountLifecycle.emit(ctx.account.id, {
+            kind: 'session.failed.first',
+            sessionId: `ses_${session.id}`,
+            errorMessage,
+          });
+        } catch {
+          /* swallow — original error wins */
         }
       }
 

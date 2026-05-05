@@ -24,6 +24,8 @@ import { EmailPreferencesService } from '../../../src/services/email-preferences
 import { InMemoryEmailPreferencesRepo } from './in-memory-email-preferences-repo.js';
 import { AccountAuditService } from '../../../src/services/account-audit.js';
 import { InMemoryAccountAuditRepo } from './in-memory-account-audit-repo.js';
+import { AccountLifecycleService } from '../../../src/services/account-lifecycle.js';
+import { InMemoryAccountLifecycleRepo } from './in-memory-account-lifecycle-repo.js';
 import {
   ValidationHarnessService,
   type ValidationHarnessRecaptureBridge,
@@ -112,6 +114,8 @@ export interface TestAppFixture {
   profilesRepo: InMemoryProfilesRepo;
   billingRepo: InMemoryBillingRepo;
   billingProvider: InMemoryBillingProvider;
+  /** V-202c — lifecycle dedup state (first_failure_email_sent_at, etc.). */
+  accountLifecycleRepo: InMemoryAccountLifecycleRepo;
   driver: MockDriver;
   /** Plaintext API key — pass as `Authorization: Bearer <plaintext>`. */
   plaintext: string;
@@ -188,6 +192,30 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const accountAuditRepo = new InMemoryAccountAuditRepo();
   const accountAuditService = new AccountAuditService(accountAuditRepo);
 
+  // V-202c — pre-construct logger + email + lifecycle service so
+  // sessions can wire accountLifecycle. Test logger is reused below
+  // by other services that take it explicitly.
+  const testLogger = createTestLogger();
+  const noopEmail = createEmailService({ config: null, logger: testLogger });
+  const emailPreferencesRepo = new InMemoryEmailPreferencesRepo();
+  const emailPreferencesService = new EmailPreferencesService(emailPreferencesRepo);
+  const accountLifecycleRepo = new InMemoryAccountLifecycleRepo();
+  // Seed the account-lifecycle row so V-202c first-failure dispatch
+  // can resolve the email + dedup flag without a separate seeding
+  // step in tests.
+  accountLifecycleRepo.upsert({
+    id: accountId,
+    email: opts.email ?? 'tester@driftstack.local',
+    firstFailureEmailSentAt: null,
+  });
+  const accountLifecycleService = new AccountLifecycleService(
+    accountLifecycleRepo,
+    noopEmail,
+    emailPreferencesService,
+    testLogger,
+    { docsBaseUrl: 'https://driftstack.local/docs' },
+  );
+
   const webhooksRepo = new InMemoryWebhooksRepo();
   // V-225 — accountAudit wired for webhook_endpoint.{created,deleted}.
   const webhooksService = new WebhooksService(webhooksRepo, accountAuditService);
@@ -222,6 +250,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     driver,
     webhooks: webhooksService,
     accountAudit: accountAuditService,
+    accountLifecycle: accountLifecycleService,
   });
   // Legal-acceptance plumbing — uses an in-memory catalog with a fixed
   // canned document set (one per documentKey) so tests don't depend on
@@ -259,10 +288,6 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   ]);
   const legalService = new LegalService(legalCatalog, legalRepo);
 
-  // V-204 — email notification preferences.
-  const emailPreferencesRepo = new InMemoryEmailPreferencesRepo();
-  const emailPreferencesService = new EmailPreferencesService(emailPreferencesRepo);
-
   // Pre-seed acceptances for the seeded account so the api-key
   // issuance gate (V-049) doesn't block existing tests that exercise
   // /v1/api-keys without separately accepting docs. Tests that
@@ -292,9 +317,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // V-079: auth-flow service. Uses a no-op email service (Postmark
   // unconfigured) and exposes debug tokens so tests can read the
   // plaintext from the response without scraping email.
-  const testLogger = createTestLogger();
+  // testLogger + noopEmail constructed earlier for V-202c lifecycle
+  // service; reused here.
   const authFlowsRepo = new InMemoryAuthFlowsRepo();
-  const noopEmail = createEmailService({ config: null, logger: testLogger });
   const authFlowsService = new AuthFlowsService(
     authFlowsRepo,
     noopEmail,
@@ -468,6 +493,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     profilesRepo,
     billingRepo,
     billingProvider,
+    accountLifecycleRepo,
     driver,
     plaintext,
     accountId,
@@ -524,6 +550,13 @@ export async function seedAdditionalAccount(
 
   fx.authRepo.upsertApiKey(keyRow);
   fx.apiKeysRepo.upsert(keyRow);
+  // V-202c — seed lifecycle row for the new account so a session.failed
+  // here can resolve email + dedup flag.
+  fx.accountLifecycleRepo.upsert({
+    id: accountId,
+    email: opts.email ?? `tester-${accountId.slice(-4)}@driftstack.local`,
+    firstFailureEmailSentAt: null,
+  });
 
   return { accountId, apiKeyId, plaintext };
 }

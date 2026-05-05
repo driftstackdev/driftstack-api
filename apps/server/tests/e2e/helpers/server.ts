@@ -45,6 +45,9 @@ import { EmailPreferencesService } from '../../../src/services/email-preferences
 import { DrizzleEmailPreferencesRepo } from '../../../src/db/email-preferences-repo.js';
 import { AccountAuditService } from '../../../src/services/account-audit.js';
 import { DrizzleAccountAuditRepo } from '../../../src/db/account-audit-repo.js';
+import { AccountLifecycleService } from '../../../src/services/account-lifecycle.js';
+import { DrizzleAccountLifecycleRepo } from '../../../src/db/account-lifecycle-repo.js';
+import { createEmailService } from '../../../src/services/email.js';
 import {
   ValidationHarnessService,
   type ValidationHarnessRecaptureBridge,
@@ -145,11 +148,27 @@ export async function startTestServer(): Promise<TestServer> {
     rateLimitOverridesRepo,
     authCache,
   );
+  // V-202c — lifecycle service constructed before sessions so the
+  // accountLifecycle dep can be wired. Email is no-op in e2e (Postmark
+  // unconfigured); email-prefs is constructed here and reused below.
+  const emailPreferencesRepo = new DrizzleEmailPreferencesRepo(database);
+  const emailPreferencesService = new EmailPreferencesService(emailPreferencesRepo);
+  const noopEmail = createEmailService({ config: null, logger });
+  const accountLifecycleRepo = new DrizzleAccountLifecycleRepo(database);
+  const accountLifecycleService = new AccountLifecycleService(
+    accountLifecycleRepo,
+    noopEmail,
+    emailPreferencesService,
+    logger,
+    { docsBaseUrl: 'https://driftstack.local/docs' },
+  );
+
   const sessionsService = new SessionsService({
     repo: sessionsRepo,
     driver,
     webhooks: webhooksService,
     accountAudit: accountAuditService,
+    accountLifecycle: accountLifecycleService,
   });
   // legalService is constructed below; ApiKeysService gets the gate
   // wired in production. e2e tests authenticate with pre-seeded keys
@@ -167,9 +186,6 @@ export async function startTestServer(): Promise<TestServer> {
   const legalRepo = new DrizzleLegalRepo(database);
   const legalCatalog = buildLegalCatalog({ repoRoot: resolve(here, '../../../../../') });
   const legalService = new LegalService(legalCatalog, legalRepo);
-
-  const emailPreferencesRepo = new DrizzleEmailPreferencesRepo(database);
-  const emailPreferencesService = new EmailPreferencesService(emailPreferencesRepo);
 
   const validationSchedulesRepo = new DrizzleValidationSchedulesRepo(database);
   const recaptureBridge: ValidationHarnessRecaptureBridge = {

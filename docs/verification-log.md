@@ -12888,3 +12888,78 @@ To verify the fix took effect: `npm run test:e2e` would now apply 0000-0019 agai
 ### Next
 
 Continuing V-202b/c/d (next session pickup — V-202c lands cleanly now that journal is healthy). V-184b Tier 3 onboarding visual UX. V-215 post-force-push verification (founder-side).
+
+## V-202c — first-failure email dedup + AccountLifecycleService introduction
+
+### What
+
+Per founder verdict (2026-05-05 ack of V-228 follow-up): introduces `AccountLifecycleService` as the central dispatcher for customer-facing lifecycle events that pair audit-log emit and/or email send. V-202c lands the first event kind: `session.failed.first`. V-202b will extend the discriminated `LifecycleEvent` union with subscription/billing event kinds.
+
+Five components:
+
+1. **Migration `0020_first_failure_email.sql`** — adds `accounts.first_failure_email_sent_at timestamptz` (nullable, no default). Class A migration per V-198 taxonomy. Dedup gate is application-layer; the column merely persists the gate state.
+
+2. **`AccountLifecycleRepo` interface** with `findForLifecycle(accountId)` returning `{ id, email, firstFailureEmailSentAt }` and `markFirstFailureEmailSent(accountId, at)` returning boolean (true when the caller won the atomic check-and-set race; false when a concurrent caller had already set the column).
+
+3. **`DrizzleAccountLifecycleRepo`** implements both methods. The mark uses `UPDATE accounts SET first_failure_email_sent_at = $at WHERE id = $accountId AND first_failure_email_sent_at IS NULL RETURNING id` — atomic check-and-set in one statement; concurrent callers only see one win.
+
+4. **`AccountLifecycleService.emit(accountId, event)`** dispatches based on `event.kind`. For `session.failed.first`: looks up the lifecycle row, short-circuits if `firstFailureEmailSentAt` is non-null, checks email-prefs opt-out via `EmailPreferencesService.shouldSend(accountId, 'session-failed-first')`, atomically marks the column, then sends `email.sendSessionFailedFirst(...)`. Best-effort by contract — all errors caught + logged warn, never propagate to the calling service.
+
+5. **Wire-in at `SessionsService.runWithFailureCapture`** — after the existing webhook emit, dispatches `{ kind: 'session.failed.first', sessionId, errorMessage }` to the lifecycle service. The caller (the failed driver call) gets to throw its original error regardless of any lifecycle dispatch outcome.
+
+Construction wired in:
+
+- `bootstrap.ts` (production): `accountLifecycleService` constructed before sessions, passed via `accountLifecycle:` SessionsService dep. `emailPreferencesService` construction moved earlier to match.
+- `tests/integration/_helpers/build-test-app.ts` (in-memory test fixture): same shape with `InMemoryAccountLifecycleRepo`. Auto-seeds the lifecycle row for the primary fixture account; `seedAdditionalAccount()` extended to seed lifecycle row for the secondary account too. Fixture exposes `accountLifecycleRepo` field for tests that need to introspect or pre-set state.
+- `tests/e2e/helpers/server.ts`: same shape with the Drizzle repo + a no-op email service (Postmark not configured in e2e).
+
+Test coverage: 6 unit tests in new `apps/server/tests/unit/account-lifecycle.test.ts` covering the dispatcher's full surface:
+
+- `sends the email + marks the dedup flag on first call` — happy path; asserts email arguments include trimmed-trailing-slash docsUrl.
+- `skips the email + does not mark when flag is already set` — pre-seeded firstFailureEmailSentAt; markCallCount stays 0.
+- `skips when customer has opted out` — `shouldSend` returns false; mark not called.
+- `no-ops cleanly when account is unknown` — null lifecycle row.
+- `swallows email-service errors (best-effort contract)` — mocked sendSessionFailedFirst rejection; emit() resolves, doesn't throw.
+- `two concurrent first-failures result in exactly one email (race)` — both `service.emit()` calls awaited via Promise.all; second caller's atomic mark returns false, send skipped.
+
+### Why
+
+V-202 (V-202 commit at 9d4f50fa, GENERATE-2 of the V-201 ack queue) landed the email template + the `sendSessionFailedFirst` method but explicitly deferred the wire-point: "Adding `has_received_first_failure_email` to `accounts` is a Class A migration — lands separately with the wire-in." V-202c is that wire-in.
+
+Founder approved the lifecycle-method abstraction in the V-228 ack with the rationale "pattern is growing; encapsulate before duplication; email + audit are paired lifecycle outputs." The right time to introduce the abstraction is the FIRST call site (V-202c), so V-202b's 4-5 wire-points can reuse the dispatcher rather than each replicating the lookup + dedup + opt-out plumbing.
+
+The atomic mark-before-send order is deliberate: if the email send fails AFTER the mark, the column is already set and subsequent first-failures correctly no-op. The customer might never get the welcome-to-debugging email, but they'll never get duplicates either. Acceptable tradeoff because the email is informational, not critical (the customer ALSO gets a `session.failed` webhook to their endpoint, which IS the contract for failure notifications).
+
+### Files
+
+- `apps/server/src/db/migrations/0020_first_failure_email.sql` — new migration.
+- `apps/server/src/db/migrations/meta/_journal.json` — added idx 20 entry.
+- `apps/server/src/db/schema.ts` — `firstFailureEmailSentAt` column on accounts.
+- `apps/server/src/services/account-lifecycle.ts` — new service.
+- `apps/server/src/db/account-lifecycle-repo.ts` — Drizzle impl.
+- `apps/server/src/services/sessions.ts` — `accountLifecycle?` SessionsServiceDeps + emit at failure capture.
+- `apps/server/src/lib/bootstrap.ts` — wire-in + reorder (emailPreferencesService earlier, lifecycle service constructed before sessions).
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — fixture wiring + accountLifecycleRepo on TestAppFixture + seed in seedAdditionalAccount.
+- `apps/server/tests/integration/_helpers/in-memory-account-lifecycle-repo.ts` — new in-memory impl.
+- `apps/server/tests/e2e/helpers/server.ts` — e2e wire-in.
+- `apps/server/tests/unit/account-lifecycle.test.ts` — 6 new unit tests.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (one prettier reflow on `account-lifecycle-repo.ts` after adding the file).
+- `npm test`: 696 / 696 passing across 72 files (+6 V-202c unit tests; +1 file = the new test file).
+- pre-push hook (V-223) will exercise on push.
+
+### Notes
+
+- The mark-then-send ordering means a Postmark outage during V-202c's first emit results in "no email this time, no email ever" for that account. Surfaced as a known limitation. The alternative (send-then-mark) would re-send on every retry until the email finally goes through, with dedup risk if Postmark already accepted the first attempt but the response was lost. Mark-then-send is the more conservative posture.
+- The `docsBaseUrl` config is hardcoded `https://driftstack.dev/docs` in production wiring — no env-var plumbing yet. If a Tier 3 marketing decision flips the docs domain, that's a one-line bootstrap.ts edit. Not adding env-var indirection until there's a second consumer or a real change-the-domain pressure.
+- `AccountLifecycleService` does NOT emit to `AccountAuditService` for `session.failed.first` — the `AccountAuditAction` enum (V-216) doesn't include `session.failed` as a customer-visible action. The session.failed surface is webhooks (V-090) + this email (V-202c); audit-log is silent. If a future review decides session failures belong in the audit log, it'd be an additive enum extension + an audit emit added to the same lifecycle handler.
+- V-202b's wire-points will extend the `LifecycleEvent` discriminated union: `subscription.tier_changed` (paired with V-226 audit emit + sendTierChanged email), `subscription.trial_pack_purchased` (audit + sendTrialPackPurchased), `subscription.canceled` (audit + sendSubscriptionCancellation), `billing.receipt_succeeded` (email-only, no audit), `billing.payment_failed` (email-only, no audit). Each handler in the dispatcher follows the same shape: lookup → dedup-if-applicable → opt-out check → atomic mark → email send → audit emit.
+
+### Next
+
+V-202b — Stripe handler email wires. Extends `LifecycleEvent` with subscription/billing event kinds; hooks at the matching points in `StripeWebhooksService.handleSubscriptionUpsert` / `handleSubscriptionDeleted` / `handleCheckoutCompleted`. Each new kind reuses the lifecycle dispatcher rather than duplicating the lookup pattern. Then V-202d (trial-pack expiry job — V-173-pattern extension with `scheduled_jobs` table). Then V-184b Tier 3 onboarding visual UX.
