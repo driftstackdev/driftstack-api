@@ -1,6 +1,12 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
 
+// V-192 — progressive-enhancement against /v1/admin/sessions (new in
+// V-192). SSG renders mock; an inline <script> reads ds_web_session_token
+// from localStorage, fetches with bearer auth, and replaces the table.
+// Filter bar wired (status select + account_id text input). Force-
+// destroy button wired against POST /v1/admin/sessions/:id/destroy.
+
 interface MockAdminSession {
   id: string;
   accountId: string;
@@ -54,59 +60,48 @@ function fmtIso(iso: string | null): string {
   return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }
 
-const stuckSessions = MOCK_SESSIONS.filter(
-  (s) => s.status === 'errored' || s.status === 'busy',
-);
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 ---
 
 <AdminLayout title="Sessions">
-  <div class="mx-auto max-w-6xl px-6 py-10">
+  <div class="mx-auto max-w-6xl px-6 py-10" data-page="admin-sessions">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
     <header class="mb-10">
       <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Sessions</h1>
-      <p class="mt-2 text-sm text-slate-500">
-        Cross-account session view. Use this for support cases — find a
-        customer's stuck session, force-destroy if the customer can't.
+      <p class="mt-2 max-w-prose text-sm text-slate-500">
+        Live and recent customer sessions across all accounts. Force-destroy is
+        the only mutation surfaced here; everything else (replay, view recording)
+        flows through the per-account detail surface.
       </p>
     </header>
 
-    <!-- Stuck session callout -->
-    {
-      stuckSessions.length > 0 && (
-        <div class="mb-6 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <span class="font-mono text-xs uppercase">!</span>
-          <p>
-            <strong class="font-medium">
-              {stuckSessions.length.toString()} stuck session
-              {stuckSessions.length === 1 ? '' : 's'}
-            </strong>{' '}
-            (errored or busy &gt; 5 min). Force-destroy if the customer's own
-            DELETE returns 4xx — captures the underlying driver state for
-            postmortem.
-          </p>
-        </div>
-      )
-    }
-
     <!-- Filter bar -->
     <div class="mb-6 flex flex-wrap items-center gap-3">
-      <input
-        type="search"
-        placeholder="Filter by session id, account email…"
-        class="w-72 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
-      />
       <select
+        data-field="status"
         class="rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
       >
         <option value="">All statuses</option>
-        <option value="creating">Creating</option>
-        <option value="ready">Ready</option>
-        <option value="busy">Busy</option>
-        <option value="errored">Errored</option>
-        <option value="destroyed">Destroyed</option>
+        <option value="creating">creating</option>
+        <option value="ready">ready</option>
+        <option value="busy">busy</option>
+        <option value="destroyed">destroyed</option>
+        <option value="errored">errored</option>
       </select>
+      <input
+        type="search"
+        data-field="account-id"
+        placeholder="Account id (acc_<uuid>)"
+        class="w-72 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+      />
     </div>
 
-    <!-- Sessions table -->
     <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
       <table class="w-full text-sm">
         <thead>
@@ -114,24 +109,23 @@ const stuckSessions = MOCK_SESSIONS.filter(
             <th class="px-4 py-3">Session</th>
             <th class="px-4 py-3">Account</th>
             <th class="px-4 py-3">Status</th>
-            <th class="px-4 py-3">Created</th>
-            <th class="px-4 py-3">Destroyed</th>
+            <th class="px-4 py-3">Started</th>
             <th class="px-4 py-3"></th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-100">
+        <tbody class="divide-y divide-slate-100" data-list="sessions">
           {
             MOCK_SESSIONS.map((session) => (
               <tr class="hover:bg-slate-50">
                 <td class="px-4 py-3">
                   <p class="font-mono text-xs text-slate-900">{session.id}</p>
-                  <p class="mt-1 font-mono text-[11px] text-slate-500">
+                  <p class="mt-0.5 font-mono text-[11px] text-slate-500">
                     {session.archetype}
                   </p>
                 </td>
                 <td class="px-4 py-3">
-                  <p class="text-slate-900">{session.accountEmail}</p>
-                  <p class="mt-1 font-mono text-[11px] text-slate-500">
+                  <p class="text-sm text-slate-900">{session.accountEmail}</p>
+                  <p class="mt-0.5 font-mono text-[11px] text-slate-500">
                     {session.accountId}
                   </p>
                 </td>
@@ -146,22 +140,16 @@ const stuckSessions = MOCK_SESSIONS.filter(
                   </span>
                 </td>
                 <td class="px-4 py-3 text-slate-600">{fmtIso(session.createdAt)}</td>
-                <td class="px-4 py-3 text-slate-600">{fmtIso(session.destroyedAt)}</td>
                 <td class="px-4 py-3 text-right">
-                  {session.status !== 'destroyed' ? (
-                    <a
-                      href={`#destroy-${session.id}`}
-                      class="text-sm font-medium text-red-700 hover:underline"
+                  {session.status !== 'destroyed' && (
+                    <button
+                      type="button"
+                      data-action="destroy"
+                      data-id={session.id}
+                      class="text-sm text-red-700 hover:underline"
                     >
                       Force destroy
-                    </a>
-                  ) : (
-                    <a
-                      href={`#audit-${session.id}`}
-                      class="text-sm text-oxblood-700 hover:underline"
-                    >
-                      Audit
-                    </a>
+                    </button>
                   )}
                 </td>
               </tr>
@@ -171,10 +159,199 @@ const stuckSessions = MOCK_SESSIONS.filter(
       </table>
     </div>
 
-    <p class="mt-4 text-xs text-slate-500">
-      Force-destroy fires <code class="font-mono">POST /v1/admin/sessions/:id/destroy</code> with
-      an audit row. Destroyed-by-admin sessions are flagged in the customer's
-      session log so support tickets land with full context.
+    <p class="mt-4 text-xs text-slate-500" data-field="footnote">
+      Showing {MOCK_SESSIONS.length} sessions. Force-destroy fires
+      <code class="font-mono">POST /v1/admin/sessions/:id/destroy</code> with audit log.
     </p>
   </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="admin-sessions"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const tbody = root.querySelector('[data-list="sessions"]');
+      const footnote = root.querySelector('[data-field="footnote"]');
+      const statusEl = root.querySelector('[data-field="status"]');
+      const accountIdEl = root.querySelector('[data-field="account-id"]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      const STATUS_BADGE = {
+        creating: 'bg-amber-50 text-amber-700',
+        ready: 'bg-emerald-50 text-emerald-700',
+        busy: 'bg-blue-50 text-blue-700',
+        destroyed: 'bg-slate-100 text-slate-600',
+        errored: 'bg-red-50 text-red-700',
+      };
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+      function hideBanner() {
+        if (!banner) return;
+        banner.classList.add('hidden');
+      }
+      function escapeHtml(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c],
+        );
+      }
+      function fmtIso(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+
+      function rowHtml(s) {
+        const destroyBtn =
+          s.status !== 'destroyed'
+            ? '<button type="button" data-action="destroy" data-id="' +
+              escapeHtml(s.id) +
+              '" class="text-sm text-red-700 hover:underline">Force destroy</button>'
+            : '';
+        return (
+          '<tr class="hover:bg-slate-50">' +
+          '<td class="px-4 py-3">' +
+          '<p class="font-mono text-xs text-slate-900">' +
+          escapeHtml(s.id) +
+          '</p>' +
+          '<p class="mt-0.5 font-mono text-[11px] text-slate-500">' +
+          escapeHtml(s.archetype) +
+          '</p></td>' +
+          '<td class="px-4 py-3">' +
+          '<p class="font-mono text-[11px] text-slate-500">' +
+          escapeHtml(s.account_id) +
+          '</p></td>' +
+          '<td class="px-4 py-3">' +
+          '<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
+          (STATUS_BADGE[s.status] || '') +
+          '">' +
+          escapeHtml(s.status) +
+          '</span></td>' +
+          '<td class="px-4 py-3 text-slate-600">' +
+          escapeHtml(fmtIso(s.created_at)) +
+          '</td>' +
+          '<td class="px-4 py-3 text-right">' +
+          destroyBtn +
+          '</td></tr>'
+        );
+      }
+
+      function buildQuery() {
+        const params = new URLSearchParams();
+        params.set('limit', '50');
+        if (statusEl && statusEl.value) params.set('status', statusEl.value);
+        if (accountIdEl && accountIdEl.value.trim())
+          params.set('account_id', accountIdEl.value.trim());
+        return params;
+      }
+
+      let inFlight = 0;
+      function load() {
+        if (!token) return;
+        const myReq = ++inFlight;
+        const params = buildQuery();
+        fetch(apiBaseUrl + '/v1/admin/sessions?' + params.toString(), {
+          headers: { authorization: 'Bearer ' + token },
+          credentials: 'include',
+        })
+          .then((r) => {
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then((body) => {
+            if (myReq !== inFlight) return;
+            const rows = body.data || [];
+            if (tbody) {
+              if (rows.length === 0) {
+                tbody.innerHTML =
+                  '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">No sessions match the current filter.</td></tr>';
+              } else {
+                tbody.innerHTML = rows.map(rowHtml).join('');
+              }
+            }
+            if (footnote) {
+              footnote.textContent =
+                'Showing ' +
+                rows.length +
+                ' session' +
+                (rows.length === 1 ? '' : 's') +
+                '. Force-destroy fires POST /v1/admin/sessions/:id/destroy with audit log.';
+            }
+            hideBanner();
+          })
+          .catch((err) => {
+            if (myReq !== inFlight) return;
+            const msg = err && err.message ? err.message : 'network error';
+            if (msg === 'forbidden') {
+              showBanner(
+                'Access denied — admin scope required. You are signed in as a customer account.',
+              );
+            } else {
+              showBanner("Couldn't load sessions (" + msg + '). Showing preview data below.');
+            }
+          });
+      }
+
+      function destroy(id) {
+        if (!token) return;
+        const reason = window.prompt('Reason for force-destroying ' + id + ' (optional):') || '';
+        const body = {};
+        if (reason.trim()) body.reason = reason.trim();
+        showBanner('Destroying ' + id + '…');
+        fetch(apiBaseUrl + '/v1/admin/sessions/' + encodeURIComponent(id) + '/destroy', {
+          method: 'POST',
+          headers: {
+            authorization: 'Bearer ' + token,
+            'content-type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify(body),
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(() => {
+            showBanner('Destroyed ' + id + '. Refreshing…');
+            load();
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't destroy (" + msg + ').');
+          });
+      }
+
+      root.addEventListener('click', (ev) => {
+        const target = ev.target;
+        if (!target || !target.closest) return;
+        const btn = target.closest('[data-action="destroy"]');
+        if (!btn) return;
+        ev.preventDefault();
+        const id = btn.getAttribute('data-id');
+        if (id) destroy(id);
+      });
+
+      let debounce = 0;
+      function scheduleLoad() {
+        clearTimeout(debounce);
+        debounce = setTimeout(load, 200);
+      }
+      if (statusEl) statusEl.addEventListener('change', scheduleLoad);
+      if (accountIdEl) accountIdEl.addEventListener('input', scheduleLoad);
+
+      if (!token) {
+        showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+        return;
+      }
+
+      load();
+    })();
+  </script>
 </AdminLayout>

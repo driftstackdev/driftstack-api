@@ -24,6 +24,7 @@ import type { AccountContext } from './auth.js';
 import type { Driver } from '../drivers/types.js';
 import type { GUIInputRequest } from '../schemas/gui-input.js';
 import { ConcurrencyLimitError, NotFoundError, SessionDestroyedError } from '../lib/errors.js';
+import { requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Concurrent session limits + profile count limits per tier
@@ -117,6 +118,17 @@ export interface SessionRepo {
     accountId: string,
     opts: { limit: number; cursor?: string },
   ): Promise<SessionListPage>;
+  /**
+   * Cross-account session list for admin operational tooling. Filters
+   * by status (single value) and/or accountId. Cursor pagination by
+   * createdAt DESC, mirroring listSessions().
+   */
+  listAllSessions(opts: {
+    limit: number;
+    cursor?: string;
+    status?: SessionRecord['status'];
+    accountId?: string;
+  }): Promise<SessionListPage>;
   recordEvent(input: SessionEventInput): Promise<void>;
 }
 
@@ -365,6 +377,24 @@ export class SessionsService {
     opts: { limit: number; cursor?: string },
   ): Promise<SessionListPage> {
     return this.deps.repo.listSessions(ctx.account.id, opts);
+  }
+
+  /**
+   * Cross-account list for the admin panel + ops tooling. Requires
+   * driftstack_internal_admin scope (compat alias 'admin' also accepted
+   * for legacy keys per V-174 migration).
+   */
+  async listAll(
+    ctx: AccountContext,
+    opts: {
+      limit: number;
+      cursor?: string;
+      status?: SessionRecord['status'];
+      accountId?: string;
+    },
+  ): Promise<SessionListPage> {
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    return this.deps.repo.listAllSessions(opts);
   }
 
   // ─────────────────────────────────────────────────────────────────────────

@@ -10921,3 +10921,51 @@ PRIORITY C phase 5 — the per-account detail page is the surface staff hit to a
 ### Next
 
 V-192 — admin-panel /sessions live wiring (no admin sessions list endpoint exists today; either add one or surface as gap and skip to V-193).
+
+## V-192 — admin /sessions cross-account list endpoint + page wiring (PRIORITY C phase 6)
+
+### What
+
+Built a new cross-account admin list endpoint and wired the admin /sessions page against it:
+
+1. **`GET /v1/admin/sessions`** — paginated cross-account session list. Filters by status (single value: creating / ready / busy / destroyed / errored) and account*id (accepts prefixed `acc*<uuid>`or raw uuid). Cursor pagination by`createdAt DESC`. Read-only; no audit row written for the list itself.
+2. **`SessionsService.listAll(ctx, opts)`** — admin-scope-gated wrapper over a new `SessionRepo.listAllSessions(opts)` method.
+3. **Drizzle and in-memory repo implementations** of `listAllSessions` with the status/account filters composing onto the existing cursor pattern.
+4. **OpenAPI registration** of the new path with inline Zod schemas.
+5. **3 new integration tests** (`admin-sessions.test.ts`): happy path lists across accounts, filter by `account_id` returns only that account's sessions, 403 without admin scope.
+6. **Dashboard wiring on `apps/admin-panel/src/pages/sessions.astro`** — replaces the static MOCK_SESSIONS table with progressive-enhancement fetch + filter bar (status select, account_id text input) + force-destroy action wired to existing `POST /v1/admin/sessions/:id/destroy`.
+
+### Why
+
+PRIORITY C phase 6 — admin /sessions was 100% mock; staff had no way to see live sessions across accounts during incident response. Adding a cross-account list endpoint unblocks operational visibility (e.g. "is account X stuck on 5 errored sessions?") and force-destroy from the same page closes the most common ops loop without needing curl.
+
+### Files
+
+- `apps/server/src/services/sessions.ts` — added `listAllSessions` to `SessionRepo` + `listAll` to `SessionsService` (gated on `driftstack_internal_admin` via the V-174 compat alias). Imported `requireScope as throwIfMissingScope`.
+- `apps/server/src/db/sessions-repo.ts` — Drizzle implementation: `select(*).from(sessions).where(filters).orderBy(desc(createdAt)).limit(N+1)` with conditional status / accountId / cursor predicates.
+- `apps/server/tests/integration/_helpers/in-memory-sessions-repo.ts` — in-memory implementation iterating + filtering.
+- `apps/server/src/routes/admin-sessions.ts` — new route file. Inline Zod query schema + `publicSession` projection.
+- `apps/server/src/lib/app.ts` — registers `registerAdminSessionsRoutes` with the existing `sessionsService`.
+- `apps/server/src/lib/openapi.ts` — adds `/v1/admin/sessions` registration.
+- `apps/server/tests/integration/openapi.test.ts` — adds path to expected list (62 → 63 paths).
+- `apps/server/tests/integration/admin-sessions.test.ts` — 3 new tests.
+- `apps/admin-panel/src/pages/sessions.astro` — full progressive-enhancement rewrite. `data-page="admin-sessions"` root, filter bar on status + account_id, force-destroy button via event delegation + reload-on-success.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 631 / 631 passing across 63 files (3 new admin-sessions tests pass).
+- `astro check` on admin-panel: 0 errors / warnings / hints.
+
+### Notes
+
+- Account-email column is dropped from the live view because the response shape is `publicSession` (no email). Adding email would require a join in `listAllSessions` — followup if staff find the bare prefixed account_id hard to scan.
+- The mock had 3 in-memory sessions but the live filter bar can paginate up to 100 per page (limit max). Default 50.
+- Force-destroy uses the existing audited `POST /v1/admin/sessions/:id/destroy` endpoint. Reason field is captured via `window.prompt`, same minimal-UX pattern as V-191 admin actions.
+- The new endpoint reuses `SessionsService` rather than introducing a parallel admin-sessions service. Keeps a single source of truth for the data shape; admin-only path is gated at the service-method scope check.
+
+### Next
+
+V-193 — admin /api-keys cross-account list endpoint + page wiring (~1.5hr Tier 1, mirror of V-192 pattern but for `apiKeys` table).

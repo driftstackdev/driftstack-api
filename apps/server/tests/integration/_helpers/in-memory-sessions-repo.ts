@@ -94,6 +94,27 @@ export class InMemorySessionsRepo implements SessionRepo {
     });
   }
 
+  listAllSessions(opts: {
+    limit: number;
+    cursor?: string;
+    status?: SessionRecord['status'];
+    accountId?: string;
+  }): Promise<SessionListPage> {
+    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
+    const all = Array.from(this.sessions.values())
+      .filter((s) => (opts.accountId ? s.accountId === opts.accountId : true))
+      .filter((s) => (opts.status ? s.status === opts.status : true))
+      .filter((s) => (cursorDate ? s.createdAt < cursorDate : true))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const items = all.slice(0, opts.limit);
+    const last = items[items.length - 1];
+    const hasMore = all.length > opts.limit;
+    return Promise.resolve({
+      items,
+      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+    });
+  }
+
   recordEvent(input: SessionEventInput): Promise<void> {
     this.events.push({
       ...input,

@@ -109,6 +109,35 @@ export class DrizzleSessionRepo implements SessionRepo {
       durationMs: input.durationMs,
     });
   }
+
+  async listAllSessions(opts: {
+    limit: number;
+    cursor?: string;
+    status?: SessionRecord['status'];
+    accountId?: string;
+  }): Promise<SessionListPage> {
+    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
+    const filters = [];
+    if (cursorDate) filters.push(lt(sessions.createdAt, cursorDate));
+    if (opts.status) filters.push(eq(sessions.status, opts.status));
+    if (opts.accountId) filters.push(eq(sessions.accountId, opts.accountId));
+    const whereClause = filters.length === 0 ? undefined : and(...filters);
+
+    const rows = await this.database.db
+      .select()
+      .from(sessions)
+      .where(whereClause)
+      .orderBy(desc(sessions.createdAt))
+      .limit(opts.limit + 1);
+
+    const hasMore = rows.length > opts.limit;
+    const items = hasMore ? rows.slice(0, opts.limit) : rows;
+    const last = items[items.length - 1];
+    return {
+      items: items.map(toSessionRecord),
+      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+    };
+  }
 }
 
 function toSessionRecord(r: typeof sessions.$inferSelect): SessionRecord {

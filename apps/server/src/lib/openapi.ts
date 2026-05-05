@@ -592,6 +592,33 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // Cross-account sessions list (admin)
+  const ListAdminSessionsQueryOpenApi = z.object({
+    limit: z.number().int().min(1).max(100).optional(),
+    cursor: z.string().optional(),
+    status: z.enum(['creating', 'ready', 'busy', 'destroyed', 'errored']).optional(),
+    account_id: z.string().optional(),
+  });
+  const PaginatedAdminSessionsSchema = z.object({
+    data: z.array(SessionSchema),
+    next_cursor: z.string().nullable(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/sessions',
+    summary: 'Cross-account session list (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: { query: ListAdminSessionsQueryOpenApi },
+    responses: {
+      200: {
+        description: 'Paginated cross-account sessions.',
+        content: { 'application/json': { schema: PaginatedAdminSessionsSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+
   // Overview — aggregate counts the admin-panel index renders.
   const AdminOverviewResponseSchema = z.object({
     accounts: z.object({
