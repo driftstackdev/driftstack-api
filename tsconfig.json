@@ -4,6 +4,7 @@
     { "path": "./apps/server" },
     { "path": "./packages/api-types" },
     { "path": "./packages/behavioural-simulation" },
+    { "path": "./packages/recapture-automation" },
     { "path": "./packages/recipe-library" },
     { "path": "./packages/sdk-typescript" },
     { "path": "./packages/webhook-delivery" },

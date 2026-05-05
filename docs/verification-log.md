@@ -10282,3 +10282,80 @@ This is a meaningful gap — a Go customer who wants to manage profiles or wire 
 ### Next
 
 V-179 (next): recapture automation scaffolding (file 115, ~2-3hr).
+
+---
+
+## V-179 — Recapture automation scaffolding (file 115, PRIORITY)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder PRIORITY (file 115). When Apple ships a new iOS minor version (e.g. iOS 18.7 → iOS 18.8), the entire fingerprint reference set captured against the old version MAY have drifted. Recapture automation detects the version bump, triggers a recapture pass against representative archetypes, and validates that the new captures match the prior baseline (or surfaces a diff for manual review).
+
+V-179 lands the seam following the V-127 / V-144 / V-149 pattern: types + interfaces + in-memory mock + tests. Real implementation lands in a future iteration once the operational workflow stabilises.
+
+Today the workflow is manual: when Agent 1 notices a new iOS version on Apple's release notes, the founder runs the BS Automate capture batches manually. The new package's mock implementation models the SAME workflow programmatically so a future scheduled-job + alerting layer can drop in.
+
+### What changed
+
+New workspace `packages/recapture-automation/`:
+
+- `package.json` + `tsconfig.json` matching V-127 / V-144 / V-149 conventions.
+- `src/types.ts` (~140 lines):
+  - `IosArchetypeVersion` (`iosVersion`, `safariVersion`).
+  - `RecaptureTrigger` enum: `'ios_version_bump' | 'safari_version_bump' | 'baseline_drift_detected' | 'manual_request'`.
+  - `RecaptureStatus` enum: `'queued' | 'in_progress' | 'completed' | 'failed' | 'cancelled'`.
+  - `FingerprintComparisonOutcome` enum: `'match' | 'diff' | 'capture_error' | 'new_surface' | 'missing_surface'`.
+  - `FingerprintComparison` (per-surface diff: file 121 surface id + outcome + baseline/recaptured values + notes).
+  - `RecaptureRun` (id + trigger + archetype + status + per-surface comparison list + aggregate counts + timestamps).
+  - `IosVersionTransition` (boundary type for the detection layer).
+- `src/interfaces.ts`:
+  - `RecaptureService` — `triggerRecapture` / `getRun` / `listRuns` / `recordComparison` / `finalizeRun`.
+  - `IosVersionWatcher` — `getLastSeenVersion` / `pollForTransition` / `recordTransitionHandled`. Out-of-scope detection layer; the interface is the seam.
+- `src/mock.ts`:
+  - `MockRecaptureService` — in-memory Map-backed implementation; deterministic id assignment (`rcap_00000001`); status transitions queued → in_progress (on first comparison) → completed/failed (on finalize); aggregate counts auto-update.
+  - `MockIosVersionWatcher` — seeded transitions; lastSeen tracking.
+- `src/index.ts` — re-exports.
+- `tests/mock.test.ts` — 9 tests covering trigger / id shape / status transitions / count aggregation / finalize / list filters + pagination / watcher transitions.
+
+`tsconfig.json` (root): added `./packages/recapture-automation` to `references`.
+
+### Use case (forward-looking)
+
+When Apple ships iOS 18.8:
+
+1. `IosVersionWatcher.pollForTransition()` (manual today, scheduled cron tomorrow) detects 18.7 → 18.8.
+2. Operator (founder + future automation) calls `RecaptureService.triggerRecapture({ trigger: 'ios_version_bump', archetypeId: 'iphone16pro_ios18_7_safari26_4', baselineVersion: { iosVersion: '18.7', ... }, targetVersion: { iosVersion: '18.8', ... } })`.
+3. A capture worker (BS Automate batches today; future: scheduled job) walks file 121 surfaces against the new iOS version, calling `recordComparison()` per surface.
+4. `finalizeRun(runId, 'completed')` marks the run terminal. Aggregate counts (matchCount / diffCount / errorCount / etc.) reflect the validation outcome.
+5. If `diffCount > 0`, surface a manual-review queue item — the locked archetype's fingerprint reference set has drifted.
+
+The MOCK doesn't implement the capture worker (that's BS Automate / WebKit fork territory); it just models the orchestration state machine.
+
+### How verified
+
+- `npm install`: workspace picked up (11 workspaces total, was 10).
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` pass on src + package.json).
+- Targeted: workspace tests run via vitest auto-discovery: 9/9 passing.
+- Full suite: `npm test`: 625/625 (was 616; +9 new).
+
+### Files added
+
+- `packages/recapture-automation/package.json`
+- `packages/recapture-automation/tsconfig.json`
+- `packages/recapture-automation/src/{types,interfaces,mock,index}.ts`
+- `packages/recapture-automation/tests/mock.test.ts`
+
+### Files modified
+
+- `tsconfig.json` (root references)
+- `package-lock.json` (workspace pickup)
+
+### Next
+
+V-180+ next: per founder direction, generate-from-planning-docs continuation. Expanded queue PRIORITY A (customer dashboard live-data wiring V-180-V-183), PRIORITY B (onboarding flow), PRIORITY C (admin panel live-data wiring), PRIORITY D (production-readiness), PRIORITY E (generate-from-planning-docs). ~30-40hr of substantive Tier 1 work runway.
