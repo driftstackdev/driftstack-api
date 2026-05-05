@@ -19,7 +19,7 @@ function sampleAccount(): AccountRow {
     id: 'acc_bench',
     email: 'bench@driftstack.test',
     name: 'Bench Account',
-    tier: 'pro',
+    tier: 'api_builder',
     status: 'active',
     createdAt: new Date('2026-05-04T00:00:00Z'),
     updatedAt: new Date('2026-05-04T00:00:00Z'),

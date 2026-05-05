@@ -27,7 +27,7 @@ export const MOCK_ACCOUNTS: MockAdminAccount[] = [
     id: 'acc_00000000-0000-4000-8000-000000000002',
     email: 'agency@driftstack.local',
     name: 'Agency Test',
-    tier: 'agency',
+    tier: 'agency_manual',
     status: 'active',
     createdAt: '2026-04-22T14:00:00Z',
     lastSeenAt: '2026-05-03T22:30:00Z',

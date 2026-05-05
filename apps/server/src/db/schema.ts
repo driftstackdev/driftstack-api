@@ -807,3 +807,33 @@ export type NewProfile = typeof profiles.$inferInsert;
 
 export type Subscription = typeof subscriptions.$inferSelect;
 export type NewSubscription = typeof subscriptions.$inferInsert;
+
+// audit_archive_runs (V-163, ADR-006) — ledger of monthly archive
+// sweeps that copy 90+ day-old rows from the four audit-shaped
+// tables (admin_audit_log / processed_stripe_events / legal_
+// acceptances / webhook_deliveries) to R2 as JSONL+gzip and DELETE
+// from Postgres. One row per (table_name, window_start) sweep.
+export const auditArchiveRuns = pgTable(
+  'audit_archive_runs',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tableName: text('table_name').notNull(),
+    windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+    windowEnd: timestamp('window_end', { withTimezone: true }).notNull(),
+    rowsArchived: integer('rows_archived').notNull(),
+    r2ObjectKey: text('r2_object_key').notNull(),
+    sha256Checksum: text('sha256_checksum').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }).notNull(),
+    deletedFromPostgres: boolean('deleted_from_postgres').notNull().default(false),
+  },
+  (t) => [
+    index('audit_archive_runs_table_window_idx').on(t.tableName, t.windowStart),
+    index('audit_archive_runs_started_idx').on(t.startedAt),
+  ],
+);
+
+export type AuditArchiveRun = typeof auditArchiveRuns.$inferSelect;
+export type NewAuditArchiveRun = typeof auditArchiveRuns.$inferInsert;

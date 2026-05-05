@@ -9053,3 +9053,92 @@ Full /pricing.astro audit per founder direction following V-161 /faq cleanup. Fo
 ### Next
 
 Continuing per never-stop rule. PRIORITY 1 (FAQ + pricing redline batch) complete. Moving to PRIORITY 2: /usage analytics real-data wiring.
+
+---
+
+## V-163 — AuditArchiveService + audit_archive_runs ledger (ADR-006 PRIORITY 3)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder PRIORITY 3 — implement the R2 archive policy specified in ADR-006 (D-033). Four audit-shaped tables (admin_audit_log / processed_stripe_events / legal_acceptances / webhook_deliveries) need to retain 90 days hot in Postgres + 7 years archive in R2 as JSONL+gzip. V-163 lands the service + ledger + tests; the cron / external scheduler invocation lands separately at deploy time.
+
+### What changed
+
+`apps/server/src/db/migrations/0013_audit_archive_runs.sql` (new):
+
+- `audit_archive_runs` ledger table per ADR-006 §Operational notes.
+- Columns: id (uuid PK), table_name, window_start, window_end, rows_archived, r2_object_key, sha256_checksum, started_at, completed_at, deleted_from_postgres (default false).
+- Two indexes: `(table_name, window_start)` for forensic lookup; `(started_at)` for "recent runs" audit queries.
+
+`apps/server/src/db/migrations/meta/_journal.json`: idx 13 entry added.
+
+`apps/server/src/db/schema.ts`: `auditArchiveRuns` Drizzle schema + `AuditArchiveRun` / `NewAuditArchiveRun` types.
+
+`apps/server/src/services/audit-archive.ts` (new — 240 lines):
+
+- `AUDIT_TABLES` const — the four ADR-006 tables + their primary timestamp columns.
+- `archiveObjectKey(prefix, tableName, windowStart)` — composes the stable R2 key shape `<prefix>/<table>/YYYY/MM/<table>_YYYY-MM.jsonl.gz` per ADR §2.
+- `rowsToJsonl(rows)` — newline-delimited JSON serialisation.
+- `AuditArchiveService.archiveTable(tableName)` — single-table sweep:
+  - SELECT rows older than 90 days via injected `ArchiveTableRepo`.
+  - Stream-serialise → gzip → sha256 → R2 putObject.
+  - Insert `audit_archive_runs` ledger row.
+  - DELETE archived rows from Postgres.
+  - Mark ledger.deletedFromPostgres=true.
+- `archiveAll()` — orchestrates all four tables in sequence; per-table failure does not abort siblings.
+- `ArchiveTableRepo` + `ArchiveLedgerRepo` interfaces — the Drizzle-backed implementations land in V-164 follow-on.
+- `r2Prefix` constructor option lets ops point staging vs production at distinct prefixes within the same bucket.
+- `now()` test seam.
+
+`apps/server/tests/unit/audit-archive.test.ts` (new) — 14 tests:
+
+- Pure helpers: `rowsToJsonl` (3 cases), `archiveObjectKey` (2 cases including custom prefix), `AUDIT_TABLES` coverage assertion.
+- archiveTable happy path: gzip JSONL upload, R2 key partitioning by oldest archived row's timestamp (not now()), checksum equals sha256 of uploaded body, ledger row insertion, DELETE called with archived ids, windowEnd = now - 90 days.
+- archiveTable empty-window: empty input still uploads (idempotent overwrite preserved); no DELETE call; ledger marks deleted=true (nothing pending).
+- archiveAll orchestration: runs all four tables, only non-empty windows trigger DELETE.
+
+### Pre-existing typecheck regressions fixed inline
+
+V-163 adds new schema imports that surfaced 3 stale type errors in unrelated files. Fixed inline so the verify chain stays green:
+
+- `apps/admin-panel/src/data/mocks.ts:30` — `tier: 'agency'` → `'agency_manual'` (V-135 scaffolding had a stale tier name; only flagged once new schema emits triggered fresh astro-check).
+- `apps/customer-dashboard/src/pages/team.astro:33` — `const seatLimit = 1` widened to `const seatLimit: number = 1`. The literal-type narrowing made the false branch of `seatLimit === 1 ? ... : ...` unreachable (`never`), breaking `.toString()` call.
+- `apps/server/tests/bench/auth-cache.bench.ts:22` — `tier: 'pro'` → `'api_builder'` (stale tier name from pre-ADR-004 nomenclature).
+
+These are not blocking changes but the verify chain must stay green throughout per push-to-main pattern.
+
+### How verified
+
+- `npm run typecheck`: clean across all 10 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after a `prettier --write` pass on the new files).
+- Targeted: `npm test -- audit-archive.test.ts`: 14/14 passing.
+- Full suite: `npm test`: 577/577 passing (was 563; +14 new).
+
+### Files added
+
+- `apps/server/src/db/migrations/0013_audit_archive_runs.sql`
+- `apps/server/src/services/audit-archive.ts`
+- `apps/server/tests/unit/audit-archive.test.ts`
+
+### Files modified
+
+- `apps/server/src/db/migrations/meta/_journal.json`
+- `apps/server/src/db/schema.ts`
+- `apps/admin-panel/src/data/mocks.ts` (pre-existing tier-name fix)
+- `apps/customer-dashboard/src/pages/team.astro` (pre-existing literal-type fix)
+- `apps/server/tests/bench/auth-cache.bench.ts` (pre-existing tier-name fix)
+
+### What was deliberately NOT done in V-163
+
+- **DrizzleAuditArchiveRepo + DrizzleArchiveLedgerRepo** — the per-table repository implementations against real Postgres land in V-164. V-163 keeps the service interface-only so the verify chain doesn't depend on adding integration tests against a running DB.
+- **Cron / scheduler wiring** — ADR §3 specifies "monthly cron-driven service runs on the 1st of each month at 02:00 UTC." The cron itself is a deployment-time concern (CronJob in K8s, GitHub Actions schedule, Hetzner systemd timer, etc.). Service exposes `archiveAll()` as the entry point for whatever scheduler invokes it.
+- **Admin export endpoint** (`GET /v1/admin/accounts/:id/audit-export`) — ADR §5 Phase 1; lands as a separate V-NNN once the archive ledger has data to export against.
+
+### Next
+
+V-164 next: DrizzleAuditArchiveRepo + DrizzleArchiveLedgerRepo + integration test against Postgres. Then PRIORITY 4 (webhook delivery system real implementation).

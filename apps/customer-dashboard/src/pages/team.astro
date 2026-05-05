@@ -30,7 +30,7 @@ const MOCK_TEAM: MockTeamMember[] = [
 
 // Mock — real source: /v1/billing tier capabilities. team_max=1 means
 // no inviting allowed.
-const seatLimit = 1;
+const seatLimit: number = 1;
 const seatLimitText = seatLimit === 1 ? 'Solo account' : `${seatLimit.toString()} seats`;
 const canInvite = seatLimit > MOCK_TEAM.length;
 
