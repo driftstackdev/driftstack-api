@@ -11739,3 +11739,64 @@ No file changes — audit-confirmation V-entry. Policy already documented in CLA
 ### Next
 
 V-209 — `/about` page voice rewrite (Tier 3 working-tree draft, founder review before commit).
+
+## V-209 — /about page audit + working-tree draft (Tier 3, NOT committed)
+
+### What
+
+Audited the live `/about` page against the founder's V-209 directive, drafted minor improvements in the working tree, surfaced for founder redline before any commit.
+
+### Audit findings
+
+The "Pre-development. KvK eenmanszaak registration scheduled 21-05-2026. Validation experiment (per `docs/planning/01-validation-experiment.md`) begins after KvK registration completes" copy the founder cited as problematic **does not appear** in the current `apps/marketing-site/src/pages/about.astro`. The live page is already in solid company voice:
+
+- Hero: "A small Dutch company building one product well" + concise positioning paragraph.
+- "What we're building" — accessible explanation of source-modified WebKit vs runtime patching.
+- "Why we exist" — the bigger story.
+- "Posture" — three-pillar (EU-resident, no behavioural data collection, honest scope).
+- Company facts dl with Entity / Headquarters / Team / Funding / Sub-processors / Contact.
+- CTA to trial pack.
+
+The founder's cited copy may have been from an outdated impression or a different surface; on the live page the voice problem isn't there.
+
+### Tightenings drafted (working tree, NOT committed)
+
+Two small changes drafted in `apps/marketing-site/src/pages/about.astro`:
+
+1. **Drop Dutch jargon parenthetical** — Entity row was "Dutch BV (Besloten Vennootschap)". Now reads "Dutch BV". Per the founder's V-209 directive: don't include "eenmanszaak" / "BV" Dutch legal jargon explanations on customer-facing copy. Just "Dutch BV" alone is recognizable globally without the parenthetical.
+
+2. **Add Founder section** — new section between Posture and Company Facts. One paragraph in professional bio voice with placeholders `[FOUNDER NAME]` and `[BACKGROUND]` for founder fill-in during redline. Footer has direct mailto link + response-time-expectation ("read every email and respond within one business day"). Text:
+
+   > Driftstack is built by [FOUNDER NAME]. [BACKGROUND — e.g. "Background in browser internals and infrastructure engineering. Previously at [prior company], where [...]"]. Reach me at hello@driftstack.dev; I read every email and respond within one business day.
+
+   Background-color rhythm preserved (white-slate-white-white-slate-slate becomes white-slate-white-white-slate after Company Facts section was changed to bg-white to keep the Posture / Founder + Company Facts / CTA visual groupings).
+
+### NOT committed
+
+Per the marketing-cadence rule, the `about.astro` edits stay in the working tree until founder applies redlines + approves. Founder needs to:
+
+1. Fill in `[FOUNDER NAME]` and `[BACKGROUND]` with real text.
+2. Approve the Dutch BV jargon trim.
+3. Approve the visual rhythm (or redline the section ordering / colors).
+4. Direct commit OR additional revisions.
+
+Working-tree state captured by `git diff apps/marketing-site/src/pages/about.astro` from current `HEAD`.
+
+### Files
+
+- `apps/marketing-site/src/pages/about.astro` — working-tree changes ONLY, NOT committed.
+- `docs/verification-log.md` — this entry (this commits per standard convention; the V-log entry documenting the Tier 3 draft is engineering scaffolding, not customer-facing copy).
+
+### Verify
+
+- `npx astro check` on marketing-site: 0 errors / warnings / hints.
+- The about.astro changes do not break the build.
+
+### Notes
+
+- Founder Tier 3 redline pass needed to fill in placeholders + approve. Do not push the about.astro changes to main until then.
+- The scope of V-209 is intentionally narrow — current page is already in good shape, so the draft is incremental tightening rather than full rewrite. If the founder wants a broader rewrite (different positioning, different sections), that surfaces as a follow-up draft.
+
+### Next
+
+V-210 — marketing site visitor-density audit + Tier 3 drafts for `/index` + `/pricing` + `/faq` (~3-5hr Tier 3 working-tree drafts, founder redline before commit).
