@@ -44,6 +44,7 @@ export interface AccountsAdminRepo {
     at: Date,
   ): Promise<AccountRow | null>;
   list(args: ListAccountsArgs): Promise<ListAccountsPage>;
+  countByStatus(status: 'active' | 'suspended' | 'deleted'): Promise<number>;
 }
 
 export class AccountsAdminService {
@@ -62,6 +63,14 @@ export class AccountsAdminService {
   async list(ctx: AccountContext, args: ListAccountsArgs): Promise<ListAccountsPage> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
     return this.repo.list(args);
+  }
+
+  async countByStatus(
+    ctx: AccountContext,
+    status: 'active' | 'suspended' | 'deleted',
+  ): Promise<number> {
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    return this.repo.countByStatus(status);
   }
 
   async changeTier(

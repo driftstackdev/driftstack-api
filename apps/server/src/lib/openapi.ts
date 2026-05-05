@@ -592,6 +592,31 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // Overview — aggregate counts the admin-panel index renders.
+  const AdminOverviewResponseSchema = z.object({
+    accounts: z.object({
+      active: z.number().int().nonnegative(),
+      suspended: z.number().int().nonnegative(),
+    }),
+    webhooks: z.object({
+      dlq_depth: z.number().int().nonnegative(),
+    }),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/overview',
+    summary: 'Aggregate counts for the admin panel index page (admin)',
+    tags: ['admin'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Aggregate active/suspended account counts and DLQ depth.',
+        content: { 'application/json': { schema: AdminOverviewResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+
   return r;
 }
 

@@ -229,6 +229,14 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     });
   }
 
+  countDlqDeliveries(): Promise<number> {
+    let cnt = 0;
+    for (const r of this.deliveries.values()) {
+      if (r.status === 'dlq') cnt++;
+    }
+    return Promise.resolve(cnt);
+  }
+
   resetDeliveryToPending(deliveryId: string, at: Date): Promise<WebhookDeliveryRow | null> {
     const row = this.deliveries.get(deliveryId);
     if (!row) return Promise.resolve(null);

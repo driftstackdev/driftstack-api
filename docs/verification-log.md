@@ -10834,3 +10834,54 @@ PRIORITY C phase 3 — the DLQ page is the operational lever staff pull when a c
 ### Next
 
 V-190 — admin index overview tiles + recent admin activity wiring (needs aggregate counts; small new endpoint or compute from existing list endpoints).
+
+## V-190 — admin index overview tiles + recent admin activity (PRIORITY C phase 4)
+
+### What
+
+Wired the admin-panel index page to live aggregate state via two server-side additions plus dashboard fetch wiring:
+
+1. **New endpoint `GET /v1/admin/overview`** returning `{ accounts: { active, suspended }, webhooks: { dlq_depth } }`. Single-roundtrip aggregate so the index page doesn't have to iterate list endpoints.
+2. **New `countByStatus(status)` on `AccountsAdminRepo`** + Drizzle and in-memory implementations.
+3. **New `countDlqDeliveries()` on `WebhooksRepo`** + Drizzle and in-memory implementations.
+4. **Service-layer wrappers** (`AccountsAdminService.countByStatus` and `WebhooksAdminService.countDlq`) gating on `driftstack_internal_admin` scope.
+5. **Dashboard wiring on `index.astro`** — replaces tile values via fetch + renders the recent-activity list from `/v1/admin/audit-log?limit=5`.
+
+Open-leads tile remains on mock (`MOCK_LEADS.length`) — leads tracking has no Postgres surface yet; tile is now visibly labelled "mock — leads endpoint TBD" so staff don't read it as live state.
+
+### Why
+
+PRIORITY C phase 4 — admin index was 100% mock. The tiles + recent activity are the first thing a staff user sees when they open the panel; making them live grounds every other admin action in real state. Adding the new endpoint here (rather than hammering the list endpoints) keeps admin-panel paint cost flat and avoids accidentally leaking N+1 queries on the audit / accounts paths.
+
+### Files
+
+- `apps/server/src/routes/admin-overview.ts` — new route file. Single GET handler; parallel `countByStatus(active)`, `countByStatus(suspended)`, `countDlq()` with `Promise.all`. No audit row written (read-only).
+- `apps/server/src/lib/app.ts` — registers `registerAdminOverviewRoutes` with the existing services.
+- `apps/server/src/lib/openapi.ts` — registers `/v1/admin/overview` with an inline `AdminOverviewResponseSchema` Zod shape.
+- `apps/server/src/services/admin-accounts.ts` — adds `countByStatus` to interface + service.
+- `apps/server/src/db/admin-accounts-repo.ts` — Drizzle `select count(*)::int from accounts where status = $1`.
+- `apps/server/tests/integration/_helpers/in-memory-admin-accounts-repo.ts` — in-memory `filter(...).length` impl.
+- `apps/server/src/services/webhooks.ts` — adds `countDlqDeliveries` to repo interface + `countDlq` to `WebhooksAdminService`.
+- `apps/server/src/db/webhooks-repo.ts` — Drizzle `count(*)` over `webhook_deliveries.status='dlq'`.
+- `apps/server/tests/integration/_helpers/in-memory-webhooks-repo.ts` — in-memory iteration.
+- `apps/server/tests/integration/admin-overview.test.ts` — new integration test (3 tests: 200 happy path, suspended count after suspend mutation, 403 without admin scope).
+- `apps/server/tests/integration/openapi.test.ts` — added `/v1/admin/overview` to the expected-paths list.
+- `apps/admin-panel/src/pages/index.astro` — `data-page="admin-overview"` root, `data-field` attrs on tiles, `data-list="recent-audits"` on the activity ul, inline script that fetches `/v1/admin/overview` + `/v1/admin/audit-log?limit=5` in parallel and renders. Banner surfaces no-token / 403 forbidden / fetch-error.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 628 / 628 passing across 62 files (3 new admin-overview tests pass).
+- `astro check` on admin-panel: 0 errors / warnings / hints.
+
+### Notes
+
+- Open-leads tile stays on mock per design — there's no `/v1/admin/leads` endpoint and no `leads` table. The visible "mock" footnote on that tile is honest UX rather than silently rendering a fabricated value.
+- Recent-activity list uses `admin_account_id` (prefixed `acc_<uuid>`) rather than email since the audit shape doesn't expose admin email today; same gap as V-188.
+- The new endpoint is single-flight per request — no caching layer added. Admin panel volume is low enough that a 200-row count() per page-load is negligible. If admin volume scales, switch to a denormalised counter keyed off the `accounts.status` change paths.
+
+### Next
+
+V-191 — admin /accounts/[id] detail page live wiring (existing endpoint, ~1.5hr Tier 1).

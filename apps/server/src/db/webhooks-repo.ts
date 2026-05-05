@@ -272,6 +272,14 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     };
   }
 
+  async countDlqDeliveries(): Promise<number> {
+    const [row] = await this.database.db
+      .select({ cnt: sql<number>`count(*)::int` })
+      .from(webhookDeliveries)
+      .where(eq(webhookDeliveries.status, 'dlq' as WebhookDeliveryStatus));
+    return row?.cnt ?? 0;
+  }
+
   async resetDeliveryToPending(deliveryId: string, at: Date): Promise<WebhookDeliveryRow | null> {
     const [row] = await this.database.db
       .update(webhookDeliveries)

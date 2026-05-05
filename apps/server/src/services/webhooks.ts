@@ -150,6 +150,8 @@ export interface WebhooksRepo {
   findDeliveryById(deliveryId: string): Promise<WebhookDeliveryRow | null>;
   /** List dlq deliveries across all accounts, paginated by createdAt DESC. */
   listDlqDeliveries(opts: { limit: number; cursor?: string }): Promise<ListDeliveriesPage>;
+  /** Total count of deliveries currently in DLQ across all accounts. */
+  countDlqDeliveries(): Promise<number>;
   /**
    * Reset a delivery to status='pending' so the worker picks it up.
    * Resets attempts to 0 and nextAttemptAt to `at`. Returns the updated
@@ -343,6 +345,11 @@ export class WebhooksAdminService {
   ): Promise<ListDeliveriesPage> {
     throwIfMissingScope(ctx, 'admin');
     return this.repo.listDlqDeliveries(opts);
+  }
+
+  countDlq(ctx: AccountContext): Promise<number> {
+    throwIfMissingScope(ctx, 'admin');
+    return this.repo.countDlqDeliveries();
   }
 }
 

@@ -66,4 +66,9 @@ export class InMemoryAccountsAdminRepo implements AccountsAdminRepo {
     const nextCursor = hasMore && data.length > 0 ? data[data.length - 1]!.id : null;
     return Promise.resolve({ data, hasMore, nextCursor });
   }
+
+  countByStatus(status: 'active' | 'suspended' | 'deleted'): Promise<number> {
+    const cnt = this.authRepo.allAccounts().filter((r) => r.status === status).length;
+    return Promise.resolve(cnt);
+  }
 }
