@@ -11185,3 +11185,43 @@ The pre-V-197 test suite covered Stripe webhooks via sign-verify roundtrips (`si
 ### Next
 
 V-198 — DB migration rehearsal docs (~1-2hr Tier 1).
+
+## V-198 — DB migration rehearsal procedure (PRIORITY D phase 4)
+
+### What
+
+New `docs/deployment/migration-rehearsal.md` (~180 lines after prettier reflow). Standing checklist for rehearsing Drizzle migrations against production-shape data via Neon point-in-time branching.
+
+Key sections:
+
+- **Effective date**: every migration after the first paying customer (pre-launch is empty production; rehearsal is overhead for no benefit).
+- **Pre-flight classification**: Class A (additive nullable / new tables / `CREATE INDEX CONCURRENTLY`), Class B (NOT NULL with backfill / type changes / renames / FK adds), Class C (DROP / non-reversible data transformations).
+- **7-step rehearsal sequence**: Neon branch → run migration → verify post-state invariants → run test suite against the branch → document in V-log → land in production with appropriate maintenance window for B/C → drop the branch.
+- **Rollback strategy by class** with explicit notes that Class C has no in-place rollback (point-in-time restore is the only recovery path; founder approval required).
+- **Lock-contention monitoring** SQL snippet for `pg_locks ⨝ pg_stat_activity` during the prod deploy window.
+- **What this doc does NOT cover**: schema drift, application-level data migrations (feature-flag + dual-write/read), DR scenarios.
+
+### Why
+
+V-185–V-195 acked carry-forward V-198 as part of PRIORITY D. We've been adding Drizzle migrations freely (16 in `apps/server/src/db/migrations/` to date) because production is empty and the lock-table risk is zero. That changes at commercial activation. The doc captures what good looks like ahead of that gate so the first migration against a non-empty prod doesn't go in cold.
+
+### Files
+
+- `docs/deployment/migration-rehearsal.md` — new file.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 652 / 652 passing across 67 files (no test changes — pure docs).
+
+### Notes
+
+- Class A vs B vs C nomenclature is local to this doc; no industry standard. Picked the three-band split because Drizzle migrations naturally cluster into "trivial" / "lock-some-rows" / "danger zone" and three classes makes the right rehearsal posture obvious.
+- The "Document the rehearsal" step expects an inline `### Rehearsal` block in the V-log entry that's landing the migration. Keeps the timing data adjacent to the change description rather than in a separate ops log nobody reads.
+- Cross-references the operational runbook (V-195) for incident plays. Migration-rehearsal is a planned-deploy doc; runbook is unplanned-incident doc. Two docs, two failure modes.
+
+### Next
+
+V-199 — full DR runbook expansion (V-195 skeleton has [TODO] markers; expand per file 59 disaster-recovery scenarios).
