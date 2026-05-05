@@ -11897,3 +11897,40 @@ The git identity policy locks the local commit-author identity to Driftstack-bra
 ### Next
 
 V-212 — update V-207 runbook with name+email rewrite scope (~15 min, surface for founder ack before founder executes).
+
+## V-212 — V-207 runbook expanded with name+email rewrite scope
+
+### What
+
+Updated `docs/founder-actions/v207-force-push-attribution-cleanup.md` to include `--name-callback` + `--email-callback` alongside `--message-callback`. Single filter-repo invocation now does:
+
+1. Strip `Co-Authored-By: Claude` trailer from every commit message.
+2. Rewrite author name to `Driftstack`.
+3. Rewrite author email to `dev@driftstack.dev`.
+4. Rewrite committer identity to match (filter-repo's `--name-callback` + `--email-callback` cover both author + committer by default).
+
+Captured updated repo state at commit `3e90b30`: 232 total commits, 218 carry the trailer, 226 carry the personal author identity (V-210+ already land as Driftstack). Added three sanity-check commands (trailer count, author identity uniq, committer identity uniq) to verify the rewrite. Added a note on GitHub author-display behavior (no avatar without a mapped user account).
+
+### Why
+
+V-207 stripped the trailer only. V-211 locked the new git identity for forward commits. V-212 extends the V-207 runbook so the same force-push pass that founder runs ALSO rewrites existing-history author identity — single operation, no second force-push needed.
+
+### Files
+
+- `docs/founder-actions/v207-force-push-attribution-cleanup.md` — expanded runbook.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run format:check`: clean.
+- Runbook contents reviewed: pre-flight, exact filter-repo command with all three callbacks, verification commands, rollback, cross-repo notes, GitHub UI implications.
+
+### Notes
+
+- I do NOT execute the force-push. Runbook is on disk; founder runs when ready.
+- `NEW_NAME` and `NEW_EMAIL` are shell vars in the runbook — founder can edit if a different form is preferred (e.g. `Driftstack BV` post-KvK).
+- Same pattern applies cross-repo to `driftstack` + `webkit-driftstack`; founder coordinates those separately.
+
+### Next
+
+V-213 — `/about` Dutch-BV-only commit (REVISED scope per founder anonymity decision; drop the Founder section from the working-tree draft, commit only the Dutch-BV jargon trim).
