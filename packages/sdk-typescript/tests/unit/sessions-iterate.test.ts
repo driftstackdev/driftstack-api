@@ -10,6 +10,7 @@ function fakeSession(id: string): Session {
     api_key_id: 'key_test',
     status: 'ready',
     archetype: 'mac-iphone-14-safari',
+    purpose: 'production_customer',
     label: null,
     metadata: null,
     created_at: '2026-05-04T00:00:00Z',

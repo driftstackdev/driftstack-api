@@ -50,6 +50,7 @@ function publicSession(s: SessionRecord): Record<string, unknown> {
     api_key_id: prefixId('key', s.apiKeyId),
     status: s.status,
     archetype: s.archetype,
+    purpose: s.purpose,
     label: s.label,
     metadata: s.metadata,
     created_at: s.createdAt.toISOString(),

@@ -67,6 +67,8 @@ const PNG_1X1_TRANSPARENT_BASE64 =
 interface InternalSession {
   driverSessionId: DriverSessionId;
   archetype: string;
+  /** V-169 — captured for test inspection; mock doesn't act on it. */
+  purpose: 'production_customer' | 'cumulative_rig_validation' | 'test_domain_probe';
   currentUrl: string | null;
   currentTitle: string | null;
   destroyed: boolean;
@@ -110,6 +112,7 @@ export class MockDriver implements Driver {
     this.sessions.set(id, {
       driverSessionId: id,
       archetype: input.archetype,
+      purpose: input.purpose,
       currentUrl: null,
       currentTitle: null,
       destroyed: false,

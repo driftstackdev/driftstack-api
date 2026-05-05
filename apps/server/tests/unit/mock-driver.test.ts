@@ -8,8 +8,14 @@ const fastDriver = (): MockDriver =>
 describe('MockDriver — session lifecycle', () => {
   it('createSession returns a deterministic, monotonically increasing id', async () => {
     const driver = fastDriver();
-    const a = await driver.createSession({ archetype: 'iphone16pro_ios18_7_safari26_4' });
-    const b = await driver.createSession({ archetype: 'iphone16pro_ios18_7_safari26_4' });
+    const a = await driver.createSession({
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      purpose: 'production_customer' as const,
+    });
+    const b = await driver.createSession({
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      purpose: 'production_customer' as const,
+    });
     expect(a.driverSessionId).toMatch(/^mock_ses_\d{8}$/);
     expect(b.driverSessionId).toMatch(/^mock_ses_\d{8}$/);
     expect(b.driverSessionId > a.driverSessionId).toBe(true);
@@ -17,7 +23,10 @@ describe('MockDriver — session lifecycle', () => {
 
   it('destroy is idempotent', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     await expect(driver.destroy(driverSessionId)).resolves.toBeUndefined();
     await expect(driver.destroy(driverSessionId)).resolves.toBeUndefined();
     await expect(driver.destroy('mock_ses_99999999')).resolves.toBeUndefined();
@@ -25,7 +34,10 @@ describe('MockDriver — session lifecycle', () => {
 
   it('operations on a destroyed session throw DriverError', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     await driver.destroy(driverSessionId);
 
     await expect(
@@ -42,7 +54,10 @@ describe('MockDriver — session lifecycle', () => {
 describe('MockDriver — navigate', () => {
   it('happy-path 200 with finalUrl matching url', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     const r = await driver.navigate(driverSessionId, {
       url: 'https://example.com/path',
       timeoutMs: 5000,
@@ -55,7 +70,10 @@ describe('MockDriver — navigate', () => {
 
   it('updates the session state so getState reflects the new url', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     await driver.navigate(driverSessionId, {
       url: 'https://example.com',
       timeoutMs: 5000,
@@ -68,7 +86,10 @@ describe('MockDriver — navigate', () => {
 
   it('rejects malformed URLs with DriverError', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     await expect(
       driver.navigate(driverSessionId, {
         url: 'not a url',
@@ -80,7 +101,10 @@ describe('MockDriver — navigate', () => {
 
   it('error.driftstack-mock.test triggers DriverError', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     await expect(
       driver.navigate(driverSessionId, {
         url: 'https://error.driftstack-mock.test',
@@ -92,7 +116,10 @@ describe('MockDriver — navigate', () => {
 
   it('http500.driftstack-mock.test returns status 500 (no throw)', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     const r = await driver.navigate(driverSessionId, {
       url: 'https://http500.driftstack-mock.test',
       timeoutMs: 5000,
@@ -105,7 +132,10 @@ describe('MockDriver — navigate', () => {
 describe('MockDriver — interact', () => {
   it('happy-path tap returns durationMs', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     const r = await driver.interact(driverSessionId, {
       action: { kind: 'tap', selector: '#button' },
       timeoutMs: 1000,
@@ -115,7 +145,10 @@ describe('MockDriver — interact', () => {
 
   it('selector #nonexistent triggers DriverError', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     await expect(
       driver.interact(driverSessionId, {
         action: { kind: 'tap', selector: '#nonexistent' },
@@ -126,7 +159,10 @@ describe('MockDriver — interact', () => {
 
   it('press action (no selector) succeeds', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     const r = await driver.interact(driverSessionId, {
       action: { kind: 'press', key: 'Enter' },
       timeoutMs: 1000,
@@ -143,7 +179,10 @@ describe('MockDriver — wait', () => {
       navigateLatencyMs: 0,
       interactLatencyMs: 0,
     });
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     const start = Date.now();
     const r = await driver.wait(driverSessionId, {
       condition: { kind: 'time', ms: 50 },
@@ -156,7 +195,10 @@ describe('MockDriver — wait', () => {
 
   it('selector that never appears returns satisfied=false after timeout', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     const r = await driver.wait(driverSessionId, {
       condition: { kind: 'selector', selector: '#nonexistent' },
       timeoutMs: 100,
@@ -168,7 +210,10 @@ describe('MockDriver — wait', () => {
 describe('MockDriver — capture', () => {
   it('screenshot returns base64-encoded PNG bytes', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     const r = await driver.capture(driverSessionId, { kind: 'screenshot', fullPage: false });
     expect(r.kind).toBe('screenshot');
     expect(r.encoding).toBe('base64');
@@ -179,7 +224,10 @@ describe('MockDriver — capture', () => {
 
   it('dom_snapshot returns utf8 HTML', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     const r = await driver.capture(driverSessionId, { kind: 'dom_snapshot', fullPage: true });
     expect(r.kind).toBe('dom_snapshot');
     expect(r.encoding).toBe('utf8');
@@ -188,7 +236,10 @@ describe('MockDriver — capture', () => {
 
   it('pdf returns base64-encoded bytes', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     const r = await driver.capture(driverSessionId, { kind: 'pdf', fullPage: false });
     expect(r.kind).toBe('pdf');
     expect(r.encoding).toBe('base64');
@@ -198,7 +249,10 @@ describe('MockDriver — capture', () => {
 describe('MockDriver — getState', () => {
   it('fresh session has null url and title', async () => {
     const driver = fastDriver();
-    const { driverSessionId } = await driver.createSession({ archetype: 'x' });
+    const { driverSessionId } = await driver.createSession({
+      archetype: 'x',
+      purpose: 'production_customer' as const,
+    });
     const state = await driver.getState(driverSessionId);
     expect(state.url).toBeNull();
     expect(state.title).toBeNull();
@@ -211,8 +265,14 @@ describe('MockDriver — determinism', () => {
   it('two drivers with the same op sequence return matching state', async () => {
     const a = fastDriver();
     const b = fastDriver();
-    const sa = await a.createSession({ archetype: 'iphone16pro_ios18_7_safari26_4' });
-    const sb = await b.createSession({ archetype: 'iphone16pro_ios18_7_safari26_4' });
+    const sa = await a.createSession({
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      purpose: 'production_customer' as const,
+    });
+    const sb = await b.createSession({
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      purpose: 'production_customer' as const,
+    });
     expect(sa.driverSessionId).toBe(sb.driverSessionId); // first id is identical
 
     const ra = await a.navigate(sa.driverSessionId, {

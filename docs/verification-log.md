@@ -9513,3 +9513,119 @@ Surfaced for a separate scope-architecture refactor: split 'admin' into 'account
 ### Next
 
 V-169 next: /usage real-data wiring (Decision 1, Option A — wire even if data is zero). Then CF1 (AFP Layer 1 harness-configuration split).
+
+---
+
+## V-169 — Session purpose field (CF1: AFP harness-configuration split)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Cross-agent dependency from Agent 1 Phase 3 (CF1 carry-forward). Their V-193 architectural verification refuted the original Layer 1 sketch (PLATFORM(DRIFTSTACK) gate flip on `Document::noiseInjectionPolicies()`); refined design moves the branching to a harness-configuration split — Agent 2 territory.
+
+V-169 lands the contract surface: a `purpose` field on session-create that drives WebKit driver harness selection. Agent 1's harness-config doc lands separately (`docs/architecture/afp-harness-configuration.md` cross-reference); the WebKit driver implementation reads `purpose` once integrated.
+
+### What changed
+
+`packages/api-types/src/sessions.ts`:
+
+- New `SessionPurposeSchema = z.enum(['production_customer', 'cumulative_rig_validation', 'test_domain_probe'])` + `SessionPurpose` type + `DEFAULT_SESSION_PURPOSE = 'production_customer'` constant.
+- `SessionSchema` adds required `purpose` field (in response payload).
+- `CreateSessionRequestSchema` adds optional `purpose` field (defaults applied server-side).
+- Doc-comment explains harness semantics per purpose:
+  - `production_customer` (default): ephemeral context + `_resourceLoadStatisticsEnabled=YES`. ATFP fires per iOS per-site logic.
+  - `cumulative_rig_validation`: persistent context, NOT ephemeral. ATFP doesn't fire (matches V-179 baseline).
+  - `test_domain_probe`: ephemeral on tracker-context URLs. ATFP fires deterministically.
+
+`apps/server/src/drivers/types.ts`:
+
+- `CreateSessionInput.purpose` added (required at the driver boundary; SessionsService applies the default before calling).
+
+`apps/server/src/services/sessions.ts`:
+
+- `SessionRecord.purpose` + `NewSessionInput.purpose` added.
+- `create()` resolves `purpose = body.purpose ?? DEFAULT_SESSION_PURPOSE`, plumbs through to driver + repo + 'created' event payload.
+
+`apps/server/src/db/migrations/0014_session_purpose.sql` (new):
+
+- Postgres `session_purpose` enum.
+- `ALTER TABLE sessions ADD COLUMN purpose session_purpose NOT NULL DEFAULT 'production_customer'`.
+- Existing rows get the default backfilled.
+
+`apps/server/src/db/schema.ts`:
+
+- New `sessionPurpose` pgEnum.
+- `sessions.purpose` column with NOT NULL + default `'production_customer'`.
+
+`apps/server/src/db/sessions-repo.ts`:
+
+- INSERT now writes `purpose`.
+- `toSessionRecord()` projects `purpose`.
+
+`apps/server/src/routes/sessions.ts`:
+
+- `publicSession()` includes `purpose` in the response shape.
+
+`apps/server/src/drivers/mock.ts`:
+
+- `InternalSession.purpose` captured for test inspection (mock doesn't act on it; the WebKit driver does).
+
+`apps/server/tests/integration/_helpers/in-memory-sessions-repo.ts`:
+
+- `insertSession()` propagates `purpose`.
+
+Test fixture updates:
+
+- `apps/server/tests/unit/mock-driver.test.ts` (20 createSession sites): added `purpose: 'production_customer' as const`.
+- `apps/server/tests/unit/driver-factory.test.ts`: WebKitDriver stub createSession test signature updated.
+- `apps/server/tests/unit/sessions-failure.test.ts`: StubRepo's insertSession projects `purpose`.
+- `apps/server/tests/unit/schemas.test.ts`: SessionSchema test fixture includes `purpose`.
+- `packages/sdk-typescript/tests/unit/sessions-iterate.test.ts`: fakeSession includes `purpose`.
+
+### New tests in V-169
+
+`apps/server/tests/integration/full-lifecycle.test.ts` — new test "session purpose defaults to production_customer + flows through (V-169 AFP CF1)":
+
+- Default behavior: omit `purpose` → response carries `production_customer`.
+- Explicit `cumulative_rig_validation` → response carries it.
+- Explicit `test_domain_probe` → response carries it.
+- Invalid purpose value → 400 (Zod schema rejection).
+
+### What is NOT in V-169 (deferred)
+
+- WebKit driver harness branching itself (Agent 1's territory; not yet integrated into apps/server/src/drivers/webkit.ts which is still a stub).
+- `docs/architecture/afp-harness-configuration.md` cross-reference doc (Agent 1 lands it in driftstack repo first; Agent 2 mirrors when it does).
+- Customer-facing API documentation update (purpose is INTERNAL today — production customers use the default; cumulative_rig + test_domain_probe are reserved for internal validation tools, not part of the public API contract). When Agent 1's adversarial-validation workflow goes live + the validation team needs API access, the field becomes customer-facing.
+
+### How verified
+
+- `npm run typecheck`: clean across all 10 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` pass on the bulk-edited test files).
+- `npm test`: 603/603 passing (was 602; +1 new for V-169).
+
+### Files modified
+
+- `packages/api-types/src/sessions.ts`
+- `apps/server/src/drivers/types.ts`
+- `apps/server/src/drivers/mock.ts`
+- `apps/server/src/services/sessions.ts`
+- `apps/server/src/db/sessions-repo.ts`
+- `apps/server/src/db/schema.ts`
+- `apps/server/src/db/migrations/0014_session_purpose.sql` (new)
+- `apps/server/src/db/migrations/meta/_journal.json`
+- `apps/server/src/routes/sessions.ts`
+- `apps/server/tests/integration/_helpers/in-memory-sessions-repo.ts`
+- `apps/server/tests/unit/mock-driver.test.ts` (20 sites)
+- `apps/server/tests/unit/driver-factory.test.ts`
+- `apps/server/tests/unit/sessions-failure.test.ts`
+- `apps/server/tests/unit/schemas.test.ts`
+- `apps/server/tests/integration/full-lifecycle.test.ts` (new V-169 test)
+- `packages/sdk-typescript/tests/unit/sessions-iterate.test.ts`
+
+### Next
+
+V-170 next: /usage real-data wiring (Decision 1, Option A approved by founder). Then V-171 (V-163 DrizzleAuditArchive follow-on).

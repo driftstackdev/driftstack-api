@@ -27,6 +27,7 @@ export class InMemorySessionsRepo implements SessionRepo {
       driverSessionId: input.driverSessionId,
       status: 'creating',
       archetype: input.archetype,
+      purpose: input.purpose,
       label: input.label,
       metadata: input.metadata,
       createdAt: now,

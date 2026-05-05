@@ -41,6 +41,15 @@ export const sessionStatus = pgEnum('session_status', [
   'errored',
 ]);
 
+// V-169 — sessions.purpose drives WebKit driver harness selection.
+// See docs/architecture/afp-harness-configuration.md (Agent 1
+// cross-reference, Phase 3 work).
+export const sessionPurpose = pgEnum('session_purpose', [
+  'production_customer',
+  'cumulative_rig_validation',
+  'test_domain_probe',
+]);
+
 export const sessionEventType = pgEnum('session_event_type', [
   'created',
   'navigated',
@@ -443,6 +452,8 @@ export const sessions = pgTable(
     // packages/api-types/src/common.ts LOCKED_ARCHETYPE_ID +
     // docs/architecture/archetype-naming-convention.md for shape rationale.
     archetype: text('archetype').notNull().default('iphone16pro_ios18_7_safari26_4'),
+    // V-169 — harness purpose (drives WebKit driver harness selection).
+    purpose: sessionPurpose('purpose').notNull().default('production_customer'),
     // Optional client-supplied label.
     label: text('label'),
     // Free-form session metadata supplied by client; bounded at API layer.

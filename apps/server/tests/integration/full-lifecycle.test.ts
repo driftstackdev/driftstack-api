@@ -209,6 +209,55 @@ describe('Full customer lifecycle (V-166)', () => {
     expect(postLogout.statusCode).toBe(401);
   });
 
+  it('session purpose defaults to production_customer + flows through (V-169 AFP CF1)', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+
+    // Default — no purpose specified.
+    const defaultRes = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { label: 'default-purpose' },
+    });
+    expect(defaultRes.statusCode).toBe(201);
+    expect(defaultRes.json<DriverSessionResponse & { purpose: string }>().purpose).toBe(
+      'production_customer',
+    );
+
+    // Explicit cumulative_rig_validation.
+    const cumRes = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { label: 'cum-rig', purpose: 'cumulative_rig_validation' },
+    });
+    expect(cumRes.statusCode).toBe(201);
+    expect(cumRes.json<DriverSessionResponse & { purpose: string }>().purpose).toBe(
+      'cumulative_rig_validation',
+    );
+
+    // Explicit test_domain_probe.
+    const probeRes = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { label: 'probe', purpose: 'test_domain_probe' },
+    });
+    expect(probeRes.statusCode).toBe(201);
+    expect(probeRes.json<DriverSessionResponse & { purpose: string }>().purpose).toBe(
+      'test_domain_probe',
+    );
+
+    // Invalid purpose rejected at schema validation.
+    const invalidRes = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { label: 'bad', purpose: 'unknown_value' },
+    });
+    expect(invalidRes.statusCode).toBe(400);
+  });
+
   it('web session can mint admin-scoped sub-key (full customer-account control)', async () => {
     fx = await buildTestApp();
 

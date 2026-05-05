@@ -7,6 +7,7 @@
 // can operate on it.
 
 import {
+  DEFAULT_SESSION_PURPOSE,
   LOCKED_ARCHETYPE_ID,
   PROFILES_PER_TIER,
   TIER_CONCURRENT_SESSION_LIMITS,
@@ -16,6 +17,7 @@ import {
   type CreateSessionRequest,
   type InteractRequest,
   type NavigateRequest,
+  type SessionPurpose,
   type WaitRequest,
 } from '@driftstack/api-types';
 import type { AccountContext } from './auth.js';
@@ -56,6 +58,8 @@ export interface SessionRecord {
   driverSessionId: string;
   status: 'creating' | 'ready' | 'busy' | 'destroyed' | 'errored';
   archetype: string;
+  /** V-169 — harness purpose. */
+  purpose: SessionPurpose;
   label: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: Date;
@@ -69,6 +73,8 @@ export interface NewSessionInput {
   apiKeyId: string;
   driverSessionId: string;
   archetype: string;
+  /** V-169 — harness purpose. Defaults applied at the service-layer. */
+  purpose: SessionPurpose;
   label: string | null;
   metadata: Record<string, unknown> | null;
 }
@@ -142,8 +148,10 @@ export class SessionsService {
     }
 
     const archetype = body.archetype ?? LOCKED_ARCHETYPE_ID;
+    const purpose: SessionPurpose = body.purpose ?? DEFAULT_SESSION_PURPOSE;
     const driverResult = await this.deps.driver.createSession({
       archetype,
+      purpose,
       ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
     });
 
@@ -152,6 +160,7 @@ export class SessionsService {
       apiKeyId: ctx.apiKey.id,
       driverSessionId: driverResult.driverSessionId,
       archetype,
+      purpose,
       label: body.label ?? null,
       metadata: body.metadata ?? null,
     });
@@ -160,7 +169,7 @@ export class SessionsService {
     await this.deps.repo.recordEvent({
       sessionId: record.id,
       type: 'created',
-      payload: { archetype, driver_session_id: driverResult.driverSessionId },
+      payload: { archetype, purpose, driver_session_id: driverResult.driverSessionId },
       durationMs: null,
     });
 

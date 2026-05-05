@@ -22,6 +22,19 @@ export type DriverSessionId = string;
 export interface CreateSessionInput {
   /** iPhone archetype slug, e.g. "iphone16pro_ios18_7_safari26_4". */
   archetype: string;
+  /**
+   * V-169 — harness purpose. Drives WebKit driver's harness-config
+   * selection (persistent vs ephemeral context, _resourceLoad
+   * StatisticsEnabled flag, ATFP firing). See
+   * `docs/architecture/afp-harness-configuration.md` (Agent 1
+   * cross-reference, Phase 3 work).
+   *   - `production_customer` (default): ephemeral + ATFP-on.
+   *   - `cumulative_rig_validation`: persistent, ATFP-off.
+   *   - `test_domain_probe`: ephemeral, deterministic ATFP firing.
+   * MockDriver accepts but doesn't act on this; the WebKit driver
+   * is where the harness branching lives.
+   */
+  purpose: 'production_customer' | 'cumulative_rig_validation' | 'test_domain_probe';
   /** Free-form metadata supplied by the customer. Driver may ignore. */
   metadata?: Record<string, unknown>;
 }

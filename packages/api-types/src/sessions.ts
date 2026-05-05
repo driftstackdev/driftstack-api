@@ -20,12 +20,46 @@ export const ArchetypeSchema = z
   .min(3)
   .max(60);
 
+/**
+ * V-169 — session purpose drives harness configuration in the WebKit
+ * driver (per AFP Layer 1 design from Agent 1's Phase 3 work; see
+ * `docs/architecture/afp-harness-configuration.md` once Agent 1 lands
+ * the cross-reference doc).
+ *
+ * Semantics:
+ * - `production_customer` (default): ephemeral context +
+ *   `_resourceLoadStatisticsEnabled=YES`. ATFP fires per iOS per-site
+ *   logic. This is what every paying-customer session uses.
+ * - `cumulative_rig_validation`: persistent context, NOT ephemeral.
+ *   ATFP doesn't fire (matches the V-179 baseline rig). Used by Agent 1
+ *   to validate that the static-fingerprint surface remains
+ *   bit-identical across releases.
+ * - `test_domain_probe`: ephemeral context on tracker-context URLs.
+ *   ATFP fires deterministically. Used by Agent 1 for adversarial
+ *   validation against detection vendors.
+ *
+ * The MockDriver accepts the field but doesn't act on it (the WebKit
+ * driver is where the harness branching lives). Production customer
+ * sessions use the default; the other two purposes are reserved for
+ * internal validation tools and not part of the customer-facing API
+ * contract today.
+ */
+export const SessionPurposeSchema = z.enum([
+  'production_customer',
+  'cumulative_rig_validation',
+  'test_domain_probe',
+]);
+export type SessionPurpose = z.infer<typeof SessionPurposeSchema>;
+export const DEFAULT_SESSION_PURPOSE: SessionPurpose = 'production_customer';
+
 export const SessionSchema = z.object({
   id: SessionIdSchema,
   account_id: AccountIdSchema,
   api_key_id: ApiKeyIdSchema,
   status: SessionStatusSchema,
   archetype: ArchetypeSchema,
+  /** V-169 — harness purpose; defaults to `production_customer`. */
+  purpose: SessionPurposeSchema,
   label: z.string().nullable(),
   metadata: z.record(z.unknown()).nullable(),
   created_at: Iso8601Schema,
@@ -42,6 +76,8 @@ export type Session = z.infer<typeof SessionSchema>;
 
 export const CreateSessionRequestSchema = z.object({
   archetype: ArchetypeSchema.optional(),
+  /** V-169 — harness purpose; defaults to `production_customer`. */
+  purpose: SessionPurposeSchema.optional(),
   label: z.string().max(120).optional(),
   metadata: z.record(z.unknown()).optional(),
 });

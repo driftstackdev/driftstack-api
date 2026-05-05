@@ -99,6 +99,13 @@
       "when": 1778892000000,
       "tag": "0013_audit_archive_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1778892400000,
+      "tag": "0014_session_purpose",
+      "breakpoints": true
     }
   ]
 }

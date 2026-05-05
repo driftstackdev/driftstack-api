@@ -24,6 +24,7 @@ export class DrizzleSessionRepo implements SessionRepo {
         apiKeyId: input.apiKeyId,
         driverSessionId: input.driverSessionId,
         archetype: input.archetype,
+        purpose: input.purpose,
         label: input.label,
         metadata: input.metadata,
       })
@@ -118,6 +119,7 @@ function toSessionRecord(r: typeof sessions.$inferSelect): SessionRecord {
     driverSessionId: r.driverSessionId,
     status: r.status,
     archetype: r.archetype,
+    purpose: r.purpose,
     label: r.label,
     metadata: r.metadata ?? null,
     createdAt: r.createdAt,

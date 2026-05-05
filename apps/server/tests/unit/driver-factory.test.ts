@@ -22,9 +22,9 @@ describe('createDriver factory', () => {
 describe('WebKitDriver stub', () => {
   it('every method throws DriverNotIntegratedError', async () => {
     const d = new WebKitDriver();
-    await expect(d.createSession({ archetype: 'x' })).rejects.toBeInstanceOf(
-      DriverNotIntegratedError,
-    );
+    await expect(
+      d.createSession({ archetype: 'x', purpose: 'production_customer' }),
+    ).rejects.toBeInstanceOf(DriverNotIntegratedError);
     await expect(
       d.navigate('id', { url: 'https://example.com', timeoutMs: 1, waitUntil: 'load' }),
     ).rejects.toBeInstanceOf(DriverNotIntegratedError);
