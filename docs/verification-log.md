@@ -12261,3 +12261,47 @@ File 78 + V-179 recapture-automation called for continuous validation. V-179 lan
 ### Next
 
 V-219 — per-tier rate limit policy refinement (GENERATE-5, ~2-3hr Tier 1).
+
+## V-219 — per-tier rate limit policy + customer-facing view (GENERATE-5)
+
+### What
+
+1. **Hoisted `TIER_RATE_LIMIT_DEFAULTS` from server-private to `@driftstack/api-types`**. Same 8-tier × 2-bucket shape that already existed in `apps/server/src/services/rate-limit.ts`; same numeric values. Server's `bucketConfigFor()` now reads from the shared constant. SDK consumers + customer dashboard import the same record.
+
+2. **New `GET /v1/account/rate-limits`**. Returns `{ tier, buckets[] }` — per-bucket capacity + refill, with `source = 'tier_default' | 'override'` and `override_expires_at` populated for active overrides.
+
+3. api-types schemas: `BucketLimitConfig`, `RateLimitBucketSchema`, `GetAccountRateLimitsResponseSchema`.
+
+4. OpenAPI registration. 3 integration tests (tier-default match, active-override reflection, 401 unauthenticated).
+
+### Why
+
+GENERATE-5. Three problems addressed: (a) SDK consumers couldn't read the same constants the server enforces; (b) no customer-facing endpoint to see effective limits with overrides resolved; (c) no single source-of-truth record. Hoisting to `@driftstack/api-types` solves all three.
+
+### Files
+
+- `packages/api-types/src/common.ts` — `TIER_RATE_LIMIT_DEFAULTS` const + `BucketLimitConfig` type.
+- `packages/api-types/src/accounts.ts` — `RateLimitBucketSchema` + response schema.
+- `apps/server/src/services/rate-limit.ts` — `bucketConfigFor()` refactored to source from the shared constant.
+- `apps/server/src/routes/account-rate-limits.ts` — new GET handler (synchronous; no DB read).
+- `apps/server/src/lib/app.ts` — route registered.
+- `apps/server/src/lib/openapi.ts` + `apps/server/tests/integration/openapi.test.ts` — endpoint registered.
+- `apps/server/tests/integration/account-rate-limits.test.ts` — 3 tests.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean (handler is sync — no await needed).
+- `npm run format:check`: clean.
+- `npm test`: 679 / 679 passing across 71 files.
+
+### Notes
+
+- Handler is synchronous: override state already loaded into `AccountContext.rateLimitOverrides` at auth-time (V-052); tier defaults are an in-process const. Zero round-trip beyond auth.
+- Override-vs-default precedence matches `rateLimitConsume` (V-090) — an expired override falls through to tier default; surface returns the same lazy-expiry result.
+- SDK type expansion (TS / Python / Go consume the new shape) is a follow-up V-NNN. api-types schema is stable + additive; SDK workspaces already depend on `@driftstack/api-types`.
+- Customer dashboard surface for /settings or /usage is a follow-up Tier 3 cycle. Endpoint is live; UI placement awaits founder direction.
+
+### Next
+
+V-220 — API versioning strategy doc (GENERATE-7, ~1hr Tier 1).

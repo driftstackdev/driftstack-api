@@ -146,6 +146,74 @@ export const TIER_CONCURRENT_SESSION_LIMITS: Record<AccountTier, number> = {
 };
 
 /**
+ * V-219 — per-tier rate-limit defaults (token-bucket capacity + refill).
+ *
+ * One config per `(tier, bucketKey)`. Two bucket keys are defined today:
+ *
+ *   - `global` — every authenticated `/v1/*` call consumes this bucket.
+ *     Protects against accidental DDoS / runaway scripts.
+ *   - `sessions:create` — `POST /v1/sessions` only. Lower cap because
+ *     session creation is the most expensive op in the system (driver
+ *     allocation, archetype hydration, fingerprint pinning).
+ *
+ * Capacity = max burst size. Refill = sustained rate (tokens/sec). The
+ * effective sustained RPS for a default-cost call is `refillPerSecond`.
+ *
+ * These are anti-abuse limits, not pricing — per ADR-004, customers
+ * pay for concurrent sessions, not per-call. The numbers scale roughly
+ * with concurrent cap (more concurrent = more API calls likely). Exposed
+ * to SDK consumers + the customer dashboard so they can render the
+ * effective limit on the /settings / /usage surface.
+ *
+ * Source-of-truth lives here; the server reads from this constant via
+ * `bucketConfigFor()` in `apps/server/src/services/rate-limit.ts`.
+ * Cross-workspace consumers can import directly. Per-account overrides
+ * via the rate-limit-overrides path (V-052) supersede these defaults.
+ */
+export interface BucketLimitConfig {
+  capacity: number;
+  refill_per_second: number;
+}
+
+export const TIER_RATE_LIMIT_DEFAULTS: Record<
+  AccountTier,
+  Record<'global' | 'sessions:create', BucketLimitConfig>
+> = {
+  trial_pack: {
+    global: { capacity: 60, refill_per_second: 1 },
+    'sessions:create': { capacity: 5, refill_per_second: 1 / 60 },
+  },
+  solo_manual: {
+    global: { capacity: 120, refill_per_second: 2 },
+    'sessions:create': { capacity: 10, refill_per_second: 1 / 30 },
+  },
+  team_manual: {
+    global: { capacity: 360, refill_per_second: 6 },
+    'sessions:create': { capacity: 20, refill_per_second: 1 / 10 },
+  },
+  agency_manual: {
+    global: { capacity: 1_800, refill_per_second: 30 },
+    'sessions:create': { capacity: 60, refill_per_second: 1 },
+  },
+  api_starter: {
+    global: { capacity: 240, refill_per_second: 4 },
+    'sessions:create': { capacity: 15, refill_per_second: 1 / 20 },
+  },
+  api_builder: {
+    global: { capacity: 1_800, refill_per_second: 30 },
+    'sessions:create': { capacity: 60, refill_per_second: 1 },
+  },
+  api_scale: {
+    global: { capacity: 6_000, refill_per_second: 100 },
+    'sessions:create': { capacity: 120, refill_per_second: 2 },
+  },
+  enterprise: {
+    global: { capacity: 60_000, refill_per_second: 1_000 },
+    'sessions:create': { capacity: 600, refill_per_second: 10 },
+  },
+};
+
+/**
  * Currently-locked archetype identifier + human-readable label.
  *
  * The identifier (`iphone16pro_ios18_7_safari26_4`) is what the API

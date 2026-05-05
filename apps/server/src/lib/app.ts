@@ -27,6 +27,7 @@ import type { AccountAuditService } from '../services/account-audit.js';
 import { registerAccountAuditRoutes } from '../routes/account-audit.js';
 import type { ValidationHarnessService } from '../services/validation-harness.js';
 import { registerAdminValidationHarnessRoutes } from '../routes/admin-validation-harness.js';
+import { registerAccountRateLimitsRoutes } from '../routes/account-rate-limits.js';
 import type { AuthFlowsService } from '../services/auth-flows.js';
 import type { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import type { ProfilesService } from '../services/profiles.js';
@@ -226,6 +227,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerEmailPreferencesRoutes(app, { emailPreferences: deps.emailPreferencesService });
   registerAccountAuditRoutes(app, { accountAudit: deps.accountAuditService });
   registerAdminValidationHarnessRoutes(app, { harness: deps.validationHarnessService });
+  registerAccountRateLimitsRoutes(app);
   // V-176 — public-facing status endpoint. Reuses the readinessChecks
   // already supplied to /ready; no additional wiring needed at deps
   // level. /v1/status has no auth (public status pages are public).

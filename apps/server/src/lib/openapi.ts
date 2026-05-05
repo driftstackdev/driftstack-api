@@ -701,6 +701,35 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // V-219 — customer-facing rate-limit view.
+  const RateLimitBucketOpenApi = z.object({
+    bucket_key: z.enum(['global', 'sessions:create']),
+    capacity: z.number().int().positive(),
+    refill_per_second: z.number().positive(),
+    source: z.enum(['tier_default', 'override']),
+    override_expires_at: z.string().nullable(),
+  });
+  const GetAccountRateLimitsResponseOpenApi = z.object({
+    tier: z.string(),
+    buckets: z.array(RateLimitBucketOpenApi),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/rate-limits',
+    summary: 'Effective rate-limit config for the calling account',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Per-bucket capacity + refill, with override-vs-default source.',
+        content: {
+          'application/json': { schema: GetAccountRateLimitsResponseOpenApi },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+
   // V-216 — customer-facing audit log.
   const ListAccountAuditQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),

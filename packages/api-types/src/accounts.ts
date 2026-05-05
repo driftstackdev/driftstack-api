@@ -108,3 +108,27 @@ export const ListAccountAuditLogResponseSchema = z.object({
   next_cursor: z.string().nullable(),
 });
 export type ListAccountAuditLogResponse = z.infer<typeof ListAccountAuditLogResponseSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
+// V-219 — customer-facing rate-limit view
+// ───────────────────────────────────────────────────────────────────────────
+
+export const RateLimitBucketSchema = z.object({
+  bucket_key: z.enum(['global', 'sessions:create']),
+  capacity: z.number().int().positive(),
+  refill_per_second: z.number().positive(),
+  /**
+   * `'tier_default'` when the value comes from the locked tier table;
+   * `'override'` when an admin-set override is currently in effect.
+   */
+  source: z.enum(['tier_default', 'override']),
+  /** Override expiry, if applicable. Null for tier defaults. */
+  override_expires_at: z.string().nullable(),
+});
+export type RateLimitBucket = z.infer<typeof RateLimitBucketSchema>;
+
+export const GetAccountRateLimitsResponseSchema = z.object({
+  tier: AccountTierSchema,
+  buckets: z.array(RateLimitBucketSchema),
+});
+export type GetAccountRateLimitsResponse = z.infer<typeof GetAccountRateLimitsResponseSchema>;
