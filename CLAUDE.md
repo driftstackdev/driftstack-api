@@ -1,5 +1,31 @@
 # Driftstack API — repository context
 
+## ⚠️ Commit attribution policy
+
+Commits are attributed to the founder, not to AI development tooling.
+
+- **DO NOT** include `Co-Authored-By: Claude <noreply@anthropic.com>` (or any other AI-tool name) trailer on commits.
+- **DO NOT** include `🤖 Generated with [Claude Code]` (or any equivalent) footer on commits.
+- **DO NOT** reference Anthropic / Claude / AI tooling in commit messages, including in body text.
+- Commit message body documents engineering work; tooling is not part of commit metadata.
+
+This is a presentation choice, not capability disclosure. Driftstack engineering uses whatever tools are most effective; commit history reflects the work, not the tooling.
+
+Applies to every commit going forward without exception. If a tool's default appends an attribution trailer, override the default. When using `git commit -m "$(cat <<'EOF' ... EOF)"` heredoc, the message ends with a normal blank line — never a `Co-Authored-By:` trailer.
+
+## ⚠️ Customer-facing copy policy
+
+Marketing site, customer dashboard, admin panel, FAQ, docs, and any public-facing surfaces:
+
+- **DO NOT** reference AI / AI-assisted development / AI tooling on customer-facing copy.
+- **DO NOT** mention Claude / Anthropic / OpenAI / specific AI tools.
+- **DO NOT** use "AI-powered" or "AI-built" framing.
+- Driftstack is the product; the development tooling that produced it is not customer-facing information.
+
+Internal documentation (architecture docs, planning docs, `decisions.md`) can reference tooling for engineering accuracy. Customer-facing surfaces stay product-focused.
+
+The Anthropic API used as a BYO bundled LLM (per the sub-processor list below) is product surface, not development-tooling reference — that's allowed when documenting customer-facing capability.
+
 ## ⚠️ Read this first
 
 This repo is **driftstack-api** — the customer-facing API and control plane for Driftstack. The WebKit fork that supplies the real browser engine lives in a separate repository; the two repos do not share files. The mock WebKit driver in `apps/server/src/drivers/mock.ts` is the contract that decouples the two; the real WebKit driver swaps in once the fork's Phase 2 closes.

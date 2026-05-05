@@ -11555,3 +11555,41 @@ GENERATE-4 from the V-201 ack queue. Customers receiving the V-202 lifecycle ema
 ### Next
 
 V-205 — customer-facing API audit log (GENERATE-6, ~2-3hr Tier 1).
+
+> **HARD RESET** received from founder review of V-202 → V-204: the GENERATE queue is paused. Founder corrections take priority. V-205 → V-210 are now policy + cleanup work; the original V-205 (customer-facing API audit log) renumbers to V-211 along with the rest of the queue.
+
+## V-205 — commit attribution policy + stop the bleeding
+
+### What
+
+Two policy sections appended to the top of `/CLAUDE.md`:
+
+1. **Commit attribution policy** — no `Co-Authored-By: Claude` trailer, no `🤖 Generated with [Claude Code]` footer, no AI/Anthropic/Claude reference in commit messages. Applies to every commit going forward without exception.
+2. **Customer-facing copy policy** — no AI / Anthropic / Claude / tooling references on any customer-facing surface (marketing site, dashboards, admin panel, FAQ, docs). Internal docs can reference tooling for engineering accuracy.
+
+The policy lands at the **top** of CLAUDE.md (above "Read this first") so it's the first thing future-self sees on context inheritance. This is THE thing to not miss.
+
+### Why
+
+Founder direction received during V-202 → V-204 review: every prior commit since this resumption began (and likely earlier) included a `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` trailer. Those commits are publicly visible on github.com/driftstackdev/driftstack-api. Customer perception matters — customers evaluating Driftstack landing on commits attributed to AI may discount the product.
+
+This is presentation, not compliance. EU/Netherlands jurisdiction has no AI-assisted-development disclosure requirement. The fix is removing the attribution from forward commits + (separately, V-207) force-pushing history rewrite.
+
+### Files
+
+- `CLAUDE.md` — two new policy sections at the top.
+- `docs/verification-log.md` — this V-entry, plus a HARD RESET marker noting the queue renumber.
+
+### Verify
+
+This commit itself is the verification of the commit-attribution part. The commit message lands with **no** `Co-Authored-By:` trailer and **no** `🤖` footer. Inspect via `git log -1 --format=%B` after push to confirm clean.
+
+### Notes
+
+- Going forward I will use plain heredoc commit messages with **no trailer**. The bash tool's example template that pastes `Co-Authored-By: Claude` is overridden by this CLAUDE.md policy and the founder's explicit direction.
+- The Anthropic API as a customer-facing BYO bundled LLM (per the sub-processor list) is product surface, not development-tooling reference — that's allowed where documenting customer-facing capability. Distinct from "we built this product using Claude," which is not allowed on customer-facing copy.
+- V-206 (audit + clean public-surface AI references) and V-207 (founder force-push history rewrite) follow.
+
+### Next
+
+V-206 — audit + clean public-surface AI references (~1-2hr Tier 1).
