@@ -11112,3 +11112,40 @@ PRIORITY D phase 1 — production-readiness. Pre-launch the most acute gap was "
 ### Next
 
 V-196 — admin /rate-limit-overrides "set new override" form (currently the dashboard redirects to per-account page). OR: V-197 Stripe webhook signature e2e test. OR: continue PRIORITY D toward V-200+ Go SDK parity.
+
+## V-196 — quota-override form on admin /accounts/[id] (PRIORITY D phase 2)
+
+### What
+
+Added an inline rate-limit-override form to the per-account admin detail page. Triggered by a new "Set rate-limit override" button in the existing action row. Form fields: bucket (`global` / `session_create` / `capture`), capacity (positive int), refill_per_second (≥ 0.01), duration_seconds (default 14 days = 1209600), reason (required, audited).
+
+Submit POSTs to `/v1/admin/accounts/:id/quota-override`. On success the page reloads the audit slice so the recorded action surfaces immediately. Cancel hides + resets the form. The form is hidden by default and revealed on click; avoids visual noise on the per-account page when no override is being staged.
+
+### Why
+
+Closes V-191 carry-forward where I dropped the quota-override action entirely from the per-account page (it was an unwired anchor link in the original mock). Decision 4 from the V-185–V-195 founder review locked the workflow direction: per-account-detail is the canonical staff path for setting overrides, NOT a top-level form on /rate-limit-overrides. This V-entry implements that decision — the form lives on the page where staff already are when they decide an account needs an override.
+
+### Files
+
+- `apps/admin-panel/src/pages/accounts/[id].astro`
+  - Added "Set rate-limit override" button to the action row.
+  - Added `<form data-field="override-form">` block (hidden by default) with bucket / capacity / refill / duration / reason inputs.
+  - Inline script extended with `showOverrideForm` / `hideOverrideForm` / `submitOverride` + form-submit handler. Token check + minimal client-side validation; server returns 400/409 for invalid combinations and surfaces via the existing banner.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 640 / 640 passing across 66 files (no new server tests — existing admin-rate-limit-overrides.test.ts already covers the POST endpoint).
+- `astro check` on admin-panel: 0 errors / warnings / hints.
+
+### Notes
+
+- Form is intentionally minimal — no live validation feedback, no inline per-field error messages. Banner pattern surfaces server 4xx as a generic "Couldn't apply override (HTTP NNN)". Acceptable for staff-only surface; a fuller error UX is Tier 3 visual polish.
+- Default duration 14 days matches the convention noted on /rate-limit-overrides. Permanent overrides require staff to enter a multi-year duration explicitly; flagged in weekly audit-log review.
+- "Clear override" surfaces on the /rate-limit-overrides cross-account page (V-194), not here. Per-account detail focuses on the _set_ path; cross-account list focuses on the _clear_ path. Two pages, two halves of the operational loop.
+
+### Next
+
+V-197 — Stripe webhook signature e2e test (~2hr Tier 1).
