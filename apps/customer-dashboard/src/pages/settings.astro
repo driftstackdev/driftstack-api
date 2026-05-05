@@ -2,19 +2,72 @@
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 import { MOCK_ACCOUNT } from '../data/mocks.ts';
 
-// V-134 scaffolding. Real reads + writes against /v1/auth/* + /v1/account
-// land later.
+// V-217 — progressive-enhancement live wiring against:
+//   - /v1/account/email-preferences (V-204) — list + PUT per-event toggles
+//   - /v1/account/audit-log (V-216) — recent customer-visible events
+//   - /v1/auth/password-reset/request (V-079) — change-password trigger
+//
+// SSG renders mocks; inline <script> reads ds_web_session_token from
+// localStorage and replaces the live sections. Profile + Active
+// sign-ins remain on mock — those wires land in follow-up slices
+// (/v1/account profile endpoint doesn't exist yet; sign-in tracking
+// is a separate concern).
 
 function fmtIso(iso: string | null): string {
   if (iso === null) return '—';
   return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+
+// V-204 opt-outable email events. Mirrors OptOutableEmailEventSchema.
+const EMAIL_EVENTS = [
+  {
+    type: 'signup-welcome',
+    label: 'Signup welcome',
+    description: 'Once-after-verification onboarding email.',
+  },
+  {
+    type: 'session-failed-first',
+    label: 'First session failure',
+    description: 'One-time notice the first time a session fails on this account.',
+  },
+  {
+    type: 'tier-changed',
+    label: 'Subscription tier changed',
+    description: 'Confirmation when your tier changes via the Stripe portal.',
+  },
+  {
+    type: 'trial-pack-purchased',
+    label: 'Trial pack purchased',
+    description: 'Confirmation after the $2.99 checkout succeeds.',
+  },
+  {
+    type: 'trial-pack-expired',
+    label: 'Trial pack expired',
+    description: 'Notice when the 14-day trial-pack window closes.',
+  },
+  {
+    type: 'billing-receipt',
+    label: 'Billing receipts',
+    description: 'Per-invoice receipt emails. Stripe receipts continue regardless.',
+  },
+] as const;
 ---
 
 <DashboardLayout title="Settings">
-  <div class="mx-auto max-w-3xl px-6 py-10">
+  <div class="mx-auto max-w-3xl px-6 py-10" data-page="settings">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
     <header class="mb-10">
-      <p class="text-sm text-slate-500">Account · {MOCK_ACCOUNT.id.slice(0, 16)}…</p>
+      <p class="text-sm text-slate-500" data-field="header-account">
+        Account · {MOCK_ACCOUNT.id.slice(0, 16)}…
+      </p>
       <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Settings</h1>
       <p class="mt-2 max-w-prose text-sm text-slate-500">
         Account profile, security, and the danger zone. Changes here affect
@@ -52,6 +105,10 @@ function fmtIso(iso: string | null): string {
           </p>
         </div>
         <button class="btn-primary mt-2">Save changes</button>
+        <p class="text-xs text-slate-400">
+          Profile editing endpoint lands as a follow-up slice; saves are
+          currently no-op.
+        </p>
       </div>
     </section>
 
@@ -60,7 +117,9 @@ function fmtIso(iso: string | null): string {
       <h2 class="text-lg font-semibold text-slate-900">Security</h2>
       <p class="mt-2 text-sm text-slate-500">Password + recovery options.</p>
       <div class="mt-6 space-y-3">
-        <a href="#change-password" class="btn-secondary inline-flex">Change password</a>
+        <button type="button" data-action="change-password" class="btn-secondary inline-flex">
+          Change password
+        </button>
         <p class="text-xs text-slate-500">
           We email you a magic link to confirm. The link expires after 15
           minutes; old sessions stay signed in until they naturally expire.
@@ -88,40 +147,58 @@ function fmtIso(iso: string | null): string {
             current
           </span>
         </li>
-        <li class="flex items-start justify-between gap-6 py-3">
-          <div>
-            <p class="text-sm font-medium text-slate-900">macOS · Safari</p>
-            <p class="mt-1 text-xs text-slate-500">Signed in {fmtIso('2026-05-02T14:30:00Z')}</p>
-          </div>
-          <a href="#revoke-session" class="text-sm text-red-700 hover:underline">Sign out</a>
-        </li>
       </ul>
-      <button class="btn-secondary mt-6">Sign out all other sessions</button>
+      <p class="mt-4 text-xs text-slate-400">
+        Sign-in tracking endpoint lands as a follow-up slice; current entry is
+        scaffolding.
+      </p>
     </section>
 
-    <!-- Notifications -->
-    <section class="dashboard-card mt-6">
+    <!-- Email notifications (V-204 — live-wired) -->
+    <section class="dashboard-card mt-6" data-region="email-prefs">
       <h2 class="text-lg font-semibold text-slate-900">Email notifications</h2>
       <p class="mt-2 text-sm text-slate-500">
-        Transactional emails (billing, security) always go out. Below are
-        opt-in product updates.
+        Security + financial emails (signup verification, password reset,
+        billing failure, subscription cancellation, support replies) always
+        go out. Below are the optional lifecycle emails — toggle off any
+        you don't want.
       </p>
-      <div class="mt-6 space-y-3">
-        <label class="flex items-start gap-3">
-          <input type="checkbox" checked class="mt-0.5" />
-          <span class="text-sm text-slate-700">
-            <strong class="block font-medium text-slate-900">Quota warnings</strong>
-            Email when concurrent usage hits 80% / 100% of cap.
-          </span>
-        </label>
-        <label class="flex items-start gap-3">
-          <input type="checkbox" class="mt-0.5" />
-          <span class="text-sm text-slate-700">
-            <strong class="block font-medium text-slate-900">Changelog digest</strong>
-            Roughly every 2-4 weeks; only material changes.
-          </span>
-        </label>
+      <div class="mt-6 space-y-3" data-list="email-prefs">
+        {
+          EMAIL_EVENTS.map((event) => (
+            <label class="flex items-start gap-3">
+              <input
+                type="checkbox"
+                data-event-type={event.type}
+                checked
+                class="mt-0.5"
+                disabled
+              />
+              <span class="text-sm text-slate-700">
+                <strong class="block font-medium text-slate-900">{event.label}</strong>
+                {event.description}
+              </span>
+            </label>
+          ))
+        }
       </div>
+      <p class="mt-4 text-xs text-slate-400" data-field="email-prefs-status">
+        Sign in to load live preferences.
+      </p>
+    </section>
+
+    <!-- Audit log (V-216 — live-wired) -->
+    <section class="dashboard-card mt-6" data-region="audit-log">
+      <h2 class="text-lg font-semibold text-slate-900">Recent activity</h2>
+      <p class="mt-2 text-sm text-slate-500">
+        API key mints + revokes, session lifecycle events, and other account
+        changes. Newest first; filtered to your own account.
+      </p>
+      <ul class="mt-6 divide-y divide-slate-100" data-list="audit-log">
+        <li class="py-3 text-sm text-slate-500" data-field="audit-empty">
+          Sign in to load recent activity.
+        </li>
+      </ul>
     </section>
 
     <!-- Danger zone -->
@@ -133,9 +210,224 @@ function fmtIso(iso: string | null): string {
         deleted from R2 within 14 days. Invoice history retained per EU tax
         law (10 years) — not deletable on request.
       </p>
-      <button class="btn-secondary mt-4 border-red-300 text-red-700 hover:bg-red-100">
-        Delete account
-      </button>
+      <p class="mt-3 text-xs text-red-800">
+        Pre-launch: deletion is processed by emailing
+        <a
+          href="mailto:support@driftstack.dev?subject=Account%20deletion%20request"
+          class="underline">support@driftstack.dev</a
+        >. Self-service deletion endpoint lands post-launch.
+      </p>
     </section>
   </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="settings"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+      function hideBanner() {
+        if (!banner) return;
+        banner.classList.add('hidden');
+      }
+      function escapeHtml(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c],
+        );
+      }
+      function fmtIso(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+
+      function authedFetch(path, init = {}) {
+        return fetch(apiBaseUrl + path, {
+          ...init,
+          headers: {
+            ...(init.headers || {}),
+            authorization: 'Bearer ' + token,
+            'content-type': 'application/json',
+          },
+          credentials: 'include',
+        });
+      }
+
+      // V-204 — email preferences live wire.
+      const emailPrefsList = root.querySelector('[data-list="email-prefs"]');
+      const emailPrefsStatus = root.querySelector('[data-field="email-prefs-status"]');
+
+      function setEmailPrefsState(prefs) {
+        if (!emailPrefsList) return;
+        const inputs = emailPrefsList.querySelectorAll('input[type="checkbox"][data-event-type]');
+        inputs.forEach((input) => {
+          input.disabled = false;
+          const eventType = input.getAttribute('data-event-type');
+          const pref = prefs.find((p) => p.event_type === eventType);
+          input.checked = pref ? pref.opted_in : true;
+        });
+        if (emailPrefsStatus) {
+          emailPrefsStatus.textContent =
+            'Toggle off any lifecycle email you do not want. Changes save automatically.';
+        }
+      }
+
+      function loadEmailPrefs() {
+        if (!token || !emailPrefsList) return;
+        authedFetch('/v1/account/email-preferences', { method: 'GET' })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => setEmailPrefsState(body.data || []))
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't load email preferences (" + msg + ').');
+          });
+      }
+
+      function saveEmailPref(eventType, optedIn) {
+        if (!token) return;
+        authedFetch('/v1/account/email-preferences', {
+          method: 'PUT',
+          body: JSON.stringify({ event_type: eventType, opted_in: optedIn }),
+        })
+          .then((r) => {
+            if (r.status === 204 || r.ok) return null;
+            return Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then(() => {
+            showBanner('Email preference saved.');
+            setTimeout(hideBanner, 2000);
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't save email preference (" + msg + ').');
+          });
+      }
+
+      if (emailPrefsList) {
+        emailPrefsList.addEventListener('change', (ev) => {
+          const target = ev.target;
+          if (
+            !(target instanceof HTMLInputElement) ||
+            target.type !== 'checkbox' ||
+            !target.getAttribute('data-event-type')
+          )
+            return;
+          const eventType = target.getAttribute('data-event-type');
+          if (eventType) saveEmailPref(eventType, target.checked);
+        });
+      }
+
+      // V-216 — audit log live wire.
+      const auditList = root.querySelector('[data-list="audit-log"]');
+
+      function fmtAction(action) {
+        return action.replace(/[._]/g, ' ');
+      }
+
+      function renderAudit(entries) {
+        if (!auditList) return;
+        if (entries.length === 0) {
+          auditList.innerHTML =
+            '<li class="py-3 text-sm text-slate-500">No recent activity yet — your first key mint, session create, or other account event will appear here.</li>';
+          return;
+        }
+        auditList.innerHTML = entries
+          .map((entry) => {
+            const targetFrag = entry.target_resource_id
+              ? '<p class="mt-1 font-mono text-[11px] text-slate-500">' +
+                escapeHtml(entry.target_resource_id) +
+                '</p>'
+              : '';
+            return (
+              '<li class="flex items-start justify-between gap-4 py-3">' +
+              '<div class="min-w-0">' +
+              '<p class="font-mono text-xs text-slate-500">' +
+              escapeHtml(fmtIso(entry.timestamp)) +
+              '</p>' +
+              '<p class="mt-1 text-sm text-slate-900">' +
+              '<code class="font-mono text-xs text-oxblood-700">' +
+              escapeHtml(entry.action) +
+              '</code>' +
+              '</p>' +
+              targetFrag +
+              '</div>' +
+              '<span class="text-xs text-slate-400">' +
+              escapeHtml(fmtAction(entry.actor_type)) +
+              '</span></li>'
+            );
+          })
+          .join('');
+      }
+
+      function loadAudit() {
+        if (!token || !auditList) return;
+        authedFetch('/v1/account/audit-log?limit=20', { method: 'GET' })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => renderAudit(body.data || []))
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't load audit log (" + msg + ').');
+          });
+      }
+
+      // V-079 — change password trigger via password-reset request.
+      function changePassword() {
+        if (!token) {
+          showBanner('Sign in to change password.');
+          return;
+        }
+        // Email comes from the JWT-mirrored web session; the customer-
+        // dashboard fetches /v1/account when that endpoint exists. For
+        // V-217, prompt for the email so the password-reset link goes
+        // to the right address. Self-derived email comes via /v1/account
+        // follow-up.
+        const email = window.prompt('Enter your account email to send the password-reset link:');
+        if (!email || !email.trim()) return;
+        showBanner('Sending password-reset email…');
+        fetch(apiBaseUrl + '/v1/auth/password-reset/request', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email: email.trim() }),
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(() => {
+            showBanner('Password-reset email sent. Check your inbox.');
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't send password-reset (" + msg + ').');
+          });
+      }
+
+      root.addEventListener('click', (ev) => {
+        const target = ev.target;
+        if (!target || !target.closest) return;
+        const btn = target.closest('[data-action="change-password"]');
+        if (!btn) return;
+        ev.preventDefault();
+        changePassword();
+      });
+
+      if (!token) {
+        showBanner('Sign in to see live preferences + recent activity.');
+        return;
+      }
+
+      loadEmailPrefs();
+      loadAudit();
+    })();
+  </script>
 </DashboardLayout>

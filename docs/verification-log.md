@@ -12156,3 +12156,47 @@ The 13-action enum covers V-216 + leaves room for the wire-ins still pending (lo
 ### Next
 
 V-217 — customer dashboard /settings page expansion (GENERATE-9, ~2-3hr Tier 1 + Tier 3 visual surface).
+
+## V-217 — customer dashboard /settings page live wiring (GENERATE-9)
+
+### What
+
+Replaced mock-only sections on `/settings` with progressive-enhancement live wiring against existing endpoints, plus a new Audit log section surfacing the V-216 endpoint:
+
+1. **Email notifications section** — replaced two hardcoded toggles ("Quota warnings" / "Changelog digest", neither wired) with the **six V-204 opt-outable lifecycle events** (`signup-welcome`, `session-failed-first`, `tier-changed`, `trial-pack-purchased`, `trial-pack-expired`, `billing-receipt`). Toggles fetch from `GET /v1/account/email-preferences`, save via `PUT` on change, banner feedback.
+
+2. **NEW Audit log section** — `GET /v1/account/audit-log?limit=20` (V-216). Newest-first list with timestamp + action + target_resource_id + actor_type. Empty-state copy explains entries appear after first activity.
+
+3. **Change-password button** — wired to `POST /v1/auth/password-reset/request` with email prompt. Fire-and-forget; banner confirms.
+
+4. **Profile + Active sign-ins** kept on mock with footnotes flagging that server endpoints don't exist yet (`/v1/account` profile read/write, sign-in tracking).
+
+5. **Danger zone** — replaced dead "Delete account" button with mailto-to-support paragraph for pre-launch. Self-service deletion endpoint lands post-launch.
+
+### Why
+
+GENERATE-9 from the V-201 ack queue. V-216 landed the audit endpoint; V-204 landed email preferences; V-079 already had password-reset request. None of these were surfaced in the customer dashboard. V-217 wires the existing surfaces. Pure progressive-enhancement live-data wiring — no Tier 3 visual redesign; follows the V-180–V-194 pattern (mock paint → JS replaces with live).
+
+### Files
+
+- `apps/customer-dashboard/src/pages/settings.astro` — rewritten with progressive-enhancement script + new Audit log section + V-204 6-event email-prefs list.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 668 / 668 passing across 69 files.
+- `npx astro check` on customer-dashboard: 0 errors / warnings; one pre-existing hint on `sessions.astro` (V-186 carry).
+
+### Notes
+
+- Progressive-enhancement live-data wiring — same Tier 1 push-to-main pattern as V-180–V-194. Visual treatment unchanged; only mock data fetches are replaced. New Audit-log section uses existing `.dashboard-card` + slate-50 list conventions.
+- Profile + Active sign-ins kept on mock because server endpoints don't exist yet. Footnotes flag the gap.
+- Change-password prompts for email via `window.prompt` because there's no `/v1/account` self-read endpoint yet. When that lands, the prompt becomes a confirmation modal showing the verified email. MFA setup not scaffolded — no MFA backend.
+- Banner pattern: success messages auto-hide after 2s; error messages persist until next interaction.
+
+### Next
+
+V-218 — continuous validation harness (GENERATE-1, ~3-4hr Tier 1).
