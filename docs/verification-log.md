@@ -12611,3 +12611,61 @@ The cost of the gate is ~15s typecheck + ~12s tests = ~30s per push. Acceptable 
 ### Next
 
 V-184b Tier 3 onboarding flow visual UX (already-queued, founder-redline pass). V-215 post-force-push verification (founder fires V-207/V-212 runbook; Agent 2 verifies). Standing-by tasks: 9 deferred V-216 enum-value emit wires (login/logout/password_changed/profile/subscription/webhook_endpoint events); V-202b/c/d email-trigger wires (Stripe webhook handlers + first-failure dedup + trial-pack expiry job).
+
+## V-224 — auth-flows audit-log emit wires (V-216 deferred batch, part 1/3)
+
+### What
+
+`AuthFlowsService` now emits four customer-facing audit events through `AccountAuditService`:
+
+- `account.email_verified` — emitted at the end of `verifyEmail()` after the email-verified flag flips. Payload captures `issuedFromIp` + `userAgent` (defense-in-depth context for anyone reviewing their own audit log later).
+- `account.login` — emitted at the end of `login()` after a successful password verification + session issuance. Payload includes `method: 'password'` (forward-compatible — magic-link login paths could pass `method: 'magic_link'` when those grow audit emit, future work).
+- `account.password_changed` — emitted at the end of `confirmPasswordReset()` after the new hash is stored. Payload includes `via: 'password_reset'` (forward-compatible — a future "change password while signed in" path would set `via: 'self_serve'`).
+- `account.logout` — emitted in `logout()` after the web session is revoked + cache invalidated. Payload includes the `sessionId` so the customer can correlate against their device list.
+
+Implementation pattern: `AuthFlowsService` constructor gains a 6th optional positional param `accountAudit: AccountAuditService | null = null`. Default null preserves the existing `auth-flows-email.test.ts` 4-arg construction site (which doesn't exercise audit). Production wiring (`bootstrap.ts`) + the integration test fixture (`build-test-app.ts`) pass the real service.
+
+A private `emitAuditBestEffort()` helper centralises the try/catch + logger.warn-on-failure pattern (matches the existing api-keys / sessions emit posture from V-216). Audit failures never break the auth flow itself — same defensive posture as the V-202 email sends earlier in the same code paths.
+
+Test coverage: 4 new tests in `auth-flows.test.ts` `describe('V-224 — auth-flows emits customer-facing audit entries')`:
+
+- `verify-email emits account.email_verified` — signs up → verify-email → reads `/v1/account/audit-log` with the issued web session token, asserts the `account.email_verified` entry is present with `actor_type: customer`.
+- `login emits account.login` — signs up + verifies one account, then logs in; asserts `account.login` entry with `payload.method === 'password'`.
+- `password-reset/confirm emits account.password_changed` — signs up, requests reset, confirms with new password; asserts `account.password_changed` entry with `payload.via === 'password_reset'`.
+- `logout emits account.logout (visible on a fresh session)` — signs up + verifies + logs out the first session, then logs in again to read the audit log; asserts `account.logout` entry visible.
+
+### Why
+
+V-216 landed the `AccountAuditService` + `/v1/account/audit-log` route + 4 of 13 enum values wired (api-keys mint/revoke + sessions create/destroy). The remaining 9 enum values were deferred. V-224 takes the first batch (4 auth-flow events) because:
+
+1. They share a single service file (`auth-flows.ts`) and a single dep wire (`accountAudit?` optional ctor arg) — small, focused commit.
+2. They're customer-self-serve actions where an audit trail directly answers "did I log in then? did someone reset my password?" — the highest-value subset of the 13.
+3. They unblock `/v1/account/audit-log` from being mostly empty when a customer first hits it. Prior to V-224, a brand-new account that had never minted an API key or run a session would see an empty log even after signup + email-verify; that empty state was misleading.
+
+The remaining 5 deferred slots (`profile.created`, `profile.deleted`, `subscription.tier_changed`, `webhook_endpoint.created`, `webhook_endpoint.deleted`) span three more services — V-225 will pick up profiles + webhook_endpoints (similar shape to api-keys); V-226 will pick up subscription.tier_changed (Stripe-webhook-driven, `actor_type: 'system'`).
+
+### Files
+
+- `apps/server/src/services/auth-flows.ts` — added `accountAudit?` ctor arg + `emitAuditBestEffort()` helper + 4 emit sites.
+- `apps/server/src/lib/bootstrap.ts` — production wiring passes `accountAuditService` to `AuthFlowsService`.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — test fixture wiring.
+- `apps/server/tests/integration/auth-flows.test.ts` — new V-224 describe block with 4 assertions.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 683 / 683 passing across 71 files (was 679 before; +4 V-224 audit-emission tests).
+- pre-push hook (V-223): runs full chain on push; this commit is the second to exercise the gate.
+
+### Notes
+
+- Did NOT add audit emission to the magic-link consume path. `consumeMagicLink` is a session-issuance equivalent to `login`, but with a different payload `method` value. Holding off until founder confirms whether we want a single `account.login` event with a `method` discriminator (`password` | `magic_link`) or separate event types. Current state: only `password` logins emit. Magic-link still issues sessions but doesn't audit them; safe gap because magic-link is opt-in (passwordless) — defer until V-225 review.
+- Did NOT add audit emission to `signup` itself. Reasoning: signup pre-verification is a half-state — an unverified account has no `/v1/account/audit-log` access until verify-email lands a session token. The first audit row a customer can ever see is `account.email_verified`, which is correct semantically (the account "starts" then). If we emitted `account.signup`, customers would only ever see it AFTER `account.email_verified`, which would be confusing.
+- The `payload` shape design (`{ method }`, `{ via }`, `{ sessionId }`, `{ issuedFromIp, userAgent }`) keeps every emit small + targeted. No PII beyond what's already in the audit row's `ip_address` + `user_agent` columns. IP + UA on the row itself are populated by the service layer's existing capture path; the payload duplicates them for the auth-flow events specifically because the `actor_type: customer` rows record the BROWSER's IP/UA, while these emits also benefit from being self-describing without a JOIN against the row schema.
+
+### Next
+
+V-225 — second batch of V-216 deferred emit wires: `profile.created`, `profile.deleted`, `webhook_endpoint.created`, `webhook_endpoint.deleted`. Two services (`ProfilesService`, `WebhooksService`); both follow the same pattern as V-224 (optional `accountAudit?` ctor arg + emit at the success path). Then V-226 for `subscription.tier_changed` (Stripe-webhook-driven). Then V-184b Tier 3 onboarding visual UX.

@@ -416,3 +416,162 @@ describe('POST /v1/auth/refresh + /v1/auth/logout', () => {
     expect(res.statusCode).toBe(200);
   });
 });
+
+describe('V-224 — auth-flows emits customer-facing audit entries', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  interface AuditListResponse {
+    data: Array<{
+      action: string;
+      actor_type: string;
+      payload: Record<string, unknown> | null;
+    }>;
+    next_cursor: string | null;
+  }
+
+  async function listAudit(
+    fixture: TestAppFixture,
+    sessionToken: string,
+  ): Promise<AuditListResponse> {
+    const res = await fixture.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?limit=50',
+      headers: { authorization: `Bearer ${sessionToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    return res.json<AuditListResponse>();
+  }
+
+  it('verify-email emits account.email_verified', async () => {
+    fx = await buildTestApp();
+    const signup = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email: 'audit-verify@driftstack.local', password: 'correct horse battery staple' },
+    });
+    const token = signup.json<SignupResponse>().debug_token!;
+    const verify = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      payload: { token },
+    });
+    const sessionToken = verify.json<SessionEnvelope>().session.token;
+
+    const log = await listAudit(fx, sessionToken);
+    const verified = log.data.find((e) => e.action === 'account.email_verified');
+    expect(verified).toBeDefined();
+    expect(verified!.actor_type).toBe('customer');
+  });
+
+  it('login emits account.login', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email: 'audit-login@driftstack.local', password: 'correct horse battery staple' },
+    });
+    const verifyToken = (
+      await fx.app.inject({
+        method: 'POST',
+        url: '/v1/auth/signup',
+        payload: {
+          email: 'audit-login2@driftstack.local',
+          password: 'correct horse battery staple',
+        },
+      })
+    ).json<SignupResponse>().debug_token!;
+    // Verify the second account so we can log in to it.
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      payload: { token: verifyToken },
+    });
+
+    const login = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        email: 'audit-login2@driftstack.local',
+        password: 'correct horse battery staple',
+      },
+    });
+    expect(login.statusCode).toBe(200);
+    const sessionToken = login.json<SessionEnvelope>().session.token;
+
+    const log = await listAudit(fx, sessionToken);
+    const loginEntry = log.data.find((e) => e.action === 'account.login');
+    expect(loginEntry).toBeDefined();
+    expect((loginEntry!.payload as { method?: string } | null)?.method).toBe('password');
+  });
+
+  it('password-reset/confirm emits account.password_changed', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: {
+        email: 'audit-reset@driftstack.local',
+        password: 'correct horse battery staple',
+      },
+    });
+    const reqRes = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/password-reset/request',
+      payload: { email: 'audit-reset@driftstack.local' },
+    });
+    const resetToken = reqRes.json<{ debug_token: string }>().debug_token;
+    const confirm = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/password-reset/confirm',
+      payload: { token: resetToken, new_password: 'totally different password!!' },
+    });
+    const sessionToken = confirm.json<SessionEnvelope>().session.token;
+
+    const log = await listAudit(fx, sessionToken);
+    const changed = log.data.find((e) => e.action === 'account.password_changed');
+    expect(changed).toBeDefined();
+    expect((changed!.payload as { via?: string } | null)?.via).toBe('password_reset');
+  });
+
+  it('logout emits account.logout (visible on a fresh session)', async () => {
+    fx = await buildTestApp();
+    const signup = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email: 'audit-logout@driftstack.local', password: 'correct horse battery staple' },
+    });
+    const verifyToken = signup.json<SignupResponse>().debug_token!;
+    const verify = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      payload: { token: verifyToken },
+    });
+    const firstSession = verify.json<SessionEnvelope>().session.token;
+
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/logout',
+      payload: { token: firstSession },
+    });
+
+    // Log in again to get a fresh session token to read the audit log
+    // (the previous one is now revoked).
+    const login = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        email: 'audit-logout@driftstack.local',
+        password: 'correct horse battery staple',
+      },
+    });
+    const newSession = login.json<SessionEnvelope>().session.token;
+
+    const log = await listAudit(fx, newSession);
+    const logoutEntry = log.data.find((e) => e.action === 'account.logout');
+    expect(logoutEntry).toBeDefined();
+  });
+});

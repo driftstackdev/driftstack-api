@@ -17,6 +17,7 @@
 import type { Logger } from '../lib/logger.js';
 import type { EmailService } from './email.js';
 import type { AuthCache } from './auth-cache.js';
+import type { AccountAuditService } from './account-audit.js';
 import {
   AUTH_TOKEN_TTL_MS,
   generateAuthToken,
@@ -259,7 +260,44 @@ export class AuthFlowsService {
      * Tests that don't exercise the cache pass null (no-op).
      */
     private readonly authCache: AuthCache | null = null,
+    /**
+     * V-224 — optional customer-facing audit log. When wired, emits
+     * account.email_verified / account.login / account.logout /
+     * account.password_changed entries at the matching flow points.
+     * Best-effort; emit failures never break the auth flow itself.
+     * Tests that don't exercise the audit log pass null.
+     */
+    private readonly accountAudit: AccountAuditService | null = null,
   ) {}
+
+  private async emitAuditBestEffort(
+    accountId: string,
+    action:
+      | 'account.email_verified'
+      | 'account.login'
+      | 'account.logout'
+      | 'account.password_changed',
+    payload: Record<string, unknown>,
+    actorAccountId: string | null = null,
+  ): Promise<void> {
+    if (this.accountAudit === null) return;
+    try {
+      await this.accountAudit.record({
+        accountId,
+        actorType: 'customer',
+        actorAccountId: actorAccountId ?? accountId,
+        actorKeyId: null,
+        action,
+        targetResourceId: null,
+        payload,
+      });
+    } catch (err) {
+      this.logger.warn(
+        { component: 'auth-flows', action, accountId, err },
+        'account-audit emit failed (best-effort, swallowed)',
+      );
+    }
+  }
 
   async signup(args: SignupArgs): Promise<SignupResult> {
     const email = args.email.trim().toLowerCase();
@@ -311,6 +349,11 @@ export class AuthFlowsService {
     const account = await this.requireAccount(row.accountId);
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
 
+    await this.emitAuditBestEffort(account.id, 'account.email_verified', {
+      issuedFromIp: args.issuedFromIp,
+      userAgent: args.userAgent,
+    });
+
     // V-202 — fire signup-welcome email after the verify lands. Derive
     // the dashboard origin from `verifyEmailUrl` (the verify link
     // already lives on the customer dashboard host). Fire-and-forget;
@@ -343,6 +386,11 @@ export class AuthFlowsService {
     }
 
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
+    await this.emitAuditBestEffort(account.id, 'account.login', {
+      method: 'password',
+      issuedFromIp: args.issuedFromIp,
+      userAgent: args.userAgent,
+    });
     return { account, session };
   }
 
@@ -459,6 +507,11 @@ export class AuthFlowsService {
     await this.repo.setPassword(account.id, newHash);
 
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
+    await this.emitAuditBestEffort(account.id, 'account.password_changed', {
+      via: 'password_reset',
+      issuedFromIp: args.issuedFromIp,
+      userAgent: args.userAgent,
+    });
     return { account, session };
   }
 
@@ -496,6 +549,9 @@ export class AuthFlowsService {
         // Drop on the floor; cache will TTL out within 30s.
       }
     }
+    await this.emitAuditBestEffort(row.accountId, 'account.logout', {
+      sessionId: row.id,
+    });
   }
 
   // ──────────────────── helpers ────────────────────

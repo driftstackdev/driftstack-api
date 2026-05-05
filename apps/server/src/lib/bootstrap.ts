@@ -245,6 +245,7 @@ export async function createProductionDeps(
       exposeDebugToken: config.authFlowUrls.exposeDebugToken,
     },
     authCache, // V-168 — cache invalidation on logout
+    accountAuditService, // V-224 — emit account.{email_verified,login,logout,password_changed}
   );
 
   // V-080: inbound Stripe webhook handler. Optional — only wired when
