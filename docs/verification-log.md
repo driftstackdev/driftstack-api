@@ -10070,3 +10070,46 @@ pre-test step.
 Then per execution order: V-176 status page, V-177 SDK versioning,
 V-178 cross-SDK example parity, V-179 recapture automation, V-180+
 generate-from-planning-docs.
+
+---
+
+## V-175 — api-types dist/ staleness hygiene fix
+
+### Date
+
+2026-05-05
+
+### Goal
+
+V-122 + V-170 both hit the same footgun: adding new schema exports to `packages/api-types/src/*.ts` doesn't propagate to runtime-consuming workspaces (apps/server, sdk-typescript) until the package's `dist/` is rebuilt. Symptom: `tsc --noEmit` typecheck passes (sees TS sources directly via project references), but vitest tests fail at runtime because Node resolves the package via npm-workspace symlink → `dist/index.js` which is stale.
+
+V-175 closes the gap: add a `pretest` hook to the root `package.json` that runs `npm run build --workspaces --if-present` before vitest. New exports in any package's source are now guaranteed visible to runtime consumers.
+
+### What changed
+
+`package.json`:
+
+- New `pretest` script: `"pretest": "npm run build --workspaces --if-present"`.
+- Runs automatically before `npm test` per npm script lifecycle conventions (no test-script change needed).
+
+### How verified
+
+- `time npm test`: 15s wall clock (vs ~9s pre-V-175). The +6s is the workspace rebuild — acceptable amortised cost for the bulletproofness it provides.
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- 613/613 tests passing.
+
+### Trade-off considered
+
+- **Targeted vs full rebuild**: targeted approach (rebuild only `packages/api-types` + `packages/sdk-typescript` + similar runtime-consumed packages) saves ~2s. Full `--workspaces --if-present` is ~6s but doesn't require maintaining a list of which packages need pre-test rebuilds. New packages with `dist/` outputs automatically get covered. Picked full for maintenance simplicity.
+
+- **Path-rewrite to source instead of dist consumption**: tsconfig path-mapping could rewrite `@driftstack/api-types` to point at `packages/api-types/src` directly, bypassing dist. Would save the build step entirely. Rejected: the package's published shape is via dist (npm publish target); tests should consume the SAME shape that downstream consumers see. Path-rewrite would mask "I forgot to add this to the package's public exports" bugs.
+
+### Files modified
+
+- `package.json` (1 new script line)
+
+### Next
+
+V-176 next: status page scaffolding (PRIORITY 7, ~2-3hr).

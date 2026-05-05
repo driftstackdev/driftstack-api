@@ -16,6 +16,7 @@
     "build": "npm run build --workspaces --if-present",
     "dev": "npm run dev --workspace apps/server",
     "start": "npm run start --workspace apps/server",
+    "pretest": "npm run build --workspaces --if-present",
     "test": "vitest run",
     "test:watch": "vitest",
     "bench": "vitest bench --run",
