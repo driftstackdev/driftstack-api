@@ -10724,3 +10724,41 @@ Carry-forward from V-180. The original V-180 patch deliberately scoped only the 
 ### Next
 
 V-187 — PRIORITY C admin panel live-data wiring (first page).
+
+## V-187 — admin-panel /accounts live wiring (PRIORITY C phase 1)
+
+### What
+
+Replaced the mock-only `MOCK_ACCOUNTS` table on `apps/admin-panel/src/pages/accounts.astro` with progressive-enhancement live data sourced from `GET /v1/admin/accounts`. The SSG mock still renders for instant paint; an inline `<script>` reads `ds_web_session_token` from localStorage, calls the admin endpoint with bearer auth, and replaces the table body. Filter bar is wired (status + tier dropdowns + email_contains text search) with a 200ms debounce on input and a re-fetch on dropdown change. The footnote updates with a real "Showing N accounts" line, including a "more available" hint when `has_more=true`.
+
+### Why
+
+PRIORITY C phase 1 — admin panel was a static-mock surface across 8 pages. `/accounts` is the most-trafficked admin page (every account-detail action starts here), so it leads the live-wiring sweep. Using the existing `/v1/admin/accounts` endpoint without backend changes keeps the V-187 slice tight; subsequent V-NNN slices wire other pages.
+
+### Files
+
+- `apps/admin-panel/src/pages/accounts.astro`
+  - Added `data-page="admin-accounts"` root, `data-banner`, `data-list="accounts"`, `data-field` attrs on the search/status/tier inputs and footnote.
+  - Inline `<script is:inline define:vars={{ apiBaseUrl }}>` builds the query, fetches `/v1/admin/accounts`, replaces tbody contents, and surfaces banner messages for no-token / 403 forbidden / fetch-error.
+  - 403 explicitly maps to "Access denied — admin scope required" so a customer-account web session that lands on /accounts gets a clear message rather than a generic "HTTP 403".
+  - Renamed the static "agency" tier option to `agency_manual` to match the locked AccountTier values in `@driftstack/api-types`.
+  - "Last seen" column relabelled to "Last updated" (account row's `updated_at`) — `last_seen_at` doesn't exist in the public account shape; updated_at is the closest signal admins read for "is this account still live".
+  - HTML escaping for every interpolated field; `encodeURIComponent` on the link href.
+
+### Verify
+
+- `npm run typecheck`: clean across all 11 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 625 / 625 passing across 61 files.
+- `astro check` on admin-panel: 0 errors / warnings / hints.
+
+### Notes
+
+- Filter bar request is debounced (200ms) but in-flight responses are dedup'd by an `inFlight` counter — older responses are dropped when a newer fetch starts. Prevents a slow earlier filter from flashing stale rows over a fresh search.
+- Pagination cursor is computed by the server and returned as `next_cursor`; the page surfaces "more available" but doesn't wire a Next button yet — pagination ships as a separate slice once admins confirm "Load more" vs numbered-page UX (Tier 3 visual surface).
+- The admin endpoint requires `driftstack_internal_admin` scope. Customer-account web sessions land on /accounts the same way they could land on any admin page; the banner makes the failure mode explicit instead of silently empty.
+
+### Next
+
+V-188 — admin /audit-log live wiring (existing endpoint, ~1hr Tier 1).
