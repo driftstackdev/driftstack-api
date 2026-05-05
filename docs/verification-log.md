@@ -10214,3 +10214,71 @@ Founder PRIORITY 9 (~1hr). Document the operating contract that the three SDK CH
 ### Next
 
 V-178: cross-SDK example parity (PRIORITY 11, ~1-2hr).
+
+---
+
+## V-178 — Cross-SDK example parity audit + profile-management examples (PRIORITY 11)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder PRIORITY 11 (~1-2hr). Audit cross-SDK example coverage; add the missing common example (profile-management) where SDKs support it; surface the Go-SDK resource-coverage gap as a separate finding.
+
+### Audit findings
+
+Existing examples:
+
+| Pattern               | TS  | Python                      | Go                                |
+| --------------------- | --- | --------------------------- | --------------------------------- |
+| `quickstart`          | ✓   | ✓                           | ✓                                 |
+| `error-handling`      | ✓   | ✓                           | ✓                                 |
+| `pagination`          | ✓   | ✓                           | ✓ (V-151)                         |
+| `webhook-receiver`    | ✓   | ✓                           | ✓                                 |
+| `rate-limit-handling` | ✓   | (covered in error-handling) | (covered in error-handling)       |
+| `profile-management`  | NEW | NEW                         | (Go SDK has no profiles resource) |
+
+Ecosystem-idiomatic SDK-specific examples (intentionally not parity):
+
+- TS: `rate-limit-handling.ts` (focused on RateLimitError + retry)
+- Python: `langchain_tool.py` (Python-ecosystem integration)
+- Python: `pytest_fixture.py` (Python-ecosystem integration)
+- Go: `goroutine_pool/` (Go concurrency idiom)
+- Go: `scraping_pipeline/` (Go pipeline pattern)
+
+### What changed
+
+`packages/sdk-typescript/examples/profile-management.ts` (new):
+
+- Walks: create → iterate (paginated) → get → update → delete.
+- Uses `client.profiles.iterate({ limit: 50 })` (V-118 SDK iterator).
+- Inline notes on the locked-archetype default (V-136), profile-name uniqueness scope (D-032), tier-aware profile-count limits (ADR-004).
+
+`packages/sdk-python/examples/profile_management.py` (new):
+
+- Same walk in idiomatic Python: `for profile in client.profiles.iterate(limit=50)`.
+- Inline notes match the TS file.
+
+### Surfaced gap (separate V-NNN)
+
+**Go SDK lacks `profiles`, `auth`, `billing` resources.** The Go SDK currently exposes only `sessions`, `api_keys`, `webhooks`, `usage`. TS + Python both have all 7 resources (plus `profiles` / `auth` / `billing`).
+
+This is a meaningful gap — a Go customer who wants to manage profiles or wire signup/billing flows can't do it through the SDK today; they'd have to call `/v1/profiles` directly via raw HTTP. Adding the three missing resources to the Go SDK is ~3-4hr per resource (~10-12hr total) — too big for V-178. Surfaced for a separate V-NNN workstream when Go-SDK feature parity becomes a launch-blocking concern.
+
+### How verified
+
+- `npm run typecheck`: clean across all 10 workspaces.
+- `npm run lint`: clean (no production-code TS files added; SDK examples use eslint-disable per repo convention).
+- `npm run format:check`: clean.
+- `npm test`: 616/616 unchanged (no test files touched).
+
+### Files added
+
+- `packages/sdk-typescript/examples/profile-management.ts`
+- `packages/sdk-python/examples/profile_management.py`
+
+### Next
+
+V-179 (next): recapture automation scaffolding (file 115, ~2-3hr).
