@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-05-03
 **Tier:** Contractual (explicit; commercial-commitment shape)
-**Related V-entry:** V-061 (file-127 sweep that landed the previous single-ladder values), V-071 (this ADR), V-072 (data-layer rewrite that codifies the new structure).
+**Related V-entry:** V-061 (file-127 sweep that landed the previous single-ladder values), V-071 (this ADR), V-073 (data-layer rewrite that codifies the new structure — V-072 was renumbered).
 **Related ADR:** ADR-003 (paid trial pack — unchanged by this restructure; trial-pack mechanics survive intact).
 **Related D-entry:** none new — D-019 ("Six-tier locked pricing model") still references the prior structure and is now superseded by this ADR; future revision of D-019 may add a pointer to ADR-004 when convenient.
 
@@ -64,7 +64,7 @@ Hardware requirements (M4 Mini 16GB / Mac Studio M4 Max / Mac Studio Ultra+Mac P
 
 **Annual discount:** 20% across all tiers. **Setup fees:** zero across all tiers.
 
-Concrete enforcement implications (handled in V-072 / V-073):
+Concrete enforcement implications (handled in V-073 — V-072 slot was skipped during renumbering):
 
 - Postgres `account_tier` enum drops `'free' | 'starter' | 'solo' | 'builder' | 'scale' | 'enterprise'` and becomes `'trial_pack' | 'solo_manual' | 'team_manual' | 'agency_manual' | 'api_starter' | 'api_builder' | 'api_scale' | 'enterprise'`. Pre-launch — no production customers — so the migration drops + recreates rather than preserving values.
 - `TIER_CONCURRENT_SESSION_LIMITS` becomes the only tier-limit metric on paid tiers.
@@ -144,7 +144,7 @@ Re-evaluate this decision if **any** of the following fires:
 
 ## Notes
 
-The deferred file-127 single-ladder hours-with-overage design remains the parent driftstack repo's prior recorded design but is now superseded by ADR-004 in this repo's scope. If any revisit trigger fires and the conclusion is "go back to single-ladder + hours metering," the reactivation path is to (1) update the parent file 127 spec back to that shape, (2) reverse the V-072/V-073 enforcement code (re-add `TIER_QUOTAS.session_minute` + Stripe Meter integration for concurrent), (3) revise marketing-site pricing copy, (4) issue Art 28(2) sub-processor amendment notice if anything in the rail mix changes (it wouldn't here — billing rail is still Stripe-only per ADR-002).
+The deferred file-127 single-ladder hours-with-overage design remains the parent driftstack repo's prior recorded design but is now superseded by ADR-004 in this repo's scope. If any revisit trigger fires and the conclusion is "go back to single-ladder + hours metering," the reactivation path is to (1) update the parent file 127 spec back to that shape, (2) reverse the V-073 enforcement code (re-add `TIER_QUOTAS.session_minute` + Stripe Meter integration for concurrent), (3) revise marketing-site pricing copy, (4) issue Art 28(2) sub-processor amendment notice if anything in the rail mix changes (it wouldn't here — billing rail is still Stripe-only per ADR-002).
 
 The trial pack survives ADR-004 unchanged. ADR-003's schema (`accounts.trial_pack_*`), purchase mechanism ($2.99 Stripe Checkout one-time), credit-decrement rate ($0.18/hr), 14-day window, and once-per-account semantic all remain. The tier the trial pack converts customers into is now Solo Manual or API Starter (customer choice at conversion checkout) rather than the prior Starter; the conversion mechanic is unchanged.
 

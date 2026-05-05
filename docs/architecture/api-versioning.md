@@ -110,11 +110,14 @@ When `/v2/*` does ship, expect:
 - **`/v1/webhooks/*`** — `WebhookEventType` enum is closed. Adding
   a new event type IS technically breaking for strictly-typed
   consumers. We mitigate via the SDK passthrough pattern +
-  documented "we may send unknown event types; ignore + continue."
-  Customers are encouraged to subscribe with explicit
-  `events: [...]` arrays so the server only ever sends event types
-  the customer already opted into. New event types are then
-  additive at the wire level; subscription is opt-in.
+  documented "we may send unknown event types; ignore + continue"
+  (the catalog of all event types lives at `docs/api/webhook-events.md`
+  per V-203, and the system-design rationale at
+  `docs/architecture/webhook-system-design.md`). Customers are
+  encouraged to subscribe with explicit `events: [...]` arrays so the
+  server only ever sends event types the customer already opted into.
+  New event types are then additive at the wire level; subscription is
+  opt-in.
 - **`/v1/billing/*`** — Stripe-driven; subscription/trial-pack
   state shapes are stable across `/v1/*`'s lifetime. Mid-major
   changes here are extremely unlikely.

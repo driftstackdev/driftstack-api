@@ -12498,3 +12498,58 @@ V-222 — architecture docs cross-references audit (GENERATE-10, ~1-2hr Tier 1).
 ### Follow-up — verify-chain regression backstop
 
 The fact that three commits landed with `tsconfig.test.json` typecheck failing on `main` means the pre-push hook isn't catching what the V-log claims `npm run typecheck` covers. Action item: confirm `lefthook.yml` (or equivalent) runs the workspace-level `typecheck` script (which fans out into `tsc --build && tsc --noEmit -p tsconfig.test.json`), not just `tsc --build`. Surfacing as a follow-up rather than fixing in this commit because the fix is a separate concern (CI/hook config audit) from the V-221 CDN work.
+
+## V-222 — architecture docs cross-references audit (GENERATE-10)
+
+### What
+
+Cross-reference audit across `docs/architecture.md`, `docs/architecture/*.md` (8 files), `docs/api/webhook-events.md`, and `docs/adr/*.md` (~3000 lines total). Findings + fixes applied in the same commit:
+
+**BROKEN reference fix:**
+
+- `docs/adr/ADR-004-pricing-restructure-two-ladder.md` referenced V-072 in three places (header line 6, enforcement-implications line 67, Notes line 147) for the "data-layer rewrite that codifies the new structure". The actual landing slot was V-073 (V-072 was skipped during renumbering). Updated all three references; header annotated with "V-072 was renumbered" so the trail is clear.
+
+**MISSING cross-link fixes:**
+
+- `docs/architecture/webhook-system-design.md` § "Event types" — added cross-link to `docs/architecture/api-versioning.md` § "Per-resource versioning notes — `/v1/webhooks/*`". The previous text said "Adding new event types is non-breaking" without distinguishing wire-level (true for explicit subscribers) from type-level (false for strictly-typed SDK consumers); revised paragraph captures both and points at the breaking-change taxonomy + SDK passthrough escape hatch.
+- `docs/architecture/api-versioning.md` § "Per-resource versioning notes — `/v1/webhooks/*`" — promoted `docs/api/webhook-events.md` (V-203) reference from a single line in Related at the bottom to inline mention next to the closed-enum-server-sends discussion. Also added cross-link to `docs/architecture/webhook-system-design.md`.
+- `docs/architecture/team-roles-taxonomy.md` § "API key scope ↔ team role mapping" — added paragraph noting the scope enum is closed; new scopes are breaking and trigger the deprecation cycle. Cross-links to `docs/architecture/api-versioning.md` § "Per-resource versioning notes — `/v1/api-keys/*`" and references V-174 as the precedent.
+- `docs/architecture/customer-dashboard-stack.md` — added new "Related docs" section listing team-roles-taxonomy.md, webhook-system-design.md, api-versioning.md, webhook-events.md, and the V-221 CDN strategy (with a note that the dashboard's authenticated pages use `Cache-Control: private, no-store`, distinct from the marketing site's tiered caching).
+- `docs/architecture/moneybird-scoping.md` § References — added ADR-004 entry. Defines the 8 paid tiers + concurrent-only metering that Moneybird invoice line items align with; trial-pack survives ADR-004 unchanged per its Notes section.
+
+**INCONSISTENT references:** Audited but no actionable inconsistency. The Explore audit flagged a path discrepancy between `apps/server/src/lib/openapi.ts` (full path in api-versioning.md) and `lib/openapi.ts` (shorthand in phase-8-e2e-design.md). On review this is intentional shorthand within phase-8-e2e-design.md (the doc operates entirely in the `apps/server` context) — not a true cross-reference inconsistency. Skipped.
+
+**HEALTHY areas (for reference):** ADR-004 → ADR-003 → ADR-002 form a coherent decision chain. Webhook system design + webhook-events.md + api-versioning.md now form a triangle (webhook-events.md was already well-linked from the other two; this commit adds the bidirectional link from webhook-system-design.md to api-versioning.md to close the triangle). V-079 auth-flow references are consistent across architecture.md, team-roles-taxonomy.md, and api-versioning.md.
+
+### Why
+
+GENERATE-10 from the queue. Architecture docs are the primary onboarding surface for any future engineer (or audit reviewer); broken refs (V-072 →V-073) and missing cross-links degrade their value over time. Pre-launch is the right window to do this kind of audit because the doc set is small enough to fully review in one pass and the next time it'll be cheaper is "never."
+
+### Files
+
+- `docs/adr/ADR-004-pricing-restructure-two-ladder.md` — V-072 → V-073 fixes (3 sites).
+- `docs/architecture/webhook-system-design.md` — event-types paragraph rewrite + cross-link to api-versioning.md.
+- `docs/architecture/api-versioning.md` — webhook-events.md + webhook-system-design.md cross-links promoted from bottom-of-doc list to inline mention.
+- `docs/architecture/team-roles-taxonomy.md` — scope-enum versioning paragraph + cross-link.
+- `docs/architecture/customer-dashboard-stack.md` — new "Related docs" section.
+- `docs/architecture/moneybird-scoping.md` — ADR-004 added to References.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 679 / 679 passing across 71 files (pure docs, no test changes).
+
+### Notes
+
+- Audit conducted via Explore subagent producing concrete findings, then verified each finding against source-of-truth (e.g. `grep -n "^## V-072" docs/verification-log.md` confirmed V-072 doesn't exist before applying ADR-004 fix).
+- Skipped two findings the audit surfaced as "low-priority":
+  - `apps/server/src/lib/openapi.ts` path normalisation — phase-8-e2e-design.md's shorthand (`lib/openapi.ts`) is intentional within a doc scoped to `apps/server`; not a true inconsistency.
+  - Test-helper path clarification in architecture.md — the doc's "Layers" section is at the apps/services level, not the file-tree level; adding a tests/ note would muddy that abstraction.
+- The Explore audit's "HEALTHY" findings (decision chain, V-079 consistency, webhook triangle) are noted in the V-log but not separately re-verified beyond the commit's spot-checks. They're confidence-level findings, not action items.
+
+### Next
+
+V-223 — lefthook gate strengthening (founder-approved 2026-05-05 ack of V-221 follow-up; ~15min Tier 1). Confirm/configure pre-push hook to run workspace-level `npm run typecheck` (covers tsconfig.test.json) so the V-204 / V-216 / V-218 class of regression can't recur. Then V-184b Tier 3 onboarding flow visual UX (already-queued) + V-215 post-force-push verification (founder fires V-207/V-212 runbook).

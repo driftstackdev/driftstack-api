@@ -130,6 +130,12 @@ for them. This keeps key-creation auditable: the admin who minted the
 key is the audit-row's `admin_account_id`, not the day-to-day user
 of the key.
 
+The scope enum itself is closed; adding a new scope is a breaking
+change for strictly-typed SDK consumers and triggers the deprecation
+cycle. See `docs/architecture/api-versioning.md` (V-220) §
+"Per-resource versioning notes — `/v1/api-keys/*`" for the full
+breaking-change taxonomy and the path V-174 took when expanding scopes.
+
 ## Backend implementation notes (forward-looking)
 
 V-079 auth-flow schema only models single-user accounts today

@@ -39,7 +39,7 @@ All events have shape `{ id: string, type: string, created_at: ISO8601, data: ob
 | `quota.exceeded`      | Account fully exhausts a usage quota                      | `{ tier, usage_record_type, total, quota }` |
 | `api_key.revoked`     | DELETE /v1/api-keys/:id                                   | `{ api_key_id, name, revoked_at }`          |
 
-The set is deliberately small for the first release. Adding new event types is non-breaking; removing or changing the `data` shape of an existing type IS breaking.
+The set is deliberately small for the first release. Adding new event types is non-breaking _at the wire level_ for customers who subscribe with explicit `events: [...]` arrays — the server only emits subscribed types, so a new type only reaches a customer who opted in. For strictly-typed SDK consumers, however, a new server-emitted enum value is still a breaking change at the type-system level; see `docs/architecture/api-versioning.md` (V-220) § "Per-resource versioning notes — `/v1/webhooks/*`" for the breaking-change taxonomy and the SDK passthrough escape hatch. Removing or changing the `data` shape of an existing type IS unconditionally breaking and triggers the deprecation cycle in V-220.
 
 ## Subscription model
 

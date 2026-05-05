@@ -132,3 +132,11 @@ The decision is reversible: if the dashboard hits Astro's complexity ceiling (re
 ## Decision authority
 
 This is **architectural / structural** — surfaces for founder review per the Decision authority section in AGENTS.md. No commit until founder confirms the recommendation (or redirects to one of B / C / D).
+
+## Related docs
+
+- `docs/architecture/team-roles-taxonomy.md` (V-142) — owner / admin / member / viewer roles + scope mapping; gates which dashboard surfaces a signed-in user can see.
+- `docs/architecture/webhook-system-design.md` — webhook subscription + event-type model; the `/webhooks` page in the dashboard is the customer surface for this.
+- `docs/architecture/api-versioning.md` (V-220) — deprecation cycle for any UI-exposed breaking change (e.g. scope rename surfacing in the API-keys page).
+- `docs/api/webhook-events.md` (V-203) — canonical event-type catalog displayed in the webhook subscription UI.
+- `apps/marketing-site/public/_headers` + `docs/deployment/cdn-strategy.md` (V-221) — marketing site uses Cloudflare Pages; the dashboard SSR build at `app.driftstack.dev` uses the @astrojs/cloudflare adapter and follows similar caching discipline (no public caching of authenticated pages — `Cache-Control: private, no-store`).

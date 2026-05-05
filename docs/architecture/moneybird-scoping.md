@@ -309,6 +309,11 @@ above gates clear.
   Moneybird sits downstream of.
 - ADR-003 (paid trial pack) — the one-time-revenue line that
   necessitates separate Moneybird ledger treatment.
+- ADR-004 (pricing restructure to two-ladder concurrent-only) —
+  defines the 8 paid tiers + concurrent-only metering that Moneybird
+  invoice line items must align with. Subscription-line shape +
+  monthly/annual cadence flow from this ADR; trial-pack survives ADR-004
+  unchanged per its Notes section.
 - V-052 (Coinbase Commerce dropped from sub-processor list) — single-
   rail posture making Moneybird's input simpler.
 - V-053 (env-vars schema) — `MONEYBIRD_API_TOKEN` + `MONEYBIRD_ADMINISTRATION_ID`
