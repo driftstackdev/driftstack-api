@@ -10684,3 +10684,43 @@ GAP 1 from V-181 carry-forward: dashboard `/webhooks` page fields were deliberat
 ### Next
 
 V-186 — customer-dashboard `/sessions` concurrent-meter live wiring (~1hr Tier 1).
+
+## V-186 — /sessions concurrent meter live wiring
+
+### What
+
+Replaced the static MOCK_USAGE_SUMMARY-driven concurrent meter on `customer-dashboard /sessions` with progressive-enhancement live data:
+
+- **`concurrent_now`** is computed from the existing `/v1/sessions` response (count of items with `status` in `['creating','ready','busy']`).
+- **`concurrent_limit`** is fetched from `/v1/usage` (returns `tier`) then mapped through the locked `TIER_CONCURRENT_SESSION_LIMITS` table imported from `@driftstack/api-types`.
+
+The meter has three update points: header summary line, large `now / cap` numeric, progress bar `width%`. All update from a single `updateMeter(now, cap)` helper so a partial failure (e.g. `/v1/usage` 5xx, sessions 200) still surfaces the live `now` value while leaving `cap` at the SSG mock fallback.
+
+### Why
+
+Carry-forward from V-180. The original V-180 patch deliberately scoped only the active/recent lists, leaving the meter on mock data with a TODO comment. Closes the carry-forward to make the page fully live, and grounds the dashboard's most prominent commercial signal (capacity utilisation against tier cap) in real account state.
+
+### Files
+
+- `apps/customer-dashboard/src/pages/sessions.astro`
+  - Imported `TIER_CONCURRENT_SESSION_LIMITS` from `@driftstack/api-types`.
+  - Added `tierConcurrentLimits` to the inline-script `define:vars` payload.
+  - Added `data-field` attrs to header now/cap spans, meter now/cap spans, progress bar.
+  - Added `setText`, `updateMeter`, parallel `/v1/sessions` + `/v1/usage` fetches in the inline script. Each fetch updates its own slice of the meter independently so failure of one does not blank the other.
+
+### Verify
+
+- `npm run typecheck`: clean across all 11 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 625 / 625 passing across 61 files.
+- `astro check` on customer-dashboard: 0 errors, 0 warnings; one pre-existing hint on unused `selector` param in `renderList()` (not introduced by this change).
+
+### Notes
+
+- Both `concurrent_now` and the capacity bar reflect _active_ states only — destroyed/errored sessions are excluded as they no longer occupy concurrent capacity. Mirrors how the server enforces the cap at `concurrentSessionLimitFor()`.
+- `concurrent_limit` is sourced from a constant table rather than a server-returned `concurrent_limit` field. The /v1/usage shape today returns `tier` only; threading the cap server-side would require a schema bump. Keeping the mapping client-side is acceptable because `TIER_CONCURRENT_SESSION_LIMITS` is a locked constant published in the same `@driftstack/api-types` package the dashboard already depends on (single source of truth, no drift risk).
+
+### Next
+
+V-187 — PRIORITY C admin panel live-data wiring (first page).

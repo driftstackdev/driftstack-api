@@ -1,19 +1,19 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 import { MOCK_SESSIONS, MOCK_USAGE_SUMMARY } from '../data/mocks.ts';
+import { TIER_CONCURRENT_SESSION_LIMITS } from '@driftstack/api-types';
 
 // V-180 — progressive-enhancement wiring against /v1/sessions, mirrors
 // the V-171 /usage pattern. SSG renders mock; inline <script> replaces
 // the lists with live data when ds_web_session_token is in localStorage.
 // Banners cover: no-token / fetch-error / live-loaded states.
 //
-// Concurrent meter still reads MOCK_USAGE_SUMMARY for now — V-180 is
-// scoped to the sessions list. /v1/usage.concurrent_now isn't in the
-// current API shape; computing from the live sessions response (active
-// = count of status in [creating, ready, busy]) would change the
-// shape of what concurrent_now means (tier cap is per-tier static; the
-// LIVE side needs the tier-aware cap from /v1/usage.tier mapped to
-// TIER_CONCURRENT_SESSION_LIMITS). Lands as separate refinement V-NNN.
+// V-186 — concurrent meter now wired live. concurrent_now is computed
+// from /v1/sessions response (count of status in [creating, ready,
+// busy]). concurrent_limit comes from /v1/usage.tier mapped via
+// TIER_CONCURRENT_SESSION_LIMITS imported from @driftstack/api-types.
+// Both fetches run in parallel; meter updates as soon as the slower
+// of the two settles.
 
 function fmtIso(iso: string | null): string {
   if (iso === null) return '—';
@@ -46,6 +46,7 @@ const recentClosedSessions = MOCK_SESSIONS.filter(
 );
 
 const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
 ---
 
 <DashboardLayout title="Sessions">
@@ -63,9 +64,9 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
 
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-slate-500">
-          {MOCK_USAGE_SUMMARY.concurrent_now} active · {MOCK_USAGE_SUMMARY.concurrent_limit} concurrent
-          cap
+        <p class="text-sm text-slate-500" data-field="header-summary">
+          <span data-field="header-now">{MOCK_USAGE_SUMMARY.concurrent_now}</span> active · <span
+            data-field="header-cap">{MOCK_USAGE_SUMMARY.concurrent_limit}</span> concurrent cap
         </p>
         <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Sessions</h1>
         <p class="mt-2 max-w-prose text-sm text-slate-500">
@@ -84,13 +85,14 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       </p>
       <div class="mt-4 flex items-center gap-4">
         <p class="font-mono text-3xl font-semibold text-slate-900">
-          {MOCK_USAGE_SUMMARY.concurrent_now}
+          <span data-field="meter-now">{MOCK_USAGE_SUMMARY.concurrent_now}</span>
           <span class="text-base font-normal text-slate-500">
-            / {MOCK_USAGE_SUMMARY.concurrent_limit}
+            / <span data-field="meter-cap">{MOCK_USAGE_SUMMARY.concurrent_limit}</span>
           </span>
         </p>
         <div class="h-2 flex-1 overflow-hidden rounded bg-slate-100">
           <div
+            data-field="meter-bar"
             class="h-full bg-oxblood-700"
             style={`width: ${((MOCK_USAGE_SUMMARY.concurrent_now / MOCK_USAGE_SUMMARY.concurrent_limit) * 100).toString()}%`}
           />
@@ -204,7 +206,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
     recent lists. Falls back to mock-rendered lists when token is
     absent or fetch fails. Mirrors V-171 /usage pattern.
   -->
-  <script is:inline define:vars={{ apiBaseUrl }}>
+  <script is:inline define:vars={{ apiBaseUrl, tierConcurrentLimits }}>
     (function () {
       const root = document.querySelector('[data-page="sessions"]');
       if (!root) return;
@@ -334,12 +336,41 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         ul.innerHTML = sessions.map(liFn).join('');
       }
 
+      function setText(field, text) {
+        const el = root.querySelector('[data-field="' + field + '"]');
+        if (el) el.textContent = text;
+      }
+
+      // V-186 — concurrent meter wiring. concurrent_now derived from
+      // the live /v1/sessions response (active states), concurrent_limit
+      // from /v1/usage.tier mapped via tierConcurrentLimits. We update
+      // each meter half independently so a partial failure (e.g. usage
+      // 5xx) still surfaces the active count from sessions.
+      function updateMeter(now, cap) {
+        if (now !== null) {
+          setText('header-now', String(now));
+          setText('meter-now', String(now));
+        }
+        if (cap !== null) {
+          setText('header-cap', String(cap));
+          setText('meter-cap', String(cap));
+        }
+        const bar = root.querySelector('[data-field="meter-bar"]');
+        if (bar && now !== null && cap !== null && cap > 0) {
+          const pct = Math.min(100, Math.max(0, (now / cap) * 100));
+          bar.style.width = pct.toFixed(1) + '%';
+        }
+      }
+
       if (!token) {
         showBanner('Sign in to see live sessions. Showing preview data below.');
         return;
       }
 
-      fetch(apiBaseUrl + '/v1/sessions', {
+      let currentNow = null;
+      let currentCap = null;
+
+      const sessionsP = fetch(apiBaseUrl + '/v1/sessions', {
         headers: { authorization: 'Bearer ' + token },
         credentials: 'include',
       })
@@ -354,6 +385,8 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           );
           renderList('active', active, 'active');
           renderList('recent', recent, 'recent');
+          currentNow = active.length;
+          updateMeter(currentNow, currentCap);
           if (sessions.length === 0) {
             showBanner('No sessions yet — create one to get started.');
           }
@@ -365,6 +398,26 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
               '). Showing preview data below.',
           );
         });
+
+      const usageP = fetch(apiBaseUrl + '/v1/usage', {
+        headers: { authorization: 'Bearer ' + token },
+        credentials: 'include',
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+        .then((body) => {
+          const tier = body && body.tier ? body.tier : null;
+          const cap = tier && tierConcurrentLimits[tier] ? tierConcurrentLimits[tier] : null;
+          if (cap !== null) {
+            currentCap = cap;
+            updateMeter(currentNow, currentCap);
+          }
+        })
+        .catch(() => {
+          // Usage failure is non-fatal — leave the cap as the SSG
+          // mock value rather than hiding it.
+        });
+
+      void Promise.all([sessionsP, usageP]);
     })();
   </script>
 </DashboardLayout>
