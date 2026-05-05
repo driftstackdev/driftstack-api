@@ -42,6 +42,7 @@ import { registerAdminWebhookRoutes } from '../routes/admin-webhooks.js';
 import { registerAdminAuditLogRoutes } from '../routes/admin-audit-log.js';
 import { registerAdminOverviewRoutes } from '../routes/admin-overview.js';
 import { registerAdminSessionsRoutes } from '../routes/admin-sessions.js';
+import { registerAdminApiKeysRoutes } from '../routes/admin-api-keys.js';
 import { registerLegalRoutes } from '../routes/legal.js';
 import { registerAuthRoutes } from '../routes/auth.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
@@ -204,6 +205,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     webhooksAdmin: deps.webhooksAdminService,
   });
   registerAdminSessionsRoutes(app, { sessionsService: deps.sessionsService });
+  registerAdminApiKeysRoutes(app, { apiKeysService: deps.apiKeysService });
   registerLegalRoutes(app, deps.legalService);
   // V-176 — public-facing status endpoint. Reuses the readinessChecks
   // already supplied to /ready; no additional wiring needed at deps

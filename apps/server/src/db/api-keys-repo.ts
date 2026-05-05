@@ -1,6 +1,6 @@
 // Drizzle-backed implementation of ApiKeysRepo.
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, lt } from 'drizzle-orm';
 import type { ApiKeyRow } from '../services/auth.js';
 import type { ApiKeysRepo, NewApiKeyInput } from '../services/api-keys.js';
 import type { Database } from './client.js';
@@ -50,6 +50,36 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
 
   async markRevoked(id: string, at: Date): Promise<void> {
     await this.database.db.update(apiKeys).set({ revokedAt: at }).where(eq(apiKeys.id, id));
+  }
+
+  async listAllApiKeys(opts: {
+    limit: number;
+    cursor?: string;
+    accountId?: string;
+    revoked?: boolean;
+  }): Promise<{ items: ApiKeyRow[]; nextCursor: string | null }> {
+    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
+    const filters = [];
+    if (cursorDate) filters.push(lt(apiKeys.createdAt, cursorDate));
+    if (opts.accountId) filters.push(eq(apiKeys.accountId, opts.accountId));
+    if (opts.revoked === true) filters.push(isNotNull(apiKeys.revokedAt));
+    if (opts.revoked === false) filters.push(isNull(apiKeys.revokedAt));
+    const whereClause = filters.length === 0 ? undefined : and(...filters);
+
+    const rows = await this.database.db
+      .select()
+      .from(apiKeys)
+      .where(whereClause)
+      .orderBy(desc(apiKeys.createdAt))
+      .limit(opts.limit + 1);
+
+    const hasMore = rows.length > opts.limit;
+    const items = hasMore ? rows.slice(0, opts.limit) : rows;
+    const last = items[items.length - 1];
+    return {
+      items: items.map(toApiKeyRow),
+      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+    };
   }
 }
 

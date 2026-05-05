@@ -49,6 +49,18 @@ export interface ApiKeysRepo {
   /** Find an API key by id WITHOUT account scoping (admin force-actions only). */
   findApiKeyUnscoped(id: string): Promise<ApiKeyRow | null>;
   markRevoked(id: string, at: Date): Promise<void>;
+  /**
+   * Cross-account list for admin tooling. Filters by accountId
+   * optionally; supports cursor pagination by createdAt DESC. Optional
+   * `revoked` filter — true = only revoked keys, false = only active,
+   * undefined = both.
+   */
+  listAllApiKeys(opts: {
+    limit: number;
+    cursor?: string;
+    accountId?: string;
+    revoked?: boolean;
+  }): Promise<{ items: ApiKeyRow[]; nextCursor: string | null }>;
 }
 
 export interface CreateApiKeyServiceInput {
@@ -116,6 +128,18 @@ export class ApiKeysService {
 
   async list(ctx: AccountContext): Promise<ApiKeyRow[]> {
     return this.repo.listApiKeys(ctx.account.id);
+  }
+
+  /**
+   * Cross-account list for the admin panel. Requires
+   * `driftstack_internal_admin` scope.
+   */
+  async listAll(
+    ctx: AccountContext,
+    opts: { limit: number; cursor?: string; accountId?: string; revoked?: boolean },
+  ): Promise<{ items: ApiKeyRow[]; nextCursor: string | null }> {
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    return this.repo.listAllApiKeys(opts);
   }
 
   async revoke(ctx: AccountContext, keyId: string): Promise<void> {

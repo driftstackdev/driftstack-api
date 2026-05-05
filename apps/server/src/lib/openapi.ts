@@ -592,6 +592,33 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // Cross-account API keys list (admin)
+  const ListAdminApiKeysQueryOpenApi = z.object({
+    limit: z.number().int().min(1).max(100).optional(),
+    cursor: z.string().optional(),
+    account_id: z.string().optional(),
+    revoked: z.enum(['true', 'false']).optional(),
+  });
+  const PaginatedAdminApiKeysSchema = z.object({
+    data: z.array(ApiKeySchema),
+    next_cursor: z.string().nullable(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/api-keys',
+    summary: 'Cross-account API key list (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: { query: ListAdminApiKeysQueryOpenApi },
+    responses: {
+      200: {
+        description: 'Paginated cross-account API keys.',
+        content: { 'application/json': { schema: PaginatedAdminApiKeysSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+
   // Cross-account sessions list (admin)
   const ListAdminSessionsQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),

@@ -34,6 +34,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/admin/accounts/{id}/tier',
         '/v1/admin/accounts/{id}/unsuspend',
         '/v1/admin/accounts/{id}/usage',
+        '/v1/admin/api-keys',
         '/v1/admin/audit-log',
         '/v1/admin/overview',
         '/v1/admin/sessions',

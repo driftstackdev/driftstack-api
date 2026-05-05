@@ -10969,3 +10969,48 @@ PRIORITY C phase 6 — admin /sessions was 100% mock; staff had no way to see li
 ### Next
 
 V-193 — admin /api-keys cross-account list endpoint + page wiring (~1.5hr Tier 1, mirror of V-192 pattern but for `apiKeys` table).
+
+## V-193 — admin /api-keys cross-account list + page wiring (PRIORITY C phase 7)
+
+### What
+
+Built `GET /v1/admin/api-keys` cross-account list endpoint and wired the admin /api-keys dashboard page against it:
+
+1. Endpoint: paginated list with optional `account_id` (prefixed or raw uuid) and `revoked` ("true"/"false") filters. Cursor pagination by `createdAt DESC`.
+2. `ApiKeysRepo.listAllApiKeys` + `ApiKeysService.listAll` — admin-scope-gated cross-account list, mirrors V-192's sessions pattern.
+3. Drizzle and in-memory implementations.
+4. OpenAPI registration + 3 integration tests (happy path, revoked filter, 403 without admin scope).
+5. Dashboard wiring — `apps/admin-panel/src/pages/api-keys.astro` now fetches live + filters by account_id text input + Hide-revoked checkbox; Revoke button POSTs to existing `/v1/admin/api-keys/:id/revoke` with required reason.
+
+### Why
+
+PRIORITY C phase 7 — admin /api-keys was 100% mock; staff couldn't see live keys cross-account during support cases. With V-192's pattern proven for sessions, the same structure here closes the second of three remaining list-surface gaps. Revoke was the existing audited mutation; this slice connects discovery (list) to action (revoke) on a single page.
+
+### Files
+
+- `apps/server/src/services/api-keys.ts` — adds `listAllApiKeys` to repo + `listAll` to service.
+- `apps/server/src/db/api-keys-repo.ts` — Drizzle filter composition.
+- `apps/server/tests/integration/_helpers/in-memory-api-keys-repo.ts` — in-memory variant.
+- `apps/server/src/routes/admin-api-keys.ts` — new route file with `publicAdminApiKey` projection that includes `account_id`.
+- `apps/server/src/lib/app.ts` — register call.
+- `apps/server/src/lib/openapi.ts` — route + paginated schema.
+- `apps/server/tests/integration/openapi.test.ts` — added path (63 → 64).
+- `apps/server/tests/integration/admin-api-keys-list.test.ts` — 3 tests.
+- `apps/admin-panel/src/pages/api-keys.astro` — full progressive-enhancement rewrite.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 634 / 634 passing across 64 files.
+
+### Notes
+
+- Revoke flow requires a non-empty reason — surfaced as a precondition before the POST fires.
+- The admin response shape (`publicAdminApiKey`) intentionally includes `account_id`; customer-scoped `/v1/api-keys` does not. Same row, different projection per audience.
+- `SCOPE_LABEL` updated for V-174 split scopes (`account_owner` → "owner", `driftstack_internal_admin` → "staff").
+
+### Next
+
+V-194 — admin /rate-limit-overrides cross-account list endpoint + page wiring (mirror of V-192/V-193 pattern; /leads page stays mock — no leads infra).

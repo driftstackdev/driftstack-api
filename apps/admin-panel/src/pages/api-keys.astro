@@ -1,13 +1,19 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
 
+// V-193 — progressive-enhancement against /v1/admin/api-keys (new in
+// V-193). SSG renders a small mock; an inline <script> fetches with
+// bearer auth. Filter bar wired (account_id text input + hide-revoked
+// checkbox). Revoke action POSTs to existing
+// /v1/admin/api-keys/:id/revoke with audited reason.
+
 interface MockAdminApiKey {
   id: string;
   name: string;
   keyPrefix: string;
   accountId: string;
   accountEmail: string;
-  scopes: ReadonlyArray<'read' | 'write' | 'admin' | 'gui_control'>;
+  scopes: ReadonlyArray<string>;
   lastUsedAt: string | null;
   revokedAt: string | null;
   createdAt: string;
@@ -25,34 +31,14 @@ const MOCK_KEYS: MockAdminApiKey[] = [
     revokedAt: null,
     createdAt: '2026-04-15T09:10:00Z',
   },
-  {
-    id: 'key_00000000-0000-4000-8000-0000000000b2',
-    name: 'staging',
-    keyPrefix: 'ds_live_e5f6g7h8',
-    accountId: 'acc_00000000-0000-4000-8000-000000000002',
-    accountEmail: 'agency@driftstack.local',
-    scopes: ['read', 'write', 'admin'],
-    lastUsedAt: '2026-05-03T22:00:00Z',
-    revokedAt: null,
-    createdAt: '2026-04-22T14:05:00Z',
-  },
-  {
-    id: 'key_00000000-0000-4000-8000-0000000000b3',
-    name: 'leaked-on-pastebin',
-    keyPrefix: 'ds_live_xxxxxxxx',
-    accountId: 'acc_00000000-0000-4000-8000-000000000001',
-    accountEmail: 'tester@driftstack.local',
-    scopes: ['read', 'write'],
-    lastUsedAt: '2026-04-20T03:30:00Z',
-    revokedAt: '2026-04-20T15:00:00Z',
-    createdAt: '2026-04-15T09:11:00Z',
-  },
 ];
 
 const SCOPE_LABEL: Record<string, string> = {
   read: 'read',
   write: 'write',
   admin: 'admin',
+  account_owner: 'owner',
+  driftstack_internal_admin: 'staff',
   gui_control: 'gui',
 };
 
@@ -60,10 +46,19 @@ function fmtIso(iso: string | null): string {
   if (iso === null) return '—';
   return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 ---
 
 <AdminLayout title="API keys">
-  <div class="mx-auto max-w-6xl px-6 py-10">
+  <div class="mx-auto max-w-6xl px-6 py-10" data-page="admin-api-keys">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
     <header class="mb-10">
       <h1 class="text-3xl font-semibold tracking-tight text-slate-900">API keys</h1>
       <p class="mt-2 max-w-prose text-sm text-slate-500">
@@ -73,7 +68,6 @@ function fmtIso(iso: string | null): string {
       </p>
     </header>
 
-    <!-- Security notice -->
     <div
       class="mb-6 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
     >
@@ -90,16 +84,16 @@ function fmtIso(iso: string | null): string {
     <div class="mb-6 flex flex-wrap items-center gap-3">
       <input
         type="search"
-        placeholder="Filter by key prefix, name, or account email…"
+        data-field="account-id"
+        placeholder="Account id (acc_<uuid>)"
         class="w-72 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
       />
       <label class="flex items-center gap-2 text-sm text-slate-600">
-        <input type="checkbox" class="rounded" />
+        <input type="checkbox" data-field="hide-revoked" class="rounded" />
         Hide revoked
       </label>
     </div>
 
-    <!-- Keys table -->
     <div class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
       <table class="w-full text-sm">
         <thead>
@@ -112,15 +106,10 @@ function fmtIso(iso: string | null): string {
             <th class="px-4 py-3"></th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-100">
+        <tbody class="divide-y divide-slate-100" data-list="api-keys">
           {
             MOCK_KEYS.map((key) => (
-              <tr
-                class:list={[
-                  'hover:bg-slate-50',
-                  key.revokedAt !== null && 'opacity-60',
-                ]}
-              >
+              <tr class:list={['hover:bg-slate-50', key.revokedAt !== null && 'opacity-60']}>
                 <td class="px-4 py-3">
                   <p class="font-medium text-slate-900">{key.name}</p>
                   <p class="mt-1 font-mono text-[11px] text-slate-700">
@@ -130,22 +119,12 @@ function fmtIso(iso: string | null): string {
                   <p class="mt-0.5 font-mono text-[10px] text-slate-400">{key.id}</p>
                 </td>
                 <td class="px-4 py-3">
-                  <p class="text-slate-900">{key.accountEmail}</p>
-                  <p class="mt-1 font-mono text-[10px] text-slate-500">
-                    {key.accountId}
-                  </p>
+                  <p class="font-mono text-[10px] text-slate-500">{key.accountId}</p>
                 </td>
                 <td class="px-4 py-3">
                   <div class="flex flex-wrap gap-1">
                     {key.scopes.map((scope) => (
-                      <span
-                        class:list={[
-                          'rounded px-1.5 py-0.5 font-mono text-[11px]',
-                          scope === 'admin'
-                            ? 'bg-oxblood-50 text-oxblood-700'
-                            : 'bg-slate-100 text-slate-700',
-                        ]}
-                      >
+                      <span class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700">
                         {SCOPE_LABEL[scope] ?? scope}
                       </span>
                     ))}
@@ -164,20 +143,15 @@ function fmtIso(iso: string | null): string {
                   )}
                 </td>
                 <td class="px-4 py-3 text-right">
-                  {key.revokedAt === null ? (
-                    <a
-                      href={`#revoke-${key.id}`}
+                  {key.revokedAt === null && (
+                    <button
+                      type="button"
+                      data-action="revoke"
+                      data-id={key.id}
                       class="text-sm font-medium text-red-700 hover:underline"
                     >
                       Revoke
-                    </a>
-                  ) : (
-                    <a
-                      href={`#audit-${key.id}`}
-                      class="text-sm text-oxblood-700 hover:underline"
-                    >
-                      Audit
-                    </a>
+                    </button>
                   )}
                 </td>
               </tr>
@@ -187,10 +161,223 @@ function fmtIso(iso: string | null): string {
       </table>
     </div>
 
-    <p class="mt-4 text-xs text-slate-500">
+    <p class="mt-4 text-xs text-slate-500" data-field="footnote">
       Revocation fires <code class="font-mono">POST /v1/admin/api-keys/:id/revoke</code> with
       a required reason. The reason is stored on the audit row and surfaced
       to the customer in their key list ("revoked by Driftstack: &lt;reason&gt;").
     </p>
   </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="admin-api-keys"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const tbody = root.querySelector('[data-list="api-keys"]');
+      const footnote = root.querySelector('[data-field="footnote"]');
+      const accountIdEl = root.querySelector('[data-field="account-id"]');
+      const hideRevokedEl = root.querySelector('[data-field="hide-revoked"]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      const SCOPE_LABEL = {
+        read: 'read',
+        write: 'write',
+        admin: 'admin',
+        account_owner: 'owner',
+        driftstack_internal_admin: 'staff',
+        gui_control: 'gui',
+      };
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+      function hideBanner() {
+        if (!banner) return;
+        banner.classList.add('hidden');
+      }
+      function escapeHtml(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c],
+        );
+      }
+      function fmtIso(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+
+      function rowHtml(k) {
+        const revoked = k.revoked_at !== null;
+        const opacityClass = revoked ? 'opacity-60' : '';
+        const scopeChips = (k.scopes || [])
+          .map(
+            (s) =>
+              '<span class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700">' +
+              escapeHtml(SCOPE_LABEL[s] || s) +
+              '</span>',
+          )
+          .join(' ');
+        const statusBadge = revoked
+          ? '<span class="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-slate-600">revoked</span>'
+          : '<span class="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-emerald-700">active</span>';
+        const actionCell = !revoked
+          ? '<button type="button" data-action="revoke" data-id="' +
+            escapeHtml(k.id) +
+            '" class="text-sm font-medium text-red-700 hover:underline">Revoke</button>'
+          : '';
+        return (
+          '<tr class="hover:bg-slate-50 ' +
+          opacityClass +
+          '">' +
+          '<td class="px-4 py-3">' +
+          '<p class="font-medium text-slate-900">' +
+          escapeHtml(k.name) +
+          '</p>' +
+          '<p class="mt-1 font-mono text-[11px] text-slate-700">' +
+          escapeHtml(k.key_prefix) +
+          '<span class="text-slate-400">…</span></p>' +
+          '<p class="mt-0.5 font-mono text-[10px] text-slate-400">' +
+          escapeHtml(k.id) +
+          '</p></td>' +
+          '<td class="px-4 py-3">' +
+          '<p class="font-mono text-[10px] text-slate-500">' +
+          escapeHtml(k.account_id) +
+          '</p></td>' +
+          '<td class="px-4 py-3"><div class="flex flex-wrap gap-1">' +
+          scopeChips +
+          '</div></td>' +
+          '<td class="px-4 py-3 text-xs text-slate-600">' +
+          escapeHtml(fmtIso(k.last_used_at)) +
+          '</td>' +
+          '<td class="px-4 py-3">' +
+          statusBadge +
+          '</td>' +
+          '<td class="px-4 py-3 text-right">' +
+          actionCell +
+          '</td></tr>'
+        );
+      }
+
+      function buildQuery() {
+        const params = new URLSearchParams();
+        params.set('limit', '50');
+        if (accountIdEl && accountIdEl.value.trim())
+          params.set('account_id', accountIdEl.value.trim());
+        if (hideRevokedEl && hideRevokedEl.checked) params.set('revoked', 'false');
+        return params;
+      }
+
+      let inFlight = 0;
+      function load() {
+        if (!token) return;
+        const myReq = ++inFlight;
+        const params = buildQuery();
+        fetch(apiBaseUrl + '/v1/admin/api-keys?' + params.toString(), {
+          headers: { authorization: 'Bearer ' + token },
+          credentials: 'include',
+        })
+          .then((r) => {
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then((body) => {
+            if (myReq !== inFlight) return;
+            const rows = body.data || [];
+            if (tbody) {
+              if (rows.length === 0) {
+                tbody.innerHTML =
+                  '<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-slate-500">No keys match the current filter.</td></tr>';
+              } else {
+                tbody.innerHTML = rows.map(rowHtml).join('');
+              }
+            }
+            if (footnote) {
+              footnote.textContent =
+                'Showing ' +
+                rows.length +
+                ' key' +
+                (rows.length === 1 ? '' : 's') +
+                '. Revoke fires POST /v1/admin/api-keys/:id/revoke with a required reason.';
+            }
+            hideBanner();
+          })
+          .catch((err) => {
+            if (myReq !== inFlight) return;
+            const msg = err && err.message ? err.message : 'network error';
+            if (msg === 'forbidden') {
+              showBanner(
+                'Access denied — admin scope required. You are signed in as a customer account.',
+              );
+            } else {
+              showBanner("Couldn't load API keys (" + msg + '). Showing preview data below.');
+            }
+          });
+      }
+
+      function revoke(id) {
+        if (!token) return;
+        const reason = window.prompt('Reason for revoking ' + id + ' (required):');
+        if (!reason || !reason.trim()) {
+          showBanner('Revoke cancelled — reason is required.');
+          return;
+        }
+        showBanner('Revoking ' + id + '…');
+        fetch(apiBaseUrl + '/v1/admin/api-keys/' + encodeURIComponent(id) + '/revoke', {
+          method: 'POST',
+          headers: {
+            authorization: 'Bearer ' + token,
+            'content-type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ reason: reason.trim() }),
+        })
+          .then((r) => {
+            if (r.status === 204 || r.ok) return null;
+            return Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then(() => {
+            showBanner('Revoked ' + id + '. Refreshing…');
+            load();
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't revoke (" + msg + ').');
+          });
+      }
+
+      root.addEventListener('click', (ev) => {
+        const target = ev.target;
+        if (!target || !target.closest) return;
+        const btn = target.closest('[data-action="revoke"]');
+        if (!btn) return;
+        ev.preventDefault();
+        const id = btn.getAttribute('data-id');
+        if (id) revoke(id);
+      });
+
+      let debounce = 0;
+      function scheduleLoad() {
+        clearTimeout(debounce);
+        debounce = setTimeout(load, 200);
+      }
+      if (accountIdEl) accountIdEl.addEventListener('input', scheduleLoad);
+      if (hideRevokedEl) hideRevokedEl.addEventListener('change', scheduleLoad);
+
+      if (!token) {
+        showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
+        return;
+      }
+
+      load();
+    })();
+  </script>
 </AdminLayout>
