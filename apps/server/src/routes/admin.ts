@@ -1,7 +1,7 @@
 // Admin routes — API key management + usage view.
 
 import type { FastifyInstance } from 'fastify';
-import { CreateApiKeyRequestSchema } from '@driftstack/api-types';
+import { CreateApiKeyRequestSchema, UsageSeriesQuerySchema } from '@driftstack/api-types';
 import type { ApiKeyRow } from '../services/auth.js';
 import type { ApiKeysService } from '../services/api-keys.js';
 import type { UsageService, UsageSummary } from '../services/usage.js';
@@ -110,6 +110,30 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
       if (!ctx) throw new Error('account context missing after requireAuth');
       const summary = await usageService.currentPeriodSummary(ctx);
       return publicUsage(summary);
+    },
+  );
+
+  // ── GET /v1/usage/series ──────────────────────────────────────────────
+  // V-170 — daily-bucketed usage series for sparkline rendering.
+  // Customer-dashboard /usage consumes this. Default 30 days, max 90.
+  // Empty buckets today (usage_records writers not wired); the endpoint
+  // returns the contract shape with zeros so the dashboard can render
+  // empty-state correctly.
+  app.get(
+    '/v1/usage/series',
+    {
+      preHandler: [app.requireAuth, app.rateLimit('global')],
+    },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const query = UsageSeriesQuerySchema.parse(request.query ?? {});
+      const series = await usageService.dailySeries(ctx, query.days ?? 30);
+      return {
+        from_date: series.fromDate,
+        to_date: series.toDate,
+        buckets: series.buckets,
+      };
     },
   );
 }

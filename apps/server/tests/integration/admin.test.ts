@@ -260,3 +260,113 @@ describe('GET /v1/usage', () => {
     expect(body.quotas.session_minute).toBeNull();
   });
 });
+
+describe('GET /v1/usage/series (V-170)', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('200 returns 30-day contiguous bucket series with empty totals (default)', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/usage/series',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{
+      from_date: string;
+      to_date: string;
+      buckets: Array<{ date: string; totals: Record<string, number> }>;
+    }>();
+    expect(body.from_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(body.to_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(body.buckets).toHaveLength(30);
+    // Default: no recorded usage → every bucket is empty.
+    for (const b of body.buckets) {
+      expect(Object.keys(b.totals)).toEqual([]);
+    }
+  });
+
+  it('honours days=7 query param', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/usage/series?days=7',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ buckets: unknown[] }>().buckets).toHaveLength(7);
+  });
+
+  it('rejects days=200 (above max=90)', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/usage/series?days=200',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('aggregates recorded usage into the right daily bucket', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const now = new Date();
+    // Record 3 navigates today.
+    fx.usageRepo.record({
+      accountId: fx.accountId,
+      recordType: 'navigate',
+      quantity: 3,
+      recordedAt: now,
+    });
+    // Record 5 interacts 3 days ago.
+    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+    fx.usageRepo.record({
+      accountId: fx.accountId,
+      recordType: 'interact',
+      quantity: 5,
+      recordedAt: threeDaysAgo,
+    });
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/usage/series?days=7',
+      headers: auth(fx),
+    });
+    const body = res.json<{
+      buckets: Array<{ date: string; totals: Record<string, number> }>;
+    }>();
+    expect(body.buckets).toHaveLength(7);
+    // Find the bucket for today.
+    const todayStr = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+      .toISOString()
+      .slice(0, 10);
+    // The to_date is exclusive (today's UTC midnight), so today's bucket
+    // is NOT included — the latest included bucket is yesterday.
+    const todayBucket = body.buckets.find((b) => b.date === todayStr);
+    expect(todayBucket).toBeUndefined();
+    // The 3-days-ago interact should appear.
+    const threeDaysAgoStr = new Date(
+      Date.UTC(
+        threeDaysAgo.getUTCFullYear(),
+        threeDaysAgo.getUTCMonth(),
+        threeDaysAgo.getUTCDate(),
+      ),
+    )
+      .toISOString()
+      .slice(0, 10);
+    const threeDaysAgoBucket = body.buckets.find((b) => b.date === threeDaysAgoStr);
+    expect(threeDaysAgoBucket?.totals.interact).toBe(5);
+  });
+
+  it('401 without auth bearer', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/usage/series',
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});

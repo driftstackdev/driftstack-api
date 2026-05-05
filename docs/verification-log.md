@@ -9629,3 +9629,86 @@ Test fixture updates:
 ### Next
 
 V-170 next: /usage real-data wiring (Decision 1, Option A approved by founder). Then V-171 (V-163 DrizzleAuditArchive follow-on).
+
+---
+
+## V-170 — /v1/usage/series backend endpoint (Decision 1, Option A — backend half)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder Decision 1 (locked, Option A): wire /usage to real backend even if data is zero. V-170 lands the backend half (new `/v1/usage/series` endpoint + service + repo methods + tests). V-171 (next) lands the customer-dashboard wiring.
+
+Endpoint contract: returns daily-bucketed usage totals for the last N UTC days (default 30, max 90), one bucket per day in `[from_date, to_date)`. Today the buckets are all empty (`usage_records` writers not yet wired in production code per V-014/V-015 amendment + usage.ts:51-53 comment); the endpoint returns the contract shape with zeros so the dashboard renders empty-state correctly. When writers land later, the dashboard auto-populates.
+
+### What changed
+
+`packages/api-types/src/usage.ts`:
+
+- New `UsageDailyBucketSchema` — `{ date: 'YYYY-MM-DD', totals: Record<UsageRecordType, number> }`.
+- New `UsageSeriesQuerySchema` — `{ days?: number(1-90) }` (zod coerces query string).
+- New `UsageSeriesResponseSchema` — `{ from_date, to_date, buckets: UsageDailyBucket[] }`.
+- Type aliases: `UsageDailyBucket`, `UsageSeriesQuery`, `UsageSeriesResponse`.
+
+`apps/server/src/services/usage.ts`:
+
+- New `UsageDailyBucket` interface mirroring the API contract.
+- `UsageRepo.dailyBucketsForRange(accountId, fromDate, toDate)` — returns NON-empty buckets only (caller fills gaps).
+- `UsageService.dailySeries(ctx, days?, now?)`:
+  - Clamps days to `[1, 90]`.
+  - Computes `toDate = dayStartUtc(now)` + `fromDate = toDate - days*24h`.
+  - Calls repo, fills missing days with empty `totals: {}` so the response is contiguous (no gaps for sparkline rendering).
+  - Returns `{ fromDate, toDate, buckets }` with date strings in `YYYY-MM-DD`.
+
+`apps/server/src/db/usage-repo.ts`:
+
+- `DrizzleUsageRepo.dailyBucketsForRange` — `GROUP BY date_trunc('day', recorded_at AT TIME ZONE 'UTC'), record_type` against the existing `(account_id, recorded_at)` index. Returns ascending by date.
+
+`apps/server/tests/integration/_helpers/in-memory-usage-repo.ts`:
+
+- Mirrors the Drizzle impl for in-memory tests.
+
+`apps/server/src/routes/admin.ts`:
+
+- New `GET /v1/usage/series` route (alongside existing `/v1/usage`). Same `requireAuth + rateLimit('global')` preHandler. Returns the response shape with `from_date` / `to_date` / `buckets` keys.
+
+`apps/server/tests/integration/admin.test.ts`:
+
+- 5 new tests for `/v1/usage/series`:
+  - 200 returns 30-day contiguous series with empty totals (default).
+  - `days=7` query param honored.
+  - `days=200` rejected with 400 (above max=90).
+  - Recorded usage aggregates into the right daily bucket; today's bucket is NOT included (`to_date` is exclusive); other days surface correctly.
+  - 401 without bearer.
+
+### Bug discovered + fixed during V-170
+
+`api-types` workspace's compiled `dist/` output was stale — new schema additions in `packages/api-types/src/usage.ts` weren't visible at runtime until I ran `npm run build --workspace packages/api-types`. The `npm run typecheck` step doesn't trigger a re-emit (uses `tsc --noEmit -p tsconfig.json` for the SDK + `tsc --build` for everything else; the SDK's noEmit doesn't refresh dist).
+
+This is a pre-existing footgun separate from V-170 (V-122 hit the same thing for SDK iterators); not fixing in this commit. Worth a future hygiene V-NNN to add a pre-test `npm run build --workspaces --if-present` step OR have integration tests run against source directly via path-rewrites.
+
+### How verified
+
+- `npm run typecheck`: clean across all 10 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` pass).
+- Targeted: `npm test -- admin.test.ts`: 18/18 passing (was 13/13; +5 new for V-170).
+- Full suite: `npm test`: 608/608 passing (was 603; +5 new).
+
+### Files modified
+
+- `packages/api-types/src/usage.ts`
+- `apps/server/src/services/usage.ts`
+- `apps/server/src/db/usage-repo.ts`
+- `apps/server/tests/integration/_helpers/in-memory-usage-repo.ts`
+- `apps/server/src/routes/admin.ts`
+- `apps/server/tests/integration/admin.test.ts`
+
+### Next
+
+V-171 (next): customer-dashboard `/usage` wiring — switch from MOCK_USAGE_SUMMARY + mockSeries() to client-side fetch against `/v1/usage` + `/v1/usage/series`. Empty-state UI when data is zero. Tier 1 (engineering scaffolding; visual layout unchanged).
+
+After V-171: V-172 = V-163 follow-on (DrizzleAuditArchive + DrizzleArchiveLedgerRepo).

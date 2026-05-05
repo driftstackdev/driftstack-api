@@ -132,8 +132,25 @@ export interface UsageTotals {
   totals: Partial<Record<UsageRecordType, number>>;
 }
 
+/** V-170 — one daily bucket of usage totals. Date is the UTC day in `YYYY-MM-DD`. */
+export interface UsageDailyBucket {
+  date: string;
+  totals: Partial<Record<UsageRecordType, number>>;
+}
+
 export interface UsageRepo {
   totalsForPeriod(accountId: string, periodStart: Date, periodEnd: Date): Promise<UsageTotals>;
+  /**
+   * V-170 — daily aggregation in `[fromDate, toDate)` (toDate exclusive).
+   * Returns one bucket per UTC day, INCLUDING days with zero usage
+   * (caller can render gaps as zeros without filling missing dates).
+   * Buckets are ordered ascending by date.
+   */
+  dailyBucketsForRange(
+    accountId: string,
+    fromDate: Date,
+    toDate: Date,
+  ): Promise<readonly UsageDailyBucket[]>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -190,6 +207,53 @@ export class UsageService {
       quotas: TIER_QUOTAS[tier],
     };
   }
+
+  /**
+   * V-170 — daily series for the most recent N days (default 30, max 90).
+   * Returns one bucket per UTC day in [fromDate, now), inclusive of days
+   * with zero usage. Customer-dashboard /usage sparklines consume this.
+   *
+   * Today the buckets are all empty because usage_records writers
+   * aren't wired in production code (per V-014/V-015 amendment +
+   * usage.ts:51-53 comment). The endpoint returns the contract shape
+   * with zeros; once writers land, the dashboard auto-populates.
+   */
+  async dailySeries(
+    ctx: AccountContext,
+    days: number = 30,
+    now: Date = new Date(),
+  ): Promise<{
+    fromDate: string;
+    toDate: string;
+    buckets: readonly UsageDailyBucket[];
+  }> {
+    const clampedDays = Math.max(1, Math.min(days, 90));
+    const toDate = dayStartUtc(now);
+    const fromDate = new Date(toDate.getTime() - clampedDays * 24 * 60 * 60 * 1000);
+    const raw = await this.repo.dailyBucketsForRange(ctx.account.id, fromDate, toDate);
+
+    // Fill missing days with empty buckets so the response is contiguous
+    // (sparkline rendering doesn't need to handle gaps).
+    const byDate = new Map<string, Partial<Record<UsageRecordType, number>>>();
+    for (const b of raw) byDate.set(b.date, b.totals);
+
+    const buckets: UsageDailyBucket[] = [];
+    for (let i = 0; i < clampedDays; i += 1) {
+      const day = new Date(fromDate.getTime() + i * 24 * 60 * 60 * 1000);
+      const dateStr = day.toISOString().slice(0, 10);
+      buckets.push({ date: dateStr, totals: byDate.get(dateStr) ?? {} });
+    }
+
+    return {
+      fromDate: fromDate.toISOString().slice(0, 10),
+      toDate: toDate.toISOString().slice(0, 10),
+      buckets,
+    };
+  }
+}
+
+function dayStartUtc(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
 
 function monthStartUtc(now: Date): Date {
