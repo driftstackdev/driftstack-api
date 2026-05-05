@@ -67,6 +67,9 @@ export type LifecycleEvent =
       kind: 'subscription.trial_pack_purchased';
       creditCents: number;
       expiresAt: Date;
+    }
+  | {
+      kind: 'subscription.trial_pack_expired';
     };
 
 export interface AccountLifecycleServiceConfig {
@@ -124,6 +127,9 @@ export class AccountLifecycleService {
           return;
         case 'subscription.trial_pack_purchased':
           await this.handleTrialPackPurchased(accountId, event);
+          return;
+        case 'subscription.trial_pack_expired':
+          await this.handleTrialPackExpired(accountId);
           return;
       }
     } catch (err) {
@@ -247,6 +253,20 @@ export class AccountLifecycleService {
       creditCentsRemaining: event.creditCents,
       expiresAt: event.expiresAt,
       dashboardUrl: this.dashboardUrl,
+    });
+  }
+
+  private async handleTrialPackExpired(accountId: string): Promise<void> {
+    const allowed = await this.emailPreferences.shouldSend(accountId, 'trial-pack-expired');
+    if (!allowed) return;
+
+    const account = await this.repo.findForLifecycle(accountId);
+    if (account === null) return;
+
+    await this.email.sendTrialPackExpired({
+      to: account.email,
+      // Upgrade URL points to the billing page where customers pick a paid tier.
+      upgradeUrl: this.billingPortalUrl,
     });
   }
 }

@@ -47,6 +47,8 @@ import { AccountAuditService } from '../../../src/services/account-audit.js';
 import { DrizzleAccountAuditRepo } from '../../../src/db/account-audit-repo.js';
 import { AccountLifecycleService } from '../../../src/services/account-lifecycle.js';
 import { DrizzleAccountLifecycleRepo } from '../../../src/db/account-lifecycle-repo.js';
+import { ScheduledJobsService } from '../../../src/services/scheduled-jobs.js';
+import { DrizzleScheduledJobsRepo } from '../../../src/db/scheduled-jobs-repo.js';
 import { createEmailService } from '../../../src/services/email.js';
 import {
   ValidationHarnessService,
@@ -168,6 +170,17 @@ export async function startTestServer(): Promise<TestServer> {
     accountAuditService, // V-202b — tier_changed audit emit
   );
 
+  const scheduledJobsRepo = new DrizzleScheduledJobsRepo(database);
+  const scheduledJobsService = new ScheduledJobsService(scheduledJobsRepo, logger, {
+    workerId: 'e2e-test-worker',
+  });
+  scheduledJobsService.register('trial_pack.expired', async (job) => {
+    if (job.accountId === null) return;
+    await accountLifecycleService.emit(job.accountId, {
+      kind: 'subscription.trial_pack_expired',
+    });
+  });
+
   const sessionsService = new SessionsService({
     repo: sessionsRepo,
     driver,
@@ -226,6 +239,8 @@ export async function startTestServer(): Promise<TestServer> {
     emailPreferencesService,
     accountAuditService,
     validationHarnessService,
+    accountLifecycleService,
+    scheduledJobsService,
     rateLimitStore,
     permissiveCors: true,
   });

@@ -44,6 +44,9 @@ import {
   type ValidationHarnessRecaptureBridge,
 } from '../../src/services/validation-harness.js';
 import { InMemoryValidationSchedulesRepo } from './_helpers/in-memory-validation-schedules-repo.js';
+import { AccountLifecycleService } from '../../src/services/account-lifecycle.js';
+import { InMemoryAccountLifecycleRepo } from './_helpers/in-memory-account-lifecycle-repo.js';
+import { createEmailService } from '../../src/services/email.js';
 import { randomUUID as authCacheTestRandomUUID } from 'node:crypto';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
@@ -51,6 +54,7 @@ function buildAdditionalDeps(): {
   emailPreferencesService: EmailPreferencesService;
   accountAuditService: AccountAuditService;
   validationHarnessService: ValidationHarnessService;
+  accountLifecycleService: AccountLifecycleService;
 } {
   const emailPreferencesService = new EmailPreferencesService(new InMemoryEmailPreferencesRepo());
   const accountAuditService = new AccountAuditService(new InMemoryAccountAuditRepo());
@@ -62,7 +66,25 @@ function buildAdditionalDeps(): {
     recaptureBridge,
     { iosVersion: '18.7', safariVersion: '26.4' },
   );
-  return { emailPreferencesService, accountAuditService, validationHarnessService };
+  const stubLogger = createTestLogger();
+  const noopEmail = createEmailService({ config: null, logger: stubLogger });
+  const accountLifecycleService = new AccountLifecycleService(
+    new InMemoryAccountLifecycleRepo(),
+    noopEmail,
+    emailPreferencesService,
+    stubLogger,
+    {
+      docsBaseUrl: 'https://example.test/docs',
+      billingPortalUrl: 'https://example.test/billing',
+      dashboardUrl: 'https://example.test',
+    },
+  );
+  return {
+    emailPreferencesService,
+    accountAuditService,
+    validationHarnessService,
+    accountLifecycleService,
+  };
 }
 
 let fx: TestAppFixture;

@@ -24,6 +24,8 @@ import type { LegalService } from '../services/legal.js';
 import type { EmailPreferencesService } from '../services/email-preferences.js';
 import { registerEmailPreferencesRoutes } from '../routes/email-preferences.js';
 import type { AccountAuditService } from '../services/account-audit.js';
+import type { AccountLifecycleService } from '../services/account-lifecycle.js';
+import type { ScheduledJobsService } from '../services/scheduled-jobs.js';
 import { registerAccountAuditRoutes } from '../routes/account-audit.js';
 import type { ValidationHarnessService } from '../services/validation-harness.js';
 import { registerAdminValidationHarnessRoutes } from '../routes/admin-validation-harness.js';
@@ -107,6 +109,19 @@ export interface AppDeps {
   accountAuditService: AccountAuditService;
   /** V-218: continuous validation harness. */
   validationHarnessService: ValidationHarnessService;
+  /**
+   * V-202c — central dispatcher for paired audit emit + email send
+   * lifecycle events. Required for routes that don't already have a
+   * direct audit/email path.
+   */
+  accountLifecycleService: AccountLifecycleService;
+  /**
+   * V-202d — generic time-shifted job dispatcher (`scheduled_jobs` table).
+   * Optional — when omitted, the trial-pack expiry email and any future
+   * cron-shaped work is silenced. Tests that don't exercise scheduled
+   * jobs pass null/undefined.
+   */
+  scheduledJobsService?: ScheduledJobsService;
   /**
    * V-079: user-facing auth flows. Optional during the migration window —
    * when omitted, the /v1/auth/* routes are not registered. Once the

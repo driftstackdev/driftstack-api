@@ -26,6 +26,8 @@ import { AccountAuditService } from '../../../src/services/account-audit.js';
 import { InMemoryAccountAuditRepo } from './in-memory-account-audit-repo.js';
 import { AccountLifecycleService } from '../../../src/services/account-lifecycle.js';
 import { InMemoryAccountLifecycleRepo } from './in-memory-account-lifecycle-repo.js';
+import { ScheduledJobsService } from '../../../src/services/scheduled-jobs.js';
+import { InMemoryScheduledJobsRepo } from './in-memory-scheduled-jobs-repo.js';
 import {
   ValidationHarnessService,
   type ValidationHarnessRecaptureBridge,
@@ -116,6 +118,10 @@ export interface TestAppFixture {
   billingProvider: InMemoryBillingProvider;
   /** V-202c — lifecycle dedup state (first_failure_email_sent_at, etc.). */
   accountLifecycleRepo: InMemoryAccountLifecycleRepo;
+  /** V-202d — scheduled jobs ledger; tests can inspect or trigger processTick. */
+  scheduledJobsRepo: InMemoryScheduledJobsRepo;
+  /** V-202d — service handle so tests can call processTick(now) deterministically. */
+  scheduledJobsService: ScheduledJobsService;
   driver: MockDriver;
   /** Plaintext API key — pass as `Authorization: Bearer <plaintext>`. */
   plaintext: string;
@@ -220,6 +226,21 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     },
     accountAuditService, // V-202b — tier_changed audit emit
   );
+
+  // V-202d — scheduled-jobs service with the trial_pack.expired handler
+  // pre-registered. Tests that exercise the trial-pack expiry flow can
+  // call `scheduledJobsService.processTick()` directly to fire any due
+  // jobs without waiting on a setInterval poller.
+  const scheduledJobsRepo = new InMemoryScheduledJobsRepo();
+  const scheduledJobsService = new ScheduledJobsService(scheduledJobsRepo, testLogger, {
+    workerId: 'test-worker',
+  });
+  scheduledJobsService.register('trial_pack.expired', async (job) => {
+    if (job.accountId === null) return;
+    await accountLifecycleService.emit(job.accountId, {
+      kind: 'subscription.trial_pack_expired',
+    });
+  });
 
   const webhooksRepo = new InMemoryWebhooksRepo();
   // V-225 — accountAudit wired for webhook_endpoint.{created,deleted}.
@@ -412,6 +433,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       },
     },
     accountLifecycleService, // V-202b — fans out tier_changed audit + email at one call site
+    scheduledJobsService, // V-202d — enqueues trial_pack.expired job at trial-pack purchase
   );
   const stripeWebhookSigningSecret = 'whsec_test_fixture_secret';
 
@@ -469,6 +491,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     emailPreferencesService,
     accountAuditService,
     validationHarnessService,
+    accountLifecycleService,
+    scheduledJobsService,
     authFlowsService,
     stripeWebhooksService,
     stripeWebhookSigningSecret,
@@ -499,6 +523,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     billingRepo,
     billingProvider,
     accountLifecycleRepo,
+    scheduledJobsRepo,
+    scheduledJobsService,
     driver,
     plaintext,
     accountId,

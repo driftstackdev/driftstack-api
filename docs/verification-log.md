@@ -13034,3 +13034,75 @@ V-202b closes the V-202 deferred-wires list except for V-202d (trial-pack expiry
 V-202d — trial-pack expiry job. Per founder-approved V-173-pattern extension: introduce a generic `scheduled_jobs` table (job_type + payload + run_at + locked_by + completed_at), a `setInterval` poller in bootstrap (alongside V-173 webhook worker + V-218 validation harness `processTick`), multi-replica safe via `SELECT FOR UPDATE SKIP LOCKED`. Trial-pack expiry is one `job_type`; future cron-shaped work fits the same table. Email path uses the lifecycle dispatcher (new event kind: `subscription.trial_pack_expired`).
 
 Then V-184b Tier 3 onboarding visual UX (founder-redline). Then V-215 force-push verification (waits on founder firing V-207/V-212 runbook).
+
+## V-202d — generic scheduled_jobs + trial-pack expiry job
+
+### What
+
+Per founder-approved V-173-pattern extension: a single generic `scheduled_jobs` table that handles all time-shifted background work. Trial-pack expiry is the first consumer; future cron-shaped jobs (subscription renewal reminders, end-of-month usage rollups, cleanup jobs) reuse the table by adding a `job_type` discriminator value + a registered handler.
+
+Five components:
+
+1. **Migration `0021_scheduled_jobs.sql`** — Class A additive table per V-198. Schema: id (uuid), job_type (text), account_id (uuid nullable, FK accounts ON DELETE CASCADE), payload (jsonb), run_at (timestamptz), locked_by/locked_at (lock state), completed_at/failed_at (terminal states), last_error (text), attempts/max_attempts (int with default 3), created_at/updated_at. Two partial indexes: `scheduled_jobs_due_idx` on (run_at) WHERE completed_at IS NULL AND failed_at IS NULL (worker query); `scheduled_jobs_account_type_pending_idx` on (account_id, job_type) WHERE same (dedup-at-enqueue lookup). Journal idx 21 entry added.
+
+2. **`ScheduledJobsRepo` interface** with `enqueue` (with optional `dedupOnAccountAndType` flag), `claimDue` (atomic via `SELECT … FOR UPDATE SKIP LOCKED` in a CTE → `UPDATE … RETURNING`), `markComplete`, `markRetry`, `markFailed`. The Drizzle impl uses one statement for the claim so concurrent workers across replicas never claim the same row. The in-memory impl mirrors the contract (lock-aware skip; deterministic runAt-ASC ordering).
+
+3. **`ScheduledJobsService.processTick(now)`** — claims up to `batchSize` due jobs, dispatches each to its registered handler, marks complete on success / retry-with-exponential-backoff on transient failure / failed-permanently when attempts exceed max. Handler registry is a Map keyed by `job_type`. Unhandled `job_type` values mark the row failed with a clear error message (operator visibility for misconfigurations).
+
+4. **Trial-pack expiry handler.** `bootstrap.ts` (and the test fixtures) register `'trial_pack.expired'` to delegate to `accountLifecycleService.emit({ kind: 'subscription.trial_pack_expired' })`. The lifecycle service's new handler sends `sendTrialPackExpired` (opt-out aware via `'trial-pack-expired'` preference key, already in V-204 catalog) with `upgradeUrl` pointing at the billing portal.
+
+5. **Wire-in at trial-pack purchase** (`StripeWebhooksService.handleCheckoutCompleted`, mode=payment). After `applyTrialPackPurchase` succeeds (idempotency-gated), enqueue a `trial_pack.expired` job with `runAt: expiresAt` and `dedupOnAccountAndType: true`. The dedup flag protects against late Stripe-event re-deliveries that bypass the V-089 idempotency gate (e.g. days-later replays).
+
+The `setInterval(processTick, 60_000)` poller wiring is intentionally NOT done in this commit — the harness V-218 has the same shape (its processTick exists but is also unwired in bootstrap), and the founder hasn't approved the actual setInterval startup for either. Both services are constructed + handler-registered + ready for activation in a separate "wire pollers" V-entry. Tests exercise `processTick` directly which fully validates the dispatch path.
+
+### Why
+
+V-202 deferred the expiry email behind "trial-pack expiry job doesn't exist in this repo today (no scheduled query, no cron worker). Surfaced as follow-up." Founder verdict 2026-05-05 approved the V-173-pattern extension as the right shape: a generic `scheduled_jobs` table beats either (a) per-feature ad-hoc cron tables, (b) external scheduler services (BullMQ, pg_cron — operational surface area Driftstack doesn't need yet), or (c) per-account scheduled-column queries (works for one feature; doesn't generalize).
+
+The architectural value is centralization: every future "fire X at T+N" feature gets the table for free. The first consumer (trial-pack expiry) validates the shape under realistic conditions before more consumers commit to it.
+
+The `dedupOnAccountAndType` flag captures a real concern: Stripe webhook re-deliveries beyond the local idempotency window (rare but possible — Stripe will retry for up to 3 days after initial delivery failure) would otherwise enqueue duplicate trial-pack expiry jobs. The flag makes the enqueue safe to call multiple times for the same account.
+
+### Files
+
+- `apps/server/src/db/migrations/0021_scheduled_jobs.sql` — new migration.
+- `apps/server/src/db/migrations/meta/_journal.json` — idx 21 entry.
+- `apps/server/src/db/schema.ts` — `scheduledJobs` table + types.
+- `apps/server/src/services/scheduled-jobs.ts` — service + repo interface + types.
+- `apps/server/src/db/scheduled-jobs-repo.ts` — Drizzle impl with CTE-based atomic claim.
+- `apps/server/src/services/account-lifecycle.ts` — new `subscription.trial_pack_expired` event kind + handler.
+- `apps/server/src/services/stripe-webhooks.ts` — optional `scheduledJobs` ctor arg + enqueue at trial-pack purchase site.
+- `apps/server/src/lib/app.ts` — `accountLifecycleService` (required) + `scheduledJobsService` (optional) added to `AppDeps`.
+- `apps/server/src/lib/bootstrap.ts` — wires the service + repo + handler registration.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — fixture wiring + exposes `scheduledJobsRepo` + `scheduledJobsService` on `TestAppFixture`.
+- `apps/server/tests/integration/_helpers/in-memory-scheduled-jobs-repo.ts` — new in-memory impl.
+- `apps/server/tests/e2e/helpers/server.ts` — e2e wire-in.
+- `apps/server/tests/integration/auth-cache.test.ts` — `buildAdditionalDeps` extended with `accountLifecycleService` to satisfy the new required dep on `AppDeps`.
+- `apps/server/tests/unit/scheduled-jobs.test.ts` — new file, 7 unit tests (dispatch / unhandled type / future runAt / retry-with-backoff / completion idempotency / dedup at enqueue / dedup unblocks after completion).
+- `apps/server/tests/unit/account-lifecycle.test.ts` — `+2` tests for `subscription.trial_pack_expired` (happy path / opt-out).
+- `apps/server/tests/integration/trial-pack-expiry.test.ts` — new file, 5 integration tests covering the end-to-end pipeline (purchase enqueues / processTick before run_at no-ops / processTick after run_at completes / no re-pickup / dedup on duplicate purchase).
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after prettier reflow on 3 new files).
+- `npm test`: 717 / 717 passing across 74 files (+14 over the V-202b 703 baseline; 7 scheduled-jobs unit + 5 trial-pack-expiry integration + 2 lifecycle unit).
+- pre-push hook (V-223) will exercise on push.
+
+### Notes
+
+- Closes V-202b/c/d email-trigger queue except for the **poller startup**. The poller wiring (`setInterval(scheduledJobsService.processTick, 60_000)` + matching cleanup in teardown) is deferred because: (1) V-218 validation harness has the same unstarted-poller state and the same wiring should apply uniformly to both (one V-entry, one decision); (2) the founder hasn't approved the production polling cadence — 60s is the V-202 V-log assumption but could be longer (e.g. 5min) for trial-pack expiry where second-level latency doesn't matter. Tests + manual `processTick` calls work today; production starts firing emails once the poller activates.
+- The Drizzle `claimDue` query uses raw SQL via `db.execute(sql\`...\`)`rather than the typed builder because Drizzle 0.x doesn't have first-class CTE support for the`WITH due AS (... FOR UPDATE SKIP LOCKED) UPDATE ... FROM due` shape. The raw SQL is the same idiom V-173 webhook delivery worker uses (`apps/server/src/services/durable-webhook-delivery.ts`); consistency across the codebase. If/when Drizzle gains the ergonomics this can refactor.
+- The 5-minute stale-lock threshold (`new Date(now - 5 * 60_000)` as the lock-bypass cutoff) means a worker process that crashes mid-handler doesn't permanently strand its claimed jobs. Five minutes is conservative — worker handlers should complete in seconds. If a job genuinely needs longer than 5 minutes, the threshold becomes a parameter on a per-job-type basis (not needed today).
+- Trial-pack expiry happens 14 days after purchase by default. The `setInterval` poller cadence (60s default) versus the run_at granularity (14 days) means the expiry email fires within ~60s of `expiresAt` once the poller activates. Acceptable: customers don't notice 60-second-class delays on a 14-day timer. If/when sub-minute job latency matters (e.g. real-time-ish notifications), the poller cadence drops to 5s.
+
+### Next
+
+V-202 deferred-wires queue is now fully closed (V-202b email wires + V-202c first-failure dedup + V-202d expiry job all landed). Remaining queue per founder direction:
+
+- **Poller startup wiring** — single V-entry to start setInterval pollers for `scheduledJobsService.processTick` AND `validationHarnessService.processTick` in bootstrap, with matching teardown. Founder-approve cadence first.
+- **Drizzle-kit reinstatement** (TD-002 — V-228 follow-up; auto-update journal on future migrations).
+- **V-184b Tier 3 onboarding visual UX** (founder-redline; DRAFT-only, no commit per autopilot guardrails).
+- **V-215 force-push verification** (waits on founder firing V-207/V-212 runbook).

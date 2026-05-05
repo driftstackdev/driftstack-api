@@ -1,0 +1,173 @@
+// V-202d — generic time-shifted job dispatcher built on the
+// `scheduled_jobs` table. Per founder verdict (2026-05-05),
+// V-173-pattern extension: bootstrap runs setInterval poller that
+// calls `processTick(now)`; the service claims due jobs via
+// SELECT ... FOR UPDATE SKIP LOCKED, dispatches each to its
+// registered handler keyed by job_type, and marks complete (or
+// retries on transient failure / fails permanently when attempts
+// exhaust).
+//
+// First consumer: trial-pack expiry. When a customer purchases the
+// trial pack, an enqueue at `expiresAt` schedules a
+// `trial_pack.expired` job. The handler delegates to
+// AccountLifecycleService.emit({ kind: 'subscription.trial_pack_expired' })
+// which fires the email (opt-out aware).
+//
+// Future consumers (subscription renewal reminders, usage rollups,
+// cleanup jobs) just register a handler for their job_type and
+// enqueue rows. No new table.
+
+import type { Logger } from '../lib/logger.js';
+
+export interface ScheduledJobRow {
+  id: string;
+  jobType: string;
+  accountId: string | null;
+  payload: Record<string, unknown>;
+  runAt: Date;
+  attempts: number;
+  maxAttempts: number;
+}
+
+export interface EnqueueScheduledJobInput {
+  jobType: string;
+  accountId: string | null;
+  payload: Record<string, unknown>;
+  runAt: Date;
+  /**
+   * When true, `enqueue` no-ops if a pending job (completed_at IS NULL
+   * AND failed_at IS NULL) already exists with the same
+   * (account_id, job_type). Used by trial-pack expiry to ensure one
+   * pending job per account regardless of how many times the purchase
+   * webhook re-fires.
+   */
+  dedupOnAccountAndType?: boolean;
+}
+
+export interface ScheduledJobsRepo {
+  enqueue(input: EnqueueScheduledJobInput): Promise<{ enqueued: boolean }>;
+  /**
+   * Atomically claim up to `batchSize` due jobs (run_at <= now,
+   * not yet completed/failed, not currently locked). Sets
+   * locked_by + locked_at + increments attempts. The implementation
+   * MUST use SELECT ... FOR UPDATE SKIP LOCKED so concurrent workers
+   * never claim the same row.
+   */
+  claimDue(opts: { batchSize: number; now: Date; workerId: string }): Promise<ScheduledJobRow[]>;
+  markComplete(jobId: string, at: Date): Promise<void>;
+  markRetry(jobId: string, opts: { lastError: string; nextRunAt: Date }): Promise<void>;
+  markFailed(jobId: string, opts: { lastError: string; at: Date }): Promise<void>;
+}
+
+export type ScheduledJobHandler = (job: ScheduledJobRow) => Promise<void>;
+
+export interface ScheduledJobsServiceConfig {
+  /** Batch size per tick. */
+  batchSize?: number;
+  /** Backoff for retries: ms = base * 2^(attempts-1). */
+  retryBackoffBaseMs?: number;
+  /** Identifier for this worker process; written to locked_by. */
+  workerId: string;
+}
+
+export class ScheduledJobsService {
+  private readonly handlers = new Map<string, ScheduledJobHandler>();
+  private readonly batchSize: number;
+  private readonly retryBackoffBaseMs: number;
+  private readonly workerId: string;
+
+  constructor(
+    private readonly repo: ScheduledJobsRepo,
+    private readonly logger: Logger,
+    config: ScheduledJobsServiceConfig,
+  ) {
+    this.batchSize = config.batchSize ?? 25;
+    this.retryBackoffBaseMs = config.retryBackoffBaseMs ?? 60_000;
+    this.workerId = config.workerId;
+  }
+
+  /** Register a handler for a job_type. Last-write-wins if called twice. */
+  register(jobType: string, handler: ScheduledJobHandler): void {
+    this.handlers.set(jobType, handler);
+  }
+
+  enqueue(input: EnqueueScheduledJobInput): Promise<{ enqueued: boolean }> {
+    return this.repo.enqueue(input);
+  }
+
+  /**
+   * One scheduler tick. Claims due jobs, runs handlers, marks each
+   * complete / retry / failed. Returns the count of jobs processed
+   * (claimed + dispatched), useful for tests + ops metrics.
+   */
+  async processTick(now: Date): Promise<{ processed: number }> {
+    const due = await this.repo.claimDue({
+      batchSize: this.batchSize,
+      now,
+      workerId: this.workerId,
+    });
+    if (due.length === 0) return { processed: 0 };
+
+    await Promise.all(due.map((job) => this.runOne(job, now)));
+    return { processed: due.length };
+  }
+
+  private async runOne(job: ScheduledJobRow, now: Date): Promise<void> {
+    const handler = this.handlers.get(job.jobType);
+    if (!handler) {
+      this.logger.warn(
+        {
+          component: 'scheduled-jobs',
+          jobId: job.id,
+          jobType: job.jobType,
+          accountId: job.accountId,
+        },
+        'no handler registered for job_type — marking failed (operator should register or delete)',
+      );
+      await this.repo.markFailed(job.id, {
+        lastError: `no handler registered for job_type=${job.jobType}`,
+        at: now,
+      });
+      return;
+    }
+
+    try {
+      await handler(job);
+      await this.repo.markComplete(job.id, now);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const exhausted = job.attempts >= job.maxAttempts;
+      if (exhausted) {
+        this.logger.error(
+          {
+            component: 'scheduled-jobs',
+            jobId: job.id,
+            jobType: job.jobType,
+            accountId: job.accountId,
+            attempts: job.attempts,
+            err: { message },
+          },
+          'job failed permanently — attempts exhausted',
+        );
+        await this.repo.markFailed(job.id, { lastError: message, at: now });
+      } else {
+        // Exponential backoff: 60s, 120s, 240s, ... per default base.
+        const backoffMs = this.retryBackoffBaseMs * 2 ** Math.max(0, job.attempts - 1);
+        const nextRunAt = new Date(now.getTime() + backoffMs);
+        this.logger.warn(
+          {
+            component: 'scheduled-jobs',
+            jobId: job.id,
+            jobType: job.jobType,
+            accountId: job.accountId,
+            attempts: job.attempts,
+            nextRunAt,
+            err: { message },
+          },
+          'job failed — scheduling retry',
+        );
+        await this.repo.markRetry(job.id, { lastError: message, nextRunAt });
+      }
+    }
+  }
+}

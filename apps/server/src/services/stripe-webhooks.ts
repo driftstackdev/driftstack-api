@@ -19,6 +19,7 @@ import { createHash } from 'node:crypto';
 import type { AccountTier } from '@driftstack/api-types';
 import type { Logger } from '../lib/logger.js';
 import type { AccountLifecycleService } from './account-lifecycle.js';
+import type { ScheduledJobsService } from './scheduled-jobs.js';
 
 /**
  * Minimal parsed-Stripe-event shape. We don't depend on the `stripe`
@@ -166,6 +167,14 @@ export class StripeWebhooksService {
      * outputs). Best-effort; failures never block the Stripe handler.
      */
     private readonly accountLifecycle: AccountLifecycleService | null = null,
+    /**
+     * V-202d — optional. When wired, trial-pack purchases enqueue a
+     * `trial_pack.expired` scheduled job that fires the expiry email
+     * at `expiresAt`. Tests that don't exercise the expiry path pass
+     * null; the trial-pack provisioning still happens, just without
+     * the future-dated email.
+     */
+    private readonly scheduledJobs: ScheduledJobsService | null = null,
   ) {}
 
   /**
@@ -451,6 +460,34 @@ export class StripeWebhooksService {
         creditCents,
         expiresAt,
       });
+    }
+
+    // V-202d — schedule the expiry email at expiresAt. dedupOnAccountAndType
+    // ensures one pending trial_pack.expired job per account regardless
+    // of how many times the purchase webhook re-fires (Stripe re-deliveries
+    // beyond the V-089 idempotency-gate's window would otherwise enqueue
+    // duplicates here).
+    if (applied && this.scheduledJobs !== null) {
+      try {
+        await this.scheduledJobs.enqueue({
+          jobType: 'trial_pack.expired',
+          accountId,
+          payload: { trial_pack_expires_at: expiresAt.toISOString() },
+          runAt: expiresAt,
+          dedupOnAccountAndType: true,
+        });
+      } catch (err) {
+        // Best-effort. A scheduled-jobs enqueue failure shouldn't fail
+        // the Stripe webhook (re-delivery would re-enqueue anyway).
+        this.config.logger.warn(
+          {
+            component: 'stripe-webhooks',
+            eventId: event.id,
+            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+          },
+          'trial_pack.expired enqueue failed (best-effort, swallowed)',
+        );
+      }
     }
 
     this.logEvent(event, applied ? 'trial-pack provisioned' : 'trial-pack already provisioned');

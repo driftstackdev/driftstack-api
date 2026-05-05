@@ -282,3 +282,27 @@ describe('AccountLifecycleService — subscription.trial_pack_purchased (V-202b)
     expect(email.sendTrialPackPurchased).not.toHaveBeenCalled();
   });
 });
+
+describe('AccountLifecycleService — subscription.trial_pack_expired (V-202d)', () => {
+  it('sends the expiry email; no audit emit', async () => {
+    const { service, email, audit } = build();
+    // The build() helper installs a sendTrialPackExpired vi.fn — extend it.
+    const expired = vi.fn().mockResolvedValue(undefined);
+    Object.assign(email, { sendTrialPackExpired: expired });
+    await service.emit('acc_test', { kind: 'subscription.trial_pack_expired' });
+    expect(expired).toHaveBeenCalledTimes(1);
+    expect(expired).toHaveBeenCalledWith({
+      to: 'first-failure@driftstack.local',
+      upgradeUrl: 'https://example.test/billing',
+    });
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('skips email when customer opted out', async () => {
+    const { service, email } = build({ shouldSend: false });
+    const expired = vi.fn().mockResolvedValue(undefined);
+    Object.assign(email, { sendTrialPackExpired: expired });
+    await service.emit('acc_test', { kind: 'subscription.trial_pack_expired' });
+    expect(expired).not.toHaveBeenCalled();
+  });
+});

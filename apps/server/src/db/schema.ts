@@ -997,3 +997,42 @@ export const validationSchedules = pgTable(
 
 export type ValidationSchedule = typeof validationSchedules.$inferSelect;
 export type NewValidationSchedule = typeof validationSchedules.$inferInsert;
+
+// V-202d — generic scheduled_jobs table for time-shifted background work.
+// Trial-pack expiry is the first consumer; future cron-shaped jobs reuse
+// the same table by adding a job_type discriminator value + a handler.
+export const scheduledJobs = pgTable(
+  'scheduled_jobs',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    jobType: text('job_type').notNull(),
+    accountId: uuid('account_id').references(() => accounts.id, { onDelete: 'cascade' }),
+    payload: jsonb('payload')
+      .notNull()
+      .default(sql`'{}'::jsonb`)
+      .$type<Record<string, unknown>>(),
+    runAt: timestamp('run_at', { withTimezone: true }).notNull(),
+    lockedBy: text('locked_by'),
+    lockedAt: timestamp('locked_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    failedAt: timestamp('failed_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(3),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index('scheduled_jobs_due_idx').on(t.runAt),
+    index('scheduled_jobs_account_type_pending_idx').on(t.accountId, t.jobType),
+  ],
+);
+
+export type ScheduledJob = typeof scheduledJobs.$inferSelect;
+export type NewScheduledJob = typeof scheduledJobs.$inferInsert;

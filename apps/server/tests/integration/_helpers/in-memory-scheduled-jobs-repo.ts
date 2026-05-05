@@ -1,0 +1,146 @@
+// V-202d — in-memory ScheduledJobsRepo for integration + unit tests.
+
+import { randomUUID } from 'node:crypto';
+import type {
+  EnqueueScheduledJobInput,
+  ScheduledJobRow,
+  ScheduledJobsRepo,
+} from '../../../src/services/scheduled-jobs.js';
+
+interface InMemoryRow {
+  id: string;
+  jobType: string;
+  accountId: string | null;
+  payload: Record<string, unknown>;
+  runAt: Date;
+  lockedBy: string | null;
+  lockedAt: Date | null;
+  completedAt: Date | null;
+  failedAt: Date | null;
+  lastError: string | null;
+  attempts: number;
+  maxAttempts: number;
+  createdAt: Date;
+}
+
+const STALE_LOCK_MS = 5 * 60_000;
+
+export class InMemoryScheduledJobsRepo implements ScheduledJobsRepo {
+  private readonly rows = new Map<string, InMemoryRow>();
+
+  /** Test seam — read full row for assertions. */
+  read(id: string): InMemoryRow | undefined {
+    const r = this.rows.get(id);
+    return r ? { ...r } : undefined;
+  }
+
+  /** Test seam — list all rows. */
+  all(): InMemoryRow[] {
+    return Array.from(this.rows.values()).map((r) => ({ ...r }));
+  }
+
+  enqueue(input: EnqueueScheduledJobInput): Promise<{ enqueued: boolean }> {
+    if (input.dedupOnAccountAndType === true && input.accountId !== null) {
+      for (const r of this.rows.values()) {
+        if (
+          r.accountId === input.accountId &&
+          r.jobType === input.jobType &&
+          r.completedAt === null &&
+          r.failedAt === null
+        ) {
+          return Promise.resolve({ enqueued: false });
+        }
+      }
+    }
+
+    const id = randomUUID();
+    const now = new Date();
+    this.rows.set(id, {
+      id,
+      jobType: input.jobType,
+      accountId: input.accountId,
+      payload: input.payload,
+      runAt: input.runAt,
+      lockedBy: null,
+      lockedAt: null,
+      completedAt: null,
+      failedAt: null,
+      lastError: null,
+      attempts: 0,
+      maxAttempts: 3,
+      createdAt: now,
+    });
+    return Promise.resolve({ enqueued: true });
+  }
+
+  claimDue(opts: { batchSize: number; now: Date; workerId: string }): Promise<ScheduledJobRow[]> {
+    const due: InMemoryRow[] = [];
+    for (const r of this.rows.values()) {
+      if (due.length >= opts.batchSize) break;
+      if (r.completedAt !== null || r.failedAt !== null) continue;
+      if (r.runAt.getTime() > opts.now.getTime()) continue;
+      // Skip if currently locked + lock is fresh.
+      if (r.lockedBy !== null && r.lockedAt !== null) {
+        const lockAgeMs = opts.now.getTime() - r.lockedAt.getTime();
+        if (lockAgeMs < STALE_LOCK_MS) continue;
+      }
+      due.push(r);
+    }
+    // Sort by runAt ASC for deterministic order.
+    due.sort((a, b) => a.runAt.getTime() - b.runAt.getTime());
+
+    const claimed: ScheduledJobRow[] = [];
+    for (const r of due) {
+      const updated: InMemoryRow = {
+        ...r,
+        lockedBy: opts.workerId,
+        lockedAt: opts.now,
+        attempts: r.attempts + 1,
+      };
+      this.rows.set(r.id, updated);
+      claimed.push({
+        id: updated.id,
+        jobType: updated.jobType,
+        accountId: updated.accountId,
+        payload: updated.payload,
+        runAt: updated.runAt,
+        attempts: updated.attempts,
+        maxAttempts: updated.maxAttempts,
+      });
+    }
+    return Promise.resolve(claimed);
+  }
+
+  markComplete(jobId: string, at: Date): Promise<void> {
+    const r = this.rows.get(jobId);
+    if (!r) return Promise.resolve();
+    this.rows.set(jobId, { ...r, completedAt: at, lockedBy: null, lockedAt: null });
+    return Promise.resolve();
+  }
+
+  markRetry(jobId: string, opts: { lastError: string; nextRunAt: Date }): Promise<void> {
+    const r = this.rows.get(jobId);
+    if (!r) return Promise.resolve();
+    this.rows.set(jobId, {
+      ...r,
+      runAt: opts.nextRunAt,
+      lastError: opts.lastError,
+      lockedBy: null,
+      lockedAt: null,
+    });
+    return Promise.resolve();
+  }
+
+  markFailed(jobId: string, opts: { lastError: string; at: Date }): Promise<void> {
+    const r = this.rows.get(jobId);
+    if (!r) return Promise.resolve();
+    this.rows.set(jobId, {
+      ...r,
+      failedAt: opts.at,
+      lastError: opts.lastError,
+      lockedBy: null,
+      lockedAt: null,
+    });
+    return Promise.resolve();
+  }
+}

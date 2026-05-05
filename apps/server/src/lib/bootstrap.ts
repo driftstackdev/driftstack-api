@@ -36,6 +36,8 @@ import { DrizzleAccountAuditRepo } from '../db/account-audit-repo.js';
 import { AccountAuditService } from '../services/account-audit.js';
 import { DrizzleAccountLifecycleRepo } from '../db/account-lifecycle-repo.js';
 import { AccountLifecycleService } from '../services/account-lifecycle.js';
+import { DrizzleScheduledJobsRepo } from '../db/scheduled-jobs-repo.js';
+import { ScheduledJobsService } from '../services/scheduled-jobs.js';
 import { DrizzleValidationSchedulesRepo } from '../db/validation-schedules-repo.js';
 import {
   ValidationHarnessService,
@@ -167,6 +169,7 @@ export async function createProductionDeps(
   const accountAuditRepo = new DrizzleAccountAuditRepo(dbHandle);
   const validationSchedulesRepo = new DrizzleValidationSchedulesRepo(dbHandle);
   const accountLifecycleRepo = new DrizzleAccountLifecycleRepo(dbHandle);
+  const scheduledJobsRepo = new DrizzleScheduledJobsRepo(dbHandle);
 
   // Auth cache + coalescer.
   const authCache = new RedisAuthCache(redis, logger);
@@ -206,6 +209,24 @@ export async function createProductionDeps(
     },
     accountAuditService, // V-202b — required for tier_changed audit emit
   );
+
+  // V-202d — generic scheduled-jobs dispatcher. Currently registers
+  // one handler (`trial_pack.expired`) that delegates to the lifecycle
+  // service. Future cron-shaped jobs reuse this service with new
+  // `register(jobType, handler)` calls.
+  // workerId composition: `<process-pid>@<host>` is sufficient here —
+  // production runs single-replica today; multi-replica safety still
+  // works because the SELECT FOR UPDATE SKIP LOCKED query in the repo
+  // is what guarantees mutual exclusion, not the workerId.
+  const scheduledJobsService = new ScheduledJobsService(scheduledJobsRepo, logger, {
+    workerId: `pid-${process.pid.toString()}`,
+  });
+  scheduledJobsService.register('trial_pack.expired', async (job) => {
+    if (job.accountId === null) return; // mis-enqueued; skip
+    await accountLifecycleService.emit(job.accountId, {
+      kind: 'subscription.trial_pack_expired',
+    });
+  });
 
   // Webhooks first so sessions + api-keys can wire it.
   // V-225 — accountAudit wired for webhook_endpoint.{created,deleted}.
@@ -301,6 +322,7 @@ export async function createProductionDeps(
       priceToTier,
     },
     accountLifecycleService, // V-202b — fans out tier_changed audit + email at one call site
+    scheduledJobsService, // V-202d — enqueues trial_pack.expired job at trial-pack purchase
   );
 
   // V-081: Profiles service.
@@ -382,6 +404,8 @@ export async function createProductionDeps(
     emailPreferencesService,
     accountAuditService,
     validationHarnessService,
+    accountLifecycleService,
+    scheduledJobsService,
     authFlowsService,
     profilesService,
     // V-100: admin force-actions take direct repo + driver access.
