@@ -328,3 +328,90 @@ describe('checkout.session.completed — trial-pack provisioning', () => {
     expect(acctAfterSecond?.trialPackPurchasedAt?.getTime()).toBe(firstPurchasedAt!.getTime());
   });
 });
+
+// V-226 — subscription.tier_changed customer-facing audit emit.
+describe('V-226 — subscription tier changes emit account audit entries', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  interface AuditListResponse {
+    data: Array<{
+      action: string;
+      actor_type: string;
+      payload: Record<string, unknown> | null;
+    }>;
+    next_cursor: string | null;
+  }
+
+  async function listTierChanges(fixture: TestAppFixture): Promise<AuditListResponse> {
+    const res = await fixture.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=subscription.tier_changed',
+      headers: { authorization: `Bearer ${fixture.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    return res.json<AuditListResponse>();
+  }
+
+  it('emits subscription.tier_changed when subscription.created upgrades the tier', async () => {
+    fx = await buildTestApp({ tier: 'trial_pack' });
+    const raw = buildSubscriptionEvent({
+      eventId: 'evt_v226_upgrade',
+      type: 'customer.subscription.created',
+      stripeSubscriptionId: 'sub_v226_a',
+      stripeCustomerId: 'cus_test_default',
+      priceId: 'price_api_builder_monthly',
+      status: 'active',
+    });
+    await postEvent(fx, raw);
+
+    const log = await listTierChanges(fx);
+    expect(log.data.length).toBe(1);
+    const entry = log.data[0]!;
+    expect(entry.actor_type).toBe('system');
+    const payload = entry.payload as { from?: string; to?: string; stripe_event_type?: string };
+    expect(payload.from).toBe('trial_pack');
+    expect(payload.to).toBe('api_builder');
+    expect(payload.stripe_event_type).toBe('customer.subscription.created');
+  });
+
+  it('emits subscription.tier_changed when subscription.deleted downgrades to trial_pack', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const raw = buildSubscriptionEvent({
+      eventId: 'evt_v226_downgrade',
+      type: 'customer.subscription.deleted',
+      stripeSubscriptionId: 'sub_v226_b',
+      stripeCustomerId: 'cus_test_default',
+      priceId: 'price_api_builder_monthly',
+      status: 'canceled',
+      canceledAtSec: nowSec(),
+    });
+    await postEvent(fx, raw);
+
+    const log = await listTierChanges(fx);
+    expect(log.data.length).toBe(1);
+    const payload = log.data[0]!.payload as { from?: string; to?: string };
+    expect(payload.from).toBe('api_builder');
+    expect(payload.to).toBe('trial_pack');
+  });
+
+  it('does NOT emit when subscription.updated keeps the same tier', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    // Send an update that keeps the same price (same tier).
+    const raw = buildSubscriptionEvent({
+      eventId: 'evt_v226_noop',
+      type: 'customer.subscription.updated',
+      stripeSubscriptionId: 'sub_v226_c',
+      stripeCustomerId: 'cus_test_default',
+      priceId: 'price_api_builder_monthly',
+      status: 'active',
+    });
+    await postEvent(fx, raw);
+
+    const log = await listTierChanges(fx);
+    expect(log.data.length).toBe(0);
+  });
+});

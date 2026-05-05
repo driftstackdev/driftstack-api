@@ -362,23 +362,27 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     stripeCustomerId: 'cus_test_default',
     tier: opts.tier ?? 'api_builder',
   });
-  const stripeWebhooksService = new StripeWebhooksService(stripeWebhooksRepo, {
-    logger: testLogger,
-    priceToTier: {
-      price_solo_monthly: 'solo_manual',
-      price_solo_annual: 'solo_manual',
-      price_team_monthly: 'team_manual',
-      price_team_annual: 'team_manual',
-      price_agency_monthly: 'agency_manual',
-      price_agency_annual: 'agency_manual',
-      price_api_starter_monthly: 'api_starter',
-      price_api_starter_annual: 'api_starter',
-      price_api_builder_monthly: 'api_builder',
-      price_api_builder_annual: 'api_builder',
-      price_api_scale_monthly: 'api_scale',
-      price_api_scale_annual: 'api_scale',
+  const stripeWebhooksService = new StripeWebhooksService(
+    stripeWebhooksRepo,
+    {
+      logger: testLogger,
+      priceToTier: {
+        price_solo_monthly: 'solo_manual',
+        price_solo_annual: 'solo_manual',
+        price_team_monthly: 'team_manual',
+        price_team_annual: 'team_manual',
+        price_agency_monthly: 'agency_manual',
+        price_agency_annual: 'agency_manual',
+        price_api_starter_monthly: 'api_starter',
+        price_api_starter_annual: 'api_starter',
+        price_api_builder_monthly: 'api_builder',
+        price_api_builder_annual: 'api_builder',
+        price_api_scale_monthly: 'api_scale',
+        price_api_scale_annual: 'api_scale',
+      },
     },
-  });
+    accountAuditService, // V-226 — emit subscription.tier_changed
+  );
   const stripeWebhookSigningSecret = 'whsec_test_fixture_secret';
 
   // V-081: Profiles service.

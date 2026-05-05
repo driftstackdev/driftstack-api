@@ -269,10 +269,14 @@ export async function createProductionDeps(
       priceToTier[prices.annual] = tier;
     }
   }
-  const stripeWebhooksService = new StripeWebhooksService(stripeWebhooksRepo, {
-    logger,
-    priceToTier,
-  });
+  const stripeWebhooksService = new StripeWebhooksService(
+    stripeWebhooksRepo,
+    {
+      logger,
+      priceToTier,
+    },
+    accountAuditService, // V-226 — emit subscription.tier_changed
+  );
 
   // V-081: Profiles service.
   // V-225 — accountAudit wired for profile.{created,deleted}.

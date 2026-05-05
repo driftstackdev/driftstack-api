@@ -153,11 +153,16 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     return Promise.resolve();
   }
 
-  setAccountTier(args: { accountId: string; tier: AccountTier; at: Date }): Promise<void> {
+  setAccountTier(args: {
+    accountId: string;
+    tier: AccountTier;
+    at: Date;
+  }): Promise<{ previousTier: AccountTier | null }> {
     const a = this.accounts.get(args.accountId);
-    if (!a) return Promise.resolve();
+    if (!a) return Promise.resolve({ previousTier: null });
+    const previousTier = a.tier;
     this.accounts.set(args.accountId, { ...a, tier: args.tier });
-    return Promise.resolve();
+    return Promise.resolve({ previousTier });
   }
 
   applyTrialPackPurchase(args: {

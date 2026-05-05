@@ -18,6 +18,7 @@
 import { createHash } from 'node:crypto';
 import type { AccountTier } from '@driftstack/api-types';
 import type { Logger } from '../lib/logger.js';
+import type { AccountAuditService } from './account-audit.js';
 
 /**
  * Minimal parsed-Stripe-event shape. We don't depend on the `stripe`
@@ -90,8 +91,17 @@ export interface StripeWebhooksRepo {
    * transitions imply a tier change (e.g. subscription.created →
    * upgrade from trial_pack to api_builder; subscription.deleted →
    * downgrade to trial_pack).
+   *
+   * Returns the previous tier so callers can detect a real change
+   * (V-226 audit emit only fires when previousTier !== new tier).
+   * Returns null when the account is not found (should never happen
+   * in practice — the caller resolves accountId before calling).
    */
-  setAccountTier(args: { accountId: string; tier: AccountTier; at: Date }): Promise<void>;
+  setAccountTier(args: {
+    accountId: string;
+    tier: AccountTier;
+    at: Date;
+  }): Promise<{ previousTier: AccountTier | null }>;
 
   /**
    * Provision a trial-pack purchase per ADR-003: 299¢ credit, 14-day
@@ -145,7 +155,52 @@ export class StripeWebhooksService {
   constructor(
     private readonly repo: StripeWebhooksRepo,
     private readonly config: StripeWebhooksServiceConfig,
+    /**
+     * V-226 — optional customer-facing audit log. When wired, emits a
+     * `subscription.tier_changed` entry whenever a Stripe subscription
+     * event flips an account's tier. `actor_type: 'system'` because the
+     * trigger is Stripe's webhook delivery, not a customer action.
+     * Best-effort; failures never block the Stripe handler (Stripe
+     * retries are idempotency-protected by the event-ledger anyway).
+     */
+    private readonly accountAudit: AccountAuditService | null = null,
   ) {}
+
+  private async emitTierChangeBestEffort(args: {
+    accountId: string;
+    previousTier: AccountTier | null;
+    newTier: AccountTier;
+    eventType: string;
+    eventId: string;
+  }): Promise<void> {
+    if (this.accountAudit === null) return;
+    if (args.previousTier === args.newTier) return; // no-op transition
+    try {
+      await this.accountAudit.record({
+        accountId: args.accountId,
+        actorType: 'system',
+        actorAccountId: null,
+        actorKeyId: null,
+        action: 'subscription.tier_changed',
+        targetResourceId: null,
+        payload: {
+          from: args.previousTier,
+          to: args.newTier,
+          stripe_event_type: args.eventType,
+          stripe_event_id: args.eventId,
+        },
+      });
+    } catch (err) {
+      this.config.logger.warn(
+        {
+          component: 'stripe-webhooks',
+          eventId: args.eventId,
+          err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+        },
+        'subscription.tier_changed audit emit failed (best-effort, swallowed)',
+      );
+    }
+  }
 
   /**
    * Process a verified Stripe event. Idempotent — repeated calls with
@@ -303,7 +358,14 @@ export class StripeWebhooksService {
     // state. Trialing counts as active for our purposes (the customer
     // gets the tier; Stripe handles the dunning).
     if (tier !== undefined && (status === 'active' || status === 'trialing')) {
-      await this.repo.setAccountTier({ accountId, tier, at });
+      const { previousTier } = await this.repo.setAccountTier({ accountId, tier, at });
+      await this.emitTierChangeBestEffort({
+        accountId,
+        previousTier,
+        newTier: tier,
+        eventType: event.type,
+        eventId: event.id,
+      });
     }
 
     this.logEvent(event, `subscription ${status}`);
@@ -335,10 +397,18 @@ export class StripeWebhooksService {
       canceledAt: at,
       at,
     });
-    await this.repo.setAccountTier({
+    const downgradeTier = this.config.cancelDowngradeTier ?? 'trial_pack';
+    const { previousTier } = await this.repo.setAccountTier({
       accountId,
-      tier: this.config.cancelDowngradeTier ?? 'trial_pack',
+      tier: downgradeTier,
       at,
+    });
+    await this.emitTierChangeBestEffort({
+      accountId,
+      previousTier,
+      newTier: downgradeTier,
+      eventType: event.type,
+      eventId: event.id,
     });
 
     this.logEvent(event, 'subscription canceled');

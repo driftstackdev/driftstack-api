@@ -12731,3 +12731,65 @@ After V-225, only 1 of the 13 enum values remains unwired: `subscription.tier_ch
 ### Next
 
 V-226 — `subscription.tier_changed` audit emit. Stripe-webhook-driven (`StripeWebhooksService`); `actor_type: 'system'` because the trigger is Stripe's customer.subscription.\* event flowing through the inbound webhook handler. Then V-184b Tier 3 onboarding visual UX.
+
+## V-226 — subscription.tier_changed audit emit (V-216 deferred batch, part 3/3 — final)
+
+### What
+
+`StripeWebhooksService` now emits `subscription.tier_changed` to `AccountAuditService` whenever an inbound Stripe subscription event flips an account's tier. This closes out the last of the 13 `AccountAuditAction` enum values; all customer-facing audit actions are now wired.
+
+The interesting design constraint: emit only on a real tier change, not when a subscription event re-asserts the existing tier (Stripe sends `customer.subscription.updated` for any field change, including ones that don't affect the customer's tier — e.g. payment-method swap, cancel-at-period-end toggle). Spamming the audit log with no-op tier-change rows would defeat its purpose.
+
+Solution: extended `StripeWebhooksRepo.setAccountTier` to return `{ previousTier: AccountTier | null }`. The Drizzle implementation does a SELECT-then-UPDATE (one extra round-trip per tier change, negligible at our volume); the in-memory implementation reads pre-update from its Map. The `setAccountTier` call sites in `handleSubscriptionUpsert` and `handleSubscriptionDeleted` now capture the previousTier and call a new `emitTierChangeBestEffort()` helper, which short-circuits when `previousTier === newTier`.
+
+Audit row shape:
+
+- `actor_type: 'system'` (the trigger is Stripe's webhook, not a customer action)
+- `actor_account_id: null`, `actor_key_id: null`
+- `target_resource_id: null` (the action targets the account itself, which is already the audit row's `accountId`)
+- `payload: { from, to, stripe_event_type, stripe_event_id }` — the from/to gives a customer reading their audit log clear "you were on X, now you're on Y" context; the stripe_event_id lets staff cross-reference Stripe's event ledger without a JOIN.
+
+Test coverage: 3 new tests in `stripe-webhooks-mutations.test.ts` describe block "V-226 — subscription tier changes emit account audit entries":
+
+- `subscription.created upgrades trial_pack → api_builder` — asserts 1 entry with from=trial_pack, to=api_builder, stripe_event_type=customer.subscription.created, actor_type=system.
+- `subscription.deleted downgrades api_builder → trial_pack` — asserts 1 entry with from=api_builder, to=trial_pack.
+- `subscription.updated with same tier emits NOTHING` — sends an update that keeps the same price (same tier resolves); asserts the audit-log filter for subscription.tier_changed returns 0 entries. Validates the no-op short-circuit.
+
+### Why
+
+V-224 covered the auth-flow batch (4 events). V-225 covered the customer-CRUD batch (4 events). V-226 closes the final 1: the Stripe-driven event. Together V-216 + V-224 + V-225 + V-226 wire all 13 `AccountAuditAction` enum values to real emit sites — no more "deferred wires" to track.
+
+`subscription.tier_changed` is arguably the most operationally important entry from the customer's perspective: when their tier changes, they want to know exactly when, what triggered it (cancel? upgrade? Stripe billing failure?), and what the from/to was. Without this audit row, a customer who notices unexpected billing or unexpected tier limits has no way to confirm whether an automatic Stripe event flipped their state. The from/to pair in the payload is intentionally redundant with the subscription mirror's history — having both means a customer reading their audit log doesn't need to JOIN against the subscription table.
+
+### Files
+
+- `apps/server/src/services/stripe-webhooks.ts` — added `accountAudit?` ctor arg + `emitTierChangeBestEffort()` helper + 2 emit sites. Updated `StripeWebhooksRepo.setAccountTier` contract to return `{ previousTier }`.
+- `apps/server/src/db/stripe-webhooks-repo.ts` — Drizzle implementation reads previous tier via SELECT before the UPDATE.
+- `apps/server/tests/integration/_helpers/in-memory-stripe-webhooks-repo.ts` — in-memory implementation captures previousTier from the Map.
+- `apps/server/src/lib/bootstrap.ts` — production wiring passes `accountAuditService` to `StripeWebhooksService`.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — fixture wiring.
+- `apps/server/tests/integration/stripe-webhooks-mutations.test.ts` — new V-226 describe block with 3 assertions.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 690 / 690 passing across 71 files (+3 V-226 audit-emission tests over the 687 V-225 baseline).
+- pre-push hook (V-223) will exercise on push.
+
+### Notes
+
+- The previousTier-returning contract on `setAccountTier` adds one SELECT per Stripe webhook tier-change event in the Drizzle path. At our volume (single-digit Stripe events per minute even at scale) this is invisible. Could be optimized via a single-statement RETURNING old.\* CTE in Postgres if it ever matters; the current implementation prioritises clarity over micro-optimisation.
+- Staff-driven tier changes via `/v1/admin/accounts/:id/tier` (V-194 + adjacent admin routes) are NOT covered by this emit. Those go through a different code path and would emit with `actor_type: 'staff'`, `actor_account_id: <staff_account_id>` — that's V-227 territory if/when staff-driven mutations need a customer-facing audit trail. Pre-launch the founder is the only staff member, and admin actions are already captured in the separate `admin_audit_log` (V-100 / V-163 archive). Holding off until external customer demand surfaces.
+- `subscription.tier_changed` payload uses snake_case keys (`stripe_event_type`, `stripe_event_id`) for consistency with the public API surface, where all customer-facing JSON uses snake_case (V-018 contract). Earlier V-224/V-225 payloads used camelCase (`issuedFromIp`, `userAgent`); those are also customer-visible and arguably should normalise. Surfaced as a follow-up rather than fixing here — the existing audit rows are already in production-equivalent test data and renaming the keys would be a breaking change for any customer parsing the audit log JSON. V-227 candidate alongside the admin-driven tier-change emit, OR a separate normalisation pass.
+
+### Next
+
+All V-216 deferred emit wires now landed. Remaining queue:
+
+- V-184b Tier 3 onboarding flow visual UX (already-queued, founder-redline pass).
+- V-215 post-force-push verification (founder fires V-207/V-212 runbook; Agent 2 verifies — waiting on founder).
+- V-202b/c/d email-trigger wires (Stripe webhook handlers + first-failure dedup + trial-pack expiry job).
+- V-227 follow-up candidates (staff-driven tier-change audit emit; audit payload key-case normalisation).

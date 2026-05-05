@@ -112,11 +112,22 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
       });
   }
 
-  async setAccountTier(args: { accountId: string; tier: AccountTier; at: Date }): Promise<void> {
+  async setAccountTier(args: {
+    accountId: string;
+    tier: AccountTier;
+    at: Date;
+  }): Promise<{ previousTier: AccountTier | null }> {
+    const before = await this.database.db
+      .select({ tier: accounts.tier })
+      .from(accounts)
+      .where(eq(accounts.id, args.accountId))
+      .limit(1);
+    const previousTier = before[0]?.tier ?? null;
     await this.database.db
       .update(accounts)
       .set({ tier: args.tier, updatedAt: args.at })
       .where(eq(accounts.id, args.accountId));
+    return { previousTier };
   }
 
   async applyTrialPackPurchase(args: {
