@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+# V-223 — pre-push gate. Catches the class of regression where a
+# previous commit pushed broken `tsconfig.test.json` typecheck or
+# breaking test changes to main without a per-file lint-staged hook
+# noticing.
+#
+# pre-commit runs lint-staged (per-file eslint + prettier on staged
+# files only) — fast, narrow, doesn't catch project-wide regressions.
+# pre-push runs the full verify chain that production-relevant
+# commits depend on.
+#
+# Skip in emergencies via `git push --no-verify`. Don't make a habit.
+
+set -e
+
+echo "→ typecheck (workspaces, including tsconfig.test.json)"
+npm run typecheck
+
+echo "→ lint"
+npm run lint
+
+echo "→ format check"
+npm run format:check
+
+echo "→ tests"
+npm test
+
+echo "✓ pre-push gate clean"

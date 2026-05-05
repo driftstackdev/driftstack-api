@@ -12553,3 +12553,61 @@ GENERATE-10 from the queue. Architecture docs are the primary onboarding surface
 ### Next
 
 V-223 — lefthook gate strengthening (founder-approved 2026-05-05 ack of V-221 follow-up; ~15min Tier 1). Confirm/configure pre-push hook to run workspace-level `npm run typecheck` (covers tsconfig.test.json) so the V-204 / V-216 / V-218 class of regression can't recur. Then V-184b Tier 3 onboarding flow visual UX (already-queued) + V-215 post-force-push verification (founder fires V-207/V-212 runbook).
+
+## V-223 — pre-push verify gate (lefthook → husky reality check)
+
+### What
+
+New `.husky/pre-push` hook that runs the full verify chain on `git push` so pushes of broken `main` can't recur:
+
+```sh
+npm run typecheck   # workspaces, including tsconfig.test.json
+npm run lint
+npm run format:check
+npm test
+```
+
+V-221 follow-up note assumed the project used `lefthook`; reality check:
+
+- Hook system is **husky v9** (per `package.json` `"prepare": "husky"` + `"husky": "^9.1.7"` devDep).
+- Existing `.husky/pre-commit` runs `npx lint-staged` only — per-file eslint + prettier on staged files. Fast and narrow; doesn't catch project-wide typecheck or test regressions.
+- No `pre-push` hook existed before this commit. The V-204 / V-216 / V-218 regressions caught in V-221 slipped past because nothing was actually checking the workspace-level typecheck before push.
+
+Hook flow:
+
+- `git config core.hooksPath` → `.husky/_` (husky-managed dispatcher dir).
+- `.husky/_/pre-push` (auto-generated dispatcher) calls `.husky/_/h` which resolves to `.husky/pre-push` (the file I authored) and runs it under `sh -e`. Errexit is forced by the dispatcher; my hook's leading `set -e` is redundant but harmless and explicit.
+- Skip available via `git push --no-verify` when an emergency justifies it. Hook header documents this.
+
+Self-test: ran `.husky/pre-push` directly before commit — typecheck/lint/format/tests all clean, exits 0 with `✓ pre-push gate clean`. The push of this commit will be the first end-to-end exercise of the dispatcher chain.
+
+### Why
+
+V-221 surfaced that `tsconfig.test.json` typecheck was failing on `main` for an unknown number of commits before someone (this session) noticed. Per-package `tsc --build` runs in CI/dev workflows but doesn't cover the test tsconfig; the workspace-level `npm run typecheck` script does, but nothing was running it gate-style before push. Founder approved the lefthook strengthening as a small Tier-1 ops task in the V-221 ack; renamed slot V-223 (V-222 already taken by the cross-references audit).
+
+The cost of the gate is ~15s typecheck + ~12s tests = ~30s per push. Acceptable for the founder's "push-to-main on green" cadence — pushes happen once per V-entry, not per keystroke. The cost of NOT having the gate, as V-221 demonstrated, is "main is silently broken for 3 commits and an audit catches it later." Always pay the 30s.
+
+### Files
+
+- `.husky/pre-push` — new (executable, sh).
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `.husky/pre-push` self-run: clean — typecheck / lint / format / tests all pass.
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 679 / 679 passing across 71 files.
+- The `git push` for THIS commit will exercise the dispatcher chain end-to-end and is the load-bearing verification.
+
+### Notes
+
+- Husky v9 doesn't need a shebang line at the top of hooks (the dispatcher invokes via `sh -e`), but I kept `#!/usr/bin/env sh` for clarity if someone later runs the hook directly without husky.
+- `lint-staged` config in `package.json` still does its job at pre-commit — that's the per-file fast path. pre-push is the project-wide slow path. Two layers; both have their place.
+- Did NOT add `npm run test:e2e` to the pre-push gate. e2e requires Docker Compose (Postgres + Redis + WebKit driver) and adds 5+ minutes per push; the founder's local Docker Desktop is occasionally not running. e2e stays in CI (which has the infra). The pre-push gate covers unit + integration (the 679 tests across 71 files passing here are vitest unit + integration; e2e is `npm run test:e2e --workspace apps/server`, separately).
+- Did NOT add a typecheck-before-commit gate. Typecheck on every commit is too slow for this codebase (~15s) and would interrupt rapid commit-rebase-amend cycles during a single V-entry. Pre-push is the right granularity: gate at the published-history boundary.
+
+### Next
+
+V-184b Tier 3 onboarding flow visual UX (already-queued, founder-redline pass). V-215 post-force-push verification (founder fires V-207/V-212 runbook; Agent 2 verifies). Standing-by tasks: 9 deferred V-216 enum-value emit wires (login/logout/password_changed/profile/subscription/webhook_endpoint events); V-202b/c/d email-trigger wires (Stripe webhook handlers + first-failure dedup + trial-pack expiry job).
