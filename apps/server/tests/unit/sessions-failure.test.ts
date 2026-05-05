@@ -103,6 +103,9 @@ class StubRepo implements SessionRepo {
   listSessions(): Promise<{ items: SessionRecord[]; nextCursor: string | null }> {
     return Promise.resolve({ items: [], nextCursor: null });
   }
+  listAllSessions(): Promise<{ items: SessionRecord[]; nextCursor: string | null }> {
+    return Promise.resolve({ items: [], nextCursor: null });
+  }
   recordEvent(input: SessionEventInput): Promise<void> {
     this.events.push(input);
     return Promise.resolve();

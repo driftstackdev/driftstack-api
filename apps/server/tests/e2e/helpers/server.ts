@@ -41,6 +41,16 @@ import { DrizzleAdminAuditLogRepo } from '../../../src/db/admin-audit-repo.js';
 import { DrizzleAccountsAdminRepo } from '../../../src/db/admin-accounts-repo.js';
 import { DrizzleRateLimitOverridesRepo } from '../../../src/db/rate-limit-overrides-repo.js';
 import { RedisRateLimitStore } from '../../../src/lib/redis-rate-limit-store.js';
+import { EmailPreferencesService } from '../../../src/services/email-preferences.js';
+import { DrizzleEmailPreferencesRepo } from '../../../src/db/email-preferences-repo.js';
+import { AccountAuditService } from '../../../src/services/account-audit.js';
+import { DrizzleAccountAuditRepo } from '../../../src/db/account-audit-repo.js';
+import {
+  ValidationHarnessService,
+  type ValidationHarnessRecaptureBridge,
+} from '../../../src/services/validation-harness.js';
+import { DrizzleValidationSchedulesRepo } from '../../../src/db/validation-schedules-repo.js';
+import { randomUUID } from 'node:crypto';
 import * as schema from '../../../src/db/schema.js';
 
 export interface TestServer {
@@ -132,10 +142,13 @@ export async function startTestServer(): Promise<TestServer> {
     authCache,
   );
 
+  const accountAuditRepo = new DrizzleAccountAuditRepo(database);
+  const accountAuditService = new AccountAuditService(accountAuditRepo);
   const sessionsService = new SessionsService({
     repo: sessionsRepo,
     driver,
     webhooks: webhooksService,
+    accountAudit: accountAuditService,
   });
   // legalService is constructed below; ApiKeysService gets the gate
   // wired in production. e2e tests authenticate with pre-seeded keys
@@ -153,7 +166,27 @@ export async function startTestServer(): Promise<TestServer> {
   const legalRepo = new DrizzleLegalRepo(database);
   const legalCatalog = buildLegalCatalog({ repoRoot: resolve(here, '../../../../../') });
   const legalService = new LegalService(legalCatalog, legalRepo);
-  const apiKeysService = new ApiKeysService(apiKeysRepo, authCache, webhooksService, legalService);
+
+  const emailPreferencesRepo = new DrizzleEmailPreferencesRepo(database);
+  const emailPreferencesService = new EmailPreferencesService(emailPreferencesRepo);
+
+  const validationSchedulesRepo = new DrizzleValidationSchedulesRepo(database);
+  const recaptureBridge: ValidationHarnessRecaptureBridge = {
+    triggerRecapture: () => Promise.resolve({ id: `run_${randomUUID()}` }),
+  };
+  const validationHarnessService = new ValidationHarnessService(
+    validationSchedulesRepo,
+    recaptureBridge,
+    { iosVersion: '18.7', safariVersion: '26.4' },
+  );
+
+  const apiKeysService = new ApiKeysService(
+    apiKeysRepo,
+    authCache,
+    webhooksService,
+    legalService,
+    accountAuditService,
+  );
   const app = await buildApp({
     logger,
     authRepo,
@@ -168,6 +201,9 @@ export async function startTestServer(): Promise<TestServer> {
     accountsAdminService,
     rateLimitOverridesService,
     legalService,
+    emailPreferencesService,
+    accountAuditService,
+    validationHarnessService,
     rateLimitStore,
     permissiveCors: true,
   });

@@ -35,7 +35,35 @@ import { InMemoryWebhooksRepo } from './_helpers/in-memory-webhooks-repo.js';
 import { InMemoryAdminAuditLogRepo } from './_helpers/in-memory-admin-audit-repo.js';
 import { InMemoryAccountsAdminRepo } from './_helpers/in-memory-admin-accounts-repo.js';
 import { InMemoryRateLimitOverridesRepo } from './_helpers/in-memory-rate-limit-overrides-repo.js';
+import { EmailPreferencesService } from '../../src/services/email-preferences.js';
+import { InMemoryEmailPreferencesRepo } from './_helpers/in-memory-email-preferences-repo.js';
+import { AccountAuditService } from '../../src/services/account-audit.js';
+import { InMemoryAccountAuditRepo } from './_helpers/in-memory-account-audit-repo.js';
+import {
+  ValidationHarnessService,
+  type ValidationHarnessRecaptureBridge,
+} from '../../src/services/validation-harness.js';
+import { InMemoryValidationSchedulesRepo } from './_helpers/in-memory-validation-schedules-repo.js';
+import { randomUUID as authCacheTestRandomUUID } from 'node:crypto';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+
+function buildAdditionalDeps(): {
+  emailPreferencesService: EmailPreferencesService;
+  accountAuditService: AccountAuditService;
+  validationHarnessService: ValidationHarnessService;
+} {
+  const emailPreferencesService = new EmailPreferencesService(new InMemoryEmailPreferencesRepo());
+  const accountAuditService = new AccountAuditService(new InMemoryAccountAuditRepo());
+  const recaptureBridge: ValidationHarnessRecaptureBridge = {
+    triggerRecapture: () => Promise.resolve({ id: `run_${authCacheTestRandomUUID()}` }),
+  };
+  const validationHarnessService = new ValidationHarnessService(
+    new InMemoryValidationSchedulesRepo(),
+    recaptureBridge,
+    { iosVersion: '18.7', safariVersion: '26.4' },
+  );
+  return { emailPreferencesService, accountAuditService, validationHarnessService };
+}
 
 let fx: TestAppFixture;
 
@@ -231,6 +259,7 @@ describe('auth cache — graceful degradation', () => {
         ]),
         new InMemoryLegalRepo(),
       ),
+      ...buildAdditionalDeps(),
       permissiveCors: true,
     });
 
@@ -333,6 +362,7 @@ describe('auth cache — graceful degradation', () => {
         ]),
         new InMemoryLegalRepo(),
       ),
+      ...buildAdditionalDeps(),
       permissiveCors: true,
     });
 

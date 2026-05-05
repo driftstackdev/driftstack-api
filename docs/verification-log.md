@@ -12441,3 +12441,60 @@ GENERATE-7 from the V-201 ack queue. SDK versioning was documented in V-177; the
 ### Next
 
 V-221 — CDN strategy for marketing site (GENERATE-8, ~1-2hr Tier 1).
+
+## V-221 — CDN strategy for marketing site (GENERATE-8)
+
+### What
+
+Two new files codifying Cloudflare Pages caching for `apps/marketing-site/`:
+
+- `apps/marketing-site/public/_headers` — per-path Cache-Control rules. Cloudflare Pages copies `public/_headers` verbatim into the deploy and applies rules per-path. First match wins; ordering matters.
+- `docs/deployment/cdn-strategy.md` — strategy doc explaining the why behind each tier, security-header choices, match-order semantics, and what we explicitly don't do.
+
+Three cache tiers:
+
+1. **Hashed assets** (`/_astro/*`, `/*.svg|png|jpg|jpeg|webp|avif|ico|woff|woff2`) — `public, max-age=31536000, immutable`. Astro's hash flips on content change so a real update produces a new URL; in between, browser + edge cache forever.
+2. **Marketing pages** (`/`, `/index.html`, `/*` catch-all) — `public, max-age=300, s-maxage=86400, stale-while-revalidate=86400` plus security headers (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`). 5min browser, 1d edge, 1d SWR. Optimised for "deploy a few times a week, fast page loads in between."
+3. **Crawler artefacts** (`/robots.txt`, `/sitemap-index.xml`, `/sitemap-*.xml`) — `public, max-age=3600`. Fast enough that fresh sitemaps propagate same-day; slow enough that we don't burn origin requests on every Googlebot visit.
+
+Plus an unrelated **test scaffolding sync** that also landed in the same commit (kept together because the working tree was already in this state when verify ran clean):
+
+- `apps/server/tests/e2e/helpers/server.ts` — wired `emailPreferencesService` (V-204), `accountAuditService` (V-216), `validationHarnessService` (V-218) into `buildApp` call site; sessions service constructor gets `accountAudit`; api-keys service constructor gets the audit service as 5th arg.
+- `apps/server/tests/integration/auth-cache.test.ts` — added `buildAdditionalDeps()` helper feeding the same three services into the two raw `buildApp` call sites (broken-cache + null-cache scenarios).
+- `apps/server/tests/unit/sessions-failure.test.ts` — `StubRepo` gained the `listAllSessions()` stub method that landed in `SessionRepo` for V-194 admin cross-account list.
+
+### Why
+
+GENERATE-8 from the queue. Marketing site deploy lands soon; without `_headers`, every request would re-fetch hashed bundles from origin (free-tier CDN bandwidth burn) and edge POPs would have nothing to serve from cache. The strategy doc captures the reasoning so a future "let's tweak the TTL" change has a paper trail to push back against.
+
+The test scaffolding sync wasn't on the GENERATE queue — discovered while running verify chain for V-221. `npm run typecheck` failed on `main` with three errors: `e2e/helpers/server.ts` and `integration/auth-cache.test.ts` were missing the V-204/V-216/V-218 services on `AppDeps`, and `unit/sessions-failure.test.ts`'s `StubRepo` was missing `listAllSessions` (V-194). All three regressions were pushed without typecheck verifying the test tsconfig path. Surfaced + fixed in this commit so `main` is green again.
+
+### Files
+
+- `apps/marketing-site/public/_headers` — new.
+- `docs/deployment/cdn-strategy.md` — new.
+- `apps/server/tests/e2e/helpers/server.ts` — wire-in fix.
+- `apps/server/tests/integration/auth-cache.test.ts` — wire-in fix.
+- `apps/server/tests/unit/sessions-failure.test.ts` — `StubRepo.listAllSessions` stub.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean (was failing on `main` before this commit — three pre-existing regressions surfaced + fixed inline; see "Why" above).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 679 / 679 passing across 71 files.
+
+### Notes
+
+- The verify-chain catch is the kind of thing the "verify before push" discipline is supposed to prevent. Root cause: V-204/V-216/V-218 commits each ran `typecheck` against the workspace `tsconfig.json` (which excludes `tests/`) but the test tsconfig (`tsconfig.test.json`) also gets typechecked by the workspace `typecheck` script — and the latter was failing without anyone noticing. Surfaces a gap in the verify chain itself: `npm run typecheck` at repo root catches it; need to confirm pre-push hook is invoking that, not a sub-script.
+- Decided NOT to add `Strict-Transport-Security` or `Content-Security-Policy` headers to `_headers` here. HSTS is owned at the Cloudflare zone level (preload list policy); CSP needs an audit pass against every inline-script + external-asset surface and setting it half-correctly is worse than not setting it at all. Both are documented as "what we don't do" in `cdn-strategy.md`.
+- `/*` catch-all MUST stay last in `_headers`; if a new pattern needs to be added it goes above `/*`. The doc spells out the match-order rule explicitly.
+
+### Next
+
+V-222 — architecture docs cross-references audit (GENERATE-10, ~1-2hr Tier 1). Then V-184b Tier 3 onboarding flow visual UX (already-queued) + V-215 post-force-push verification (founder fires V-207/V-212 runbook).
+
+### Follow-up — verify-chain regression backstop
+
+The fact that three commits landed with `tsconfig.test.json` typecheck failing on `main` means the pre-push hook isn't catching what the V-log claims `npm run typecheck` covers. Action item: confirm `lefthook.yml` (or equivalent) runs the workspace-level `typecheck` script (which fans out into `tsc --build && tsc --noEmit -p tsconfig.test.json`), not just `tsc --build`. Surfacing as a follow-up rather than fixing in this commit because the fix is a separate concern (CI/hook config audit) from the V-221 CDN work.
