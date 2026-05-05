@@ -160,4 +160,104 @@ describe('GET /v1/account/audit-log', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  // V-225 — second batch of deferred V-216 emit wires.
+
+  it('records profile.created when a customer creates a profile', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth(fx),
+      payload: { name: 'main' },
+    });
+    expect(create.statusCode).toBe(200);
+
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=profile.created',
+      headers: auth(fx),
+    });
+    const body = list.json<ListResponse>();
+    expect(body.data.length).toBe(1);
+    const entry = body.data[0]!;
+    expect(entry.target_resource_id).toMatch(/^profile_/);
+    expect((entry.payload as { name?: string } | null)?.name).toBe('main');
+  });
+
+  it('records profile.deleted when a customer deletes a profile', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth(fx),
+      payload: { name: 'doomed' },
+    });
+    const id = create.json<{ id: string }>().id;
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${id}`,
+      headers: auth(fx),
+    });
+    expect(del.statusCode).toBe(204);
+
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=profile.deleted',
+      headers: auth(fx),
+    });
+    const body = list.json<ListResponse>();
+    expect(body.data.length).toBe(1);
+    expect((body.data[0]!.payload as { name?: string } | null)?.name).toBe('doomed');
+  });
+
+  it('records webhook_endpoint.created when a customer creates an endpoint', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: { url: 'https://example.test/hook', events: ['session.completed'] },
+    });
+    expect(create.statusCode).toBe(201);
+
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=webhook_endpoint.created',
+      headers: auth(fx),
+    });
+    const body = list.json<ListResponse>();
+    expect(body.data.length).toBe(1);
+    const entry = body.data[0]!;
+    expect(entry.target_resource_id).toMatch(/^webhook_endpoint_/);
+    expect((entry.payload as { url?: string } | null)?.url).toBe('https://example.test/hook');
+  });
+
+  it('records webhook_endpoint.deleted when a customer deletes an endpoint', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: { url: 'https://example.test/hook2', events: ['session.completed'] },
+    });
+    const id = create.json<{ id: string }>().id;
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/webhooks/${id}`,
+      headers: auth(fx),
+    });
+    expect(del.statusCode).toBe(204);
+
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=webhook_endpoint.deleted',
+      headers: auth(fx),
+    });
+    const body = list.json<ListResponse>();
+    expect(body.data.length).toBe(1);
+    expect((body.data[0]!.payload as { url?: string } | null)?.url).toBe(
+      'https://example.test/hook2',
+    );
+  });
 });

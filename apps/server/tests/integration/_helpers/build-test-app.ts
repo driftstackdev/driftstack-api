@@ -182,8 +182,15 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const usageRepo = new InMemoryUsageRepo();
   const usageService = new UsageService(usageRepo);
 
+  // V-216 — customer-facing audit; constructed early so all
+  // emit-on-event services (webhooks, sessions, api-keys, profiles)
+  // can wire it.
+  const accountAuditRepo = new InMemoryAccountAuditRepo();
+  const accountAuditService = new AccountAuditService(accountAuditRepo);
+
   const webhooksRepo = new InMemoryWebhooksRepo();
-  const webhooksService = new WebhooksService(webhooksRepo);
+  // V-225 — accountAudit wired for webhook_endpoint.{created,deleted}.
+  const webhooksService = new WebhooksService(webhooksRepo, accountAuditService);
   const webhooksAdminService = new WebhooksAdminService(webhooksRepo);
 
   const adminAuditRepo = new InMemoryAdminAuditLogRepo();
@@ -197,10 +204,6 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     rateLimitOverridesRepo,
     authCache,
   );
-  // V-216 — customer-facing audit; constructed early so sessions +
-  // api-keys can wire it.
-  const accountAuditRepo = new InMemoryAccountAuditRepo();
-  const accountAuditService = new AccountAuditService(accountAuditRepo);
 
   // V-218 — validation harness with mock recapture bridge.
   const validationSchedulesRepo = new InMemoryValidationSchedulesRepo();
@@ -380,7 +383,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
 
   // V-081: Profiles service.
   const profilesRepo = new InMemoryProfilesRepo();
-  const profilesService = new ProfilesService(profilesRepo);
+  // V-225 — accountAudit wired for profile.{created,deleted}.
+  const profilesService = new ProfilesService(profilesRepo, accountAuditService);
 
   // V-082: Billing service against an in-memory provider. The seeded
   // account is registered with the billing repo so getAccount + the

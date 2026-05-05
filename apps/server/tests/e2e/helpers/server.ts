@@ -126,8 +126,12 @@ export async function startTestServer(): Promise<TestServer> {
     interactLatencyMs: 10,
   });
 
+  const accountAuditRepo = new DrizzleAccountAuditRepo(database);
+  const accountAuditService = new AccountAuditService(accountAuditRepo);
+
   const webhooksRepo = new DrizzleWebhooksRepo(database);
-  const webhooksService = new WebhooksService(webhooksRepo);
+  // V-225 — accountAudit wired for webhook_endpoint.{created,deleted}.
+  const webhooksService = new WebhooksService(webhooksRepo, accountAuditService);
   const webhooksAdminService = new WebhooksAdminService(webhooksRepo);
 
   const adminAuditRepo = new DrizzleAdminAuditLogRepo(database);
@@ -141,9 +145,6 @@ export async function startTestServer(): Promise<TestServer> {
     rateLimitOverridesRepo,
     authCache,
   );
-
-  const accountAuditRepo = new DrizzleAccountAuditRepo(database);
-  const accountAuditService = new AccountAuditService(accountAuditRepo);
   const sessionsService = new SessionsService({
     repo: sessionsRepo,
     driver,

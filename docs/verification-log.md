@@ -12669,3 +12669,65 @@ The remaining 5 deferred slots (`profile.created`, `profile.deleted`, `subscript
 ### Next
 
 V-225 — second batch of V-216 deferred emit wires: `profile.created`, `profile.deleted`, `webhook_endpoint.created`, `webhook_endpoint.deleted`. Two services (`ProfilesService`, `WebhooksService`); both follow the same pattern as V-224 (optional `accountAudit?` ctor arg + emit at the success path). Then V-226 for `subscription.tier_changed` (Stripe-webhook-driven). Then V-184b Tier 3 onboarding visual UX.
+
+## V-225 — profile + webhook_endpoint audit emit wires (V-216 deferred batch, part 2/3)
+
+### What
+
+`ProfilesService` and `WebhooksService` now emit to `AccountAuditService` at four CRUD points:
+
+- `profile.created` — emitted at the end of `ProfilesService.create()` after the row is inserted. Payload: `{ name, archetype }`. Target: `profile_<uuid>`.
+- `profile.deleted` — emitted at the end of `ProfilesService.delete()` after the row is hard-deleted. Payload: `{ name }` (read from the pre-delete `findById` to capture the name in the audit row even though the source row is gone). Target: `profile_<uuid>`.
+- `webhook_endpoint.created` — emitted at the end of `WebhooksService.create()` after the endpoint is inserted. Payload: `{ url, events }`. Target: `webhook_endpoint_<uuid>`.
+- `webhook_endpoint.deleted` — emitted at the end of `WebhooksService.delete()` after the endpoint is soft-disabled. Skipped on the idempotent no-op path (already disabled). Payload: `{ url }`. Target: `webhook_endpoint_<uuid>`.
+
+Both services follow the V-224 pattern: optional 2nd ctor arg `accountAudit: AccountAuditService | null = null` (default null preserves any existing 1-arg construction) + private `emitAuditBestEffort()` helper that swallows failures so the CRUD path doesn't break on audit-log unavailability.
+
+For `webhook_endpoint.*`, the `actor_key_id` is populated from `ctx.apiKey.id` (the call comes through the API surface where the API key is the actor). For `profile.*`, the call signature is direct (no `AccountContext`), so `actor_key_id` is null and `actor_account_id` carries the actor identity.
+
+Bootstrap + test fixture wiring reordered slightly so `accountAuditService` is constructed before `webhooksService` (it was already constructed before `profilesService` in build-test-app.ts; bootstrap.ts had them in the opposite order, fixed here). e2e helper also reordered.
+
+Test coverage: 4 new tests in `account-audit.test.ts` (kept alongside the existing V-216 emit tests for api-keys + sessions, since they all exercise the same `/v1/account/audit-log` endpoint):
+
+- `records profile.created` — POST /v1/profiles → GET /v1/account/audit-log filtered by action; asserts 1 entry with target*resource_id ~ `/^profile*/` and payload.name === 'main'.
+- `records profile.deleted` — POST + DELETE; asserts 1 entry with payload.name === 'doomed'.
+- `records webhook_endpoint.created` — POST /v1/webhooks; asserts 1 entry with payload.url + payload.events.
+- `records webhook_endpoint.deleted` — POST + DELETE; asserts 1 entry with payload.url.
+
+### Why
+
+V-224 took the auth-flows batch (4 of 9 deferred enum values). V-225 takes the next 4 because:
+
+1. They live in two services with similar shapes (both have a `create()` returning a row + a `delete()` taking an id). One commit covers both; splitting would be artificial.
+2. Profiles + webhook endpoints are the two non-key, non-session resources customers create + delete. Having them in the audit log answers "did I delete that profile yesterday?" and "who deleted my prod webhook endpoint?" — frequent questions if anything goes sideways.
+3. The `webhook_endpoint.deleted` emit closes a real audit gap: deleting a webhook endpoint is the only customer action that silently removes their event-delivery surface. Without an audit row, a customer who notices missing events has no in-app way to confirm whether a delete was the cause.
+
+After V-225, only 1 of the 13 enum values remains unwired: `subscription.tier_changed` (Stripe-webhook-driven, `actor_type: 'system'`). V-226 will pick that up.
+
+### Files
+
+- `apps/server/src/services/profiles.ts` — added `accountAudit?` ctor arg + `emitAuditBestEffort()` helper + 2 emit sites (create, delete).
+- `apps/server/src/services/webhooks.ts` — same shape, 2 emit sites (create, delete; skipped on idempotent already-disabled path).
+- `apps/server/src/lib/bootstrap.ts` — production wiring; reordered `accountAuditService` construction before `webhooksService` so the wire-in is possible.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — same reorder + wire-in.
+- `apps/server/tests/e2e/helpers/server.ts` — same reorder + wire-in.
+- `apps/server/tests/integration/account-audit.test.ts` — 4 new V-225 tests in the existing describe block.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (one prettier reflow on `webhooks.ts` after the constructor expansion; auto-fixed).
+- `npm test`: 687 / 687 passing across 71 files (+4 V-225 tests over the 683 V-224 baseline).
+- pre-push hook (V-223) will exercise on push.
+
+### Notes
+
+- The `webhook_endpoint.deleted` skip on the idempotent no-op path is deliberate: emitting an audit row for a "delete that already happened" would create misleading entries in the customer's audit log. The first delete already wrote an entry; subsequent identical DELETE calls are no-ops and don't deserve their own row. Same posture would apply to api_key.revoked if the V-216 emit there ever needs revisiting.
+- For `profile.deleted`, an extra `findById` round-trip is taken pre-delete so the payload can capture the profile name. The DB cost is negligible (single PK lookup) and the audit-row payload is otherwise blank, which would defeat the point of the audit entry.
+- Rationale for separate `profile.created` + `profile.deleted` events (vs a generic `profile.changed`): the customer's mental model treats profile creation and deletion as fundamentally different lifecycle moments. Same pattern as `api_key.minted` + `api_key.revoked` (V-216).
+
+### Next
+
+V-226 — `subscription.tier_changed` audit emit. Stripe-webhook-driven (`StripeWebhooksService`); `actor_type: 'system'` because the trigger is Stripe's customer.subscription.\* event flowing through the inbound webhook handler. Then V-184b Tier 3 onboarding visual UX.

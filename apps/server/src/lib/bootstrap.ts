@@ -175,13 +175,15 @@ export async function createProductionDeps(
   // Driver — mock or real WebKit per config.
   const driver = createDriver(config);
 
-  // Webhooks first so sessions + api-keys can wire it.
-  const webhooksService = new WebhooksService(webhooksRepo);
-  const webhooksAdminService = new WebhooksAdminService(webhooksRepo);
-
-  // V-216 — customer-facing audit log; constructed early so sessions
-  // + api-keys can wire it for emit-on-event.
+  // V-216 — customer-facing audit log; constructed early so all
+  // emit-on-event services downstream (webhooks, sessions, api-keys,
+  // profiles) can wire it.
   const accountAuditService = new AccountAuditService(accountAuditRepo);
+
+  // Webhooks first so sessions + api-keys can wire it.
+  // V-225 — accountAudit wired for webhook_endpoint.{created,deleted}.
+  const webhooksService = new WebhooksService(webhooksRepo, accountAuditService);
+  const webhooksAdminService = new WebhooksAdminService(webhooksRepo);
 
   // Sessions, api-keys, usage.
   const sessionsService = new SessionsService({
@@ -273,8 +275,9 @@ export async function createProductionDeps(
   });
 
   // V-081: Profiles service.
+  // V-225 — accountAudit wired for profile.{created,deleted}.
   const profilesRepo = new DrizzleProfilesRepo(dbHandle);
-  const profilesService = new ProfilesService(profilesRepo);
+  const profilesService = new ProfilesService(profilesRepo, accountAuditService);
 
   // V-082 + V-088: Billing service. Activates only when all three of
   // STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS + STRIPE_TRIAL_PACK_PRICE_ID

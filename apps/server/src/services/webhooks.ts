@@ -12,6 +12,7 @@ import { ConflictError, NotFoundError } from '../lib/errors.js';
 import { requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
 import { generateWebhookSecret, webhookSecretPrefix } from '../lib/webhook-signing.js';
 import type { AccountContext } from './auth.js';
+import type { AccountAuditService } from './account-audit.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Types
@@ -179,7 +180,37 @@ export interface CreatedWebhookEndpoint {
 }
 
 export class WebhooksService {
-  constructor(private readonly repo: WebhooksRepo) {}
+  constructor(
+    private readonly repo: WebhooksRepo,
+    /**
+     * V-225 — optional customer-facing audit log. When wired, emits
+     * webhook_endpoint.created / webhook_endpoint.deleted entries.
+     * Best-effort; failures never break the CRUD path.
+     */
+    private readonly accountAudit: AccountAuditService | null = null,
+  ) {}
+
+  private async emitAuditBestEffort(
+    ctx: AccountContext,
+    action: 'webhook_endpoint.created' | 'webhook_endpoint.deleted',
+    targetResourceId: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    if (this.accountAudit === null) return;
+    try {
+      await this.accountAudit.record({
+        accountId: ctx.account.id,
+        actorType: 'customer',
+        actorAccountId: ctx.account.id,
+        actorKeyId: ctx.apiKey.id,
+        action,
+        targetResourceId,
+        payload,
+      });
+    } catch {
+      /* best-effort — audit failures don't break the CRUD path */
+    }
+  }
 
   async create(ctx: AccountContext, input: CreateWebhookInput): Promise<CreatedWebhookEndpoint> {
     throwIfMissingScope(ctx, 'admin');
@@ -206,6 +237,11 @@ export class WebhooksService {
       secretPrefix,
       events: input.events,
       description: input.description,
+    });
+
+    await this.emitAuditBestEffort(ctx, 'webhook_endpoint.created', `webhook_endpoint_${row.id}`, {
+      url: url.toString(),
+      events: input.events,
     });
 
     return { row, plaintextSecret };
@@ -243,8 +279,11 @@ export class WebhooksService {
     throwIfMissingScope(ctx, 'admin');
     const row = await this.repo.findEndpoint(id, ctx.account.id);
     if (!row) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
-    if (row.disabledAt !== null) return; // idempotent
+    if (row.disabledAt !== null) return; // idempotent — no audit emit on no-op
     await this.repo.disableEndpoint(id, new Date());
+    await this.emitAuditBestEffort(ctx, 'webhook_endpoint.deleted', `webhook_endpoint_${id}`, {
+      url: row.url,
+    });
   }
 
   listDeliveries(

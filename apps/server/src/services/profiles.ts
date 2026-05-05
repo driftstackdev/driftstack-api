@@ -13,6 +13,7 @@
 import { LOCKED_ARCHETYPE_ID, type AccountTier } from '@driftstack/api-types';
 import { ConflictError, NotFoundError, TierLimitError } from '../lib/errors.js';
 import { profileLimitFor } from './sessions.js';
+import type { AccountAuditService } from './account-audit.js';
 
 export interface ProfileRecord {
   id: string;
@@ -75,7 +76,38 @@ export interface CreateProfileArgs {
 }
 
 export class ProfilesService {
-  constructor(private readonly repo: ProfilesRepo) {}
+  constructor(
+    private readonly repo: ProfilesRepo,
+    /**
+     * V-225 — optional customer-facing audit log. When wired, emits
+     * profile.created / profile.deleted entries. Best-effort; emit
+     * failures never break the CRUD operation. Tests that don't
+     * exercise the audit log pass null.
+     */
+    private readonly accountAudit: AccountAuditService | null = null,
+  ) {}
+
+  private async emitAuditBestEffort(
+    accountId: string,
+    action: 'profile.created' | 'profile.deleted',
+    targetResourceId: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    if (this.accountAudit === null) return;
+    try {
+      await this.accountAudit.record({
+        accountId,
+        actorType: 'customer',
+        actorAccountId: accountId,
+        actorKeyId: null,
+        action,
+        targetResourceId,
+        payload,
+      });
+    } catch {
+      /* best-effort — audit failures don't break the CRUD path */
+    }
+  }
 
   async create(args: CreateProfileArgs): Promise<ProfileRecord> {
     const limit = profileLimitFor(args.tier);
@@ -105,12 +137,17 @@ export class ProfilesService {
       });
     }
 
-    return this.repo.insert({
+    const row = await this.repo.insert({
       accountId: args.accountId,
       name: args.name,
       archetype: args.archetype ?? DEFAULT_ARCHETYPE,
       description: args.description ?? null,
     });
+    await this.emitAuditBestEffort(args.accountId, 'profile.created', `profile_${row.id}`, {
+      name: row.name,
+      archetype: row.archetype,
+    });
+    return row;
   }
 
   async list(args: ListProfilesArgs): Promise<ListProfilesPage> {
@@ -147,8 +184,12 @@ export class ProfilesService {
   }
 
   async delete(args: { id: string; accountId: string }): Promise<void> {
+    const before = await this.repo.findById(args);
     const ok = await this.repo.delete(args);
     if (!ok) throw new NotFoundError('Profile not found.');
+    await this.emitAuditBestEffort(args.accountId, 'profile.deleted', `profile_${args.id}`, {
+      name: before?.name ?? null,
+    });
   }
 
   async touch(args: { id: string; accountId: string; at: Date }): Promise<void> {
