@@ -12359,3 +12359,42 @@ V-219\* directive: customer dashboard + admin panel visual style match marketing
 ### Next
 
 V-219\* PHASE 2 — apply the proposed layout edits as working-tree drafts, NOT committed until founder redline pass.
+
+## V-219\* PHASE 3 — visual-consistency redlines applied + committed
+
+### What
+
+Founder redline pass complete. All 4 PHASE 2 questions approved as-implemented; single coordinated commit lands the working-tree drafts.
+
+Redline verdicts:
+
+- **Q1 wordmark sizing** — APPROVE `h-7 w-7` (28×28px) D-badge matching marketing. Consistency across surfaces is the alignment goal.
+- **Q2 footer link order** — APPROVE Privacy / Terms / DPA / AUP / Sub-processors. Importance-based: P+T are top-tier consumer protection, DPA+AUP are mid-tier (B2B + acceptable use), Sub-processors is transparency artifact.
+- **Q3 onboarding minimal-header** — APPROVE wordmark-only, no CTA. Onboarding pages are conversion flows; the form is the CTA.
+- **Q4 admin "admin" pill** — KEEP alongside D-badge. Pill is the staff-context cue; D-badge is the brand-consistency cue. Both stay.
+
+### Files
+
+- `apps/customer-dashboard/src/layouts/DashboardLayout.astro` — sidebar wordmark replaced (D-badge + lowercase font-mono "driftstack"), new minimal horizontal header for `withSidebar={false}` onboarding pages, new footer with Privacy / Terms / DPA / AUP / Sub-processors links.
+- `apps/admin-panel/src/layouts/AdminLayout.astro` — sidebar wordmark replaced; "admin" pill preserved alongside.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 679 / 679 passing across 71 files (no test changes — frontend layout edits only).
+- `astro check` on customer-dashboard: 0 errors / warnings; one pre-existing hint on `sessions.astro` (V-186 carry).
+- `astro check` on admin-panel: 0 errors / warnings / hints.
+
+### Notes
+
+- PHASE 1 audit gaps with PHASE 2 redline plans now closed (Gap 1 wordmark, Gap 2 onboarding header, Gap 7 footer). Gaps 3 (empty-state copy), 4 (loading patterns), 5 (status-badge palette refactor — optional, deferred), 6 (anonymity compliance) had no redline required per the audit.
+- Customer-dashboard footer on every signed-in page. Cross-app continuity for legal-doc discoverability achieved.
+- Admin panel intentionally has no footer — staff-only surface.
+- The api-versioning.md draft remains held in working tree, ready for V-220 commit.
+
+### Next
+
+V-220 — API versioning strategy doc (GENERATE-7). Draft already held in working tree, prettier-formatted. Review-and-commit pass.

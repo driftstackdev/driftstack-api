@@ -40,40 +40,87 @@ const navItems = [
     <meta name="robots" content="noindex" />
   </head>
   <body class="bg-slate-50 text-slate-900">
-    <div class="flex min-h-screen">
+    {/*
+      V-219* — brand alignment with marketing site:
+        - Sidebar header: D-badge + lowercase font-mono "driftstack" wordmark
+          matches apps/marketing-site/src/components/Header.astro pattern
+        - withSidebar={false} branch: minimal horizontal header so onboarding
+          pages have brand presence (Gap 2 from the V-219* audit)
+        - Footer (signed-in dashboard) with legal-doc links (Gap 7)
+    */}
+    <div class="flex min-h-screen flex-col">
       {
-        withSidebar && (
-          <aside class="hidden w-56 shrink-0 border-r border-slate-200 bg-white md:block">
-            <div class="flex h-16 items-center px-6 border-b border-slate-200">
-              <a href="/" class="font-semibold text-slate-900">
-                Driftstack
+        !withSidebar && (
+          <header class="border-b border-slate-200 bg-white">
+            <div class="mx-auto flex max-w-6xl items-center px-6 py-4">
+              <a
+                href="/"
+                class="flex items-center gap-2 font-mono text-base font-semibold text-slate-900"
+              >
+                <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700 text-white">
+                  D
+                </span>
+                <span>driftstack</span>
               </a>
             </div>
-            <nav class="px-4 py-6">
-              <ul class="space-y-1">
-                {navItems.map((item) => (
-                  <li>
-                    <a
-                      href={item.href}
-                      class:list={[
-                        'block rounded-md px-3 py-2 text-sm transition-colors',
-                        pathname === item.href || pathname.startsWith(item.href + '/')
-                          ? 'bg-oxblood-50 font-medium text-oxblood-700'
-                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-                      ]}
-                    >
-                      {item.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-          </aside>
+          </header>
         )
       }
-      <main class="flex-1">
-        <slot />
-      </main>
+      <div class="flex flex-1">
+        {
+          withSidebar && (
+            <aside class="hidden w-56 shrink-0 border-r border-slate-200 bg-white md:block">
+              <div class="flex h-16 items-center px-6 border-b border-slate-200">
+                <a
+                  href="/"
+                  class="flex items-center gap-2 font-mono text-base font-semibold text-slate-900"
+                >
+                  <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700 text-white">
+                    D
+                  </span>
+                  <span>driftstack</span>
+                </a>
+              </div>
+              <nav class="px-4 py-6">
+                <ul class="space-y-1">
+                  {navItems.map((item) => (
+                    <li>
+                      <a
+                        href={item.href}
+                        class:list={[
+                          'block rounded-md px-3 py-2 text-sm transition-colors',
+                          pathname === item.href || pathname.startsWith(item.href + '/')
+                            ? 'bg-oxblood-50 font-medium text-oxblood-700'
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                        ]}
+                      >
+                        {item.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            </aside>
+          )
+        }
+        <main class="flex-1">
+          <slot />
+        </main>
+      </div>
+      <footer class="border-t border-slate-200 bg-white">
+        <div
+          class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4 text-xs text-slate-500"
+        >
+          <span>Driftstack</span>
+          <nav class="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <a href="/legal/privacy" class="hover:text-oxblood-700">Privacy</a>
+            <a href="/legal/terms" class="hover:text-oxblood-700">Terms</a>
+            <a href="/legal/dpa" class="hover:text-oxblood-700">DPA</a>
+            <a href="/legal/aup" class="hover:text-oxblood-700">AUP</a>
+            <a href="/trust/sub-processors" class="hover:text-oxblood-700">Sub-processors</a>
+          </nav>
+        </div>
+      </footer>
     </div>
   </body>
 </html>
