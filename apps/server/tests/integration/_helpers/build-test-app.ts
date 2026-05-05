@@ -22,6 +22,8 @@ import { LegalService } from '../../../src/services/legal.js';
 import { buildLegalCatalogFromContent } from '../../../src/services/legal-catalog.js';
 import { EmailPreferencesService } from '../../../src/services/email-preferences.js';
 import { InMemoryEmailPreferencesRepo } from './in-memory-email-preferences-repo.js';
+import { AccountAuditService } from '../../../src/services/account-audit.js';
+import { InMemoryAccountAuditRepo } from './in-memory-account-audit-repo.js';
 import { InMemoryAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { InMemoryAuthRepo } from './in-memory-auth-repo.js';
@@ -189,11 +191,17 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     rateLimitOverridesRepo,
     authCache,
   );
+  // V-216 — customer-facing audit; constructed early so sessions +
+  // api-keys can wire it.
+  const accountAuditRepo = new InMemoryAccountAuditRepo();
+  const accountAuditService = new AccountAuditService(accountAuditRepo);
+
   // Wire webhooks INTO sessions + api-keys services for event emission.
   const sessionsService = new SessionsService({
     repo: sessionsRepo,
     driver,
     webhooks: webhooksService,
+    accountAudit: accountAuditService,
   });
   // Legal-acceptance plumbing — uses an in-memory catalog with a fixed
   // canned document set (one per documentKey) so tests don't depend on
@@ -253,7 +261,13 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     }
   }
 
-  const apiKeysService = new ApiKeysService(apiKeysRepo, authCache, webhooksService, legalService);
+  const apiKeysService = new ApiKeysService(
+    apiKeysRepo,
+    authCache,
+    webhooksService,
+    legalService,
+    accountAuditService,
+  );
 
   // V-079: auth-flow service. Uses a no-op email service (Postmark
   // unconfigured) and exposes debug tokens so tests can read the
@@ -397,6 +411,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     rateLimitOverridesService,
     legalService,
     emailPreferencesService,
+    accountAuditService,
     authFlowsService,
     stripeWebhooksService,
     stripeWebhookSigningSecret,

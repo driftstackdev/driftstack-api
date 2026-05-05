@@ -12082,3 +12082,77 @@ V-214 audit + drafts surfaced for redline. Founder approved minimal-not-rewrite 
 ### Next
 
 V-215 — post-force-push verification (Agent 2 surfaces post-founder execution; runs sanity-check commands per V-212 runbook), OR potentially V-214c follow-up Tier 3 audit cycle on POSSIBLE SURFACES 1–3 (`/index` hero copy, `/pricing` tier-table row labels, `/index` Why-Driftstack + Built-for-two-audiences sections) — Agent 2 judgment.
+
+> **V-214 closure**: founder deferred SURFACES 1/2/3 post-launch (hero density not load-bearing; rest acceptable post-V-214b). V-214 fully closed.
+
+## V-216 — customer-facing audit log (GENERATE-6)
+
+### What
+
+New customer-visible audit-log surface so account holders can see their own account history (key mints/revokes, session creates/destroys, etc.) without admin intervention.
+
+Components:
+
+1. **Migration `0018_account_audit_log.sql`** — Class A additive table (per V-198 taxonomy). Schema mirrors `admin_audit_log` shape but scoped to a single customer account. Cascading delete on `accounts.id` so customer-data deletion under GDPR removes audit history with the account.
+
+2. **Drizzle schema entry** in `apps/server/src/db/schema.ts`. Fields: `accountId`, `actorType` (`customer` / `system` / `staff`), `actorAccountId`, `actorKeyId`, `action`, `targetResourceId`, `payload jsonb`, `ipAddress`, `userAgent`, `timestamp`. Two indexes: `(accountId, timestamp)` for the customer's own listing path; `(accountId, action, timestamp)` for filtered queries.
+
+3. **`AccountAuditService` + `AccountAuditRepo`** — append-only contract: `record()` for emit-on-event, `list(ctx, opts)` gated on `account_owner` scope. Mirror of `AdminAuditService` shape but customer-scoped.
+
+4. **Drizzle repo + in-memory repo** for the test fixture.
+
+5. **`GET /v1/account/audit-log`** endpoint with `limit` / `cursor` / `action` query params. Cursor is the timestamp of the last seen entry (timestamp DESC paging).
+
+6. **OpenAPI registration** with inline Zod shapes for the request/response.
+
+7. **Closed-enum `AccountAuditAction` Zod schema** in `packages/api-types/src/accounts.ts` with 13 actions covering account lifecycle (email_verified, login, logout, password_changed), api-keys (minted, revoked), sessions (created, destroyed), profiles (created, deleted), subscription (tier_changed), webhook endpoints (created, deleted).
+
+8. **Wire-in at three emit points** for V-216 initial coverage:
+   - `ApiKeysService.create` → `api_key.minted`
+   - `ApiKeysService.revoke` → `api_key.revoked`
+   - `SessionsService.create` → `session.created`
+   - `SessionsService.destroy` → `session.destroyed`
+
+   All four wires are fire-and-forget with `try { ... } catch { /* swallow */ }` — audit failures never break the underlying customer action.
+
+9. **6 new integration tests** covering: empty default, mint→audit, revoke→audit, session lifecycle, action filter, 400 on unknown action enum.
+
+### Why
+
+GENERATE-6 from the V-201 ack queue. Customers integrating with SOC2-adjacent obligations need their own audit trail without staff lookup. Locking it as a server-side record (not client-side log replay) means it survives cache layers + matches the admin-audit shape so cross-account oversight stays consistent.
+
+The 13-action enum covers V-216 + leaves room for the wire-ins still pending (login/logout, password_changed, profile lifecycle, subscription, webhook endpoints — those slot as V-NNN follow-ups). Closed enum at the API layer means customers can register integrations against a stable contract; new actions are additive and backwards-compatible.
+
+### Files
+
+- `apps/server/src/db/migrations/0018_account_audit_log.sql` — new Class A migration.
+- `apps/server/src/db/schema.ts` — `accountAuditLog` table + types.
+- `packages/api-types/src/accounts.ts` — `AccountAuditActionSchema`, `AccountAuditEntrySchema`, list query/response.
+- `apps/server/src/services/account-audit.ts` — service + repo interface.
+- `apps/server/src/db/account-audit-repo.ts` — Drizzle impl.
+- `apps/server/src/routes/account-audit.ts` — `GET /v1/account/audit-log` handler.
+- `apps/server/src/lib/bootstrap.ts` + `apps/server/src/lib/app.ts` — wired into deps + routes.
+- `apps/server/src/services/api-keys.ts` — `CustomerAuditEmitter` interface + emit on mint/revoke. New optional 5th constructor arg.
+- `apps/server/src/services/sessions.ts` — `accountAudit` dep + emit on create/destroy.
+- `apps/server/tests/integration/_helpers/in-memory-account-audit-repo.ts` — in-memory variant.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — fixture wiring.
+- `apps/server/tests/integration/account-audit.test.ts` — 6 new tests.
+- `apps/server/src/lib/openapi.ts` + `apps/server/tests/integration/openapi.test.ts` — endpoint registered.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 668 / 668 passing across 69 files (6 new account-audit tests).
+
+### Notes
+
+- Wire-ins for the remaining 9 enum values (login/logout/password_changed/profile/subscription/webhook_endpoint events) deferred to follow-up V-NNN. The API surface is stable; consumers that subscribe to filtered action queries today will see new actions appear without contract change.
+- Customer dashboard `/settings` page UI to surface this endpoint is the GENERATE-9 V-217 slice — backend lands first per the founder spec ("customer dashboard /settings page surfaces").
+- Cascading delete on `accountId` FK means deleting an account removes its audit trail. Counter-argument: long-lived audit retention for compliance. Trade-off taken: GDPR right-to-erasure default wins; if a customer requires audit-after-deletion (e.g. SOC2 compliance windows), R2 archive (V-172) is the longer-term retention path. Same posture as `admin_audit_log` cascade.
+- The `actor_type='system'` pattern is reserved for emit points where the action is initiated by Driftstack-internal automation (Stripe webhook handlers, scheduled jobs). Not yet wired today; reserved for the follow-up slice.
+
+### Next
+
+V-217 — customer dashboard /settings page expansion (GENERATE-9, ~2-3hr Tier 1 + Tier 3 visual surface).

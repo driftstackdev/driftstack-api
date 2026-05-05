@@ -147,6 +147,18 @@ export interface SessionsServiceDeps {
       data: Record<string, unknown>,
     ) => Promise<number>;
   } | null;
+  /** V-216: optional customer-facing audit emitter. */
+  accountAudit?: {
+    record: (input: {
+      accountId: string;
+      actorType: 'customer' | 'system' | 'staff';
+      actorAccountId?: string | null;
+      actorKeyId?: string | null;
+      action: 'session.created' | 'session.destroyed';
+      targetResourceId?: string | null;
+      payload?: Record<string, unknown> | null;
+    }) => Promise<unknown>;
+  } | null;
 }
 
 export class SessionsService {
@@ -184,6 +196,23 @@ export class SessionsService {
       payload: { archetype, purpose, driver_session_id: driverResult.driverSessionId },
       durationMs: null,
     });
+
+    // V-216 — customer-facing audit entry.
+    if (this.deps.accountAudit) {
+      try {
+        await this.deps.accountAudit.record({
+          accountId: ctx.account.id,
+          actorType: 'customer',
+          actorAccountId: ctx.account.id,
+          actorKeyId: ctx.apiKey.id,
+          action: 'session.created',
+          targetResourceId: `ses_${record.id}`,
+          payload: { archetype, purpose },
+        });
+      } catch {
+        /* swallow */
+      }
+    }
 
     return { ...record, status: 'ready' };
   }
@@ -359,8 +388,8 @@ export class SessionsService {
 
     // Emit session.completed webhook event (best-effort; failures here
     // never affect destroy correctness).
+    const durationMs = destroyedAt.getTime() - session.createdAt.getTime();
     if (this.deps.webhooks) {
-      const durationMs = destroyedAt.getTime() - session.createdAt.getTime();
       try {
         await this.deps.webhooks.enqueueEvent(ctx.account.id, 'session.completed', {
           session_id: `ses_${session.id}`,
@@ -368,6 +397,23 @@ export class SessionsService {
         });
       } catch {
         // Webhook enqueue is best-effort; never break the user-facing op.
+      }
+    }
+
+    // V-216 — customer-facing audit entry.
+    if (this.deps.accountAudit) {
+      try {
+        await this.deps.accountAudit.record({
+          accountId: ctx.account.id,
+          actorType: 'customer',
+          actorAccountId: ctx.account.id,
+          actorKeyId: ctx.apiKey.id,
+          action: 'session.destroyed',
+          targetResourceId: `ses_${session.id}`,
+          payload: { duration_ms: durationMs },
+        });
+      } catch {
+        /* swallow */
       }
     }
   }

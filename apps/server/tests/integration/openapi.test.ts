@@ -44,6 +44,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/admin/webhook-deliveries/{id}/replay',
         '/v1/admin/webhook-dlq',
         '/v1/admin/webhook-dlq/{id}/requeue',
+        '/v1/account/audit-log',
         '/v1/account/email-preferences',
         '/v1/api-keys',
         '/v1/api-keys/{id}',

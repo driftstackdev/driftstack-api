@@ -915,3 +915,44 @@ export const accountEmailPreferences = pgTable(
 
 export type AccountEmailPreference = typeof accountEmailPreferences.$inferSelect;
 export type NewAccountEmailPreference = typeof accountEmailPreferences.$inferInsert;
+
+// V-216 — customer-facing audit log. Mirrors admin_audit_log shape
+// but scoped to a single customer account: customer-initiated actions
+// on their own account (mints / revokes / session creates / etc.),
+// plus system-initiated events (Stripe webhook handlers, scheduled
+// jobs) and any staff actions that touched the account. Append-only:
+// the service exposes only an insert path and a paginated read.
+export const accountAuditLog = pgTable(
+  'account_audit_log',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    /** 'customer' | 'system' | 'staff'. App-layer enforced. */
+    actorType: text('actor_type').notNull(),
+    actorAccountId: uuid('actor_account_id').references(() => accounts.id, {
+      onDelete: 'set null',
+    }),
+    actorKeyId: uuid('actor_key_id').references(() => apiKeys.id, {
+      onDelete: 'set null',
+    }),
+    action: text('action').notNull(),
+    targetResourceId: text('target_resource_id'),
+    payload: jsonb('payload').$type<Record<string, unknown>>(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    timestamp: timestamp('timestamp', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index('account_audit_log_account_idx').on(t.accountId, t.timestamp),
+    index('account_audit_log_action_idx').on(t.accountId, t.action, t.timestamp),
+  ],
+);
+
+export type AccountAuditLogEntry = typeof accountAuditLog.$inferSelect;
+export type NewAccountAuditLogEntry = typeof accountAuditLog.$inferInsert;

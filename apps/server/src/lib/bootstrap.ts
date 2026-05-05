@@ -31,6 +31,8 @@ import { DrizzleAdminAuditLogRepo } from '../db/admin-audit-repo.js';
 import { DrizzleAccountsAdminRepo } from '../db/admin-accounts-repo.js';
 import { DrizzleEmailPreferencesRepo } from '../db/email-preferences-repo.js';
 import { EmailPreferencesService } from '../services/email-preferences.js';
+import { DrizzleAccountAuditRepo } from '../db/account-audit-repo.js';
+import { AccountAuditService } from '../services/account-audit.js';
 import { DrizzleRateLimitOverridesRepo } from '../db/rate-limit-overrides-repo.js';
 import { DrizzleLegalRepo } from '../db/legal-repo.js';
 import { DrizzleAuthFlowsRepo } from '../db/auth-flows-repo.js';
@@ -154,6 +156,7 @@ export async function createProductionDeps(
   const rateLimitOverridesRepo = new DrizzleRateLimitOverridesRepo(dbHandle);
   const legalRepo = new DrizzleLegalRepo(dbHandle);
   const emailPreferencesRepo = new DrizzleEmailPreferencesRepo(dbHandle);
+  const accountAuditRepo = new DrizzleAccountAuditRepo(dbHandle);
 
   // Auth cache + coalescer.
   const authCache = new RedisAuthCache(redis, logger);
@@ -169,11 +172,16 @@ export async function createProductionDeps(
   const webhooksService = new WebhooksService(webhooksRepo);
   const webhooksAdminService = new WebhooksAdminService(webhooksRepo);
 
+  // V-216 — customer-facing audit log; constructed early so sessions
+  // + api-keys can wire it for emit-on-event.
+  const accountAuditService = new AccountAuditService(accountAuditRepo);
+
   // Sessions, api-keys, usage.
   const sessionsService = new SessionsService({
     repo: sessionsRepo,
     driver,
     webhooks: webhooksService,
+    accountAudit: accountAuditService,
   });
   const usageService = new UsageService(usageRepo);
 
@@ -194,7 +202,14 @@ export async function createProductionDeps(
   const emailPreferencesService = new EmailPreferencesService(emailPreferencesRepo);
 
   // ApiKeysService needs legalService (V-049 issuance gate).
-  const apiKeysService = new ApiKeysService(apiKeysRepo, authCache, webhooksService, legalService);
+  // V-216: also wires accountAuditService for customer-facing audit emit.
+  const apiKeysService = new ApiKeysService(
+    apiKeysRepo,
+    authCache,
+    webhooksService,
+    legalService,
+    accountAuditService,
+  );
 
   // V-079: user-facing auth flows.
   const authFlowsRepo = new DrizzleAuthFlowsRepo(dbHandle);
@@ -311,6 +326,7 @@ export async function createProductionDeps(
     rateLimitOverridesService,
     legalService,
     emailPreferencesService,
+    accountAuditService,
     authFlowsService,
     profilesService,
     // V-100: admin force-actions take direct repo + driver access.

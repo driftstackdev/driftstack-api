@@ -52,3 +52,59 @@ export const SetEmailPreferenceRequestSchema = z.object({
   opted_in: z.boolean(),
 });
 export type SetEmailPreferenceRequest = z.infer<typeof SetEmailPreferenceRequestSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
+// V-216 — customer-facing audit log
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Closed enum of customer-visible audit actions. Adding a new event
+ * type is a Class A schema migration (additive enum value).
+ */
+export const AccountAuditActionSchema = z.enum([
+  'account.email_verified',
+  'account.login',
+  'account.logout',
+  'account.password_changed',
+  'api_key.minted',
+  'api_key.revoked',
+  'session.created',
+  'session.destroyed',
+  'profile.created',
+  'profile.deleted',
+  'subscription.tier_changed',
+  'webhook_endpoint.created',
+  'webhook_endpoint.deleted',
+]);
+export type AccountAuditAction = z.infer<typeof AccountAuditActionSchema>;
+
+export const AccountAuditActorTypeSchema = z.enum(['customer', 'system', 'staff']);
+export type AccountAuditActorType = z.infer<typeof AccountAuditActorTypeSchema>;
+
+export const AccountAuditEntrySchema = z.object({
+  id: z.string().uuid(),
+  account_id: z.string(),
+  actor_type: AccountAuditActorTypeSchema,
+  actor_account_id: z.string().nullable(),
+  actor_key_id: z.string().nullable(),
+  action: AccountAuditActionSchema,
+  target_resource_id: z.string().nullable(),
+  payload: z.record(z.unknown()).nullable(),
+  ip_address: z.string().nullable(),
+  user_agent: z.string().nullable(),
+  timestamp: Iso8601Schema,
+});
+export type AccountAuditEntry = z.infer<typeof AccountAuditEntrySchema>;
+
+export const ListAccountAuditLogQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional().default(50),
+  cursor: z.string().optional(),
+  action: AccountAuditActionSchema.optional(),
+});
+export type ListAccountAuditLogQuery = z.infer<typeof ListAccountAuditLogQuerySchema>;
+
+export const ListAccountAuditLogResponseSchema = z.object({
+  data: z.array(AccountAuditEntrySchema),
+  next_cursor: z.string().nullable(),
+});
+export type ListAccountAuditLogResponse = z.infer<typeof ListAccountAuditLogResponseSchema>;

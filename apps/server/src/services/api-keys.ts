@@ -82,12 +82,39 @@ export interface RevocationWebhookEmitter {
   ) => Promise<number>;
 }
 
+/** V-216 — minimal callable surface for the customer-facing audit log. */
+export interface CustomerAuditEmitter {
+  record: (input: {
+    accountId: string;
+    actorType: 'customer' | 'system' | 'staff';
+    actorAccountId?: string | null;
+    actorKeyId?: string | null;
+    action:
+      | 'account.email_verified'
+      | 'account.login'
+      | 'account.logout'
+      | 'account.password_changed'
+      | 'api_key.minted'
+      | 'api_key.revoked'
+      | 'session.created'
+      | 'session.destroyed'
+      | 'profile.created'
+      | 'profile.deleted'
+      | 'subscription.tier_changed'
+      | 'webhook_endpoint.created'
+      | 'webhook_endpoint.deleted';
+    targetResourceId?: string | null;
+    payload?: Record<string, unknown> | null;
+  }) => Promise<unknown>;
+}
+
 export class ApiKeysService {
   constructor(
     private readonly repo: ApiKeysRepo,
     private readonly authCache: AuthCache | null = null,
     private readonly webhooks: RevocationWebhookEmitter | null = null,
     private readonly legalGate: LegalAcceptanceGate | null = null,
+    private readonly accountAudit: CustomerAuditEmitter | null = null,
   ) {}
 
   async create(ctx: AccountContext, input: CreateApiKeyServiceInput): Promise<CreatedApiKey> {
@@ -122,6 +149,24 @@ export class ApiKeysService {
       keyHash,
       expiresAt: input.expiresAt,
     });
+
+    // V-216 — record customer-facing audit entry. Best-effort; never
+    // breaks the mint flow.
+    if (this.accountAudit) {
+      try {
+        await this.accountAudit.record({
+          accountId: ctx.account.id,
+          actorType: 'customer',
+          actorAccountId: ctx.account.id,
+          actorKeyId: ctx.apiKey.id,
+          action: 'api_key.minted',
+          targetResourceId: `key_${row.id}`,
+          payload: { name: input.name, scopes: input.scopes },
+        });
+      } catch {
+        /* swallow */
+      }
+    }
 
     return { row, plaintext };
   }
@@ -175,6 +220,23 @@ export class ApiKeysService {
         });
       } catch {
         // Swallow.
+      }
+    }
+
+    // V-216 — record customer-facing audit entry.
+    if (this.accountAudit) {
+      try {
+        await this.accountAudit.record({
+          accountId: ctx.account.id,
+          actorType: 'customer',
+          actorAccountId: ctx.account.id,
+          actorKeyId: ctx.apiKey.id,
+          action: 'api_key.revoked',
+          targetResourceId: `key_${keyId}`,
+          payload: { name: key.name, revoked_at: revokedAt.toISOString() },
+        });
+      } catch {
+        /* swallow */
       }
     }
   }

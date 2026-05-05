@@ -612,6 +612,45 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // V-216 — customer-facing audit log.
+  const ListAccountAuditQueryOpenApi = z.object({
+    limit: z.number().int().min(1).max(100).optional(),
+    cursor: z.string().optional(),
+    action: z.string().optional(),
+  });
+  const AccountAuditEntryOpenApi = z.object({
+    id: z.string().uuid(),
+    account_id: z.string(),
+    actor_type: z.enum(['customer', 'system', 'staff']),
+    actor_account_id: z.string().nullable(),
+    actor_key_id: z.string().nullable(),
+    action: z.string(),
+    target_resource_id: z.string().nullable(),
+    payload: z.record(z.unknown()).nullable(),
+    ip_address: z.string().nullable(),
+    user_agent: z.string().nullable(),
+    timestamp: z.string(),
+  });
+  const ListAccountAuditResponseOpenApi = z.object({
+    data: z.array(AccountAuditEntryOpenApi),
+    next_cursor: z.string().nullable(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/audit-log',
+    summary: "List the calling account's own audit-log entries",
+    tags: ['account'],
+    security: auth,
+    request: { query: ListAccountAuditQueryOpenApi },
+    responses: {
+      200: {
+        description: 'Paginated audit-log entries (newest first).',
+        content: { 'application/json': { schema: ListAccountAuditResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+
   // V-204 — customer email notification preferences.
   const ListEmailPrefsResponseSchema = z.object({
     data: z.array(
