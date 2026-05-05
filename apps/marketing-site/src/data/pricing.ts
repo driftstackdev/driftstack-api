@@ -305,7 +305,7 @@ export const ANNUAL_DISCOUNT_LABEL = '20% off annual';
 export const TRIAL_PACK = {
   priceUsd: 2.99,
   creditCents: 299,
-  meterRate: '$0.18/hr (Starter equivalent rate)',
+  meterRate: '$0.18 per concurrent-hour (per ADR-003 trial-pack mechanic)',
   hoursApprox: 16,
   windowDays: 14,
   concurrent: 1,

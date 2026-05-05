@@ -8995,3 +8995,61 @@ NOT modified per founder's prior categorization:
 ### Next
 
 V-162: full /pricing.astro audit per ADR-004 conventions (100% bit-identical parity bar / two-ladder structure / BYOK gating / self-hosted matrix / $1,000 / $2,000 / $4,000+ self-hosted prices / $2.99 trial pack mechanics).
+
+---
+
+## V-162 — /pricing.astro audit + drift cleanup (Starter equivalent rate redline)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Full /pricing.astro audit per founder direction following V-161 /faq cleanup. Founder-listed audit conventions: (a) 100% bit-identical parity bar (no "99.X%" framing), (b) ADR-004 tier values + concurrent-only metering everywhere, (c) two-ladder Manual + API structure, (d) BYOK gating per locked tier matrix, (e) self-hosted matrix uses license differentiators (NOT hardware-deployment-choices), (f) self-hosted prices $1k / $2k / $4k+, (g) $2.99 trial pack mechanics.
+
+### What changed
+
+`apps/marketing-site/src/data/pricing.ts`:
+
+- `TRIAL_PACK.meterRate`: `'$0.18/hr (Starter equivalent rate)'` → `'$0.18 per concurrent-hour (per ADR-003 trial-pack mechanic)'`. Same redline pattern founder applied to FAQ entry 5; "Starter equivalent rate" references the dead Starter tier from the file-127 single-ladder model.
+
+`apps/marketing-site/src/pages/pricing.astro`:
+
+- Trial pack hero card prose (line 95-100): dropped "Starter equivalent rate" surrounding text; reads "decremented at {TRIAL_PACK.meterRate}" instead. Added explicit "trial pack is the only Driftstack product with hour-based metering — paid tiers are concurrent-only" framing matching FAQ entry 5 closing line.
+
+### Audit findings — clean against founder conventions
+
+- (a) 100% bit-identical bar: no "99.X%" / "match rate" / percentage framing anywhere. Fingerprint claim "Same engine, same fingerprints, same fidelity" (line 510) carries no qualifier.
+- (b) ADR-004 tier values present and correct:
+  - Manual ladder: Solo $79 / Team $249 / Agency $699 ✓
+  - API ladder: Starter $149 / Builder $499 / Scale $1,499 ✓
+  - Enterprise from $4,000/mo annual-only ✓
+  - All `overagePerHourUsd: null` for paid tiers (concurrent-only) ✓
+  - All `hoursLabel: 'Unlimited'` for paid tiers (no monthly hours meter) ✓
+- (c) Two-ladder structure: `manualTiers` + `apiTiers` filter cleanly via `tierType` field; `Trial pack` + Self-hosted are separate sections.
+- (d) BYOK gating per locked matrix: `aiAgent: false` for Manual + Solo Manual + Team Manual + API Starter; `aiAgent: true` + `llmBilling: 'byok_or_bundled'` for Agency Manual + API Builder + API Scale; `'byok_or_bundled_custom'` for Enterprise. Self-hosted SKUs documented as BYOK-only in line 495 prose.
+- (e) Self-hosted matrix differentiators: software updates / archetype updates / source code access / custom archetype dev / source escrow / support tier / minimum term — license-differentiator pattern, not hardware-deployment-choices ✓.
+- (f) Self-hosted prices: Solo $1,000/mo / Pro $2,000/mo / Enterprise from $4,000/mo annual-only ✓.
+- (g) Trial pack mechanics: $2.99 one-time / 299¢ credit / 14-day window / 1 concurrent / once per account ✓.
+
+### NOT modified per founder's prior categorization
+
+- Mini-FAQ teaser entry "Why concurrent caps and not hours?" (line 515-522) — references "720 browser-hours/month and a surprise overage bill" as the SCENARIO under hours-with-overage (the bad model being argued against). Same comparative-framing pattern as faq.astro:20 which founder explicitly said to keep. Correct as-is.
+- "Hours: Unlimited" row across all paid tiers — founder previously surfaced as "visually muddy non-blocking observation; not redlined." Kept.
+
+### How verified
+
+- `npm run typecheck`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 563/563 passing.
+- Dev server (marketing-site, port 4321): `/pricing` renders 200; grep against rendered HTML confirms no stale markers (`Starter equivalent rate`, `0.18/hr (Starter`, `Solo 4`, `Browser-hour cap` all absent); new framing (`concurrent-hour`, `ADR-003`, `trial-pack mechanic`) all present.
+
+### Files modified
+
+- `apps/marketing-site/src/data/pricing.ts`
+- `apps/marketing-site/src/pages/pricing.astro`
+
+### Next
+
+Continuing per never-stop rule. PRIORITY 1 (FAQ + pricing redline batch) complete. Moving to PRIORITY 2: /usage analytics real-data wiring.

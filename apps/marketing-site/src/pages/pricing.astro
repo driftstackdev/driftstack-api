@@ -93,11 +93,12 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
             Trial pack — {fmtUsd(trialPack.monthlyUsd)}, one-time
           </h2>
           <p class="mt-3 max-w-prose text-slate-600">
-            {TRIAL_PACK.creditCents}¢ of pre-paid credit, decremented at the
-            Starter equivalent rate ({TRIAL_PACK.meterRate}). Yields ~{TRIAL_PACK.hoursApprox}
-            hours of iPhone Safari sessions. {TRIAL_PACK.concurrent} concurrent session,
+            {TRIAL_PACK.creditCents}¢ of pre-paid credit, decremented at
+            {TRIAL_PACK.meterRate}. Yields ~{TRIAL_PACK.hoursApprox} hours of
+            iPhone Safari sessions. {TRIAL_PACK.concurrent} concurrent session,
             {TRIAL_PACK.windowDays}-day window from purchase, used once per
-            account.
+            account. The trial pack is the only Driftstack product with
+            hour-based metering — paid tiers are concurrent-only.
           </p>
           <ul class="mt-4 space-y-1 text-sm text-slate-600">
             <li class="flex gap-2">
