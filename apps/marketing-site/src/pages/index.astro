@@ -78,15 +78,20 @@ await session.destroy();`}</code></pre>
         Bit-identical.
       </p>
       <p class="mt-6 max-w-prose text-lg text-slate-700">
-        Validated against the full reference iPhone Safari (iOS 18.7 / Safari
-        26.4) fingerprint surface. Every measured signal returns the exact
-        reference value — not approximate, not within tolerance. Match or P0
-        finding.
+        Detection systems read hundreds of small signals — screen size, font
+        rendering, GPU details, JavaScript timing — to identify what kind
+        of device a visitor is. Driftstack matches every one of those signals
+        against a real iPhone, exactly.
+      </p>
+      <p class="mt-4 max-w-prose text-base text-slate-600">
+        Validated against the reference iPhone 16 Pro on iOS 18.7 / Safari
+        26.4. Every measured signal returns the exact reference value — not
+        approximate, not within tolerance. A signal either matches the
+        reference, or we treat the gap as a launch-blocker bug.
       </p>
       <p class="mt-3 max-w-prose text-sm text-slate-500">
-        Reference: iPhone 16 Pro / iOS 18.7 / Safari 26.4. Methodology + signal
-        categories at <code class="font-mono">/trust/cumulative-rig</code>
-        (when it lands).
+        Methodology + signal categories at
+        <code class="font-mono">/trust/cumulative-rig</code> (when it lands).
       </p>
     </div>
   </section>
@@ -124,11 +129,13 @@ await session.destroy();`}</code></pre>
             Pay per concurrent session, not per call.
           </h2>
           <p class="mt-6 max-w-prose text-base text-slate-600">
-            Concurrent caps are the only meter. Run as many hours as you want
-            within your concurrent cap. No per-call markup, no per-element
-            fees, no hourly metering that turns idle browsers into surprise
-            overage charges. Read 50 elements or navigate 200 pages on the
-            same session — same line item, same price.
+            <strong class="text-slate-900">Concurrent</strong> = how many
+            sessions run at the same time, like browser tabs you'd have open
+            at once. That's the only thing we meter. Within your concurrent
+            cap, run as many hours as you want — no per-call markup, no
+            per-element fees, no hourly metering that turns idle browsers
+            into surprise overage charges. Read 50 elements or navigate 200
+            pages on the same session — same line item, same price.
           </p>
         </div>
         <div class="flex flex-col gap-1 border-l-4 border-oxblood-700 pl-6">
@@ -158,10 +165,11 @@ await session.destroy();`}</code></pre>
           </h2>
           <p class="mt-6 max-w-prose text-base text-slate-600">
             Customer data hosted in the EU — compute, database, object storage.
-            Session traffic egresses through proxies you control, not ours.
-            We never see your destination URLs. Session execution may run in
-            supported regions outside the EU under SCCs and the EU-US Data
-            Privacy Framework. Full sub-processor list at
+            Session traffic exits through <strong class="text-slate-900">your</strong>
+            network egress (the proxies and VPNs you configure to reach target
+            sites), not ours. We never see your destination URLs. Session
+            execution may run in supported regions outside the EU under SCCs
+            and the EU-US Data Privacy Framework. Full sub-processor list at
             <a href="/trust/sub-processors" class="text-oxblood-700 underline"
               >/trust/sub-processors</a
             >.
@@ -245,7 +253,7 @@ await session.destroy();`}</code></pre>
             </li>
             <li class="flex gap-2">
               <span class="text-oxblood-700">→</span>
-              <span>Bundled LLM or BYOK for AI-driven sessions (Builder+)</span>
+              <span>Bundled LLM, or bring your own API key from OpenAI / Anthropic, for AI-driven sessions (Builder+)</span>
             </li>
           </ul>
           <a href="/pricing#api" class="btn-secondary mt-6 inline-flex">See API pricing →</a>

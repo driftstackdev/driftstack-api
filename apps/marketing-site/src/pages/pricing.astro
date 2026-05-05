@@ -93,12 +93,16 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
             Trial pack — {fmtUsd(trialPack.monthlyUsd)}, one-time
           </h2>
           <p class="mt-3 max-w-prose text-slate-600">
-            {TRIAL_PACK.creditCents}¢ of pre-paid credit, decremented at
-            {TRIAL_PACK.meterRate}. Yields ~{TRIAL_PACK.hoursApprox} hours of
-            iPhone Safari sessions. {TRIAL_PACK.concurrent} concurrent session,
-            {TRIAL_PACK.windowDays}-day window from purchase, used once per
-            account. The trial pack is the only Driftstack product with
-            hour-based metering — paid tiers are concurrent-only.
+            $2.99 buys ~{TRIAL_PACK.hoursApprox} hours of iPhone Safari
+            sessions to evaluate the platform. {TRIAL_PACK.concurrent}
+            concurrent session, {TRIAL_PACK.windowDays}-day window from
+            purchase, used once per account.
+          </p>
+          <p class="mt-2 max-w-prose text-sm text-slate-500">
+            Mechanically: {TRIAL_PACK.creditCents}¢ of pre-paid credit
+            decremented at {TRIAL_PACK.meterRate}. The trial pack is the only
+            Driftstack product with hour-based metering — paid tiers are
+            concurrent-only.
           </p>
           <ul class="mt-4 space-y-1 text-sm text-slate-600">
             <li class="flex gap-2">
@@ -135,6 +139,13 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         <span class="text-slate-500"
           >Run as many hours as you want within your concurrent cap.</span
         > No surprise overage bills.
+      </p>
+      <p class="mt-4 max-w-prose text-sm text-slate-600">
+        <strong class="text-slate-900">Concurrent sessions</strong> = how many
+        sessions you can run at the same time, like browser tabs you'd have
+        open at once. The number after each tier (e.g. "3 concurrent") is the
+        cap; everything else (hours, calls, page navigations) is unmetered
+        within the cap.
       </p>
     </div>
   </section>
@@ -270,6 +281,15 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         <p class="mt-3 max-w-prose text-slate-600">
           SDK in your language. Programmatic session creation. Concurrent caps that
           scale with your fleet.
+        </p>
+        <p class="mt-3 max-w-prose text-sm text-slate-500">
+          You'll see <strong class="text-slate-700">"BYOK"</strong> in the tier
+          tables below — it means
+          <em>bring your own API key</em> from a model provider (OpenAI or
+          Anthropic) for the optional AI agent feature. Your model spend goes
+          to your provider account; Driftstack doesn't markup or proxy.
+          Bundled LLM is the alternative — Driftstack proxies + bills on one
+          invoice. Detail below the tier tables.
         </p>
       </div>
 

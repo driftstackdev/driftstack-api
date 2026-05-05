@@ -29,7 +29,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'How does concurrent metering work?',
-        a: 'Concurrency cap is the only meter on paid tiers. Solo Manual = 1 concurrent / Team Manual = 3 / Agency Manual = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom. Within your cap, run as many session-hours as you want — same cap covers a 5-minute session and a 6-hour session. The cap controls peak parallelism; monthly throughput is whatever your concurrent fleet runs continuously. No monthly meter, no per-hour metering, no overage line items. The trial pack ($2.99) is the one exception — it uses time-based decrement at $0.18/hr against the prepaid 299¢ credit.',
+        a: '<strong>Concurrent</strong> = the number of sessions you can run at the same time, like browser tabs you\'d have open at once. That\'s the only thing we meter on paid tiers. Per-tier caps: Solo Manual = 1 concurrent / Team Manual = 3 / Agency Manual = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom. Within your cap, run as many session-hours as you want — same cap covers a 5-minute session and a 6-hour session. The cap controls peak parallelism; monthly throughput is whatever your concurrent fleet runs continuously. No monthly meter, no per-hour metering, no overage line items. The trial pack ($2.99) is the one exception — it uses time-based decrement at $0.18/hr against the prepaid 299¢ credit.',
       },
       {
         q: 'What happens when I hit my concurrent cap?',
@@ -109,7 +109,7 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'What is the bundled LLM?',
-        a: 'Driftstack\'s optional AI agent feature drives sessions with a large language model — useful for natural-language test specifications, automated screenshot diffing, or LLM-driven flow exploration. On Builder / Scale / Enterprise, you can either bring your own Anthropic API key (BYOK, billed by Anthropic directly — generate at <a href="https://console.anthropic.com" class="text-oxblood-700 underline" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>) or use the bundled rate (billed by Driftstack at a markup over the published per-token price).',
+        a: 'Driftstack\'s optional AI agent feature drives sessions with a large language model — useful for natural-language test specifications, automated screenshot diffing, or LLM-driven flow exploration. On Builder / Scale / Enterprise, you have two options: <strong>BYOK</strong> (bring your own API key — get one from your model provider, e.g. <a href="https://console.anthropic.com" class="text-oxblood-700 underline" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>; your model spend goes to your provider account, not Driftstack), or use the bundled rate (Driftstack proxies the calls and bills you on one invoice at a markup over the published per-token price).',
       },
       {
         q: 'What\'s the BYOK markup?',

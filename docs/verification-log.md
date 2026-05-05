@@ -12042,3 +12042,43 @@ Each working-tree edit is small + targeted. Founder reviews via `git diff apps/m
 ### Next
 
 V-215 — post-force-push verification (Agent 2 surfaces post-founder execution; runs sanity-check commands per V-212 runbook).
+
+## V-214b — V-214 Tier 3 redlines applied + committed
+
+### What
+
+Founder redline pass complete. All 9 V-214 working-tree edits approved. Two BYOK economics framing redlines applied on top:
+
+1. **Pricing /pricing.astro EDIT 3** — added "Your model spend goes to your provider account; Driftstack doesn't markup or proxy." sentence to clarify BYOK economics.
+2. **/faq.astro EDIT 2** — within the BYOK first-mention parenthetical, replaced "billed by the provider directly" with "your model spend goes to your provider account, not Driftstack" for symmetric framing.
+
+Single coordinated commit per founder's allowance — cleaner V-log than three separate per-page commits.
+
+### Why
+
+V-214 audit + drafts surfaced for redline. Founder approved minimal-not-rewrite approach + the 9 targeted edits. Two redlines tightened the BYOK economics framing so customers reading the BYOK description understand the cost structure (no Driftstack markup; provider-direct billing) — not just the operational mechanics (who proxies / who invoices). Same redline applied symmetrically on /pricing and /faq.
+
+### Files
+
+- `apps/marketing-site/src/pages/index.astro` — 4 edits (cumulative-rig visitor-first + P0→launch-blocker, metering tab analogy, compliance egress parenthetical, API audience BYOK→plain words).
+- `apps/marketing-site/src/pages/pricing.astro` — 3 edits (trial-pack human framing first + mechanics demoted, positioning band concurrent definition, API tier section BYOK teaser with economics framing).
+- `apps/marketing-site/src/pages/faq.astro` — 2 edits (concurrent metering visitor-first definition, BYOK first-mention with economics framing).
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npx astro check` on marketing-site: 0 errors / warnings / hints.
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Marketing dev server running at http://localhost:4321/ for founder visual verification (background process; restart with `npm run dev --workspace apps/marketing-site -- --host 0.0.0.0 --port 4321` if needed).
+
+### Notes
+
+- Single coordinated commit picked over three per-page commits per founder's "your call" allowance. Cleaner V-log; easier to review the cross-page consistency of the concurrent definition + BYOK economics framing as one unit.
+- Density-audit trio (`/index`, `/pricing`, `/faq`) now uses the same tab-analogy definition of "concurrent" — cross-page consistency for visitors moving between pages.
+- BYOK economics framing now consistent on /pricing tier section + /faq bundled-LLM answer. The ABOVE-table /pricing teaser is the highest-leverage placement (visitor scanning tier tables sees the explanation before the acronym appears in feature cells).
+
+### Next
+
+V-215 — post-force-push verification (Agent 2 surfaces post-founder execution; runs sanity-check commands per V-212 runbook), OR potentially V-214c follow-up Tier 3 audit cycle on POSSIBLE SURFACES 1–3 (`/index` hero copy, `/pricing` tier-table row labels, `/index` Why-Driftstack + Built-for-two-audiences sections) — Agent 2 judgment.
