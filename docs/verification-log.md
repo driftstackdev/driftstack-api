@@ -10359,3 +10359,54 @@ The MOCK doesn't implement the capture worker (that's BS Automate / WebKit fork 
 ### Next
 
 V-180+ next: per founder direction, generate-from-planning-docs continuation. Expanded queue PRIORITY A (customer dashboard live-data wiring V-180-V-183), PRIORITY B (onboarding flow), PRIORITY C (admin panel live-data wiring), PRIORITY D (production-readiness), PRIORITY E (generate-from-planning-docs). ~30-40hr of substantive Tier 1 work runway.
+
+---
+
+## V-180 — customer-dashboard /sessions live wiring (PRIORITY A.1)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder PRIORITY A.1 (~2-3hr). customer-dashboard `/sessions` progressive-enhancement against `/v1/sessions`. Mirrors V-171 `/usage` pattern: SSG renders mock for instant paint; inline `<script>` fetches live data + replaces lists; banners cover no-token / fetch-error / empty-data states.
+
+### What changed
+
+`apps/customer-dashboard/src/pages/sessions.astro`:
+
+- Frontmatter: read `import.meta.env.PUBLIC_API_BASE_URL` (defaults to `http://localhost:3000`).
+- Wrapper `<div data-page="sessions">` for JS scoping.
+- Hidden banner element (`data-banner`) above the active sessions list — JS reveals + populates per state.
+- Active + Recent lists annotated with:
+  - `data-list="active"` / `data-list="recent"` — JS targets the `<ul>` directly to replace innerHTML.
+  - `data-empty="active"` / `data-empty="recent"` — empty-state `<p>` toggled visible/hidden by JS.
+  - `data-count="active"` / `data-count="recent"` — count span replaced by JS.
+- Inline `<script is:inline>` (~140 lines):
+  - Reads `localStorage.ds_web_session_token`.
+  - Fetches `apiBaseUrl + '/v1/sessions'` with bearer auth + `credentials: 'include'`.
+  - Splits response into active (status not in [destroyed, errored]) + recent (status in [destroyed, errored]).
+  - Calls `renderList(sessions, kind)` which builds `<li>` HTML matching the SSG-rendered shape (status badges, archetype, profile abbreviation, action links, duration calc on recent).
+  - Banners: no-token / fetch-error / no-sessions-yet states.
+  - HTML escaping for user-controlled values (session id, archetype, profile id) to prevent XSS — even though the values come from a trusted backend, defensive escape matches the cost-of-mistake calculus.
+
+### What's still mock
+
+- **Concurrent meter** (concurrent_now / concurrent_limit). MOCK_USAGE_SUMMARY's `concurrent_now` field doesn't exist in the live `/v1/usage` response shape. Computing live `concurrent_now` from the sessions response (count where status in [creating, ready, busy]) is straightforward; the limit needs the tier mapped through TIER_CONCURRENT_SESSION_LIMITS (V-156). Refinement queued as separate V-NNN — V-180 stays scoped to the sessions list itself.
+- **MOCK_SESSIONS** — still rendered at SSG. Stays as fallback when token is absent or fetch fails. Matches the V-171 fallback semantic.
+
+### How verified
+
+- `npm run typecheck`: clean across all 11 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Dev server: `astro dev --host 0.0.0.0 --port 4324` starts; `curl http://localhost:4324/sessions` returns 200; HTML grep confirms all `data-*` markers present + banner copy ("Sign in to see live sessions") visible in the inline script source.
+
+### Files modified
+
+- `apps/customer-dashboard/src/pages/sessions.astro`
+
+### Next
+
+V-181 next: customer-dashboard /webhooks live wiring (~2-3hr).

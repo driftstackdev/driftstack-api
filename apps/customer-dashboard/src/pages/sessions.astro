@@ -2,7 +2,18 @@
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 import { MOCK_SESSIONS, MOCK_USAGE_SUMMARY } from '../data/mocks.ts';
 
-// V-134 scaffolding. Real reads against /v1/sessions land later.
+// V-180 — progressive-enhancement wiring against /v1/sessions, mirrors
+// the V-171 /usage pattern. SSG renders mock; inline <script> replaces
+// the lists with live data when ds_web_session_token is in localStorage.
+// Banners cover: no-token / fetch-error / live-loaded states.
+//
+// Concurrent meter still reads MOCK_USAGE_SUMMARY for now — V-180 is
+// scoped to the sessions list. /v1/usage.concurrent_now isn't in the
+// current API shape; computing from the live sessions response (active
+// = count of status in [creating, ready, busy]) would change the
+// shape of what concurrent_now means (tier cap is per-tier static; the
+// LIVE side needs the tier-aware cap from /v1/usage.tier mapped to
+// TIER_CONCURRENT_SESSION_LIMITS). Lands as separate refinement V-NNN.
 
 function fmtIso(iso: string | null): string {
   if (iso === null) return '—';
@@ -33,10 +44,23 @@ const activeSessions = MOCK_SESSIONS.filter(
 const recentClosedSessions = MOCK_SESSIONS.filter(
   (s) => s.status === 'destroyed' || s.status === 'errored',
 );
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 ---
 
 <DashboardLayout title="Sessions">
-  <div class="mx-auto max-w-5xl px-6 py-10">
+  <div class="mx-auto max-w-5xl px-6 py-10" data-page="sessions">
+    <!--
+      V-180 — banner is hidden by default (mock-rendered SSG path);
+      progressive-enhance script reveals + populates on fetch
+      success/failure / no-token state.
+    -->
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    ></div>
+
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
         <p class="text-sm text-slate-500">
@@ -81,92 +105,90 @@ const recentClosedSessions = MOCK_SESSIONS.filter(
     <!-- Active sessions -->
     <section>
       <h2 class="mb-4 text-lg font-semibold text-slate-900">
-        Active ({activeSessions.length.toString()})
+        Active (<span data-count="active">{activeSessions.length.toString()}</span>)
       </h2>
-      {
-        activeSessions.length === 0 ? (
-          <p class="text-sm text-slate-500">No sessions running.</p>
-        ) : (
-          <ul class="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
-            {activeSessions.map((session) => (
-              <li class="flex items-start justify-between gap-6 px-6 py-4">
-                <div class="min-w-0">
-                  <div class="flex items-center gap-3">
-                    <p class="font-mono text-sm font-medium text-slate-900">
-                      {session.id}
-                    </p>
-                    <span
-                      class:list={[
-                        'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
-                        STATUS_BADGE_CLASS[session.status],
-                      ]}
-                    >
-                      {session.status}
-                    </span>
-                  </div>
-                  <p class="mt-1 text-xs text-slate-500">
-                    Archetype <code class="font-mono">{session.archetype}</code> · started{' '}
-                    {fmtIso(session.created_at)}
-                    {session.profile_id !== null && (
-                      <>
-                        {' · profile '}
-                        <code class="font-mono">{session.profile_id.slice(0, 16)}…</code>
-                      </>
-                    )}
-                  </p>
-                </div>
-                <div class="flex shrink-0 flex-col items-end gap-2">
-                  <a href={`#detail-${session.id}`} class="text-sm text-oxblood-700 hover:underline">
-                    Open
-                  </a>
-                  <a href={`#destroy-${session.id}`} class="text-sm text-red-700 hover:underline">
-                    Destroy
-                  </a>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )
-      }
+      <p data-empty="active" class:list={['text-sm text-slate-500', activeSessions.length === 0 ? '' : 'hidden']}>
+        No sessions running.
+      </p>
+      <ul
+        data-list="active"
+        class:list={['divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white', activeSessions.length === 0 ? 'hidden' : '']}
+      >
+        {activeSessions.map((session) => (
+          <li class="flex items-start justify-between gap-6 px-6 py-4">
+            <div class="min-w-0">
+              <div class="flex items-center gap-3">
+                <p class="font-mono text-sm font-medium text-slate-900">{session.id}</p>
+                <span
+                  class:list={[
+                    'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
+                    STATUS_BADGE_CLASS[session.status],
+                  ]}
+                >
+                  {session.status}
+                </span>
+              </div>
+              <p class="mt-1 text-xs text-slate-500">
+                Archetype <code class="font-mono">{session.archetype}</code> · started{' '}
+                {fmtIso(session.created_at)}
+                {session.profile_id !== null && (
+                  <>
+                    {' · profile '}
+                    <code class="font-mono">{session.profile_id.slice(0, 16)}…</code>
+                  </>
+                )}
+              </p>
+            </div>
+            <div class="flex shrink-0 flex-col items-end gap-2">
+              <a href={`#detail-${session.id}`} class="text-sm text-oxblood-700 hover:underline">
+                Open
+              </a>
+              <a href={`#destroy-${session.id}`} class="text-sm text-red-700 hover:underline">
+                Destroy
+              </a>
+            </div>
+          </li>
+        ))}
+      </ul>
     </section>
 
     <!-- Recent closed -->
     <section class="mt-12">
       <h2 class="mb-4 text-lg font-semibold text-slate-900">
-        Recent ({recentClosedSessions.length.toString()})
+        Recent (<span data-count="recent">{recentClosedSessions.length.toString()}</span>)
       </h2>
-      {
-        recentClosedSessions.length === 0 ? (
-          <p class="text-sm text-slate-500">No recent sessions.</p>
-        ) : (
-          <ul class="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
-            {recentClosedSessions.map((session) => (
-              <li class="flex items-start justify-between gap-6 px-6 py-4">
-                <div class="min-w-0">
-                  <div class="flex items-center gap-3">
-                    <p class="font-mono text-sm text-slate-700">{session.id}</p>
-                    <span
-                      class:list={[
-                        'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
-                        STATUS_BADGE_CLASS[session.status],
-                      ]}
-                    >
-                      {session.status}
-                    </span>
-                  </div>
-                  <p class="mt-1 text-xs text-slate-500">
-                    Ran {fmtDuration(session.duration_ms)} · destroyed{' '}
-                    {fmtIso(session.destroyed_at)}
-                  </p>
-                </div>
-                <a href={`#replay-${session.id}`} class="text-sm text-oxblood-700 hover:underline">
-                  View recording
-                </a>
-              </li>
-            ))}
-          </ul>
-        )
-      }
+      <p data-empty="recent" class:list={['text-sm text-slate-500', recentClosedSessions.length === 0 ? '' : 'hidden']}>
+        No recent sessions.
+      </p>
+      <ul
+        data-list="recent"
+        class:list={['divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white', recentClosedSessions.length === 0 ? 'hidden' : '']}
+      >
+        {recentClosedSessions.map((session) => (
+          <li class="flex items-start justify-between gap-6 px-6 py-4">
+            <div class="min-w-0">
+              <div class="flex items-center gap-3">
+                <p class="font-mono text-sm text-slate-700">{session.id}</p>
+                <span
+                  class:list={[
+                    'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
+                    STATUS_BADGE_CLASS[session.status],
+                  ]}
+                >
+                  {session.status}
+                </span>
+              </div>
+              <p class="mt-1 text-xs text-slate-500">
+                Ran {fmtDuration(session.duration_ms)} · destroyed{' '}
+                {fmtIso(session.destroyed_at)}
+              </p>
+            </div>
+            <a href={`#replay-${session.id}`} class="text-sm text-oxblood-700 hover:underline">
+              View recording
+            </a>
+          </li>
+        ))}
+      </ul>
     </section>
 
     <p class="mt-8 text-xs text-slate-500">
@@ -175,4 +197,174 @@ const recentClosedSessions = MOCK_SESSIONS.filter(
       the V-040 R2 mirror ships.
     </p>
   </div>
+
+  <!--
+    V-180 — progressive-enhancement script. Reads ds_web_session_token
+    from localStorage, fetches /v1/sessions, replaces the active +
+    recent lists. Falls back to mock-rendered lists when token is
+    absent or fetch fails. Mirrors V-171 /usage pattern.
+  -->
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="sessions"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+
+      const STATUS_BADGE_CLASS = {
+        creating: 'bg-amber-50 text-amber-700',
+        ready: 'bg-emerald-50 text-emerald-700',
+        busy: 'bg-blue-50 text-blue-700',
+        destroyed: 'bg-slate-100 text-slate-600',
+        errored: 'bg-red-50 text-red-700',
+      };
+
+      function fmtIso(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+      function fmtDuration(ms) {
+        if (ms === null || ms === undefined) return '—';
+        const sec = Math.floor(ms / 1000);
+        const min = Math.floor(sec / 60);
+        const hr = Math.floor(min / 60);
+        if (hr > 0) return hr + 'h ' + (min % 60) + 'm';
+        if (min > 0) return min + 'm ' + (sec % 60) + 's';
+        return sec + 's';
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c],
+        );
+      }
+
+      function activeLi(s) {
+        const profileFrag =
+          s.profile_id !== null && s.profile_id !== undefined
+            ? ' · profile <code class="font-mono">' + escapeHtml(s.profile_id.slice(0, 16)) + '…</code>'
+            : '';
+        return (
+          '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
+          '<div class="min-w-0">' +
+          '<div class="flex items-center gap-3">' +
+          '<p class="font-mono text-sm font-medium text-slate-900">' +
+          escapeHtml(s.id) +
+          '</p>' +
+          '<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
+          (STATUS_BADGE_CLASS[s.status] || '') +
+          '">' +
+          escapeHtml(s.status) +
+          '</span>' +
+          '</div>' +
+          '<p class="mt-1 text-xs text-slate-500">Archetype <code class="font-mono">' +
+          escapeHtml(s.archetype) +
+          '</code> · started ' +
+          escapeHtml(fmtIso(s.created_at)) +
+          profileFrag +
+          '</p></div>' +
+          '<div class="flex shrink-0 flex-col items-end gap-2">' +
+          '<a href="#detail-' +
+          escapeHtml(s.id) +
+          '" class="text-sm text-oxblood-700 hover:underline">Open</a>' +
+          '<a href="#destroy-' +
+          escapeHtml(s.id) +
+          '" class="text-sm text-red-700 hover:underline">Destroy</a>' +
+          '</div></li>'
+        );
+      }
+
+      function recentLi(s) {
+        const durationMs =
+          s.created_at && s.destroyed_at
+            ? new Date(s.destroyed_at).getTime() - new Date(s.created_at).getTime()
+            : null;
+        return (
+          '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
+          '<div class="min-w-0">' +
+          '<div class="flex items-center gap-3">' +
+          '<p class="font-mono text-sm text-slate-700">' +
+          escapeHtml(s.id) +
+          '</p>' +
+          '<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
+          (STATUS_BADGE_CLASS[s.status] || '') +
+          '">' +
+          escapeHtml(s.status) +
+          '</span>' +
+          '</div>' +
+          '<p class="mt-1 text-xs text-slate-500">Ran ' +
+          escapeHtml(fmtDuration(durationMs)) +
+          ' · destroyed ' +
+          escapeHtml(fmtIso(s.destroyed_at)) +
+          '</p></div>' +
+          '<a href="#replay-' +
+          escapeHtml(s.id) +
+          '" class="text-sm text-oxblood-700 hover:underline">View recording</a>' +
+          '</li>'
+        );
+      }
+
+      function renderList(selector, sessions, kind) {
+        const ul = root.querySelector('[data-list="' + kind + '"]');
+        const empty = root.querySelector('[data-empty="' + kind + '"]');
+        const count = root.querySelector('[data-count="' + kind + '"]');
+        if (count) count.textContent = sessions.length.toString();
+        if (sessions.length === 0) {
+          ul.classList.add('hidden');
+          empty.classList.remove('hidden');
+          return;
+        }
+        empty.classList.add('hidden');
+        ul.classList.remove('hidden');
+        const liFn = kind === 'active' ? activeLi : recentLi;
+        ul.innerHTML = sessions.map(liFn).join('');
+      }
+
+      if (!token) {
+        showBanner('Sign in to see live sessions. Showing preview data below.');
+        return;
+      }
+
+      fetch(apiBaseUrl + '/v1/sessions', {
+        headers: { authorization: 'Bearer ' + token },
+        credentials: 'include',
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+        .then((body) => {
+          const sessions = body.data || [];
+          const active = sessions.filter(
+            (s) => s.status !== 'destroyed' && s.status !== 'errored',
+          );
+          const recent = sessions.filter(
+            (s) => s.status === 'destroyed' || s.status === 'errored',
+          );
+          renderList('active', active, 'active');
+          renderList('recent', recent, 'recent');
+          if (sessions.length === 0) {
+            showBanner('No sessions yet — create one to get started.');
+          }
+        })
+        .catch((err) => {
+          showBanner(
+            "Couldn't load live sessions (" +
+              (err && err.message ? err.message : 'network error') +
+              '). Showing preview data below.',
+          );
+        });
+    })();
+  </script>
 </DashboardLayout>
