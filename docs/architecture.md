@@ -182,6 +182,39 @@ Sub-processor list locked per V-052 / AGENTS.md. Adding a vendor outside this li
 
 Zod schemas in `@driftstack/api-types` are paired with `@asteasolutions/zod-to-openapi` to produce the OpenAPI 3.1 spec at runtime. Spec served at `/openapi.json`; Swagger UI at `/docs`. The spec is the contract for SDK consumers; a deliberately committed copy lives elsewhere when material to SDK regeneration.
 
+## Lifecycle event dispatcher (V-202c / V-202b)
+
+Customer-facing events that pair an audit-log entry with a transactional email go through `AccountLifecycleService` (`apps/server/src/services/account-lifecycle.ts`). One `emit(accountId, event)` call site fans out into:
+
+1. Account row lookup (`AccountLifecycleRepo.findForLifecycle`) — resolves email + per-event dedup flags.
+2. Audit-log emit (when applicable for the event kind) via `AccountAuditService.record`.
+3. Email-preference opt-out check via `EmailPreferencesService.shouldSend`.
+4. Atomic dedup mark (when applicable) — e.g. `accounts.first_failure_email_sent_at` for `session.failed.first`.
+5. `EmailService` send.
+
+Best-effort by contract: errors during dispatch are caught + logged warn, never propagate to the caller. The calling service's primary responsibility (handling a Stripe webhook, a session failure, a checkout completion) must never be blocked on lifecycle work.
+
+Event kinds wired today (`LifecycleEvent` discriminated union):
+
+- `session.failed.first` — V-202c. Emitted from `SessionsService.runWithFailureCapture`. One-shot per account (column-based dedup).
+- `subscription.tier_changed` — V-202b. Emitted from `StripeWebhooksService.handleSubscriptionUpsert` / `handleSubscriptionDeleted`. Audit + email; short-circuits on no-op transitions.
+- `subscription.trial_pack_purchased` — V-202b. Emitted from `StripeWebhooksService.handleCheckoutCompleted` (mode=payment).
+- `subscription.trial_pack_expired` — V-202d. Emitted from the `trial_pack.expired` `scheduled_jobs` handler.
+
+Adding a new lifecycle event = extend the discriminated union, add a handler in the service, optionally extend `AccountLifecycleServiceConfig` for any new templating URLs, and add an opt-out preference key in `OptOutableEmailEvent` if the email should be customer-suppressible.
+
+## Scheduled jobs (V-202d)
+
+`scheduled_jobs` table holds time-shifted background work. `ScheduledJobsService` (`apps/server/src/services/scheduled-jobs.ts`) owns the lifecycle:
+
+- `enqueue(jobType, accountId?, payload, runAt, dedupOnAccountAndType?)` — append (with optional dedup against pending rows for the same account + job_type).
+- `processTick(now)` — atomic claim (`SELECT … FOR UPDATE SKIP LOCKED` in a CTE → `UPDATE … RETURNING`), dispatch each claimed row to its registered handler, mark complete / retry-with-exponential-backoff / failed-permanently. Multi-replica safe: concurrent workers across processes never claim the same row.
+- `register(jobType, handler)` — handler registry keyed by `job_type`. Unhandled `job_type` values mark the row failed with operator-visible error.
+
+First registered handler: `trial_pack.expired` → delegates to `accountLifecycleService.emit({ kind: 'subscription.trial_pack_expired' })`. Future cron-shaped jobs (subscription renewal reminders, end-of-month rollups, cleanup jobs) reuse the same table by adding a `job_type` discriminator + handler — no new table.
+
+The `setInterval(processTick, ...)` poller is constructed but not yet auto-started in bootstrap (covers both `ScheduledJobsService` and `ValidationHarnessService`); founder approval pending on cadence. Tests + manual `processTick` calls work today.
+
 ## Driver abstraction
 
 ```ts
@@ -224,6 +257,11 @@ Webhooks:
 - **D-029** — Hand-rolled Stripe HTTP client (no `stripe` npm SDK dep).
 - **D-030** — Inbound Stripe webhook idempotency via `processed_stripe_events` PK.
 - **D-031** — `session.failed` first-failure-only emission semantic.
+
+Lifecycle + scheduled jobs:
+
+- **V-202c / V-202b / V-202d** — `AccountLifecycleService` is the single dispatcher for paired audit + email customer lifecycle events. `ScheduledJobsService` is the generic table-backed cron worker (V-173-pattern extension); first consumer is trial-pack expiry. Per-event-kind tests in `tests/unit/account-lifecycle.test.ts` + `tests/unit/scheduled-jobs.test.ts`. Per-flow integration tests in `tests/integration/trial-pack-expiry.test.ts`.
+- **V-216 / V-224 / V-225 / V-226** — All 13 `AccountAuditAction` enum values now have emit sites: 4 in `auth-flows.ts` (V-224), 2 in `api-keys.ts` (V-216), 2 in `sessions.ts` (V-216), 2 in `profiles.ts` (V-225), 2 in `webhooks.ts` (V-225), 1 in `account-lifecycle.ts` (V-226 → relocated by V-202b). No deferred wires remain.
 
 Infrastructure + observability:
 

@@ -13106,3 +13106,67 @@ V-202 deferred-wires queue is now fully closed (V-202b email wires + V-202c firs
 - **Drizzle-kit reinstatement** (TD-002 — V-228 follow-up; auto-update journal on future migrations).
 - **V-184b Tier 3 onboarding visual UX** (founder-redline; DRAFT-only, no commit per autopilot guardrails).
 - **V-215 force-push verification** (waits on founder firing V-207/V-212 runbook).
+
+## V-229 — V-216 deferred-wires close-out + architecture docs cross-refs
+
+### What
+
+Two doc-only updates closing follow-ups from V-202b/c/d:
+
+1. **V-216 close-out audit.** Programmatically grep-confirmed all 13 `AccountAuditAction` enum values have at least one emit site in production code:
+
+   | enum value                  | emit site                                                 |
+   | --------------------------- | --------------------------------------------------------- |
+   | `account.email_verified`    | `auth-flows.ts:352`                                       |
+   | `account.login`             | `auth-flows.ts:389`                                       |
+   | `account.logout`            | `auth-flows.ts:552`                                       |
+   | `account.password_changed`  | `auth-flows.ts:510`                                       |
+   | `api_key.minted`            | `api-keys.ts:162`                                         |
+   | `api_key.revoked`           | `api-keys.ts:234`                                         |
+   | `session.created`           | `sessions.ts:215`                                         |
+   | `session.destroyed`         | `sessions.ts:423`                                         |
+   | `profile.created`           | `profiles.ts:146`                                         |
+   | `profile.deleted`           | `profiles.ts:190`                                         |
+   | `subscription.tier_changed` | `account-lifecycle.ts:200` (V-202b relocation from V-226) |
+   | `webhook_endpoint.created`  | `webhooks.ts:242`                                         |
+   | `webhook_endpoint.deleted`  | `webhooks.ts:284`                                         |
+
+   No deferred wires remain. The "deferred-wires queue" referenced in V-216 / V-224 / V-225 / V-226 V-log entries is sealed.
+
+2. **Architecture docs cross-refs** for V-202c / V-202b / V-202d additions:
+   - New section in `docs/architecture.md` "Lifecycle event dispatcher (V-202c / V-202b)" — explains the `AccountLifecycleService.emit(accountId, event)` shape, the 5-step dispatch sequence, the best-effort contract, and the discriminated union of currently-wired event kinds. Forward-reference for "how to add a new lifecycle event."
+   - New section "Scheduled jobs (V-202d)" — explains the `scheduled_jobs` table + `ScheduledJobsService`'s enqueue / processTick / register surface; documents the multi-replica safety guarantee and the trial-pack expiry as the first consumer; flags the unstarted setInterval poller as a known gap pending founder approval on cadence.
+   - New "Lifecycle + scheduled jobs" subsection in the "Decisions (cross-reference)" block — points at V-202c/V-202b/V-202d for the dispatcher pattern and explicitly seals V-216 close-out.
+
+### Why
+
+Per autopilot guardrails: V-216 close-out audit was explicitly listed as a remaining time-permitting item. This V-entry IS that explicit close-out. Future-you reading the V-log queue should see one anchor entry confirming the queue is empty rather than having to re-trace V-224/V-225/V-226 and grep.
+
+The architecture cross-refs serve the same audience: when V-202b moved the V-226 audit emit out of `stripe-webhooks.ts`, an architecture-reader who knew "where does subscription.tier_changed audit get emitted?" would have to re-discover the answer in the new location. The doc update makes the dispatcher pattern discoverable from the top-level architecture document instead of buried in service-file comments.
+
+### Files
+
+- `docs/architecture.md` — added "Lifecycle event dispatcher" + "Scheduled jobs" sections; added cross-reference subsection.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 717 / 717 passing across 74 files (pure docs; no test changes).
+- pre-push hook (V-223) will exercise on push.
+
+### Notes
+
+- The 13-row enum table in this V-entry was generated from a `grep -rn "action: '"` audit. If a future migration adds a new enum value, its emit site should land in the same commit (Class A enum extension is meant to be additive — adding without an emit is an immediate gap). This V-entry establishes the convention.
+- Did not yet update `docs/architecture/customer-dashboard-stack.md` "Related docs" with the lifecycle service pointer. The lifecycle service is server-internal infrastructure; it surfaces to the dashboard only via the `/v1/account/audit-log` route which is already listed there. Skipped to avoid speculative linking.
+
+### Next
+
+Per autopilot direction:
+
+- **Drizzle-kit reinstatement** (TD-002).
+- **Poller startup wiring** (V-218 + V-202d).
+- **V-184b Tier 3 onboarding visual UX** (DRAFT-only).
+- **V-215 force-push verification** (waits on founder).
