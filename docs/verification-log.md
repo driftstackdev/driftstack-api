@@ -10113,3 +10113,66 @@ V-175 closes the gap: add a `pretest` hook to the root `package.json` that runs 
 ### Next
 
 V-176 next: status page scaffolding (PRIORITY 7, ~2-3hr).
+
+---
+
+## V-176 — Status page backend scaffolding (PRIORITY 7 backend half)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder PRIORITY 7. Customer-facing status page surface — distinct from `/ready` (k8s/orchestration liveness) which is internal infra. `/v1/status` is the public-status-page consumable.
+
+V-176 lands the backend; Tier 3 frontend draft (marketing-site /status.astro) deferred per Tier 3 cadence (working-tree draft → founder review → commit).
+
+### What changed
+
+`apps/server/src/routes/status.ts` (new):
+
+- `registerStatusRoutes(app, { readinessChecks })` registers `GET /v1/status`.
+- Reuses the existing `ReadinessCheck[]` from app.ts that `/ready` already runs (postgres / redis / r2 in production); no separate health-check infrastructure.
+- Per-component check: runs the readiness probe with its existing timeout. ok → `'operational'`; failed/timeout → `'degraded'`. `'major_outage'` is reserved for a future incidents service to mark wide-blast-radius outages (placeholder string in the type union; not derivable from readiness probes alone).
+- Aggregate overall: any major_outage → major_outage; any degraded → degraded; else operational.
+- Response includes `recent_incidents: []` placeholder array — populated by a future incidents service (tracked as a follow-on; not blocking V-176).
+- No auth required (status pages are public).
+- `Cache-Control: public, max-age=30` header — Cloudflare or similar can cache; load is bounded.
+
+`apps/server/src/lib/app.ts`:
+
+- Imports + calls `registerStatusRoutes(app, { readinessChecks: deps.readinessChecks ?? [] })` after the legal routes.
+
+`apps/server/tests/integration/status.test.ts` (new) — 3 tests:
+
+- 200 returns operational status with no readiness checks wired (test fixture).
+- Public — no auth required (no Authorization header still returns 200).
+- Sets Cache-Control: public, max-age=30.
+
+### What's NOT in V-176
+
+- **Frontend status page** at `apps/marketing-site/src/pages/status.astro`. Tier 3 visual surface; per founder cadence rule, drafts stay in working tree until founder review approves the visual shape. Will land as separate V-NNN once the visual draft surfaces (drafts the page using mock data, fetches `/v1/status` client-side, renders pill-style component status indicators).
+- **Incidents service** (table + admin endpoints to create/manage incidents). Future workstream; the `recent_incidents` field today is `[]` placeholder. When the incidents service lands, it populates the field.
+- **Custom timeouts per component**. Today every component uses the same 1500ms timeout. Per-component override is wired (the ReadinessCheck.timeoutMs field is already optional); production may tune.
+
+### How verified
+
+- `npm run typecheck`: clean across all 10 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Targeted: `npm test -- status.test.ts`: 3/3 passing.
+- Full suite: `npm test`: 616/616 (was 613; +3 new).
+
+### Files added
+
+- `apps/server/src/routes/status.ts`
+- `apps/server/tests/integration/status.test.ts`
+
+### Files modified
+
+- `apps/server/src/lib/app.ts`
+
+### Next
+
+V-177 next: SDK versioning doc (PRIORITY 9, ~1hr).

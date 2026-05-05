@@ -34,6 +34,7 @@ import requestIdPlugin from '../middleware/request-id.js';
 import { registerErrorHandler } from '../middleware/error-handler.js';
 import { registerSessionRoutes } from '../routes/sessions.js';
 import { registerAdminRoutes } from '../routes/admin.js';
+import { registerStatusRoutes } from '../routes/status.js';
 import { registerOpenApiRoutes } from '../routes/openapi.js';
 import { registerWebhookRoutes } from '../routes/webhooks.js';
 import { registerAdminAccountsRoutes } from '../routes/admin-accounts.js';
@@ -197,6 +198,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
   registerAdminAuditLogRoutes(app, { audit: deps.adminAuditService });
   registerLegalRoutes(app, deps.legalService);
+  // V-176 — public-facing status endpoint. Reuses the readinessChecks
+  // already supplied to /ready; no additional wiring needed at deps
+  // level. /v1/status has no auth (public status pages are public).
+  registerStatusRoutes(app, { readinessChecks: deps.readinessChecks ?? [] });
   if (deps.authFlowsService !== undefined) {
     registerAuthRoutes(app, { service: deps.authFlowsService });
   }
