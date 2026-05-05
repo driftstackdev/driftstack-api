@@ -1,7 +1,7 @@
 // V-127 mock implementation. Deterministic outputs so tests can
 // assert exact shape without RNG flakiness; same inputs ALWAYS
-// produce the same outputs (matches CLAUDE.md mock-driver discipline:
-// "deterministic; same inputs → same outputs").
+// produce the same outputs (matches the mock-driver discipline used
+// elsewhere in the repo: "deterministic; same inputs → same outputs").
 //
 // Phase 3 ships a non-mock generator behind the same interface.
 

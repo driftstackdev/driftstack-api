@@ -131,7 +131,7 @@ See `docs/architecture.md` for the full request lifecycle (V-087 sync).
 
 ## Contributing
 
-This is a small project with direct push-to-main on internal commits; the verification log (`docs/verification-log.md`) and decisions log (`docs/decisions.md`) capture the rationale behind every substantive change. External contributions go through standard pull-request flow on GitHub. See `CLAUDE.md` for the full operational discipline (test standards, marketing-copy review cadence, decision-authority levels).
+This is a small project with direct push-to-main on internal commits; the verification log (`docs/verification-log.md`) and decisions log (`docs/decisions.md`) capture the rationale behind every substantive change. External contributions go through standard pull-request flow on GitHub.
 
 ## License
 

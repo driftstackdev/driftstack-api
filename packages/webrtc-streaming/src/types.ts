@@ -1,9 +1,9 @@
 // V-149 — WebRTC streaming types.
 //
-// CLAUDE.md "Out of scope" notes: "WebRTC streaming layer — may land
-// inside the GUI workstream if scope allows; otherwise polling-based
-// screenshots for the first iteration." V-149 lands the seam so
-// future work can drop in behind a stable interface.
+// Streaming is out of scope for v1 — may land inside the GUI workstream
+// if scope allows, otherwise polling-based screenshots ship first.
+// V-149 lands the seam so future work can drop in behind a stable
+// interface.
 //
 // Use case: live-view a session running on a Driftstack-controlled
 // browser. Screenshots-on-demand work today (apps/server/src/routes/

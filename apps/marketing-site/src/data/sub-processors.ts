@@ -1,10 +1,10 @@
 // Sub-processor register — public surface for /trust/sub-processors.
 //
 // Mirrors the DPA Annex 3 entries from `docs/legal/dpa.md` (this repo)
-// plus the sub-processor lock from CLAUDE.md (V-052 revision). When
-// the DPA Annex 3 changes, this file updates in the same commit; the
-// /trust page is a customer-facing transparency artifact, not a
-// separate canonical source.
+// plus the locked sub-processor list (V-052 revision). When the DPA
+// Annex 3 changes, this file updates in the same commit; the /trust
+// page is a customer-facing transparency artifact, not a separate
+// canonical source.
 //
 // Changes to this list trigger Art 28(2) sub-processor amendment
 // notice (30-day notice to customers) per the DPA. Adding or removing

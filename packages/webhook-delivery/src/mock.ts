@@ -2,7 +2,7 @@
 //
 // Deterministic outputs so tests can assert exact shape without
 // timing flakiness. Same inputs always produce the same DeliveryRecord
-// shapes (matches CLAUDE.md mock-driver discipline).
+// shapes (matches the mock-driver discipline used elsewhere in the repo).
 //
 // Real production implementation in apps/server/src/services/webhooks.ts
 // + webhook-worker.ts. Mock here lets future-system consumers exercise

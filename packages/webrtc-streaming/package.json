@@ -1,7 +1,7 @@
 {
   "name": "@driftstack/webrtc-streaming",
   "version": "0.0.1",
-  "description": "WebRTC streaming layer interface + mock implementation. Out-of-scope per CLAUDE.md (may land inside the GUI workstream if scope allows; otherwise polling-based screenshots for the first iteration).",
+  "description": "WebRTC streaming layer interface + mock implementation. Out-of-scope for the first iteration; may land inside the GUI workstream if scope allows, otherwise polling-based screenshots for v1.",
   "license": "UNLICENSED",
   "private": true,
   "type": "module",

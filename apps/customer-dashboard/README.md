@@ -2,7 +2,7 @@
 
 The signed-in customer dashboard for Driftstack — `app.driftstack.dev`.
 
-> **Status:** scaffolding only as of V-099 + V-108. Customer-visible copy + visual treatments on the onboarding flow + management pages are pending founder review per CLAUDE.md's marketing-copy + brand-surface cadence. The project init, design tokens, layout, and route shells are committed; per-page copy lands as Tier 3 drafts surfaced to the founder.
+> **Status:** scaffolding only as of V-099 + V-108. Customer-visible copy + visual treatments on the onboarding flow + management pages are pending founder review per the standing marketing-copy + brand-surface cadence. The project init, design tokens, layout, and route shells are committed; per-page copy lands as Tier 3 drafts surfaced to the founder.
 
 ## Stack
 

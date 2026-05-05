@@ -11593,3 +11593,71 @@ This commit itself is the verification of the commit-attribution part. The commi
 ### Next
 
 V-206 — audit + clean public-surface AI references (~1-2hr Tier 1).
+
+## V-206 — audit + clean public-surface AI references
+
+### What
+
+Full repo audit for AI / Claude / Anthropic mentions, then a cleanup pass on the customer-facing surfaces.
+
+**Audit findings — three categories:**
+
+1. **Allowed (internal docs, kept untouched)**: `docs/architecture/`, `docs/adr/`, `docs/decisions.md`, `docs/verification-log.md`, `docs/onboarding-for-future-developers.md`, `docs/founder-action-queue.md`, `docs/network-architecture.md`, `docs/entity-org-transition.md`, `docs/contract-audit-2026-05-03.md`, `docs/locked-decisions.md`. Internal architecture/policy docs per the V-205 policy clause "internal documentation can reference tooling for engineering accuracy."
+
+2. **Allowed (legitimate sub-processor)**: Anthropic mentions in `apps/marketing-site/src/pages/{faq,pricing,security}.astro`, `docs/legal/{dpa,privacy-policy,acceptable-use-policy,terms-of-service,definitions,README}.md`, and `apps/marketing-site/src/data/sub-processors.ts`. These describe the BYO-bundled-LLM customer feature where customers bring their own Anthropic API key — product surface, not development tooling. Per the V-205 policy carve-out.
+
+3. **Cleanup required (7 customer-facing/public-package surfaces)**: 7 files mentioned the literal filename `CLAUDE.md` in a place visible to outside readers. Cleaned up.
+
+**Cleanup pass:**
+
+- `README.md` — removed "See `CLAUDE.md` for the full operational discipline" sentence from the Contributing section. The verification log + decisions log links remain.
+- `apps/customer-dashboard/README.md` — replaced "per CLAUDE.md's marketing-copy + brand-surface cadence" with "per the standing marketing-copy + brand-surface cadence."
+- `packages/webrtc-streaming/package.json` — rewrote the description (visible on npm registry) to drop the CLAUDE.md reference.
+- `packages/webrtc-streaming/src/types.ts` — header comment rewrite.
+- `packages/webhook-delivery/src/mock.ts` — replaced "matches CLAUDE.md mock-driver discipline" with "matches the mock-driver discipline used elsewhere in the repo."
+- `packages/behavioural-simulation/src/mock.ts` — same pattern.
+- `apps/marketing-site/src/data/sub-processors.ts` — replaced "sub-processor lock from CLAUDE.md" with "locked sub-processor list."
+
+After cleanup, `grep -rln "CLAUDE.md" --include="*.md" --include="*.ts" ...` outside `docs/` and `CLAUDE.md` itself returns zero hits.
+
+### Surfaced for founder decision (NOT executed unilaterally)
+
+The file is **literally named `CLAUDE.md`** at repo root. Visible on github.com/driftstackdev/driftstack-api file listing — the filename itself is an AI-tooling tell. Open question: rename to `AGENTS.md` (emerging cross-tool standard, recognized by Claude Code, Cursor, Codex, et al.) OR keep the current name?
+
+- **Pro rename**: completes the V-205 policy intent. Customer-facing repo no longer signals tool choice via filename.
+- **Pro keep**: 25 internal-doc references update. AGENTS.md is becoming convention-shared but isn't yet universal; CLAUDE.md is still the most-recognized name in some tools.
+
+Surfaced as V-NNN candidate (renumbered into the queue if accepted). Not executed in V-206 because the rename is a non-trivial scope shift across 25 files + the file itself, and "presentation, not capability disclosure" is the founder's framing — the call is theirs.
+
+### Why
+
+Follow-on to V-205. V-205 stopped the bleeding (no new commits attribute to AI tooling); V-206 pulls existing customer-facing AI-tooling references out of the repo. Customers landing on the GitHub repo or npm page should see Driftstack-the-product, not the development tooling.
+
+### Files
+
+- `README.md`
+- `apps/customer-dashboard/README.md`
+- `packages/webrtc-streaming/package.json`
+- `packages/webrtc-streaming/src/types.ts`
+- `packages/webhook-delivery/src/mock.ts`
+- `packages/behavioural-simulation/src/mock.ts`
+- `apps/marketing-site/src/data/sub-processors.ts`
+- `docs/verification-log.md` (this entry)
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 662 / 662 passing across 68 files.
+- `grep -rln "CLAUDE.md" --include="*.md" --include="*.ts" --include="*.tsx" --include="*.astro" --include="*.go" --include="*.py" --include="*.json" --include="*.sql" | grep -v node_modules | grep -v dist/ | grep -v "^docs/" | grep -v "^CLAUDE.md$"`: zero hits.
+
+### Notes
+
+- Anthropic mentions in `apps/marketing-site/src/pages/{faq,pricing,security}.astro` describe the BYO bundled LLM feature (customer-facing capability). Kept per the V-205 policy carve-out.
+- `docs/legal/*.md` "AI-generated baseline draft" markers kept — those are explicit working-tree warnings to the founder + counsel that the docs need legal review before publication. They are NOT meant to survive into the published, counsel-approved final docs; counsel will rewrite/approve before any customer sees them.
+- The CLAUDE.md filename itself is the remaining tell. Surfaced for founder decision rather than unilaterally renamed.
+
+### Next
+
+V-207 — founder force-push history rewrite (founder action; Agent 2 surfaces the filter-repo command + impact summary).
