@@ -9890,3 +9890,81 @@ them so the service can run against real DB at deploy time.
 
 V-173 (next): Postgres-backed webhook delivery (founder Decision 2,
 ~3-4hr).
+
+---
+
+## V-173 — DurableWebhookDeliveryService (Decision 2 — Postgres-backed)
+
+### Date
+
+2026-05-05
+
+### Goal
+
+Founder Decision 2 (locked): V-164 InMemoryWebhookDelivery satisfies dev/test interface; production needs Postgres-backed implementation. V-173 lands it.
+
+### What changed
+
+`apps/server/src/db/migrations/0015_webhook_delivery_attempts.sql` (new):
+
+- Per-attempt log table: `webhook_delivery_attempts` (id, delivery_id FK CASCADE, attempt_number, completed_at_ms bigint, response_status, response_excerpt, duration_ms, outcome, error_message).
+- Index on `(delivery_id, attempt_number)` for ordered history fetch.
+- Existing `webhook_deliveries.attempts` integer column stays (count); the new table holds the FULL HISTORY so the package's `DeliveryRecord.attempts` array can be populated.
+
+`apps/server/src/db/schema.ts`:
+
+- New `webhookDeliveryAttempts` Drizzle table mirroring the migration.
+- `WebhookDeliveryAttemptRow` + `NewWebhookDeliveryAttemptRow` types.
+
+`apps/server/src/services/durable-webhook-delivery.ts` (new — 460 lines):
+
+- `BACKOFF_MS_BY_ATTEMPT` constant: 1/5/15/30/60min (mirrors V-164).
+- `DEFAULT_TIMEOUT_MS = 10_000`, `DEFAULT_MAX_ATTEMPTS = 5`.
+- `signPayload(secret, body, emittedAtSec)`: HMAC-SHA256 hex.
+- `createDurableWebhookDelivery(deps)` factory returns `{ deliveries, dlq, processTick }` matching the V-164 InMemory shape.
+- **DurableWebhookDeliveryService** implements `WebhookDeliveryService`:
+  - `enqueue`: INSERT INTO webhook_deliveries (status='pending'); package's `DeliveryPayload` (eventId/eventType/emittedAtSec/body) maps to (event_id text col, event_type enum col, jsonb { body, emittedAtSec }).
+  - `get`: SELECT by id + load attempts from webhook_delivery_attempts.
+  - `list`: SELECT with optional status filter + cursor pagination (newest-first by created_at desc, id desc; cursor lookup translates to `created_at < cursor.created_at`).
+  - `replay`: UPDATE status='pending', next_attempt_at=now, delivered_at=null.
+- **DurableDlqManager** implements `DlqManager`:
+  - `list`: SELECT WHERE status='dlq' INNER JOIN webhook_endpoints (for accountId scope filter); newest-first.
+  - `get`: same join, single row.
+  - `requeue`: UPDATE status='pending', next_attempt_at=now.
+  - `discard`: DELETE FROM webhook_deliveries WHERE id=?; FK CASCADE on attempts cleans up the attempt log automatically.
+- **DurableWebhookWorker** with `processTick({ batchSize, leaseDurationMs })`:
+  - Atomic claim transaction: SELECT due rows FOR UPDATE SKIP LOCKED + UPDATE status='in_flight' in one txn so concurrent workers each get a disjoint slice.
+  - For each claimed row: signPayload → fetch with timeout → record attempt row → update delivery (success → status='delivered'; max attempts reached → status='dlq'; otherwise → status='pending', next_attempt_at += backoff).
+
+### Coexistence note (documented inline in V-173 file header)
+
+`apps/server/src/services/webhooks.ts` is the existing inline implementation (production today). V-173 lands the package-interface-conformant Postgres-backed implementation as the FORWARD path. Both services CAN coexist; in practice each delivery is owned by one or the other (the existing service owns deliveries it created, the new service owns deliveries it created).
+
+Migration to fully replace `webhooks.ts` is a separate future V-NNN — needs soak time + integration tests against real DB before flipping the customer-facing call sites.
+
+### What's NOT in V-173
+
+- **Bootstrap wiring** — DurableWebhookDeliveryService is not yet constructed in `apps/server/src/lib/bootstrap.ts`. The customer-facing webhook routes still use the existing `webhooks.ts` service. Bootstrap wiring lands when call sites switch (separate V-NNN, after integration test coverage).
+- **Real-DB integration tests** — the service-level contract is type-checked against the package interfaces; runtime behavior is testable against an actual Postgres instance via the e2e Playwright harness. Adding e2e coverage for the new service is queued (separate V-NNN with the integration-test infrastructure expansion per founder PRIORITY 2 in V-166's surface).
+- **Lease-expiry recovery** — workers crashing mid-deliver leave deliveries stuck in `in_flight`. Recovery via a separate sweep (`UPDATE WHERE status='in_flight' AND updated_at < now-leaseDurationMs RETURNING ...`) is queued for V-NNN; not blocking V-173.
+
+### How verified
+
+- `npm run typecheck`: clean across all 10 workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` pass).
+- `npm test`: 608/608 (unchanged — no test files touched; runtime behavior depends on real Postgres which the unit test suite doesn't exercise).
+
+### Files added
+
+- `apps/server/src/db/migrations/0015_webhook_delivery_attempts.sql`
+- `apps/server/src/services/durable-webhook-delivery.ts`
+
+### Files modified
+
+- `apps/server/src/db/migrations/meta/_journal.json`
+- `apps/server/src/db/schema.ts`
+
+### Next
+
+V-174 (next): scope architecture split (founder Decision 1 from this round — account_owner + driftstack_internal_admin, ~2-3hr including migration script + tests).

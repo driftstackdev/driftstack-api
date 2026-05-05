@@ -619,6 +619,41 @@ export const webhookDeliveries = pgTable(
   ],
 );
 
+// V-173 — per-attempt log for webhook deliveries.
+// DurableWebhookDeliveryService writes one row per attempt; the
+// package's DeliveryRecord.attempts array reads from this table.
+// Existing apps/server/src/services/webhooks.ts does not write here
+// (different service; coexists during migration window).
+export const webhookDeliveryAttempts = pgTable(
+  'webhook_delivery_attempts',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    deliveryId: uuid('delivery_id')
+      .notNull()
+      .references(() => webhookDeliveries.id, { onDelete: 'cascade' }),
+    /** 1-indexed attempt number within the delivery's attempt history. */
+    attemptNumber: integer('attempt_number').notNull(),
+    /** Unix-ms timestamp when this attempt completed. Wide enough for ms precision. */
+    completedAtMs: bigint('completed_at_ms', { mode: 'number' }).notNull(),
+    /** HTTP status if a response came back; null on transport error / timeout. */
+    responseStatus: integer('response_status'),
+    /** First ~200 chars of response body for debugging. */
+    responseExcerpt: text('response_excerpt'),
+    /** Wall-clock duration of this attempt in milliseconds. */
+    durationMs: integer('duration_ms').notNull(),
+    /** 'success' | 'http_error' | 'transport_error' | 'timeout' (per package contract). */
+    outcome: text('outcome').notNull(),
+    /** Free-text error reason when outcome != 'success'. */
+    errorMessage: text('error_message'),
+  },
+  (t) => [index('webhook_delivery_attempts_delivery_idx').on(t.deliveryId, t.attemptNumber)],
+);
+
+export type WebhookDeliveryAttemptRow = typeof webhookDeliveryAttempts.$inferSelect;
+export type NewWebhookDeliveryAttemptRow = typeof webhookDeliveryAttempts.$inferInsert;
+
 // admin_audit_log records every admin action (tier change, suspend,
 // webhook delivery replay/requeue, rate-limit override). Append-only:
 // the service exposes only an insert path and a paginated read; there
