@@ -11454,3 +11454,50 @@ GENERATE-2 from the V-201 ack queue. Customer onboarding currently fires verify-
 ### Next
 
 V-203 — webhook event catalog + customer-facing `/api/webhook-events` docs page (GENERATE-3, ~2-3hr Tier 1).
+
+## V-203 — webhook event catalog (GENERATE-3)
+
+### What
+
+New `docs/api/webhook-events.md` (~250 lines after prettier reflow). Single-source reference for every webhook event type the control plane emits or will emit.
+
+Three-state status notation: `[LIVE]` (declared in the enum + production emitter wired), `[DECLARED]` (declared in the enum but no emitter), `[PLANNED]` (not yet in the enum). Honest empirical labelling — quota events are flagged DECLARED rather than LIVE because the enum has them but no service fires them today, which is exactly the kind of drift V-203 is supposed to catch.
+
+Coverage:
+
+- 5 currently-declared event types fully documented: `session.completed`, `session.failed`, `api_key.revoked` (LIVE) + `quota.warning_80pct`, `quota.exceeded` (DECLARED).
+- 11 PLANNED event types from the V-201 ack queue surfaced with rationale.
+- Common envelope shape (id / type / account_id / emitted_at / data).
+- Headers documentation: `Driftstack-Signature`, `Driftstack-Event-Id`, `Driftstack-Delivery-Attempt`.
+- Retry policy: 5 attempts at 1m/5m/30m/2h/12h, then DLQ.
+- Idempotency note (dedup on evt\_<uuid>).
+- Verification helper cross-refs across all three SDKs.
+- Failure modes + delivery posture.
+
+### Why
+
+GENERATE-3 from the V-201 ack queue. Customers integrating webhooks today have no centralised reference for what fires when + the payload shape; the V-090 session.failed semantic, the V-173 durable delivery wiring, the DLQ admin page, and the SDK signature verifiers all live in different places. V-203 collapses the surface into a single source-of-truth doc that the customer-facing `/api/webhook-events` Tier 3 visual page can render from.
+
+The honesty about DECLARED vs LIVE is intentional. `quota.warning_80pct` and `quota.exceeded` are visible in the WebhookEventTypeSchema enum (and have been since V-002), so customers can register for them on `POST /v1/webhooks` — but the server never fires them. That's a footgun. The doc names the gap so customers don't quietly subscribe to events that won't ever arrive.
+
+### Files
+
+- `docs/api/webhook-events.md` — new file.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after prettier reformatted the table).
+- `npm test`: 657 / 657 passing across 67 files (no test changes — pure docs).
+
+### Notes
+
+- The DECLARED event quota wiring gap (no emitter for `quota.warning_80pct` / `quota.exceeded`) is now documented in two places: this doc, and the WebhookEventTypeSchema source comment (TODO add — small follow-up). Wiring the emitter requires a usage-threshold check on the metering hot path; queued as V-NNN.
+- The PLANNED list intentionally excludes `webhook_endpoint.created` / `webhook_endpoint.deleted` from the immediate roadmap rationale — they're listed as available but not pushed. Recursion risk is technically managed (the delete-self event would fire to other endpoints, not the deleted one), but customer demand is unclear pre-launch.
+- Cross-references are concrete (file paths + line ranges where useful). Avoids the "see related docs" hand-wave that fails to actually link reader to the answer.
+- The customer-facing Tier 3 marketing-site page that renders this catalog ships separately when the marketing site grows a `/docs/api/*` section. This V-entry is the engineering scaffolding behind it (push-to-main per standard convention); the Tier 3 visual surface goes through the marketing-cadence redline flow.
+
+### Next
+
+V-204 — customer email notification preferences (GENERATE-4, ~2-3hr Tier 1).
