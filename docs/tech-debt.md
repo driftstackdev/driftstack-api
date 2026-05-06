@@ -90,6 +90,29 @@ See V-231 V-log entry for the full reasoning chain.
 
 ---
 
+## TD-003 — V-184b onboarding visual UX polish
+
+**Source:** V-235 (founder direction 2026-05-06: "V-184b copy redline NOT done now").
+**Status:** Deferred post-launch.
+
+**Current state:** Functional onboarding flow exists (signup → verify-email → welcome → select-tier → first-session) per V-184a / V-217. All five pages work end-to-end against the V-049 / V-202c lifecycle. The visual UX is V-184a Tier-1 scaffolding placeholder copy + minimal styling.
+
+**Why deferred:**
+
+- V-184b is visual polish ON TOP of working onboarding, not a launch blocker.
+- Tier-3 copy decisions need founder energy + focus; founder is currently directing all attention at the GUI client launch arc (V-235 onwards).
+- Onboarding visual polish benefits from real customer feedback signals — better to ship as-is, observe which sections customers stumble on, then redline with data rather than guesses.
+
+**Revisit triggers:**
+
+1. First paying customers report onboarding friction in a specific page (e.g. "I didn't understand which tier to pick"). The data points to which page needs the redline first.
+2. Conversion-rate telemetry on the onboarding funnel (post-launch ETA) shows a clear drop-off step.
+3. Founder bandwidth opens up post-launch and the polish becomes the highest-leverage T3 work.
+
+**Implementation when revived:** The proposal at `docs/proposals/post-launch/v-184b-onboarding-visual-scope.md` carries the per-page scope outline + `[FOUNDER COPY]` markers. Founder reds in copy + structure picks → autopilot lands per-page Astro edits as V-184b-1 through V-184b-5. Estimated mechanical-edit effort: ~30min per page once founder copy is set.
+
+---
+
 ## How to add an entry
 
 1. The deferral decision must already be recorded in a V-log entry.

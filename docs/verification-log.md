@@ -13386,3 +13386,46 @@ V-228 verification flag cleared. Founder cleared all autopilot ack queue items. 
 - **V-184b Tier 3 onboarding visual UX** — waits on founder copy redline of `docs/proposals/v-184b-onboarding-visual-scope.md`.
 - **V-215 force-push verification** — waits on founder firing V-207/V-212 runbook.
 - Whatever launch-readiness work surfaces from the founder next.
+
+## V-235 — V-184b deferred post-launch (Decision 1 of 3 from founder direction 2026-05-06)
+
+### What
+
+Per founder direction 2026-05-06: V-184b onboarding visual UX redline is **deferred post-launch**. Three actions:
+
+1. **Moved** `docs/proposals/v-184b-onboarding-visual-scope.md` → `docs/proposals/post-launch/v-184b-onboarding-visual-scope.md` (new `post-launch/` subdirectory). Establishes the convention: proposals that aren't launch-blocking but are still tracked live in `post-launch/`.
+2. **Added** `TD-003 — V-184b onboarding visual UX polish` entry to `docs/tech-debt.md`. References the proposal; lists revisit triggers (real-customer onboarding friction, conversion-funnel drop-off telemetry, post-launch founder bandwidth).
+3. **Existing onboarding pages stay as-is** for launch. V-184a Tier-1 functional scaffolding is the launch surface; V-184b polish is purely additive.
+
+### Why
+
+Founder reasoning preserved:
+
+- V-184b is visual polish on top of functional onboarding (V-217 wired the actual flows; functionality works).
+- Tier-3 copy decisions need founder energy + focus; current focus is GUI client launch arc (V-236 onwards).
+- Better to ship onboarding as-is, gather signal from real customers, iterate post-launch with feedback.
+
+The deferral is bounded — proposal stays under version control, revisit triggers documented, mechanical-edit estimate noted (~30min per page once founder copy is set). No risk of "we'll get to it" rot.
+
+### Files
+
+- `docs/proposals/post-launch/v-184b-onboarding-visual-scope.md` — moved from `docs/proposals/v-184b-onboarding-visual-scope.md` (no content change).
+- `docs/tech-debt.md` — added TD-003 entry.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 717 / 717 passing across 74 files (pure docs).
+- pre-push hook (V-223 + V-231 backstops): clean on push.
+
+### Notes
+
+- The `docs/proposals/post-launch/` subdirectory is new. Convention: top-level `docs/proposals/` is for launch-blocking decisions awaiting founder ack; `docs/proposals/post-launch/` is for tracked-but-deferred proposals. After founder ack on a top-level proposal, it either moves to `docs/proposals/archive/` (decision applied; proposal historical) or to `post-launch/` (decision is "do this later"). This V-entry establishes the post-launch flavor.
+- `td-002-drizzle-kit-reinstatement.md` remains at top-level even though it's RESOLVED — keeping it there as an example of "proposal → resolution path" until a separate housekeeping pass moves it to archive. Not load-bearing; small tidy follow-up.
+
+### Next
+
+V-236 — apps/gui-client audit (Phase 1 of GUI client launch arc per founder direction 2026-05-06).
