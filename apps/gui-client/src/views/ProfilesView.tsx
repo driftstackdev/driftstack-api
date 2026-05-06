@@ -15,6 +15,14 @@ import { DriftstackError } from '../lib/client';
 
 const REFRESH_MS = 5000;
 
+// V-238 — only one customer-pickable archetype today. When V-136-style
+// expansion lands more archetypes (e.g. iPhone 17 Pro / iOS 19), surface
+// them here. The form preselects this single option; the select control
+// is disabled until there are 2+ choices.
+const KNOWN_ARCHETYPES: ReadonlyArray<{ id: string; label: string }> = [
+  { id: 'iphone16pro_ios18_7_safari26_4', label: 'iPhone 16 Pro / iOS 18.7 / Safari 26.4' },
+];
+
 interface Profile {
   id: string;
   name: string;
@@ -45,6 +53,10 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
     error: null,
   });
   const [busyId, setBusyId] = useState<string | null>(null);
+  // V-238 — create-form modal state. Lives here (not lifted to App.tsx)
+  // because every other ProfilesView interaction is local; the modal
+  // is a transient overlay scoped to this view's lifecycle.
+  const [createOpen, setCreateOpen] = useState(false);
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!client) {
@@ -114,8 +126,12 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
           >
             {state.loading ? 'Refreshing…' : 'Refresh'}
           </button>
-          {/* New-profile flow lands later — needs a name + archetype picker dialog. */}
-          <button type="button" className="btn-primary" disabled aria-disabled="true">
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => setCreateOpen(true)}
+            disabled={state.loading}
+          >
             New profile
           </button>
         </div>
@@ -176,6 +192,179 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
           Refreshed {new Date(state.refreshedAt).toLocaleTimeString()} · auto-refresh 5s
         </p>
       )}
+
+      {createOpen && (
+        <CreateProfileModal
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => {
+            setCreateOpen(false);
+            void refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// V-238 — Create-profile modal. Form has name (required, 1-120 chars),
+// optional description (max 500 chars per server schema), and archetype
+// picker (currently single-option; expands when V-136+ adds more).
+// On submit: calls client.profiles.create(); closes + refreshes parent
+// on success; surfaces server error inline on failure (e.g. tier-cap
+// reached, duplicate name).
+function CreateProfileModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+}): JSX.Element {
+  const { client } = useSettings();
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [archetype, setArchetype] = useState(KNOWN_ARCHETYPES[0]?.id ?? '');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // ESC-to-close — matches the macOS Cmd+W / standard modal convention.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape' && !submitting) {
+        e.preventDefault();
+        onClose();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, submitting]);
+
+  async function handleSubmit(e: React.FormEvent): Promise<void> {
+    e.preventDefault();
+    if (!client) {
+      setError('No client configured.');
+      return;
+    }
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      setError('Name is required.');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await client.profiles.create({
+        name: trimmed,
+        archetype,
+        ...(description.trim().length > 0 ? { description: description.trim() } : {}),
+      });
+      onCreated();
+    } catch (err) {
+      setError(friendlyError(err));
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-profile-title"
+      onClick={(e) => {
+        // Click the backdrop (not the modal itself) closes — unless mid-submit.
+        if (e.target === e.currentTarget && !submitting) onClose();
+      }}
+    >
+      <div className="w-full max-w-md rounded-md border border-surface-divider bg-surface-raised p-5 shadow-lg">
+        <header className="mb-4 flex items-center justify-between">
+          <h3 id="create-profile-title" className="text-base font-medium text-ink-primary">
+            New profile
+          </h3>
+          <button
+            type="button"
+            className="btn-secondary text-xs"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </header>
+
+        <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="section-label">Name</span>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={120}
+              minLength={1}
+              required
+              autoFocus
+              disabled={submitting}
+              className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+              placeholder="my-recurring-workflow"
+            />
+            <span className="text-xs text-ink-muted">
+              Used to identify the profile in lists + when attaching sessions.
+            </span>
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="section-label">Description (optional)</span>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={500}
+              rows={2}
+              disabled={submitting}
+              className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+              placeholder="What this identity slot is for"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="section-label">Archetype</span>
+            <select
+              value={archetype}
+              onChange={(e) => setArchetype(e.target.value)}
+              disabled={submitting || KNOWN_ARCHETYPES.length < 2}
+              className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+            >
+              {KNOWN_ARCHETYPES.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+            {KNOWN_ARCHETYPES.length < 2 && (
+              <span className="text-xs text-ink-muted">
+                Single archetype available today — expands as new device targets land.
+              </span>
+            )}
+          </label>
+
+          {error !== null && (
+            <p className="text-xs text-status-error" role="alert">
+              {error}
+            </p>
+          )}
+
+          <div className="mt-2 flex items-center justify-end gap-2">
+            <button type="button" className="btn-secondary" onClick={onClose} disabled={submitting}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={submitting || name.trim().length === 0}
+            >
+              {submitting ? 'Creating…' : 'Create profile'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

@@ -13569,3 +13569,57 @@ The endpoint shape is intentionally narrow: it's the customer self-profile dashb
 
 V-238 — Profile create form modal in `apps/gui-client` (P0 #1 from V-236 audit; ~1-2hr Tier-1; independent of V-237).
 V-239 — Tier-aware enforcement display in `apps/gui-client/src/views/SessionsView.tsx` consuming the new V-237 endpoint via SDK regen (P0 #2 from V-236 audit; ~2-3hr Tier-1).
+
+## V-238 — GUI profile create form modal (P0 #1)
+
+### What
+
+`apps/gui-client/src/views/ProfilesView.tsx` gains a working create-profile flow. The previously-stubbed "New profile" button (V-184a-era `aria-disabled="true"`) now opens an inline modal with name + description + archetype fields. On submit the form calls the existing `client.profiles.create()` SDK accessor, refreshes the list on success, and surfaces server errors inline on failure (tier-cap reached, duplicate name, validation errors).
+
+**Modal shape:**
+
+- Name: required, 1–120 chars (matches server's `CreateProfileRequest` schema), autofocus on open.
+- Description: optional, max 500 chars, `<textarea>` rows=2.
+- Archetype: select control, currently single option (`iphone16pro_ios18_7_safari26_4` per V-136 `LOCKED_ARCHETYPE_ID`); disabled when `KNOWN_ARCHETYPES.length < 2` with helper text "Single archetype available today — expands as new device targets land". When V-136-style archetype expansion lands, adding entries to `KNOWN_ARCHETYPES` automatically enables the picker.
+- Footer: Cancel + Create profile (submit) buttons. Submit disabled while `name.trim().length === 0` or while submitting.
+- Backdrop click closes (unless mid-submit). ESC closes (unless mid-submit). Both gated on `!submitting` so an in-flight network request can't be cancelled mid-stream.
+- Brand: matches V-219\* visual treatment (oxblood `btn-primary`, surface-divider borders, mono labels, status-error red on validation failures).
+
+**No new dependencies.** Modal is implemented inline in `ProfilesView.tsx` as a `<div role="dialog" aria-modal="true">` overlay. No headlessUI / radix dependency added — the existing tailwind tokens + custom `@layer components` cover all the styling needs.
+
+### Why
+
+V-236 audit identified this as P0 launch-blocker #1: customers cannot create profiles from the GUI today. Read + delete were live; create was stubbed pending "form modal with name + archetype picker." Estimate was ~1-2hr Tier-1 work; landed inside that envelope.
+
+The single-archetype-today UX deserves a note: per V-136 the archetype enum has a locked `iphone16pro_ios18_7_safari26_4` value and `ARCHETYPE_DISPLAY_LABEL` map is currently a single-entry record. The form is forward-compatible — when V-136-style expansion adds e.g. `iphone17pro_ios19_safari27` the `KNOWN_ARCHETYPES` array gains entries and the select control unlocks automatically.
+
+### Files
+
+- `apps/gui-client/src/views/ProfilesView.tsx` — added `KNOWN_ARCHETYPES` constant + `createOpen` state + button onClick wiring + new `CreateProfileModal` component + render-conditional in JSX.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck` (workspace + gui-client): clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (one prettier reflow on `ProfilesView.tsx` after the modal addition).
+- `npm test`: 722 / 722 passing across 75 files (gui-client has no test suite today; backend tests unaffected).
+- Pre-push hook (V-223 + V-231 backstops): clean on push.
+- **Visual + interaction self-check pending Tauri dev environment.** The autopilot doesn't have access to start `npm run tauri:dev` and visually verify the modal renders correctly. The patterns used (Tailwind `fixed inset-0 z-50 flex items-center justify-center bg-black/40` for backdrop; `role="dialog" aria-modal="true"` for accessibility; `autofocus` on name input) are standard React + Tailwind idioms; founder visual review on next `tauri:dev` run is the canonical verification step.
+
+### Notes
+
+- The modal does NOT do explicit focus-trapping (Tab → outside the modal still moves focus). For a single-modal-at-a-time desktop app this is an acceptable simplification; a focus-trap library is overkill until the GUI client ships multiple stacked modals.
+- The "submit disabled while `name.trim().length === 0`" UX prevents the trivial empty-form case but doesn't validate against duplicate names client-side. Server's `ConflictError` ("Profile name X already exists in this account.") surfaces inline via `friendlyError(err)` which formats `DriftstackError` instances cleanly.
+- Tier-cap errors (`TierLimitError` from server when `count >= profileLimitFor(tier)`) likewise surface inline. After V-239 lands the tier-aware enforcement display, the New Profile button should ALSO be gated on `profile_count < profile_cap` so the customer never sees the modal-then-error path. Surfaced as a follow-up in the V-239 plan; not blocking for V-238 close-out.
+- The `archetype` select uses native `<select>` rather than a custom dropdown component. Cheaper + accessible by default. When the archetype list grows beyond ~5 entries, switching to a typeahead-search component might be worth the dependency cost; today it's overkill.
+
+### Next
+
+V-239 — Tier-aware enforcement display in `apps/gui-client/src/views/SessionsView.tsx` (and update ProfilesView too while we're there). Consumes the V-237 `/v1/account/me` endpoint via SDK regen. Estimated ~2-3hr Tier-1 work:
+
+1. SDK regen — add `account.me()` accessor to `@driftstack/sdk` resources/account.ts (new file).
+2. Settings/SettingsContext load: fetch `/v1/account/me` once on apiKey/baseUrl change; expose `accountMe` on the context.
+3. SessionsView: header shows "X / Y concurrent sessions"; Spawn button disabled when `concurrent_session_active >= concurrent_session_cap`.
+4. ProfilesView: header shows "P / Q profiles"; New profile button disabled when `profile_count >= profile_cap` (skip when `profile_cap === null` for enterprise).
+5. Refresh `accountMe` after each create/destroy via the lifecycle handlers already in place.
