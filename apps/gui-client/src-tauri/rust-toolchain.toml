@@ -1,0 +1,13 @@
+# V-240 — pin Rust toolchain for reproducible contributor builds.
+# README ("Prerequisites: Node 22+, Rust 1.95+") was the soft floor;
+# this file is the hard pin so a contributor on Rust 1.94 or earlier
+# gets the right version installed automatically via rustup.
+#
+# Bump the channel value when a new minimum is needed (e.g. when a
+# Cargo.toml dep adds an MSRV requirement above 1.95). Keep README
+# in sync.
+
+[toolchain]
+channel = "1.95.0"
+profile = "minimal"
+components = ["clippy", "rustfmt"]

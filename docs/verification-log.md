@@ -13686,3 +13686,54 @@ V-236 audit P0 list now complete. Per audit + autopilot guardrails, remaining qu
 - **P2 post-launch:** WebRTC streaming, auto-update mechanism, first-run wizard.
 
 Recommend continuing with P1 items as the next two small Tier-1 commits.
+
+## V-240 — GUI P1 close-out: rust-toolchain pin + cloud/self-hosted label
+
+### What
+
+Bundles both V-236 audit P1 items into a single small commit:
+
+1. **`apps/gui-client/src-tauri/rust-toolchain.toml`** — new file pinning the Rust channel to `1.95.0` (matches the README's `Rust 1.95+` floor) with `profile = "minimal"` and `components = ["clippy", "rustfmt"]`. New contributors on Rust 1.94 or earlier get the right version installed automatically via rustup.
+
+2. **`apps/gui-client/src/App.tsx` titlebar mode** — the hardcoded "self-hosted" label is now derived from the configured API base URL via a new `deploymentLabel(baseUrl)` helper:
+   - `host === 'driftstack.dev'` or `host.endsWith('.driftstack.dev')` → `cloud`.
+   - Anything else (localhost, customer's own domain, IP) → `self-hosted`.
+   - Malformed URL → defaults to `self-hosted` (the safer assumption since cloud customers wouldn't typo their base URL).
+
+   Cloud customers now see "Driftstack · cloud" in the titlebar; self-hosted customers continue to see "Driftstack · self-hosted". The label is informational only — not a feature gate.
+
+### Why
+
+V-236 audit P1 #1 (rust pin) + P1 #2 (titlebar conditional) were both small Tier-1 mechanical edits with no architectural decisions; bundling avoids two near-identical commit ceremonies. P0 list closed in V-237/V-238/V-239; P1 close-out in V-240 finishes the GUI launch-readiness checklist except for T3 founder-ack-required items (key storage, telemetry, distribution).
+
+### Files
+
+- `apps/gui-client/src-tauri/rust-toolchain.toml` — new pin file.
+- `apps/gui-client/src/App.tsx` — added `deploymentLabel()` helper + `useSettings()` hook in `TitleBar` + dynamic label render.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 722 / 722 passing across 75 files (no test changes; gui-client has no test suite).
+- pre-push hook: clean on push.
+- **Visual self-check pending Tauri dev environment.** The deploymentLabel logic is straightforward URL parsing; founder visual review on next `tauri:dev` is the canonical verification step.
+
+### Notes
+
+- The `.driftstack.dev` suffix match captures both `api.driftstack.dev` (the production API host) and any future subdomain Driftstack owns. Customer self-hosted at `driftstack-mirror.example.com` correctly falls into the "self-hosted" bucket.
+- Did NOT add a tooltip explaining what "cloud" / "self-hosted" means. The label is informational; customers who don't understand the distinction won't be confused (they'll just see a deployment-mode indicator they can ignore).
+- The Rust toolchain pin is forward-looking: `1.95.0` may not be the current stable channel at the moment of writing. The README claims `1.95+` as the floor, so this matches. If `1.95.0` isn't yet released, the rustup install will fail with a clear error pointing at what's available; bumping the channel down is a one-line edit.
+
+### Next
+
+V-236 audit launch-readiness checklist:
+
+- **P0 items:** ALL CLOSED (V-237 backend + V-238 profile create form + V-239 tier-aware enforcement).
+- **P1 items:** ALL CLOSED (V-240 rust pin + cloud/self-hosted label).
+- **P2 items:** post-launch (WebRTC streaming, auto-update, first-run wizard).
+- **T3 founder-ack-required:** carry forward (API-key at-rest storage; telemetry posture; distribution mechanism). Drafts surfaced in `docs/proposals/` when reaching the corresponding boundary.
+
+GUI client is launch-ready except for T3 surfaces. Recommend founder review the T3 items next; autopilot continues with whatever launch-readiness work surfaces.

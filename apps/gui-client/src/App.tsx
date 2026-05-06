@@ -129,7 +129,29 @@ function NotYet({ label }: { label: string }): JSX.Element {
 
 // ─── chrome ───────────────────────────────────────────────────────
 
+// V-240 — derive deployment-mode label from the configured API base
+// URL. Cloud customers see "cloud"; self-hosted customers see
+// "self-hosted". The label is informational (titlebar mode indicator),
+// not a feature gate. Hostname-match logic: anything ending in
+// `driftstack.dev` is cloud; everything else (localhost, customer's
+// own domain, IP, etc.) is self-hosted.
+function deploymentLabel(baseUrl: string): 'cloud' | 'self-hosted' {
+  try {
+    const host = new URL(baseUrl).hostname;
+    if (host === 'driftstack.dev' || host.endsWith('.driftstack.dev')) {
+      return 'cloud';
+    }
+    return 'self-hosted';
+  } catch {
+    // Malformed URL — default to self-hosted (the safer assumption
+    // since cloud customers wouldn't typo their base URL).
+    return 'self-hosted';
+  }
+}
+
 function TitleBar(): JSX.Element {
+  const { settings } = useSettings();
+  const mode = deploymentLabel(settings.baseUrl);
   return (
     <div
       data-tauri-drag-region="true"
@@ -140,7 +162,7 @@ function TitleBar(): JSX.Element {
         <div className="h-3.5 w-3.5 rounded-sm bg-accent" />
         <span className="text-sm font-medium text-ink-primary">Driftstack</span>
         <span className="mono text-ink-muted">·</span>
-        <span className="mono text-ink-secondary">self-hosted</span>
+        <span className="mono text-ink-secondary">{mode}</span>
       </div>
       <div className="flex items-center gap-2 text-ink-muted">
         <span className="section-label">v0.0.1</span>
