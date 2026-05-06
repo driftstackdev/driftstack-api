@@ -1,0 +1,88 @@
+# V-245 — cross-platform GUI build verification.
+#
+# Separate from V-243 `gui-release.yml` (tag-triggered, signs binaries).
+# This workflow runs on every push to main + every PR that touches
+# `apps/gui-client/**` and validates that the Tauri Rust + React build
+# succeeds cleanly on all three target platforms.
+#
+# Catches early: V-241 keyring-rs platform-specific build issues,
+# V-243 tauri-plugin-updater dep resolution, V-244 wizard import
+# regressions, anything that would only fail on a non-dev platform.
+#
+# Does NOT produce signed artifacts — debug build, no signing key
+# required, no GitHub Release. Pure "does it compile?" check.
+
+name: GUI cross-platform build check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/gui-client/**'
+      - 'packages/sdk-typescript/**'
+      - '.github/workflows/gui-build-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/gui-client/**'
+      - 'packages/sdk-typescript/**'
+      - '.github/workflows/gui-build-check.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - macos-latest
+          - ubuntu-22.04
+          - windows-latest
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Rust (rust-toolchain.toml pinned per V-240)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust deps
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: 'apps/gui-client/src-tauri -> target'
+
+      - name: Install Linux build deps
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev pkg-config
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Build SDK (transitive dep)
+        run: npm run build --workspace packages/sdk-typescript
+
+      - name: Typecheck gui-client (TS)
+        run: npm run typecheck --workspace apps/gui-client
+
+      - name: Build frontend bundle (Vite)
+        run: npm run build --workspace apps/gui-client
+
+      - name: Cargo check (Rust shell — fast, no codegen)
+        working-directory: apps/gui-client/src-tauri
+        run: cargo check --all-targets
+
+      - name: Cargo test (Rust unit tests — V-241 keyring tests)
+        working-directory: apps/gui-client/src-tauri
+        run: cargo test --all-targets

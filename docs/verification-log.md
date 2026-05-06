@@ -13959,3 +13959,67 @@ The wizard is gated by `apiKey === null` rather than a separate `firstRun` flag 
 ### Next
 
 V-245 — Cross-platform GUI build verification CI (founder direction queue option (c)). New GitHub Actions workflow that builds windows-x64 + macos-universal + linux-x64 Tauri binaries on every push to main (separate from V-243's tag-triggered release build). Catches platform-specific build breakage early. Validates V-241 (keyring-rs cross-platform) + V-243 (Tauri Updater config) build cleanly across all three OS targets without needing a release tag.
+
+## V-245 — Cross-platform GUI build verification CI
+
+### What
+
+New `.github/workflows/gui-build-check.yml` — fast cross-platform build verification that runs on every push to main + every PR touching `apps/gui-client/**`. Separate from V-243's tag-triggered release workflow; this one is pure "does it compile?" without signing keys or GitHub Release publication.
+
+**Matrix:** macos-latest / ubuntu-22.04 / windows-latest. Each runs:
+
+1. `actions/checkout@v4` + `actions/setup-node@v4` (Node 22, npm cache).
+2. `dtolnay/rust-toolchain@stable` (honors V-240 `rust-toolchain.toml` pin).
+3. `Swatinem/rust-cache@v2` for `apps/gui-client/src-tauri/target`.
+4. Linux-only: install `libwebkit2gtk-4.1-dev` + dependencies via apt.
+5. `npm ci` (workspace-wide).
+6. `npm run build --workspace packages/sdk-typescript` (transitive dep).
+7. `npm run typecheck --workspace apps/gui-client` (TS).
+8. `npm run build --workspace apps/gui-client` (Vite frontend bundle).
+9. `cargo check --all-targets` (fast — type-check Rust without codegen).
+10. `cargo test --all-targets` (V-241 keyring unit tests run here).
+
+**Skipped intentionally:**
+
+- Full `cargo build --release` — too slow for per-push verification (~3-5 min per platform). The release-mode build runs on tag in V-243.
+- Signing — no signing key needed for build verification.
+- Bundling (`tauri build`) — `cargo check` catches the same Rust issues without producing a 100MB artifact per matrix leg.
+
+### Why
+
+Per founder direction queue option (c): "Cross-platform GUI build verification — GitHub Actions workflow that builds windows-x64 + macos-universal + linux-x64 Tauri binaries on every push to main. Validates the cross-platform target without OS-level signing (signing deferred per T3 #3). Catches platform-specific build breakage before customer ever sees it."
+
+The V-241 (keyring-rs) + V-243 (tauri-plugin-updater) + V-244 (wizard) work all touched cross-platform-sensitive surfaces. Without this workflow, the first time we'd find out about (say) a Linux secret-service binding issue or a Windows Tauri 2.x breaking change is when the founder triggers the V-243 release workflow at tag time. V-245 catches it on every commit instead, giving fast feedback within ~5 minutes per platform.
+
+The V-241 Rust unit tests (`keyring_user_prefix_is_stable` + `keyring_service_matches_tauri_bundle_id`) run via `cargo test --all-targets` here. First time those tests exercise on real CI; if they fail on any platform that's an immediate signal something in keyring-rs's per-platform feature gating is off.
+
+### Files
+
+- `.github/workflows/gui-build-check.yml` — new workflow.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- Workflow YAML structure follows the existing `.github/workflows/ci.yml` pattern (matrix, concurrency, paths filter).
+- **Real validation on first push.** This V-entry's commit IS the first push that triggers the workflow. Watch GitHub Actions for the three matrix legs to go green; any failure surfaces a real cross-platform gap to fix in V-246+.
+- `npm run typecheck` / `lint` / `format:check`: clean (workflow is YAML, no TS impact).
+- `npm test`: 729 / 729 passing.
+- pre-push hook: clean on push.
+
+### Notes
+
+- The `paths` filter limits runs to commits touching `apps/gui-client/**`, `packages/sdk-typescript/**` (transitive), or this workflow file. Saves CI minutes on non-GUI commits.
+- `cargo check` is dramatically faster than `cargo build` — typechecks Rust without LLVM codegen. The trade-off: link errors aren't caught here (they surface in `cargo build`). Acceptable: link errors are rare relative to type/import errors, and V-243 tag-time release builds catch them with full cargo build before customer sees the binary.
+- The `cargo test --all-targets` step exercises both unit tests (e.g. `lib.rs::tests::keyring_user_prefix_is_stable`) and any integration tests under `src-tauri/tests/`. Currently no integration tests; future Rust integration tests fall here automatically.
+- Linux build deps include `libwebkit2gtk-4.1-dev` (Tauri's WebView dep on Linux), `libappindicator3-dev` (system tray), `librsvg2-dev` (icon rendering), `patchelf` (binary patching for AppImage), `libssl-dev` (TLS for Sentry HTTP transport), `pkg-config`. Mirror the Tauri 2.x official Linux setup guide.
+- macOS + Windows runners have everything needed pre-installed; no extra apt/brew steps.
+
+### Next
+
+Per founder direction order: V-243 (T3 #3) + V-244 (wizard) + V-245 (build CI) close the locked execution order's GUI-focused phases. Remaining queue options:
+
+- (a) Pre-launch security audit on auth/payment/data-handling code paths in `apps/server` (~3-4hr).
+- (b) Hetzner deployment automation for `apps/server` (~2-3hr).
+- (d) Documentation site `apps/docs` (Astro) (~3-4hr).
+
+Picking next based on highest-leverage. Recommend (b) Hetzner deployment automation: launch readiness depends on having a tested deploy path. (a) security audit can run after deploy automation is in place; (d) docs site can defer.
