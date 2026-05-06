@@ -427,11 +427,63 @@ export async function createProductionDeps(
     sentry,
   };
 
+  // V-232 — background poller startup. Both processTick methods own
+  // their own claim/dispatch/retry semantics; the bootstrap layer just
+  // calls them on a 60s timer. 60s cadence is the V-173 webhook-worker
+  // convention; trial-pack expiry and validation-harness scheduling
+  // both have minute-level latency tolerance, so this matches.
+  // Founder-approved cadence on V-202d ack (2026-05-06).
+  //
+  // Errors inside the tick are caught + logged warn-level by the
+  // services themselves; the setInterval handler still wraps in a
+  // try/catch as a defense-in-depth: an unexpected throw must NEVER
+  // kill the interval, or background work silently stops.
+  const POLLER_INTERVAL_MS = 60_000;
+  const scheduledJobsTimer = setInterval(() => {
+    void (async () => {
+      try {
+        await scheduledJobsService.processTick(new Date());
+      } catch (err) {
+        logger.warn(
+          {
+            component: 'scheduled-jobs-poller',
+            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+          },
+          'scheduled-jobs processTick threw unexpectedly (interval continues)',
+        );
+      }
+    })();
+  }, POLLER_INTERVAL_MS);
+  // Don't keep the event loop alive just for the poller — let the
+  // app close cleanly on SIGINT without waiting on the next tick.
+  scheduledJobsTimer.unref();
+
+  const validationHarnessTimer = setInterval(() => {
+    void (async () => {
+      try {
+        await validationHarnessService.processTick({ now: new Date() });
+      } catch (err) {
+        logger.warn(
+          {
+            component: 'validation-harness-poller',
+            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+          },
+          'validation-harness processTick threw unexpectedly (interval continues)',
+        );
+      }
+    })();
+  }, POLLER_INTERVAL_MS);
+  validationHarnessTimer.unref();
+
   let torn = false;
   async function teardown(): Promise<void> {
     if (torn) return;
     torn = true;
     logger.info({ component: 'bootstrap' }, 'tearing down');
+    // V-232 — stop pollers BEFORE other teardown so an in-flight tick
+    // doesn't try to acquire a closing redis/db handle.
+    clearInterval(scheduledJobsTimer);
+    clearInterval(validationHarnessTimer);
     try {
       await sentry.flush(2000);
       await sentry.close(2000);

@@ -13276,3 +13276,62 @@ Per founder verdicts on the autopilot ack:
 - **V-184b Tier 3 onboarding visual UX** — deferred to founder timing per the V-202b/c/d ack ("DEFER founder redline timing"); waits on copy redline of `docs/proposals/v-184b-onboarding-visual-scope.md`.
 - **V-215 force-push verification** — waits on founder firing V-207/V-212 runbook.
 - **TD-002 archive in `docs/tech-debt.md`** — small housekeeping; defer to a future doc-sweep.
+
+## V-232 — Background poller startup wiring (60s cadence)
+
+### What
+
+Bootstrap now starts two `setInterval` pollers at 60 second cadence (founder-approved on the V-202d ack 2026-05-06):
+
+1. **`scheduledJobsService.processTick(new Date())`** — the V-202d generic scheduled-jobs worker. Trial-pack expiry is the first job_type registered.
+2. **`validationHarnessService.processTick({ now: new Date() })`** — the V-218 continuous validation harness. Cross-repo dep on Agent 1's V-203 Phase 2A vendor probes for actual probe execution; until that lands the harness fires synthetic run ids per the documented stub. The schedule + ledger logic IS real and the poller will exercise it.
+
+Both timers use `Node.Timeout.unref()` so the event loop can exit cleanly on SIGINT/SIGTERM without waiting for the next tick.
+
+Each tick is wrapped in a try/catch + warn-level log as defense-in-depth: services already catch + log their own errors, but a wholly-unexpected throw in the interval callback would otherwise propagate to Node's `unhandledRejection` and could kill the process. The wrapper guarantees the interval continues regardless.
+
+Teardown order: `clearInterval` for both timers FIRST, before sentry/redis/dbHandle close. This avoids the race where a poller's in-flight tick tries to use a closing handle.
+
+### Why
+
+Per founder verdict on the V-202b/c/d autopilot ack: "Wire setInterval startup for V-218 validation harness + V-202d trial-pack expiry both at 60s. Matches V-173 webhook delivery convention. Standard cron-like default."
+
+The V-218 + V-202d code paths have been functional but unstarted — handlers register, processTick works on direct invocation, integration tests pass — but no production code path was firing them. This commit closes that gap. After V-232 lands and a deploy reaches Hetzner, both background workers run continuously.
+
+60s cadence is the right choice for the current first-consumer set:
+
+- Trial-pack expiry: 14-day timer; sub-minute detection latency is invisible to customers.
+- Validation harness: per-archetype recapture cadence is set in the schedule rows themselves (typically hours-to-days); the 60s poller just decides "is anything due RIGHT NOW".
+
+If/when sub-minute job latency matters (e.g. real-time-ish notifications), the poller cadence can drop to 5s without any code changes — it's a single constant.
+
+### Files
+
+- `apps/server/src/lib/bootstrap.ts` — added two `setInterval` blocks + matching `clearInterval` in teardown.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 717 / 717 passing across 74 files. Tests don't exercise the bootstrap.ts setInterval path directly (test fixtures construct services without bootstrap); the per-service `processTick` paths are already covered by V-202d unit tests + the V-202d integration test suite.
+- pre-push hook (V-223 + V-231 backstops): clean on push.
+
+### Notes
+
+- `setInterval` rather than a recursive setTimeout because:
+  1. Both processTick implementations are designed to claim+dispatch at most `batchSize` jobs per call. If a tick takes longer than 60s (network blip, large batch), the next tick still fires on schedule; the slow tick's claim transaction blocks subsequent claims via `FOR UPDATE SKIP LOCKED` semantics so there's no double-dispatch.
+  2. `setInterval` integrates cleanly with `unref()` and `clearInterval()`. Recursive setTimeout requires extra cleanup state to track the pending timer.
+- The 60s cadence applies to BOTH pollers. Could split (e.g. scheduled-jobs at 60s, harness at 5min) but founder verdict explicitly ack'd 60s for both. If staggering becomes useful (e.g. to spread CPU load), it's a 1-line change.
+- E2E tests don't exercise the poller startup path because the e2e helper at `apps/server/tests/e2e/helpers/server.ts` calls `buildApp` directly without going through `bootstrap.ts`. Production reality (the actual setInterval running in a deployed server) will be observable via Pino logs after the first deploy that includes V-232 — both pollers will emit warn-level logs only on errors, so silence is the success indicator.
+
+### Next
+
+Per founder direction on V-231 ack queue:
+
+- **V-184b Tier 3 onboarding visual UX** — waits on founder copy redline of `docs/proposals/v-184b-onboarding-visual-scope.md`.
+- **V-215 force-push verification** — waits on founder firing V-207/V-212 runbook.
+- **TD-002 archive** in `docs/tech-debt.md` — small housekeeping; defer to a future doc-sweep.
+
+Both founder-approved Tier-1 items from the autopilot ack queue (TD-002 + poller startup) now landed. Next session resumes with whatever launch-readiness work the founder surfaces.
