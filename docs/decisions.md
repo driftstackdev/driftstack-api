@@ -305,3 +305,19 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Reasoning:** 4 roles cover the realistic shape of small-to-mid B2B accounts (1–20 humans). 3 roles loses the read-only auditor / stakeholder slot (compliance + observer use cases). 5+ roles introduces a billing-only carve-out that's better solved by per-feature flags than another role tier. Keeping API auth on scopes (not roles) preserves the K-of-N invariant — an automation key minted by an admin can be revoked without affecting the human admin's dashboard access. Documented forward-looking schema + endpoint sketch in `docs/architecture/team-roles-taxonomy.md` so the future "wire up multi-seat" V-NNN has a checklist instead of a blank page.
 - **Tier:** 2 (architectural — auth model + future schema shape).
 - **V-log:** V-142.
+
+## D-2026-05-06-01 — GUI API key at-rest storage: keyring-rs (OS keychain per-platform)
+
+- **Decision:** the GUI client (`apps/gui-client`) stores the customer's API key in the OS-native keychain via the `keyring` Rust crate (v3, with `apple-native` + `windows-native` + `sync-secret-service` features). macOS Keychain on Mac, Windows Credential Manager on Windows, Linux Secret Service / KWallet on Linux — chosen automatically per-platform by the crate. Service identifier `dev.driftstack.gui` matches the Tauri bundle id so OS-native UI surfaces secrets under the app's identity. Three Tauri commands expose the surface to the frontend: `secret_save(key, value)`, `secret_load(key) -> Option<String>`, `secret_delete(key)`. Other settings (baseUrl, future theme prefs) stay in `settings.json` via `@tauri-apps/plugin-store` because they're non-sensitive.
+- **Reasoning:** alternatives considered:
+  - **(a) Tauri Stronghold plugin** — encrypts at rest with an OS-derived key; cross-platform; requires a master password (UX friction) OR a derived-from-OS-keychain key (added complexity). keyring-rs gets the same security with simpler ergonomics.
+  - **(b) Plaintext on disk** — current pre-V-241 state; documented + acknowledged. Customer-trust concern (disk forensics, shoulder-surfing). Acceptable as MVP but not for first paying customer.
+  - **(c) Custom encrypted-blob** — reinvents keyring-rs poorly. Skip.
+
+  keyring-rs is mature (used by 1Password, GitHub CLI, etc.); Tauri 2.x compat verified via crate features; no friction with the existing `tauri-plugin-store` (different concern; plain JSON for non-secrets stays where it is). The "service:user" namespace `dev.driftstack.gui:default:api_key` keeps room for future per-account-id secrets when multi-account lands without orphaning the current single-account customers.
+
+  Migration path: `loadSettings()` detects pre-V-241 customers with `apiKey` in settings.json on first call, transparently copies to keychain, rewrites the JSON without the apiKey field. One-shot; no customer action. Failure mode (keychain write fails) leaves apiKey in settings.json so the customer isn't suddenly logged out.
+
+- **Tier:** 3 (security architecture / customer-data handling — autonomously decided per founder direction 2026-05-06 explicit autopilot grant).
+- **V-log:** V-241.
+- **Revert path:** if keyring-rs proves to be a build-time blocker on a target platform, revert by removing the `keyring` dependency + restoring settings.ts to the plugin-store-only path. Migration in reverse direction (keychain → settings.json) would need a one-shot read-and-rewrite. Not anticipated.

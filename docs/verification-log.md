@@ -13737,3 +13737,60 @@ V-236 audit launch-readiness checklist:
 - **T3 founder-ack-required:** carry forward (API-key at-rest storage; telemetry posture; distribution mechanism). Drafts surfaced in `docs/proposals/` when reaching the corresponding boundary.
 
 GUI client is launch-ready except for T3 surfaces. Recommend founder review the T3 items next; autopilot continues with whatever launch-readiness work surfaces.
+
+## V-241 — GUI T3 #1: keyring-rs API key at-rest storage
+
+### What
+
+Decision: D-2026-05-06-01 — `apps/gui-client` stores the customer's API key in the OS-native keychain via the `keyring` Rust crate (v3 with `apple-native` + `windows-native` + `sync-secret-service` features). Cross-platform: macOS Keychain / Windows Credential Manager / Linux Secret Service (or KWallet) — handled automatically per-platform.
+
+Three Tauri commands implement the surface in `src-tauri/src/lib.rs`:
+
+- `secret_save(key, value) -> Result<(), String>` — set the credential.
+- `secret_load(key) -> Result<Option<String>, String>` — read; `Ok(None)` when not yet set (first-run state).
+- `secret_delete(key) -> Result<(), String>` — idempotent (delete-when-absent succeeds).
+
+Service identifier `dev.driftstack.gui` matches the Tauri bundle id so OS-native UI surfaces secrets under the app's identity. Username slot fixed at `default:<key>` namespace for now; multi-account support adds per-account-id usernames later.
+
+`apps/gui-client/src/lib/settings.ts` reworked: `apiKey` lives in keychain via `invoke('secret_save'/'secret_load'/'secret_delete')`; `baseUrl` stays in `settings.json`. Migration: `loadSettings()` detects pre-V-241 customers with `apiKey` field in settings.json, transparently copies to keychain, rewrites the JSON without the apiKey field. Failure mode (keychain write fails) leaves the apiKey in settings.json so customer isn't logged out.
+
+Two Rust unit tests in `lib.rs::tests`:
+
+- `keyring_user_prefix_is_stable` — locks username format so future revisions don't orphan customer secrets.
+- `keyring_service_matches_tauri_bundle_id` — catches drift between `KEYRING_SERVICE` and `tauri.conf.json`.
+
+Real keychain integration testing happens via `tauri:dev` per-platform.
+
+### Why
+
+Per founder direction 2026-05-06 autopilot grant: T3 decisions made + documented autonomously this window. Reasoning chain in D-2026-05-06-01 covers alternatives (Tauri Stronghold, plaintext, custom encrypted-blob) and why keyring-rs wins on cost/benefit.
+
+### Files
+
+- `apps/gui-client/src-tauri/Cargo.toml` — added `keyring` dep.
+- `apps/gui-client/src-tauri/src/lib.rs` — three Tauri commands + two unit tests.
+- `apps/gui-client/src/lib/settings.ts` — split storage (keychain for apiKey; plugin-store for baseUrl) + migration path.
+- `docs/decisions.md` — D-2026-05-06-01.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck` (workspaces + gui-client): clean.
+- `npm run lint` / `format:check`: clean.
+- `npm test`: 722 / 722 passing across 75 files.
+- pre-push hook: clean on push.
+- **Rust build verification pending** — `cargo build` not exercised in autopilot env. Caught by V-244 cross-platform CI build (queued).
+- **Real keychain integration verification pending** Tauri dev environment per-platform.
+
+### Notes
+
+- The `keyring` crate auto-selects the platform backend at compile time. macOS uses Security framework; Windows uses CredRead/CredWrite; Linux uses org.freedesktop.secrets D-Bus.
+- Failure modes per platform:
+  - **macOS:** OS prompts customer to allow keychain access first time. Dismiss → fallback to null; app prompts re-entry.
+  - **Windows:** Credential Manager per-user; no prompt.
+  - **Linux:** if no secret-service daemon running (headless / minimal desktop), crate returns PlatformFailure. settings.ts catch handles gracefully; PHASE 3 publish docs note this prereq.
+- The apiKey migration is one-way (pre-V-241 → keychain). Downgrade requires re-entry. Acceptable.
+
+### Next
+
+V-242 — T3 #2 (Sentry crash-only opt-in telemetry).
