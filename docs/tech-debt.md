@@ -67,50 +67,26 @@ catalog and would naturally apply to Phase 1 + Phase 2.
 
 ---
 
-## TD-002 — Drizzle-kit reinstatement (auto-update journal + snapshots)
+## TD-002 — Drizzle-kit reinstatement (auto-update journal + snapshots) — RESOLVED 2026-05-06
 
 **Source:** V-228 (Drizzle migration journal regression catch).
+**Resolution:** Landed in **V-231** per founder-approved Option A; pre-push backstop added; future migrations land cleanly.
 
-**Current state:** Hand-edited `_journal.json` for migrations 0017–0020.
-Snapshots only exist for 0000–0006 (drizzle-kit was used for those;
-discontinued afterward). The hand-edited journal works for `migrate()`
-application but means:
+**What landed:**
 
-1. New migrations require manually appending an idx + tag entry to the
-   journal. Easy to forget (this is what V-228 caught).
-2. Snapshots can't be regenerated cleanly — drizzle-kit's `generate`
-   would produce a giant diff against the schema state from 0006.
+- `drizzle-orm@^0.38.4` added to root `devDependencies` so the existing root-level `drizzle-kit` CLI can resolve the schema. Existing root `drizzle.config.ts` (already pointing at `apps/server/src/db/schema.ts`) now functional.
+- `apps/server/src/db/migrations/0022_consolidate_snapshot.sql` lands as a comment-only no-op (the auto-generated SQL was NOT idempotent — would crash against any database that already ran 0017–0021). The auto-generated `meta/0022_snapshot.json` is the load-bearing artifact: future `drizzle-kit generate` runs diff against it cleanly.
+- `.husky/pre-push` gains a journal-sync backstop: aborts push if any `*.sql` in `apps/server/src/db/migrations/` lacks a corresponding `"tag": "<filename>"` entry in `_journal.json`. Self-tested: green on real state; synthetic 9999-tag missing-entry correctly fails.
 
-**Why deferred:** Reinstating drizzle-kit requires a one-time cleanup
-pass (regenerate ALL snapshots from the current schema, or accept the
-0007–0020 snapshot gap permanently). The V-223 pre-push gate doesn't
-cover migration application, so the fail-fast feedback loop for "did
-I update the journal?" is weak. Adding it to the gate requires Docker
-in CI/pre-push, which V-223 explicitly excluded.
+**Why the proposal's wording was revised mid-implementation:** drizzle-kit doesn't generate idempotent SQL by default. Caught + fixed inline rather than punting back to founder for a verdict refinement; the no-op approach achieves the same goal (snapshot directory becomes usable; migrator records idx 22 as applied without re-creating tables).
 
-**Revisit triggers:**
+**Status going forward:**
 
-1. A second journal-out-of-sync regression occurs (would prove
-   hand-editing isn't sufficient).
-2. A schema change requires drizzle-kit's diff-generation specifically
-   (e.g. an enum mutation that's painful to write by hand).
-3. CI infrastructure adds Docker + Postgres for e2e tests (would
-   provide the fail-fast loop).
+- Adding a new migration: run `npm run db:generate -- --name=<short_descriptor>` from repo root; drizzle-kit auto-updates the journal + snapshot. Verified.
+- Skipping the journal update is now structurally caught by the pre-push hook (V-231 backstop). V-228-class regressions cannot recur.
+- Snapshot directory has 0000–0006 + 0022. 0007–0021 remain absent (intentional; the proposal's Option A explicitly accepts this gap). Diffs from 0022 onward are clean.
 
-**Implementation when revived:**
-
-- Install `drizzle-kit` in `apps/server/package.json` devDeps.
-- Add a `drizzle.config.ts` pointing at `src/db/schema.ts` +
-  `src/db/migrations/`.
-- Run `drizzle-kit generate` on the current schema → expect a single
-  consolidated migration that captures the 0007–0020 schema delta.
-  Either (a) accept that as `0021_consolidated_snapshot.sql` and
-  acknowledge the gap, or (b) drop and recreate snapshots 0007–0020
-  by hand-editing `meta/_journal.json` to claim each existing SQL
-  file is the canonical migration for that idx.
-- Add a `drizzle:generate` npm script.
-- Update the pre-push hook (or CI workflow) to fail if a new SQL file
-  in `src/db/migrations/` lacks a journal entry.
+See V-231 V-log entry for the full reasoning chain.
 
 ---
 
