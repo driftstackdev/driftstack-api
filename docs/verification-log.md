@@ -13905,3 +13905,57 @@ The "Tauri Updater public-key signed but no OS-level cert" posture matches what 
 V-244 — Cross-platform first-run setup wizard (queued by founder direction; per the v-241/242/243 chain landing the foundation, the wizard ties together cloud-vs-self-hosted choice + key onboarding + first profile).
 
 After V-244 — cross-platform GUI build verification CI (queue option (c) per founder direction; surfaces any build gaps across the three OS targets early).
+
+## V-244 — GUI first-run setup wizard
+
+### What
+
+New `apps/gui-client/src/views/FirstRunWizard.tsx` (~360 lines) — multi-step guided setup that fires when `settings.apiKey === null` at app boot. Replaces the V-184a-era "show Settings + a banner" first-run flow.
+
+**Flow (4 steps + done):**
+
+1. **Welcome** — brand intro + value prop ("Driftstack runs real iPhone Safari sessions on a Mac Mini fleet you control or rent."). Single "Get started" button.
+2. **Deployment mode** — radio: Cloud (default `https://api.driftstack.dev`) vs Self-hosted (default `http://localhost:7780`, customer-editable input). Selection auto-fills baseUrl.
+3. **API key** — paste into masked input. On click, builds a one-shot `Driftstack` SDK client + calls `client.account.me()` (V-237 endpoint). Validation success → persist via the real settings flow (V-241 keychain for key, plugin-store for baseUrl) → advance. Validation failure → inline error message (`DriftstackError` formatted, or fetch error text).
+4. **First profile (skippable)** — name input + auto-archetype (`iphone16pro_ios18_7_safari26_4` LOCKED_ARCHETYPE_ID). Skip flips to Done; create calls `client.profiles.create()`. Either path drops into the main app shell.
+
+`App.tsx::Shell` component now gates on `settings.apiKey === null && !wizardDismissed` — wizard renders full-screen until `onComplete()` flips `wizardDismissed=true`. The `wizardDismissed` flag is in-memory (component state) so the customer can retry the wizard by quitting + relaunching, but doesn't get re-locked-into-it after dismissing.
+
+**Brand consistency:** `TitleBar` matches the main-app shell (D-badge + lowercase mono "driftstack" wordmark + "setup" subtitle in mono ink-secondary). Stepper uses oxblood (`bg-accent`) for the current step + accent-subtle for completed steps + surface-raised for upcoming. Cards use `border-surface-divider bg-surface-raised hover:border-accent` matching the main-app card pattern.
+
+**Anonymity (V-211 mirror):** No founder name, no AI / Anthropic / Claude references, no marketing language outside what's already in the existing onboarding copy.
+
+### Why
+
+Founder direction 2026-05-06 specified the wizard as PHASE 2 follow-up after T3 #1-#3. The V-241 keychain + V-237 `/v1/account/me` + V-238 profile create form + V-239 SDK accessor all converge here: customer pastes key → validate via /v1/account/me → save to keychain → optionally create first profile → enter the main app fully configured. Single flow that exercises every primitive the launch arc landed.
+
+The wizard is gated by `apiKey === null` rather than a separate `firstRun` flag because:
+
+- An existing customer who clears their keychain (logout) lands back in the wizard correctly.
+- A fresh-install customer with no keychain entry lands in the wizard correctly.
+- No new persisted flag = no migration path needed for pre-V-244 customers (who have an apiKey already and skip the wizard anyway).
+
+### Files
+
+- `apps/gui-client/src/views/FirstRunWizard.tsx` — new wizard component.
+- `apps/gui-client/src/App.tsx` — `Shell` component gates on `settings.apiKey === null`; loading state while settings fetch; `wizardDismissed` flag for the skip-to-app path.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck` (workspaces + gui-client): clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (one prettier reflow on FirstRunWizard.tsx after the 360-line component landed).
+- `npm test`: 729 / 729 passing across 76 files (no test changes; gui-client has no React component test infra; the wizard's wire-level functions go through SettingsContext which IS tested).
+- pre-push hook: clean on push.
+- **Visual + interaction self-check pending Tauri dev environment.** First-run wizard is the most visually complex addition this window; founder visual review on next `npm run tauri:dev` (with no apiKey set, or after deleting the keychain entry to force first-run state) is the canonical verification.
+
+### Notes
+
+- The wizard does NOT cover legal-acceptance (ToS / Privacy / DPA / AUP). The V-049 server-side gate enforces acceptance at API-key issuance time; cloud customers accept legal docs in the dashboard signup flow before getting a key. Self-hosted customers seed acceptances via the customer dashboard (V-184 onboarding) or skip the gate entirely if their server isn't enforcing legal-acceptance for their workflow. The GUI wizard's only legal touch is "you're using a key that already passed acceptance" — implicit; acceptable.
+- `Driftstack` SDK constructor is invoked directly (not via `buildClient` from `lib/client.ts`) because `buildClient` returns null when apiKey is null; during validation the apiKey IS being newly entered. After validation success the `update()` call propagates through SettingsContext + buildClient rebuilds the cached client correctly.
+- The wizard uses React `<input type="password">` for the API key step — masks during entry, autocomplete=off prevents browser autofill from leaking. Founder visual review on Tauri dev should confirm this looks correct on each OS (Tauri WebView inherits OS form-field styling for some inputs on some platforms; minor visual variance is acceptable since the function is identical).
+
+### Next
+
+V-245 — Cross-platform GUI build verification CI (founder direction queue option (c)). New GitHub Actions workflow that builds windows-x64 + macos-universal + linux-x64 Tauri binaries on every push to main (separate from V-243's tag-triggered release build). Catches platform-specific build breakage early. Validates V-241 (keyring-rs cross-platform) + V-243 (Tauri Updater config) build cleanly across all three OS targets without needing a release tag.

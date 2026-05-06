@@ -1,0 +1,457 @@
+// V-244 — first-run setup wizard.
+//
+// Replaces the V-184a-era "show Settings + a banner" first-run flow
+// with a guided multi-step path. Triggered when `settings.apiKey` is
+// null at app boot (the canonical "no credentials yet" signal —
+// V-241 keychain absence + no settings.json apiKey field).
+//
+// Steps:
+//   1. Welcome — brand intro + value prop ("control panel for the
+//      Driftstack iPhone Safari fleet").
+//   2. Deployment mode — cloud vs self-hosted radio. Sets baseUrl
+//      to `https://api.driftstack.dev` or whatever the customer types.
+//   3. API key — paste the key; validated via `client.account.me()`
+//      so the customer sees a clear "valid / wrong key / unreachable"
+//      response before the wizard advances.
+//   4. First profile (skippable) — name + archetype picker; calls
+//      `client.profiles.create()` against the just-validated client.
+//   5. Done — flips a flag; main app shell takes over.
+//
+// Cross-platform: pure React + Tailwind; identical Win/Mac/Linux.
+// Brand: oxblood D-badge + lowercase mono "driftstack" wordmark +
+// slate palette (matches V-219* dashboard treatment + App.tsx
+// TitleBar).
+//
+// Anonymity (V-211 mirror): "Driftstack" voice everywhere; no
+// founder name; no AI / Anthropic references in any visible string.
+
+import { useEffect, useState } from 'react';
+import { Driftstack } from '@driftstack/sdk';
+import { useSettings } from '../lib/SettingsContext';
+
+type WizardStep = 'welcome' | 'mode' | 'apikey' | 'profile' | 'done';
+type DeploymentMode = 'cloud' | 'self-hosted';
+
+const CLOUD_DEFAULT_URL = 'https://api.driftstack.dev';
+const SELF_HOSTED_DEFAULT_URL = 'http://localhost:7780';
+
+export interface FirstRunWizardProps {
+  /** Called when the wizard finishes (success or skip-to-app). */
+  onComplete: () => void;
+}
+
+export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element {
+  const { update } = useSettings();
+  const [step, setStep] = useState<WizardStep>('welcome');
+  const [mode, setMode] = useState<DeploymentMode>('cloud');
+  const [baseUrl, setBaseUrl] = useState(CLOUD_DEFAULT_URL);
+  const [apiKey, setApiKey] = useState('');
+  const [validating, setValidating] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Keep baseUrl in sync with the mode selection.
+  useEffect(() => {
+    setBaseUrl(mode === 'cloud' ? CLOUD_DEFAULT_URL : SELF_HOSTED_DEFAULT_URL);
+  }, [mode]);
+
+  async function validateAndSave(): Promise<void> {
+    setValidating(true);
+    setValidationError(null);
+    const trimmedUrl = baseUrl.trim().replace(/\/+$/, '');
+    const trimmedKey = apiKey.trim();
+    try {
+      // Build a one-shot SDK client with the just-entered creds and
+      // hit /v1/account/me. Any failure (invalid key, unreachable,
+      // tier-suspended) surfaces as DriftstackError or fetch rejection.
+      const client = new Driftstack({ apiKey: trimmedKey, baseUrl: trimmedUrl });
+      await client.account.me();
+      // Persist via the real settings flow (keychain for key, store
+      // for baseUrl).
+      await update({ apiKey: trimmedKey, baseUrl: trimmedUrl });
+      setStep('profile');
+    } catch (err) {
+      setValidationError(friendlyError(err));
+    } finally {
+      setValidating(false);
+    }
+  }
+
+  function finish(): void {
+    setStep('done');
+    onComplete();
+  }
+
+  return (
+    <div className="flex h-screen w-screen flex-col bg-surface-base">
+      <TitleBar />
+      <main className="flex flex-1 items-center justify-center overflow-auto p-8">
+        <div className="w-full max-w-xl">
+          <Stepper current={step} />
+          {step === 'welcome' && <WelcomeStep onNext={() => setStep('mode')} />}
+          {step === 'mode' && (
+            <ModeStep
+              mode={mode}
+              baseUrl={baseUrl}
+              onModeChange={setMode}
+              onBaseUrlChange={setBaseUrl}
+              onBack={() => setStep('welcome')}
+              onNext={() => setStep('apikey')}
+            />
+          )}
+          {step === 'apikey' && (
+            <ApiKeyStep
+              mode={mode}
+              apiKey={apiKey}
+              validating={validating}
+              error={validationError}
+              onApiKeyChange={setApiKey}
+              onBack={() => setStep('mode')}
+              onValidate={() => void validateAndSave()}
+            />
+          )}
+          {step === 'profile' && <ProfileStep onSkip={finish} onCreated={finish} />}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// ─── chrome ───────────────────────────────────────────────────────
+
+function TitleBar(): JSX.Element {
+  return (
+    <div
+      data-tauri-drag-region="true"
+      className="flex h-9 select-none items-center justify-between border-b border-surface-divider bg-surface-raised px-3"
+    >
+      <div className="flex items-center gap-2">
+        <div className="h-3.5 w-3.5 rounded-sm bg-accent" />
+        <span className="text-sm font-medium text-ink-primary">Driftstack</span>
+        <span className="mono text-ink-muted">·</span>
+        <span className="mono text-ink-secondary">setup</span>
+      </div>
+    </div>
+  );
+}
+
+const STEP_ORDER: WizardStep[] = ['welcome', 'mode', 'apikey', 'profile'];
+const STEP_LABELS: Record<WizardStep, string> = {
+  welcome: 'Welcome',
+  mode: 'Deployment',
+  apikey: 'API key',
+  profile: 'First profile',
+  done: 'Done',
+};
+
+function Stepper({ current }: { current: WizardStep }): JSX.Element {
+  const currentIdx = STEP_ORDER.indexOf(current);
+  return (
+    <div className="mb-8 flex items-center gap-2">
+      {STEP_ORDER.map((s, i) => {
+        const active = i === currentIdx;
+        const done = i < currentIdx;
+        return (
+          <div key={s} className="flex items-center gap-2">
+            <div
+              className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+                active
+                  ? 'bg-accent text-white'
+                  : done
+                    ? 'bg-accent-subtle text-accent'
+                    : 'bg-surface-raised text-ink-muted'
+              }`}
+            >
+              {i + 1}
+            </div>
+            <span
+              className={`text-xs ${
+                active ? 'text-ink-primary' : done ? 'text-ink-secondary' : 'text-ink-muted'
+              }`}
+            >
+              {STEP_LABELS[s]}
+            </span>
+            {i < STEP_ORDER.length - 1 && <span className="mx-2 h-px w-6 bg-surface-divider" />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── steps ────────────────────────────────────────────────────────
+
+function WelcomeStep({ onNext }: { onNext: () => void }): JSX.Element {
+  return (
+    <section>
+      <h1 className="text-2xl font-semibold text-ink-primary">Welcome to Driftstack</h1>
+      <p className="mt-3 text-sm text-ink-secondary">
+        Driftstack runs real iPhone Safari sessions on a Mac Mini fleet you control or rent. This
+        desktop client is your control panel — spin sessions up, drive them, save profile state,
+        review recordings.
+      </p>
+      <p className="mt-3 text-sm text-ink-secondary">
+        Setup takes about a minute: choose cloud or self-hosted, paste your API key, optionally
+        create a first profile.
+      </p>
+      <div className="mt-6 flex justify-end">
+        <button type="button" className="btn-primary" onClick={onNext}>
+          Get started
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ModeStep({
+  mode,
+  baseUrl,
+  onModeChange,
+  onBaseUrlChange,
+  onBack,
+  onNext,
+}: {
+  mode: DeploymentMode;
+  baseUrl: string;
+  onModeChange: (m: DeploymentMode) => void;
+  onBaseUrlChange: (u: string) => void;
+  onBack: () => void;
+  onNext: () => void;
+}): JSX.Element {
+  return (
+    <section>
+      <h2 className="text-xl font-semibold text-ink-primary">Cloud or self-hosted?</h2>
+      <p className="mt-2 text-sm text-ink-secondary">
+        Cloud means your sessions run on Driftstack's Mac Mini fleet. Self-hosted means you've
+        deployed the Driftstack server on your own infrastructure.
+      </p>
+
+      <div className="mt-6 flex flex-col gap-3">
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-surface-divider bg-surface-raised p-4 hover:border-accent">
+          <input
+            type="radio"
+            name="mode"
+            checked={mode === 'cloud'}
+            onChange={() => onModeChange('cloud')}
+            className="mt-1"
+          />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-ink-primary">Cloud (recommended)</div>
+            <div className="mt-1 text-xs text-ink-secondary">
+              Connect to <span className="mono">api.driftstack.dev</span>. Driftstack runs the
+              fleet, handles updates, billing via Stripe.
+            </div>
+          </div>
+        </label>
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-surface-divider bg-surface-raised p-4 hover:border-accent">
+          <input
+            type="radio"
+            name="mode"
+            checked={mode === 'self-hosted'}
+            onChange={() => onModeChange('self-hosted')}
+            className="mt-1"
+          />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-ink-primary">Self-hosted</div>
+            <div className="mt-1 text-xs text-ink-secondary">
+              Connect to your own Driftstack server. Default{' '}
+              <span className="mono">http://localhost:7780</span>; change below if needed.
+            </div>
+            {mode === 'self-hosted' && (
+              <input
+                type="url"
+                value={baseUrl}
+                onChange={(e) => onBaseUrlChange(e.target.value)}
+                className="mono mt-3 w-full rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+                placeholder="http://localhost:7780"
+                spellCheck={false}
+                autoComplete="off"
+              />
+            )}
+          </div>
+        </label>
+      </div>
+
+      <div className="mt-6 flex justify-between">
+        <button type="button" className="btn-secondary" onClick={onBack}>
+          Back
+        </button>
+        <button type="button" className="btn-primary" onClick={onNext}>
+          Next
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ApiKeyStep({
+  mode,
+  apiKey,
+  validating,
+  error,
+  onApiKeyChange,
+  onBack,
+  onValidate,
+}: {
+  mode: DeploymentMode;
+  apiKey: string;
+  validating: boolean;
+  error: string | null;
+  onApiKeyChange: (s: string) => void;
+  onBack: () => void;
+  onValidate: () => void;
+}): JSX.Element {
+  return (
+    <section>
+      <h2 className="text-xl font-semibold text-ink-primary">Connect with your API key</h2>
+      <p className="mt-2 text-sm text-ink-secondary">
+        {mode === 'cloud' ? (
+          <>
+            Find your API key in the dashboard at{' '}
+            <span className="mono">app.driftstack.dev/api-keys</span>. Looks like{' '}
+            <span className="mono">ds_live_…</span>.
+          </>
+        ) : (
+          <>
+            Mint a key against your self-hosted server. The key looks like{' '}
+            <span className="mono">ds_test_…</span> for trial-tier or{' '}
+            <span className="mono">ds_live_…</span> otherwise.
+          </>
+        )}
+      </p>
+
+      <div className="mt-6">
+        <label className="flex flex-col gap-1.5">
+          <span className="section-label">API key</span>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => onApiKeyChange(e.target.value)}
+            className="mono w-full rounded-sm border border-surface-divider bg-surface-base px-2 py-1.5 text-sm text-ink-primary"
+            placeholder="ds_live_…"
+            spellCheck={false}
+            autoComplete="off"
+            autoFocus
+          />
+          <span className="text-2xs text-ink-muted">
+            Stored in your OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret
+            Service).
+          </span>
+        </label>
+      </div>
+
+      {error !== null && (
+        <p className="mt-4 text-xs text-status-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="mt-6 flex justify-between">
+        <button type="button" className="btn-secondary" onClick={onBack} disabled={validating}>
+          Back
+        </button>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={onValidate}
+          disabled={validating || apiKey.trim().length === 0}
+        >
+          {validating ? 'Validating…' : 'Validate + continue'}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ProfileStep({
+  onSkip,
+  onCreated,
+}: {
+  onSkip: () => void;
+  onCreated: () => void;
+}): JSX.Element {
+  const { client } = useSettings();
+  const [name, setName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleCreate(): Promise<void> {
+    if (!client) {
+      setError('No client configured.');
+      return;
+    }
+    const trimmed = name.trim();
+    if (trimmed.length === 0) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await client.profiles.create({
+        name: trimmed,
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      onCreated();
+    } catch (err) {
+      setError(friendlyError(err));
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="text-xl font-semibold text-ink-primary">Create your first profile</h2>
+      <p className="mt-2 text-sm text-ink-secondary">
+        Profiles are persistent identity slots — cookies, localStorage, and other browser state
+        carry across sessions tied to the same profile. You can skip this and create profiles later;
+        the customer dashboard + GUI both support it.
+      </p>
+
+      <div className="mt-6">
+        <label className="flex flex-col gap-1.5">
+          <span className="section-label">Profile name</span>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-sm border border-surface-divider bg-surface-base px-2 py-1.5 text-sm text-ink-primary"
+            placeholder="my-recurring-workflow"
+            maxLength={120}
+            disabled={submitting}
+            autoFocus
+          />
+          <span className="text-2xs text-ink-muted">
+            Archetype defaults to iPhone 16 Pro / iOS 18.7 / Safari 26.4. More archetypes can be
+            added later from the Profiles view.
+          </span>
+        </label>
+      </div>
+
+      {error !== null && (
+        <p className="mt-4 text-xs text-status-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div className="mt-6 flex justify-between">
+        <button type="button" className="btn-secondary" onClick={onSkip} disabled={submitting}>
+          Skip for now
+        </button>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => void handleCreate()}
+          disabled={submitting || name.trim().length === 0}
+        >
+          {submitting ? 'Creating…' : 'Create profile'}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+// ─── helpers ───────────────────────────────────────────────────────
+
+function friendlyError(err: unknown): string {
+  if (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') {
+    return err.message;
+  }
+  return String(err);
+}

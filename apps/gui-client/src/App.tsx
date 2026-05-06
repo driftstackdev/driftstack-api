@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { ConnectivityView } from './views/ConnectivityView';
+import { FirstRunWizard } from './views/FirstRunWizard';
 import { LiveSessionView } from './views/LiveSessionView';
 import { ProfilesView } from './views/ProfilesView';
 import { ProxiesView } from './views/ProxiesView';
@@ -41,7 +42,29 @@ export function App(): JSX.Element {
 }
 
 function Shell(): JSX.Element {
+  const { settings, loading } = useSettings();
   const [view, setView] = useState<View>({ kind: 'sessions' });
+  // V-244 — track wizard state. Customer with no apiKey on boot
+  // sees the wizard; once apiKey is set (via wizard or any other
+  // path) the regular shell takes over. `wizardDismissed` lets the
+  // customer skip the wizard mid-flow without leaving them stuck on
+  // it forever; once true, they get the normal shell + can still
+  // configure via Settings.
+  const [wizardDismissed, setWizardDismissed] = useState(false);
+
+  // While settings load, render nothing rather than flashing the wizard.
+  if (loading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-surface-base">
+        <span className="section-label text-ink-muted">Loading…</span>
+      </div>
+    );
+  }
+
+  // V-244 — first-run gate. No apiKey + not dismissed → wizard.
+  if (settings.apiKey === null && !wizardDismissed) {
+    return <FirstRunWizard onComplete={() => setWizardDismissed(true)} />;
+  }
 
   // Cmd+, → Settings (macOS convention).
   useEffect(() => {
