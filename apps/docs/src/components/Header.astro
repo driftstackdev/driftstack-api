@@ -1,0 +1,91 @@
+---
+// V-250 — docs site header. Mirrors marketing-site Header pattern
+// for brand consistency: oxblood D-badge + lowercase font-mono
+// "driftstack" wordmark, "docs" subtitle to disambiguate cross-app.
+
+const navItems = [
+  { href: '/', label: 'Overview' },
+  { href: '/api/', label: 'API' },
+  { href: '/sdk/', label: 'SDKs' },
+  { href: '/guides/', label: 'Guides' },
+  { href: 'https://driftstack.dev', label: 'Marketing site', external: true },
+];
+const pathname = Astro.url.pathname;
+function isActive(href: string): boolean {
+  if (href === '/') return pathname === '/';
+  return pathname.startsWith(href);
+}
+---
+
+<header class="border-b border-slate-200 bg-white">
+  <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
+    <a href="/" class="flex items-center gap-2 font-mono text-base font-semibold text-slate-900">
+      <span
+        class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700 text-white"
+      >
+        D
+      </span>
+      <span>driftstack</span>
+      <span class="ml-1 text-xs text-slate-500">docs</span>
+    </a>
+
+    <nav class="hidden items-center gap-6 md:flex">
+      {
+        navItems.map((item) => (
+          <a
+            href={item.href}
+            class:list={['nav-link', isActive(item.href) && 'text-oxblood-700 font-medium']}
+            target={item.external ? '_blank' : undefined}
+            rel={item.external ? 'noopener noreferrer' : undefined}
+          >
+            {item.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="flex items-center gap-3 md:hidden">
+      <details class="relative">
+        <summary
+          class="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-slate-200 text-slate-700 [&::-webkit-details-marker]:hidden"
+          aria-label="Open navigation menu"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </summary>
+        <nav
+          class="absolute right-0 top-12 z-20 flex w-56 flex-col gap-1 rounded-md border border-slate-200 bg-white p-3 shadow-lg"
+        >
+          {
+            navItems.map((item) => (
+              <a
+                href={item.href}
+                class:list={[
+                  'rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100',
+                  isActive(item.href) && 'text-oxblood-700 font-medium',
+                ]}
+                target={item.external ? '_blank' : undefined}
+                rel={item.external ? 'noopener noreferrer' : undefined}
+              >
+                {item.label}
+              </a>
+            ))
+          }
+        </nav>
+      </details>
+    </div>
+  </div>
+</header>

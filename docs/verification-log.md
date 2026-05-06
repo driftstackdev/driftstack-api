@@ -14232,3 +14232,73 @@ Per founder direction queue, remaining options:
 - (d) Documentation site `apps/docs` (Astro) for customer-facing API docs / SDK guides / onboarding tutorials. ~3-4hr Tier-1.
 
 Picking V-250 = option (d).
+
+## V-250 — Documentation site scaffold (apps/docs)
+
+### What
+
+New `apps/docs/` Astro 5 + Tailwind 3 static site, mirroring the apps/marketing-site pattern. Five pages built clean (5 page(s) built in 363ms): `/`, `/api/`, `/sdk/`, `/guides/`, `/404`. Sitemap auto-generated.
+
+**Structure:**
+
+- `apps/docs/package.json` — `@driftstack/docs` workspace; same Astro/Tailwind/sitemap deps as marketing-site.
+- `apps/docs/astro.config.mjs` — `site: 'https://docs.driftstack.dev'`; static output; sitemap integration with 404-exclusion filter (same pattern as V-106).
+- `apps/docs/tailwind.config.mjs` — copied from marketing-site (oxblood + slate palette).
+- `apps/docs/tsconfig.json` — copied from marketing-site.
+- `apps/docs/src/styles/base.css` — copied from marketing-site (Tailwind directives + nav-link/btn-primary @layer components).
+- `apps/docs/src/components/Header.astro` — adapted from marketing-site Header. Same D-badge + lowercase font-mono "driftstack" wordmark + "docs" subtitle to disambiguate cross-app. Nav: Overview / API / SDKs / Guides / link back to marketing site. CSS-only mobile hamburger via `<details>`.
+- `apps/docs/src/components/Footer.astro` — lighter than marketing-site Footer (no full Product/Company/Trust/Legal grid since docs is a focused reference surface). Cross-links back to marketing site for company nav.
+- `apps/docs/src/layouts/BaseLayout.astro` — same OG/Twitter/canonical structure as marketing-site BaseLayout.
+- `apps/docs/src/pages/index.astro` — landing with three section cards (API reference / SDKs / Guides) + pre-launch note pointing at the GitHub repo's `docs/` tree as the canonical source.
+- `apps/docs/src/pages/{api,sdk,guides}/index.astro` — section landing pages. Each links at the relevant repo `docs/` markdown source (api-versioning.md, sdk-versioning.md, etc.). Per-topic in-doc-site pages migrate in subsequent V-NNN releases.
+- `apps/docs/src/pages/404.astro` — fallback with "site is being built out incrementally; check repo docs/" framing.
+- `apps/docs/public/robots.txt` — Allow: /, sitemap pointer.
+- `apps/docs/public/_headers` — copied from marketing-site (same V-221 CDN strategy: hashed assets immutable, marketing pages 5m/1d/1d-SWR, crawler artefacts 1h).
+- `apps/docs/.gitignore` — `.astro/`, `dist/`, `node_modules/` (matches sibling Astro apps).
+
+**eslint config update:** `eslint.config.js` excludes `apps/docs/**` from the type-aware lint pass (same pattern V-099 / V-135 used for customer-dashboard / admin-panel; Astro project files aren't in the TS project so the parser claims they're not in scope).
+
+### Why
+
+Per founder direction queue option (d): "Documentation site — apps/docs (Astro) for customer-facing API docs / SDK guides / onboarding tutorials. Pull from existing docs/ markdown sources. Style consistency with marketing site + dashboard."
+
+Scoped to scaffold-only this V-NNN: the heavy lift is per-topic page migration from `/docs/architecture/*.md` + `/docs/api/*.md` into the doc site's Astro pages. That's substantial (multi-commit work each topic) and most of the content benefits from founder review for tone alignment with customer-facing voice. Subsequent V-251+ commits migrate page-by-page.
+
+The pre-launch posture (landing page tells customers "site is being built out, canonical sources are in the repo") is honest + functional. Customers can read the existing markdown directly; the doc site provides discovery + brand-consistent presentation as content fills in.
+
+### Files
+
+- `apps/docs/` — new Astro app (12 files: package.json, astro.config.mjs, tailwind.config.mjs, tsconfig.json, .gitignore, public/\_headers, public/robots.txt, src/styles/base.css, src/layouts/BaseLayout.astro, src/components/Header.astro + Footer.astro, src/pages/index.astro + 404.astro + api/index.astro + sdk/index.astro + guides/index.astro).
+- `eslint.config.js` — added `apps/docs/**` to the lint exclusion list.
+- `package-lock.json` — auto-updated by npm install for new workspace.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run build --workspace apps/docs`: 5 pages built clean in 363ms.
+- `npm run typecheck --workspace apps/docs` (`astro check`): 0 errors / 0 warnings / 0 hints across 10 Astro files.
+- `npm run lint`: clean (after adding `apps/docs/**` to exclusions).
+- `npm run format:check`: clean (after prettier --write on the new files).
+- `npm test`: 734 / 734 passing across 76 files (no test changes; Astro apps aren't in vitest scope).
+- pre-push hook: clean on push.
+
+### Notes
+
+- The doc-site is intentionally minimal in copy. Customer-facing language ("Reference and guides for integrating...", section descriptions) was kept close to the technical-reference voice already present in `/docs/architecture/`. No marketing-style superlatives. If founder wants more polish on copy, that's a Tier-3 redline pass on a future V-NNN.
+- Section landing pages link OUT to the GitHub repo's `/docs/` tree for now — this is intentionally honest about the pre-launch state. Customers click the link and read the canonical markdown; subsequent V-NNN releases convert each linked doc into an inline Astro page (with table-of-contents + cross-links + search). Single source of truth stays in `/docs/`; the Astro pages are presentation.
+- Did NOT add MDX support, search, or per-page table-of-contents in this scaffold. All three are valuable additions; each is its own V-NNN-sized work item. Adding them all in one commit would balloon the scope; deferring lets each land cleanly with its own tests + verification.
+- Cloudflare Pages deploy: a separate `gh workflow` for `apps/docs` deploys (mirroring `.github/workflows/deploy-marketing.yml`) is queued but not in this commit. Founder configures the Cloudflare Pages project + DNS for `docs.driftstack.dev` separately.
+- The doc site's `_headers` is a literal copy of marketing-site's. Any V-221-style cache strategy update should sweep both files (or be hoisted to a shared template). Track as a future small refactor; not blocking.
+
+### Next
+
+Per founder direction, the four queue options (a/b/c/d) are now all addressed in this autopilot window:
+
+- (a) Pre-launch security audit — V-246 + V-247 + V-248 + V-249.
+- (b) Hetzner deployment automation — pre-existing (1025 lines of Dockerfile + compose + workflow + env-vars + runbook + DR runbook).
+- (c) Cross-platform GUI build verification CI — V-245.
+- (d) Documentation site scaffold — V-250 (this entry).
+
+Plus the locked execution order: V-241 (T3 #1) + V-242 (T3 #2) + V-243 (T3 #3) + V-244 (first-run wizard).
+
+Surfacing autopilot ledger to clipboard for founder review on wake. Continuing to fill remaining time by either: per-topic doc-site page migrations (V-251+, mostly mechanical content moves), OR additional security audit follow-up (V-246-P1-003 scope refactor — Tier-2 architectural decision, would surface a proposal in `docs/proposals/` rather than implementing).

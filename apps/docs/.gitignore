@@ -1,0 +1,4 @@
+# V-250 — Astro auto-generated artifacts.
+.astro/
+dist/
+node_modules/

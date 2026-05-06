@@ -1,0 +1,66 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Guides">
+  <section class="mx-auto max-w-3xl px-6 py-12">
+    <a href="/" class="text-xs text-slate-500 hover:text-oxblood-700">← Back to docs</a>
+    <h1 class="mt-4 text-3xl font-semibold tracking-tight text-slate-900">Guides</h1>
+    <p class="mt-3 text-base text-slate-600">
+      Onboarding tutorials, common workflows, integration patterns. The guide pages migrate from
+      the repository's <span class="font-mono">docs/</span> tree in subsequent doc-site releases;
+      until then, the canonical references are linked below.
+    </p>
+
+    <ul class="mt-8 space-y-3 text-sm text-slate-700">
+      <li>
+        <a
+          href="https://github.com/driftstackdev/driftstack-api/tree/main/docs/architecture"
+          class="text-oxblood-700 hover:underline"
+          target="_blank"
+          rel="noopener noreferrer">Architecture overview</a
+        >
+        <p class="mt-0.5 text-xs text-slate-500">
+          System shape, layers, request lifecycle, lifecycle event dispatcher, scheduled jobs.
+        </p>
+      </li>
+      <li>
+        <a
+          href="https://github.com/driftstackdev/driftstack-api/blob/main/docs/architecture/api-versioning.md"
+          class="text-oxblood-700 hover:underline"
+          target="_blank"
+          rel="noopener noreferrer">API versioning</a
+        >
+        <p class="mt-0.5 text-xs text-slate-500">
+          What's additive vs breaking, deprecation cycle, when /v2/* would ship.
+        </p>
+      </li>
+      <li>
+        <a
+          href="https://github.com/driftstackdev/driftstack-api/blob/main/docs/api/webhook-events.md"
+          class="text-oxblood-700 hover:underline"
+          target="_blank"
+          rel="noopener noreferrer">Webhook events catalog</a
+        >
+        <p class="mt-0.5 text-xs text-slate-500">
+          Per-event-type payload shape, signature verification, retry policy.
+        </p>
+      </li>
+      <li>
+        <a
+          href="https://github.com/driftstackdev/driftstack-api/blob/main/docs/architecture/team-roles-taxonomy.md"
+          class="text-oxblood-700 hover:underline"
+          target="_blank"
+          rel="noopener noreferrer">Team roles taxonomy</a
+        >
+        <p class="mt-0.5 text-xs text-slate-500">
+          Owner / admin / member / viewer; what each role can do in the dashboard.
+        </p>
+      </li>
+    </ul>
+
+    <p class="mt-10 text-sm text-slate-500">
+      First-party in-doc-site versions of these guides land in subsequent V-NNN releases.
+    </p>
+  </section>
+</BaseLayout>

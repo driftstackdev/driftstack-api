@@ -1,0 +1,55 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="API reference">
+  <section class="mx-auto max-w-3xl px-6 py-12">
+    <a href="/" class="text-xs text-slate-500 hover:text-oxblood-700">← Back to docs</a>
+    <h1 class="mt-4 text-3xl font-semibold tracking-tight text-slate-900">API reference</h1>
+    <p class="mt-3 text-base text-slate-600">
+      The Driftstack HTTP API surface lives at <span class="font-mono">https://api.driftstack.dev</span>.
+      Every endpoint is versioned under <span class="font-mono">/v1/*</span>; new majors land
+      with explicit deprecation cycles per the policy below.
+    </p>
+
+    <ul class="mt-8 space-y-4 text-sm text-slate-700">
+      <li>
+        <span class="font-medium text-slate-900">OpenAPI spec.</span>
+        Live at <span class="font-mono">/openapi.json</span>; rendered via Scalar at
+        <span class="font-mono">/docs/</span> on the API host.
+      </li>
+      <li>
+        <span class="font-medium text-slate-900">Versioning policy.</span>
+        Detailed at
+        <a
+          href="https://github.com/driftstackdev/driftstack-api/blob/main/docs/architecture/api-versioning.md"
+          class="text-oxblood-700 hover:underline"
+          target="_blank"
+          rel="noopener noreferrer">docs/architecture/api-versioning.md</a
+        > in the repository (V-220). One major active at a time; additive changes are free; breaking
+        changes go through a 90-day deprecation cycle.
+      </li>
+      <li>
+        <span class="font-medium text-slate-900">Webhook events.</span>
+        Catalog of every event type the API emits at
+        <a
+          href="https://github.com/driftstackdev/driftstack-api/blob/main/docs/api/webhook-events.md"
+          class="text-oxblood-700 hover:underline"
+          target="_blank"
+          rel="noopener noreferrer">docs/api/webhook-events.md</a
+        > (V-203).
+      </li>
+      <li>
+        <span class="font-medium text-slate-900">Authentication.</span>
+        Bearer API keys (<span class="font-mono">ds_live_…</span> for production,
+        <span class="font-mono">ds_test_…</span> for trial-pack tier). Web sessions on the customer
+        dashboard use opaque sha256-hashed tokens (D-028); Bearer header in both cases.
+      </li>
+    </ul>
+
+    <p class="mt-10 text-sm text-slate-500">
+      Pre-launch — full per-endpoint pages migrate from the repository
+      <span class="font-mono">/docs/</span> tree in subsequent doc-site releases.
+    </p>
+  </section>
+</BaseLayout>

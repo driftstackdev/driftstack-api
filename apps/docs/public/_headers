@@ -1,0 +1,80 @@
+# V-221 — Cloudflare Pages cache headers for the marketing site.
+#
+# Strategy in detail at docs/deployment/cdn-strategy.md.
+# Three tiers:
+#   1. Hashed assets (immutable, 1y)        — /_astro/*, fonts, images
+#   2. Marketing pages (medium, 5m / 1d edge) — html
+#   3. Crawler artefacts (1h)                — robots.txt, sitemaps
+#
+# Cloudflare Pages copies public/_headers verbatim into the deploy and
+# applies these per-path. First match wins; ordering matters. More-
+# specific patterns above broader ones.
+#
+# Format reference:
+#   https://developers.cloudflare.com/pages/configuration/headers/
+
+# ── Hashed Astro bundles + CSS ───────────────────────────────────────
+# Astro emits hashed filenames under /_astro/* — the hash flips on
+# every content change so customers always re-fetch on real updates;
+# in between, the browser + edge cache the file forever.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# ── Static media (images, fonts) ─────────────────────────────────────
+# Hash-versioned via Astro pipeline OR uploaded with stable names; in
+# either case treat as immutable. If a stable-name image needs to
+# change, deploy with a new filename (or add a query string).
+/*.svg
+  Cache-Control: public, max-age=31536000, immutable
+/*.png
+  Cache-Control: public, max-age=31536000, immutable
+/*.jpg
+  Cache-Control: public, max-age=31536000, immutable
+/*.jpeg
+  Cache-Control: public, max-age=31536000, immutable
+/*.webp
+  Cache-Control: public, max-age=31536000, immutable
+/*.avif
+  Cache-Control: public, max-age=31536000, immutable
+/*.ico
+  Cache-Control: public, max-age=31536000, immutable
+/*.woff
+  Cache-Control: public, max-age=31536000, immutable
+/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+# ── Crawler artefacts ────────────────────────────────────────────────
+# Crawlers re-check robots + sitemaps periodically; 1h is the sweet
+# spot — fast enough that a fresh sitemap propagates the same day,
+# slow enough that we don't burn origin requests on every Googlebot
+# visit.
+/robots.txt
+  Cache-Control: public, max-age=3600
+/sitemap-index.xml
+  Cache-Control: public, max-age=3600
+/sitemap-*.xml
+  Cache-Control: public, max-age=3600
+
+# ── Marketing pages (HTML) ───────────────────────────────────────────
+# 5min in the customer's browser, 1d at the edge, 1d
+# stale-while-revalidate. Means: customers see fresh-ish content (max
+# 5min stale on a return visit), edge keeps a hot copy for 24h, and
+# during a re-fetch the edge can serve stale-but-fresh while
+# revalidating in the background. Optimised for "we deploy a few
+# times a week and want fast page loads in between."
+/
+  Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+/index.html
+  Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400
+
+# Catch-all for HTML pages — Cloudflare Pages serves /pricing/index.html
+# at /pricing, /faq/index.html at /faq, etc. The `/*` pattern
+# (last-resort) covers any HTML response not already matched.
+/*
+  Cache-Control: public, max-age=300, s-maxage=86400, stale-while-revalidate=86400
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

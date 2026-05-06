@@ -1,0 +1,55 @@
+---
+// V-250 — docs site BaseLayout. Mirrors apps/marketing-site/BaseLayout
+// for brand consistency; OG images point at the marketing site default
+// since docs pages don't have their own social cards yet.
+import '../styles/base.css';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  pathname?: string;
+}
+
+const {
+  title,
+  description = 'Driftstack documentation: API reference, SDK guides, self-hosted GUI client.',
+  pathname = Astro.url.pathname,
+} = Astro.props;
+
+const fullTitle = title === 'Driftstack docs' ? title : `${title} · Driftstack docs`;
+const canonical = new URL(pathname, Astro.site).toString();
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index,follow" />
+    <link rel="canonical" href={canonical} />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Driftstack docs" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23722F37'/%3E%3Ctext x='32' y='42' text-anchor='middle' fill='white' font-family='Georgia,serif' font-size='34' font-weight='700'%3ED%3C/text%3E%3C/svg%3E"
+    />
+  </head>
+  <body class="flex min-h-screen flex-col bg-slate-50 text-slate-900">
+    <Header />
+    <main class="flex-1">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

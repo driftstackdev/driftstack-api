@@ -23,6 +23,8 @@ export default tseslint.config(
       'apps/customer-dashboard/**',
       // Admin panel — same Astro-project pattern (V-135).
       'apps/admin-panel/**',
+      // Docs site — same Astro-project pattern (V-250).
+      'apps/docs/**',
       // Standalone Node scripts (V-165) — not part of any TS project,
       // not type-checked by tsconfig.eslint.json. Linting these would
       // require a separate parser config; the scripts are short +
