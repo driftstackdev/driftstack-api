@@ -134,3 +134,20 @@ back a migration, suspending an account suspected of abuse, ANY
 financial action), wait for the founder to authorize. Document the
 issue, take read-only diagnostic steps, and surface for explicit
 approval per the locked decision-authority policy in AGENTS.md.
+
+## Log-handling — PII posture
+
+V-249 / V-246-P1-002 — operationally Pino logs may contain customer
+PII (email addresses) for the following intentional cases:
+
+- `magic-link requested for unknown email` — `auth-flows.ts` line ~406. Logged at `info` so abuse patterns (enumeration attempts, password-spray scout traffic) are visible.
+- `magic-link suppressed — account not active` — `auth-flows.ts` line ~412. Logged at `info` for the same reason.
+- `password-reset requested for unknown email` — same shape, same posture.
+
+**Posture for log sharing:**
+
+- Raw Pino logs from production are Driftstack-internal-only. Don't share with non-Driftstack-staff (customers, support contractors) without scrubbing.
+- If a customer asks for "the logs related to my account," the audit-log surface (`/v1/account/audit-log`, V-216) is the customer-facing equivalent. Send that, not raw Pino output.
+- Sentry breadcrumbs are scrubbed at emit time (V-242 `beforeSend` for the GUI client; existing apps/server Sentry config strips request bodies). Sentry is safe to share with customer support if needed for a specific incident, with founder approval.
+
+**Long-term mitigation:** IP-based rate limiting on auth endpoints (V-246-P1-004, post-launch) reduces the operational need for email-level PII logging. When that lands, the email can be replaced with a hash + IP.

@@ -14182,3 +14182,53 @@ V-246 P0 + P1 fixes both landed (V-247 + V-248). Remaining audit findings:
 - V-246-P2-\* (5 items): operational/documentation, post-launch.
 
 Recommend continuing with V-249: ops-runbook docs update (P1-002 close-out) — small mechanical doc change before pushing into option (d) docs site.
+
+## V-249 — V-246-P1-002 close-out: PII log-handling posture documented
+
+### What
+
+Added "Log-handling — PII posture" section to `docs/deployment/runbook.md` (~25 lines). Documents:
+
+- Three specific intentional PII-in-logs cases from `auth-flows.ts` (magic-link unknown email, magic-link suspended account, password-reset unknown email — all at `info` level for abuse-pattern visibility).
+- Posture for log sharing: raw Pino logs are Driftstack-internal-only; customer-facing equivalent is `/v1/account/audit-log` (V-216).
+- Sentry breadcrumb scrubbing posture (V-242 `beforeSend` for GUI client; apps/server Sentry strips request bodies).
+- Long-term mitigation path: IP-based rate limiting (V-246-P1-004) reduces the operational need for email-level PII; email can be replaced with hash + IP when that lands.
+
+### Why
+
+V-246 audit identified P1-002 as "acceptable with documentation" — the PII logging is intentional for abuse detection, but ops needs to know the posture to avoid accidentally sharing raw logs with non-staff. Closes the audit follow-up with a low-cost docs update.
+
+### Files
+
+- `docs/deployment/runbook.md` — added "Log-handling — PII posture" section.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck` / `lint` / `format:check`: clean.
+- `npm test`: 734 / 734 passing across 76 files (pure docs).
+- pre-push hook: clean on push.
+
+### Notes
+
+- The runbook section explicitly references V-249 + V-246-P1-002 so a future auditor can grep for "P1-002" and see resolution status.
+- Considered adding a `Sentry beforeSend` audit for `apps/server`'s existing Sentry config to confirm request bodies are scrubbed there too. Skipped: V-117 / V-094 already document the apps/server Sentry posture as no-PII; no regression visible. If a follow-up wants to verify by reading sentry.ts, that's a small audit task.
+
+### Next
+
+V-246 audit close-out status:
+
+- **P0 V-246-P0-001:** CLOSED in V-247.
+- **P1 V-246-P1-001:** CLOSED in V-248.
+- **P1 V-246-P1-002:** CLOSED in V-249 (this entry).
+- **P1 V-246-P1-003:** deferred post-launch (Cloudflare Access mitigation strength is the founder-validated posture).
+- **P1 V-246-P1-004:** deferred post-launch (IP rate limiting).
+- **P2 (5 items):** deferred post-launch.
+
+Active P1 + P0 fixes from the audit all landed. Audit follow-up complete.
+
+Per founder direction queue, remaining options:
+
+- (d) Documentation site `apps/docs` (Astro) for customer-facing API docs / SDK guides / onboarding tutorials. ~3-4hr Tier-1.
+
+Picking V-250 = option (d).
