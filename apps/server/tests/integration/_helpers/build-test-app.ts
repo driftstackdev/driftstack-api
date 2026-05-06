@@ -500,6 +500,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     billingService,
     sessionRepo: sessionsRepo,
     apiKeysRepo,
+    profilesRepo,
     driver,
     permissiveCors: true,
   });

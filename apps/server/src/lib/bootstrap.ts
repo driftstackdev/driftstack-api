@@ -409,9 +409,11 @@ export async function createProductionDeps(
     authFlowsService,
     profilesService,
     // V-100: admin force-actions take direct repo + driver access.
+    // V-237: profilesRepo also feeds /v1/account/me.
     sessionRepo: sessionsRepo,
     apiKeysRepo,
     driver,
+    profilesRepo,
     ...(config.stripe?.webhookSecret !== undefined
       ? {
           stripeWebhooksService,

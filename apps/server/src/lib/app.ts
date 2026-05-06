@@ -35,6 +35,8 @@ import type { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import type { ProfilesService } from '../services/profiles.js';
 import type { BillingService } from '../services/billing.js';
 import type { SessionRepo } from '../services/sessions.js';
+import type { ProfilesRepo } from '../services/profiles.js';
+import { registerAccountMeRoutes } from '../routes/account-me.js';
 import type { ApiKeysRepo } from '../services/api-keys.js';
 import type { Driver } from '../drivers/types.js';
 import authPlugin from '../middleware/auth.js';
@@ -145,10 +147,16 @@ export interface AppDeps {
    * V-100: admin force-action route deps. Routes register only when
    * all four are provided (sessionRepo / apiKeysRepo / driver / audit
    * are all needed for the destroy/revoke handlers).
+   *
+   * V-237: `sessionRepo` + `profilesRepo` also power
+   * `GET /v1/account/me` (customer self-profile with concurrent +
+   * profile usage/cap). Route registers only when both are present.
    */
   sessionRepo?: SessionRepo;
   apiKeysRepo?: ApiKeysRepo;
   driver?: Driver;
+  /** V-237: profiles repo — feeds /v1/account/me profile counts. */
+  profilesRepo?: ProfilesRepo;
   /**
    * Readiness checks executed by `/ready`. Each runs with the
    * supplied (or default 1500ms) timeout; aggregate result drives
@@ -243,6 +251,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerAccountAuditRoutes(app, { accountAudit: deps.accountAuditService });
   registerAdminValidationHarnessRoutes(app, { harness: deps.validationHarnessService });
   registerAccountRateLimitsRoutes(app);
+  // V-237 — customer self-profile for tier-aware GUI enforcement.
+  // Registers only when both repos are wired (production always; tests
+  // when fixtures expose them).
+  if (deps.sessionRepo !== undefined && deps.profilesRepo !== undefined) {
+    registerAccountMeRoutes(app, {
+      sessionRepo: deps.sessionRepo,
+      profilesRepo: deps.profilesRepo,
+    });
+  }
   // V-176 — public-facing status endpoint. Reuses the readinessChecks
   // already supplied to /ready; no additional wiring needed at deps
   // level. /v1/status has no auth (public status pages are public).

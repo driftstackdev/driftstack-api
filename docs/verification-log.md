@@ -13491,3 +13491,81 @@ The audit's P0/P1/P2/T3 categorization is the load-bearing artifact: PHASE 2 pic
 ### Next
 
 PHASE 2 — start with backend dependency check (Section 14 of audit). V-237: verify `/v1/account` or equivalent shape; if it doesn't return tier + concurrent cap, add `/v1/account/me` endpoint with proper auth + tests. Then in parallel: V-238 profile create form modal in GUI (independent of backend). Then V-239 tier-aware enforcement display in GUI (depends on V-237).
+
+## V-237 — `/v1/account/me` customer self-profile endpoint
+
+### What
+
+New `GET /v1/account/me` endpoint added to `apps/server`. Returns the calling account's identity + tier + concurrent + profile usage/cap in one call:
+
+```json
+{
+  "id": "acc_<uuid>",
+  "email": "...",
+  "name": "...",
+  "tier": "api_builder",
+  "status": "active",
+  "concurrent_session_cap": 5,
+  "concurrent_session_active": 2,
+  "profile_cap": 50,
+  "profile_count": 3
+}
+```
+
+Powers the GUI client's tier-aware enforcement display (file 128 spec mirror) so the customer sees "X / Y concurrent sessions" + "P / Q profiles" in `SessionsView` / `ProfilesView` headers — and the GUI can pre-empt the 402 ConcurrencyLimitExceeded response by gating the Spawn button when active === cap.
+
+V-236 audit Section 14 surfaced this as a backend dependency for the V-239 GUI tier-aware enforcement work. Verified in audit: existing `/v1/account/rate-limits` returns `tier` but not the cap fields; existing `/v1/account/audit-log` is the event ledger; existing `/v1/account/email-preferences` is V-204 prefs. None of them carry the dashboard-header view the GUI needs.
+
+**Implementation:**
+
+- New `apps/server/src/routes/account-me.ts` — registers `GET /v1/account/me` behind `requireAuth + rateLimit('global')`. Cap values come from in-memory tier constants (`TIER_CONCURRENT_SESSION_LIMITS` + `PROFILES_PER_TIER` from `@driftstack/api-types`); usage values from live `sessionRepo.countActiveSessions()` + `profilesRepo.countByAccount()` in parallel via `Promise.all`.
+- `profileCapFor(tier)` helper translates the api-types `'custom'` enterprise marker into customer-facing `null` ("no fixed cap on this tier; see your contract"). All other tiers return a numeric cap.
+- Wired in `apps/server/src/lib/app.ts`: `registerAccountMeRoutes` invoked when both `sessionRepo` + `profilesRepo` are present in `AppDeps`. New optional `profilesRepo?: ProfilesRepo` added to `AppDeps`. Production wiring in `bootstrap.ts` always provides both; test fixture `build-test-app.ts` similarly.
+
+**Test coverage:** 5 new integration tests in `apps/server/tests/integration/account-me.test.ts`:
+
+- 200 returns identity + tier + zero usage on freshly-seeded account.
+- Reflects `concurrent_session_active=1` after `POST /v1/sessions`.
+- Reflects `profile_count=2` after creating two profiles via `POST /v1/profiles`.
+- Returns `profile_cap: null` on `enterprise` tier.
+- 401 without an Authorization header.
+
+### Why
+
+V-236 audit identified two P0 launch-blockers that converge on this endpoint:
+
+1. Profile create form modal (V-238) — independent of backend; can ship in parallel.
+2. Tier-aware enforcement display (V-239) — depends on this endpoint.
+
+Per autopilot guardrails: "GUI client connects to driftstack-api endpoints — if new endpoints needed, add them in apps/server first with proper auth/scope, then consume from gui-client." V-237 lands the backend; V-239 will consume.
+
+The endpoint shape is intentionally narrow: it's the customer self-profile dashboard view, not a billing surface or admin surface. Adding cap + usage fields together (rather than separate `/concurrent-cap` + `/profile-cap` endpoints) saves the GUI an extra round-trip on settings load + page transitions.
+
+### Files
+
+- `apps/server/src/routes/account-me.ts` — new route.
+- `apps/server/src/lib/app.ts` — `ProfilesRepo` import + `profilesRepo?` on `AppDeps` + conditional `registerAccountMeRoutes`.
+- `apps/server/src/lib/bootstrap.ts` — `profilesRepo` added to `AppDeps` construction.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — fixture wiring.
+- `apps/server/tests/integration/account-me.test.ts` — 5 new tests.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (one prettier reflow on the new route file).
+- `npm test`: 722 / 722 passing across 75 files (+5 V-237 tests).
+- pre-push hook (V-223 + V-231 backstops): clean on push.
+
+### Notes
+
+- The `profile_cap: null` semantic for enterprise tier deliberately matches the `quotas: {field: null}` semantic the `/v1/usage` endpoint uses post-V-073 (per V-234 close-out). One consistent "null = no fixed cap" convention across customer-facing endpoints.
+- The GUI client SDK (`@driftstack/sdk`) needs an `account.me()` accessor before the GUI can consume V-237. SDK regen happens in V-238 / V-239 prep — not this commit.
+- Staff-driven mutations (admin force-changes a tier or cap) currently bypass any `/v1/account/me` cache because there is no such cache; the endpoint reads live counts on every call. If response time becomes a concern at high volume (highly unlikely at our scale), add a 5s in-memory cache; the auth-cache invalidation pattern (V-016 / D-025) bumps the account-version on tier change and would invalidate.
+- Did NOT add the cap to OpenAPI's `403/402 ConcurrencyLimitExceeded` problem-detail body. Kept the V-237 surface narrow (single endpoint addition); attaching cap to error bodies is a separate change to consider when GUI tier-aware enforcement reveals whether the cap-on-error is duplicative with the dashboard header.
+
+### Next
+
+V-238 — Profile create form modal in `apps/gui-client` (P0 #1 from V-236 audit; ~1-2hr Tier-1; independent of V-237).
+V-239 — Tier-aware enforcement display in `apps/gui-client/src/views/SessionsView.tsx` consuming the new V-237 endpoint via SDK regen (P0 #2 from V-236 audit; ~2-3hr Tier-1).
