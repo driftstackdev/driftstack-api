@@ -95,6 +95,18 @@ interface SerializedContext {
 interface CachedEntry {
   context: SerializedContext;
   accountVersion: number;
+  /**
+   * V-247 / V-246-P0-001 — per-key version counter. Bumped on
+   * revocation so an in-flight slow-path `set()` that captured the
+   * pre-revoke version produces an entry that the next `get()`
+   * detects as stale (currentKeyVersion !== entry.keyVersion). Closes
+   * the API-key revocation cache window. Optional during the
+   * migration: pre-V-247 entries lack this field; absent treated as
+   * 0 + current treated as 0 → degrades to V-246-pre behavior on the
+   * old entry, fresh entries get the gate. After 30s TTL the old
+   * entries naturally expire.
+   */
+  keyVersion?: number;
 }
 
 function serialize(ctx: AccountContext): SerializedContext {
@@ -180,6 +192,11 @@ function deserialize(s: SerializedContext): AccountContext {
 const KEY_ENTRY = (sha: string): string => `auth:apikey:${sha}`;
 const KEY_REVERSE = (keyId: string): string => `auth:keyid:${keyId}`;
 const KEY_ACCOUNT_VERSION = (accountId: string): string => `auth:account:${accountId}:v`;
+// V-247 / V-246-P0-001 — per-key version counter. Bumped by
+// invalidateKey(); checked by get(). Closes the revocation cache
+// window where a slow-path set() could land a stale revokedAt=null
+// entry after the revocation deleted the previous entry.
+const KEY_KEY_VERSION = (keyId: string): string => `auth:keyid:${keyId}:v`;
 
 export class RedisAuthCache implements AuthCache {
   constructor(
@@ -192,9 +209,17 @@ export class RedisAuthCache implements AuthCache {
       const raw = await this.redis.get(KEY_ENTRY(plaintextSha256));
       if (!raw) return null;
       const entry = JSON.parse(raw) as CachedEntry;
-      const versionRaw = await this.redis.get(KEY_ACCOUNT_VERSION(entry.context.account.id));
-      const currentVersion = versionRaw ? Number(versionRaw) : 0;
-      if (currentVersion !== entry.accountVersion) return null;
+      const accountVersionRaw = await this.redis.get(KEY_ACCOUNT_VERSION(entry.context.account.id));
+      const currentAccountVersion = accountVersionRaw ? Number(accountVersionRaw) : 0;
+      if (currentAccountVersion !== entry.accountVersion) return null;
+      // V-247 — key-version gate. Pre-V-247 entries (`keyVersion` absent)
+      // treat as version 0; post-V-247 entries always have it. Either way
+      // a revocation INCR makes the current value diverge from the cached
+      // value → null → falls through to scrypt + DB check → RevokedKeyError.
+      const keyVersionRaw = await this.redis.get(KEY_KEY_VERSION(entry.context.apiKey.id));
+      const currentKeyVersion = keyVersionRaw ? Number(keyVersionRaw) : 0;
+      const cachedKeyVersion = entry.keyVersion ?? 0;
+      if (currentKeyVersion !== cachedKeyVersion) return null;
       return deserialize(entry.context);
     } catch (err) {
       this.logger.warn({ err: errSummary(err) }, 'auth cache get failed; degrading to scrypt path');
@@ -210,9 +235,16 @@ export class RedisAuthCache implements AuthCache {
     ttlSec: number,
   ): Promise<void> {
     try {
-      const versionRaw = await this.redis.get(KEY_ACCOUNT_VERSION(accountId));
-      const accountVersion = versionRaw ? Number(versionRaw) : 0;
-      const entry: CachedEntry = { context: serialize(context), accountVersion };
+      // V-247 — capture both versions (account + key) at write time so
+      // a subsequent `invalidateAccount` OR `invalidateKey` increments
+      // the counter and the next `get()` detects the stale entry.
+      const [accountVersionRaw, keyVersionRaw] = await Promise.all([
+        this.redis.get(KEY_ACCOUNT_VERSION(accountId)),
+        this.redis.get(KEY_KEY_VERSION(keyId)),
+      ]);
+      const accountVersion = accountVersionRaw ? Number(accountVersionRaw) : 0;
+      const keyVersion = keyVersionRaw ? Number(keyVersionRaw) : 0;
+      const entry: CachedEntry = { context: serialize(context), accountVersion, keyVersion };
       const ttlMs = ttlSec * 1000;
       await Promise.all([
         this.redis.set(KEY_ENTRY(plaintextSha256), JSON.stringify(entry), 'PX', ttlMs),
@@ -226,8 +258,17 @@ export class RedisAuthCache implements AuthCache {
 
   async invalidateKey(keyId: string): Promise<void> {
     try {
+      // V-247 — INCR the key-version counter FIRST (atomic in Redis); any
+      // in-flight `set()` that captured the pre-INCR value will land an
+      // entry the next `get()` detects as stale. Then drop the existing
+      // entry so the next request takes the slow path immediately rather
+      // than waiting for a TTL expiry. Both ops are best-effort; the
+      // INCR is the load-bearing one for race resolution.
       const sha = await this.redis.get(KEY_REVERSE(keyId));
-      const ops: Array<Promise<unknown>> = [this.redis.del(KEY_REVERSE(keyId))];
+      const ops: Array<Promise<unknown>> = [
+        this.redis.incr(KEY_KEY_VERSION(keyId)),
+        this.redis.del(KEY_REVERSE(keyId)),
+      ];
       if (sha) ops.push(this.redis.del(KEY_ENTRY(sha)));
       await Promise.all(ops);
     } catch (err) {
@@ -251,6 +292,8 @@ export class RedisAuthCache implements AuthCache {
 interface MemEntry {
   context: AccountContext;
   accountVersion: number;
+  /** V-247 — key-version captured at set time; mirrors Redis impl. */
+  keyVersion: number;
   expiresAtMs: number;
 }
 
@@ -258,6 +301,8 @@ export class InMemoryAuthCache implements AuthCache {
   private readonly entries = new Map<string, MemEntry>();
   private readonly reverse = new Map<string, string>();
   private readonly accountVersions = new Map<string, number>();
+  // V-247 — mirror Redis key-version counter.
+  private readonly keyVersions = new Map<string, number>();
 
   get(plaintextSha256: string): Promise<AccountContext | null> {
     const entry = this.entries.get(plaintextSha256);
@@ -266,8 +311,11 @@ export class InMemoryAuthCache implements AuthCache {
       this.entries.delete(plaintextSha256);
       return Promise.resolve(null);
     }
-    const currentVersion = this.accountVersions.get(entry.context.account.id) ?? 0;
-    if (currentVersion !== entry.accountVersion) return Promise.resolve(null);
+    const currentAccountVersion = this.accountVersions.get(entry.context.account.id) ?? 0;
+    if (currentAccountVersion !== entry.accountVersion) return Promise.resolve(null);
+    // V-247 — key-version gate.
+    const currentKeyVersion = this.keyVersions.get(entry.context.apiKey.id) ?? 0;
+    if (currentKeyVersion !== entry.keyVersion) return Promise.resolve(null);
     return Promise.resolve(entry.context);
   }
 
@@ -279,9 +327,11 @@ export class InMemoryAuthCache implements AuthCache {
     ttlSec: number,
   ): Promise<void> {
     const accountVersion = this.accountVersions.get(accountId) ?? 0;
+    const keyVersion = this.keyVersions.get(keyId) ?? 0;
     this.entries.set(plaintextSha256, {
       context,
       accountVersion,
+      keyVersion,
       expiresAtMs: Date.now() + ttlSec * 1000,
     });
     this.reverse.set(keyId, plaintextSha256);
@@ -289,6 +339,11 @@ export class InMemoryAuthCache implements AuthCache {
   }
 
   invalidateKey(keyId: string): Promise<void> {
+    // V-247 — INCR key-version FIRST so any in-flight set() that
+    // captured the pre-INCR value lands a stale entry. Then drop
+    // the existing entry for fast-path eviction.
+    const cur = this.keyVersions.get(keyId) ?? 0;
+    this.keyVersions.set(keyId, cur + 1);
     const sha = this.reverse.get(keyId);
     if (sha) this.entries.delete(sha);
     this.reverse.delete(keyId);

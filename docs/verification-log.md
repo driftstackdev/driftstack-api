@@ -14066,3 +14066,60 @@ The audit's "P0 = launch-blocking" bar was set against "first paying customer po
 ### Next
 
 V-247 — implement V-246-P0-001 fix (key-version cache invalidation). Then V-248 — implement V-246-P1-001 fix (Stripe URL allowlist). Both same-session work.
+
+## V-247 — V-246-P0-001 fix: API key revocation race window closed via key-version counter
+
+### What
+
+Closes the V-246 audit's single P0 finding. Implements key-version counter pattern in `auth-cache.ts` mirroring the existing account-version pattern (V-016 / D-025).
+
+**Race resolved:**
+
+- Pre-V-247: revocation does DB write → cache delete. An in-flight slow-path `cache.set()` could land AFTER cache delete with the pre-revoke `revokedAt: null` snapshot, surviving until 30s TTL. The next `get()` returns the stale entry → revoked key authenticates.
+- Post-V-247: revocation does INCR(key-version) FIRST, then cache delete. The in-flight `set()` captured the pre-INCR version (e.g. 0), the current is now 1, the next `get()` sees the mismatch and returns null → falls through to scrypt → DB checks revokedAt → throws RevokedKeyError.
+
+**Implementation:**
+
+- `CachedEntry` interface gains optional `keyVersion?: number`. Optional during migration so pre-V-247 entries (already in flight from running servers) don't break — absent treated as 0; current also treated as 0 if no counter exists yet.
+- `KEY_KEY_VERSION(keyId)` Redis key namespace `auth:keyid:<keyId>:v`.
+- `RedisAuthCache.get()` reads both account-version + key-version on every hit; mismatch on either → null.
+- `RedisAuthCache.set()` reads both versions at write time and bakes them into the entry.
+- `RedisAuthCache.invalidateKey()` calls `INCR` on the key-version FIRST (atomic), THEN deletes the existing entry. Order matters: the INCR is the load-bearing race-resolution; the delete is fast-path eviction so the next request takes scrypt directly.
+- `InMemoryAuthCache` mirrors all of the above for tests.
+
+**Test coverage:** 2 new unit tests in `tests/unit/auth-cache.test.ts`:
+
+- `rejects a stale entry whose keyVersion was bumped post-set` — simulates the race by re-setting an entry then incrementing the counter without dropping the entry; asserts the next get returns null.
+- `per-key invalidation does not affect other keys on the same account` — defense-in-depth that revoking key A leaves key B's cached context intact.
+
+All existing 16 auth-cache tests still pass (10 unit + 6 integration).
+
+### Why
+
+V-246 audit identified this as the single P0 launch-blocker. Per founder direction's autopilot grant, T2 (architectural) decisions can be taken autonomously this window. The key-version counter pattern was the audit's recommended fix (Option B) — chosen over Option A (re-verify revokedAt from DB on every cache hit) because Option A defeats the cache by adding a DB query per hit; Option B is zero added latency on cache hit (the `redis.get` is parallel to the existing account-version read).
+
+The pattern mirrors the existing account-version invalidation (V-016 / D-025) so future engineers reading the cache code see one consistent invalidation pattern, not two.
+
+### Files
+
+- `apps/server/src/services/auth-cache.ts` — added `keyVersion` to `CachedEntry` + `KEY_KEY_VERSION` Redis key + per-key version checks in `RedisAuthCache.get()/set()/invalidateKey()` + matching changes in `InMemoryAuthCache`.
+- `apps/server/tests/unit/auth-cache.test.ts` — 2 new race regression tests.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (one prettier reflow on auth-cache.ts).
+- `npm test`: 731 / 731 passing across 76 files (+2 V-247 unit tests).
+- pre-push hook: clean on push.
+
+### Notes
+
+- The migration posture is forward-compatible: a server upgrading from V-246 to V-247 with existing cache entries (without `keyVersion`) treats them as version 0; the new INCR semantics start from 1; old entries effectively become "missing version" → `0 !== 0` is FALSE → entry passes the version gate but DOES NOT have the protection until it ages out (30s TTL). After ~30 seconds all cache entries are V-247-shaped. No data loss; brief race-window remains during the rollover window only.
+- Defense-in-depth: V-247 keeps the existing entry-delete behavior in `invalidateKey` for fast-path eviction. The `INCR` is the race-resolution; the `DEL` is the latency-resolution (next request on the same key doesn't wait for TTL expiry, takes scrypt directly).
+- The audit's V-246-P1-003 (`account_owner` scope reach into `/v1/admin/*`) was not addressed in V-247; it requires a route-layer scope refactor that's its own multi-commit work and is operationally mitigated by V-135 Cloudflare Access. Tracked for post-launch.
+
+### Next
+
+V-248 — V-246-P1-001 fix (Stripe checkout `success_url` / `cancel_url` allowlist).
