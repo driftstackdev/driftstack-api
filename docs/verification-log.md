@@ -13429,3 +13429,65 @@ The deferral is bounded — proposal stays under version control, revisit trigge
 ### Next
 
 V-236 — apps/gui-client audit (Phase 1 of GUI client launch arc per founder direction 2026-05-06).
+
+## V-236 — GUI client audit (PHASE 1 of launch arc)
+
+### What
+
+New `docs/gui-client/audit-current-state.md` (~250 lines) — systematic walk of `apps/gui-client/` against the file 128 spec across 13 audit dimensions. Per founder direction 2026-05-06, this is PHASE 1 of the GUI client launch arc; PHASE 2 picks the topmost P0 launch-blocking gap and starts mechanical Tier-1 work.
+
+**Headline finding:** the GUI client is more complete than the launch checklist suggested. Sessions / profiles (read+delete) / proxies / recordings / connectivity / settings all wire to live `@driftstack/sdk` accessors hitting real endpoints. Auth chain works (API-key based; settings persisted via Tauri Store plugin). Brand consistency LOCKED (oxblood + Geist Sans + Berkeley Mono + lowercase "driftstack" wordmark per V-219\* mirror). Anonymity policy COMPLIANT (no founder name, no AI references in customer-facing surfaces).
+
+**P0 launch-blockers identified — narrow + concrete:**
+
+1. **Profile create form modal** (~1-2hr Tier-1) — `ProfilesView.tsx:118` has `aria-disabled="true"` Spawn button; customers cannot create profiles from the GUI today. Read + delete are live. The fix is mechanical: form modal with name + archetype picker calling existing `/v1/profiles POST`.
+2. **Tier-aware enforcement display** (~2-3hr Tier-1) — GUI doesn't show "X of Y concurrent sessions" or pre-empt the 402 ConcurrencyLimitExceeded response. Server-side enforcement (V-073) IS in place; GUI just doesn't surface it. Manual-tier UX improvement.
+3. **Cross-cutting backend dependency** — verify whether `/v1/account` or equivalent returns tier + concurrent cap. If missing, add `/v1/account/me` returning `{ tier, concurrent_cap, profiles_used, profiles_cap }` to `apps/server` BEFORE consuming in GUI per autopilot guardrail "GUI client connects to driftstack-api endpoints — if new endpoints needed, add them in apps/server first."
+
+**P1 launch-recommended:**
+
+- `rust-toolchain.toml` pin (~5min) for reproducible contributor builds.
+- Self-hosted titlebar label conditional on URL match (~30min) — `App.tsx:143` hardcodes "Driftstack · self-hosted" which cloud customers shouldn't see.
+
+**P2 post-launch:**
+
+- WebRTC streaming (depends on file 36 server-side architecture work).
+- Auto-update mechanism (Sparkle / Tauri Updater / GitHub Releases — distribution Tier-3 surface).
+- First-run setup wizard.
+
+**T3 founder-ack-required surfaces (drafted but not autonomously decided):**
+
+- **API-key at-rest storage** — currently plaintext on disk in `~/Library/Application Support/dev.driftstack.gui/settings.json`. Three approaches: macOS Keychain (`@tauri-apps/plugin-stronghold`), encrypted-at-rest with OS-derived key, or keep plaintext + document explicitly. Customer-data architecture decision.
+- **Telemetry posture** — cloud variant reports to Sentry vs self-hosted no-reporting vs both with explicit opt-in. Customer-data + product decision.
+- **Distribution mechanism** (when reaching PHASE 3) — signed `.dmg` / Sparkle / GitHub Releases / etc.
+
+These get explicit founder-ack drafts in `docs/proposals/` when the corresponding P-item lands at the relevant boundary; autopilot does not autonomously pick.
+
+### Why
+
+Per founder direction 2026-05-06: "PHASE 1 — apps/gui-client audit (Tier 1, ~1-2hr) ... Surface audit doc + push as V-235. PHASE 2 begins immediately after audit lands." Slot used as V-236 instead of V-235 (V-235 was used by the V-184b deferral housekeeping commit landing first).
+
+The audit's P0/P1/P2/T3 categorization is the load-bearing artifact: PHASE 2 picks from P0; T3 surfaces hold for founder verdicts; P1/P2 pile up post-launch. Per autopilot guardrails the categorization stays bounded — security/customer-data items are explicitly T3-flagged so autopilot doesn't autonomously decide them.
+
+### Files
+
+- `docs/gui-client/audit-current-state.md` — new audit doc.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 717 / 717 passing across 74 files (pure docs).
+- pre-push hook (V-223 + V-231 backstops): clean on push.
+
+### Notes
+
+- The audit was conducted via Explore agent reading 18 source files in `apps/gui-client/`; findings cross-checked against actual file paths + line numbers cited inline. Each "current state" claim is grounded in a concrete code citation.
+- The `apps/gui-client/` codebase has its own task list referencing "GUI8" milestones (settings.ts comment about future keychain upgrade); this audit does not enumerate those internal milestones — it only categorizes by launch-readiness priority. Future renumbering of internal milestones doesn't affect this audit's findings.
+- The `@driftstack/sdk` is currently at v0.1.x; SDK regen is part of any backend contract change. If the `/v1/account/me` endpoint addition is needed for P0 #2 + #3, the SDK regen + GUI consume sequence is: backend → SDK `npm run sdk:python:dump-spec` (or TS equivalent) → SDK release → GUI consume.
+
+### Next
+
+PHASE 2 — start with backend dependency check (Section 14 of audit). V-237: verify `/v1/account` or equivalent shape; if it doesn't return tier + concurrent cap, add `/v1/account/me` endpoint with proper auth + tests. Then in parallel: V-238 profile create form modal in GUI (independent of backend). Then V-239 tier-aware enforcement display in GUI (depends on V-237).
