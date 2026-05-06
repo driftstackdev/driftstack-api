@@ -14023,3 +14023,46 @@ Per founder direction order: V-243 (T3 #3) + V-244 (wizard) + V-245 (build CI) c
 - (d) Documentation site `apps/docs` (Astro) (~3-4hr).
 
 Picking next based on highest-leverage. Recommend (b) Hetzner deployment automation: launch readiness depends on having a tested deploy path. (a) security audit can run after deploy automation is in place; (d) docs site can defer.
+
+## V-246 — Pre-launch security audit
+
+### What
+
+New `docs/security-audit-2026-05-06.md` (~110 lines) — structured findings from a pre-launch security audit walking auth + payment + data-handling code paths in `apps/server/`. Conducted via Explore agent reading 14 service/lib/route files; cross-checked by line citations.
+
+**Headline findings:**
+
+- **1 P0** (launch-blocking): API key revocation race window — between DB write of `revokedAt` and cache invalidation, a concurrent request can hit a stale cached `AccountContext` with `revokedAt: null`. Fix targeted at V-247 via key-version counter (mirrors existing account-version pattern).
+- **1 P1** (recommended fix): Open redirect in Stripe checkout — `success_url` / `cancel_url` from request body passed unvalidated to Stripe Checkout API. Fix targeted at V-248 via origin allowlist.
+- **3 P1** (deferrable): PII in operational logs (intentional, document); `account_owner` scope reachability into `/v1/admin/*` (operationally mitigated by Cloudflare Access; refactor post-launch); IP-based rate limiting on auth endpoints (planned).
+- **5 P2** (post-launch): operational/documentation items.
+- **10 verified clean**: scope enforcement, plaintext credential leakage, Stripe idempotency, audit log injection, account-scope leakage, web session security, CSRF, user enumeration prevention, cache version invalidation, multi-customer Stripe webhooks.
+
+### Why
+
+Per founder direction queue option (a) — pre-launch security audit on auth/payment/data-handling. Pivoted to (a) over (b) when option (b) Hetzner deployment automation was found mostly already built (1025 lines of Dockerfile + compose + workflow + env-vars + runbook + DR runbook).
+
+The audit's "P0 = launch-blocking" bar was set against "first paying customer post-KvK transition Q4-2026/Q1-2027" — anything that would be embarrassing if it hit production. The single P0 finding meets that bar; everything else is documented hardening that can ship incrementally.
+
+### Files
+
+- `docs/security-audit-2026-05-06.md` — new audit doc.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 729 / 729 passing across 76 files (pure docs).
+- pre-push hook: clean on push.
+
+### Notes
+
+- Audit was conducted by Explore agent with concrete file:line citations for every finding. Each "verified clean" claim is grounded in inspected code, not absence of evidence. The "10 verified clean" list is part of the audit value — surfacing absence of issues is as important as surfacing presence.
+- Founder review on wake validates the prioritization. Specifically: V-246-P1-003 (account_owner → /v1/admin/\* reach) is genuinely deferrable per the audit because Cloudflare Access on `admin.driftstack.dev` (V-135) prevents the customer from reaching the admin origin in the first place. If the founder disagrees with that mitigation strength, V-246-P1-003 becomes another P0 alongside V-246-P0-001.
+- Targeted V-247 + V-248 fixes are mechanical from the audit recommendations. V-247 is the larger of the two (touches auth.ts + auth-cache.ts); V-248 is a small route-layer addition.
+
+### Next
+
+V-247 — implement V-246-P0-001 fix (key-version cache invalidation). Then V-248 — implement V-246-P1-001 fix (Stripe URL allowlist). Both same-session work.
