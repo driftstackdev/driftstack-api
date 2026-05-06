@@ -321,3 +321,30 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Tier:** 3 (security architecture / customer-data handling — autonomously decided per founder direction 2026-05-06 explicit autopilot grant).
 - **V-log:** V-241.
 - **Revert path:** if keyring-rs proves to be a build-time blocker on a target platform, revert by removing the `keyring` dependency + restoring settings.ts to the plugin-store-only path. Migration in reverse direction (keychain → settings.json) would need a one-shot read-and-rewrite. Not anticipated.
+
+## D-2026-05-06-02 — GUI telemetry: Sentry crash-only, opt-in, cloud-default-on / self-hosted-default-off
+
+- **Decision:** the GUI client (`apps/gui-client`) wires `@sentry/browser` v8 for crash-only telemetry. Gate logic in `src/lib/telemetry.ts::telemetryEnabled()`:
+  - DSN unset → never fires.
+  - `optIn === true` → ON (overrides default).
+  - `optIn === false` → OFF (overrides default).
+  - `optIn === null` → ON for cloud baseUrl (`*.driftstack.dev`), OFF for everything else.
+
+  Crash-only configuration: tracesSampleRate=0 (no perf), no Replay, no Browser-Profiling. Default integrations (GlobalHandlers, Breadcrumbs) cover the crash surface only. `beforeSend` scrubber strips Authorization headers, `api_key` / `password` / `secret` / `token` / `bearer` field names from `extra` + `contexts`. Release tagged as `driftstack-gui@<version>`.
+
+  Customer toggle in `SettingsView` exposes three radios: "Use platform default", "Share crash reports with Driftstack", "Don't share crash reports". Default selection on first install is "Use platform default" (null) so cloud customers get telemetry without explicit action and self-hosted customers don't.
+
+  No native (Rust-side) Sentry yet. The Tauri shell is thin per the V-236 audit; most customer-facing crashes originate in the React layer. Adding sentry-rust later is purely additive if Rust crashes become a real issue surface.
+
+- **Reasoning:** alternatives considered:
+  - **(a) No telemetry** — current pre-V-242 state. Operational signal "did anyone hit a crash?" is unknowable. Acceptable for true-self-hosted privacy posture, but cloud customers benefit from observability.
+  - **(b) Always-on** — privacy concern for self-hosted; defeats the "your data stays on your premise" pitch.
+  - **(c) Always-opt-in (default off everywhere)** — most cloud customers won't toggle on; we lose the signal that matters most.
+
+  The cloud-on / self-hosted-off split aligns telemetry to the customer's underlying choice: cloud is a data-sharing tier already (their data hits Driftstack's servers); self-hosted explicitly opts out of that. Telemetry mirrors the same posture.
+
+  Privacy contract is defense-in-depth: never intentionally send PII (no API keys, profile data, request bodies, customer email/name); the `beforeSend` scrubber catches the case where a stack trace accidentally captures a credential-shaped field. Sentry's `sendDefaultPii` is also off.
+
+- **Tier:** 3 (security architecture / customer-data handling — autonomously decided per founder direction 2026-05-06 explicit autopilot grant).
+- **V-log:** V-242.
+- **Revert path:** if telemetry becomes a customer-trust concern (e.g. someone files a complaint), set `tracesSampleRate=0` and remove the cloud-default in one PR; default everywhere becomes "off unless opt-in". Customer-facing impact: minor loss of crash signal for cloud customers who didn't actively opt in. Reversible without schema or contract changes.

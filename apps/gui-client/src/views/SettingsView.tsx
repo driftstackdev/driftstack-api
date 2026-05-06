@@ -1,16 +1,22 @@
-// Settings view — API key + base URL editor.
+// Settings view — API key + base URL + telemetry toggle.
 //
-// This is the first surface a fresh installation lands on. The API key
-// is masked by default; "Show" reveals it for verification while
-// editing. Both fields persist to the Tauri store on save.
+// V-241: API key now stored in OS keychain (macOS Keychain / Windows
+// Credential Manager / Linux Secret Service); the masked input edits
+// the keychain entry transparently via Tauri commands.
+//
+// V-242: telemetry toggle — Sentry crash-only opt-in. Defaults ON for
+// cloud customers, OFF for self-hosted. Customer can override either
+// direction.
 
 import { useState } from 'react';
 import { useSettings } from '../lib/SettingsContext';
+import { isCloudBaseUrl } from '../lib/telemetry';
 
 export function SettingsView(): JSX.Element {
   const { settings, update, loading } = useSettings();
   const [draftKey, setDraftKey] = useState(settings.apiKey ?? '');
   const [draftUrl, setDraftUrl] = useState(settings.baseUrl);
+  const [draftTelemetry, setDraftTelemetry] = useState<boolean | null>(settings.telemetryOptIn);
   const [reveal, setReveal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -31,6 +37,7 @@ export function SettingsView(): JSX.Element {
       await update({
         apiKey: draftKey.length > 0 ? draftKey : null,
         baseUrl: draftUrl.trim().replace(/\/+$/, '') || 'http://localhost:7780',
+        telemetryOptIn: draftTelemetry,
       });
       setSavedAt(Date.now());
     } finally {
@@ -38,7 +45,17 @@ export function SettingsView(): JSX.Element {
     }
   }
 
-  const dirty = draftKey !== (settings.apiKey ?? '') || draftUrl !== settings.baseUrl;
+  const dirty =
+    draftKey !== (settings.apiKey ?? '') ||
+    draftUrl !== settings.baseUrl ||
+    draftTelemetry !== settings.telemetryOptIn;
+
+  // V-242 — surface the platform default to the customer so they
+  // understand what the "use default" choice means in their context.
+  const cloudBaseUrl = isCloudBaseUrl(draftUrl);
+  const platformDefaultLabel = cloudBaseUrl ? 'on (cloud default)' : 'off (self-hosted default)';
+  const effectiveTelemetry =
+    draftTelemetry === null ? (cloudBaseUrl ? 'on' : 'off') : draftTelemetry ? 'on' : 'off';
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
@@ -85,9 +102,8 @@ export function SettingsView(): JSX.Element {
             </button>
           </div>
           <span className="mt-1 block text-2xs text-ink-muted">
-            Stored in{' '}
-            <span className="mono">~/Library/Application Support/dev.driftstack.gui/</span>; never
-            sent to anywhere except your configured API server.
+            Stored in your OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret
+            Service); never sent anywhere except your configured API server.
           </span>
         </Field>
 
@@ -109,6 +125,44 @@ export function SettingsView(): JSX.Element {
           <span className="mt-1 block text-2xs text-ink-muted">
             Default targets a local server on port 7780. Set to{' '}
             <span className="mono">https://api.driftstack.dev</span> for the cloud tier.
+          </span>
+        </Field>
+
+        <Field label="Crash reports">
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-2 text-sm text-ink-secondary">
+              <input
+                type="radio"
+                name="telemetry"
+                checked={draftTelemetry === null}
+                onChange={() => setDraftTelemetry(null)}
+              />
+              <span>
+                Use platform default <span className="mono">({platformDefaultLabel})</span>
+              </span>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink-secondary">
+              <input
+                type="radio"
+                name="telemetry"
+                checked={draftTelemetry === true}
+                onChange={() => setDraftTelemetry(true)}
+              />
+              <span>Share crash reports with Driftstack</span>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-ink-secondary">
+              <input
+                type="radio"
+                name="telemetry"
+                checked={draftTelemetry === false}
+                onChange={() => setDraftTelemetry(false)}
+              />
+              <span>Don't share crash reports</span>
+            </label>
+          </div>
+          <span className="mt-2 block text-2xs text-ink-muted">
+            Crash-only: error messages, stack traces, app version, OS. Never API keys, profile data,
+            or any session contents. Currently: <span className="mono">{effectiveTelemetry}</span>.
           </span>
         </Field>
 

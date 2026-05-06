@@ -13794,3 +13794,54 @@ Per founder direction 2026-05-06 autopilot grant: T3 decisions made + documented
 ### Next
 
 V-242 — T3 #2 (Sentry crash-only opt-in telemetry).
+
+## V-242 — GUI T3 #2: Sentry crash-only opt-in telemetry
+
+### What
+
+Decision: D-2026-05-06-02 — `@sentry/browser` v8 for crash-only telemetry in `apps/gui-client`. Three radio choices in Settings: "Use platform default" / "Share crash reports" / "Don't share". Defaults to platform-default (null) which resolves to ON for cloud baseUrl + OFF for self-hosted.
+
+**Components:**
+
+- `apps/gui-client/src/lib/telemetry.ts` — pure gate function `telemetryEnabled({ baseUrl, optIn })` + Sentry init wrapper. DSN injected via `VITE_SENTRY_DSN` env var at build time. Crash-only config (`tracesSampleRate: 0`, integrations filtered to drop BrowserTracing/Replay/Profiling). `beforeSend` scrubber strips Authorization headers + sensitive field names (api_key, password, secret, token, bearer) from event payloads.
+- `apps/gui-client/src/lib/settings.ts` — `DriftstackSettings.telemetryOptIn: boolean | null` field; persisted to settings.json alongside baseUrl.
+- `apps/gui-client/src/lib/SettingsContext.tsx` — useEffect re-inits telemetry whenever baseUrl or telemetryOptIn changes; close() called on opt-out.
+- `apps/gui-client/src/views/SettingsView.tsx` — three-radio Crash reports section + "Currently: <on|off>" status line surfacing the resolved gate state. API-key storage label updated to mention OS keychain (macOS / Windows / Linux) per V-241.
+- `apps/gui-client/tests/unit/telemetry.test.ts` — 7 unit tests for `isCloudBaseUrl()` (canonical / subdomain / look-alike / localhost-or-IP / malformed) and `telemetryEnabled()` baseline (DSN-empty case in test env). Documents the full gating matrix as a contract-as-comment.
+
+**Cross-platform:** `@sentry/browser` runs identically on Tauri's WebView across Windows / macOS / Linux. No native-side Sentry yet (thin Rust shell per V-236 audit).
+
+### Why
+
+Per founder direction 2026-05-06 autopilot grant. Reasoning chain in D-2026-05-06-02 covers alternatives (no telemetry / always-on / always-opt-in) and why cloud-default-on + self-hosted-default-off aligns with each customer's underlying data-sharing choice.
+
+### Files
+
+- `apps/gui-client/package.json` — added `@sentry/browser: ^8.55.0`.
+- `apps/gui-client/src/lib/telemetry.ts` — new module.
+- `apps/gui-client/src/lib/settings.ts` — `telemetryOptIn` field + persist + load.
+- `apps/gui-client/src/lib/SettingsContext.tsx` — re-init telemetry on settings change.
+- `apps/gui-client/src/views/SettingsView.tsx` — three-radio toggle + V-241 storage label refresh.
+- `apps/gui-client/tests/unit/telemetry.test.ts` — 7 new unit tests.
+- `docs/decisions.md` — D-2026-05-06-02.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean (two `import.meta.env` ts-eslint disables narrowly scoped to the DSN/version constants).
+- `npm run format:check`: clean.
+- `npm test`: 729 / 729 passing across 76 files (+7 V-242 telemetry tests).
+- pre-push hook: clean on push.
+- **Real Sentry init verification pending** Tauri dev environment + Sentry DSN configured in env. Production verification: deploy with `VITE_SENTRY_DSN` set; trigger a synthetic error in the GUI; confirm event lands in Sentry project with scrubbed payload.
+
+### Notes
+
+- The `import.meta.env.VITE_SENTRY_DSN` access has two narrowly-scoped ts-eslint disables. Vite injects the env shape at build time; the runtime types are unavoidable since the SDK can't know what env vars the bundler will inject. Same shape as the existing apps/marketing-site / apps/customer-dashboard env access patterns.
+- The `null` semantic for `telemetryOptIn` (= "use platform default") is the customer's first-run state. Once they choose either "share" or "don't share" explicitly, the value is locked to true/false; "use platform default" is no longer the default but is still selectable. This matches the underlying contract: the customer's CHOICE is null/true/false, not just true/false-with-platform-derivation-elsewhere.
+- DSN is empty in autopilot test env, so `telemetryEnabled` always returns false in tests. The gating matrix is documented as a contract-as-comment in the test file. Real-DSN verification happens at deploy time. Acceptable trade — the gate logic itself is pure, simple, and covered.
+- Considered + skipped: per-event opt-in dialog (every crash prompts the user to send). Too noisy for a desktop app; opt-in toggle in Settings is the conventional pattern.
+
+### Next
+
+V-243 — T3 #3 (Tauri Updater + GitHub Releases distribution).

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@driftstack/sdk": "*",
+    "@sentry/browser": "^8.55.0",
     "@tauri-apps/api": "^2.1.0",
     "@tauri-apps/plugin-fs": "^2.1.0",
     "@tauri-apps/plugin-store": "^2.1.0",

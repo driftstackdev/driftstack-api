@@ -24,11 +24,19 @@ import { invoke } from '@tauri-apps/api/core';
 export interface DriftstackSettings {
   apiKey: string | null;
   baseUrl: string;
+  /**
+   * V-242 / D-2026-05-06-02 — explicit telemetry opt-in/out. When
+   * `null`, the platform default is used: ON for cloud, OFF for
+   * self-hosted. A non-null value is the customer's explicit choice
+   * and overrides the default.
+   */
+  telemetryOptIn: boolean | null;
 }
 
 export const DEFAULT_SETTINGS: DriftstackSettings = {
   apiKey: null,
   baseUrl: 'http://localhost:7780',
+  telemetryOptIn: null,
 };
 
 const STORE_FILE = 'settings.json';
@@ -38,6 +46,7 @@ const KEYCHAIN_API_KEY_NAME = 'api_key';
 interface PersistedSettings {
   apiKey?: unknown;
   baseUrl?: unknown;
+  telemetryOptIn?: unknown;
 }
 
 let store: LazyStore | null = null;
@@ -104,20 +113,25 @@ export async function loadSettings(): Promise<DriftstackSettings> {
     persisted && typeof persisted.baseUrl === 'string' && persisted.baseUrl.length > 0
       ? persisted.baseUrl
       : DEFAULT_SETTINGS.baseUrl;
+  const telemetryOptIn =
+    persisted && typeof persisted.telemetryOptIn === 'boolean' ? persisted.telemetryOptIn : null;
 
   // If migration ran (or settings.json had a stale apiKey that we just
   // dropped), persist the cleaned-up shape.
   if (persisted && 'apiKey' in persisted) {
-    await getStore().set(SETTINGS_KEY, { baseUrl });
+    await getStore().set(SETTINGS_KEY, { baseUrl, telemetryOptIn });
     await getStore().save();
   }
 
-  return { apiKey, baseUrl };
+  return { apiKey, baseUrl, telemetryOptIn };
 }
 
 export async function saveSettings(s: DriftstackSettings): Promise<void> {
-  // baseUrl → JSON store; apiKey → keychain (or delete on null).
-  await getStore().set(SETTINGS_KEY, { baseUrl: s.baseUrl });
+  // baseUrl + telemetryOptIn → JSON store; apiKey → keychain (or delete on null).
+  await getStore().set(SETTINGS_KEY, {
+    baseUrl: s.baseUrl,
+    telemetryOptIn: s.telemetryOptIn,
+  });
   await getStore().save();
 
   if (s.apiKey === null || s.apiKey.length === 0) {

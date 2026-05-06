@@ -14,6 +14,7 @@ import type { ReactNode } from 'react';
 import type { AccountSelfProfile } from '@driftstack/sdk';
 import { buildClient, type DriftstackClient } from './client';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type DriftstackSettings } from './settings';
+import { initTelemetry } from './telemetry';
 
 interface SettingsContextValue {
   settings: DriftstackSettings;
@@ -45,6 +46,13 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
       cancelled = true;
     };
   }, []);
+
+  // V-242 — re-init telemetry whenever baseUrl or telemetryOptIn changes.
+  // initTelemetry is idempotent + reconfigure-safe; it close()s the
+  // existing client when the customer opts out mid-session.
+  useEffect(() => {
+    initTelemetry({ baseUrl: settings.baseUrl, optIn: settings.telemetryOptIn });
+  }, [settings.baseUrl, settings.telemetryOptIn]);
 
   const update = useCallback(
     async (next: Partial<DriftstackSettings>) => {
