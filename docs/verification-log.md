@@ -13335,3 +13335,54 @@ Per founder direction on V-231 ack queue:
 - **TD-002 archive** in `docs/tech-debt.md` — small housekeeping; defer to a future doc-sweep.
 
 Both founder-approved Tier-1 items from the autopilot ack queue (TD-002 + poller startup) now landed. Next session resumes with whatever launch-readiness work the founder surfaces.
+
+## V-234 — e2e suite verified clean against real Postgres (V-228 verification flag cleared)
+
+### What
+
+Founder confirmed Docker running 2026-05-06; ran `npm run test:e2e --workspace apps/server` to validate the V-228 verification flag carried across V-228 / V-202c / V-202d / V-231 (do all 22 migrations chain cleanly against a real Postgres + Redis?).
+
+**First run:** 67 passed / 7 failed.
+
+- 6 of the 7 failures: `POST /v1/api-keys` returning 409 instead of 201. Root cause: V-049 legal-acceptance gate added after the e2e seed helper was last touched. The integration fixture (`build-test-app.ts`) pre-seeds legal_acceptances; the e2e seed helper (`tests/e2e/helpers/seed.ts`) didn't. Fixed by extending `seedAccount` with cached `buildLegalCatalog` reads + a default acceptances-batch insert. Tests that exercise the gate explicitly can opt out via `skipLegalAcceptance: true`.
+- 1 of the 7 failures: `GET /v1/usage` for `api_scale` tier asserted `quotas.navigate === 100_000`. Root cause: stale test asserting pre-V-073 single-ladder quota values; per ADR-004 / V-073 ALL paid tiers are concurrent-only and per-op quotas are intentionally null (`session_minute` ledger primitive preserved but not gated). Updated assertion to `.toBeNull()` with comment explaining the contract.
+
+**Second run:** 74 passed / 0 failed. Migrations 0000-0022 chain cleanly. The 0022 no-op consolidation marker (V-231) applied successfully — confirming the comment-only file is a valid drizzle migration.
+
+### Why
+
+The V-228 / V-202c / V-202d / V-231 V-log entries each carried an explicit verification flag: `npm run test:e2e --workspace apps/server` once Docker was available would confirm the full migration chain works end-to-end. Founder ran the gate; this V-entry records the outcome + the two fixes the run surfaced.
+
+The fixes are interesting in opposite ways:
+
+- **Seed-helper fix:** the kind of gap the V-228 / V-221 catches were designed to surface — feature shipped (V-049 legal-acceptance gate), but a peripheral test scaffold (e2e seed) didn't get the matching update. Same shape as the V-221 typecheck-gap: code worked at unit/integration level, broke at e2e level. Different from V-221 in that production was never at risk (the e2e seed only affects test data); but the shape of the gap is identical. Worth noting for future schema-affecting changes: when adding a new gate, sweep both `tests/integration/_helpers/build-test-app.ts` AND `tests/e2e/helpers/seed.ts`.
+- **Stale-test fix:** opposite problem — production code is correct (per ADR-004); the test was out-of-date. Likely missed during the V-073 backend rewrite because the test file uses raw assertions rather than reading from the canonical `TIER_QUOTAS` map. Worth noting for future: assertions on tier-specific values should read from the same source the production code reads from, not duplicate the constants in tests.
+
+### Files
+
+- `apps/server/tests/e2e/helpers/seed.ts` — added `buildLegalCatalog` import + cached catalog + default acceptances-batch insert + `skipLegalAcceptance` opt-out flag.
+- `apps/server/tests/e2e/admin.spec.ts` — updated `/v1/usage` scale-tier test to assert null quotas per ADR-004.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 717 / 717 passing across 74 files (unaffected — these changes are e2e-only).
+- `npm run test:e2e --workspace apps/server`: **74 / 74 passing.** All 22 migrations apply cleanly against fresh Postgres; e2e flow verifies sessions / api-keys / webhooks / admin / customer-journey / openapi-contract / usage end-to-end.
+- pre-push hook: clean on push.
+
+### Notes
+
+- **V-228 verification flag CLEARED.** The flag was carried across 5 V-entries (V-228 / V-202c / V-202d / V-231 / V-232) over multiple sessions; this is the first time it's been actually exercised. Going forward, e2e should be run before any deploy to catch this class of regression earlier.
+- The `cachedCatalog` per-process pattern in `seed.ts` prevents repeated disk reads of the legal docs across the ~74 seed calls in an e2e run. Each test is fast (< 1s); without caching, file reads would dominate. Cheap optimization but matches the V-051 build-time copy pattern.
+- Did NOT add a pre-push gate that runs e2e. Per V-223 design, e2e stays in CI / on-demand because of the Docker dependency. If founder wants e2e in pre-push, that's a separate decision; the cost (5 min Docker startup + e2e runtime) is too high for every push.
+
+### Next
+
+V-228 verification flag cleared. Founder cleared all autopilot ack queue items. Remaining queue:
+
+- **V-184b Tier 3 onboarding visual UX** — waits on founder copy redline of `docs/proposals/v-184b-onboarding-visual-scope.md`.
+- **V-215 force-push verification** — waits on founder firing V-207/V-212 runbook.
+- Whatever launch-readiness work surfaces from the founder next.

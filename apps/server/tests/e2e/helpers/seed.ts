@@ -1,12 +1,22 @@
 // Programmatic test data: insert an account + admin API key directly via
 // Drizzle. Returns the plaintext key for use in Authorization headers.
+//
+// V-049 legal-acceptance gate: POST /v1/api-keys requires the account
+// to have accepted all required legal documents (ToS / Privacy / DPA /
+// AUP). seedAccount pre-acceptances all four against the canonical
+// catalog loaded from `docs/legal/*.md`, mirroring the integration
+// fixture at `tests/integration/_helpers/build-test-app.ts`. Tests
+// that exercise the gate explicitly can pass `skipLegalAcceptance: true`.
 
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import type { Redis } from 'ioredis';
 import type postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../../../src/lib/api-keys.js';
-import { accounts, apiKeys } from '../../../src/db/schema.js';
+import { accounts, apiKeys, legalAcceptances } from '../../../src/db/schema.js';
 import * as schema from '../../../src/db/schema.js';
+import { buildLegalCatalog } from '../../../src/services/legal-catalog.js';
 import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
 
 export interface SeedAccountInput {
@@ -14,6 +24,8 @@ export interface SeedAccountInput {
   tier?: AccountTier;
   scopes?: ApiKeyScope[];
   status?: 'active' | 'suspended' | 'deleted';
+  /** Skip seeding legal acceptances. For tests that exercise the V-049 gate. */
+  skipLegalAcceptance?: boolean;
 }
 
 export interface SeededAccount {
@@ -21,6 +33,17 @@ export interface SeededAccount {
   apiKeyId: string;
   plaintext: string;
   tier: AccountTier;
+}
+
+// Cache the catalog once per process — DEFAULT_SOURCES + readFileSync
+// are deterministic across the e2e run.
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
+let cachedCatalog: ReturnType<typeof buildLegalCatalog> | null = null;
+function getCatalog(): ReturnType<typeof buildLegalCatalog> {
+  if (cachedCatalog === null) {
+    cachedCatalog = buildLegalCatalog({ repoRoot });
+  }
+  return cachedCatalog;
 }
 
 export async function seedAccount(
@@ -57,6 +80,20 @@ export async function seedAccount(
     })
     .returning({ id: apiKeys.id });
   if (!key) throw new Error('failed to seed api key');
+
+  // V-049 gate — pre-accept all legal docs unless the test opts out.
+  if (input.skipLegalAcceptance !== true) {
+    const catalog = getCatalog();
+    const rows = catalog.entries().map((entry) => ({
+      accountId: account.id,
+      documentKey: entry.documentKey,
+      version: entry.version,
+      contentHash: entry.contentHash,
+    }));
+    if (rows.length > 0) {
+      await db.insert(legalAcceptances).values(rows);
+    }
+  }
 
   return { accountId: account.id, apiKeyId: key.id, plaintext, tier };
 }

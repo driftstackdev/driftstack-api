@@ -129,9 +129,13 @@ test('DELETE /v1/api-keys/:id: 403 when admin scope missing', async ({ request }
 
 // ── GET /v1/usage ──────────────────────────────────────────────────────────
 
-test('GET /v1/usage: zero totals + tier quotas for fresh scale-tier account', async ({
+test('GET /v1/usage: zero totals + null quotas for fresh scale-tier account', async ({
   request,
 }) => {
+  // Per ADR-004 / V-073: paid tiers are concurrent-only; per-op quotas
+  // are intentionally null across the board (the `session_minute` meter
+  // is preserved as a ledger primitive but not gated). The customer-
+  // visible signal is "no per-meter cap at this tier."
   const seed = await seedAccount(server.client, { tier: 'api_scale' });
   const res = await request.get(`${server.baseUrl}/v1/usage`, {
     headers: authHeader(seed.plaintext),
@@ -140,7 +144,7 @@ test('GET /v1/usage: zero totals + tier quotas for fresh scale-tier account', as
   const body = (await res.json()) as Record<string, unknown>;
   expect(body.tier).toBe('api_scale');
   expect((body.totals as Record<string, number>).navigate).toBe(0);
-  expect((body.quotas as Record<string, number>).navigate).toBe(100_000);
+  expect((body.quotas as Record<string, number | null>).navigate).toBeNull();
 });
 
 test('GET /v1/usage: enterprise tier returns null quotas', async ({ request }) => {
