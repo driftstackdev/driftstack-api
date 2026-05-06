@@ -13845,3 +13845,63 @@ Per founder direction 2026-05-06 autopilot grant. Reasoning chain in D-2026-05-0
 ### Next
 
 V-243 — T3 #3 (Tauri Updater + GitHub Releases distribution).
+
+## V-243 — GUI T3 #3: Tauri Updater + GitHub Releases (cross-platform distribution)
+
+### What
+
+Decision: D-2026-05-06-03 — the GUI client ships via GitHub Releases (binary delivery) with Tauri Updater (signed auto-update). Cross-platform CI builds three platform binaries on every `gui-v*` tag.
+
+**Components landing:**
+
+1. **`apps/gui-client/src-tauri/Cargo.toml`** — added `tauri-plugin-updater = "2.0"` to dependencies.
+2. **`apps/gui-client/src-tauri/src/lib.rs`** — registered `tauri_plugin_updater::Builder::new().build()` in the Tauri builder chain.
+3. **`apps/gui-client/src-tauri/tauri.conf.json`** — added `plugins.updater` config block with `endpoints` pointing at the GitHub Releases manifest URL + `pubkey: $TAURI_UPDATER_PUBKEY` placeholder (the CI workflow substitutes the real key from the secret). Bundle targets expanded from `["app"]` to `["app", "dmg", "nsis", "appimage", "deb"]` for cross-platform installer outputs.
+4. **`apps/gui-client/src-tauri/capabilities/default.json`** — added `updater:default` permission so the WebView can drive the update prompt.
+5. **`apps/gui-client/package.json`** — added `@tauri-apps/plugin-updater: ^2.1.0` to dependencies (frontend SDK for the updater plugin).
+6. **`.github/workflows/gui-release.yml`** — new tag-triggered cross-platform release workflow. Matrix builds on `macos-latest` (universal-apple-darwin), `ubuntu-22.04`, `windows-latest`. Per-platform: install Node + Rust + npm deps + Linux build deps + SDK build, replace pubkey placeholder, run `tauri-apps/tauri-action@v0` to build/bundle/sign, upload artifacts to a GitHub Release.
+7. **`docs/founder-actions/v243-tauri-updater-keys.md`** — runbook for the founder's one-time `npx tauri signer generate` step + GitHub secrets upload + first-release verification.
+
+**OS-level binary code signing DEFERRED post-launch.** Customers see "unknown publisher" / Gatekeeper warnings on first install. Subsequent updates ARE signed via the Tauri Updater public-key. Per-platform certs become D-2026-05-06-03a (Apple), D-2026-05-06-03b (Windows), D-2026-05-06-03c (Linux) when reached.
+
+### Why
+
+Per founder direction 2026-05-06 autopilot grant. Reasoning chain in D-2026-05-06-03 covers alternatives (Sparkle, custom updater) and why Tauri Updater + GitHub Releases is the right shape.
+
+The "Tauri Updater public-key signed but no OS-level cert" posture matches what most early-stage indie desktop apps do: Gatekeeper / SmartScreen annoyance on first install is acceptable, but customers MUST trust update signatures (otherwise a network attacker could push a compromised update). Public-key crypto solves the signed-update problem without requiring a paid cert from Apple/Microsoft.
+
+### Files
+
+- `apps/gui-client/src-tauri/Cargo.toml` — `tauri-plugin-updater` dep.
+- `apps/gui-client/src-tauri/src/lib.rs` — plugin registration.
+- `apps/gui-client/src-tauri/tauri.conf.json` — updater config + bundle targets.
+- `apps/gui-client/src-tauri/capabilities/default.json` — `updater:default` permission.
+- `apps/gui-client/package.json` — `@tauri-apps/plugin-updater` dep.
+- `.github/workflows/gui-release.yml` — new CI workflow.
+- `docs/founder-actions/v243-tauri-updater-keys.md` — runbook.
+- `docs/decisions.md` — D-2026-05-06-03.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 729 / 729 passing across 76 files (unchanged — V-243 is config + workflow + Rust dep, no new TS code with tests).
+- pre-push hook: clean on push.
+- **Workflow YAML syntax verification pending** — autopilot env doesn't have `actionlint` or `gh workflow lint`. The workflow follows tauri-apps/tauri-action@v0 reference docs verbatim. First real validation is the founder triggering `gui-v0.1.0` per the runbook.
+- **Rust build verification pending** — covered alongside V-241 by a future cross-platform CI build (V-244 candidate per recommended order).
+
+### Notes
+
+- `npx tauri signer generate` is interactive (password prompt) so cannot run in autopilot env. The founder runs this once on their dev machine; the runbook documents the steps + expected outputs.
+- The `tauri.conf.json` `pubkey` field uses literal placeholder `$TAURI_UPDATER_PUBKEY`. Tauri 2.x supports `$VAR` substitution for some fields but the updater pubkey field requires the actual key at build time. CI workflow does the substitution via Node script (less brittle than `sed` for JSON). Local dev (`npx tauri:dev`) does not need the substitution because dev mode skips updater verification entirely.
+- Bundle targets `["app", "dmg", "nsis", "appimage", "deb"]` produce: macOS `.app` + `.dmg` (signed by Tauri Updater key only — not Apple-notarized); Windows `.exe` (NSIS installer); Linux `.AppImage` (portable) + `.deb` (Debian/Ubuntu). Future: `.rpm` for Fedora customers when one asks. RPM is a separate target string in Tauri config; trivially additive.
+- The workflow uses `releaseDraft: false` + `prerelease: false` for direct-publish. If the founder wants a manual review step before publication, change `releaseDraft: true` and add a manual "Publish release" step in the GitHub UI.
+- `gui-latest.json` manifest URL is `https://github.com/driftstackdev/driftstack-api/releases/latest/download/gui-latest.json`. GitHub's `latest/download/` redirects to the most recent non-prerelease, non-draft release's asset. As long as `prerelease: false` + `releaseDraft: false`, the URL stays stable.
+
+### Next
+
+V-244 — Cross-platform first-run setup wizard (queued by founder direction; per the v-241/242/243 chain landing the foundation, the wizard ties together cloud-vs-self-hosted choice + key onboarding + first profile).
+
+After V-244 — cross-platform GUI build verification CI (queue option (c) per founder direction; surfaces any build gaps across the three OS targets early).

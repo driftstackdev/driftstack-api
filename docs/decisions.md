@@ -348,3 +348,25 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Tier:** 3 (security architecture / customer-data handling — autonomously decided per founder direction 2026-05-06 explicit autopilot grant).
 - **V-log:** V-242.
 - **Revert path:** if telemetry becomes a customer-trust concern (e.g. someone files a complaint), set `tracesSampleRate=0` and remove the cloud-default in one PR; default everywhere becomes "off unless opt-in". Customer-facing impact: minor loss of crash signal for cloud customers who didn't actively opt in. Reversible without schema or contract changes.
+
+## D-2026-05-06-03 — GUI distribution: Tauri Updater + GitHub Releases (cross-platform)
+
+- **Decision:** the GUI client (`apps/gui-client`) ships via GitHub Releases (binary delivery) + Tauri Updater (auto-update with public-key signature verification). CI workflow at `.github/workflows/gui-release.yml` triggers on `gui-v*` tags, builds three platform binaries in parallel (macOS universal `.dmg`, Windows `.exe` via NSIS, Linux `.AppImage` + `.deb`), signs each with the Tauri Updater private key, uploads to a GitHub Release, and exposes `gui-latest.json` as the manifest.
+
+  **OS-level binary code signing DEFERRED post-launch.** Customers see "unknown publisher" / Gatekeeper warnings on first install (normal for indie apps). Subsequent updates ARE signed via the Tauri Updater public-key embedded in the original install — that protects update integrity even without OS-level publisher trust. Per-platform signing certs become individual D-\* entries when the founder enrolls in the relevant program:
+  - **D-2026-05-06-03a (deferred):** Apple Developer cert (~$99/yr) for macOS Gatekeeper trust + notarization. Blocked on founder Apple Developer enrollment.
+  - **D-2026-05-06-03b (deferred):** Windows code signing cert (~$200+/yr; EV cert preferred for SmartScreen reputation). Blocked on founder cert purchase.
+  - **D-2026-05-06-03c (deferred):** Linux package signing (.AppImage / .deb / .rpm). Free per-distro; deferred post-launch — customers running on Linux are technical enough to handle unsigned `.AppImage` execution.
+
+- **Reasoning:** alternatives considered:
+  - **(a) Sparkle** — established macOS auto-updater, but macOS-only; would need a separate Windows/Linux updater. Tauri Updater is one-tool-fits-all.
+  - **(b) Tauri Updater alone, no GitHub Releases** — would need to host binaries ourselves. GitHub Releases is free, has CDN, and provides per-asset URLs for the manifest to reference. No reason to self-host.
+  - **(c) Custom updater protocol** — reinvents Tauri Updater poorly. Skip.
+
+  Tauri Updater is built into the framework, supports public-key signature verification (prevents an attacker from substituting an unsigned update via DNS hijack or similar), and works identically across Windows / macOS / Linux. GitHub Releases provides binary hosting with a stable URL pattern (`releases/latest/download/<asset>`). The `gui-latest.json` manifest is regenerated on every release; existing installs hit the manifest URL, see a new version is available, download + verify + apply.
+
+  CI workflow uses `tauri-apps/tauri-action@v0` which encapsulates the build-bundle-sign sequence. Three GitHub Actions secrets needed: `TAURI_UPDATER_PUBKEY` (public key embedded in builds), `TAURI_UPDATER_PRIVKEY` (private key for signing), `TAURI_UPDATER_PRIVKEY_PASSWORD` (passphrase set during key generation). Founder runbook at `docs/founder-actions/v243-tauri-updater-keys.md` documents the one-time `npx tauri signer generate` step + GitHub secret upload.
+
+- **Tier:** 3 (distribution architecture / customer trust + signing — autonomously decided per founder direction 2026-05-06 explicit autopilot grant).
+- **V-log:** V-243.
+- **Revert path:** if Tauri Updater proves problematic (Tauri 2.x bugs, signing key issues, etc.), customers can always download a fresh release manually from GitHub. Switch to Sparkle (macOS) + a separate Windows installer + Linux package mirror would be ~3-day rework; reversible at any pre-customer-volume point.

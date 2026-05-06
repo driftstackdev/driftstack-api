@@ -33,7 +33,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
+    "targets": ["app", "dmg", "nsis", "appimage", "deb"],
     "category": "DeveloperTool",
     "icon": [
       "icons/32x32.png",
@@ -45,6 +45,16 @@
     "macOS": {
       "minimumSystemVersion": "12.0",
       "entitlements": "Entitlements.plist"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/driftstackdev/driftstack-api/releases/latest/download/gui-latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "$TAURI_UPDATER_PUBKEY"
     }
   }
 }

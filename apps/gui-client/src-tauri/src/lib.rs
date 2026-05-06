@@ -31,6 +31,11 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
+        // V-243 / D-2026-05-06-03 — auto-update via Tauri Updater.
+        // Configuration (endpoint + pubkey) lives in tauri.conf.json
+        // under `plugins.updater`; the customer's GUI checks the
+        // endpoint on startup + offers a signed update download.
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             ping,
             secret_save,

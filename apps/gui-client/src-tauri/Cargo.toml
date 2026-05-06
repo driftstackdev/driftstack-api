@@ -19,6 +19,11 @@ tauri = { version = "2.0", features = [] }
 tauri-plugin-shell = "2.0"
 tauri-plugin-store = "2.0"
 tauri-plugin-fs = "2.0"
+# V-243 / D-2026-05-06-03 — Tauri Updater for cross-platform auto-update.
+# Public-key signature verification on update bundles; signing key
+# generated via `npx tauri signer generate` (founder action; see
+# docs/founder-actions/v243-tauri-updater-keys.md).
+tauri-plugin-updater = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # V-241 T3 #1 (D-2026-05-06-01): keyring-rs for cross-platform OS
