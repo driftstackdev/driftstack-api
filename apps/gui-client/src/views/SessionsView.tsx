@@ -25,7 +25,7 @@ export interface SessionsViewProps {
 }
 
 export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX.Element {
-  const { client, settings } = useSettings();
+  const { client, settings, accountMe, refreshAccountMe } = useSettings();
   const [state, setState] = useState<SessionsState>({
     sessions: [],
     refreshedAt: null,
@@ -33,6 +33,15 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
     error: null,
   });
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // V-239 — gate the New session button when the customer is at the
+  // concurrent cap. Server enforces (V-073 returns 402); the GUI's job
+  // is to surface the cap proactively so the customer never sees the
+  // 402 in normal flow. accountMe === null (not loaded) → don't gate.
+  const concurrentCap = accountMe?.concurrent_session_cap ?? null;
+  const concurrentActive = accountMe?.concurrent_session_active ?? null;
+  const atConcurrentCap =
+    concurrentCap !== null && concurrentActive !== null && concurrentActive >= concurrentCap;
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!client) {
@@ -70,6 +79,9 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
     try {
       await client.sessions.create();
       await refresh();
+      // V-239 — refresh the cap counter after a successful spawn so
+      // the gate flips to disabled if this brought us to the cap.
+      await refreshAccountMe();
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err) }));
     } finally {
@@ -83,6 +95,9 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
     try {
       await client.sessions.destroy(id);
       await refresh();
+      // V-239 — refresh after destroy so the cap counter unlocks the
+      // Spawn button when we drop below cap.
+      await refreshAccountMe();
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err) }));
     } finally {
@@ -101,7 +116,11 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
           <span className="section-label">Sessions</span>
           <h2 className="text-lg font-medium text-ink-primary">
             Active sessions
-            <span className="ml-2 mono text-ink-muted">{state.sessions.length}</span>
+            <span className="ml-2 mono text-ink-muted">
+              {concurrentCap !== null && concurrentActive !== null
+                ? `${concurrentActive.toString()} / ${concurrentCap.toString()}`
+                : state.sessions.length.toString()}
+            </span>
           </h2>
         </div>
         <div className="flex gap-2">
@@ -117,7 +136,15 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
             type="button"
             className="btn-primary"
             onClick={() => void handleCreate()}
-            disabled={busyId === '__create__'}
+            disabled={busyId === '__create__' || atConcurrentCap}
+            aria-disabled={busyId === '__create__' || atConcurrentCap}
+            title={
+              atConcurrentCap
+                ? `Concurrent session cap reached (${(concurrentCap ?? 0).toString()} for ${
+                    accountMe?.tier ?? 'this tier'
+                  }). Destroy a session or upgrade to spawn more.`
+                : undefined
+            }
           >
             {busyId === '__create__' ? 'Creating…' : 'New session'}
           </button>

@@ -13623,3 +13623,66 @@ V-239 — Tier-aware enforcement display in `apps/gui-client/src/views/SessionsV
 3. SessionsView: header shows "X / Y concurrent sessions"; Spawn button disabled when `concurrent_session_active >= concurrent_session_cap`.
 4. ProfilesView: header shows "P / Q profiles"; New profile button disabled when `profile_count >= profile_cap` (skip when `profile_cap === null` for enterprise).
 5. Refresh `accountMe` after each create/destroy via the lifecycle handlers already in place.
+
+## V-239 — GUI tier-aware enforcement display (P0 #2)
+
+### What
+
+Closes V-236 audit P0 #2: the GUI now displays + gates on tier caps for both concurrent sessions and profiles. Customer sees "X / Y concurrent sessions" + "P / Q profiles" in their respective view headers; the Spawn / New profile buttons disable when at cap with a tooltip explaining the situation.
+
+**Five components:**
+
+1. **SDK `AccountResource`** — new `packages/sdk-typescript/src/resources/account.ts` with `account.me()` accessor returning `AccountSelfProfile` (id / email / name / tier / status / concurrent_session_cap + active / profile_cap + count). Exported from `client.ts` as `client.account` and from `index.ts` as `AccountSelfProfile` type. SDK build verified clean (28.7 KB CJS / 26.6 KB ESM).
+
+2. **`SettingsContext` extension** — fetches `client.account.me()` on apiKey/baseUrl change, exposes `accountMe: AccountSelfProfile | null` + `refreshAccountMe()` helper. Soft-fails to null on fetch error (invalid key / server down) so views fall back to ungated UI rather than blocking the customer entirely. Views call `refreshAccountMe()` after each mutation that affects the count.
+
+3. **`SessionsView` gate** — header counter renders `"{active} / {cap}"` when `accountMe` loaded; falls back to plain count otherwise. Spawn button has `disabled={atConcurrentCap}` + `title="Concurrent session cap reached (N for tier_X). Destroy a session or upgrade to spawn more."` when at cap. `handleCreate` + `handleDestroy` both call `refreshAccountMe()` after success so the gate flips correctly.
+
+4. **`ProfilesView` gate** — same pattern. Header counter renders `"{count} / {cap}"` when cap is numeric; renders `"{count}"` when cap is null (enterprise tier per V-237 contract). New profile button gated on `atProfileCap`; modal's `onCreated` callback also refreshes.
+
+5. **Soft-fail posture** — when `accountMe` is null (loading / network failure / unauthenticated), no gate applies. Server-side enforcement (V-073 concurrent caps; V-117 profile caps in `ProfilesService`) is the load-bearing protection; the GUI gate is UX-quality-of-life. Customer can always still hit the button and see the proper 402 / TierLimitError if the gate is wrong.
+
+### Why
+
+V-236 audit P0 #2: Manual-tier UX requires the customer see "X of Y concurrent sessions" + disable-when-full so they never see the 402 ConcurrencyLimitExceeded response in normal flow. Same for profile cap.
+
+The SDK + context + per-view changes naturally split the work: SDK is reusable (CLI / dashboard could use the same accessor); context is the single load point (each view doesn't need to re-fetch); per-view changes are purely render + button-disabled logic.
+
+The "soft-fail to null = no gate" posture is deliberate: a customer with a flaky network shouldn't be blocked from creating sessions because their cap-fetch failed. The server is always the source of truth for enforcement; the GUI just provides smoother UX on the happy path.
+
+### Files
+
+- `packages/sdk-typescript/src/resources/account.ts` — new resource.
+- `packages/sdk-typescript/src/client.ts` — added `AccountResource` import + field + ctor wire.
+- `packages/sdk-typescript/src/index.ts` — added `AccountSelfProfile` type re-export.
+- `apps/gui-client/src/lib/SettingsContext.tsx` — added `accountMe` + `refreshAccountMe` to context value; fetches on client change.
+- `apps/gui-client/src/views/SessionsView.tsx` — header counter + Spawn button gate + post-mutation refresh.
+- `apps/gui-client/src/views/ProfilesView.tsx` — header counter + New profile button gate + post-mutation refresh + modal-onCreated refresh.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run build --workspace packages/sdk-typescript`: clean (28.7KB CJS / 26.6KB ESM / DTS 16.66KB).
+- `npm run typecheck` (workspaces): clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 722 / 722 passing across 75 files (gui-client has no test suite; backend tests unaffected; SDK tests unaffected).
+- pre-push hook (V-223 + V-231 backstops): clean on push.
+- **Visual + interaction self-check pending Tauri dev environment.** Founder visual review on next `tauri:dev` run is the canonical verification step. Patterns used (Tailwind `disabled:` styling already inherited from `btn-primary`; `title` attribute for native browser tooltip; `aria-disabled` for screen readers) are standard React + Tailwind idioms.
+
+### Notes
+
+- The `concurrent_session_active` count in `accountMe` is fetched ONCE at apiKey load + after each mutation. Between mutations the polled `state.sessions.length` is in sync (5s poll) but doesn't update `accountMe`. This means the display can show stale "X / Y" while the underlying sessions list is fresh. Trade-off: avoiding a separate `/v1/account/me` poll every 5s saves the bandwidth; the cap counter only matters at the moment of clicking Spawn (which triggers a fresh refresh), not continuously. If a future review wants the counter to live-update, change the SessionsView to drive the display from `state.sessions.length` while keeping `accountMe.concurrent_session_cap` for the gate.
+- Did NOT add an "upgrade your tier" link in the at-cap tooltip. The `title` attribute is plain text only; styling a richer tooltip with an action button would require a popover dependency. The customer dashboard's billing page is the canonical upgrade surface; the GUI's job is to surface the limit, not solve the upgrade flow.
+- The `profile_cap === null` branch (enterprise tier) renders just `"{count}"` without a denominator. Customer-facing copy: "see your contract" rather than a hard number, matching the V-237 contract.
+- Closes the P0 launch-blocker list from V-236 audit. Both items 1 (profile create form, V-238) + 2 (tier-aware enforcement, V-239) landed; the cross-cutting backend dependency (V-237 `/v1/account/me` endpoint) landed in advance.
+
+### Next
+
+V-236 audit P0 list now complete. Per audit + autopilot guardrails, remaining queue:
+
+- **P1 launch-recommended:** `rust-toolchain.toml` pin (~5min), self-hosted titlebar conditional (~30min). Both Tier-1 mechanical edits.
+- **T3 founder-ack-required:** API-key at-rest storage (keychain vs encrypted vs plaintext); telemetry posture; distribution mechanism. Drafts surfaced when reaching the corresponding boundary.
+- **P2 post-launch:** WebRTC streaming, auto-update mechanism, first-run wizard.
+
+Recommend continuing with P1 items as the next two small Tier-1 commits.

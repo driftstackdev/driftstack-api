@@ -45,7 +45,12 @@ export interface ProfilesViewProps {
 }
 
 export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element {
-  const { client, settings } = useSettings();
+  const { client, settings, accountMe, refreshAccountMe } = useSettings();
+  // V-239 — gate the New profile button at the tier cap (skip when
+  // profile_cap === null which means enterprise / no fixed cap).
+  const profileCap = accountMe?.profile_cap ?? null;
+  const profileCount = accountMe?.profile_count ?? null;
+  const atProfileCap = profileCap !== null && profileCount !== null && profileCount >= profileCap;
   const [state, setState] = useState<ProfilesState>({
     profiles: [],
     refreshedAt: null,
@@ -96,6 +101,9 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
     try {
       await client.profiles.delete(id);
       await refresh();
+      // V-239 — refresh the cap counter so a deletion unlocks the
+      // New profile button when we drop below cap.
+      await refreshAccountMe();
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err) }));
     } finally {
@@ -114,7 +122,13 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
           <span className="section-label">Profiles</span>
           <h2 className="text-lg font-medium text-ink-primary">
             Persistent identity slots
-            <span className="ml-2 mono text-ink-muted">{state.profiles.length}</span>
+            <span className="ml-2 mono text-ink-muted">
+              {profileCap !== null && profileCount !== null
+                ? `${profileCount.toString()} / ${profileCap.toString()}`
+                : profileCount !== null
+                  ? `${profileCount.toString()}`
+                  : state.profiles.length.toString()}
+            </span>
           </h2>
         </div>
         <div className="flex gap-2">
@@ -130,7 +144,15 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
             type="button"
             className="btn-primary"
             onClick={() => setCreateOpen(true)}
-            disabled={state.loading}
+            disabled={state.loading || atProfileCap}
+            aria-disabled={state.loading || atProfileCap}
+            title={
+              atProfileCap
+                ? `Profile cap reached (${(profileCap ?? 0).toString()} for ${
+                    accountMe?.tier ?? 'this tier'
+                  }). Delete a profile or upgrade to add more.`
+                : undefined
+            }
           >
             New profile
           </button>
@@ -199,6 +221,9 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
           onCreated={() => {
             setCreateOpen(false);
             void refresh();
+            // V-239 — refresh the cap counter so the gate flips to
+            // disabled if we just hit cap.
+            void refreshAccountMe();
           }}
         />
       )}

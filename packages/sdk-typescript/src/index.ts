@@ -8,6 +8,7 @@ export type { SessionsListPage } from './resources/sessions.js';
 export type { ApiKeyList } from './resources/api-keys.js';
 export type { WebhookEndpointList, WebhookDeliveryListPage } from './resources/webhooks.js';
 export type { ProfilesListPage } from './resources/profiles.js';
+export type { AccountSelfProfile } from './resources/account.js';
 
 // Errors
 export {
