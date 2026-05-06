@@ -1,0 +1,34 @@
+-- V-231 / TD-002 Option A — drizzle-kit reinstatement consolidation marker.
+--
+-- This file is intentionally empty (no SQL statements). It exists so the
+-- drizzle migrator's journal idx 22 has a corresponding `.sql` file.
+--
+-- Why empty: drizzle-kit's `generate` was run against the schema state at
+-- snapshot 0006 (the last snapshot present pre-V-231) and produced a
+-- "create everything that landed in 0007-0021" SQL file. That generated
+-- SQL is NOT idempotent — running it would fail with "table already
+-- exists" / "type already exists" / "value already exists" errors on any
+-- database that has already applied 0007-0021 (which is the case for
+-- every database the migrator touches; 0007-0021 are journal entries
+-- 7 through 21 and run before this one).
+--
+-- The drizzle-kit run produced two artifacts:
+--
+--   1. `apps/server/src/db/migrations/meta/0022_snapshot.json` — captures
+--      the CURRENT schema.ts state. This is the load-bearing artifact:
+--      future `drizzle-kit generate` runs diff against this snapshot, so
+--      any future schema change produces a clean targeted migration.
+--
+--   2. This `.sql` file — replaced with a no-op so the migrator runs it
+--      successfully (zero statements = nothing to do) and records idx 22
+--      as applied. This satisfies the journal/SQL contract without
+--      attempting to re-create the world.
+--
+-- Net effect: drizzle-kit's snapshot directory is now usable; future
+-- migrations land cleanly. The "snapshot gap" at 0007-0021 is permanent
+-- but harmless — those migrations apply via their own SQL files in
+-- journal order, and the 0022 snapshot represents the state AFTER they
+-- all ran.
+--
+-- See `docs/proposals/td-002-drizzle-kit-reinstatement.md` (Option A)
+-- and the V-231 V-log entry for the full reasoning chain.

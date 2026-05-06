@@ -13,6 +13,24 @@
 
 set -e
 
+# V-231 — every new SQL migration MUST have a matching journal entry
+# (catch V-228-class regressions structurally; per founder verdict on
+# TD-002 Option A). Compares migration SQL filenames against journal
+# tags; aborts if any new file lacks an entry.
+echo "→ migration journal sync (V-228 backstop)"
+journal="apps/server/src/db/migrations/meta/_journal.json"
+if [ -f "$journal" ]; then
+  for sql in apps/server/src/db/migrations/*.sql; do
+    [ -f "$sql" ] || continue
+    tag=$(basename "$sql" .sql)
+    if ! grep -q "\"tag\": \"$tag\"" "$journal"; then
+      echo "✗ migration $sql has no journal entry for tag '$tag'"
+      echo "  add an entry to $journal or regenerate via 'npm run db:generate'"
+      exit 1
+    fi
+  done
+fi
+
 echo "→ typecheck (workspaces, including tsconfig.test.json)"
 npm run typecheck
 

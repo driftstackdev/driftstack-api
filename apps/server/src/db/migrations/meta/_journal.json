@@ -155,6 +155,13 @@
       "when": 1778909000000,
       "tag": "0021_scheduled_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1778090413216,
+      "tag": "0022_consolidate_snapshot",
+      "breakpoints": true
     }
   ]
 }
