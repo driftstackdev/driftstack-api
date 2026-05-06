@@ -14,7 +14,48 @@ import {
   StartTrialPackRequestSchema,
 } from '@driftstack/api-types';
 import type { BillingService, SubscriptionMirror } from '../services/billing.js';
-import { ValidationError } from '../lib/errors.js';
+import { BadRequestError, ValidationError } from '../lib/errors.js';
+
+// V-248 / V-246-P1-001 — Stripe checkout return URL allowlist.
+// Customer-supplied success_url + cancel_url are passed through to
+// Stripe Checkout; without validation, a customer could craft a URL
+// pointing at attacker.com and share the checkout link with a colleague
+// who'd land on the phishing site after entering their card.
+//
+// Allowlist: by default the Driftstack cloud dashboard origin and
+// `app.driftstack.local` (e2e). Per-customer enterprise allowlists are
+// out of scope for the launch posture; customers needing a custom URL
+// get a clear "contact support" error.
+//
+// The allowlist is hardcoded rather than env-driven because it
+// anchors the security guarantee — a typo in env config would silently
+// re-introduce the open-redirect. Founder edits this list when a
+// legitimate origin needs to be added (paired with PR review).
+const ALLOWED_RETURN_ORIGINS: readonly string[] = [
+  'https://app.driftstack.dev',
+  'http://localhost:5173', // dashboard dev server
+  'http://app.driftstack.local', // e2e fixture
+];
+
+/**
+ * Verify a customer-supplied URL is on the allowlist by origin match.
+ * Returns the URL string when valid; throws BadRequestError otherwise.
+ * Defensive parsing: malformed URLs reject (not silently accepted).
+ */
+function validateReturnUrl(url: string, label: 'success_url' | 'cancel_url'): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new BadRequestError(`${label} is not a valid URL.`);
+  }
+  if (!ALLOWED_RETURN_ORIGINS.includes(parsed.origin)) {
+    throw new BadRequestError(
+      `${label} origin "${parsed.origin}" is not on the allowlist. Contact support if you need a custom origin allowlisted.`,
+    );
+  }
+  return url;
+}
 
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
   if (!request.account) throw new Error('account context missing after requireAuth');
@@ -49,12 +90,21 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
       const parsed = CreateCheckoutSessionRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
+      // V-248 — gate customer-supplied return URLs against the allowlist.
+      const successUrl =
+        parsed.data.success_url !== undefined
+          ? validateReturnUrl(parsed.data.success_url, 'success_url')
+          : undefined;
+      const cancelUrl =
+        parsed.data.cancel_url !== undefined
+          ? validateReturnUrl(parsed.data.cancel_url, 'cancel_url')
+          : undefined;
       const result = await service.createCheckoutSession({
         accountId: ctx.account.id,
         tier: parsed.data.tier,
         billingPeriod: parsed.data.billing_period,
-        ...(parsed.data.success_url !== undefined ? { successUrl: parsed.data.success_url } : {}),
-        ...(parsed.data.cancel_url !== undefined ? { cancelUrl: parsed.data.cancel_url } : {}),
+        ...(successUrl !== undefined ? { successUrl } : {}),
+        ...(cancelUrl !== undefined ? { cancelUrl } : {}),
       });
       return {
         checkout_url: result.url,
@@ -71,10 +121,19 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
       const parsed = StartTrialPackRequestSchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
+      // V-248 — same allowlist gate as checkout-session.
+      const successUrl =
+        parsed.data.success_url !== undefined
+          ? validateReturnUrl(parsed.data.success_url, 'success_url')
+          : undefined;
+      const cancelUrl =
+        parsed.data.cancel_url !== undefined
+          ? validateReturnUrl(parsed.data.cancel_url, 'cancel_url')
+          : undefined;
       const result = await service.startTrialPack({
         accountId: ctx.account.id,
-        ...(parsed.data.success_url !== undefined ? { successUrl: parsed.data.success_url } : {}),
-        ...(parsed.data.cancel_url !== undefined ? { cancelUrl: parsed.data.cancel_url } : {}),
+        ...(successUrl !== undefined ? { successUrl } : {}),
+        ...(cancelUrl !== undefined ? { cancelUrl } : {}),
       });
       return {
         checkout_url: result.url,

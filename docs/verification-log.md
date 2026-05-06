@@ -14123,3 +14123,62 @@ The pattern mirrors the existing account-version invalidation (V-016 / D-025) so
 ### Next
 
 V-248 — V-246-P1-001 fix (Stripe checkout `success_url` / `cancel_url` allowlist).
+
+## V-248 — V-246-P1-001 fix: Stripe checkout return URL allowlist
+
+### What
+
+Closes V-246 audit's P1-001 finding. Customer-supplied `success_url` + `cancel_url` on `/v1/billing/checkout-session` and `/v1/billing/trial-pack` are now validated against an origin allowlist before being passed to Stripe's Checkout API.
+
+**Implementation:**
+
+- `apps/server/src/routes/billing.ts` — new `ALLOWED_RETURN_ORIGINS` constant (default: `https://app.driftstack.dev`, `http://localhost:5173` for dashboard dev, `http://app.driftstack.local` for e2e fixture).
+- New `validateReturnUrl(url, label)` helper — parses URL defensively, throws `BadRequestError` with informative message when origin doesn't match allowlist OR URL is malformed.
+- Both `POST /v1/billing/checkout-session` and `POST /v1/billing/trial-pack` handlers now call `validateReturnUrl` for each customer-provided URL field before passing to the billing service.
+- Allowlist is hardcoded (not env-driven) — anchors the security guarantee against env-config typos. Founder edits this list inline when adding a legitimate origin.
+
+**Test coverage:** 3 new integration tests in `tests/integration/billing.test.ts`:
+
+- `200 with success_url + cancel_url on the allowlist` — happy path with `https://app.driftstack.dev/...`.
+- `400 when success_url is off-allowlist (e.g. attacker.com)` — confirms attacker URL rejected with `success_url` + `allowlist` in error message.
+- `400 when cancel_url is malformed` — defensive URL parse catches "not a real url" string.
+
+All 11 existing billing integration tests still pass.
+
+### Why
+
+V-246 audit identified P1-001 as launch-recommended. Per founder direction's autopilot grant, T2 architectural decisions can be taken autonomously — the allowlist approach was the audit's recommended fix, no design tradeoff to surface.
+
+The allowlist defaults are conservative (cloud production + localhost dev + e2e fixture). Customer needing a custom origin (e.g. enterprise customer with their own dashboard at `dashboard.acme.com`) gets a clear error pointing at "contact support if you need a custom origin allowlisted." That escalation path lets the founder vet enterprise origins on a case-by-case basis without opening up `*` to everyone.
+
+### Files
+
+- `apps/server/src/routes/billing.ts` — `ALLOWED_RETURN_ORIGINS` constant + `validateReturnUrl` helper + call sites in both checkout endpoints.
+- `apps/server/tests/integration/billing.test.ts` — 3 new V-248 tests.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 734 / 734 passing across 76 files (+3 V-248 tests).
+- pre-push hook: clean on push.
+
+### Notes
+
+- The allowlist intentionally does NOT use env vars. A typo'd env var would silently re-introduce the open-redirect (e.g. `ALLOWED_ORIGIN=*` left in by mistake). Hardcoding makes the guarantee a code-review concern, not an ops-config concern.
+- `http://app.driftstack.local` is in the allowlist for e2e fixtures (V-014 / V-088 patterns). If e2e isn't using that hostname, removing it is safe; left in to avoid surprising the e2e suite.
+- The error message intentionally tells the customer EXACTLY which URL was rejected (label + origin). This is OK from a security posture: the customer already supplied the URL, so echoing it doesn't leak server-side state. The "contact support" escalation path is documented in the same error message.
+- Did NOT add per-account allowlist storage (e.g. an `accounts.allowed_return_origins` JSONB column). That would be enterprise-tier complexity; pre-launch the inline founder-edit posture is sufficient.
+
+### Next
+
+V-246 P0 + P1 fixes both landed (V-247 + V-248). Remaining audit findings:
+
+- V-246-P1-002: PII in ops logs (auth flows) — action: docs update in `runbook.md` (~5min).
+- V-246-P1-003: `account_owner` scope reach into `/v1/admin/*` — operationally mitigated by V-135 Cloudflare Access; refactor deferred post-launch.
+- V-246-P1-004: IP-based rate limiting on auth endpoints — planned post-launch.
+- V-246-P2-\* (5 items): operational/documentation, post-launch.
+
+Recommend continuing with V-249: ops-runbook docs update (P1-002 close-out) — small mechanical doc change before pushing into option (d) docs site.

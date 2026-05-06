@@ -90,6 +90,56 @@ describe('POST /v1/billing/checkout-session', () => {
     expect(fx.billingProvider.state.customers.size).toBe(1);
     expect(fx.billingProvider.state.checkoutSessions).toHaveLength(2);
   });
+
+  // V-248 / V-246-P1-001 — return URL allowlist regression tests.
+  it('200 with success_url + cancel_url on the allowlist', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/checkout-session',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        tier: 'api_builder',
+        billing_period: 'monthly',
+        success_url: 'https://app.driftstack.dev/billing/success',
+        cancel_url: 'https://app.driftstack.dev/billing/cancel',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('400 when success_url is off-allowlist (e.g. attacker.com)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/checkout-session',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        tier: 'api_builder',
+        billing_period: 'monthly',
+        success_url: 'https://attacker.example.com/phishing',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json<{ detail?: string }>();
+    expect(body.detail ?? '').toContain('success_url');
+    expect(body.detail ?? '').toContain('allowlist');
+  });
+
+  it('400 when cancel_url is malformed', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/checkout-session',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        tier: 'api_builder',
+        billing_period: 'monthly',
+        cancel_url: 'not a real url',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });
 
 describe('POST /v1/billing/trial-pack', () => {
