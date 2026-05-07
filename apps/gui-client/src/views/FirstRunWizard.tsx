@@ -25,8 +25,9 @@
 // Anonymity (V-211 mirror): "Driftstack" voice everywhere; no
 // founder name; no AI / Anthropic references in any visible string.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Driftstack } from '@driftstack/sdk';
+import { open as openInBrowser } from '@tauri-apps/plugin-shell';
 import { TitleBar } from '../components/TitleBar';
 import { useSettings } from '../lib/SettingsContext';
 
@@ -102,6 +103,7 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
           {step === 'apikey' && (
             <ApiKeyStep
               mode={mode}
+              baseUrl={baseUrl}
               apiKey={apiKey}
               validating={validating}
               error={validationError}
@@ -121,7 +123,7 @@ const STEP_ORDER: WizardStep[] = ['welcome', 'mode', 'apikey', 'profile'];
 const STEP_LABELS: Record<WizardStep, string> = {
   welcome: 'Welcome',
   mode: 'Deployment',
-  apikey: 'API key',
+  apikey: 'Sign in',
   profile: 'First profile',
   done: 'Done',
 };
@@ -319,8 +321,40 @@ function ModeStep({
   );
 }
 
+// V-268 — Sign-in step. Default path: browser-OAuth handshake against
+// the V-266 backend (initiate → user signs in via dashboard → poll
+// exchange). Fallback path: paste an API key manually (for power users
+// who already have a key, or self-hosted deployments where the
+// dashboard isn't reachable).
+//
+// The browser path is the recommended UX per founder direction
+// 2026-05-07 ("usually it opens up browser to login, to sync, might
+// be more secure also").
+
+const POLL_INTERVAL_MS = 2000;
+const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+
+interface InitiateResponse {
+  code: string;
+  browser_url: string;
+  expires_at: string;
+}
+
+interface ExchangeResponse {
+  status: 'pending' | 'bound' | 'expired';
+  api_key?: string;
+  account_id?: string;
+}
+
+function generateState(): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 function ApiKeyStep({
   mode,
+  baseUrl,
   apiKey,
   validating,
   error,
@@ -329,6 +363,7 @@ function ApiKeyStep({
   onValidate,
 }: {
   mode: DeploymentMode;
+  baseUrl: string;
   apiKey: string;
   validating: boolean;
   error: string | null;
@@ -336,63 +371,276 @@ function ApiKeyStep({
   onBack: () => void;
   onValidate: () => void;
 }): JSX.Element {
+  const [path, setPath] = useState<'browser' | 'paste'>('browser');
+  const [browserState, setBrowserState] = useState<
+    | { kind: 'idle' }
+    | { kind: 'opening' }
+    | { kind: 'waiting'; code: string; state: string; expiresAt: number }
+    | { kind: 'success' }
+    | { kind: 'error'; message: string }
+  >({ kind: 'idle' });
+  const pollHandleRef = useRef<number | null>(null);
+  const timeoutHandleRef = useRef<number | null>(null);
+
+  // Cleanup any pending poll / timeout on unmount or path change.
+  useEffect(() => {
+    return () => {
+      if (pollHandleRef.current !== null) window.clearInterval(pollHandleRef.current);
+      if (timeoutHandleRef.current !== null) window.clearTimeout(timeoutHandleRef.current);
+    };
+  }, []);
+
+  function stopPolling(): void {
+    if (pollHandleRef.current !== null) {
+      window.clearInterval(pollHandleRef.current);
+      pollHandleRef.current = null;
+    }
+    if (timeoutHandleRef.current !== null) {
+      window.clearTimeout(timeoutHandleRef.current);
+      timeoutHandleRef.current = null;
+    }
+  }
+
+  async function startBrowserSignIn(): Promise<void> {
+    setBrowserState({ kind: 'opening' });
+    const trimmedUrl = baseUrl.trim().replace(/\/+$/, '');
+    const stateToken = generateState();
+    try {
+      const initiateRes = await fetch(`${trimmedUrl}/v1/auth/cli-authorize/initiate`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          state: stateToken,
+          client_label: `Driftstack desktop on ${navigator.platform}`,
+        }),
+      });
+      if (!initiateRes.ok) {
+        const body = (await initiateRes.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(body.detail ?? `HTTP ${initiateRes.status.toString()}`);
+      }
+      const initiate = (await initiateRes.json()) as InitiateResponse;
+
+      // Open the browser. shell.open() returns once the OS hands off to
+      // the browser; it does NOT wait for the user to complete anything.
+      await openInBrowser(initiate.browser_url);
+
+      const expiresAt = new Date(initiate.expires_at).getTime();
+      setBrowserState({
+        kind: 'waiting',
+        code: initiate.code,
+        state: stateToken,
+        expiresAt,
+      });
+
+      // Begin polling exchange.
+      pollHandleRef.current = window.setInterval(() => {
+        void pollOnce(trimmedUrl, initiate.code, stateToken);
+      }, POLL_INTERVAL_MS);
+      timeoutHandleRef.current = window.setTimeout(() => {
+        stopPolling();
+        setBrowserState({
+          kind: 'error',
+          message: 'Authorization expired. Click "Sign in with browser" to try again.',
+        });
+      }, POLL_TIMEOUT_MS);
+    } catch (err) {
+      setBrowserState({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Failed to start browser sign-in.',
+      });
+    }
+  }
+
+  async function pollOnce(serverUrl: string, code: string, stateToken: string): Promise<void> {
+    try {
+      const res = await fetch(`${serverUrl}/v1/auth/cli-authorize/exchange`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ code, state: stateToken }),
+      });
+      if (!res.ok) {
+        // Don't kill the loop on transient 5xx — but DO kill on 4xx.
+        if (res.status >= 400 && res.status < 500) {
+          stopPolling();
+          const body = (await res.json().catch(() => ({}))) as { detail?: string };
+          setBrowserState({
+            kind: 'error',
+            message: body.detail ?? 'Authorization request rejected.',
+          });
+        }
+        return;
+      }
+      const body = (await res.json()) as ExchangeResponse;
+      if (body.status === 'pending') return; // keep polling
+      if (body.status === 'expired') {
+        stopPolling();
+        setBrowserState({
+          kind: 'error',
+          message: 'Authorization expired. Click "Sign in with browser" to try again.',
+        });
+        return;
+      }
+      if (body.status === 'bound' && body.api_key) {
+        stopPolling();
+        // Hand the plaintext key off to the existing paste/validate
+        // flow so the same code path persists to keychain + advances
+        // the wizard.
+        onApiKeyChange(body.api_key);
+        setBrowserState({ kind: 'success' });
+        // Defer one tick so React commits the apiKey state before
+        // onValidate reads it.
+        window.setTimeout(() => onValidate(), 0);
+      }
+    } catch {
+      // Network blip — silent retry on next interval.
+    }
+  }
+
+  function cancelBrowserSignIn(): void {
+    stopPolling();
+    setBrowserState({ kind: 'idle' });
+  }
+
   return (
     <section>
-      <h2 className="text-xl font-semibold text-ink-primary">Connect with your API key</h2>
+      <h2 className="text-xl font-semibold text-ink-primary">Sign in to Driftstack</h2>
       <p className="mt-2 text-sm text-ink-secondary">
-        {mode === 'cloud' ? (
-          <>
-            Find your API key in the dashboard at{' '}
-            <span className="mono">app.driftstack.dev/api-keys</span>. Looks like{' '}
-            <span className="mono">ds_live_…</span>.
-          </>
-        ) : (
-          <>
-            Mint a key against your self-hosted server. The key looks like{' '}
-            <span className="mono">ds_test_…</span> for trial-tier or{' '}
-            <span className="mono">ds_live_…</span> otherwise.
-          </>
-        )}
+        {mode === 'cloud'
+          ? 'Open the dashboard in your browser to authorize this device. We never see your password.'
+          : 'Open your self-hosted dashboard to authorize this device. Falls back to API-key paste below if your dashboard isn’t reachable from this machine.'}
       </p>
 
-      <div className="mt-6">
-        <label className="flex flex-col gap-1.5">
-          <span className="section-label">API key</span>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => onApiKeyChange(e.target.value)}
-            className="mono w-full rounded-sm border border-surface-divider bg-surface-base px-2 py-1.5 text-sm text-ink-primary"
-            placeholder="ds_live_…"
-            spellCheck={false}
-            autoComplete="off"
-            autoFocus
-          />
-          <span className="text-2xs text-ink-muted">
-            Stored in your OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret
-            Service).
-          </span>
-        </label>
-      </div>
+      {path === 'browser' && (
+        <div className="mt-6 flex flex-col gap-4">
+          {browserState.kind === 'idle' && (
+            <>
+              <button
+                type="button"
+                className="btn-primary w-full"
+                onClick={() => void startBrowserSignIn()}
+              >
+                Sign in with browser
+              </button>
+              <p className="text-2xs text-ink-muted">
+                Opens <span className="mono">{baseUrl}</span> in your browser. After you confirm, we
+                mint an API key bound to your account and store it in the OS keychain.
+              </p>
+            </>
+          )}
 
-      {error !== null && (
-        <p className="mt-4 text-xs text-status-error" role="alert">
-          {error}
-        </p>
+          {browserState.kind === 'opening' && (
+            <div className="rounded-md border border-surface-divider bg-surface-raised p-4 text-sm text-ink-secondary">
+              Opening browser…
+            </div>
+          )}
+
+          {browserState.kind === 'waiting' && (
+            <div className="rounded-md border border-surface-divider bg-surface-raised p-4">
+              <div className="flex items-center gap-3">
+                <div className="h-3 w-3 animate-pulse rounded-full bg-accent" aria-hidden="true" />
+                <p className="text-sm text-ink-primary">Waiting for browser confirmation…</p>
+              </div>
+              <p className="mt-2 text-xs text-ink-secondary">
+                Complete the authorization in your browser tab. This page updates automatically once
+                you confirm.
+              </p>
+              <button type="button" className="btn-secondary mt-3" onClick={cancelBrowserSignIn}>
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {browserState.kind === 'success' && (
+            <div className="rounded-md border border-status-success/30 bg-status-success/5 p-4 text-sm text-ink-primary">
+              Authorized. Continuing…
+            </div>
+          )}
+
+          {browserState.kind === 'error' && (
+            <div className="rounded-md border border-status-error/30 bg-status-error/5 p-4">
+              <p className="text-sm text-status-error">{browserState.message}</p>
+              <button
+                type="button"
+                className="btn-primary mt-3"
+                onClick={() => void startBrowserSignIn()}
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="self-start text-xs text-ink-muted underline hover:text-ink-secondary"
+            onClick={() => {
+              cancelBrowserSignIn();
+              setPath('paste');
+            }}
+          >
+            Have an API key? Paste it instead
+          </button>
+        </div>
       )}
 
-      <div className="mt-6 flex justify-between">
+      {path === 'paste' && (
+        <>
+          <div className="mt-6">
+            <label className="flex flex-col gap-1.5">
+              <span className="section-label">API key</span>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => onApiKeyChange(e.target.value)}
+                className="mono w-full rounded-sm border border-surface-divider bg-surface-base px-2 py-1.5 text-sm text-ink-primary"
+                placeholder="ds_live_…"
+                spellCheck={false}
+                autoComplete="off"
+                autoFocus
+              />
+              <span className="text-2xs text-ink-muted">
+                {mode === 'cloud' ? (
+                  <>
+                    Find your API key at <span className="mono">app.driftstack.dev/api-keys</span>.
+                  </>
+                ) : (
+                  <>Mint a key against your self-hosted server.</>
+                )}{' '}
+                Stored in your OS keychain (macOS Keychain / Windows Credential Manager / Linux
+                Secret Service).
+              </span>
+            </label>
+          </div>
+
+          {error !== null && (
+            <p className="mt-4 text-xs text-status-error" role="alert">
+              {error}
+            </p>
+          )}
+
+          <button
+            type="button"
+            className="mt-4 self-start text-xs text-ink-muted underline hover:text-ink-secondary"
+            onClick={() => setPath('browser')}
+          >
+            ← Use browser sign-in instead
+          </button>
+        </>
+      )}
+
+      <div className="mt-8 flex justify-between">
         <button type="button" className="btn-secondary" onClick={onBack} disabled={validating}>
           Back
         </button>
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={onValidate}
-          disabled={validating || apiKey.trim().length === 0}
-        >
-          {validating ? 'Validating…' : 'Validate + continue'}
-        </button>
+        {path === 'paste' && (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={onValidate}
+            disabled={validating || apiKey.trim().length === 0}
+          >
+            {validating ? 'Validating…' : 'Validate + continue'}
+          </button>
+        )}
       </div>
     </section>
   );

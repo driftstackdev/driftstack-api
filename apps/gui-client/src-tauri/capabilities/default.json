@@ -23,6 +23,14 @@
     "fs:allow-mkdir",
     "fs:allow-exists",
     "fs:allow-read-dir",
-    "updater:default"
+    "updater:default",
+    {
+      "identifier": "shell:allow-open",
+      "allow": [
+        { "url": "http://localhost:5173/cli/authorize**" },
+        { "url": "https://app.driftstack.dev/cli/authorize**" },
+        { "url": "https://app-staging.driftstack.dev/cli/authorize**" }
+      ]
+    }
   ]
 }

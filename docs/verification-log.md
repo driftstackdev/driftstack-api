@@ -15258,3 +15258,87 @@ The `?next=` plumbing through signup + verify-email closes the round-trip for us
 V-268 — GUI wizard "Sign in with browser" path. Replace the API-key-paste step with: button that calls `/v1/auth/cli-authorize/initiate`, opens `browser_url` via Tauri's `shell.open()` plugin, polls `/v1/auth/cli-authorize/exchange` every 2 seconds, displays "waiting for browser…" with cancel option, on `bound` status writes the returned key into the keychain via the existing settings flow.
 
 After V-268, the entire OAuth-style activation loop closes end-to-end, replacing the API-key-paste flow as the default new-customer path.
+
+## V-268 — GUI wizard browser-OAuth path (replaces API-key paste as default)
+
+### What
+
+Per V-266 + V-267 next-step: GUI client side of the browser-OAuth handshake. The wizard's step 3 (previously "API key" paste-only) now leads with "Sign in with browser" and falls back to manual paste only when the user opts in.
+
+`apps/gui-client/src/views/FirstRunWizard.tsx` rewrite:
+
+- Stepper label: `apikey` step renamed `"Sign in"` (still uses internal id `apikey` to avoid touching the state-machine type).
+- `ApiKeyStep` now manages two paths via internal `path` state (`'browser' | 'paste'`):
+  - **`browser` (default)**:
+    - Big "Sign in with browser" button + caption explaining what's about to happen.
+    - On click: `generateState()` → 24 random bytes hex (48 chars). POST `${baseUrl}/v1/auth/cli-authorize/initiate` with `state` + `client_label` (= "Driftstack desktop on ${navigator.platform}").
+    - Open the returned `browser_url` via `@tauri-apps/plugin-shell`'s `open()`.
+    - Switch to "waiting" UI: pulsing oxblood dot + "Waiting for browser confirmation…" + Cancel button.
+    - Start `setInterval(pollOnce, 2000)` polling `/v1/auth/cli-authorize/exchange` with the same code + state.
+    - Backstop: `setTimeout` at 5 minutes flips to "Authorization expired" error state.
+    - On `{status: 'pending'}`: keep polling.
+    - On `{status: 'expired'}`: stop polling, show error + "Try again" button.
+    - On `{status: 'bound', api_key, account_id}`: stop polling, hand the plaintext to `onApiKeyChange()`, then `onValidate()` on next tick — same code path as paste-mode persists to keychain via the existing `update({apiKey, baseUrl})` flow.
+    - 4xx during polling stops the loop with the server's `detail`. 5xx silently retries on the next interval.
+    - Cleanup: `useEffect` return clears both `setInterval` + `setTimeout` on unmount or path switch.
+  - **`paste` (fallback)**:
+    - The original API-key paste form, unchanged behaviour (Validate + continue button gated on non-empty key).
+    - Small "← Use browser sign-in instead" link returns to browser path.
+
+Tauri capability + dependency wiring:
+
+- `apps/gui-client/package.json` — added `"@tauri-apps/plugin-shell": "^2.1.0"` (Rust side already had `tauri-plugin-shell = "2.0"` + `.plugin(tauri_plugin_shell::init())` in `lib.rs` from earlier phases).
+- `apps/gui-client/src-tauri/capabilities/default.json` — added `shell:allow-open` permission with explicit URL allowlist (no wildcard origins). Allowed URLs: dev `http://localhost:5173/cli/authorize**`, staging `https://app-staging.driftstack.dev/cli/authorize**`, prod `https://app.driftstack.dev/cli/authorize**`. Tauri 2's shell plugin requires explicit allowlist for `open()` to prevent arbitrary URL invocation.
+
+### Why
+
+Closes the browser-OAuth loop end-to-end. After V-266 (backend) + V-267 (dashboard page) + V-268 (GUI), the new-customer activation flow:
+
+1. Customer downloads desktop app, opens it.
+2. First-run wizard: Welcome → Cloud/Self-hosted → Sign in.
+3. Sign in step: clicks "Sign in with browser" — system browser opens to dashboard.
+4. (If not signed in) signs up / logs in. Then `/cli/authorize` confirmation.
+5. Clicks Authorize. Dashboard binds. Browser tab shows "you can return to the desktop app."
+6. Desktop app's poll picks up the bound key (within ~2s of authorize click). Validates against `/v1/account/me`. Stores in keychain. Wizard advances to "First profile."
+
+Replaces the V-244-era "find your API key in the dashboard, paste it here" UX that founder explicitly called out as hostile to non-technical customers (V-261 notes: "find api key might be kinda hard / usually not the way it goes for non tech users").
+
+### Files
+
+- `apps/gui-client/src/views/FirstRunWizard.tsx` — `ApiKeyStep` rewritten with two-path state machine; new helpers `generateState`, `startBrowserSignIn`, `pollOnce`, `cancelBrowserSignIn`; cleanup `useEffect` for interval/timeout handles.
+- `apps/gui-client/package.json` — `@tauri-apps/plugin-shell` added to dependencies.
+- `apps/gui-client/src-tauri/capabilities/default.json` — `shell:allow-open` permission with explicit URL allowlist.
+
+### Verify
+
+- `npm run typecheck --workspace apps/gui-client`: clean.
+- `npm run build --workspace apps/gui-client`: 309.91 kB JS / 94.50 kB gzip; +5kB JS over V-265 (the new state-machine + plugin-shell binding).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 751 / 751 passing across 78 files (no behaviour change in server tests).
+
+### Notes
+
+- **Polling cadence**: 2s interval, 5min total timeout. Matches the Redis TTL on the V-266 code; if the server says expired, the GUI says expired. 2s interval is the typical "responsive but not spammy" sweet spot for one-shot auth-flow polling — Stripe Checkout uses ~3s.
+- **State generation**: `crypto.getRandomValues(new Uint8Array(24))` → 48 hex chars. Easily exceeds the V-266 server-side `min(16)` Zod check.
+- **Browser-side cancellation is uncoordinated**: if the user clicks Cancel in the GUI, the browser tab remains open showing the confirmation. The user can close it manually OR can click Authorize, in which case the GUI ignores the result (poll loop already stopped). Server-side, the code expires after 5 min naturally. Acceptable for V1; a future polish could send a "Cancelled in desktop client" message via a deep link or BroadcastChannel.
+- **Plugin-shell allowlist** intentionally narrow. The shell plugin can run arbitrary commands too (`Command.create()`); we only enable `open()` and only for the three known dashboard origins. If a future env (e.g. ngrok tunnel for live demo) needs an additional URL, add it to the allowlist explicitly — wildcards are not the default.
+- **Self-hosted edge case**: if the customer's self-hosted control plane uses an URL not in the allowlist (e.g. `https://drift.internal.example`), the `shell:allow-open` will refuse the open call. Customer falls back to the paste path, which works against any base URL. The cli-authorize backend ALSO works against any base URL — it's the dashboard origin that requires allowlisting because it's where `shell.open()` actually points. A V-NNN follow-up could let users add their own dashboard origin to the allowlist via Settings, OR could skip `shell.open()` and copy the URL to clipboard for the user to paste into their browser.
+- **TypeScript: no React Concurrent-mode landmines**: poll handle stored in `useRef` so the interval reference survives re-renders without triggering effect re-runs. Cleanup `useEffect` runs once on unmount.
+- **Bundle-size impact** (~5kB JS gzip increase) acceptable; primarily the new state-machine variants + the `plugin-shell` import.
+
+### Next
+
+V-262 successor arc complete. The browser-OAuth flow is end-to-end functional after a customer's first GUI install:
+
+- V-266: backend (3 endpoints + service + 11 tests).
+- V-267: dashboard `/cli/authorize` page + signup/verify-email `?next=` round-trip.
+- V-268: GUI wizard with browser path leading + paste fallback.
+
+Optional polish that didn't make this arc:
+
+- **`/login` page** (vs the current "needs-signin → /signup" link) — straightforward Astro page that POSTs to `/v1/auth/login` and writes `ds_web_session_token`. ~30 min of work; would close the "returning customer reactivating GUI" path.
+- **Tauri custom URL scheme** (`driftstack://auth/callback`) — replaces polling exchange with a true deep link. Real polish; lands as V-269 if founder priorities warrant it.
+- **Self-hosted dashboard-origin allowlist editor in Settings** — for the niche case of a customer running a non-standard dashboard URL. Until landed, those customers use the paste fallback.
+
+Founder review can drive the next priority — continue with the GUI views queue (LiveSessionView, ProfilesView, etc.) or pivot to marketing-site polish, or pick a different launch-blocker.
