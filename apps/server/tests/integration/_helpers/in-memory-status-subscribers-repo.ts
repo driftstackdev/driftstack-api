@@ -76,6 +76,13 @@ export class InMemoryStatusSubscribersRepo implements StatusSubscribersRepo {
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
+  async rotateUnsubscribeTokenHash(input: { id: string; hash: string }): Promise<void> {
+    const row = this.rows.find((r) => r.id === input.id);
+    if (!row) throw new Error(`status_subscribers ${input.id} not found`);
+    row.unsubscribeTokenHash = input.hash;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
   async listConfirmed(): Promise<StatusSubscriberRow[]> {
     return this.rows.filter((r) => r.confirmedAt !== null && r.unsubscribedAt === null);
   }

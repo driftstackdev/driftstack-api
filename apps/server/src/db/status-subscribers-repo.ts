@@ -109,6 +109,13 @@ export class DrizzleStatusSubscribersRepo implements StatusSubscribersRepo {
     return toRow(row);
   }
 
+  async rotateUnsubscribeTokenHash(input: { id: string; hash: string }): Promise<void> {
+    await this.database.db
+      .update(statusSubscribers)
+      .set({ unsubscribeTokenHash: input.hash })
+      .where(eq(statusSubscribers.id, input.id));
+  }
+
   async listConfirmed(): Promise<StatusSubscriberRow[]> {
     const rows = await this.database.db
       .select()

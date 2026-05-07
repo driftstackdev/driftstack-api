@@ -21,6 +21,7 @@ import { IncidentsService } from '../../../src/services/incidents.js';
 import { InMemoryIncidentsRepo } from './in-memory-incidents-repo.js';
 import { InMemoryStatusSubscribersRepo } from './in-memory-status-subscribers-repo.js';
 import { StatusSubscribersService } from '../../../src/services/status-subscribers.js';
+import { IncidentNotificationsService } from '../../../src/services/incident-notifications.js';
 import type { EmailService } from '../../../src/services/email.js';
 import { RateLimitOverridesService } from '../../../src/services/rate-limit-overrides.js';
 import { LegalService } from '../../../src/services/legal.js';
@@ -134,6 +135,13 @@ function createRecordingEmailService(realService: EmailService): {
     sendStatusSubscriptionWelcome: async (args) => {
       record('status-subscription-welcome', args);
       await realService.sendStatusSubscriptionWelcome(args);
+    },
+    sendStatusIncidentNotification: async (args) => {
+      record(
+        args.kind === 'created' ? 'status-incident-created' : 'status-incident-resolved',
+        args,
+      );
+      await realService.sendStatusIncidentNotification(args);
     },
   };
   return { service, sends };
@@ -345,14 +353,26 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
 
   const accountsAdminRepo = new InMemoryAccountsAdminRepo(authRepo);
   const accountsAdminService = new AccountsAdminService(accountsAdminRepo, authCache);
-  // V-295a — incidents service with in-memory repo.
-  const incidentsRepo = new InMemoryIncidentsRepo();
-  const incidentsService = new IncidentsService(incidentsRepo);
-
   // V-295c3 — public-status email subscribers.
   const statusSubscribersRepo = new InMemoryStatusSubscribersRepo();
   const statusSubscribersService = new StatusSubscribersService(statusSubscribersRepo, noopEmail, {
     statusPageBaseUrl: 'https://status.driftstack.test',
+  });
+
+  // V-295c3-followup — incident-notification fan-out.
+  const incidentNotifications = new IncidentNotificationsService(
+    statusSubscribersService,
+    noopEmail,
+    testLogger,
+    { statusPageBaseUrl: 'https://status.driftstack.test' },
+  );
+
+  // V-295a — incidents service with in-memory repo + V-295c3-followup
+  // lifecycle hooks for incident-notification fan-out.
+  const incidentsRepo = new InMemoryIncidentsRepo();
+  const incidentsService = new IncidentsService(incidentsRepo, {
+    onPublicCreated: (incident, update) => incidentNotifications.notifyCreated(incident, update),
+    onPublicResolved: (incident, update) => incidentNotifications.notifyResolved(incident, update),
   });
 
   const rateLimitOverridesRepo = new InMemoryRateLimitOverridesRepo(authRepo);

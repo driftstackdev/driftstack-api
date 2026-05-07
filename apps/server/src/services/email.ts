@@ -96,6 +96,19 @@ export interface EmailService {
     statusPageUrl: string;
     unsubscribeLink: string;
   }): Promise<void>;
+  /** V-295c3-followup — fires when a public incident is posted or resolved. */
+  sendStatusIncidentNotification(args: {
+    to: string;
+    /** 'created' or 'resolved'. */
+    kind: 'created' | 'resolved';
+    title: string;
+    severity: string;
+    status: string;
+    message: string;
+    incidentTime: Date;
+    statusPageUrl: string;
+    unsubscribeLink: string;
+  }): Promise<void>;
   /** True if the underlying client is configured + initialized. */
   readonly isConfigured: boolean;
 }
@@ -200,6 +213,22 @@ const TEMPLATES = {
     html: (v) =>
       `<p>You're now subscribed to Driftstack service-status updates. We'll email you when an incident is posted and again when it's resolved — nothing else.</p><p>Live status: <a href="${v.statusPageUrl}">${v.statusPageUrl}</a><br />Unsubscribe (one click): <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
   },
+  // V-295c3-followup — DRAFT copy. Two templates so the subject can vary
+  // (a "resolved" email shouldn't read like a fresh outage).
+  'status-incident-created': {
+    subject: '[Driftstack status] Incident posted',
+    text: (v) =>
+      `Driftstack just posted a service-status incident.\n\nIncident: ${v.title}\nSeverity: ${v.severity}\nCurrent status: ${v.status}\nTimestamp: ${v.incidentTime} (UTC)\n\nDetails:\n${v.message}\n\nLive status: ${v.statusPageUrl}\nUnsubscribe: ${v.unsubscribeLink}\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Driftstack just posted a service-status incident.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Incident:</strong></td><td>${v.title}</td></tr><tr><td><strong>Severity:</strong></td><td>${v.severity}</td></tr><tr><td><strong>Current status:</strong></td><td>${v.status}</td></tr><tr><td><strong>Timestamp:</strong></td><td>${v.incidentTime} (UTC)</td></tr></table><p><strong>Details:</strong><br />${v.message}</p><p>Live status: <a href="${v.statusPageUrl}">${v.statusPageUrl}</a><br />Unsubscribe: <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
+  },
+  'status-incident-resolved': {
+    subject: '[Driftstack status] Incident resolved',
+    text: (v) =>
+      `Driftstack has resolved the open service-status incident.\n\nIncident: ${v.title}\nResolved at: ${v.incidentTime} (UTC)\n\nResolution notes:\n${v.message}\n\nLive status: ${v.statusPageUrl}\nUnsubscribe: ${v.unsubscribeLink}\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Driftstack has resolved the open service-status incident.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Incident:</strong></td><td>${v.title}</td></tr><tr><td><strong>Resolved at:</strong></td><td>${v.incidentTime} (UTC)</td></tr></table><p><strong>Resolution notes:</strong><br />${v.message}</p><p>Live status: <a href="${v.statusPageUrl}">${v.statusPageUrl}</a><br />Unsubscribe: <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
+  },
 } satisfies Record<string, Template>;
 
 type TemplateName = keyof typeof TEMPLATES;
@@ -251,6 +280,7 @@ export function createEmailService({
       sendTrialPackExpired: async () => {},
       sendStatusSubscriptionConfirmation: async () => {},
       sendStatusSubscriptionWelcome: async () => {},
+      sendStatusIncidentNotification: async () => {},
     };
   }
 
@@ -327,5 +357,25 @@ export function createEmailService({
       }),
     sendStatusSubscriptionWelcome: ({ to, statusPageUrl, unsubscribeLink }) =>
       send('status-subscription-welcome', to, { statusPageUrl, unsubscribeLink }),
+    sendStatusIncidentNotification: ({
+      to,
+      kind,
+      title,
+      severity,
+      status,
+      message,
+      incidentTime,
+      statusPageUrl,
+      unsubscribeLink,
+    }) =>
+      send(kind === 'created' ? 'status-incident-created' : 'status-incident-resolved', to, {
+        title,
+        severity,
+        status,
+        message,
+        incidentTime: incidentTime.toISOString(),
+        statusPageUrl,
+        unsubscribeLink,
+      }),
   };
 }

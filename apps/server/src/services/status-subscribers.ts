@@ -45,6 +45,12 @@ export interface StatusSubscribersRepo {
     unsubscribeTokenHash: string;
   }): Promise<StatusSubscriberRow>;
   markUnsubscribed(input: { id: string; unsubscribedAt: Date }): Promise<StatusSubscriberRow>;
+  /**
+   * V-295c3-followup — replaces ONLY `unsubscribe_token_hash` for an
+   * already-confirmed row. Used by the fan-out path to issue a fresh
+   * per-email unsubscribe token. Does NOT touch confirmed_at.
+   */
+  rotateUnsubscribeTokenHash(input: { id: string; hash: string }): Promise<void>;
   listConfirmed(): Promise<StatusSubscriberRow[]>;
 }
 
@@ -132,5 +138,20 @@ export class StatusSubscribersService {
   /** All confirmed + still-subscribed rows. Used by the notification fan-out. */
   async listConfirmed(): Promise<StatusSubscriberRow[]> {
     return this.repo.listConfirmed();
+  }
+
+  /**
+   * V-295c3-followup — rotate the unsubscribe token for a subscriber +
+   * return the fresh plaintext. The fan-out caller embeds this in the
+   * unsubscribe URL of one outgoing email; the next notification
+   * rotates it again. Old tokens become invalid as soon as a new one
+   * is issued — acceptable because one-click unsubscribe is meant to
+   * target the most recent email a recipient received.
+   */
+  async rotateUnsubscribeToken(subscriberId: string): Promise<string> {
+    const plaintext = generateAuthToken();
+    const hash = tokenHash(plaintext);
+    await this.repo.rotateUnsubscribeTokenHash({ id: subscriberId, hash });
+    return plaintext;
   }
 }

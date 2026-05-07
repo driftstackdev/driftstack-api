@@ -108,8 +108,28 @@ export interface IncidentsRepo {
   findOpenAutoIncident(target: string): Promise<IncidentRow | null>;
 }
 
+/**
+ * V-295c3-followup — lifecycle callbacks.
+ *
+ * Both fire AFTER the incident write commits successfully. Callbacks
+ * are awaited; a throw is logged + swallowed by the IncidentsService
+ * (we never want a notification failure to roll back an incident
+ * write — the incident IS the source of truth, the email is best-effort).
+ */
+export interface IncidentsLifecycle {
+  onPublicCreated?: (incident: IncidentRow, initialUpdate: IncidentUpdateRow) => Promise<void>;
+  onPublicResolved?: (incident: IncidentRow, finalUpdate: IncidentUpdateRow) => Promise<void>;
+}
+
 export class IncidentsService {
-  constructor(private readonly repo: IncidentsRepo) {}
+  private readonly lifecycle: IncidentsLifecycle;
+
+  constructor(
+    private readonly repo: IncidentsRepo,
+    lifecycle: IncidentsLifecycle = {},
+  ) {
+    this.lifecycle = lifecycle;
+  }
 
   async create(
     input: CreateIncidentInput,
@@ -123,6 +143,11 @@ export class IncidentsService {
       postedByAdminId: input.createdByAdminId,
       postedByAdminKeyId: input.createdByAdminKeyId,
     });
+    if (incident.public && this.lifecycle.onPublicCreated) {
+      await this.lifecycle.onPublicCreated(incident, update).catch(() => {
+        // Notification failures must never roll back the incident write.
+      });
+    }
     return { incident, update };
   }
 
@@ -147,7 +172,13 @@ export class IncidentsService {
   async resolve(
     input: ResolveIncidentInput,
   ): Promise<{ incident: IncidentRow; update: IncidentUpdateRow }> {
-    return this.repo.resolve(input);
+    const result = await this.repo.resolve(input);
+    if (result.incident.public && this.lifecycle.onPublicResolved) {
+      await this.lifecycle.onPublicResolved(result.incident, result.update).catch(() => {
+        // Notification failures must never roll back the resolve write.
+      });
+    }
+    return result;
   }
 
   /** V-295b — auto-poller hook. */

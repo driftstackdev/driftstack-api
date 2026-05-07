@@ -16908,3 +16908,54 @@ V-295c3 (~4-6h) — email subscription (`POST /v1/status/subscribe` + new `statu
 ### Next
 
 V-295c3-followup (~2-4h) — incident notification fan-out (when `IncidentsService.create()` fires for a public incident, dispatch emails to all confirmed subscribers via Postmark; same on `resolve()`). Tombstone-purge cron job (90d post-unsubscribe email zero-out). New email template `status-incident-notification` (Tier-3 copy). Then V-295d (Twitter/Slack notifications) and V-295e (real-time WebSocket + SLA reporting). NEVER STOP per founder direction.
+
+## V-295c3-followup — Incident notification fan-out
+
+**Tier**: 1 — Customer-trust resilience. Sixth slice of V-295. Closes the email-notification loop opened by V-295c3.
+
+**Why**: V-295c3 built the subscribe/confirm/unsubscribe data plane but did NOT yet wire incident lifecycle to fan-out emails. Subscribers who confirmed in V-295c3 wouldn't actually receive anything when an incident was posted. V-295c3-followup makes the promise real: every `IncidentsService.create()` for a public incident (admin-posted OR auto-detected by V-295b) fires a personalised email to every confirmed subscriber, with a freshly-rotated unsubscribe link. Resolve does the same with the resolution email template.
+
+**Scope**
+
+- New `IncidentsLifecycle` interface on IncidentsService — optional `onPublicCreated` + `onPublicResolved` callbacks. Both await; throws are swallowed (an email-send failure must never roll back an incident write).
+- New `IncidentNotificationsService` (apps/server/src/services/incident-notifications.ts). Takes StatusSubscribersService + EmailService + Logger. `notifyCreated` / `notifyResolved` snapshot the confirmed list, rotate each subscriber's unsubscribe token, send the appropriate template with a fresh personal unsub URL. Per-recipient errors logged; other recipients still get the email.
+- Per-email unsubscribe-token rotation: each fan-out call to `subscribers.rotateUnsubscribeToken(id)` mints a fresh plaintext + replaces the stored hash. Old tokens (e.g. from the earlier welcome email) become invalid; the unsub link in the most recent email is the working one. Trade-off documented inline: one-click unsub targets the most recent email, which matches user expectations.
+- 2 new email templates: `status-incident-created` + `status-incident-resolved`. **DRAFT copy, Tier-3 review-gated.** Two templates rather than one parameterised, so the subject line varies appropriately (a "resolved" notification shouldn't read like a fresh outage).
+- New `EmailService.sendStatusIncidentNotification({ kind, ... })` — single method that routes to the right template based on `kind`.
+- New `StatusSubscribersService.rotateUnsubscribeToken(id)` + repo method `rotateUnsubscribeTokenHash`. Dedicated path that updates ONLY the unsub-hash column (not confirmedAt or anything else).
+- Bootstrap construction order shuffled: StatusSubscribersService + IncidentNotificationsService construct BEFORE IncidentsService so the lifecycle callbacks can be passed at IncidentsService construction time.
+- Test fixture: same construction order shuffle. RecordingEmailService extended with `sendStatusIncidentNotification` recording. 5 new integration tests cover: fan-out on public-create, no fan-out on private-create, fan-out on resolve, per-email token rotation invalidates old tokens, unsubscribed recipients excluded from subsequent fan-outs.
+
+**Files**
+
+- `apps/server/src/services/incidents.ts` — `IncidentsLifecycle` interface + lifecycle callback dispatch in `create()` + `resolve()`.
+- `apps/server/src/services/incident-notifications.ts` — new.
+- `apps/server/src/services/status-subscribers.ts` — `rotateUnsubscribeToken` + repo extension.
+- `apps/server/src/db/status-subscribers-repo.ts` — Drizzle `rotateUnsubscribeTokenHash` impl.
+- `apps/server/src/services/email.ts` — `sendStatusIncidentNotification` interface + 2 new templates + dispatcher branch.
+- `apps/server/src/lib/bootstrap.ts` — construction order + lifecycle callback wiring.
+- `apps/server/tests/integration/_helpers/in-memory-status-subscribers-repo.ts` — `rotateUnsubscribeTokenHash` impl.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — construction order + recording-service extension.
+- `apps/server/tests/integration/incident-notifications.test.ts` — new (5 tests).
+
+### Verify
+
+- `npm test`: 872 / 872 passing across 91 files (was 867 / 90; +5 incident-notifications).
+- `npm run lint`: clean. Sub-processor mirror: 10 ↔ 11.
+- `npm run format:check`: clean.
+- Server typecheck: clean.
+
+### Notes — methodology choices
+
+- **Lifecycle callbacks rather than event emitters**: simple `onPublicCreated` / `onPublicResolved` callbacks at construction-time keep the dependency graph explicit. An EventEmitter would be more flexible but introduces decoupling that obscures the data flow ("who subscribed to what?"). The IncidentsService now has exactly two well-named hooks.
+- **Errors swallowed by IncidentsService, not by the dispatcher**: the dispatcher logs per-recipient errors at warn level. The IncidentsService wraps each callback in `.catch(() => {})` to ensure that even a catastrophic dispatcher failure (DB outage hitting `listConfirmed`) does NOT roll back the incident write. The incident IS the source of truth; the email is best-effort.
+- **Per-email unsubscribe-token rotation**: the alternative (storing plaintext at rest, or sending the hash directly in URLs) felt wrong. Rotation matches the V-070 auth-tokens pattern (sha256-at-rest) AND gives every email a working one-click unsubscribe. Old tokens going stale is acceptable — users normally click the most recent email anyway.
+- **Two templates, not one with a `kind` variable in the subject**: simpler. The existing TEMPLATES record uses static-string subjects; teaching the template machinery about parameterised subjects for one feature would be over-engineering.
+- **Tombstone-purge job still deferred**: Privacy §3.10 says "the address itself is purged from this row 90 days after unsubscribe." That purge job is V-295c3-tombstone-purge; punted out of this slice to keep size bounded. Status site has no public traffic until launch, so the privacy text remains forward-looking-accurate.
+- **Construction order shuffle in bootstrap**: StatusSubscribersService → IncidentNotificationsService → IncidentsService. IncidentsService now requires NotificationsService for its lifecycle hooks, which requires SubscribersService. The shuffle didn't break any existing tests — verified by full sweep. Order is documented inline.
+- **No new admin endpoint to view subscribers**: founder will eventually want "see who's subscribed; force-unsubscribe abuser". Same V-295c3-tombstone-purge slice will add a small admin route. Not required for the public flow to work.
+- **Test IPs distributed via hash**: tests subscribe multiple emails; the `statusSubscribe` IP rate limit (3/min) would trip the 4th-call setup. `ipFor(email)` derives a stable 198.51.100.x IP per email so each subscriber is a "different visitor" — also models reality more accurately.
+
+### Next
+
+V-295c3-tombstone-purge (~2-3h) — scheduled-jobs entry that purges email-column from `status_subscribers` rows where `unsubscribed_at < now - 90d`. Plus a small admin endpoint for "list confirmed subscribers" + "force-unsubscribe (abuse)". Then V-295d (Twitter/Slack notifications via webhook URL) and V-295e (real-time WebSocket + SLA reporting). NEVER STOP per founder direction.
