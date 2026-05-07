@@ -16536,3 +16536,87 @@ None. V-293 routes existing users between existing surfaces — no new PII handl
 ### Next
 
 V-294 — features catalog survey. Read `/mnt/project` planning files, enumerate every feature mentioned, classify SHIPPED / IN-FLIGHT / DEFERRED / UNDISCOVERED, surface aggregate scope + recommended priority order for V-295+. Output: `docs/architecture/v294-feature-catalog.md`.
+
+## V-294 — Feature catalog (production-ready scope artifact)
+
+### What
+
+Per founder direction TIER-3 production-ready-bar lock + V-293-V-294 execution order: comprehensive scope survey of all customer-facing / admin / ops / SDK features mentioned across the 132 planning files (`/Users/john/Downloads/driftstack-planning 2/`).
+
+`docs/architecture/v294-feature-catalog.md` — load-bearing scope artifact for the V-295+ multi-week arc.
+
+Methodology:
+
+1. Spawned an Explore agent to survey all 132 planning files (priority deep-reads of 7 founder-named files; fast-scan of the rest). Returned 49.9KB structured feature list (~135 distinct items grouped by surface).
+2. Cross-referenced agent output against `docs/verification-log.md` (V-001 → V-293) + `docs/launch/pre-launch-checklist.md` (V-287 refresh) to classify each as SHIPPED / IN-FLIGHT / DEFERRED / UNDISCOVERED / AGENT-1 / OUT-OF-SCOPE.
+3. Estimated Tier-1 hours per DEFERRED + UNDISCOVERED slice based on shape (auth-flow vs UI vs data-pipeline vs new infrastructure).
+4. Identified legal-page updates per slice per the V-293-locked auto-update methodology (privacy / DPA Annex 3 / ToS / AUP).
+5. Surfaced 6 founder-Tier-2-ack questions before V-295+ starts.
+
+Output structure:
+
+- Aggregate scope summary table
+- Recommended priority order (4 tiers, 67 V-NNN slices, ~297 Tier-1 hours)
+- Per-feature detail tables across 12 surface categories
+- Legal-page-update batch summary (~31 deltas across the arc)
+- Items explicitly OUT-OF-SCOPE for v1
+- 6 open questions requiring founder verdict
+
+### Surfaces enumerated
+
+1. Customer API server (apps/server) — sessions / profiles / behavioral / proxy / challenges / webhooks / auth+rate-limit
+2. Customer dashboard (apps/customer-dashboard) — sessions UI / profiles UI / workflows / recipes / api-keys / webhooks / billing / usage / team / settings / onboarding
+3. GUI client (apps/gui-client) — wizard / browser-OAuth / live-session WebRTC / Tauri deep-link
+4. Marketing site (apps/marketing-site)
+5. Doc site (apps/docs)
+6. Status page (apps/status-page) — NEW for V-295
+7. Admin panel (apps/admin-panel)
+8. SDKs (TypeScript / Python / Go)
+9. Infrastructure + ops
+10. AI agent layer (planning file 06; v1 ships shell only)
+11. Compliance + security
+12. Business operations
+
+### Scope summary
+
+| Status       | Count | Tier-1 hours | Legal updates |
+| ------------ | ----- | ------------ | ------------- |
+| SHIPPED      | 87    | n/a          | n/a           |
+| IN-FLIGHT    | 6     | ~12          | 1             |
+| DEFERRED     | 41    | ~95          | 12            |
+| UNDISCOVERED | 53    | ~190         | 18            |
+| AGENT-1      | 18    | n/a          | n/a           |
+| OUT-OF-SCOPE | 8     | n/a          | n/a           |
+
+**Aggregate Agent-2 launch scope**: ~297 Tier-1 hours + ~31 legal page updates. ~10 weeks at sustained 6h/day. Aligns with founder's "multi-week arc" framing.
+
+### 6 questions for founder Tier-2 ack
+
+1. **Priority order**: recommended `customer-trust → admin → SDK → ops`. Confirm or reorder.
+2. **Slice granularity**: avg 4.4h/slice; some span 16-24h. Confirm intra-slice phasing for the heavy ones.
+3. **AI agent layer scope**: V-361 ships shell only. Full agent loop = post-v1, or deeper v1 surface (+80h)?
+4. **WebRTC live-session streaming (LiveKit)**: biggest single-feature scope (~32h). Confirm v1 vs defer.
+5. **Multi-payment-processor (Mollie)**: planning file lists Mollie as primary; current = Stripe only. Confirm.
+6. **Team RBAC + multi-user**: ~20h. v1 or post-v1?
+
+### Files
+
+- `docs/architecture/v294-feature-catalog.md` — new (load-bearing scope artifact, ~600 lines).
+
+### Verify
+
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 833 / 833 passing across 86 files (V-294 is doc-only; no behavior change).
+
+### Notes — methodology choices
+
+- **Explore agent for the survey portion**: 132 files × ~3-5 min/file each in main context would have blown context budget. Subagent returned a structured 49.9KB report I synthesized into the catalog. Pattern reusable for future broad-survey work.
+- **Classification per surface, not per planning file**: easier to read for V-295+ slice planning. Cross-references back to planning file numbers per row.
+- **Tier-1 hour estimates are deliberate underestimates**: 4-6h per typical UI slice + 8-16h for heavy infrastructure slices (WebRTC / agent loop / impersonation). Rounds to ~297h aggregate. Real arc may run +20-30% on integration friction.
+- **Legal-page-update batch per slice**: V-293-locked methodology applied. Not every slice updates legal — only those touching new PII / sub-processor / ToS scope. ~31 of 67 slices.
+- **OUT-OF-SCOPE list explicit**: 8 items with rationale. AI agent loop, cross-region profiles, OpenVPN, mobile-device control, pen-testing, self-hosted v2, customer logos, WebGPU iOS 26. Founder can reverse any of these in the Tier-2 ack.
+
+### Next
+
+Standing by for founder Tier-2 ack on the 6 questions before V-295+ starts. V-295+ does NOT begin until verdict received per V-294 founder direction "Pre-codegen scope review mandatory — same lesson as V-381/V-382 lessons applied at architectural-scope scale."
