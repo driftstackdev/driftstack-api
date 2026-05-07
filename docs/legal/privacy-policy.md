@@ -410,7 +410,14 @@ GDPR:
   legal claim.
 - **Right to data portability** (Article 20) — Personal Data the
   Data Subject has provided, in a structured, commonly used,
-  machine-readable format.
+  machine-readable format. Driftstack provides a self-service
+  audit-log export at `/v1/account/audit-log/export?format=csv|json`
+  (UI: Customer Dashboard → Audit log → Export). The export
+  contains the calling account's full audit history (key actions,
+  session lifecycle, profile lifecycle, subscription changes) in CSV
+  or JSON format. Maximum 10,000 rows per export; older entries
+  available via paginated read. Account, billing, and authentication
+  data are exportable on request via `privacy@driftstack.dev`.
 - **Right to object** (Article 21) — to processing based on
   Article 6(1)(f) (legitimate interest), where the Data Subject's
   interests prevail.

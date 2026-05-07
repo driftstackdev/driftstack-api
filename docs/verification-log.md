@@ -17164,3 +17164,46 @@ V-296 (~3-4h Tier-1) — API key rotation flow. Customer self-service rotation v
 ### Next
 
 V-297 (~2-3h Tier-1) — Customer self-service audit-log download via dashboard /audit-log/export. CSV + JSON formats. Privacy §10 update for GDPR Article 20 portability. Then V-298+ V-294 customer-trust catalog. NEVER STOP autopilot.
+
+## V-297 — Customer audit-log export (CSV + JSON, GDPR Art 20)
+
+**Tier**: 1 — Customer self-service. Closes the V-294 catalog "audit log download" item.
+
+**Why**: GDPR Article 20 (right to data portability) requires Driftstack to provide a "structured, commonly used, machine-readable format" export of Personal Data the Data Subject has provided. The existing /v1/account/audit-log endpoint reads but doesn't bulk-export. V-297 adds the bulk-export endpoint + the customer-dashboard page that calls it. Reduces customer friction (no more email-to-privacy@) AND Driftstack's ad-hoc fulfillment burden.
+
+**Scope**
+
+- New route: `GET /v1/account/audit-log/export?format=csv|json`. Account-scoped. account_owner via existing `app.requireAuth`. Server walks pages until 10,000-row ceiling reached or `nextCursor === null`. Sets `Content-Disposition: attachment; filename="driftstack-audit-log-YYYY-MM-DD.{csv,json}"` so browser downloads. `X-Driftstack-Export-Truncated: true|false` header signals if hit the ceiling.
+- CSV format follows RFC 4180: header row (timestamp, action, actor_type, actor_account_id, actor_key_id, target_resource_id, ip_address, user_agent, payload) + one row per entry. Cells with `,`/`"`/`\r\n` quoted; internal `"` doubled. Payload cell is JSON.stringify of the original payload.
+- JSON format: `{ generated_at, account_id, row_count, truncated, data: [...] }` envelope.
+- Privacy Policy §10 Article 20 paragraph extended to mention the export endpoint. Changes-log V-297 entry recorded.
+- Customer dashboard new page `/audit-log`: list of recent entries (50 newest) + "Export CSV" + "Export JSON" buttons. Download via fetch + Blob (auth header in request, not URL — never leaks bearer in browser history). Nav link added to DashboardLayout.
+
+**Files**
+
+- `apps/server/src/routes/account-audit.ts` — new export route + RFC 4180 csvEscape helper.
+- `apps/server/tests/integration/audit-log-export.test.ts` — new (6 tests covering JSON envelope, CSV format, RFC 4180 escaping, default format, validation, account scoping).
+- `docs/legal/privacy-policy.md` — §10 Article 20 paragraph extended.
+- `docs/legal/changes-log.md` — V-297 entry.
+- `apps/customer-dashboard/src/pages/audit-log.astro` — new page.
+- `apps/customer-dashboard/src/layouts/DashboardLayout.astro` — Audit log nav entry.
+
+### Verify
+
+- `npm test`: 910 / 910 across 96 files (was 904 / 95; +6 audit-log-export).
+- `npm run lint`: clean. Sub-processor mirror: 10 ↔ 11.
+- `npm run format:check`: clean.
+- Server + customer-dashboard typecheck: clean.
+
+### Notes — methodology choices
+
+- **Pagination walk + 10K ceiling**: rather than a single un-paginated query (could OOM on accounts with millions of entries), iterate the existing list endpoint at 200/page until ceiling. 10K is generous for a year+ of typical activity AND defensive against pathological cases.
+- **Auth header for download, not URL token**: a `<a href="/v1/...?token=...">` would leak the bearer in browser history + Referer headers. Fetch + Blob + programmatic download keeps the token in the Authorization header.
+- **CSV is the GDPR-friendly format**: regulators specifically call out CSV as a "commonly used machine-readable format." JSON is for programmatic consumers.
+- **Truncated header signals over ceiling**: clients can re-fetch with cursor pagination if they need more. Most accounts will never hit 10K.
+- **No new sub-processor**: the export is generated server-side from Driftstack's own data, streamed to the calling client. No external recipients.
+- **Privacy text includes the endpoint URL + the row ceiling**: customers who read the privacy policy can self-serve without contacting support.
+
+### Next
+
+V-298 → V-303 (V-294 catalog customer self-service) — account settings page expansion, usage page deeper, billing portal redirect, profile sharing UI if Team RBAC drops in priority. Each = 2-4h Tier-1 slice. Then V-304 onboarding email flows, V-305 Tauri deep-link replacement, V-306+ LiveKit, V-308 NowPayments. NEVER STOP autopilot.

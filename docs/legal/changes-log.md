@@ -75,3 +75,22 @@ references the corresponding rows in this log.
   job. To be wired in V-295c3-followup before public launch (the
   status site is gated behind no-traffic until then; Privacy §3.10
   is accurate forward-looking).
+
+## 2026-05-08 — V-297 (audit-log export for data portability)
+
+- **Privacy Policy §10 (data subject rights)** updated. Article 20
+  paragraph extended with concrete language describing the new
+  self-service export at `/v1/account/audit-log/export` (CSV + JSON,
+  10,000-row ceiling per export). The right to portability has always
+  been GDPR-required; V-297 makes it self-service rather than an
+  email-to-privacy@driftstack.dev request flow. Reduces customer
+  friction + Driftstack's ad-hoc fulfillment burden.
+- **No new sub-processor**: the export is generated server-side from
+  Driftstack's own Postgres + streamed to the calling client. No new
+  external recipients of Personal Data. Sub-processor mirror linter
+  unchanged (10 ↔ 11).
+- **No DPA / ToS / AUP / Definitions update**: the export endpoint
+  surfaces customer-scoped audit data the customer already has read
+  access to via /v1/account/audit-log; portability is just a
+  bulk-format wrapper. No processing-purpose, retention, or data-
+  subject-right changes. Reviewed and confirmed.

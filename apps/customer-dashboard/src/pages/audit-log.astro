@@ -1,0 +1,209 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+
+// V-216 — customer-facing audit log.
+// V-297 — added export (CSV / JSON) for GDPR Article 20 portability.
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+
+const ACTION_LABEL: Record<string, string> = {
+  'account.email_verified': 'Email verified',
+  'account.login': 'Login',
+  'account.logout': 'Logout',
+  'account.password_changed': 'Password changed',
+  'api_key.minted': 'API key created',
+  'api_key.revoked': 'API key revoked',
+  'api_key.rotated': 'API key rotated',
+  'session.created': 'Session created',
+  'session.destroyed': 'Session destroyed',
+  'profile.created': 'Profile created',
+  'profile.deleted': 'Profile deleted',
+  'subscription.tier_changed': 'Subscription changed',
+  'webhook_endpoint.created': 'Webhook created',
+  'webhook_endpoint.deleted': 'Webhook deleted',
+  'admin.refund_recorded': 'Refund recorded by support',
+  'admin.support_note': 'Support note added',
+};
+---
+
+<DashboardLayout title="Audit log">
+  <div class="mx-auto max-w-5xl px-6 py-10" data-page="audit-log">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
+    <header class="mb-10 flex items-start justify-between gap-6">
+      <div>
+        <p class="text-sm text-slate-500">Account-scoped events · append-only</p>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Audit log</h1>
+        <p class="mt-2 max-w-prose text-sm text-slate-500">
+          Every action on your account: API key lifecycle, session activity, subscription changes.
+          Export the full history at any time — your data, your file.
+        </p>
+      </div>
+      <div class="flex shrink-0 gap-2">
+        <button
+          type="button"
+          class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+          data-export-csv>Export CSV</button
+        >
+        <button
+          type="button"
+          class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+          data-export-json>Export JSON</button
+        >
+      </div>
+    </header>
+
+    <div class="rounded-lg border border-slate-200 bg-white">
+      <ul class="divide-y divide-slate-100" data-list>
+        <li class="px-6 py-4 text-sm text-slate-500">Loading audit log…</li>
+      </ul>
+      <div class="hidden px-6 py-4 text-sm text-slate-500" data-empty>
+        No audit entries yet. Events appear here as you take actions on your account.
+      </div>
+    </div>
+
+    <p class="mt-6 text-xs text-slate-500">
+      Exports cap at 10,000 rows per file. Older entries remain accessible via the read endpoint
+      (<code class="font-mono">GET /v1/account/audit-log</code>) with cursor pagination. Account,
+      billing, and authentication data export on request via <code class="font-mono"
+        >privacy@driftstack.dev</code
+      >.
+    </p>
+  </div>
+
+  <script is:inline define:vars={{ apiBaseUrl, ACTION_LABEL }}>
+    (function () {
+      const root = document.querySelector('[data-page="audit-log"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const list = root.querySelector('[data-list]');
+      const empty = root.querySelector('[data-empty]');
+      const exportCsvBtn = root.querySelector('[data-export-csv]');
+      const exportJsonBtn = root.querySelector('[data-export-json]');
+
+      function getToken() {
+        try {
+          return localStorage.getItem('driftstack_session_token') || '';
+        } catch (_) {
+          return '';
+        }
+      }
+
+      function showBanner(msg) {
+        if (!banner) return;
+        banner.textContent = msg;
+        banner.classList.remove('hidden');
+      }
+
+      function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+          if (c === '&') return '&amp;';
+          if (c === '<') return '&lt;';
+          if (c === '>') return '&gt;';
+          if (c === '"') return '&quot;';
+          return '&#39;';
+        });
+      }
+
+      function fmtTs(iso) {
+        const d = new Date(iso);
+        return d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+      }
+
+      function entryLi(entry) {
+        const label = ACTION_LABEL[entry.action] || entry.action;
+        return (
+          '<li class="px-6 py-3">' +
+          '<div class="flex items-start justify-between gap-6">' +
+          '<div class="min-w-0">' +
+          '<p class="text-sm font-medium text-slate-900">' +
+          escapeHtml(label) +
+          '</p>' +
+          '<p class="mt-1 font-mono text-xs text-slate-500">' +
+          escapeHtml(entry.action) +
+          (entry.target_resource_id
+            ? ' · ' + escapeHtml(entry.target_resource_id)
+            : '') +
+          '</p></div>' +
+          '<span class="shrink-0 text-xs text-slate-500">' +
+          escapeHtml(fmtTs(entry.timestamp)) +
+          '</span></div></li>'
+        );
+      }
+
+      function refresh() {
+        const token = getToken();
+        if (!token) {
+          if (list) list.innerHTML = '<li class="px-6 py-4 text-sm text-slate-500">Sign in to view audit log.</li>';
+          return;
+        }
+        fetch(apiBaseUrl + '/v1/account/audit-log?limit=50', {
+          headers: { authorization: 'Bearer ' + token },
+        })
+          .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function (body) {
+            const entries = body.data || [];
+            if (entries.length === 0) {
+              if (list) list.classList.add('hidden');
+              if (empty) empty.classList.remove('hidden');
+            } else {
+              if (empty) empty.classList.add('hidden');
+              if (list) {
+                list.classList.remove('hidden');
+                list.innerHTML = entries.map(entryLi).join('');
+              }
+            }
+          })
+          .catch(function (err) {
+            showBanner("Couldn't load audit log (" + (err && err.message ? err.message : 'network error') + ').');
+          });
+      }
+
+      function downloadExport(format) {
+        const token = getToken();
+        if (!token) {
+          showBanner('Sign in to export audit log.');
+          return;
+        }
+        // Direct fetch + blob download — keeps the auth header out of
+        // the URL (a window.location.assign would leak the bearer in
+        // browser history if any redirect chain were involved).
+        fetch(apiBaseUrl + '/v1/account/audit-log/export?format=' + encodeURIComponent(format), {
+          headers: { authorization: 'Bearer ' + token },
+        })
+          .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.blob().then(function (blob) {
+              const cd = r.headers.get('content-disposition') || '';
+              const m = /filename="([^"]+)"/.exec(cd);
+              const name = m ? m[1] : 'audit-log.' + format;
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = name;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            });
+          })
+          .catch(function (err) {
+            showBanner('Export failed (' + (err && err.message ? err.message : 'network error') + ').');
+          });
+      }
+
+      if (exportCsvBtn) exportCsvBtn.addEventListener('click', function () { downloadExport('csv'); });
+      if (exportJsonBtn) exportJsonBtn.addEventListener('click', function () { downloadExport('json'); });
+
+      refresh();
+    })();
+  </script>
+</DashboardLayout>
