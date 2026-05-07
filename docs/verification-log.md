@@ -16471,3 +16471,68 @@ V-289 + V-290 + V-291 + V-292 closed the founder's V-289+ execution order. Remai
 - DEFERRED post-launch: customer-dashboard PARTIAL pages polish (sessions / billing / usage / webhooks).
 
 Standing by per "NEVER STOP" — no obvious launch-blocking work remaining in the parked queue. Will continue with cheap-coverage / polish if any, otherwise truly idle until founder direction.
+
+## V-293 — Marketing + docs signup/login link wiring + parity test
+
+### What
+
+Per founder TIER-3 production-ready-bar lock + V-293-as-signup-fix scope: closes the `/signup` 404 risk in pricing.astro before any CF Pages deploy.
+
+Five `/signup` link instances in `apps/marketing-site/src/pages/pricing.astro` updated:
+
+- 3 bare `<a href="/signup">` button references (trial pack, paid tiers, self-hosted) → `https://app.driftstack.dev/signup`.
+- 2 template-literal `href={`/signup?tier=${tier.id}`}` deep links → `https://app.driftstack.dev/signup?tier=${tier.id}`.
+
+Marketing surface CTAs added:
+
+- **Header.astro**: new "Sign in" link (returning customers) next to existing "Get started" CTA. Mobile drawer also gets Sign in.
+- **Footer.astro**: Product column gains "Sign up" + "Sign in" entries below the existing Pricing / Self-hosted / Docs links.
+
+Docs surface upgrade:
+
+- `apps/docs/src/pages/quickstart.md` line 11: bare-text `app.driftstack.dev` → two clickable links: `[sign up](https://app.driftstack.dev/signup)` + `[sign in](https://app.driftstack.dev/login)`. Customer in the docs reading the quickstart now has a one-click path to either acquisition surface.
+
+Regression test:
+
+- `apps/marketing-site/tests/unit/signup-link-parity.test.ts` — V-292-pattern source-grep over every `.astro` / `.md` / `.mdx` file in `apps/marketing-site/src/` + `apps/docs/src/`. Asserts:
+  - No relative `/signup` / `/login` / `/forgot-password` / `/reset-password` hrefs (those resolve to driftstack.dev/X or docs.driftstack.dev/X — 404 in production).
+  - Header.astro contains the Sign in link + retained "Get started" CTA.
+  - Footer.astro Product column lists both Sign up + Sign in.
+  - `quickstart.md` contains the canonical clickable sign-up + sign-in markdown links.
+- 40 parameterized tests via `it.each` (one per file walked from each surface) — per-file failures surface independently if drift hits a single file.
+
+### Why
+
+Founder direction 2026-05-07 retired the deferred-post-launch pattern. The signup-link gap I'd previously surfaced as exploratory-V-293 is now load-bearing: the pricing-page CTA buttons are the customer's primary acquisition trigger; the moment the marketing CF Pages project deploys, every visitor who clicks "Start with $2.99" hits a 404. Closing this before V-294 features-catalog survey lets the rest of the multi-week arc proceed against a working acquisition funnel.
+
+### Files
+
+- `apps/marketing-site/src/pages/pricing.astro` — 5 signup-link sites.
+- `apps/marketing-site/src/components/Header.astro` — Sign in CTA (desktop + mobile drawer).
+- `apps/marketing-site/src/components/Footer.astro` — Product column extended with Sign up + Sign in.
+- `apps/docs/src/pages/quickstart.md` — clickable sign up / sign in links.
+- `apps/marketing-site/tests/unit/signup-link-parity.test.ts` — new regression-coverage file.
+
+### Verify
+
+- `npm run build --workspace apps/marketing-site`: 16 pages built clean.
+- `npm run build --workspace apps/docs`: 13 pages built clean.
+- `npm test`: 833 / 833 across 86 files (was 793 / 85; +40 parameterized tests, +1 file).
+- `npm run typecheck`: clean.
+- `npm run lint`: clean (subprocessor mirror gate green).
+- `npm run format:check`: clean.
+
+### Notes — design choices
+
+- **Absolute https:// URLs** instead of root-relative `//app.driftstack.dev/...` — the marketing site is at `driftstack.dev` (apex) but the docs site is at `docs.driftstack.dev`. A protocol-relative URL would resolve correctly from both, BUT some browsers + crawlers interpret `//app...` ambiguously. Explicit `https://` is the safe + readable form.
+- **`Sign in` + `Get started` coexist in Header**: returning customers reach for "Sign in"; new customers hit "Get started" → pricing → trial-pack acquisition. Two-CTA layout matches what every SaaS landing converges on; tested in V-293's parity assertion so future Header refactors can't accidentally drop one.
+- **Footer "Product" column added two rows** rather than a new column — "Authentication" as a separate column would over-emphasize relative to its weight. Two new links under Product is the minimal viable surface.
+- **Test parameterization with `it.each` over `walkFiles` results**: per-file failures show exactly which file drifted. If `pricing.astro` regresses to a relative `/signup` href in a future refactor, the test name itself names the file.
+
+### Legal page impact
+
+None. V-293 routes existing users between existing surfaces — no new PII handling, no new sub-processor, no new ToS scope. Per the V-293-locked legal-page-auto-update methodology, V-NNN slices that don't touch any of those four trigger no legal updates.
+
+### Next
+
+V-294 — features catalog survey. Read `/mnt/project` planning files, enumerate every feature mentioned, classify SHIPPED / IN-FLIGHT / DEFERRED / UNDISCOVERED, surface aggregate scope + recommended priority order for V-295+. Output: `docs/architecture/v294-feature-catalog.md`.

@@ -8,7 +8,7 @@ description: Get from signup to your first Driftstack session in under five minu
 
 This guide takes you from a fresh signup to your first iPhone Safari session. Allow about five minutes. You will need:
 
-- A Driftstack account (sign up at [app.driftstack.dev](https://app.driftstack.dev))
+- A Driftstack account ([sign up](https://app.driftstack.dev/signup) or [sign in](https://app.driftstack.dev/login))
 - An API key (created in the dashboard under **API keys**)
 - Node.js 18+, Python 3.10+, or Go 1.21+
 
