@@ -45,6 +45,10 @@ export interface UseBrowserSignInOptions {
   baseUrl: string;
   clientLabel?: string;
   onSuccess: (apiKey: string, accountId: string) => void | Promise<void>;
+  /** Test-only: override the 2s poll cadence. */
+  __pollIntervalMs?: number;
+  /** Test-only: override the 5-minute backstop. */
+  __pollTimeoutMs?: number;
 }
 
 export interface UseBrowserSignInResult {
@@ -114,14 +118,14 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
 
       pollHandleRef.current = window.setInterval(() => {
         void pollOnce(trimmedUrl, initiate.code, stateToken);
-      }, POLL_INTERVAL_MS);
+      }, opts.__pollIntervalMs ?? POLL_INTERVAL_MS);
       timeoutHandleRef.current = window.setTimeout(() => {
         stop();
         setState({
           kind: 'error',
           message: 'Authorization expired. Click "Sign in with browser" to try again.',
         });
-      }, POLL_TIMEOUT_MS);
+      }, opts.__pollTimeoutMs ?? POLL_TIMEOUT_MS);
     } catch (err) {
       setState({
         kind: 'error',

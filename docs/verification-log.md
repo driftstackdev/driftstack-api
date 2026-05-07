@@ -16296,3 +16296,60 @@ Per founder spec — V-287 + V-288 closed the explicit V-NNN flow. Standing by p
 - Customer-dashboard PARTIAL pages (sessions / billing / usage / webhooks) — V-279 audit rated PARTIAL but on closer look V-180-V-184 already wired live read; UI polish lower priority than entry-point flows that are now polished.
 - V-371 baseline / V-369 / V-370 bisects + /forgot-password + /reset-password smoke (founder-attended, ~10min — bundle when convenient).
 - Browser-driving admin-panel Playwright config (V-281 UI handlers) — deferred per V-285 notes.
+
+## V-289 — useBrowserSignIn hook lifecycle tests
+
+### What
+
+Per founder direction V-288 ack: 7 lifecycle tests covering the V-274 state machine across the V-266 browser-OAuth flow.
+
+`apps/gui-client/tests/unit/use-browser-sign-in.test.tsx`:
+
+1. **Happy path** — initiate → poll pending → poll bound → success. Asserts `onSuccess(apiKey, accountId)` callback fires once with the correct values + `openInBrowser` called with the dashboard's `browser_url`.
+2. **Initiate rejection** (HTTP 429) → state becomes `error` with the server's `detail` message.
+3. **Exchange returns expired** → state becomes `error`.
+4. **Exchange returns 4xx (state mismatch)** → state becomes `error` with the server's `detail`. Poll loop stops.
+5. **100ms backstop fires on prolonged waiting** → state becomes `error` after the backstop window even if every poll returns pending.
+6. **`cancel()` returns to idle + stops the poll loop** — fetch call count doesn't increase after cancel.
+7. **Unmount stops timers** — fetch call count doesn't increase after the hook unmounts.
+
+### Why
+
+V-274's hook is the security-sensitive bit of the V-266 browser-OAuth flow — it gates the moment the GUI client receives a freshly-minted API key. Lifecycle correctness (cleanup on cancel + unmount, error-path coverage, expired-code handling) needs to survive future refactors. The seven tests pin every state-machine branch.
+
+### Hook test-only API: `__pollIntervalMs` + `__pollTimeoutMs`
+
+V-289 added two underscore-prefixed test-only opts to the hook:
+
+```ts
+__pollIntervalMs?: number;  // default 2000
+__pollTimeoutMs?: number;   // default 300000 (5 min)
+```
+
+Why: fake timers + RTL's `waitFor` deadlock (RTL's poll-retry uses setTimeout which is faked → waitFor hangs). The cleanest workaround is to keep real timers + run the hook at compressed wall-time. Tests use `5ms / 100ms` so each test completes in ~150ms. Production code path is unchanged: when `__pollIntervalMs` is omitted, the constant `POLL_INTERVAL_MS = 2000` still applies.
+
+The double-underscore prefix flags these as test-only — production callers must not pass them. TypeScript's optional-property inference treats them as no-ops in the `useBrowserSignIn` opts at the call sites in `FirstRunWizard` + `SettingsView`, neither of which sets them.
+
+### Files
+
+- `apps/gui-client/src/lib/browser-sign-in.ts` — added `__pollIntervalMs` + `__pollTimeoutMs` to `UseBrowserSignInOptions`. Production behaviour unchanged.
+- `apps/gui-client/tests/unit/use-browser-sign-in.test.tsx` — new, 7 tests.
+
+### Verify
+
+- `npx vitest run --project gui-jsdom`: 8 / 8 passing across 2 files (V-288 SettingsView + V-289 hook).
+- `npm test`: 773 / 773 passing across 82 files (was 766 / 81; +7 tests, +1 file).
+- `npm run typecheck`: clean.
+- `npm run lint`: clean (`@typescript-eslint/no-base-to-string` flagged the URL-stringify in the backstop test; resolved with explicit `instanceof URL ? url.href : url.url` branch instead of bare `String(url)`).
+- `npm run format:check`: clean.
+
+### Notes
+
+- **Mocked surfaces**: `@tauri-apps/plugin-shell` (`open()` no-op), plus `vi.spyOn(globalThis, 'fetch')` per test for canned responses. No DOM fixtures needed beyond what RTL's `renderHook` provides.
+- **Module-mock pattern reused** from V-288 SettingsView.test.tsx — `vi.mock(...)` at the top of the file, then `await import(...)` to pull the hook + the mocked module's stub for assertions.
+- **Happy-path test relaxes the 'waiting' intermediate-state assertion** — under 5ms-poll timing, the window between 'opening' → 'waiting' → 'success' is too small to reliably observe via RTL's poll-based `waitFor`. Test drives directly to the terminal 'success' state + asserts `onSuccess` callback fired with the correct values + `openInBrowser` got the `browser_url`. Intermediate-state coverage is implicit (test fails if the hook never transitions).
+- **Network-blip silent retry** (the `catch {}` in `pollOnce`) intentionally not tested — it's a `// silent retry` branch with no observable effect; covering it would require asserting absence-of-state-change which is brittle. Future V-NNN can fold a `metrics` callback into the hook + assert retry counters if observability is the ask.
+
+### Next
+
+V-290 — empty-state view render tests (V-275 ProfilesView + V-276 RecordingsView + V-277 ProxiesView). Parameterised describe.each() since shape is shared.
