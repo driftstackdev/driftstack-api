@@ -64,7 +64,9 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
     </form>
 
     <p class="mt-6 text-xs text-slate-500">
-      Already have an account? <a href="/login" class="text-oxblood-700 underline">Sign in</a>.
+      Already have an account? <a data-login-link href="/login" class="text-oxblood-700 underline"
+        >Sign in</a
+      >.
     </p>
   </div>
 
@@ -74,6 +76,14 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       if (!root) return;
       const form = root.querySelector('[data-form="signup"]');
       const banner = root.querySelector('[data-banner]');
+      const loginLink = root.querySelector('[data-login-link]');
+
+      // V-269 — preserve ?next= when bouncing the user to /login.
+      const params = new URLSearchParams(window.location.search);
+      const nextRaw = params.get('next');
+      if (nextRaw && loginLink) {
+        loginLink.setAttribute('href', '/login?next=' + encodeURIComponent(nextRaw));
+      }
 
       function showBanner(text) {
         banner.textContent = text;

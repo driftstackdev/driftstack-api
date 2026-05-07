@@ -25,7 +25,7 @@
     "test:e2e": "npm run test:e2e --workspace apps/server",
     "test:e2e:setup": "docker compose up -d --wait",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "eslint .",
+    "lint": "eslint . && node scripts/check-subprocessor-mirror.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",

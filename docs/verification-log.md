@@ -15342,3 +15342,187 @@ Optional polish that didn't make this arc:
 - **Self-hosted dashboard-origin allowlist editor in Settings** — for the niche case of a customer running a non-standard dashboard URL. Until landed, those customers use the paste fallback.
 
 Founder review can drive the next priority — continue with the GUI views queue (LiveSessionView, ProfilesView, etc.) or pivot to marketing-site polish, or pick a different launch-blocker.
+
+## V-269 — Customer dashboard /login page
+
+### What
+
+Per V-267 next-step: dedicated `/login` page for returning customers (vs the existing `/signup → /verify-email` chain that creates a new account). The "Sign in" button on `/cli/authorize` now points at `/login` (was `/signup` previously); both honour `?next=` for deep-link round-trip.
+
+New + modified files:
+
+1. **`apps/customer-dashboard/src/pages/login.astro`** — new Astro page. Mirrors `signup.astro` shape (form + inline JS). POSTs `{email, password}` to `/v1/auth/login` (V-079); on success writes `session.token` to `localStorage.ds_web_session_token` (same key signup→verify-email already uses, so all existing pages "just work" against either entry point). Honours `?next=` for redirect target; falls back to `/`. Bouncing to `/signup` from the "No account yet?" link preserves `?next=`.
+2. **`apps/customer-dashboard/src/pages/cli/authorize.astro`** — needs-signin section now offers TWO options side-by-side: "Create account" → `/signup?next=…`, "Sign in" → `/login?next=…`. Previous single-button version pointed at `/signup` only.
+3. **`apps/customer-dashboard/src/pages/signup.astro`** — "Already have an account? Sign in" link now preserves `?next=` when bouncing to `/login`.
+
+### Why
+
+V-267 deferred the `/login` page as a "known gap" — the cli-authorize flow worked for already-signed-in users but pushed everyone else through `/signup`, including returning customers reactivating the GUI on a new machine. With V-269 the activation loop closes for both cohorts:
+
+- **New customer**: GUI opens `/cli/authorize` → no session → "Create account" → `/signup?next=…` → verify-email → back to `/cli/authorize` → confirm.
+- **Returning customer**: GUI opens `/cli/authorize` → no session → "Sign in" → `/login?next=…` → back to `/cli/authorize` → confirm.
+
+### Files
+
+- `apps/customer-dashboard/src/pages/login.astro` — new (page + inline JS).
+- `apps/customer-dashboard/src/pages/cli/authorize.astro` — two-button needs-signin section.
+- `apps/customer-dashboard/src/pages/signup.astro` — preserve `?next` when bouncing to /login.
+
+### Verify
+
+- `npm run build --workspace apps/customer-dashboard`: clean; `dist/login/index.html` generated.
+- `npm run typecheck --workspace apps/customer-dashboard` (astro check): 0 errors.
+- `npm run lint`: clean.
+- Manual: visit `/login?next=/cli/authorize?code=…&state=…`, sign in → lands back on `/cli/authorize` with valid session → confirmation UI renders.
+
+### Notes
+
+- **Same `ds_web_session_token` localStorage key** for both signup and login — the dashboard treats "session present" as the auth gate, doesn't care which flow produced it.
+- **No "forgot password" link** on the login page yet. The V-079 password-reset flow exists server-side but no public dashboard surface yet. V-NNN follow-up: add a `/forgot-password.astro` page that POSTs to `/v1/auth/password-reset/request` + a `/reset-password.astro` page that consumes the emailed token via `/v1/auth/password-reset/confirm`.
+
+## V-270 — Dashboard /api-keys: working create + revoke
+
+### What
+
+Per V-268's next-step (customer key management UI): wired the previously placeholder `New key` and `Revoke` actions on `/api-keys`.
+
+New flows on `apps/customer-dashboard/src/pages/api-keys.astro`:
+
+1. **Create**: "New key" button reveals an inline form with name + scope (account_owner / write / read radio buttons). Submitting POSTs `/v1/api-keys` with `{name, scopes: [scope]}`. On success, the response's plaintext key is shown ONCE in a green dismissible reveal box with "Copy to clipboard" button.
+2. **Revoke**: each row's previous `Revoke` anchor (linked to `#revoke-${id}`) is now a `<button>` that opens `window.confirm` (with the key name in the prompt) and on yes calls `DELETE /v1/api-keys/${id}`. List refreshes after success.
+3. **Refresh**: `refresh()` helper rebuilds the live list after either flow; ensures the freshly-created key shows up in the list AND the empty-state hides automatically.
+4. **Auth-gated UI**: with no session in localStorage, the "Sign in to revoke" placeholder shows in the mocked rows (was a `Revoke` anchor pointing to `#`). The "New key" button surfaces a banner asking to sign in.
+
+### Why
+
+The page was scaffolded V-182-era with mock data and progressive-enhancement live read, but the create + revoke writes were never wired — the buttons all linked to `#` anchors. After V-268 (browser-OAuth mints a key called "Desktop client"), customers reaching `/api-keys` need to actually be able to manage what they see — rename, revoke, or create additional keys for other use cases.
+
+### Files
+
+- `apps/customer-dashboard/src/pages/api-keys.astro` — create form + reveal + revoke flow wired; refresh helper added; preview-mode placeholder text replaces broken anchors.
+
+### Verify
+
+- `npm run build --workspace apps/customer-dashboard`: clean.
+- `npm run typecheck --workspace apps/customer-dashboard`: 0 errors / 0 warnings / 1 informational hint.
+- Manual end-to-end (vs the local control plane started in V-262 / running on `:3000`):
+  1. `localStorage.ds_web_session_token` set via signup or login.
+  2. Click "New key" → form appears → name "ci-runner" + scope `write` → submit → green reveal with the plaintext.
+  3. Click "Copy to clipboard" → 2-second "Copied" feedback.
+  4. Dismiss reveal → list refreshes with the new row visible.
+  5. Click "Revoke" on the new row → confirm dialog → list refreshes → row shows "revoked today" badge.
+
+### Notes
+
+- **Plaintext shown ONCE on creation**, in a dismissible green panel. The pre-formatted block uses a real `<pre>` so users can select-and-copy if clipboard API is blocked. After dismissing the reveal, the value is gone from the DOM (set to empty).
+- **Default scope = `account_owner`** in the radio group — matches V-266 default. Conservative; customers should narrow to `write` or `read` for production runners but the safe default doesn't surprise the customer who just wants "a key like the desktop one I just got."
+- **Confirm-prompt copy** explicitly states "Apps using this key will start receiving 401 immediately" so customers don't revoke production keys casually.
+- **Network-error path**: revoke failure re-enables the Revoke button + shows banner; create failure re-enables submit button + shows inline error under the form.
+
+## V-271 — Sub-processor mirror linter (CI gate)
+
+### What
+
+`scripts/check-subprocessor-mirror.mjs` — Node ESM script that compares `apps/marketing-site/src/data/sub-processors.ts` against the DPA Annex 3 table in `docs/legal/dpa.md` and fails on drift.
+
+Wired into `npm run lint`: `eslint . && node scripts/check-subprocessor-mirror.mjs`. Pre-push hook already runs lint, so any drift now fails the push gate.
+
+Detection logic:
+
+- Parse `name: '...'` literals from the public TS data file → set of public entry names (10 entries today: Hetzner Cloud, Neon, Upstash, Cloudflare R2, Postmark, Sentry, Stripe, Anthropic, Moneybird, MacStadium).
+- Walk forward from `## Annex 3` heading in `docs/legal/dpa.md`, capture first column of each table data row → set of DPA entry names (11 rows today; the Stripe split into "Stripe Payments Europe Ltd" + "Stripe, Inc." accounts for the 11→10 collapse).
+- Tokenize each name: lowercase, strip `[.,()]`, split on whitespace, filter to tokens ≥3 chars that aren't entity-suffix or generic-product stopwords (`inc`, `ltd`, `gmbh`, `bv`, `cloud`, `online`, `r2`, `commerce`, etc.).
+- Match if any distinctive token overlaps in either direction.
+
+Drift cases the linter handles correctly today:
+
+- "Hetzner Cloud" ↔ "Hetzner Online GmbH" → matched on `hetzner`.
+- "Cloudflare R2" ↔ "Cloudflare, Inc." → matched on `cloudflare`.
+- "Stripe" ↔ "Stripe Payments Europe Ltd" + "Stripe, Inc." → both DPA rows match the single public entry on `stripe`.
+- "Anthropic, PBC (conditional, opt-in only)" ↔ "Anthropic" → matched on `anthropic`.
+
+### Why
+
+V-255 noted: "The DPA Annex 3 entries from `docs/legal/dpa.md` (this repo) plus the locked sub-processor list... When the DPA Annex 3 changes, this file updates in the same commit; the /trust page is a customer-facing transparency artifact, not a separate canonical source." Manual lockstep was the documented contract; V-271 makes it CI-gated.
+
+GDPR Article 28(2) treats sub-processor changes as a customer-notifiable amendment with a 30-day notice period. Silent drift between the public list (what customers see at `/trust/sub-processors`) and the DPA (what they're contractually agreeing to) is a compliance bug, not an oversight. Catching it at lint time prevents a "we updated the DPA but forgot to update the public page" launch-eve fire drill.
+
+### Files
+
+- `scripts/check-subprocessor-mirror.mjs` — new linter (executable).
+- `package.json` — `lint` script now chains the new check after `eslint .`.
+
+### Verify
+
+- `node scripts/check-subprocessor-mirror.mjs` directly: `✓ 10 public entries, 11 DPA Annex 3 rows — all matched.`
+- `npm run lint`: chains both eslint + the mirror check, passes.
+- Pre-push hook (V-223 + V-231 era): runs `npm run lint`, will fail on drift.
+
+### Notes — caught real drift on first run
+
+The first run flagged genuine pre-existing differences:
+
+- "Hetzner Cloud" vs "Hetzner Online GmbH" — same vendor, different naming convention between public + legal.
+- "Cloudflare R2" vs "Cloudflare, Inc." — same.
+
+The substring-only matcher I started with would have required matching one ↔ the other. Refined to token-overlap-with-stopwords so both pairs match cleanly without renaming either side. The customer-facing page can keep its product-shorthand ("Cloudflare R2") while the DPA uses formal legal-entity names.
+
+### Notes — when this catches a real change
+
+When a future V-NNN adds or removes a sub-processor:
+
+1. The linter fails on the first commit that updates only one side.
+2. Error message lists exactly what's missing where + reminds the dev that this is an Article 28(2) amendment + reaccept-flow trigger.
+3. Updating both sides in the same commit (which the V-255 contract already required) makes it pass.
+
+## V-272 — GUI Settings view: account info + sign-out, V-268-aware copy
+
+### What
+
+`apps/gui-client/src/views/SettingsView.tsx` polish to match the V-268 browser-OAuth flow:
+
+1. **First-run hint rewritten**: previously read "Mint one against your self-hosted server with `npm run admin:create-key` in the `driftstack-api` repo" — internal-developer language, irrelevant to actual customers. Now reads: "The setup wizard usually mints a key for you via 'Sign in with browser.' If you skipped past it, restart the app or paste a key from `app.driftstack.dev/api-keys` below."
+2. **New "Connected" panel** shown when `settings.apiKey !== null`: shows the current base URL + the key's first 12 chars + last 4 chars (e.g. `ds_live_pjv4anxb…ar3ud`). Reassures customers what they're authenticated as without revealing the full key.
+3. **"Sign out" button** in the Connected panel: confirms (with explicit "this forgets the key locally; the key is NOT revoked on the server. Revoke it from the dashboard if you want to fully invalidate it"), then calls `update({apiKey: null, …})` which clears the keychain entry. The wizard re-fires on next launch (since `settings.apiKey === null` is the wizard gate).
+4. **API base URL hint refined**: leads with `https://api.driftstack.dev` (cloud, the default for new installs) instead of localhost; mentions self-hosted as the alternative.
+
+### Why
+
+The V-244 + V-241-era Settings view was written before the browser-OAuth flow existed. Its first-run instructions pointed customers at internal admin tooling (`npm run admin:create-key`), and there was no UI affordance for the "I want to sign out / re-authorize" use case that V-268's flow makes natural ("I switched from cloud to self-hosted; I want to redo the wizard"). V-272 closes both gaps.
+
+### Files
+
+- `apps/gui-client/src/views/SettingsView.tsx` — first-run hint + Connected panel + Sign-out button + API base URL hint refinements.
+
+### Verify
+
+- `npm run typecheck --workspace apps/gui-client`: clean.
+- `npm run build --workspace apps/gui-client`: clean (~94kB gzip JS, +0.3kB over V-268).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+
+### Notes
+
+- **Sign-out does NOT revoke the key on the server** — explicit in the confirm dialog. The keychain entry is cleared locally so the wizard fires on next launch. Customers who want to fully invalidate the key revoke it from the dashboard `/api-keys` page (which V-270 just made functional). Surfacing this distinction matters because a customer who wants to "log out" usually wants both — the GUI can't do the server-side half because that requires cross-device coordination.
+- **Key truncation** uses first 12 + last 4 chars (`ds_live_pjv4anxb…ar3ud`). Long enough to recognize at a glance, short enough that screen-share / over-the-shoulder doesn't leak. Matches the dashboard `/api-keys` masking pattern.
+- **Wizard re-fire after sign-out**: clicking Sign out clears the keychain via `update()`, which propagates through SettingsContext, which makes `settings.apiKey === null`. The next time `Shell` renders (typically on next app launch since the user usually closes the app after signing out), `settings.apiKey === null && !wizardDismissed` is true, so the V-244 wizard rendering condition triggers. If the user stays in the app post-sign-out, they see the Settings view's empty state — no crash.
+- **No "Re-authorize via browser" button** in Settings yet. After Sign out, the user has to either restart the app (wizard runs again) OR paste a fresh key. V-NNN follow-up could add a "Sign in with browser" button directly to Settings that runs the V-268 initiate→poll flow inline, avoiding the wizard restart. Not blocking.
+
+### Next
+
+Browser-OAuth arc + immediate launch-blocking gaps closed:
+
+- V-266: backend.
+- V-267: dashboard cli/authorize page.
+- V-268: GUI wizard browser path.
+- V-269: /login page.
+- V-270: dashboard /api-keys create + revoke.
+- V-271: sub-processor mirror linter (CI gate).
+- V-272: GUI Settings view polish.
+
+Optional polish remaining (parked, not chasing without explicit founder direction):
+
+- **`/forgot-password` + `/reset-password` dashboard pages** — V-079 backend exists; dashboard surface doesn't.
+- **V-NNN Tauri custom URL scheme** (`driftstack://auth/callback`) — replaces V-268 polling with deep-link callback.
+- **GUI Settings inline "Sign in with browser"** — runs V-268 initiate→poll without restarting the app post-sign-out.
+- **GUI ProfilesView / RecordingsView / ProxiesView / ConnectivityView polish** — V-265 surveyed these as scaffold-shaped but they aren't first-impression surfaces, so lower priority than the entry-point flows.

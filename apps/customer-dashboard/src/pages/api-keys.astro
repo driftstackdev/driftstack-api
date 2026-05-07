@@ -2,8 +2,8 @@
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 import { MOCK_API_KEYS } from '../data/mocks.ts';
 
-// V-182 — progressive-enhancement wiring against /v1/api-keys,
-// mirrors V-180 / V-181 pattern.
+// V-182 — progressive-enhancement wiring against /v1/api-keys.
+// V-270 — wired the New-key form + revoke confirmation flow.
 
 function fmtIso(iso: string | null): string {
   if (iso === null) return 'never';
@@ -34,20 +34,115 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       data-banner
       class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
       role="status"
-    ></div>
+    >
+    </div>
 
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
         <p class="text-sm text-slate-500">Bearer tokens · scoped + revocable</p>
         <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">API keys</h1>
         <p class="mt-2 max-w-prose text-sm text-slate-500">
-          Pass as <code class="font-mono">Authorization: Bearer &lt;key&gt;</code>.
-          Plaintext is shown ONCE on creation — store it now; we can't recover it
-          later. Revocation is immediate.
+          Pass as <code class="font-mono">Authorization: Bearer &lt;key&gt;</code>. Plaintext is
+          shown ONCE on creation — store it now; we can't recover it later. Revocation is
+          immediate.
         </p>
       </div>
-      <a href="#" class="btn-primary shrink-0">New key</a>
+      <button type="button" class="btn-primary shrink-0" data-show-create>New key</button>
     </header>
+
+    <!-- V-270: Create-key form (hidden by default) -->
+    <div
+      data-create-form-wrap
+      class="mb-8 hidden rounded-lg border border-slate-200 bg-white p-6"
+    >
+      <h2 class="text-lg font-semibold text-slate-900">Create a new API key</h2>
+      <form data-create-form class="mt-4 space-y-4">
+        <div>
+          <label for="key-name" class="block text-sm font-medium text-slate-700">Name</label>
+          <input
+            id="key-name"
+            name="name"
+            type="text"
+            required
+            placeholder="e.g. production-server, staging-bot"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+          <p class="mt-1 text-xs text-slate-500">
+            Naming a key by purpose / environment makes leak triage faster later.
+          </p>
+        </div>
+        <div>
+          <span class="block text-sm font-medium text-slate-700">Scope</span>
+          <div class="mt-2 space-y-2 text-sm">
+            <label class="flex items-start gap-2">
+              <input
+                type="radio"
+                name="scope"
+                value="account_owner"
+                checked
+                class="mt-0.5"
+              />
+              <span>
+                <strong>account_owner</strong> — full access. Manage webhooks, billing, mint
+                other keys. Choose this for keys driving the GUI client or your primary
+                automation.
+              </span>
+            </label>
+            <label class="flex items-start gap-2">
+              <input type="radio" name="scope" value="write" class="mt-0.5" />
+              <span>
+                <strong>write</strong> — create + drive sessions; cannot mint other keys, manage
+                webhooks, or change billing. Right scope for production runners.
+              </span>
+            </label>
+            <label class="flex items-start gap-2">
+              <input type="radio" name="scope" value="read" class="mt-0.5" />
+              <span>
+                <strong>read</strong> — list + get only. Right scope for monitoring or
+                read-only integrations.
+              </span>
+            </label>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 pt-2">
+          <button type="submit" class="btn-primary" data-create-submit>Create key</button>
+          <button
+            type="button"
+            class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            data-create-cancel
+          >
+            Cancel
+          </button>
+          <span data-create-error class="hidden text-sm text-rose-700"></span>
+        </div>
+      </form>
+    </div>
+
+    <!-- V-270: Just-created key reveal (shown once, dismissible) -->
+    <div
+      data-created-reveal
+      class="mb-8 hidden rounded-lg border border-emerald-200 bg-emerald-50 p-6"
+    >
+      <h2 class="text-lg font-semibold text-emerald-900">Key created — copy it now</h2>
+      <p class="mt-2 text-sm text-emerald-900">
+        This is the only time the full key is shown. Store it in your secret manager before
+        dismissing.
+      </p>
+      <pre
+        data-created-plaintext
+        class="mt-4 overflow-x-auto rounded border border-emerald-200 bg-white px-4 py-3 font-mono text-sm text-slate-900"></pre>
+      <div class="mt-4 flex items-center gap-3">
+        <button type="button" class="btn-primary" data-created-copy>Copy to clipboard</button>
+        <button
+          type="button"
+          class="rounded-md border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-100"
+          data-created-dismiss
+        >
+          Dismiss — I've saved it
+        </button>
+        <span data-created-copy-feedback class="hidden text-xs text-emerald-700">Copied.</span>
+      </div>
+    </div>
 
     <!-- Security notice -->
     <div
@@ -55,9 +150,9 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
     >
       <span class="font-mono text-xs uppercase">!</span>
       <p>
-        API keys are scrypt-hashed at rest. Driftstack staff cannot read your
-        keys — a database breach surfaces hashes, not keys. If a key leaks,
-        revoke + rotate; no admin recovery path exists.
+        API keys are scrypt-hashed at rest. Driftstack staff cannot read your keys — a database
+        breach surfaces hashes, not keys. If a key leaks, revoke + rotate; no admin recovery
+        path exists.
       </p>
     </div>
 
@@ -68,10 +163,12 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       <h2 class="text-lg font-semibold text-slate-900">No keys yet</h2>
       <p class="mx-auto mt-2 max-w-prose text-sm text-slate-500">
         Create a key to start driving sessions from your code. Most customers create one key per
-        environment (dev / staging / prod) — scopes are key-level, so a leaked dev key can't touch
-        prod state.
+        environment (dev / staging / prod) — scopes are key-level, so a leaked dev key can't
+        touch prod state.
       </p>
-      <a href="#" class="btn-primary mt-6 inline-flex"> Create your first key </a>
+      <button type="button" class="btn-primary mt-6 inline-flex" data-show-create>
+        Create your first key
+      </button>
     </div>
     <ul
       data-list
@@ -105,9 +202,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
                     </span>
                   ))}
                 </div>
-                <a href={`#revoke-${key.id}`} class="text-sm text-red-700 hover:underline">
-                  Revoke
-                </a>
+                <span class="text-sm text-slate-400">Sign in to revoke</span>
               </div>
             </div>
           </li>
@@ -119,17 +214,15 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       Scopes: <code class="font-mono">read</code> (list/get-only),
       <code class="font-mono">write</code> (create sessions, navigate, interact),
       <code class="font-mono">account_owner</code> (manage webhooks, billing, mint other keys —
-      V-174),
-      <code class="font-mono">gui_control</code> (drive the GUI client's manual sessions). Always
-      create the narrowest-scoped key the job needs.
+      V-174). Always create the narrowest-scoped key the job needs.
     </p>
   </div>
 
   <!--
-    V-182 — progressive-enhancement script. Reads
+    V-182 + V-270 — progressive-enhancement script. Reads
     ds_web_session_token from localStorage, fetches /v1/api-keys,
-    replaces the key list with live data. Falls back to mock-rendered
-    list when token absent or fetch fails. Mirrors V-180/V-181.
+    replaces the key list with live data. Wires the New-key form
+    POST + revoke DELETE flows.
   -->
   <script is:inline define:vars={{ apiBaseUrl }}>
     (function () {
@@ -138,12 +231,28 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       const banner = root.querySelector('[data-banner]');
       const ul = root.querySelector('[data-list]');
       const empty = root.querySelector('[data-empty]');
+      const formWrap = root.querySelector('[data-create-form-wrap]');
+      const form = root.querySelector('[data-create-form]');
+      const createSubmit = root.querySelector('[data-create-submit]');
+      const createCancel = root.querySelector('[data-create-cancel]');
+      const createError = root.querySelector('[data-create-error]');
+      const reveal = root.querySelector('[data-created-reveal]');
+      const revealPre = root.querySelector('[data-created-plaintext]');
+      const revealCopy = root.querySelector('[data-created-copy]');
+      const revealCopyFb = root.querySelector('[data-created-copy-feedback]');
+      const revealDismiss = root.querySelector('[data-created-dismiss]');
+      const showCreateBtns = root.querySelectorAll('[data-show-create]');
       const token = localStorage.getItem('ds_web_session_token');
 
       function showBanner(text) {
         if (!banner) return;
         banner.textContent = text;
         banner.classList.remove('hidden');
+      }
+
+      function hideBanner() {
+        if (!banner) return;
+        banner.classList.add('hidden');
       }
 
       function escapeHtml(s) {
@@ -190,13 +299,15 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
               '</span>',
           )
           .join('');
-        const revokeLink = isRevoked
+        const revokeAction = isRevoked
           ? '<span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-slate-600">revoked ' +
             escapeHtml(fmtIso(k.revoked_at)) +
             '</span>'
-          : '<a href="#revoke-' +
+          : '<button type="button" data-revoke="' +
             escapeHtml(k.id) +
-            '" class="text-sm text-red-700 hover:underline">Revoke</a>';
+            '" data-revoke-name="' +
+            escapeHtml(k.name) +
+            '" class="text-sm text-rose-700 hover:underline">Revoke</button>';
         return (
           '<li class="px-6 py-4">' +
           '<div class="flex items-start justify-between gap-6">' +
@@ -218,40 +329,171 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           '<div class="flex flex-wrap gap-1">' +
           scopes +
           '</div>' +
-          revokeLink +
+          revokeAction +
           '</div></div></li>'
         );
       }
+
+      function refresh() {
+        if (!token) return;
+        return fetch(apiBaseUrl + '/v1/api-keys', {
+          headers: { authorization: 'Bearer ' + token },
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => {
+            const keys = body.data || [];
+            if (keys.length === 0) {
+              ul.classList.add('hidden');
+              empty.classList.remove('hidden');
+            } else {
+              empty.classList.add('hidden');
+              ul.classList.remove('hidden');
+              ul.innerHTML = keys.map(keyLi).join('');
+              wireRevokeButtons();
+            }
+            hideBanner();
+          })
+          .catch((err) => {
+            showBanner(
+              "Couldn't load live API keys (" +
+                (err && err.message ? err.message : 'network error') +
+                ').',
+            );
+          });
+      }
+
+      function wireRevokeButtons() {
+        const buttons = ul.querySelectorAll('[data-revoke]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-revoke');
+            const name = btn.getAttribute('data-revoke-name') || '(unnamed)';
+            const ok = window.confirm(
+              'Revoke "' +
+                name +
+                '"? Apps using this key will start receiving 401 immediately. This cannot be undone.',
+            );
+            if (!ok) return;
+            btn.disabled = true;
+            btn.textContent = 'Revoking…';
+            fetch(apiBaseUrl + '/v1/api-keys/' + encodeURIComponent(id), {
+              method: 'DELETE',
+              headers: { authorization: 'Bearer ' + token },
+            })
+              .then((r) => {
+                if (!r.ok && r.status !== 204) {
+                  return r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) =>
+                      Promise.reject(new Error(b.detail || 'HTTP ' + r.status)),
+                    );
+                }
+                return refresh();
+              })
+              .catch((err) => {
+                showBanner(
+                  'Revoke failed: ' + (err && err.message ? err.message : 'network error'),
+                );
+                btn.disabled = false;
+                btn.textContent = 'Revoke';
+              });
+          });
+        });
+      }
+
+      function showCreate() {
+        if (!token) {
+          showBanner('Sign in to create API keys.');
+          return;
+        }
+        formWrap.classList.remove('hidden');
+        reveal.classList.add('hidden');
+        const nameInput = form.querySelector('input[name="name"]');
+        if (nameInput) nameInput.focus();
+      }
+
+      function hideCreate() {
+        formWrap.classList.add('hidden');
+        createError.classList.add('hidden');
+        createError.textContent = '';
+        form.reset();
+      }
+
+      showCreateBtns.forEach((btn) => btn.addEventListener('click', showCreate));
+      createCancel.addEventListener('click', hideCreate);
+
+      form.addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        createError.classList.add('hidden');
+        createError.textContent = '';
+        const fd = new FormData(form);
+        const name = (fd.get('name') || '').toString().trim();
+        const scope = (fd.get('scope') || 'account_owner').toString();
+        if (!name) return;
+        createSubmit.disabled = true;
+        createSubmit.textContent = 'Creating…';
+        fetch(apiBaseUrl + '/v1/api-keys', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: 'Bearer ' + token,
+          },
+          body: JSON.stringify({ name: name, scopes: [scope] }),
+        })
+          .then((r) =>
+            r.ok
+              ? r.json()
+              : r
+                  .json()
+                  .catch(() => ({}))
+                  .then((b) =>
+                    Promise.reject(new Error(b.detail || 'HTTP ' + r.status)),
+                  ),
+          )
+          .then((body) => {
+            // Show the plaintext one-shot reveal.
+            revealPre.textContent = body.plaintext || '';
+            reveal.classList.remove('hidden');
+            hideCreate();
+            return refresh();
+          })
+          .catch((err) => {
+            createError.textContent = err && err.message ? err.message : 'Create failed.';
+            createError.classList.remove('hidden');
+          })
+          .finally(() => {
+            createSubmit.disabled = false;
+            createSubmit.textContent = 'Create key';
+          });
+      });
+
+      revealCopy.addEventListener('click', () => {
+        const value = revealPre.textContent || '';
+        if (!value) return;
+        navigator.clipboard
+          .writeText(value)
+          .then(() => {
+            revealCopyFb.classList.remove('hidden');
+            window.setTimeout(() => revealCopyFb.classList.add('hidden'), 2000);
+          })
+          .catch(() => {
+            revealCopyFb.textContent = 'Copy failed — select + copy manually.';
+            revealCopyFb.classList.remove('hidden');
+          });
+      });
+
+      revealDismiss.addEventListener('click', () => {
+        revealPre.textContent = '';
+        reveal.classList.add('hidden');
+      });
 
       if (!token) {
         showBanner('Sign in to see live API keys. Showing preview data below.');
         return;
       }
 
-      fetch(apiBaseUrl + '/v1/api-keys', {
-        headers: { authorization: 'Bearer ' + token },
-        credentials: 'include',
-      })
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-        .then((body) => {
-          const keys = body.data || [];
-          if (keys.length === 0) {
-            ul.classList.add('hidden');
-            empty.classList.remove('hidden');
-            showBanner('No API keys yet — create one to get started.');
-          } else {
-            empty.classList.add('hidden');
-            ul.classList.remove('hidden');
-            ul.innerHTML = keys.map(keyLi).join('');
-          }
-        })
-        .catch((err) => {
-          showBanner(
-            "Couldn't load live API keys (" +
-              (err && err.message ? err.message : 'network error') +
-              '). Showing preview data below.',
-          );
-        });
+      void refresh();
     })();
   </script>
 </DashboardLayout>

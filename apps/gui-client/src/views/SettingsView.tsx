@@ -7,6 +7,10 @@
 // V-242: telemetry toggle — Sentry crash-only opt-in. Defaults ON for
 // cloud customers, OFF for self-hosted. Customer can override either
 // direction.
+//
+// V-272: account info block + sign-out button. First-run hint
+// rewritten to point at the V-268 browser sign-in flow instead of the
+// stale "npm run admin:create-key" instruction.
 
 import { useState } from 'react';
 import { useSettings } from '../lib/SettingsContext';
@@ -69,14 +73,45 @@ export function SettingsView(): JSX.Element {
 
       {isFirstRun && (
         <div className="max-w-xl rounded border border-accent/30 bg-accent-subtle/40 px-4 py-3">
-          <span className="section-label text-accent">First run</span>
+          <span className="section-label text-accent">No API key yet</span>
           <p className="mt-1 text-sm text-ink-secondary">
-            Don't have an API key yet? Mint one against your self-hosted server with{' '}
-            <span className="mono">npm run admin:create-key</span> in the{' '}
-            <span className="mono">driftstack-api</span> repo, or{' '}
-            <span className="mono">POST /v1/admin/accounts/&lt;id&gt;/keys</span> against a running
-            instance.
+            The setup wizard usually mints a key for you via "Sign in with browser." If you skipped
+            past it, restart the app or paste a key from{' '}
+            <span className="mono">app.driftstack.dev/api-keys</span> below.
           </p>
+        </div>
+      )}
+
+      {!isFirstRun && (
+        <div className="max-w-xl rounded border border-surface-divider bg-surface-raised px-4 py-3">
+          <span className="section-label">Connected</span>
+          <p className="mt-1 text-sm text-ink-secondary">
+            Pointing at <span className="mono">{settings.baseUrl}</span> with key{' '}
+            <span className="mono">
+              {settings.apiKey?.slice(0, 12) ?? ''}…{settings.apiKey?.slice(-4) ?? ''}
+            </span>
+            .
+          </p>
+          <button
+            type="button"
+            className="btn-secondary mt-3"
+            onClick={() => {
+              if (
+                window.confirm(
+                  'Sign out of this device? This forgets the API key locally; the key is NOT revoked on the server. Revoke it from the dashboard if you want to fully invalidate it.',
+                )
+              ) {
+                setDraftKey('');
+                void update({
+                  apiKey: null,
+                  baseUrl: settings.baseUrl,
+                  telemetryOptIn: settings.telemetryOptIn,
+                });
+              }
+            }}
+          >
+            Sign out
+          </button>
         </div>
       )}
 
@@ -123,8 +158,10 @@ export function SettingsView(): JSX.Element {
             autoComplete="off"
           />
           <span className="mt-1 block text-2xs text-ink-muted">
-            Default targets a local server on port 7780. Set to{' '}
-            <span className="mono">https://api.driftstack.dev</span> for the cloud tier.
+            <span className="mono">https://api.driftstack.dev</span> for cloud (default for new
+            installs). Self-hosted installs point at their own server URL —{' '}
+            <span className="mono">http://localhost:7780</span> by convention for local-machine
+            deployments.
           </span>
         </Field>
 

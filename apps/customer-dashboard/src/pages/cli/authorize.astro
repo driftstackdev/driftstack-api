@@ -53,13 +53,17 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       <p class="text-sm text-slate-700">
         Sign in to your Driftstack account to authorize this desktop client.
       </p>
-      <a
-        data-signin-link
-        href="/signup"
-        class="btn-primary mt-6 block w-full text-center"
-      >Sign in</a>
+      <div class="mt-6 grid grid-cols-2 gap-3">
+        <a
+          data-signup-link
+          href="/signup"
+          class="rounded-md border border-slate-200 bg-white px-4 py-2 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >Create account</a
+        >
+        <a data-signin-link href="/login" class="btn-primary text-center">Sign in</a>
+      </div>
       <p class="mt-3 text-xs text-slate-500 text-center">
-        After signing in you'll be brought back to this page automatically.
+        You'll be brought back to this page automatically.
       </p>
     </div>
 
@@ -164,10 +168,10 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       // 2. Sign-in gate
       if (!sessionToken) {
         const signinLink = sections.needsSignin.querySelector('[data-signin-link]');
-        if (signinLink) {
-          const next = encodeURIComponent(window.location.pathname + window.location.search);
-          signinLink.setAttribute('href', '/signup?next=' + next);
-        }
+        const signupLink = sections.needsSignin.querySelector('[data-signup-link]');
+        const next = encodeURIComponent(window.location.pathname + window.location.search);
+        if (signinLink) signinLink.setAttribute('href', '/login?next=' + next);
+        if (signupLink) signupLink.setAttribute('href', '/signup?next=' + next);
         show('needs-signin');
         return;
       }
