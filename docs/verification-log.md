@@ -15787,3 +15787,49 @@ The status taxonomy (READY / PENDING ENG / PENDING FOUNDER / PARTIAL / DEFERRED)
 ### Next
 
 V-280 — Launch-day runbook. Smoke tests, DNS cutover, Stripe live-mode toggle, day-1 monitoring + support, rollback procedure.
+
+## V-280 — Launch-day runbook
+
+### What
+
+`docs/operations/launch-day-runbook.md` — end-to-end choreography for the day Driftstack flips from staging-only to publicly accepting paying customers.
+
+Sections:
+
+1. **T-24h pre-flight checks** — backend / API / marketing / dashboard / docs / Stripe / GUI / smoke test (10-step full happy path against production with a real card).
+2. **T-1h final preparation** — eight-tab browser layout, two-terminal SSH setup, runbook + checklist visible.
+3. **T-0 cutover sequence** — Stripe test→live flip via SSH-write to .env (per stripe_credential_handling rule), DNS verification, marketing site go-live, first-hour eyeball monitoring.
+4. **Day-1 monitoring thresholds** — seven metric/threshold/action rows with specific tripwires for Sentry error rates, /health failures, fatal logs, webhook signature mismatches, Postmark bounce rate, customer support inbox SLO.
+5. **Day-1 customer support** — five known-issue prepared answers, four escalation paths, manual refund procedure (pre-V-281 admin panel polish).
+6. **Rollback procedures** — image-level (1-2 min, safest), workflow-level (5-10 min, tracked), full-rollback worst case (CF Pages maintenance mode + DNS reroute).
+7. **Day 2-7 stabilisation** — metrics to track, day-3 + day-7 decision points.
+8. **Pre-launch verification checklist** — final go/no-go gate.
+
+### Why
+
+V-279 surfaced the audit + queue. V-280 turns it into an executable choreography for the actual day. Distinguishes pre-flight (T-24h) from prep (T-1h) from cutover (T-0) from monitoring (first hour) from support (day-1) from stabilisation (day 2-7) — each window has its own attention budget + decision criteria.
+
+The 10-step T-24h smoke test is the load-bearing artefact. Running through it on a real account against production catches integration-level breakage that no unit test can: Stripe live-mode price ID mismatches, Postmark sender-reputation issues, email-deliverability surprises, Cloudflare-cache anomalies. Doing it 24 hours before launch leaves time to fix.
+
+### Files
+
+- `docs/operations/launch-day-runbook.md` — new (full launch-day choreography).
+
+### Verify
+
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Cross-references checked: every linked V-NNN runbook + ADR exists at the named path.
+- Smoke-test step structure mirrors actual product surface (signup → verify → tier-select → Stripe Checkout → GUI activation → session create/destroy → audit log) — every step exercises a shipped endpoint.
+
+### Notes
+
+- **Stripe live-mode flip is via SSH-write to .env**, not via `gh secret set`. Per the `stripe_credential_handling` memory rule. Documented inline so the operator on launch day doesn't accidentally paste live keys into a chat-readable terminal.
+- **Manual refund procedure** is documented as pre-V-281 + a TODO pointer to V-281's admin-panel polish. When V-281 ships, this section gets updated to point at the dashboard UI.
+- **Postmortem folder convention** documented inline: `docs/postmortems/YYYY-MM-DD-<slug>.md`. Folder lands when the first incident happens; not creating empty.
+- **Monitoring thresholds are intentionally tight on day 1** — > 5 events/min triggers triage. Acceptable for the first 24 hours when traffic is low + every event matters; should be relaxed after the baseline stabilises (day 7 retro covers this).
+- **Gold-standard launch posture is "founder available + in front of the launch dashboard for at least the first 4 hours."** Documented as a gate item in the final checklist; if the founder needs to step away, the launch waits.
+
+### Next
+
+V-281 — Customer support tooling enhancement. Admin panel improvements: customer-search-by-email, audit-log timeline viewer per customer, manual refund initiation, manual subscription state override. Closes the V-280 manual-refund-procedure gap.
