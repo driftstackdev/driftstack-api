@@ -29,7 +29,20 @@ and treats all generated content as revisable.
 - The first paying customer is onboarded.
 - Any of these documents is presented to a customer or prospect as
   representing the BV's binding position.
-- Any of these documents is hosted on a public URL (e.g. `driftstack.dev/legal/*`).
+- Any of these documents binds a customer relationship via the
+  `POST /v1/legal/accept` flow.
+
+**Public DRAFT exposure (V-255 / 2026-05-07):** These documents are
+now mirrored at `driftstack.dev/legal/{terms,privacy,dpa,aup}` as
+DRAFT pages with a prominent banner ("Draft — counsel review pending;
+not for customer reliance") + `<meta name="robots" content="noindex,nofollow">`
+so they are not search-indexed. The footer of every marketing page
+links these URLs (Footer.astro section "Legal"), unblocking 404s on
+those routes. The pages are NOT yet bound to customer acceptance via
+`POST /v1/legal/accept`; that gate still requires counsel-reviewed
+content. The DRAFT banner + noindex carry the "not for customer
+reliance" framing until counsel-reviewed `0.x.y` content replaces
+the draft.
 
 **Revision triggers (counsel re-review fires on any of):**
 

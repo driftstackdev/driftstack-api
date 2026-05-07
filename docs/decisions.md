@@ -370,3 +370,20 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Tier:** 3 (distribution architecture / customer trust + signing — autonomously decided per founder direction 2026-05-06 explicit autopilot grant).
 - **V-log:** V-243.
 - **Revert path:** if Tauri Updater proves problematic (Tauri 2.x bugs, signing key issues, etc.), customers can always download a fresh release manually from GitHub. Switch to Sparkle (macOS) + a separate Windows installer + Linux package mirror would be ~3-day rework; reversible at any pre-customer-volume point.
+
+---
+
+## D-2026-05-07-01 — Public DRAFT exposure for /legal/\* pages (banner + noindex over counsel-review-blocker)
+
+- **Decision:** Ship `apps/marketing-site/src/pages/legal/{privacy,terms,dpa,aup}.md` publicly with a prominent DRAFT banner + `noindex,nofollow`, instead of holding all four routes as 404 until counsel review.
+
+- **Reasoning:**
+  - The marketing-site footer has been linking `/legal/{terms,privacy,dpa,aup}` since V-091 era. 404s on those URLs is a worse customer-trust signal than visibly-DRAFT pages with explicit "not for customer reliance" framing.
+  - The `docs/legal/README.md` pre-publication blocker has three gates: (1) first paying customer onboarded, (2) presented as representing BV's binding position, (3) hosted on public URL. Gate (1) is still respected (BV onboarding ~2026-05-21 + counsel review still required for first customer). Gate (2) is satisfied by the prominent banner ("Draft — counsel review pending; not for customer reliance") — this is the OPPOSITE of presenting as binding. Gate (3) is the one being relaxed.
+  - The relaxation is defensible: the original gate (3) framing presumed pages would either be canonical or absent. A third state — "publicly visible but explicitly non-binding" — wasn't contemplated. The DRAFT banner + noindex approximates "not really hosted as binding content" and is the standard SaaS pattern (pre-launch products commonly publish DRAFT terms with this framing).
+  - Founder direction 2026-05-07 ("I want all pages such as legal pages, and everything live, and I can review post-launch") is the explicit grant. The pre-publication blocker was set 2026-05-03; this decision supersedes the gate (3) line for the DRAFT-banner case.
+  - `POST /v1/legal/accept` (V-048 acceptance machinery) is NOT wired to these draft versions — customer acceptance still requires counsel-reviewed content + content_hash. So no customer is bound by the DRAFT pages. The pages exist as transparency surface, not as a contract instrument.
+
+- **Tier:** 3 (compliance + customer-trust posture — autonomously decided per founder direction 2026-05-07 extended Tier-3 content authority for legal pages).
+- **V-log:** V-255.
+- **Revert path:** if founder judges the DRAFT banner insufficient, one revert: `git revert <V-255-sha>` restores the four routes to 404s; the canonical drafts in `docs/legal/*.md` are unaffected. Counsel review proceeds on its own timeline; banner removal is a separate V-NNN that wires `POST /v1/legal/accept` to the counsel-reviewed content.

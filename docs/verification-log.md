@@ -14508,3 +14508,74 @@ Public-facing doc site needs the canonical references rendered with brand identi
 ### Next
 
 V-255 — legal pages drafting (privacy / terms / dpa / aup / sub-processors) under `apps/marketing-site/src/pages/legal/`. NL/EU GDPR + Dutch BV compliance, [PLACEHOLDER] markers for BV-specific data (legal name, KvK, BTW, address, DPO contact).
+
+## V-255 — Migrate four legal docs as public DRAFT pages on marketing site
+
+### What
+
+Per founder direction 2026-05-07 (extended Tier-3 content authority for legal pages): mirror the existing AI-generated baseline drafts in `docs/legal/*.md` to public-facing routes on the marketing site, with prominent DRAFT framing.
+
+New scaffolding in `apps/marketing-site`:
+
+- `src/layouts/LegalLayout.astro` — wraps `BaseLayout` with:
+  - Prominent amber/oxblood DRAFT banner: "Draft — counsel review pending. This document is an AI-generated baseline draft. It does NOT represent the binding legal position of the operating entity and is not for customer reliance. Counsel review is required before this document binds any customer relationship."
+  - `noindex={true}` so search engines don't surface unreviewed drafts.
+  - `prose prose-slate` content area with oxblood `prose-a`, mono `prose-code`, slate-900 `prose-pre` (mirrors apps/docs DocLayout typography).
+  - Cross-link footer to other legal docs + `/trust/sub-processors`.
+- `src/layouts/BaseLayout.astro` — added optional `noindex?: boolean` prop. Robots meta now `noindex,nofollow` when true, `index,follow` (default) otherwise. Pages that omit the prop preserve prior behaviour (zero behaviour change for existing pages).
+- `package.json` + `tailwind.config.mjs` — `@tailwindcss/typography ^0.5.15` (matches the apps/docs V-254 add).
+
+Four migrated markdown pages (Astro `.md` page support with `layout:` frontmatter):
+
+- `src/pages/legal/privacy.md` ← `docs/legal/privacy-policy.md` (493 lines).
+- `src/pages/legal/terms.md` ← `docs/legal/terms-of-service.md` (597 lines).
+- `src/pages/legal/dpa.md` ← `docs/legal/dpa.md` (571 lines).
+- `src/pages/legal/aup.md` ← `docs/legal/acceptable-use-policy.md` (300 lines).
+
+Sub-processors page already exists at `/trust/sub-processors` (V-052 / V-091 era); not duplicated under `/legal/`. The legal-doc layout cross-links to it.
+
+`docs/legal/README.md` updated to record the public DRAFT exposure: prior pre-publication blocker said "any public URL" gates on counsel review; that line is replaced with a more-specific blocker — counsel review still gates "binds a customer relationship via `POST /v1/legal/accept`", but the DRAFT banner + noindex make public exposure compliant with the "not for customer reliance" framing the same README requires.
+
+### Why
+
+The marketing-site footer (`apps/marketing-site/src/components/Footer.astro` lines ~62-65) has been linking `/legal/terms` / `/legal/privacy` / `/legal/dpa` / `/legal/aup` since V-091 era — 404s on those routes is a worse customer signal than DRAFT-banner-with-noindex pages would be. Founder direction explicitly grants Tier-3 content authority + says "I want all pages such as legal pages, and everything live, and I can review post-launch and make changes if needed."
+
+### Files
+
+- `apps/marketing-site/src/layouts/LegalLayout.astro` — new (DRAFT banner + prose).
+- `apps/marketing-site/src/layouts/BaseLayout.astro` — `noindex` prop added.
+- `apps/marketing-site/src/pages/legal/{privacy,terms,dpa,aup}.md` — new (migrated).
+- `apps/marketing-site/package.json` + `apps/marketing-site/tailwind.config.mjs` — typography plugin.
+- `docs/legal/README.md` — pre-publication-blocker phrasing updated to reflect DRAFT exposure.
+
+### Verify
+
+- `npm run build --workspace apps/marketing-site`: 16 pages built clean.
+- `npm run typecheck --workspace apps/marketing-site` (astro check): 21 files, 0 errors.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 740 / 740 passing across 77 files.
+
+### Notes — surfaced for founder verdict (D-2026-05-07-01)
+
+The `docs/legal/README.md` pre-publication blocker had a line "Any of these documents is hosted on a public URL (e.g. `driftstack.dev/legal/*`)" set 2026-05-03. Founder direction 2026-05-07 (extended Tier-3 authority) explicitly asks for legal pages to go live with [DRAFT — founder review pending] framing.
+
+I resolved the tension defensively:
+
+- Pages SHIP at `/legal/*` (footer links unblock).
+- Prominent amber banner says "Draft — counsel review pending; not for customer reliance" — this satisfies the README's other gate ("not presented as representing the BV's binding position").
+- `noindex,nofollow` so the pages don't appear in search results until the banner comes off.
+- `POST /v1/legal/accept` (V-048 acceptance machinery) is NOT yet wired to these page versions — customer acceptance still requires counsel-reviewed `0.x.y` content. (The legal-acceptance flow is gated on the DB schema + content_hash, not on URL availability.)
+
+If founder wants the pages PULLED until counsel review (i.e. revert to footer-404), one revert: `git revert <V-255-sha>` + add `legal/` to `apps/marketing-site/src/pages/.astro-ignore`. Keep the DRAFT banner + noindex but reach counsel sooner if banner is judged insufficient. Surfacing for verdict; not a launch-blocker either way (BV onboarding ~target 2026-05-21 still gates first paying customer).
+
+### Other notes
+
+- DRAFT banner uses amber-50 / amber-300 / amber-900 — distinct from oxblood (brand) so it reads as "warning surface", not "branded surface". Oxblood is reserved for accent links, brand identity, primary CTAs.
+- `LegalLayout` cross-link footer at the bottom of each page surfaces the four sibling docs + sub-processors. Reduces friction for visitors comparing terms across documents.
+- `.md` page approach (mirroring V-254) means the source `docs/legal/*.md` files are now in TWO places (canonical drafts + Astro pages). When counsel review lands, both update in lockstep — same pattern the README already documents for `data/sub-processors.ts` mirroring DPA Annex 3. A future content-sync linter (V-NNN+) could enforce drift detection, but for now manual lockstep is fine (low touch frequency).
+- The four pages contain `[BV LEGAL NAME]`, `[KvK NUMBER]`, `[BTW NUMBER]`, `[REGISTERED ADDRESS]` placeholders inline — visible to visitors. The DRAFT banner makes this honest; once BV registration completes (~2026-05-21), one find-replace per file lands the legal entity values.
+
+### Next
+
+V-256 — five customer-facing topic pages (`quickstart`, `sdks/installation`, `license-activation`, `profile-management`, `sessions/lifecycle`) authored fresh under `apps/docs/src/pages/`. Founder direction: SHIPPED features only, working code samples, locked pricing per ADR-004.

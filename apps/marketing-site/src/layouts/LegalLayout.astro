@@ -1,0 +1,76 @@
+---
+// V-255 — wraps a legal markdown page in BaseLayout with:
+//   - prominent DRAFT banner ("counsel review pending; not for customer reliance")
+//   - noindex meta so search engines don't surface unreviewed drafts
+//   - prose styling consistent with apps/docs DocLayout
+//
+// Per docs/legal/README.md: counsel review is a hard pre-publication
+// blocker. Until that gate clears, the banner + noindex makes clear to
+// any visitor that the document is non-binding. Founder direction
+// 2026-05-07 (extended Tier-3 content authority) approves shipping the
+// drafts publicly with these guardrails.
+import BaseLayout from './BaseLayout.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  frontmatter?: { title?: string; description?: string };
+}
+
+const { frontmatter } = Astro.props;
+const title = Astro.props.title ?? frontmatter?.title ?? 'Legal';
+const description =
+  Astro.props.description ??
+  frontmatter?.description ??
+  'Driftstack legal documents — draft, pending counsel review.';
+---
+
+<BaseLayout title={title} description={description} noindex={true}>
+  <section class="border-b border-amber-300 bg-amber-50">
+    <div class="mx-auto max-w-3xl px-6 py-4">
+      <p class="font-mono text-xs uppercase tracking-widest text-amber-900">
+        Draft — counsel review pending
+      </p>
+      <p class="mt-2 text-sm text-amber-900">
+        This document is an AI-generated baseline draft. It does <strong>not</strong> represent
+        the binding legal position of the operating entity and is not for customer reliance.
+        Counsel review is required before this document binds any customer relationship.
+        Definitive terms will replace this draft on or before the first paying customer is
+        onboarded. Questions: <a
+          href="mailto:legal@driftstack.dev"
+          class="underline hover:text-amber-700">legal@driftstack.dev</a
+        >.
+      </p>
+    </div>
+  </section>
+
+  <section class="mx-auto max-w-3xl px-6 py-12">
+    <a href="/" class="font-mono text-xs text-slate-500 hover:text-oxblood-700">
+      ← driftstack.dev
+    </a>
+    <article
+      class="prose prose-slate mt-6 max-w-none prose-headings:scroll-mt-20 prose-headings:font-semibold prose-h1:text-3xl prose-h1:tracking-tight prose-h2:mt-12 prose-a:text-oxblood-700 prose-a:no-underline hover:prose-a:underline prose-code:rounded prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-slate-900 prose-pre:text-slate-100"
+    >
+      <slot />
+    </article>
+    <div class="mt-16 border-t border-slate-200 pt-8 text-sm text-slate-500">
+      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Other legal docs</p>
+      <ul class="mt-3 space-y-1">
+        <li><a href="/legal/terms" class="text-oxblood-700 hover:underline">Terms of Service</a></li>
+        <li><a href="/legal/privacy" class="text-oxblood-700 hover:underline">Privacy Policy</a></li>
+        <li>
+          <a href="/legal/dpa" class="text-oxblood-700 hover:underline"
+            >Data Processing Agreement</a
+          >
+        </li>
+        <li>
+          <a href="/legal/aup" class="text-oxblood-700 hover:underline">Acceptable Use Policy</a>
+        </li>
+        <li>
+          <a href="/trust/sub-processors" class="text-oxblood-700 hover:underline">Sub-processors</a
+          >
+        </li>
+      </ul>
+    </div>
+  </section>
+</BaseLayout>
