@@ -16736,3 +16736,61 @@ V-295b (~4-6h) — Status auto-polling (Hetzner cron probes /v1/health every 60s
 ### Next
 
 V-295c (~6-8h, may split) — public CF Pages status site (status.driftstack.dev) reading R2-mirrored snapshots; email subscription via Postmark; privacy-policy "Status page" sub-section + DPA Annex update if email-subscription introduces a sub-processor row; `/docs/legal/changes-log.md` creation per V-293 methodology; V-295c CF Pages founder runbook (DNS + Pages project setup). NEVER STOP per founder direction.
+
+## V-295c1 — Public CF Pages status site + privacy update + changes-log + runbook
+
+**Tier**: 1 — Customer-trust surface, third slice of V-295. The user-visible part.
+
+**Why**: V-295a + V-295b deliver the data plane (admin-posted incidents + auto-detected incidents). V-295c1 surfaces them publicly. Without the public page, the trust value is zero — the whole point is that prospects can verify availability before signing up. This slice is split out from full V-295c per the 4-6h cap (email subscription = V-295c2; R2 mirror fallback = V-295c3).
+
+**Scope**
+
+- New `apps/status-site` Astro 5 app (separate workspace package, deploys to its own subdomain).
+- Static-only build (no SSR / no edge functions); deploys to Cloudflare Pages at status.driftstack.dev.
+- Single page (`src/pages/index.astro`) that fetches `${PUBLIC_API_BASE_URL}/v1/status/incidents` at runtime + renders. No build-time API calls — keeps the build hermetic.
+- Auto-refresh every 60s (matches the V-295b probe cadence).
+- Overall-status dot derived from open incidents (operational / degraded / outage / unknown).
+- Failure-mode UI: when the API fetch fails, the card shows "Status currently unavailable" with an amber banner explaining the Service may still be running. The static page itself stays up regardless of API state.
+- Privacy Policy §3.9 "Status-page data" subsection added (no new sub-processor — Cloudflare Pages already in DPA Annex 3 as CDN/Pages-static-hosting).
+- New `docs/legal/changes-log.md` per V-293 methodology — first entry covers V-295c privacy update. Future legal-touching slices append here in the same commit.
+- New `docs/runbooks/v295c-status-site-cf-pages.md` — founder one-time CF Pages project + DNS setup + verification steps.
+- Marketing-site Footer "Trust" column gets a Status link → status.driftstack.dev (target=\_blank).
+- Workspace plumbing: ESLint + Prettier ignore globs extended for `apps/status-site/.astro/` + `apps/status-site/dist/` (matches the existing Astro-app pattern).
+
+**Files**
+
+- `apps/status-site/package.json` — new workspace.
+- `apps/status-site/astro.config.mjs` — new (static output, oxblood theme via tailwind config).
+- `apps/status-site/tailwind.config.mjs` — new (oxblood + slate, mirrors marketing-site palette).
+- `apps/status-site/tsconfig.json` — new (extends astro/tsconfigs/strict).
+- `apps/status-site/src/styles/global.css` — new (Tailwind layers).
+- `apps/status-site/src/layouts/StatusLayout.astro` — new (header + footer + privacy link).
+- `apps/status-site/src/pages/index.astro` — new (fetch + render + 60s auto-refresh).
+- `docs/legal/privacy-policy.md` — added §3.9.
+- `docs/legal/changes-log.md` — new.
+- `docs/runbooks/v295c-status-site-cf-pages.md` — new.
+- `apps/marketing-site/src/components/Footer.astro` — added Status link.
+- `.prettierignore` + `eslint.config.js` — added `apps/status-site/**` exclusion (Astro-app pattern).
+
+### Verify
+
+- `npm test`: 853 / 853 still passing across 88 files (V-295c1 is static-site + docs only; no new behavior tests; marketing-site signup-link parity test (40) still green after Footer edit).
+- `npm run lint`: clean. Sub-processor mirror linter: 10 public ↔ 11 DPA Annex 3 (V-271 invariant intact — confirmed unchanged because no new sub-processor was added).
+- `npm run format:check`: all matched files use Prettier code style.
+- `npm run build`: clean. Status site builds in 378ms, emits one page (`dist/index.html`). Admin panel + marketing site + customer dashboard + docs all unchanged.
+
+### Notes — methodology choices
+
+- **No build-time API calls**: the status page intentionally fetches on the client. If we baked incident data at build time, the page would only update on each push; we want continuous-refresh against live state. The trade-off is that initial render shows a "Loading…" state for ~150ms; acceptable.
+- **No cookies, no analytics, no tracking**: the page is one HTML file + one inline script + one fetch. No privacy concerns — the §3.9 privacy update describes exactly that posture.
+- **Single-page, no routing**: the status page does NOT need separate pages per incident. The list view shows the full timeline inline (V-295c2 may add per-incident detail if a future requirement surfaces).
+- **Footer link, target=\_blank**: status pages are conventionally separate windows so the user can keep their normal driftstack.dev tab open. Matches docs.driftstack.dev convention.
+- **Legal changes-log scope**: only legal-document edits. Engineering V-log entries (this file) remain the engineering trail. The two are parallel — `verification-log.md` is "what we built", `changes-log.md` is "what changed for the customer's legal review".
+- **CF Pages, not Workers**: the page is pure static HTML/CSS/JS. Workers would buy us nothing here. Pages also has the simplest GitHub auto-deploy story.
+- **`PUBLIC_API_BASE_URL` env, with hardcoded fallback to api.driftstack.dev**: the fallback handles the case where someone forgets to set the env in CF Pages. Production fail-safe; staging will set it explicitly.
+- **HTML escaping in inline JS**: rolled my own `escapeHtml`. The data comes from a trusted internal API so XSS risk is low, but admins post free-form text and we render directly via `innerHTML` for performance — escaping is the right invariant.
+- **Status-site ESLint exclusion follows existing pattern**: V-099 / V-135 / V-250 already exclude marketing-site / customer-dashboard / admin-panel / docs from the type-aware ESLint pipeline (those projects type-check via `astro check`). Adding status-site to that list is consistent.
+
+### Next
+
+V-295c2 (~4-6h) — R2 snapshot fallback. Bootstrap writes `incidents-public.json` to R2 every probe tick; status page falls back to the R2 URL when the live API fetch fails. Adds resilience: status page stays current even during API outages. Then V-295c3 (~4-6h) — email subscription (`POST /v1/status/subscribe` + Postmark integration + DPA Annex if Postmark scope expands; current Annex already covers Postmark for transactional). NEVER STOP per founder direction.

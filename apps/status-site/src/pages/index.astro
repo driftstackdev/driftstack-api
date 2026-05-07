@@ -1,0 +1,241 @@
+---
+import StatusLayout from '../layouts/StatusLayout.astro';
+
+// Build-time API origin. Set via PUBLIC_API_BASE_URL env at build time;
+// the client-side fetch reads from this baked-in constant. Falls back
+// to api.driftstack.dev for production CF Pages builds where the env
+// is not set explicitly.
+const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.dev';
+---
+
+<StatusLayout title="Driftstack — Service status">
+  <section id="overall" class="mb-8">
+    <div
+      id="overall-card"
+      class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+      data-state="loading"
+    >
+      <div class="flex items-center gap-3">
+        <span
+          id="overall-dot"
+          class="inline-block h-3 w-3 rounded-full bg-slate-300"
+          aria-hidden="true"></span>
+        <h1 id="overall-title" class="text-xl font-semibold text-slate-900">
+          Loading current status…
+        </h1>
+      </div>
+      <p id="overall-summary" class="mt-2 text-sm text-slate-500">
+        Fetching incident data from <code class="font-mono text-xs">{API_BASE}/v1/status/incidents</code>.
+      </p>
+    </div>
+  </section>
+
+  <section id="incidents-section" class="mb-12">
+    <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+      Incidents — last 30 days
+    </h2>
+    <div id="incidents-list" class="space-y-3">
+      <div class="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500">
+        Loading…
+      </div>
+    </div>
+  </section>
+
+  <section class="text-xs text-slate-500">
+    <p>
+      This page reads from the public no-auth endpoint
+      <code class="font-mono">{API_BASE}/v1/status/incidents</code>. The page itself stores
+      no cookies and does not log visitors. Driftstack records its own
+      health-probe history (timestamp, success, latency) for 30 days; this
+      data does not reference any Customer or visitor.
+    </p>
+  </section>
+</StatusLayout>
+
+<script is:inline define:vars={{ API_BASE }}>
+  const SEVERITY_BADGE = {
+    minor: ['bg-amber-50', 'text-amber-700'],
+    major: ['bg-orange-50', 'text-orange-700'],
+    outage: ['bg-red-50', 'text-red-700'],
+  };
+  const STATUS_BADGE = {
+    investigating: ['bg-amber-50', 'text-amber-700'],
+    identified: ['bg-blue-50', 'text-blue-700'],
+    monitoring: ['bg-indigo-50', 'text-indigo-700'],
+    resolved: ['bg-emerald-50', 'text-emerald-700'],
+  };
+  const DOT_BG = {
+    operational: 'bg-emerald-500',
+    degraded: 'bg-amber-500',
+    outage: 'bg-red-500',
+    unknown: 'bg-slate-300',
+  };
+  const STATE_TITLE = {
+    operational: 'All systems operational',
+    degraded: 'Some systems degraded',
+    outage: 'Major outage in progress',
+    unknown: 'Status currently unavailable',
+  };
+
+  function fmtIso(iso) {
+    return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+  }
+
+  function badge(text, classes) {
+    const cls = classes.join(' ');
+    return `<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${cls}">${text}</span>`;
+  }
+
+  function renderOverall(state, openCount) {
+    const dot = document.getElementById('overall-dot');
+    const title = document.getElementById('overall-title');
+    const summary = document.getElementById('overall-summary');
+    const card = document.getElementById('overall-card');
+    if (!dot || !title || !summary || !card) return;
+    dot.className = `inline-block h-3 w-3 rounded-full ${DOT_BG[state] ?? DOT_BG.unknown}`;
+    title.textContent = STATE_TITLE[state] ?? STATE_TITLE.unknown;
+    if (state === 'operational') {
+      summary.textContent = 'No active incidents.';
+    } else if (state === 'unknown') {
+      summary.textContent =
+        'The status feed is temporarily unavailable. Service may still be running normally.';
+    } else {
+      summary.textContent = `${openCount} active incident${openCount === 1 ? '' : 's'} below.`;
+    }
+    card.dataset.state = state;
+  }
+
+  function renderIncident(inc) {
+    const updates = (inc.updates ?? [])
+      .map(
+        (u) => `
+          <li class="relative pl-5 border-l border-slate-200">
+            <span class="absolute -left-[5px] top-1 inline-block h-2 w-2 rounded-full bg-oxblood-700"></span>
+            <div class="flex flex-wrap items-baseline gap-2">
+              ${badge(u.status, STATUS_BADGE[u.status] ?? [])}
+              <span class="text-xs text-slate-500">${fmtIso(u.posted_at)}</span>
+            </div>
+            <p class="mt-1 text-sm text-slate-700">${escapeHtml(u.message)}</p>
+          </li>
+        `,
+      )
+      .join('');
+    const opacity = inc.status === 'resolved' ? 'opacity-80' : '';
+    return `
+      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm ${opacity}">
+        <header class="mb-2">
+          <div class="flex flex-wrap items-center gap-2">
+            ${badge(inc.severity, SEVERITY_BADGE[inc.severity] ?? [])}
+            ${badge(inc.status, STATUS_BADGE[inc.status] ?? [])}
+          </div>
+          <h3 class="mt-2 text-base font-semibold text-slate-900">${escapeHtml(inc.title)}</h3>
+          <p class="mt-1 text-xs text-slate-500">
+            Started ${fmtIso(inc.started_at)}${
+              inc.resolved_at ? ` · resolved ${fmtIso(inc.resolved_at)}` : ''
+            }${
+              inc.affected_components && inc.affected_components.length
+                ? ' · affecting ' + inc.affected_components.map(escapeHtml).join(', ')
+                : ''
+            }
+          </p>
+        </header>
+        <ol class="mt-3 space-y-3">${updates}</ol>
+      </article>
+    `;
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) => {
+      switch (c) {
+        case '&':
+          return '&amp;';
+        case '<':
+          return '&lt;';
+        case '>':
+          return '&gt;';
+        case '"':
+          return '&quot;';
+        case "'":
+          return '&#39;';
+        default:
+          return c;
+      }
+    });
+  }
+
+  async function fetchAndRender() {
+    const list = document.getElementById('incidents-list');
+    if (!list) return;
+    try {
+      const res = await fetch(`${API_BASE}/v1/status/incidents`, {
+        headers: { accept: 'application/json' },
+        cache: 'no-store',
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.json();
+      const incidents = Array.isArray(body.data) ? body.data : [];
+
+      // Hydrate updates for each open incident in parallel. Resolved
+      // incidents are listed without updates inline (link out covered
+      // in V-295c2 if needed).
+      const detailed = await Promise.all(
+        incidents.map(async (inc) => {
+          if (inc.updates) return inc;
+          // No batched-with-updates list endpoint yet; client falls back
+          // to surface the description-only view. The detail endpoint is
+          // admin-auth only as of V-295a; opening to public-detail is a
+          // V-295c2 task.
+          return { ...inc, updates: [] };
+        }),
+      );
+
+      const open = detailed.filter((i) => i.status !== 'resolved');
+      const resolved = detailed.filter((i) => i.status === 'resolved');
+
+      const overall =
+        open.some((i) => i.severity === 'outage')
+          ? 'outage'
+          : open.length > 0
+            ? 'degraded'
+            : 'operational';
+      renderOverall(overall, open.length);
+
+      if (detailed.length === 0) {
+        list.innerHTML = `
+          <div class="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500">
+            No incidents in the last 30 days.
+          </div>
+        `;
+        return;
+      }
+
+      const sections = [];
+      if (open.length > 0) {
+        sections.push(
+          `<div class="space-y-3">${open.map(renderIncident).join('')}</div>`,
+        );
+      }
+      if (resolved.length > 0) {
+        sections.push(`
+          <h3 class="mb-2 mt-6 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Resolved
+          </h3>
+          <div class="space-y-3">${resolved.map(renderIncident).join('')}</div>
+        `);
+      }
+      list.innerHTML = sections.join('');
+    } catch (err) {
+      renderOverall('unknown', 0);
+      const message = err instanceof Error ? err.message : String(err);
+      list.innerHTML = `
+        <div class="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
+          Could not load incident feed: ${escapeHtml(message)}.
+          The Service may still be running normally — try again in a moment.
+        </div>
+      `;
+    }
+  }
+
+  fetchAndRender();
+  setInterval(fetchAndRender, 60_000);
+</script>

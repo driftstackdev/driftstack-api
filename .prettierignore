@@ -18,3 +18,5 @@ apps/admin-panel/.astro/
 apps/admin-panel/dist/
 apps/docs/.astro/
 apps/docs/dist/
+apps/status-site/.astro/
+apps/status-site/dist/
