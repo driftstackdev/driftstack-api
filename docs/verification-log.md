@@ -17019,3 +17019,49 @@ V-295c3-tombstone-purge (~2-3h) — scheduled-jobs entry that purges email-colum
 ### Next
 
 V-295d (~2-3h Tier-1) — Twitter/Slack outbound notifications via configurable webhook URLs (no Twitter API direct integration; the same outbound-webhook pattern Slack uses). Then V-295e (~3-4h) — SSE on /v1/status/stream + SLA reporting from cron snapshots. Then V-296 → V-303+ V-294 customer-trust catalog continuation. NEVER STOP — 8h+ autopilot through founder sleep window.
+
+## V-295d — Outbound incident broadcasts (Slack + generic webhook)
+
+**Tier**: 1 — Customer-trust signal-amplification. Eighth slice of V-295.
+
+**Why**: Email subscriptions (V-295c3) reach addresses that opted in. Outbound broadcasts reach broader audiences (Slack channels, Twitter via relay, Discord) without per-recipient subscription. Configured by env var; both channels optional.
+
+**Scope**
+
+- New `IncidentBroadcastService` with `notifyCreated` / `notifyResolved` methods.
+- Two channel formats:
+  - **Slack** — Slack incoming-webhook payload (text + attachments with color/severity/status). Compatible with `https://hooks.slack.com/services/...` URLs.
+  - **Generic** — JSON envelope `{ event, generated_at, incident, update }` for arbitrary relays (Twitter via Zapier/IFTTT/N8N, Discord via webhook proxy).
+- Channels are independent: configured via `BROADCAST_SLACK_WEBHOOK_URL` + `BROADCAST_GENERIC_WEBHOOK_URL` env vars; either / both / neither configured.
+- All HTTP calls fire-and-forget: errors logged at warn-level, never thrown. Incident writes never roll back due to webhook failure.
+- 5s timeout per webhook (AbortController + setTimeout).
+- Wired into IncidentsService lifecycle alongside V-295c3-followup email fan-out — both fire on the same lifecycle event in parallel; one channel's failure doesn't stall the other.
+- Test fixture exposes `broadcastFetchCalls` (URL + parsed body) so tests assert payloads without real HTTP.
+
+**Files**
+
+- `apps/server/src/services/incident-broadcast.ts` — new.
+- `apps/server/src/lib/bootstrap.ts` — service wiring + env-var reads + parallel lifecycle dispatch.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — `broadcastSlackUrl` / `broadcastGenericUrl` test opts + `broadcastFetchCalls` recording fetcher.
+- `apps/server/tests/integration/incident-broadcast.test.ts` — new (7 tests).
+
+### Verify
+
+- `npm test`: 887 / 887 across 93 files (was 880 / 92; +7 broadcast tests).
+- `npm run lint`: clean. Sub-processor mirror: 10 ↔ 11.
+- `npm run format:check`: clean.
+- Server typecheck: clean.
+
+### Notes — methodology choices
+
+- **Two named channels, not a generic list**: easier to reason about. Slack has a specific payload shape; generic is for everything else. Adding a third channel (e.g. `BROADCAST_DISCORD_WEBHOOK_URL` with Discord-shaped payload) would be a small addition: new `sendDiscord` method + new env var.
+- **Twitter via generic relay, NOT direct API**: per founder direction. Direct Twitter API integration would require OAuth tokens, app review, rate-limit management, content policy compliance — none of which we want to own. The generic JSON envelope is exactly what Zapier/IFTTT/N8N consume for "post to Twitter when this fires."
+- **Parallel dispatch with `Promise.all`**: incident-notification fan-out (V-295c3-followup) AND broadcasts run concurrently; one channel's failure (timeout, 500) doesn't stall the other. Both wrapped in their own try/catch; nothing propagates to the IncidentsService caller.
+- **Injected fetcher for tests**: pure-logic service pattern from V-295b. Tests pass a recording fetcher that captures URL + body without real HTTP. Production uses native `fetch`.
+- **No new sub-processor**: Slack / Twitter / Discord etc. are services the founder configures via env vars they own. They are not Driftstack sub-processors of Customer Data — the broadcast payload contains operational incident metadata only (no Customer Data, no Account Data). DPA Annex 3 unchanged. Privacy unchanged.
+- **5s timeout, fire-and-forget**: consistent with V-295b health probe defaults. Long enough that a slow webhook completes; short enough that a stuck webhook doesn't pile up callbacks. The lifecycle callback is fire-and-forget anyway.
+- **No exponential-backoff retries**: a missed broadcast is acceptable — incident is in the API + the status site + the email fan-out. Adding retry queues would be over-engineering for a fire-and-forget signal.
+
+### Next
+
+V-295e (~3-4h Tier-1) — Server-Sent Events on `/v1/status/stream` for real-time status-page updates + SLA reporting (rolling 30-day uptime per component computed from `system_health_probes` snapshots). Then V-296 (API key rotation flow) → V-303+ per V-294 catalog priority. NEVER STOP autopilot.

@@ -62,6 +62,7 @@ import { StatusSnapshotService } from '../services/status-snapshot.js';
 import { StatusSubscribersService } from '../services/status-subscribers.js';
 import { DrizzleStatusSubscribersRepo } from '../db/status-subscribers-repo.js';
 import { IncidentNotificationsService } from '../services/incident-notifications.js';
+import { IncidentBroadcastService } from '../services/incident-broadcast.js';
 import { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import { LegalService } from '../services/legal.js';
 import { AuthFlowsService } from '../services/auth-flows.js';
@@ -280,11 +281,35 @@ export async function createProductionDeps(
     { statusPageBaseUrl },
   );
 
-  // V-295a — public-status incidents service.
+  // V-295d — outbound incident broadcasts (Slack incoming-webhook +
+  // generic JSON envelope for Twitter/Discord/N8N relays). Both env
+  // vars optional: when unset, that channel is silently skipped.
+  const incidentBroadcast = new IncidentBroadcastService(
+    {
+      slackWebhookUrl: process.env.BROADCAST_SLACK_WEBHOOK_URL ?? null,
+      genericWebhookUrl: process.env.BROADCAST_GENERIC_WEBHOOK_URL ?? null,
+      statusPageBaseUrl,
+    },
+    logger,
+  );
+
+  // V-295a — public-status incidents service. Lifecycle dispatches both
+  // email fan-out AND outbound broadcasts in parallel; one failing
+  // doesn't stall the other.
   const incidentsRepo = new DrizzleIncidentsRepo(dbHandle);
   const incidentsService = new IncidentsService(incidentsRepo, {
-    onPublicCreated: (incident, update) => incidentNotifications.notifyCreated(incident, update),
-    onPublicResolved: (incident, update) => incidentNotifications.notifyResolved(incident, update),
+    onPublicCreated: async (incident, update) => {
+      await Promise.all([
+        incidentNotifications.notifyCreated(incident, update),
+        incidentBroadcast.notifyCreated(incident, update),
+      ]);
+    },
+    onPublicResolved: async (incident, update) => {
+      await Promise.all([
+        incidentNotifications.notifyResolved(incident, update),
+        incidentBroadcast.notifyResolved(incident, update),
+      ]);
+    },
   });
 
   // V-295b — health-probe poller. The default probe target is this

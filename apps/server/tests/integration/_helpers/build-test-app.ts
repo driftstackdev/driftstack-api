@@ -22,6 +22,7 @@ import { InMemoryIncidentsRepo } from './in-memory-incidents-repo.js';
 import { InMemoryStatusSubscribersRepo } from './in-memory-status-subscribers-repo.js';
 import { StatusSubscribersService } from '../../../src/services/status-subscribers.js';
 import { IncidentNotificationsService } from '../../../src/services/incident-notifications.js';
+import { IncidentBroadcastService } from '../../../src/services/incident-broadcast.js';
 import type { EmailService } from '../../../src/services/email.js';
 import { RateLimitOverridesService } from '../../../src/services/rate-limit-overrides.js';
 import { LegalService } from '../../../src/services/legal.js';
@@ -170,6 +171,10 @@ export interface TestAppOptions {
   skipLegalAcceptance?: boolean;
   /** Optional override for the seeded email (must be unique per fixture). */
   email?: string;
+  /** V-295d — set to a non-null URL to enable Slack outbound broadcasts in this fixture. */
+  broadcastSlackUrl?: string | null;
+  /** V-295d — set to a non-null URL to enable generic outbound broadcasts in this fixture. */
+  broadcastGenericUrl?: string | null;
 }
 
 export interface SeedAdditionalOpts {
@@ -206,6 +211,8 @@ export interface TestAppFixture {
   statusSubscribersRepo: InMemoryStatusSubscribersRepo;
   /** V-295c3-tombstone — exposed for direct purge invocation in tests. */
   statusSubscribersService: StatusSubscribersService;
+  /** V-295d — recorded outbound broadcast HTTP calls (URL + parsed JSON body). */
+  broadcastFetchCalls: ReadonlyArray<{ url: string; body: unknown }>;
   /** V-295c3 — recording email service: tests can read .sends to assert
    *  exactly which template fired with what variables. */
   emailSends: ReadonlyArray<EmailSendRecord>;
@@ -369,12 +376,44 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     { statusPageBaseUrl: 'https://status.driftstack.test' },
   );
 
+  // V-295d — outbound incident broadcasts. Recording fetcher captures
+  // POST calls so tests can assert payloads without real HTTP.
+  const broadcastFetchCalls: { url: string; body: unknown }[] = [];
+  // eslint-disable-next-line @typescript-eslint/require-await
+  const broadcastFetcher = async (url: string, init: RequestInit): Promise<Response> => {
+    broadcastFetchCalls.push({
+      url,
+      body: typeof init.body === 'string' ? JSON.parse(init.body) : init.body,
+    });
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  const incidentBroadcast = new IncidentBroadcastService(
+    {
+      slackWebhookUrl: opts.broadcastSlackUrl ?? null,
+      genericWebhookUrl: opts.broadcastGenericUrl ?? null,
+      statusPageBaseUrl: 'https://status.driftstack.test',
+    },
+    testLogger,
+    broadcastFetcher,
+  );
+
   // V-295a — incidents service with in-memory repo + V-295c3-followup
-  // lifecycle hooks for incident-notification fan-out.
+  // lifecycle hooks for incident-notification fan-out + V-295d
+  // outbound broadcasts.
   const incidentsRepo = new InMemoryIncidentsRepo();
   const incidentsService = new IncidentsService(incidentsRepo, {
-    onPublicCreated: (incident, update) => incidentNotifications.notifyCreated(incident, update),
-    onPublicResolved: (incident, update) => incidentNotifications.notifyResolved(incident, update),
+    onPublicCreated: async (incident, update) => {
+      await Promise.all([
+        incidentNotifications.notifyCreated(incident, update),
+        incidentBroadcast.notifyCreated(incident, update),
+      ]);
+    },
+    onPublicResolved: async (incident, update) => {
+      await Promise.all([
+        incidentNotifications.notifyResolved(incident, update),
+        incidentBroadcast.notifyResolved(incident, update),
+      ]);
+    },
   });
 
   const rateLimitOverridesRepo = new InMemoryRateLimitOverridesRepo(authRepo);
@@ -649,6 +688,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     incidentsRepo,
     statusSubscribersRepo,
     statusSubscribersService,
+    broadcastFetchCalls,
     emailSends,
     rateLimitOverridesRepo,
     sessionsRepo,
