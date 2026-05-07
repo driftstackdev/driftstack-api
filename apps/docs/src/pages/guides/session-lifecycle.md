@@ -6,8 +6,6 @@ description: The full lifecycle of a Driftstack session — create, drive, captu
 
 # Session lifecycle
 
-> **Draft — founder review pending.** Endpoint shapes verified against `apps/server/src/routes/sessions.ts` and `packages/api-types/src/sessions.ts`.
-
 A **session** is one running iPhone Safari instance on the modified WebKit fork. Every session occupies one of your account's concurrent slots from creation until destruction; understanding the lifecycle is the difference between using your tier's capacity well and burning slots on stuck sessions.
 
 ## States
@@ -19,12 +17,12 @@ A **session** is one running iPhone Safari instance on the modified WebKit fork.
             ┌───────┐    navigate / interact / wait      ┌────────┐
             │ ready │───────────────────────────────────▶│ active │
             └───────┘                                    └────────┘
-                ▲                                             │
-                │                                             │ destroy
-                │ idle ≥ idle_timeout                         │ or idle ≥ idle_timeout
-                │                                             ▼
-                │                                       ┌──────────┐
-                └────────reconnect (V-NNN+)─────────────│ destroyed│
+                                                              │
+                                                              │ destroy
+                                                              │ or idle ≥ idle_timeout
+                                                              ▼
+                                                        ┌──────────┐
+                                                        │ destroyed│
                                                         └──────────┘
 ```
 
@@ -150,10 +148,10 @@ If you've configured a webhook endpoint, every state transition fires an event:
 
 See the [webhook events catalog](/webhooks/events/) for full payload shapes and signature verification.
 
-## What's NOT in the lifecycle yet
+## Notes
 
-- **Reconnect after disconnect** — currently a session destroyed by idle-timeout requires a fresh `sessions.create()`. A planned `sessions.reconnect()` API will allow resuming a session within a grace window after disconnect; lands post-launch.
-- **Session-level resource quotas** — per-session bandwidth or memory caps aren't customer-facing today. Fleet-level enforcement runs internally.
+- A session destroyed by idle-timeout requires a fresh `sessions.create()`; sessions are not resumable after destroy. Plan your workflow to either keep a session alive with periodic activity or to recreate cleanly when a long pause is expected.
+- Session-level resource quotas (per-session bandwidth, memory) are not customer-facing today. Fleet-level enforcement runs internally; tier concurrent caps are the only customer-visible meter.
 
 ## Next steps
 

@@ -6,8 +6,6 @@ description: Installation and configuration for the Driftstack TypeScript, Pytho
 
 # SDK installation
 
-> **Draft — founder review pending.** Reflects shipped state of `@driftstack/sdk` (TypeScript, on npm) and the alpha Python + Go SDKs.
-
 The Driftstack SDKs share a typed surface generated from the same OpenAPI 3.1 contract. Pick the language that fits your stack.
 
 ## TypeScript / Node.js
@@ -167,17 +165,15 @@ The Go SDK is single-package, has zero non-stdlib runtime dependencies, and is c
 
 The HTTP API and the SDKs version independently. SDKs at any version stay compatible with the live API contract; SDK upgrades unlock newer fields and new resource methods, but won't break older method calls. See [SDK versioning policy](/sdk/versioning/) for the full guarantee.
 
-## What ships, what's planned
+## What ships
 
-| Capability          | TS  | Python | Go  | Notes                                  |
-| ------------------- | --- | ------ | --- | -------------------------------------- |
-| Sessions            | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait     |
-| Profiles            | ✅  | ✅     | ✅  | Create, list, get, delete              |
-| API keys            | ✅  | ✅     | ✅  | Admin scope required for create/revoke |
-| Webhooks            | ✅  | ✅     | ✅  | CRUD + delivery introspection          |
-| Usage               | ✅  | ✅     | ✅  | Current-period read                    |
-| Streaming responses | ⏳  | ⏳     | ⏳  | Planned for 1.0                        |
-| Recording playback  | ⏳  | ⏳     | ⏳  | Tied to recording feature shipping     |
+| Capability | TS  | Python | Go  | Notes                                  |
+| ---------- | --- | ------ | --- | -------------------------------------- |
+| Sessions   | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait     |
+| Profiles   | ✅  | ✅     | ✅  | Create, list, get, delete              |
+| API keys   | ✅  | ✅     | ✅  | Admin scope required for create/revoke |
+| Webhooks   | ✅  | ✅     | ✅  | CRUD + delivery introspection          |
+| Usage      | ✅  | ✅     | ✅  | Current-period read                    |
 
 ## Next steps
 

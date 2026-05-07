@@ -6,8 +6,6 @@ description: Persistent profiles in Driftstack — create, list, reuse across se
 
 # Profile management
 
-> **Draft — founder review pending.** Endpoint shapes verified against `apps/server/src/routes/profiles.ts` and `packages/api-types/src/profiles.ts`.
-
 A **profile** is a persistent identity Driftstack maintains across sessions. Cookies, local storage, IndexedDB, and the WebKit-fork's stealth state survive between session lifetimes when you bind the session to a profile.
 
 If you don't bind a profile, each session starts ephemeral — fresh cookies, fresh storage, no continuity. That's the right choice for one-shot fetches. For workflows that need login state, multi-step flows, or returning-visitor signals, bind a profile.
@@ -100,19 +98,15 @@ const profile = await client.profiles.get('prf_01HV...');
 
 ## Bind a session to a profile
 
-The session-creation endpoint accepts a profile reference. When bound, the session inherits the profile's storage state on launch and writes any new state back when destroyed (or when the session idle-times-out cleanly).
+When a session is created with a profile reference, it inherits the profile's storage state on launch and writes new state back on clean destroy (or clean idle-timeout). Without a profile, the session starts ephemeral.
 
 **TypeScript:**
 
 ```ts
-const session = await client.sessions.create({
-  label: 'login flow',
-  // profile_id binding lands when the create-session field stabilises;
-  // see /api/versioning/ for additive-field policy.
-});
+const session = await client.sessions.create({ label: 'login flow' });
 ```
 
-> **Note:** profile binding on session creation lands in the SDK once the additive `profile_id` field is published in the API types contract. Until then, the binding lives in the underlying API and SDK methods will surface it transparently — no code changes needed on your side.
+The exact field shape for profile binding on session creation is part of the live API contract; consult the OpenAPI spec at `https://api.driftstack.dev/openapi.json` or the SDK type definitions for the most current schema.
 
 ## Delete a profile
 
@@ -160,5 +154,5 @@ What does NOT persist:
 ## Next steps
 
 - **[Session lifecycle](/guides/session-lifecycle/)** — full lifecycle reference including profile-binding semantics.
-- **[API versioning](/api/versioning/)** — how additive fields like `profile_id` on session creation roll out.
+- **[API versioning](/api/versioning/)** — how additive fields roll out without breaking existing SDK calls.
 - **[Webhook events](/webhooks/events/)** — `profile.created`, `profile.deleted` event subscriptions.

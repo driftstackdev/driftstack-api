@@ -15906,3 +15906,62 @@ V-282+ — continue parked queue per founder spec:
 - Performance optimization passes if obvious bottlenecks surface.
 - Test coverage gaps if obvious.
 - GUI ProxiesView further polish if any list view lacks the V-275–V-277 pattern.
+
+## V-282 — V-256 deferrals closed: strip DRAFT framing + speculative-feature mentions
+
+### What
+
+Per V-281's "next" pointer to the V-256 explicit-deferral list. Closes four parked items in one pass:
+
+1. **SDK matrix Streaming/Recording rows** in `apps/docs/src/pages/sdk/installation.md` — the "⏳ planned for 1.0" rows for `Streaming responses` + `Recording playback` removed. Section header renamed `What ships, what's planned` → `What ships`. Same rationale as V-264's strip of legal-page DRAFT framing: "planned" rows that may never ship look amateurish; if either feature ships post-launch, add the row at that point.
+2. **`sessions.reconnect()` mention** in `apps/docs/src/pages/guides/session-lifecycle.md` — state diagram's `reconnect (V-NNN+)` arrow removed; the "What's NOT in the lifecycle yet" section rewritten as "Notes" without the "planned `sessions.reconnect()` API" promise. Replaces speculative future-API text with a clear practical note ("plan your workflow to keep a session alive or recreate cleanly when long pauses expected"). Diagram now reflects shipped behaviour only.
+3. **`profile_id` field rollout text** in `apps/docs/src/pages/guides/profile-management.md` — the "additive `profile_id` field is published in the API types contract" Note removed. Replaced with: "consult the OpenAPI spec at `https://api.driftstack.dev/openapi.json` or the SDK type definitions for the most current schema." Cross-link reference also updated. The page no longer promises a specific field name that doesn't exist in the live contract.
+4. **Quickstart troubleshooting tone** in `apps/docs/src/pages/quickstart.md` — "first paying customers get a direct response window" replaced with concrete actionable framing: "Include your account ID (`acc_…`) + the request ID from any error response (returned in the `x-request-id` header) so we can trace it." Removes the implicit Q4-2026/Q1-2027-launch-special-treatment framing that won't be true post-launch; gives customers something they can actually do.
+
+Plus a fifth strip applied to all five V-256 doc pages: the `> **Draft — founder review pending.**` blockquote stripped from each. Same rationale as V-264 stripped the same framing from the legal pages — these are launch-ready customer-facing docs, not in-progress drafts.
+
+Pages touched (DRAFT-framing strip + targeted edits per-page):
+
+- `apps/docs/src/pages/quickstart.md` — DRAFT line + troubleshooting tone.
+- `apps/docs/src/pages/license-activation.md` — DRAFT line.
+- `apps/docs/src/pages/sdk/installation.md` — DRAFT line + matrix.
+- `apps/docs/src/pages/guides/profile-management.md` — DRAFT line + profile_id text.
+- `apps/docs/src/pages/guides/session-lifecycle.md` — DRAFT line + reconnect references.
+
+### Why
+
+V-256 surfaced these four deferrals as "easy edits if founder wants different framing" + the DRAFT-tag was applied to "[DRAFT — founder review pending]" markers. Founder review on legal pages (V-264) directly overrode the DRAFT framing as amateurish. Same applies to docs — both surfaces are public, both tag a customer-trust signal. V-282 brings doc pages in line with the V-264 legal-page launch-ready posture.
+
+The speculative-feature edits (Streaming Responses, sessions.reconnect, profile_id) are overpromise-removal: every page now describes shipped behaviour only. If any of these features land post-launch, future V-NNNs can add them back at the time the SDK / API actually ships them.
+
+### Files
+
+- `apps/docs/src/pages/quickstart.md` — DRAFT strip + troubleshooting rewrite.
+- `apps/docs/src/pages/license-activation.md` — DRAFT strip.
+- `apps/docs/src/pages/sdk/installation.md` — DRAFT strip + matrix collapse to shipped capabilities only.
+- `apps/docs/src/pages/guides/profile-management.md` — DRAFT strip + profile_id speculative text removed.
+- `apps/docs/src/pages/guides/session-lifecycle.md` — DRAFT strip + reconnect arrow + "What's NOT yet" section rewritten as "Notes".
+
+### Verify
+
+- `npm run build --workspace apps/docs`: 13 pages built clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Manual scan: `grep -r "Draft — founder review pending" apps/docs/src/pages/` returns no matches.
+- Manual scan: `grep -r "profile_id\|sessions.reconnect" apps/docs/src/pages/` returns no matches.
+
+### Notes
+
+- **Same pattern as V-264 legal pages.** V-264 stripped DRAFT framing + speculative entity placeholders from `/legal/*`. V-282 stripped the same framing + speculative feature promises from `/docs/*`. The two surfaces now share the same launch-ready quality bar.
+- **Sub-processor / sub-vendor language unchanged.** None of these doc pages reference sub-processors directly; the V-271 mirror linter doesn't apply here. Legal pages remain the single canonical sub-processor surface.
+- **Capability matrix preserved as a single "What ships" table.** Five rows remain (Sessions / Profiles / API keys / Webhooks / Usage), all marked ✅. Future feature additions can grow the table; nothing is implied as planned.
+
+### Next
+
+V-282-arc closes the V-256 parked queue. Continuing parallel-to-Agent-1 launch-infrastructure work; next candidates from the founder spec V-282+ list:
+
+- **Performance optimization passes** if obvious bottlenecks surface (audit currently-shipping perf benchmarks for any regression).
+- **Test coverage gaps** — known low-coverage areas (admin-panel UI tests, GUI client view tests).
+- **Customer-dashboard scaffold-shape pages** — sessions / profiles / billing / usage / webhooks live-read works but UI polish varies (per V-279 audit "PARTIAL" rating).
+
+Standing by for direction OR continuing autonomously per "NEVER STOP" rule.

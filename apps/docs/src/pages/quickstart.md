@@ -6,8 +6,6 @@ description: Get from signup to your first Driftstack session in under five minu
 
 # Quickstart
 
-> **Draft — founder review pending.** Endpoints and code samples are verified against shipped routes; copy is the first pass and may shift before launch.
-
 This guide takes you from a fresh signup to your first iPhone Safari session. Allow about five minutes. You will need:
 
 - A Driftstack account (sign up at [app.driftstack.dev](https://app.driftstack.dev))
@@ -131,4 +129,4 @@ func main() {
 - **[Webhook event catalog](/webhooks/events/)** — push notifications when sessions transition state, billing events fire, etc.
 - **[API versioning policy](/api/versioning/)** — what changes are additive, what triggers `/v2/*`, deprecation cycles.
 
-Stuck? Email [support@driftstack.dev](mailto:support@driftstack.dev) — first paying customers get a direct response window.
+Stuck? Email [support@driftstack.dev](mailto:support@driftstack.dev). Include your account ID (`acc_…`) + the request ID from any error response (returned in the `x-request-id` header) so we can trace it.

@@ -6,8 +6,6 @@ description: Activate the Driftstack desktop GUI client by pasting your API key 
 
 # License activation (GUI client)
 
-> **Draft — founder review pending.** Reflects shipped first-run wizard in `apps/gui-client/src/views/FirstRunWizard.tsx`.
-
 The Driftstack desktop GUI client (Tauri 2.x — macOS, Windows, Linux) doesn't use a separate license-key system. It activates against the same API key you use for SDK calls, and points at either the cloud control plane or your own self-hosted instance.
 
 ## What you need
