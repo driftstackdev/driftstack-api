@@ -16223,3 +16223,76 @@ The Sentry split (GUI DSN done / server DSN pending) is the load-bearing edit: t
 ### Next
 
 V-288 — jsdom + React Testing Library setup for full GUI client view + hook tests. Same session per founder spec "V-287 → V-288 in flight."
+
+## V-288 — jsdom + React Testing Library setup for GUI client
+
+### What
+
+Per founder direction 2026-05-07 V-286 ack: "foundational GUI client test infra. Unlocks unit + lifecycle coverage for V-274 hook + V-275/V-276/V-277/V-284 view patterns going forward."
+
+Stack picked exactly as suggested: Vitest + jsdom + @testing-library/react + @testing-library/user-event. No deviation.
+
+New files:
+
+1. **`vitest.workspace.ts`** (root) — `defineWorkspace(['./vitest.config.ts', './apps/gui-client/vitest.config.ts'])`. Two projects:
+   - Root project (`vitest.config.ts`) — node environment; existing `apps/**/tests/**/*.test.ts` + `packages/**/tests/**/*.test.ts` glob unchanged.
+   - GUI-jsdom project (`apps/gui-client/vitest.config.ts`) — jsdom environment; covers ONLY `apps/gui-client/tests/**/*.test.tsx`.
+   - File extension is the discriminator: `.test.ts` runs in node, `.test.tsx` runs in jsdom. No double-runs; existing `apps/gui-client/tests/unit/*.test.ts` (telemetry, browser-sign-in) keep running unchanged in node.
+
+2. **`apps/gui-client/vitest.config.ts`** — gui-jsdom project config. Plugins: `@vitejs/plugin-react`. Test config: `environment: 'jsdom'`, `name: 'gui-jsdom'`, `setupFiles: ['./tests/setup.ts']`, `coverage.enabled: false` (root project owns coverage; component-level coverage informational).
+
+3. **`apps/gui-client/tests/setup.ts`** — runs once per worker. Imports `@testing-library/jest-dom/vitest` (extends Vitest's `expect` with DOM matchers like `toBeInTheDocument`, `toHaveTextContent`). Registers `afterEach(cleanup)` so unmount runs between tests — safe even if no component was rendered.
+
+4. **`apps/gui-client/tests/unit/SettingsView.test.tsx`** — first jsdom test. Mocks `lib/SettingsContext` + `lib/browser-sign-in` at module level (so SettingsView doesn't reach into Tauri's plugin-store / plugin-shell runtime), then renders `<SettingsView />` and asserts the no-API-key-yet panel + brand sub-headers + "Sign in with browser" button all show up. Establishes the pattern for future hook + view-component lifecycle tests.
+
+Other modifications:
+
+- **`apps/gui-client/package.json`** — added devDeps: `jsdom@^25.0.1`, `@testing-library/react@^16.1.0`, `@testing-library/user-event@^14.5.2`, `@testing-library/jest-dom@^6.6.3`.
+- **`tsconfig.eslint.json`** — extended `include` glob to cover `vitest.workspace.ts`, `apps/**/vitest.config.ts`, `apps/**/tests/**/*.tsx`. Without these, eslint's `@typescript-eslint/parser` can't find the new files in any project and produces "Parsing error: parserOptions.project has been provided" errors.
+
+### Why
+
+V-275/V-276/V-277/V-284 surfaced multiple view-level changes (empty-state polish, list-CRUD wiring) that were verified manually + via build typecheck only. Going forward, the team has a vetted path to write proper React Testing Library tests against any view or hook without cross-cutting infra concerns. The cost was paid once here (workspace config + setup + dep install + tsconfig) so individual feature V-NNNs going forward can add tests as zero-marginal-cost.
+
+The `useBrowserSignIn` hook from V-274 is the most-immediate beneficiary — it's a 5-state machine driving a security-sensitive flow (browser-OAuth pairing). V-286 covered the pure helper (`generateBrowserSignInState` entropy contract); V-288 unlocks lifecycle tests (state transitions, cleanup on unmount, fetch-mock-driven flow walkthroughs).
+
+### Files
+
+- `vitest.workspace.ts` — new (workspace entry).
+- `apps/gui-client/vitest.config.ts` — new (gui-jsdom project config).
+- `apps/gui-client/tests/setup.ts` — new (jest-dom + cleanup wiring).
+- `apps/gui-client/tests/unit/SettingsView.test.tsx` — new (first jsdom test, ~50 lines).
+- `apps/gui-client/package.json` — 4 devDeps added.
+- `tsconfig.eslint.json` — include glob extended for the new file shapes.
+
+### Verify
+
+- `npm test`: 766 / 766 across 81 files (was 765 / 80; +1 test, +1 file from SettingsView.test.tsx).
+- `npx vitest run --project gui-jsdom`: 1 / 1 passing (the new test runs in isolation).
+- `npm run typecheck --workspace apps/gui-client`: clean.
+- `npm run lint`: clean (the tsconfig.eslint.json extension fixed parser errors on the three new file shapes).
+- `npm run format:check`: clean.
+
+### Notes — design choices
+
+- **`.test.ts` vs `.test.tsx` extension as the discriminator** is the simplest possible split. No per-test environment directives needed; no manual project assignment per file. Existing pure-function `.test.ts` files in apps/gui-client (telemetry, browser-sign-in) stay in the node project where they were already running fast.
+- **`coverage.enabled: false`** on the gui-jsdom project is deliberate — V-107's coverage gate only meaningfully measures the api-types + server surfaces. Adding component-level coverage to the gate would force a coverage-threshold-bump-or-skip dance every time a new view lands. Better to keep coverage scoped to the surfaces where it's load-bearing.
+- **Module-level `vi.mock` for SettingsContext + browser-sign-in** is the approach future view tests should reuse. Alternative was wrapping `<SettingsProvider>` around the test render, but that pulls in Tauri's plugin-store at import time and breaks under jsdom.
+- **No `useEvent` / RTL `userEvent` calls in V-288's first test** — render + `screen.getByText` assertions only. User interaction tests come with the next view-test V-NNN that exercises a click handler.
+
+### What's now cheap to add
+
+- Hook lifecycle tests for `useBrowserSignIn` (state machine transitions across initiate → poll → bound).
+- View tests for `FirstRunWizard.tsx::ApiKeyStep` (browser-sign-in path UI states).
+- View tests for the V-275/V-276/V-277/V-284 empty-state pages (assert the icon + heading + body + CTA all render).
+- Click + form-submit tests for the V-272 sign-out flow + V-274 inline browser-sign-in button.
+
+Each lands as a single `.test.tsx` file under `apps/gui-client/tests/unit/` or `apps/gui-client/tests/views/`. No further infra work needed.
+
+### Next
+
+Per founder spec — V-287 + V-288 closed the explicit V-NNN flow. Standing by per "NEVER STOP":
+
+- Customer-dashboard PARTIAL pages (sessions / billing / usage / webhooks) — V-279 audit rated PARTIAL but on closer look V-180-V-184 already wired live read; UI polish lower priority than entry-point flows that are now polished.
+- V-371 baseline / V-369 / V-370 bisects + /forgot-password + /reset-password smoke (founder-attended, ~10min — bundle when convenient).
+- Browser-driving admin-panel Playwright config (V-281 UI handlers) — deferred per V-285 notes.
