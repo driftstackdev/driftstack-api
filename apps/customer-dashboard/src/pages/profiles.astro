@@ -8,11 +8,13 @@ import {
 } from '@driftstack/api-types';
 
 // V-136 — uses the locked PROFILES_PER_TIER constant from
-// @driftstack/api-types as single source of truth (no more hardcoded
-// `profileLimit = 100`). The customer-facing display also passes
-// archetype ids through `archetypeDisplayLabel` so customers see
-// "iPhone 16 Pro / iOS 18.7 / Safari 26.4" rather than the raw
-// `iphone16pro_ios18_7_safari26_4` identifier.
+// @driftstack/api-types as single source of truth.
+//
+// V-284 — progressive-enhancement wiring. Reads ds_web_session_token,
+// fetches /v1/profiles + /v1/account/me to compute live count vs tier
+// cap, wires create + delete actions. Falls back to mock-rendered list
+// when token absent or fetch fails (consistent with sessions.astro,
+// billing.astro etc).
 
 function fmtIso(iso: string | null): string {
   if (iso === null) return '—';
@@ -22,13 +24,9 @@ function fmtIso(iso: string | null): string {
 const tier: AccountTier = MOCK_USAGE_SUMMARY.tier;
 const profileLimit = PROFILES_PER_TIER[tier];
 const profileCount = MOCK_PROFILES.length;
-const atLimit =
-  profileLimit !== 'custom' && profileCount >= profileLimit;
+const atLimit = profileLimit !== 'custom' && profileCount >= profileLimit;
 const limitDisplay = profileLimit === 'custom' ? 'Custom' : profileLimit.toString();
 
-// Surface the full per-tier limit table in the footer. Order matches
-// AccountTierSchema declaration order so customers see Manual ladder
-// first then API ladder then Enterprise.
 const TIER_DISPLAY_ORDER: ReadonlyArray<{ id: AccountTier; label: string }> = [
   { id: 'solo_manual', label: 'Solo Manual' },
   { id: 'team_manual', label: 'Team Manual' },
@@ -42,98 +40,425 @@ const TIER_DISPLAY_ORDER: ReadonlyArray<{ id: AccountTier; label: string }> = [
 function fmtLimit(value: number | 'custom'): string {
   return value === 'custom' ? 'custom' : `${value.toString()} profiles`;
 }
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 ---
 
 <DashboardLayout title="Profiles">
-  <div class="mx-auto max-w-5xl px-6 py-10">
+  <div class="mx-auto max-w-5xl px-6 py-10" data-page="profiles">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-slate-500">{MOCK_USAGE_SUMMARY.tier} tier</p>
+        <p class="text-sm text-slate-500" data-field="tier-line">{MOCK_USAGE_SUMMARY.tier} tier</p>
         <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Profiles</h1>
         <p class="mt-2 max-w-prose text-sm text-slate-500">
-          Persistent identity slots that survive across sessions. Each profile
-          carries its own cookies, localStorage, and lastUsedAt timestamp.
-          Sessions can be created against a profile or anonymously.
+          Persistent identity slots that survive across sessions. Each profile carries its own
+          cookies, localStorage, and last-used timestamp. Sessions can be created against a profile
+          or anonymously.
         </p>
       </div>
-      <a
-        href="#"
-        class:list={['btn-primary shrink-0', atLimit && 'pointer-events-none opacity-50']}
-        aria-disabled={atLimit ? 'true' : undefined}
-      >
-        New profile
-      </a>
+      <button type="button" class="btn-primary shrink-0" data-show-create>New profile</button>
     </header>
 
-    <p class="mb-6 text-sm text-slate-500">
-      <strong class="font-medium text-slate-900">{profileCount}</strong> of
-      <strong class="font-medium text-slate-900">{limitDisplay}</strong>
+    <p class="mb-6 text-sm text-slate-500" data-field="usage-line">
+      <strong class="font-medium text-slate-900" data-field="count">{profileCount}</strong> of
+      <strong class="font-medium text-slate-900" data-field="limit">{limitDisplay}</strong>
       profile slots used.
       {atLimit && <span class="text-red-700"> · tier limit reached</span>}
     </p>
 
-    {
-      profileCount === 0 ? (
-        <div class="dashboard-card text-center">
-          <h2 class="text-lg font-semibold text-slate-900">No profiles yet</h2>
-          <p class="mx-auto mt-2 max-w-prose text-sm text-slate-500">
-            Profiles let you persist cookies + localStorage across sessions for
-            recurring workloads. Create one now — sessions can attach to a
-            profile or run anonymously.
+    <!-- V-284 — Create form, hidden by default -->
+    <div
+      data-create-form-wrap
+      class="mb-8 hidden rounded-lg border border-slate-200 bg-white p-6"
+    >
+      <h2 class="text-lg font-semibold text-slate-900">Create a new profile</h2>
+      <form data-create-form class="mt-4 space-y-4">
+        <div>
+          <label for="profile-name" class="block text-sm font-medium text-slate-700">Name</label>
+          <input
+            id="profile-name"
+            name="name"
+            type="text"
+            required
+            placeholder="e.g. shopper-account-1, signup-test"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+          <p class="mt-1 text-xs text-slate-500">
+            Unique within your account. Use a name that surfaces purpose ("shopper-acctA",
+            "staging-smoke") for easier triage later.
           </p>
-          <a href="#" class="btn-primary mt-6 inline-flex">
-            Create your first profile
-          </a>
         </div>
-      ) : (
-        <ul class="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
-          {MOCK_PROFILES.map((profile) => (
-            <li class="flex items-start justify-between gap-6 px-6 py-4">
-              <div class="min-w-0">
-                <p class="text-base font-medium text-slate-900">{profile.name}</p>
-                <p class="mt-1 font-mono text-xs text-slate-500">{profile.id}</p>
-                {profile.description && (
-                  <p class="mt-2 text-sm text-slate-600">{profile.description}</p>
-                )}
-                <p class="mt-2 text-xs text-slate-500">
-                  Archetype: {archetypeDisplayLabel(profile.archetype)} · last used{' '}
-                  {fmtIso(profile.last_used_at)}
-                </p>
-              </div>
-              <div class="flex shrink-0 flex-col items-end gap-2">
-                <a href={`#edit-${profile.id}`} class="text-sm text-oxblood-700 hover:underline">
-                  Edit
-                </a>
-                <a href={`#delete-${profile.id}`} class="text-sm text-red-700 hover:underline">
-                  Delete
-                </a>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )
-    }
+        <div>
+          <label for="profile-description" class="block text-sm font-medium text-slate-700"
+            >Description (optional)</label
+          >
+          <input
+            id="profile-description"
+            name="description"
+            type="text"
+            placeholder="Returning-visitor profile for the checkout flow"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div class="flex items-center gap-3 pt-2">
+          <button type="submit" class="btn-primary" data-create-submit>Create profile</button>
+          <button
+            type="button"
+            class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            data-create-cancel
+          >
+            Cancel
+          </button>
+          <span data-create-error class="hidden text-sm text-rose-700"></span>
+        </div>
+      </form>
+    </div>
+
+    <ul
+      data-list
+      class:list={[
+        'divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white',
+        profileCount === 0 ? 'hidden' : '',
+      ]}
+    >
+      {
+        MOCK_PROFILES.map((profile) => (
+          <li class="flex items-start justify-between gap-6 px-6 py-4">
+            <div class="min-w-0">
+              <p class="text-base font-medium text-slate-900">{profile.name}</p>
+              <p class="mt-1 font-mono text-xs text-slate-500">{profile.id}</p>
+              {profile.description && (
+                <p class="mt-2 text-sm text-slate-600">{profile.description}</p>
+              )}
+              <p class="mt-2 text-xs text-slate-500">
+                Archetype: {archetypeDisplayLabel(profile.archetype)} · last used{' '}
+                {fmtIso(profile.last_used_at)}
+              </p>
+            </div>
+            <div class="flex shrink-0 flex-col items-end gap-2">
+              <span class="text-sm text-slate-400">Sign in to manage</span>
+            </div>
+          </li>
+        ))
+      }
+    </ul>
+
+    <!-- V-284 — empty state matches the V-275 GUI ProfilesView pattern (oxblood icon + body + CTA) -->
+    <div
+      data-empty
+      class:list={[
+        'flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-8 py-16 text-center',
+        profileCount === 0 ? '' : 'hidden',
+      ]}
+    >
+      <div class="flex h-12 w-12 items-center justify-center rounded-md bg-oxblood-50 text-oxblood-700">
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+          <circle cx="12" cy="7" r="4"></circle>
+        </svg>
+      </div>
+      <div class="flex flex-col gap-1">
+        <h3 class="text-base font-medium text-slate-900">No profiles yet</h3>
+        <p class="max-w-md text-sm text-slate-600">
+          A profile is a persistent identity — cookies, localStorage, IndexedDB — reused across
+          sessions. Bind a session to a profile to keep login state, returning-visitor signals, and
+          stealth fingerprints stable between runs.
+        </p>
+      </div>
+      <button type="button" class="btn-primary" data-show-create>Create your first profile</button>
+      <p class="text-xs text-slate-500">
+        Sessions without a profile start ephemeral — fresh state every run.
+      </p>
+    </div>
 
     <section class="mt-10">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
-        Profile limits
-      </p>
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Profile limits</p>
       <p class="mt-2 max-w-prose text-sm text-slate-500">
-        Enforced server-side at session creation. If your workload needs more,
-        upgrade your tier:
+        Enforced server-side at session creation. If your workload needs more, upgrade your tier:
       </p>
       <dl class="mt-4 grid gap-x-8 gap-y-2 text-sm md:grid-cols-2">
         {
           TIER_DISPLAY_ORDER.map((entry) => (
             <div class="flex justify-between border-b border-slate-100 pb-2">
               <dt class="text-slate-600">{entry.label}</dt>
-              <dd class="font-mono text-slate-900">
-                {fmtLimit(PROFILES_PER_TIER[entry.id])}
-              </dd>
+              <dd class="font-mono text-slate-900">{fmtLimit(PROFILES_PER_TIER[entry.id])}</dd>
             </div>
           ))
         }
       </dl>
     </section>
   </div>
+
+  <!--
+    V-284 — progressive-enhancement script. Live-fetches /v1/profiles +
+    /v1/account/me; wires create + delete actions.
+  -->
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="profiles"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const list = root.querySelector('[data-list]');
+      const empty = root.querySelector('[data-empty]');
+      const formWrap = root.querySelector('[data-create-form-wrap]');
+      const form = root.querySelector('[data-create-form]');
+      const createSubmit = root.querySelector('[data-create-submit]');
+      const createCancel = root.querySelector('[data-create-cancel]');
+      const createError = root.querySelector('[data-create-error]');
+      const showCreateBtns = root.querySelectorAll('[data-show-create]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+      function hideBanner() {
+        if (!banner) return;
+        banner.classList.add('hidden');
+      }
+      function escapeHtml(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c],
+        );
+      }
+      function fmtIso(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().slice(0, 10);
+      }
+
+      // Locked archetype identifier from packages/api-types/src/profiles.ts.
+      // Display labels mirror the server's archetypeDisplayLabel() function.
+      function archetypeLabel(slug) {
+        if (slug === 'iphone16pro_ios18_7_safari26_4') {
+          return 'iPhone 16 Pro / iOS 18.7 / Safari 26.4';
+        }
+        return slug;
+      }
+
+      function profileLi(p) {
+        return (
+          '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
+          '<div class="min-w-0">' +
+          '<p class="text-base font-medium text-slate-900">' +
+          escapeHtml(p.name) +
+          '</p>' +
+          '<p class="mt-1 font-mono text-xs text-slate-500">' +
+          escapeHtml(p.id) +
+          '</p>' +
+          (p.description
+            ? '<p class="mt-2 text-sm text-slate-600">' + escapeHtml(p.description) + '</p>'
+            : '') +
+          '<p class="mt-2 text-xs text-slate-500">Archetype: ' +
+          escapeHtml(archetypeLabel(p.archetype)) +
+          ' · last used ' +
+          escapeHtml(fmtIso(p.last_used_at)) +
+          '</p></div>' +
+          '<div class="flex shrink-0 flex-col items-end gap-2">' +
+          '<button type="button" data-delete="' +
+          escapeHtml(p.id) +
+          '" data-delete-name="' +
+          escapeHtml(p.name) +
+          '" class="text-sm text-rose-700 hover:underline">Delete</button>' +
+          '</div></li>'
+        );
+      }
+
+      function authedFetch(path, init) {
+        return fetch(apiBaseUrl + path, {
+          ...(init || {}),
+          headers: {
+            ...((init && init.headers) || {}),
+            authorization: 'Bearer ' + token,
+            'content-type': 'application/json',
+          },
+        });
+      }
+
+      function refresh() {
+        if (!token) return;
+        const profilesP = authedFetch('/v1/profiles')
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => body.data || []);
+        const meP = authedFetch('/v1/account/me')
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .catch(() => null);
+        return Promise.all([profilesP, meP])
+          .then(([profiles, me]) => {
+            renderProfiles(profiles);
+            if (me) renderUsage(me, profiles.length);
+            hideBanner();
+          })
+          .catch((err) => {
+            showBanner(
+              "Couldn't load profiles (" +
+                (err && err.message ? err.message : 'network error') +
+                ').',
+            );
+          });
+      }
+
+      function renderProfiles(profiles) {
+        if (profiles.length === 0) {
+          list.classList.add('hidden');
+          empty.classList.remove('hidden');
+        } else {
+          empty.classList.add('hidden');
+          list.classList.remove('hidden');
+          list.innerHTML = profiles.map(profileLi).join('');
+          wireDeleteButtons();
+        }
+      }
+
+      function renderUsage(me, count) {
+        const tierLine = root.querySelector('[data-field="tier-line"]');
+        const countEl = root.querySelector('[data-field="count"]');
+        const limitEl = root.querySelector('[data-field="limit"]');
+        const usageLine = root.querySelector('[data-field="usage-line"]');
+        if (tierLine) tierLine.textContent = (me.tier || '—') + ' tier';
+        if (countEl) countEl.textContent = String(count);
+        const cap = me.profile_cap;
+        if (limitEl) {
+          limitEl.textContent = cap === null || cap === undefined ? 'Custom' : String(cap);
+        }
+        if (usageLine && cap !== null && cap !== undefined && count >= cap) {
+          if (!usageLine.querySelector('[data-cap-flag]')) {
+            const span = document.createElement('span');
+            span.setAttribute('data-cap-flag', '');
+            span.className = 'text-red-700';
+            span.textContent = ' · tier limit reached';
+            usageLine.appendChild(span);
+          }
+        }
+      }
+
+      function wireDeleteButtons() {
+        const buttons = list.querySelectorAll('[data-delete]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-delete');
+            const name = btn.getAttribute('data-delete-name') || '(unnamed)';
+            const ok = window.confirm(
+              'Delete profile "' +
+                name +
+                '"? Cookies + storage are wiped. Sessions currently bound to this profile will fail unless you set force=true. This cannot be undone.',
+            );
+            if (!ok) return;
+            btn.disabled = true;
+            btn.textContent = 'Deleting…';
+            authedFetch('/v1/profiles/' + encodeURIComponent(id), { method: 'DELETE' })
+              .then((r) => {
+                if (!r.ok && r.status !== 204) {
+                  return r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) =>
+                      Promise.reject(new Error(b.detail || 'HTTP ' + r.status)),
+                    );
+                }
+                return refresh();
+              })
+              .catch((err) => {
+                showBanner(
+                  'Delete failed: ' + (err && err.message ? err.message : 'network error'),
+                );
+                btn.disabled = false;
+                btn.textContent = 'Delete';
+              });
+          });
+        });
+      }
+
+      function showCreate() {
+        if (!token) {
+          showBanner('Sign in to create profiles.');
+          return;
+        }
+        formWrap.classList.remove('hidden');
+        const nameInput = form.querySelector('input[name="name"]');
+        if (nameInput) nameInput.focus();
+      }
+      function hideCreate() {
+        formWrap.classList.add('hidden');
+        createError.classList.add('hidden');
+        createError.textContent = '';
+        form.reset();
+      }
+
+      showCreateBtns.forEach((btn) => btn.addEventListener('click', showCreate));
+      createCancel.addEventListener('click', hideCreate);
+
+      form.addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        createError.classList.add('hidden');
+        createError.textContent = '';
+        const fd = new FormData(form);
+        const name = (fd.get('name') || '').toString().trim();
+        const description = (fd.get('description') || '').toString().trim();
+        if (!name) return;
+        const payload = { name: name };
+        if (description) payload.description = description;
+        createSubmit.disabled = true;
+        createSubmit.textContent = 'Creating…';
+        authedFetch('/v1/profiles', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        })
+          .then((r) =>
+            r.ok
+              ? r.json()
+              : r
+                  .json()
+                  .catch(() => ({}))
+                  .then((b) =>
+                    Promise.reject(new Error(b.detail || 'HTTP ' + r.status)),
+                  ),
+          )
+          .then(() => {
+            hideCreate();
+            return refresh();
+          })
+          .catch((err) => {
+            createError.textContent = err && err.message ? err.message : 'Create failed.';
+            createError.classList.remove('hidden');
+          })
+          .finally(() => {
+            createSubmit.disabled = false;
+            createSubmit.textContent = 'Create profile';
+          });
+      });
+
+      if (!token) {
+        showBanner('Sign in to see live profiles. Showing preview data below.');
+        return;
+      }
+
+      void refresh();
+    })();
+  </script>
 </DashboardLayout>

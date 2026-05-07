@@ -16006,3 +16006,54 @@ Founder explicit policy lock + "predictability over flexibility" framing. Withou
 ### Next
 
 V-284 — Customer-dashboard PARTIAL pages polish per V-279 audit. Same empty-state + loading-state + error-state vocabulary V-275/V-276/V-277 established (oxblood D-badge + heading + body + optional CTA).
+
+## V-284 — Customer-dashboard /profiles polish (live wiring + create + delete)
+
+### What
+
+Per V-279 audit's "PARTIAL" rating + V-283 next pointer. profiles.astro was the only PARTIAL page among the five surveyed (sessions/billing/usage/webhooks already had V-180-V-184 progressive enhancement; profiles did not).
+
+`apps/customer-dashboard/src/pages/profiles.astro` — full rewrite with the V-270 api-keys.astro pattern:
+
+1. **Live read against `/v1/profiles`** + `/v1/account/me` for tier/cap data. Falls back to mock-rendered list when `ds_web_session_token` absent (consistent with sessions/billing/usage/webhooks pages).
+2. **Inline create form** (replaces the dead `<a href="#">New profile</a>`). Name + optional description; POSTs `/v1/profiles`. Refresh list on success; inline error on failure.
+3. **Confirm-then-delete** (replaces the dead `<a href="#delete-…">Delete</a>` anchor). `window.confirm` warns about cookie/storage wipe + bound-session-fail-without-force; DELETE `/v1/profiles/:id`; refresh list.
+4. **Empty state** matches V-275 GUI ProfilesView pattern: oxblood-bg-50 person-outline SVG icon + heading + body explaining what a profile is + when to use one + inline "Create your first profile" CTA + footnote about ephemeral sessions.
+5. **Tier-cap surfacing**: live `/v1/account/me` populates the tier line + count + cap. When count >= cap, "tier limit reached" flag appears.
+6. **Auth-gated UI**: with no session, mocked rows show "Sign in to manage" placeholder (consistent with V-270's auth-gated api-keys page).
+
+### Why
+
+V-270 closed the same gap on /api-keys (placeholder anchors → real wiring). V-284 closes /profiles. Customer post-signup who wants to create their first profile from the dashboard now actually can — they don't have to drop into the GUI client wizard's first-profile step or call the API directly via curl.
+
+### Files
+
+- `apps/customer-dashboard/src/pages/profiles.astro` — full rewrite (140 → ~340 lines).
+
+### Verify
+
+- `npm run build --workspace apps/customer-dashboard`: clean.
+- `npm run typecheck --workspace apps/customer-dashboard` (astro check): 0 errors / 0 warnings / 1 informational hint.
+- `npm run lint`: clean (subprocessor mirror gate green).
+- Manual flow (vs local control plane on :3000):
+  1. localStorage.ds_web_session_token populated via signup or login.
+  2. /profiles loads → live rows shown (or empty state with "Create your first profile" CTA).
+  3. Click "New profile" → form appears → name + optional description → submit → green-no-error path → list refreshes with new row.
+  4. Click "Delete" on the new row → confirm dialog → list refreshes without the row.
+  5. Sign out / clear localStorage → page falls back to mock data + "Sign in to manage" placeholder + banner.
+
+### Notes
+
+- **`archetypeLabel(slug)`** is duplicated client-side rather than imported from `@driftstack/api-types`. Astro inline scripts are sandboxed; the canonical TS function is server-rendered for the SSR pass but the live-fetch path in the browser doesn't have access to it. Inline duplication is the same pattern other dashboard pages use (the SCOPE_LABEL map in api-keys.astro for example). Keeps the script self-contained; trade-off accepted per V-180-era convention.
+- **Edit action skipped for V-284 scope**. The `/v1/profiles/:id` PATCH endpoint exists but the spec only required Create + Delete for the launch surface. Edit lands in a follow-up V-NNN (or never if customers don't ask — the create-name-and-description shape is mostly fixed at creation time anyway).
+- **V-228-class regression sweep**: nothing structural changed. The page only added live-fetch + write paths to the existing surface; existing tests don't reference profiles.astro.
+- **Empty-state vocabulary now consistent across four list views in two surfaces**: GUI client (V-275 ProfilesView) + dashboard (V-284 /profiles) share the same person-outline icon + heading + body + CTA pattern. Future GUI Sessions or dashboard Sessions polish will inherit the same shape.
+
+### Next
+
+V-285+ per founder's V-285+ list:
+
+- Performance optimization passes if `apps/server/perf/baseline.ci.json` shows regressions.
+- Admin-panel UI tests — V-281's refund-record + audit-note flow specifically needs e2e coverage at the panel level (server-side tests already cover the endpoints).
+- GUI client view tests (current low-coverage area per V-279 PARTIAL rating).
+- /forgot-password /reset-password e2e manual smoke against live dev server (founder-attended, ~10min).
