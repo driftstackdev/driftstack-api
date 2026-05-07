@@ -14302,3 +14302,70 @@ Per founder direction, the four queue options (a/b/c/d) are now all addressed in
 Plus the locked execution order: V-241 (T3 #1) + V-242 (T3 #2) + V-243 (T3 #3) + V-244 (first-run wizard).
 
 Surfacing autopilot ledger to clipboard for founder review on wake. Continuing to fill remaining time by either: per-topic doc-site page migrations (V-251+, mostly mechanical content moves), OR additional security audit follow-up (V-246-P1-003 scope refactor — Tier-2 architectural decision, would surface a proposal in `docs/proposals/` rather than implementing).
+
+## V-251 — IP rate limiting on auth endpoints (V-246-P1-004 fix)
+
+### What
+
+Per founder direction 2026-05-07, V-246-P1-004 deferral OVERRIDDEN: brute-force protection on unauthenticated auth endpoints is launch-blocking. IP-keyed rate limit gates wired on the four high-risk endpoints with founder-locked thresholds.
+
+**New middleware:** `apps/server/src/middleware/ip-rate-limit.ts` — `ipRateLimit(store, cfg)` factory returning a Fastify preHandler. Reuses the existing `RateLimitStore` (token bucket — same primitive the account-keyed limiter uses) with IP-derived bucket keys (`auth-ip:<endpoint>:<ip>`). On null `req.ip` (Unix-socket / misconfigured trust-proxy) the gate soft-fails (allow) — defense-in-depth on top of the auth flows' existing protections; missing IP shouldn't lock out legitimate customers.
+
+**Wired endpoints + founder-locked limits** (in `AUTH_IP_LIMITS`):
+
+| Endpoint                               | Capacity | Refill rate (tokens/s) | Effective              |
+| -------------------------------------- | -------- | ---------------------- | ---------------------- |
+| `POST /v1/auth/signup`                 | 5        | 5/60                   | 5 attempts / IP / min  |
+| `POST /v1/auth/login`                  | 10       | 10/60                  | 10 attempts / IP / min |
+| `POST /v1/auth/verify-email`           | 10       | 10/60                  | 10 attempts / IP / min |
+| `POST /v1/auth/password-reset/request` | 3        | 3/60                   | 3 attempts / IP / min  |
+
+Limit bucket-prefix scheme namespaces per-endpoint (`auth-ip:signup:<ip>`, etc.) so signup exhaustion doesn't affect login from the same IP.
+
+`AuthRoutesDeps` extended with `rateLimitStore` field; `app.ts::registerAuthRoutes` wire-up passes through `deps.rateLimitStore`.
+
+**Test coverage:** 6 new integration tests in `apps/server/tests/integration/auth-ip-rate-limit.test.ts`:
+
+1. `signup: 5 attempts/IP/min — 6th from same IP returns 429` + `Retry-After` header.
+2. `login: 10 attempts/IP/min — 11th returns 429` (uses invalid creds so each pre-429 attempt cleanly 401s; gate fires before auth check).
+3. `password-reset/request: 3/IP/min — 4th returns 429`.
+4. `verify-email: 10/IP/min — 11th returns 429` (uses bogus token; gate fires before token check).
+5. `per-IP isolation: one IP exhausting does not affect another` — attacker IP exhausts password-reset bucket; legitimate IP still passes.
+6. `per-endpoint isolation: signup exhaustion does not affect login` — same IP, different endpoint, different bucket.
+
+### Why
+
+Founder direction overrode the V-246-P1-004 deferral on the audit follow-up: "Auth endpoints without IP rate limiting are brute-force-attack vulnerable; basic protection (e.g. 10 attempts/IP/minute on /v1/auth/login + /v1/auth/password-reset + /v1/auth/email-verify) closes a real pre-launch attack surface."
+
+The implementation reuses the existing `RateLimitStore` token-bucket primitive — same code path the V-219 account-keyed limiter exercises. No new infrastructure; just IP-keyed bucket names. Production uses the existing `RedisRateLimitStore`; tests use `MemoryRateLimitStore`.
+
+The thresholds are sized for "legitimate customer can complete the flow without hitting the gate; abuser hits it within seconds." Customer with 5 typo'd password attempts is annoyed, not locked out. A scripted brute-force at 10 req/sec hits the 10/min cap in 60ms.
+
+### Files
+
+- `apps/server/src/middleware/ip-rate-limit.ts` — new middleware module + `AUTH_IP_LIMITS` constants.
+- `apps/server/src/routes/auth.ts` — `AuthRoutesDeps.rateLimitStore` field; four `preHandler: [...gate]` wirings; comment header updated to reflect V-251 wiring.
+- `apps/server/src/lib/app.ts` — `registerAuthRoutes` invocation passes `deps.rateLimitStore`.
+- `apps/server/tests/integration/auth-ip-rate-limit.test.ts` — 6 new tests.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 740 / 740 passing across 77 files (+6 V-251 tests).
+- pre-push hook: clean on push.
+
+### Notes
+
+- The IP gate fires BEFORE the request body validation + service-layer check. This is intentional: an attacker spamming malformed payloads can still be rate-limited even though the auth check would have returned 400.
+- Magic-link request endpoint (`POST /v1/auth/magic-link/request`) is NOT wired in this commit. Founder direction listed four endpoints (signup / login / verify-email / password-reset/request); magic-link wasn't called out. That endpoint follows the same shape if added later — same `ipRateLimit(store, ...)` preHandler with `bucketPrefix: 'auth-ip:magic-link-request'` + appropriate cap. If post-launch abuse data shows magic-link is a hot target, V-NNN follow-up can wire it.
+- The token-bucket pattern means a sustained-low-rate attacker stays under the gate (e.g. 1 password-reset request/30s = 2/min, under the 3/min cap). For pre-launch, this is acceptable: the gate's job is to stop bursty brute-force, not slow-and-low. Sustained-low is observable in Sentry/Pino logs (V-249 PII posture documents the visibility) and can be addressed via account-keyed lockout if it ever becomes a real signal.
+- Pre-V-251 integration tests on the auth-flows surface use the in-memory rate-limit store from `buildTestApp`; they pass through the new gate trivially because each test makes only a few requests per IP. Verified by the 740/740 test run.
+
+### Next
+
+V-252 — V-243 founder-actions runbook fix (file paths + stdin password callout, ~5min docs).
+V-253 — V-246-P1-003 mitigation note in `docs/operations/` documenting V-135 Cloudflare Access dependency (~15min docs).
+V-254+ — Per-topic doc-site page migrations.

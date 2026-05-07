@@ -265,7 +265,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // level. /v1/status has no auth (public status pages are public).
   registerStatusRoutes(app, { readinessChecks: deps.readinessChecks ?? [] });
   if (deps.authFlowsService !== undefined) {
-    registerAuthRoutes(app, { service: deps.authFlowsService });
+    registerAuthRoutes(app, {
+      service: deps.authFlowsService,
+      rateLimitStore: deps.rateLimitStore,
+    });
   }
   if (deps.stripeWebhooksService !== undefined && deps.stripeWebhookSigningSecret !== undefined) {
     registerStripeWebhookRoutes(app, {

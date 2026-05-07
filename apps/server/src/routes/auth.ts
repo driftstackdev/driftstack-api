@@ -12,13 +12,11 @@
 //
 // All endpoints are public (no requireAuth — these ARE the gate).
 //
-// Rate limiting is intentionally NOT wired here at scaffolding time:
-// the existing `app.rateLimit()` middleware is account-keyed and
-// requires an authenticated request, which doesn't exist for these
-// public flows. IP-based rate limiting (a different middleware shape
-// that doesn't require `request.account`) is the right fit and lands
-// as a follow-on V-NNN once the abuse surface is observable in
-// staging logs.
+// V-251 — IP-based rate limiting wired on signup / login / verify-email
+// / password-reset-request. Per-IP token-bucket via the same
+// `RateLimitStore` the account-keyed limiter uses; bucket key prefix
+// per endpoint. Limits set in `middleware/ip-rate-limit.ts::AUTH_IP_LIMITS`
+// per founder direction (P1-004 deferral overridden 2026-05-07).
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
@@ -46,6 +44,8 @@ import {
   ValidationError,
   ForbiddenError,
 } from '../lib/errors.js';
+import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
+import type { RateLimitStore } from '../services/rate-limit.js';
 
 function clientIp(req: FastifyRequest): string | null {
   // Fastify resolves `req.ip` honouring the X-Forwarded-For chain when
@@ -96,12 +96,39 @@ function mapAuthFlowError(err: unknown): never {
 
 export interface AuthRoutesDeps {
   service: AuthFlowsService;
+  /**
+   * V-251 — rate-limit store shared with the account-keyed limiter.
+   * IP-keyed buckets use distinct namespaces (`auth-ip:*`) so they
+   * don't conflict with account-keyed buckets (`rl:*`).
+   */
+  rateLimitStore: RateLimitStore;
 }
 
 export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): void {
-  const { service } = deps;
+  const { service, rateLimitStore } = deps;
 
-  app.post('/v1/auth/signup', {}, async (req) => {
+  const signupGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'auth-ip:signup',
+    capacity: AUTH_IP_LIMITS.signup.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.signup.refillPerSecond,
+  });
+  const loginGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'auth-ip:login',
+    capacity: AUTH_IP_LIMITS.login.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.login.refillPerSecond,
+  });
+  const verifyEmailGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'auth-ip:verify-email',
+    capacity: AUTH_IP_LIMITS.verifyEmail.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.verifyEmail.refillPerSecond,
+  });
+  const passwordResetRequestGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'auth-ip:password-reset-request',
+    capacity: AUTH_IP_LIMITS.passwordResetRequest.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.passwordResetRequest.refillPerSecond,
+  });
+
+  app.post('/v1/auth/signup', { preHandler: [signupGate] }, async (req) => {
     const parsed = SignupRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
@@ -121,7 +148,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     }
   });
 
-  app.post('/v1/auth/verify-email', {}, async (req) => {
+  app.post('/v1/auth/verify-email', { preHandler: [verifyEmailGate] }, async (req) => {
     const parsed = VerifyEmailRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
@@ -137,7 +164,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     }
   });
 
-  app.post('/v1/auth/login', {}, async (req) => {
+  app.post('/v1/auth/login', { preHandler: [loginGate] }, async (req) => {
     const parsed = LoginRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
@@ -187,20 +214,24 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     }
   });
 
-  app.post('/v1/auth/password-reset/request', {}, async (req) => {
-    const parsed = PasswordResetRequestSchema.safeParse(req.body);
-    if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+  app.post(
+    '/v1/auth/password-reset/request',
+    { preHandler: [passwordResetRequestGate] },
+    async (req) => {
+      const parsed = PasswordResetRequestSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
-    const result = await service.requestPasswordReset({
-      email: parsed.data.email,
-      requestedFromIp: clientIp(req),
-    });
-    return {
-      sent: true as const,
-      expires_at: result.expiresAt.toISOString(),
-      ...(result.debugToken !== null ? { debug_token: result.debugToken } : {}),
-    };
-  });
+      const result = await service.requestPasswordReset({
+        email: parsed.data.email,
+        requestedFromIp: clientIp(req),
+      });
+      return {
+        sent: true as const,
+        expires_at: result.expiresAt.toISOString(),
+        ...(result.debugToken !== null ? { debug_token: result.debugToken } : {}),
+      };
+    },
+  );
 
   app.post('/v1/auth/password-reset/confirm', {}, async (req) => {
     const parsed = PasswordResetConfirmRequestSchema.safeParse(req.body);
