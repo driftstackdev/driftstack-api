@@ -497,6 +497,7 @@ The same list as in [Privacy Policy Section 7](privacy-policy.md#7-sub-processor
 | Cloudflare, Inc.                          | DNS / CDN / edge / R2 / Pages            | US (corp); EU jurisdiction (data) | 2021 SCCs Module 2 + EU-US DPF (verify) |
 | Postmark (ActiveCampaign LLC)             | Transactional email                      | US                                | 2021 SCCs Module 2 + EU-US DPF (verify) |
 | Sentry (Functional Software, Inc.)        | Error tracking                           | US (corp); EU region (data)       | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| NowPayments OU (conditional, opt-in only) | Crypto payment processing                | Estonia                           | EEA-internal                            |
 
 The list as published in the Privacy Policy is the authoritative
 list for the avoidance of doubt; this Annex is a convenience copy.

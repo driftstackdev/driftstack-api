@@ -157,10 +157,23 @@ Not used for any purpose beyond executing Customer's Session.
 ### 3.6 Billing data
 
 **What:** transaction identifiers, payment method type (card,
-SEPA, iDEAL, Bancontact), last-four of payment
+SEPA, iDEAL, Bancontact, cryptocurrency), last-four of payment
 instruments where retained, invoice status, amount, currency, VAT
 basis. Driftstack does **not** retain primary account numbers
 (PANs); these are tokenised by Stripe under PCI-DSS scope.
+
+**Cryptocurrency payments (optional, opt-in only).** Customers may
+choose to pay Subscription Fees in BTC, LTC, USDT, USDC, ETH, or
+XMR via the NowPayments OÜ (Estonia) payment processor. When this
+option is selected, the following additional data is processed:
+NowPayments invoice id, blockchain transaction hash, currency
+selected, amount in selected currency, fiat-equivalent amount at
+settlement, and the destination wallet address Driftstack uses to
+receive the payment. Driftstack does **not** retain Customer wallet
+addresses; the on-chain sender address is visible by virtue of
+public-blockchain transparency but is not separately stored or
+indexed by Driftstack. The crypto-payment path is bypassed entirely
+for Stripe-paying Customers.
 
 **Why:** to process Subscription Fees, generate invoices, and
 maintain accounting records.
@@ -170,8 +183,9 @@ Article 6(1)(c) — compliance with Dutch tax law (Article 52 of the
 Dutch _Algemene wet inzake rijksbelastingen_; 7-year retention).
 
 **Source:** Stripe returns transaction metadata to Driftstack via
-webhook. Customer provides billing details at signup or via the
-customer portal.
+webhook. NowPayments returns invoice + transaction data via webhook
+when the crypto-payment path is used. Customer provides billing
+details at signup or via the customer portal.
 
 ### 3.7 Support correspondence
 
@@ -342,6 +356,7 @@ imposing obligations consistent with Article 28 GDPR.
 | **Cloudflare, Inc.** (US, Delaware) — _EU jurisdiction selected_       | DNS, CDN, edge routing, R2 object storage for Recordings, Pages hosting for the marketing site.                                                                                                                       | United States (corporate); EU jurisdiction (data + processing) | 2021 SCCs (Module 2) and EU-US DPF where applicable; counsel verifies current Cloudflare certification status. EU jurisdiction selected on the Cloudflare account.                                                        |
 | **Postmark / ActiveCampaign LLC** (US, Delaware) — _EU sending region_ | Transactional email (signup verification, password reset, billing receipts, support correspondence).                                                                                                                  | United States                                                  | 2021 SCCs (Module 2) and EU-US DPF where applicable; counsel verifies current Postmark certification status.                                                                                                              |
 | **Sentry / Functional Software, Inc.** (US, Delaware) — _EU region_    | Error tracking and performance monitoring for the API server, GUI client, and marketing site.                                                                                                                         | United States (corporate); EU region (data residency)          | 2021 SCCs (Module 2) and EU-US DPF where applicable; counsel verifies current Sentry certification status. Sentry EU region selected.                                                                                     |
+| **NowPayments OÜ** (Estonia) — _conditional, opt-in only_              | Cryptocurrency payment processing (BTC, LTC, USDT, USDC, ETH, XMR). Engaged only when Customer opts to pay with cryptocurrency at checkout; bypassed entirely for Stripe-paying Customers.                            | European Economic Area (Estonia)                               | EEA-internal; no transfer mechanism required.                                                                                                                                                                             |
 
 The Sub-processor list is **subject to change** under the
 notification mechanism in Section 5 of the DPA. The current list is

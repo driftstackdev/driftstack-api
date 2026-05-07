@@ -76,6 +76,38 @@ references the corresponding rows in this log.
   status site is gated behind no-traffic until then; Privacy §3.10
   is accurate forward-looking).
 
+## 2026-05-08 — V-308a (NowPayments crypto sub-processor + ToS clause)
+
+- **DPA Annex 3 (sub-processors table)**: added "NowPayments OÜ
+  (Estonia) — conditional, opt-in only" row. Role: cryptocurrency
+  payment processing (BTC, LTC, USDT, USDC, ETH, XMR). Transfer
+  mechanism: EEA-internal (Estonia). Engaged only when Customer opts
+  to pay with cryptocurrency at checkout; bypassed entirely for
+  Stripe-paying Customers.
+- **Privacy Policy §3.6 (Billing data)**: extended with a
+  "Cryptocurrency payments (optional, opt-in only)" subsection.
+  Documents what data NowPayments processes (invoice id, blockchain
+  tx hash, currency, amounts, destination wallet), explicit promise
+  Driftstack does not retain Customer wallet addresses, and the
+  bypass invariant for Stripe-paying customers.
+- **Privacy Policy §7 (Sub-processors table)**: matching new row.
+- **Terms of Service §8.3**: extended with §8.3(5) crypto-payment
+  terms covering rate-quote window, finality, network-fee
+  responsibility, refund policy (original currency to original
+  sender), under-payment handling, switch-payment-method.
+- **Marketing-site sub-processors data** (`apps/marketing-site/src/data/sub-processors.ts`):
+  matching public-facing entry added so the V-271 sub-processor
+  mirror linter stays green (now 11 public ↔ 12 DPA, was 10 ↔ 11;
+  the +2 vs +1 split is the documented Stripe-EU + Stripe-Inc DPA
+  split that resolves to one public "Stripe" row).
+- **No engineering work in this slice**: V-308b/c/d will wire the
+  sandbox webhook handler (apps/server), customer checkout flow
+  (apps/customer-dashboard), and admin reconciliation UI
+  (apps/admin-panel) once founder creates the NowPayments account
+  and supplies sandbox API keys. The legal scaffolding lands first
+  per V-293 methodology so the engineering can ship under approved
+  documents from day one.
+
 ## 2026-05-08 — V-297 (audit-log export for data portability)
 
 - **Privacy Policy §10 (data subject rights)** updated. Article 20

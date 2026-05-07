@@ -17207,3 +17207,37 @@ V-297 (~2-3h Tier-1) — Customer self-service audit-log download via dashboard 
 ### Next
 
 V-298 → V-303 (V-294 catalog customer self-service) — account settings page expansion, usage page deeper, billing portal redirect, profile sharing UI if Team RBAC drops in priority. Each = 2-4h Tier-1 slice. Then V-304 onboarding email flows, V-305 Tauri deep-link replacement, V-306+ LiveKit, V-308 NowPayments. NEVER STOP autopilot.
+
+## V-308a — NowPayments crypto: sub-processor + Privacy + ToS scaffolding
+
+**Tier**: 1 — Legal/contractual prerequisites for V-308b/c/d crypto-payment engineering.
+
+**Why**: Per founder direction, "Founder will create NowPayments account 'tomorrow'; real API keys swap = single env-var update." V-308a lays the legal/contractual scaffolding NOW so that when V-308b (sandbox webhook handler) + V-308c (customer checkout) + V-308d (admin reconciliation) ship, they ship under approved documents from day one — no last-minute legal text scramble. Per V-293 methodology: legal updates per slice, atomic with engineering.
+
+**Scope**
+
+- `docs/legal/dpa.md` Annex 3: new row — "NowPayments OÜ (Estonia) — conditional, opt-in only" / "Cryptocurrency payment processing" / "Estonia" / "EEA-internal".
+- `docs/legal/privacy-policy.md` §3.6 (Billing data): extended with crypto-payment subsection. Lists exact data NowPayments processes, explicit non-retention promise for wallet addresses, bypass invariant for Stripe-paying customers.
+- `docs/legal/privacy-policy.md` §7 (Sub-processors table): matching new row.
+- `docs/legal/terms-of-service.md` §8.3: new payment method (5) — crypto via NowPayments. Six explicit terms: rate-quote window (~20 minutes), finality on confirmation, no cross-currency refunds, customer pays network fees, underpayment handling, switch-payment-method.
+- `apps/marketing-site/src/data/sub-processors.ts`: matching public entry (V-271 mirror linter now 11 public ↔ 12 DPA; +2 vs +1 due to existing Stripe-EU + Stripe-Inc split).
+- `docs/legal/changes-log.md` V-308a entry.
+
+### Verify
+
+- `npm run lint`: clean. **Sub-processor mirror linter passing at 11 ↔ 12** (NEW state — first new sub-processor since launch).
+- `npm test`: 910 / 910 unchanged (V-308a is docs-only).
+- `npm run format:check`: clean.
+
+### Notes — methodology choices
+
+- **Estonia EEA-internal, not US SCCs**: NowPayments OÜ is registered in Estonia. EEA-internal transfer = no SCC mechanism required. Cleaner regulatory posture than US-based crypto processors (CoinGate has EU presence but mixed US transfer; BitPay is US). Founder verifies legal-name + role per the "surface-as-draft" rule, may revise wording before signing customer DPAs.
+- **Conditional, opt-in only**: matches the existing Anthropic pattern (bundled-LLM AI agent — also conditional opt-in). Customers who pay via Stripe never engage NowPayments at all; the sub-processor row reflects this conditionality.
+- **Six crypto-specific ToS terms**: rate-quote, finality, refund-currency-rule, network-fee responsibility, underpayment handling, payment-method switch. These are the standard six topics every crypto-acceptance ToS needs to address; absent any one, support gets the "I sent the wrong amount / wrong network / want a refund in different currency" tickets. Drafted from first-principles reading of NowPayments' merchant docs; founder reviews tone + can swap any term.
+- **Privacy explicit non-retention of wallet addresses**: blockchains are inherently public; we don't store the sender wallet separately because it's already on-chain. The destination address is Driftstack's own (operational data, not Customer Personal Data). This invariant is documented to head off "do you track my crypto activity?" privacy questions.
+- **Sub-processor mirror linter is the structural backstop**: adding a row in DPA without adding the public-facing row WOULD have failed the linter immediately. Same the other way. V-271 catches the class of bug where one surface drifts.
+- **No engineering shipped in V-308a**: deliberate. V-308b/c/d depend on (a) the legal text being in place AND (b) founder having the NowPayments sandbox keys. (a) is now done; (b) is on founder. When (b) lands the engineering slices ship under documents already merged.
+
+### Next
+
+V-308b (~3-4h) — NowPayments sandbox webhook handler in apps/server. POST /v1/webhooks/nowpayments receiver, signature verification, payment-status state machine (waiting → confirming → confirmed → finished, or expired/failed paths). Idempotent like Stripe webhook handler (V-088). Then V-308c (customer checkout flow) + V-308d (admin reconciliation UI). NEVER STOP autopilot.

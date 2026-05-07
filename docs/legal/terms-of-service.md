@@ -220,6 +220,29 @@ Enterprise tier bills annually in advance by default.
 3. **iDEAL** for Customers with a Dutch bank account, via Stripe.
 4. **Bancontact** for Customers with a Belgian bank account, via
    Stripe.
+5. **Cryptocurrency** (BTC, LTC, USDT, USDC, ETH, XMR) via
+   NowPayments OÜ (Estonia). Crypto-payment terms:
+   - Customer chooses cryptocurrency and amount at checkout.
+   - The fiat-equivalent invoice (in EUR or USD) is fixed at the
+     time of invoice issuance; the cryptocurrency amount is
+     calculated at the live rate at invoice issuance and is valid
+     for a quoted window (typically 20 minutes) after which
+     re-quotation is required.
+   - Payment is final upon on-chain confirmation per NowPayments'
+     confirmation policy. Driftstack does **not** issue refunds for
+     cryptocurrency payments to a different network than the
+     original; refunds are made in the original cryptocurrency to
+     the original sender address.
+   - The Customer bears the on-chain network fees (miner / gas
+     fees) for sending the payment; Driftstack bears the
+     NowPayments processor fee.
+   - Underpayment by more than 1% of the quoted cryptocurrency
+     amount results in invoice failure; the partial payment may be
+     refunded (less network fees) at Customer's request to a
+     wallet address Customer provides.
+   - The crypto-payment path is bypassed entirely for
+     Stripe-paying Customers; Customer can switch payment method
+     at any time via the customer portal.
 
 8.4 **VAT / BTW.**
 

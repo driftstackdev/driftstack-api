@@ -85,6 +85,13 @@ export const SUB_PROCESSORS: SubProcessor[] = [
     purpose: 'Mac hardware hosting for the iPhone Safari session execution fleet.',
     transferMechanism: '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.',
   },
+  {
+    name: 'NowPayments',
+    region: 'NowPayments OÜ (Estonia, EU)',
+    purpose:
+      'Cryptocurrency payment processing (BTC, LTC, USDT, USDC, ETH, XMR). Engaged only when a customer opts to pay with cryptocurrency at checkout; bypassed entirely for Stripe-paying customers.',
+    transferMechanism: 'EEA-internal — no transfer mechanism required.',
+  },
 ];
 
 export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-05-03';
