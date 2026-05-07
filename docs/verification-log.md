@@ -15199,3 +15199,62 @@ Backend is the critical path — once it ships, the dashboard `/cli/authorize` p
 ### Next
 
 V-267 — dashboard `/cli/authorize` page. Backend contract is now stable; the page just needs to render a confirmation UI + POST to `/v1/auth/cli-authorize/bind` with the user's web session.
+
+## V-267 — Dashboard /cli/authorize page (browser-OAuth dashboard side)
+
+### What
+
+Per V-266 next-step: dashboard-side confirmation page for the browser-OAuth GUI activation flow. The GUI client opens this URL with `?code=…&state=…`, the user signs in (or is already signed in), confirms, and the dashboard binds the code to their account via `POST /v1/auth/cli-authorize/bind`.
+
+New + modified files:
+
+1. **`apps/customer-dashboard/src/pages/cli/authorize.astro`** — new Astro page rendered at `/cli/authorize`. Five render states managed by inline JS:
+   - **loading** — initial state while reading URL params + checking session.
+   - **missing** — `code` or `state` missing from URL; show "Open this from the desktop app" message.
+   - **needs-signin** — no `ds_web_session_token` in localStorage; show "Sign in" button that links to `/signup?next=<this-url>` (round-trip preserves the cli-authorize URL).
+   - **confirm** — show authorization details (first 6 chars of code, account context implicit) + Cancel / Authorize buttons.
+   - **success** — green "Desktop client authorized — return to the desktop app" message + link to `/api-keys` for management.
+   - **error** — red error banner with retry button.
+2. **`apps/customer-dashboard/src/pages/signup.astro`** — pass through `?next=` query param to the verify-email redirect URL so deep-link entry into the dashboard survives the signup → verify-email transition.
+3. **`apps/customer-dashboard/src/pages/verify-email.astro`** — read `?next=` query param and redirect there on successful verification (instead of `/welcome`). Falls back to `/welcome` when no `next` is set, preserving the first-time onboarding flow.
+
+### Why
+
+V-266 shipped the backend; without the dashboard surface, the flow has no UI for the user to actually authorize. The page is small (~140 lines markup + 80 lines inline JS) but it's the load-bearing trust surface — the user sees the brand, the explicit action being authorized, and confirms before any key is minted.
+
+The `?next=` plumbing through signup + verify-email closes the round-trip for users who are NOT already signed in: GUI opens `/cli/authorize?code=…` → page detects no session → links to `/signup?next=/cli/authorize?code=…` → user signs up → verify-email redirects back to `/cli/authorize?code=…` (instead of `/welcome`) → page now finds the session in localStorage → confirmation UI renders.
+
+### Files
+
+- `apps/customer-dashboard/src/pages/cli/authorize.astro` — new (page + inline JS state machine).
+- `apps/customer-dashboard/src/pages/signup.astro` — pass `?next` through to `/verify-email`.
+- `apps/customer-dashboard/src/pages/verify-email.astro` — honor `?next` on success redirect.
+
+### Verify
+
+- `npm run build --workspace apps/customer-dashboard`: clean; `dist/cli/authorize/index.html` generated.
+- `npm run typecheck --workspace apps/customer-dashboard` (astro check): 0 errors / 0 warnings / 1 informational hint.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Manual end-to-end (against the dev server already running per V-266 + the gui-client running per V-261):
+  1. Start at `http://localhost:5173/cli/authorize?code=<from-/v1/auth/cli-authorize/initiate>&state=test-state-1234567890abcdef`.
+  2. If signed in → confirmation UI; click Authorize → success.
+  3. If not signed in → "Sign in" → signup → verify-email → land back on /cli/authorize → confirm → success.
+  4. Confirm the GUI's exchange poll receives `{status: 'bound', api_key, account_id}` after authorize.
+
+### Notes
+
+- **Brand framing**: oxblood "Desktop client" eyebrow + slate body text, matching the `/security` + `/legal/*` brand-page pattern from V-264. No emerald or amber outside the success/error banners.
+- **Code preview**: only the first 6 chars of the authorization code shown (`abc123…`). The full code is in the URL query; users don't need to read it but the partial preview provides a "this is the request from the desktop app" anchor.
+- **Default scope**: bind defaults to `account_owner` (matches V-266 backend default). The page doesn't surface scope selection — V-NNN+ can add a scope picker if needed.
+- **Default key name**: server applies `"Desktop client"`. Customers can rename via `/api-keys`.
+- **Cancel**: returns user to `/`. The pending authorization code expires naturally after 5 minutes.
+- **No `/login` page yet**: the "Sign in" button currently links to `/signup`. That's a known gap — `?next=` works for both signup-then-redirect and a future login-then-redirect because both flows produce a session token in localStorage. V-NNN+ can add a `login.astro` that POSTs to `/v1/auth/login` and writes the same `ds_web_session_token` key.
+- **CSP / inline scripts**: dashboard pages already use `is:inline` script blocks elsewhere (`signup.astro`, `verify-email.astro`); same pattern here. When CSP lockdown lands later, all these pages migrate together.
+- **No analytics**: deliberately not adding tracking pixels to a security-sensitive surface. If Plausible / similar lands site-wide, this page should be excluded.
+
+### Next
+
+V-268 — GUI wizard "Sign in with browser" path. Replace the API-key-paste step with: button that calls `/v1/auth/cli-authorize/initiate`, opens `browser_url` via Tauri's `shell.open()` plugin, polls `/v1/auth/cli-authorize/exchange` every 2 seconds, displays "waiting for browser…" with cancel option, on `bound` status writes the returned key into the keychain via the existing settings flow.
+
+After V-268, the entire OAuth-style activation loop closes end-to-end, replacing the API-key-paste flow as the default new-customer path.

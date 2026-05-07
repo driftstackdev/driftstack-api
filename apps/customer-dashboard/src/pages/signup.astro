@@ -108,7 +108,15 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             if (body.debug_token) {
               sessionStorage.setItem('ds_debug_verify_token', body.debug_token);
             }
-            window.location.href = '/verify-email';
+            // V-267 — pass through the ?next= deep link so flows that
+            // brought the user to signup (e.g. GUI activation at
+            // /cli/authorize) can resume after verify-email completes.
+            const params = new URLSearchParams(window.location.search);
+            const next = params.get('next');
+            const verifyUrl = next
+              ? '/verify-email?next=' + encodeURIComponent(next)
+              : '/verify-email';
+            window.location.href = verifyUrl;
           })
           .catch((err) => {
             showBanner(err && err.message ? err.message : 'Signup failed.');

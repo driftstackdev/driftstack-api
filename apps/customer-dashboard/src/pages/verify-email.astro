@@ -92,7 +92,12 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             // Cleanup signup-stage state.
             sessionStorage.removeItem('ds_signup_email');
             sessionStorage.removeItem('ds_debug_verify_token');
-            window.location.href = '/welcome';
+            // V-267 — honor ?next= round-trip from /cli/authorize and
+            // any other deep-link entry. Falls back to /welcome for the
+            // first-time onboarding flow.
+            const params = new URLSearchParams(window.location.search);
+            const next = params.get('next');
+            window.location.href = next ? next : '/welcome';
           })
           .catch((err) => {
             showBanner(err && err.message ? err.message : 'Verification failed.');

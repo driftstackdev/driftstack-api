@@ -1,0 +1,220 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+
+// V-267 — Browser-OAuth confirmation page for the GUI client
+// activation flow (paired with V-266 backend cli-authorize routes).
+//
+// Flow:
+//   1. GUI opens this URL with `?code=…&state=…` query params.
+//   2. Page checks localStorage.ds_web_session_token — if missing,
+//      redirects to /signup?next=<this-url> (Sign in lands when the
+//      login page exists; for now, signup completes a session as well).
+//   3. Page shows a confirmation: "Authorize Driftstack desktop client?"
+//      with the code's first 6 chars + the account email.
+//   4. On Authorize: POST /v1/auth/cli-authorize/bind with
+//      `Bearer <session-token>` + `{code, state}`. Server mints a key,
+//      stores plaintext for the GUI's next exchange poll.
+//   5. Success screen: "Authorized — return to the desktop app."
+//
+// Per V-266: this page is the ONLY surface where a customer's web
+// session converts a CLI authorization code into a GUI-paired API key.
+// The plaintext key never traverses this page.
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+---
+
+<DashboardLayout title="Authorize desktop client" withSidebar={false}>
+  <div class="mx-auto max-w-md px-6 py-16" data-page="cli-authorize">
+    <header class="text-center">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Desktop client</p>
+      <h1 class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+        Authorize this device?
+      </h1>
+    </header>
+
+    <div
+      data-state="loading"
+      class="mt-8 flex justify-center py-8 text-sm text-slate-500"
+    >
+      Checking authorization request…
+    </div>
+
+    <div data-state="missing" class="mt-8 hidden">
+      <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        This page expects an authorization code in the URL. Open it from the Driftstack
+        desktop app's "Sign in with browser" button.
+      </div>
+      <a href="/" class="mt-6 block text-center text-sm text-oxblood-700 underline">
+        Return to dashboard
+      </a>
+    </div>
+
+    <div data-state="needs-signin" class="mt-8 hidden">
+      <p class="text-sm text-slate-700">
+        Sign in to your Driftstack account to authorize this desktop client.
+      </p>
+      <a
+        data-signin-link
+        href="/signup"
+        class="btn-primary mt-6 block w-full text-center"
+      >Sign in</a>
+      <p class="mt-3 text-xs text-slate-500 text-center">
+        After signing in you'll be brought back to this page automatically.
+      </p>
+    </div>
+
+    <div data-state="confirm" class="mt-8 hidden">
+      <p class="text-sm text-slate-700">
+        The Driftstack desktop client on this device is requesting an API key bound to
+        your account. The key gives the desktop app the same access as your web session
+        and remains active until you revoke it from <a href="/api-keys" class="text-oxblood-700 underline">API keys</a>.
+      </p>
+      <div class="mt-6 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
+        <div class="flex items-center justify-between gap-4 text-xs text-slate-500">
+          <span>Authorization code</span>
+          <span class="font-mono text-slate-700" data-code-preview></span>
+        </div>
+      </div>
+      <div class="mt-6 grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          data-cancel
+          class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+        <button type="button" data-authorize class="btn-primary">
+          Authorize
+        </button>
+      </div>
+      <p class="mt-4 text-xs text-slate-500">
+        Authorizing will mint a new API key named "Desktop client" with the same scope
+        as your dashboard session.
+      </p>
+    </div>
+
+    <div data-state="success" class="mt-8 hidden">
+      <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-center text-sm text-emerald-900">
+        <p class="font-medium">Desktop client authorized.</p>
+        <p class="mt-1 text-emerald-800">
+          You can return to the Driftstack desktop app — it will pick up the credentials
+          on the next poll.
+        </p>
+      </div>
+      <a href="/api-keys" class="mt-6 block text-center text-sm text-oxblood-700 underline">
+        View your API keys
+      </a>
+    </div>
+
+    <div data-state="error" class="mt-8 hidden">
+      <div
+        data-error-message
+        class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+      ></div>
+      <button
+        type="button"
+        data-retry
+        class="btn-primary mt-6 block w-full text-center"
+      >
+        Try again
+      </button>
+    </div>
+  </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="cli-authorize"]');
+      if (!root) return;
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const state = params.get('state');
+      const sessionToken =
+        window.localStorage.getItem('ds_web_session_token') ?? null;
+
+      const sections = {
+        loading: root.querySelector('[data-state="loading"]'),
+        missing: root.querySelector('[data-state="missing"]'),
+        needsSignin: root.querySelector('[data-state="needs-signin"]'),
+        confirm: root.querySelector('[data-state="confirm"]'),
+        success: root.querySelector('[data-state="success"]'),
+        error: root.querySelector('[data-state="error"]'),
+      };
+
+      function show(name) {
+        for (const key of Object.keys(sections)) {
+          const el = sections[key];
+          if (!el) continue;
+          if (key === name) el.classList.remove('hidden');
+          else el.classList.add('hidden');
+        }
+      }
+
+      function showError(message) {
+        const errEl = sections.error.querySelector('[data-error-message]');
+        if (errEl) errEl.textContent = message;
+        show('error');
+      }
+
+      // 1. Validate code + state
+      if (!code || !state) {
+        show('missing');
+        return;
+      }
+
+      // 2. Sign-in gate
+      if (!sessionToken) {
+        const signinLink = sections.needsSignin.querySelector('[data-signin-link]');
+        if (signinLink) {
+          const next = encodeURIComponent(window.location.pathname + window.location.search);
+          signinLink.setAttribute('href', '/signup?next=' + next);
+        }
+        show('needs-signin');
+        return;
+      }
+
+      // 3. Confirmation UI
+      const codePreview = sections.confirm.querySelector('[data-code-preview]');
+      if (codePreview) codePreview.textContent = code.slice(0, 6) + '…';
+      show('confirm');
+
+      // 4. Wire buttons
+      const authorizeBtn = sections.confirm.querySelector('[data-authorize]');
+      const cancelBtn = sections.confirm.querySelector('[data-cancel]');
+      const retryBtn = sections.error.querySelector('[data-retry]');
+
+      function authorize() {
+        authorizeBtn.disabled = true;
+        authorizeBtn.textContent = 'Authorizing…';
+        fetch(apiBaseUrl + '/v1/auth/cli-authorize/bind', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: 'Bearer ' + sessionToken,
+          },
+          body: JSON.stringify({ code: code, state: state }),
+        })
+          .then((r) =>
+            r.ok
+              ? r.json()
+              : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+          )
+          .then(() => {
+            show('success');
+          })
+          .catch((err) => {
+            showError(err && err.message ? err.message : 'Authorization failed.');
+          })
+          .finally(() => {
+            authorizeBtn.disabled = false;
+            authorizeBtn.textContent = 'Authorize';
+          });
+      }
+
+      authorizeBtn.addEventListener('click', authorize);
+      retryBtn.addEventListener('click', authorize);
+      cancelBtn.addEventListener('click', () => {
+        window.location.href = '/';
+      });
+    })();
+  </script>
+</DashboardLayout>
