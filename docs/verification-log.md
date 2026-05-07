@@ -16184,3 +16184,42 @@ V-287+ candidates:
 - Admin-panel browser-driving Playwright config (deferred per V-285 notes).
 
 Standing by for direction OR continuing autonomously.
+
+## V-287 — Pre-launch checklist refresh (Tauri Updater + GUI Sentry COMPLETE)
+
+### What
+
+Per founder direction 2026-05-07 V-286 ack: items completed since V-279 landed surfaced as COMPLETE so the founder reads accurate state.
+
+`docs/launch/pre-launch-checklist.md` updates:
+
+1. **Section 3 (GUI client) row**: "Tauri Updater signing keys (V-243)" → status `COMPLETE`. Notes: TAURI_UPDATER_PUBKEY / PRIVKEY / PRIVKEY_PASSWORD GitHub secrets set 2026-05-07. Runbook reference preserved for future-rotation reference.
+2. **Section 10 (Observability) row**: "Sentry error tracking (V-117 + V-242)" → status `PARTIAL` (was "READY (wiring)"). Splits the two halves explicitly: GUI client `VITE_SENTRY_DSN` GitHub secret COMPLETE; server-side `SENTRY_DSN` lands with production .env per V-278 (still PENDING FOUNDER).
+3. **Founder action queue**: prepended a "Closed since V-279" subsection with two ✅ entries (Tauri Updater keys + GUI Sentry DSN). Remaining-items queue compressed from 12 items to 11 (removed the now-completed Tauri Updater row + bumped numbering). Item 3 reworded to clarify "server-side Sentry DSN" specifically (vs the GUI-side which is already done). Item 5 added "(canonical per V-283 release policy)" reference.
+4. **Last roll-up timestamp** bumped from V-279 to V-287 with both timestamps preserved for traceability.
+
+### Why
+
+V-279 audit was a snapshot; V-287 is a refresh after two named completions landed. Without it, the founder reads a stale list and re-asks "what's outstanding" — which is exactly the wear-down the V-279 priority queue was designed to prevent.
+
+The Sentry split (GUI DSN done / server DSN pending) is the load-bearing edit: the founder action queue's item 3 now explicitly says "server-side Sentry DSN" so it's clear the GUI half is closed.
+
+### Files
+
+- `docs/launch/pre-launch-checklist.md` — three rows updated, queue header rewritten with "Closed since V-279" subsection.
+
+### Verify
+
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Cross-references unchanged: V-243 runbook still referenced (rotation reference); V-278 production-env-schema still referenced for server-side Sentry DSN landing path.
+
+### Notes
+
+- **Status taxonomy reused.** No new statuses introduced; just COMPLETE on the row + ✅ in the queue's closed-since subsection.
+- **Item count drop (12 → 11)** is intentional. The Tauri-Updater-keys item was originally a separate step; with secrets set, it's now subsumed into "first `gui-v0.1.0` tag" (which uses those secrets to sign).
+- **Queue ordering preserved.** Items 1-5 unchanged ordering; item 6 (Apple cert) bumps from old item 7. Easier for the founder to recognise the same plan with one item peeled off.
+
+### Next
+
+V-288 — jsdom + React Testing Library setup for full GUI client view + hook tests. Same session per founder spec "V-287 → V-288 in flight."

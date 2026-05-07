@@ -8,7 +8,7 @@ Roll-up of every item between current state and "first paying customer can sign 
 - Per-runbook detail lives in `docs/founder-actions/v*.md` + `docs/deployment/*.md` + `docs/operations/*.md`.
 - Per-V-NNN history lives in `docs/verification-log.md`.
 
-**Last roll-up:** 2026-05-07 (V-279).
+**Last roll-up:** 2026-05-07 (V-279), refreshed 2026-05-07 (V-287).
 
 ---
 
@@ -45,22 +45,22 @@ Roll-up of every item between current state and "first paying customer can sign 
 
 ## 3. GUI client (apps/gui-client)
 
-| Item                                                                    | Status          | Owner   | Blocks launch?                     | Notes                                                                                                           |
-| ----------------------------------------------------------------------- | --------------- | ------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| First-run wizard (V-244 + V-261)                                        | READY           | eng     | yes (READY)                        | Welcome → Cloud/Self-hosted with pricing → Sign in → First profile                                              |
-| Browser-OAuth flow (V-268)                                              | READY           | eng     | yes (READY)                        | shared `useBrowserSignIn` hook; paste fallback retained                                                         |
-| API-key-paste fallback                                                  | READY           | eng     | yes (READY)                        | toggle in wizard step 3                                                                                         |
-| Settings: connected / sign-out / inline browser-sign-in (V-272 + V-274) | READY           | eng     | yes (READY)                        | reuses V-268 plumbing                                                                                           |
-| Empty states across 4 list views (V-265 + V-275–V-277)                  | READY           | eng     | yes (READY)                        | Sessions / Profiles / Recordings / Proxies — consistent oxblood-tinted icon + onboarding copy                   |
-| Sentry crash-only telemetry (V-242)                                     | READY           | eng     | yes (READY)                        | opt-in default per platform                                                                                     |
-| OS keychain for API key (V-241)                                         | READY           | eng     | yes (READY)                        | macOS Keychain / Windows Credential Manager / Linux Secret Service                                              |
-| Tauri Updater wired (V-243)                                             | READY           | eng     | yes (READY)                        | manifest published from gui-release workflow                                                                    |
-| macOS code signing                                                      | PENDING FOUNDER | founder | yes                                | Apple Developer cert ($99/yr) + Developer ID Application certificate. Without: Gatekeeper warns on first launch |
-| Windows code signing                                                    | PENDING FOUNDER | founder | softens UX                         | EV cert (~$200+/yr) for SmartScreen reputation. Without: SmartScreen warns until reputation accumulates         |
-| Linux package signing                                                   | PENDING         | founder | no (deferred per D-2026-05-06-03c) | unsigned `.AppImage` is fine for technical operators                                                            |
-| Tauri Updater signing keys (V-243)                                      | PENDING FOUNDER | founder | yes                                | one-time `npx tauri signer generate`; runbook at `docs/founder-actions/v243-tauri-updater-keys.md`              |
-| First gui-v0.1.0 tag                                                    | PENDING FOUNDER | founder | yes                                | fires CI release pipeline; can ship Linux-only `.AppImage` first if Apple/Windows certs not yet set up          |
-| Tauri custom URL scheme                                                 | DEFERRED        | eng     | no                                 | Polling works end-to-end. Cross-platform native-bundle work; not launch-blocking                                |
+| Item                                                                    | Status          | Owner   | Blocks launch?                     | Notes                                                                                                                                       |
+| ----------------------------------------------------------------------- | --------------- | ------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| First-run wizard (V-244 + V-261)                                        | READY           | eng     | yes (READY)                        | Welcome → Cloud/Self-hosted with pricing → Sign in → First profile                                                                          |
+| Browser-OAuth flow (V-268)                                              | READY           | eng     | yes (READY)                        | shared `useBrowserSignIn` hook; paste fallback retained                                                                                     |
+| API-key-paste fallback                                                  | READY           | eng     | yes (READY)                        | toggle in wizard step 3                                                                                                                     |
+| Settings: connected / sign-out / inline browser-sign-in (V-272 + V-274) | READY           | eng     | yes (READY)                        | reuses V-268 plumbing                                                                                                                       |
+| Empty states across 4 list views (V-265 + V-275–V-277)                  | READY           | eng     | yes (READY)                        | Sessions / Profiles / Recordings / Proxies — consistent oxblood-tinted icon + onboarding copy                                               |
+| Sentry crash-only telemetry (V-242)                                     | READY           | eng     | yes (READY)                        | opt-in default per platform                                                                                                                 |
+| OS keychain for API key (V-241)                                         | READY           | eng     | yes (READY)                        | macOS Keychain / Windows Credential Manager / Linux Secret Service                                                                          |
+| Tauri Updater wired (V-243)                                             | READY           | eng     | yes (READY)                        | manifest published from gui-release workflow                                                                                                |
+| macOS code signing                                                      | PENDING FOUNDER | founder | yes                                | Apple Developer cert ($99/yr) + Developer ID Application certificate. Without: Gatekeeper warns on first launch                             |
+| Windows code signing                                                    | PENDING FOUNDER | founder | softens UX                         | EV cert (~$200+/yr) for SmartScreen reputation. Without: SmartScreen warns until reputation accumulates                                     |
+| Linux package signing                                                   | PENDING         | founder | no (deferred per D-2026-05-06-03c) | unsigned `.AppImage` is fine for technical operators                                                                                        |
+| Tauri Updater signing keys (V-243)                                      | COMPLETE        | founder | yes (READY)                        | TAURI_UPDATER_PUBKEY / PRIVKEY / PRIVKEY_PASSWORD GitHub secrets set 2026-05-07. Runbook: `docs/founder-actions/v243-tauri-updater-keys.md` |
+| First gui-v0.1.0 tag                                                    | PENDING FOUNDER | founder | yes                                | fires CI release pipeline; can ship Linux-only `.AppImage` first if Apple/Windows certs not yet set up                                      |
+| Tauri custom URL scheme                                                 | DEFERRED        | eng     | no                                 | Polling works end-to-end. Cross-platform native-bundle work; not launch-blocking                                                            |
 
 ## 4. Customer dashboard (apps/customer-dashboard)
 
@@ -141,17 +141,17 @@ Roll-up of every item between current state and "first paying customer can sign 
 
 ## 10. Observability + operations
 
-| Item                                  | Status           | Owner | Blocks launch?                              | Notes                                                    |
-| ------------------------------------- | ---------------- | ----- | ------------------------------------------- | -------------------------------------------------------- |
-| Sentry error tracking (V-117 + V-242) | READY (wiring)   | eng   | yes (wiring READY; secrets PENDING FOUNDER) | server + GUI client wiring; secrets per founder ops      |
-| Pino structured logs                  | READY            | eng   | yes (READY)                                 | every layer; request id correlation                      |
-| `/health` + `/ready` endpoints        | READY            | eng   | yes (READY)                                 | deploy workflows curl `/health` post-deploy              |
-| Migration journal sync (V-228)        | READY            | eng   | yes (READY)                                 | pre-push hook backstop                                   |
-| CI gates (V-223)                      | READY            | eng   | yes (READY)                                 | typecheck + lint + format + tests + sub-processor mirror |
-| Perf regression check (V-165)         | READY (advisory) | eng   | n/a                                         | bench-regression.yml in advisory mode; not a hard gate   |
-| Disaster recovery runbook             | READY            | eng   | yes (READY)                                 | `docs/deployment/dr-runbook.md`                          |
-| Day-to-day operations runbook         | READY            | eng   | yes (READY)                                 | `docs/deployment/runbook.md`                             |
-| Launch-day runbook                    | PENDING ENG      | eng   | yes                                         | V-280 lands this                                         |
+| Item                                  | Status           | Owner | Blocks launch?                                                   | Notes                                                                                                                                                     |
+| ------------------------------------- | ---------------- | ----- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sentry error tracking (V-117 + V-242) | PARTIAL          | mixed | yes (wiring READY; GUI DSN COMPLETE; server DSN PENDING FOUNDER) | server + GUI client wiring done. GUI client `VITE_SENTRY_DSN` GitHub secret set 2026-05-07. Server-side `SENTRY_DSN` lands with production .env per V-278 |
+| Pino structured logs                  | READY            | eng   | yes (READY)                                                      | every layer; request id correlation                                                                                                                       |
+| `/health` + `/ready` endpoints        | READY            | eng   | yes (READY)                                                      | deploy workflows curl `/health` post-deploy                                                                                                               |
+| Migration journal sync (V-228)        | READY            | eng   | yes (READY)                                                      | pre-push hook backstop                                                                                                                                    |
+| CI gates (V-223)                      | READY            | eng   | yes (READY)                                                      | typecheck + lint + format + tests + sub-processor mirror                                                                                                  |
+| Perf regression check (V-165)         | READY (advisory) | eng   | n/a                                                              | bench-regression.yml in advisory mode; not a hard gate                                                                                                    |
+| Disaster recovery runbook             | READY            | eng   | yes (READY)                                                      | `docs/deployment/dr-runbook.md`                                                                                                                           |
+| Day-to-day operations runbook         | READY            | eng   | yes (READY)                                                      | `docs/deployment/runbook.md`                                                                                                                              |
+| Launch-day runbook                    | PENDING ENG      | eng   | yes                                                              | V-280 lands this                                                                                                                                          |
 
 ---
 
@@ -177,18 +177,24 @@ Add to the above:
 
 ## Founder action queue (priority order)
 
+Closed since V-279 (2026-05-07):
+
+- ✅ **Tauri Updater signing keys** — TAURI_UPDATER_PUBKEY/PRIVKEY/PRIVKEY_PASSWORD GitHub secrets set 2026-05-07. GUI release pipeline can now sign updates.
+- ✅ **GUI client Sentry DSN** — VITE_SENTRY_DSN GitHub secret set 2026-05-07. Crash telemetry from desktop builds will reach the EU Sentry ingest once a customer opts in (V-242).
+
+Remaining, in priority order:
+
 1. **Hetzner two-VM provisioning** (V-278 runbook, ~20-30 min) — unblocks everything backend.
 2. **Cloudflare Pages 4 projects + DNS** (V-259 runbook, ~20 min) — unblocks marketing / dashboard / docs / admin deploys.
-3. **Neon + Upstash + R2 + Postmark + Sentry secrets populated** (V-278 production-env-schema, ~30-45 min) — unblocks first staging deploy.
+3. **Neon + Upstash + R2 + Postmark + server-side Sentry DSN populated in production .env** (V-278 production-env-schema, ~30-45 min) — unblocks first staging deploy. Server-side `SENTRY_DSN` is part of this batch (lands via SSH-write in `DEPLOY_DOTENV_BASE64`); GUI-client `VITE_SENTRY_DSN` already set above.
 4. **First push-to-main triggers staging deploy** — verify `https://api.staging.driftstack.dev/health` returns 200.
-5. **First `server-v0.1.0` tag** — verify production deploy via tag pipeline.
-6. **Tauri Updater signing keys** (V-243 runbook, ~5 min) — unblocks GUI release.
-7. **Apple Developer cert + Tauri release setup** (~$99/yr ongoing + ~30 min one-time) — unblocks signed macOS builds.
-8. **First `gui-v0.1.0` tag** — produces signed binaries; can ship `.AppImage` first if Apple cert not yet set up.
-9. **BV KvK closure** (~2026-05-21 target) — unblocks live-mode Stripe + legal page placeholders → real values.
-10. **Counsel review of legal docs** — required before first paying customer per README's preserved gate.
-11. **Stripe live-mode keys + 19 price IDs** (post-KvK; SSH-write only) — unblocks BillingService at production.
-12. **First paying customer.**
+5. **First `server-v0.1.0` tag** — verify production deploy via tag-pipeline (canonical per V-283 release policy).
+6. **Apple Developer cert + Tauri release setup** (~$99/yr ongoing + ~30 min one-time) — unblocks signed macOS builds.
+7. **First `gui-v0.1.0` tag** — produces signed binaries; can ship `.AppImage` first if Apple cert not yet set up.
+8. **BV KvK closure** (~2026-05-21 target) — unblocks live-mode Stripe + legal page placeholders → real values.
+9. **Counsel review of legal docs** — required before first paying customer per README's preserved gate.
+10. **Stripe live-mode keys + 19 price IDs** (post-KvK; SSH-write only) — unblocks BillingService at production.
+11. **First paying customer.**
 
 ## What's deferred post-launch (not blocking)
 
