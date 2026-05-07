@@ -94,6 +94,12 @@ const ConfigSchema = z.object({
      */
     exposeDebugToken: z.coerce.boolean().default(false),
   }),
+  /**
+   * V-266 — origin of the customer dashboard. Used to build the
+   * browser_url returned by /v1/auth/cli-authorize/initiate so the
+   * GUI's deep link points at the right host (dev / staging / prod).
+   */
+  dashboardOrigin: z.string().url().default('http://localhost:5173'),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -212,5 +218,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       passwordReset: env.AUTH_PASSWORD_RESET_URL,
       exposeDebugToken: env.AUTH_EXPOSE_DEBUG_TOKEN,
     },
+    dashboardOrigin: env.DASHBOARD_ORIGIN,
   });
 }

@@ -31,6 +31,7 @@ import type { ValidationHarnessService } from '../services/validation-harness.js
 import { registerAdminValidationHarnessRoutes } from '../routes/admin-validation-harness.js';
 import { registerAccountRateLimitsRoutes } from '../routes/account-rate-limits.js';
 import type { AuthFlowsService } from '../services/auth-flows.js';
+import type { CliAuthorizeService } from '../services/cli-authorize.js';
 import type { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import type { ProfilesService } from '../services/profiles.js';
 import type { BillingService } from '../services/billing.js';
@@ -57,6 +58,7 @@ import { registerAdminApiKeysRoutes } from '../routes/admin-api-keys.js';
 import { registerAdminRateLimitOverridesRoutes } from '../routes/admin-rate-limit-overrides.js';
 import { registerLegalRoutes } from '../routes/legal.js';
 import { registerAuthRoutes } from '../routes/auth.js';
+import { registerAuthCliRoutes } from '../routes/auth-cli.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
 import { registerBillingRoutes } from '../routes/billing.js';
@@ -130,6 +132,12 @@ export interface AppDeps {
    * onboarding flow lands in production this becomes required.
    */
   authFlowsService?: AuthFlowsService;
+  /**
+   * V-266: browser-OAuth-style activation flow for the CLI / GUI client.
+   * Optional — when omitted, the /v1/auth/cli-authorize/* routes are
+   * not registered (legacy paste-key flow remains the only path).
+   */
+  cliAuthorizeService?: CliAuthorizeService;
   /**
    * V-080: inbound Stripe webhook handler. Optional — when both
    * `stripeWebhooksService` and `stripeWebhookSigningSecret` are
@@ -268,6 +276,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAuthRoutes(app, {
       service: deps.authFlowsService,
       rateLimitStore: deps.rateLimitStore,
+    });
+  }
+  if (deps.cliAuthorizeService !== undefined) {
+    registerAuthCliRoutes(app, {
+      cliAuthorizeService: deps.cliAuthorizeService,
+      apiKeysService: deps.apiKeysService,
     });
   }
   if (deps.stripeWebhooksService !== undefined && deps.stripeWebhookSigningSecret !== undefined) {

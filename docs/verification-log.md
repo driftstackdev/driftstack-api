@@ -15117,3 +15117,85 @@ Founder feedback during live wizard review surfaced the "Welcome step has stale 
 ### Next
 
 Continuing GUI surface polish based on founder review of subsequent views (LiveSessionView, ProfilesView, RecordingsView, SettingsView). Open queue items: V-262 successor (browser-OAuth replacement for API-key-paste), founder's potential follow-up feedback.
+
+## V-266 — Browser-OAuth backend: cli-authorize initiate / bind / exchange
+
+### What
+
+Per V-261's parked browser-OAuth direction (founder feedback on API-key paste UX): backend foundation for the OAuth-style GUI activation flow.
+
+Three new public endpoints on the control plane:
+
+- `POST /v1/auth/cli-authorize/initiate` — public; CLI/GUI client starts the flow with a CSRF `state` nonce + optional `client_label`. Server returns `{code, browser_url, expires_at}`. Code is 32 random bytes (43-char base64url). Stored with 5-minute TTL.
+- `POST /v1/auth/cli-authorize/bind` — requires authenticated session (web session or API key); the dashboard's `/cli/authorize` page calls this after the user confirms. Server verifies the state, mints an API key on the authenticated account (default scope `account_owner`), stores the plaintext keyed by `code` for the GUI's next poll, returns `{ok, account_id, expires_at}`.
+- `POST /v1/auth/cli-authorize/exchange` — public; CLI/GUI polls this with the original code + state. Returns one of `{status: 'pending'}`, `{status: 'bound', api_key, account_id}`, or `{status: 'expired'}`. The bound branch deletes the entry on success — strict one-shot.
+
+New code:
+
+- `packages/api-types/src/cli-authorize.ts` — Zod schemas + inferred TypeScript types for all three endpoints. Discriminated union on the exchange response so SDK consumers can pattern-match status cleanly.
+- `apps/server/src/services/cli-authorize.ts` — `CliAuthorizeService` with a `CliAuthorizeStore` interface (KV abstraction). Production wires `RedisStore`; tests use the bundled `InMemoryCliAuthorizeStore`. Error class `CliAuthorizeError` with discriminated codes (`invalid_code`, `state_mismatch`, `already_bound`, `not_found`, `expired`).
+- `apps/server/src/routes/auth-cli.ts` — Fastify route registration. The bind handler mints the key via `apiKeysService.create()` BEFORE storing in the cli-auth state (so legal-acceptance gate + scope checks fire normally); on bind failure it best-effort-revokes the just-minted key so no orphan plaintext exists in the DB.
+- `apps/server/src/lib/config.ts` — added `dashboardOrigin` config field, defaulted to `http://localhost:5173`, env-driven via `DASHBOARD_ORIGIN`.
+- `apps/server/src/lib/bootstrap.ts` + `app.ts` — service constructed in bootstrap (always wired, no config gate); routes registered in `app.ts` when `cliAuthorizeService` is supplied.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — wires `CliAuthorizeService` with `InMemoryCliAuthorizeStore` + `dashboardOrigin: 'http://localhost:5173'`.
+- `apps/server/tests/integration/cli-authorize.test.ts` — 11 integration tests covering happy path + 8 edge / security cases.
+- `.env.example` — documents `DASHBOARD_ORIGIN` + `AUTH_EXPOSE_DEBUG_TOKEN`.
+
+### Why
+
+Founder feedback on API-key-paste UX (V-261 notes): "find api key might be kinda hard / usually not the way it goes for non tech users, usually it opens up browser to login, to sync, might be more secure also." The V-262 successor was always going to be this OAuth-style flow.
+
+Backend is the critical path — once it ships, the dashboard `/cli/authorize` page (V-267) and the GUI wizard "Sign in with browser" path (V-268) can both be built against a stable contract. Each downstream component is a separate V-NNN landing on top of this foundation.
+
+### Files
+
+- `packages/api-types/src/cli-authorize.ts` — new (Zod schemas).
+- `packages/api-types/src/index.ts` — re-export the new module.
+- `apps/server/src/services/cli-authorize.ts` — new service + KV store interface + in-memory backend.
+- `apps/server/src/routes/auth-cli.ts` — new route registration.
+- `apps/server/src/lib/app.ts` — `cliAuthorizeService` added to `AppDeps`; routes registered.
+- `apps/server/src/lib/bootstrap.ts` — service constructed + wired into deps.
+- `apps/server/src/lib/config.ts` — `dashboardOrigin` config field added.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — service wired with in-memory store.
+- `apps/server/tests/integration/cli-authorize.test.ts` — new 11-test suite.
+- `.env.example` — DASHBOARD_ORIGIN + AUTH_EXPOSE_DEBUG_TOKEN documented.
+
+### Verify
+
+- `npm test`: 751 / 751 passing across 78 files (was 740 / 77 before V-266; +11 tests, +1 file).
+- `npm run typecheck`: clean across all workspaces.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `apps/server/tests/integration/cli-authorize.test.ts` covers:
+  - initiate returns code + browser_url + expires_at.
+  - initiate rejects state shorter than 16 chars (ValidationError → 400).
+  - exchange while pending returns `{status: 'pending'}`.
+  - full happy path: initiate → bind via web-session bearer → exchange → returned key authenticates against `/v1/account/me`.
+  - one-shot semantics: second exchange after a successful one returns `{status: 'expired'}`.
+  - state mismatch on bind returns 400.
+  - state mismatch on exchange returns 400.
+  - bind without auth returns 401.
+  - bind on an unknown code returns 404.
+  - exchange on an unknown code returns `{status: 'expired'}` (does not leak existence).
+  - second bind on an already-bound code returns 400 already_bound.
+
+### Notes — design decisions
+
+- **State (CSRF nonce) is supplied by the client, not the server**: the GUI generates 16+ chars of crypto-random state and passes it on initiate. The dashboard receives it via the URL query string and echoes it in the bind call. The GUI verifies on exchange. This is the standard OAuth state pattern — defends against a malicious site sending a forged `code` to the dashboard's `/cli/authorize` page.
+- **TTL reset on bind**: when the dashboard binds, the TTL is reset to 5 minutes from bind time. Covers the case where a user takes 4:30 to log in + click Authorize, then the GUI's poll cycle hits 30s after that.
+- **Bind mints the key before storing in cli-auth state**: ensures legal-acceptance gate + scope validation fire via the normal `apiKeysService.create()` path. If the cli-auth state operation fails (state mismatch, etc.) AFTER minting, the route best-effort revokes the just-minted key so no orphan plaintext exists in the API-keys table.
+- **One-shot exchange**: deletes the Redis entry on successful retrieval. Second exchange call returns `expired` — distinguishable from "code never existed" only by side channels (timing). Acceptable for V1.
+- **Default key name on bind**: `"Desktop client"`. Customers can rename via the existing `/v1/api-keys/:id` PATCH route (admin scope) or just see the auto-name in their dashboard.
+- **Default scope on bind**: `["account_owner"]` matches what existing dashboard-issued keys get. The bind request can override via `scopes:` field.
+- **No PKCE in V1**: the state nonce + Bearer-auth-required bind + 5-min TTL provide adequate protection for the launch threat model. PKCE can land in a follow-up if a security review surfaces issues.
+- **Error mapping**: `CliAuthorizeError` codes map to HTTP statuses in the route handler — `state_mismatch` → 400, `already_bound` → 400, `not_found` / `expired` → 404, `invalid_code` → 400. Codes are explicit (not stringly-typed) so future audit code can pattern-match cleanly.
+
+### Notes — what's NOT in V-266
+
+- **Dashboard `/cli/authorize` page**: V-267 — Astro page on `apps/customer-dashboard` that consumes `?code=&state=` query, requires login, shows a confirmation screen ("Authorize Driftstack desktop client?"), POSTs to `/v1/auth/cli-authorize/bind` on confirm.
+- **GUI wizard "Sign in with browser" path**: V-268 — replace the API-key paste step with a button that calls `initiate`, opens `browser_url` via Tauri's `shell.open()` plugin, polls `exchange` every 2 seconds.
+- **Tauri custom URL scheme** (`driftstack://auth/callback`): V-269 (optional polish) — replaces the polling exchange with a true deep-link callback.
+
+### Next
+
+V-267 — dashboard `/cli/authorize` page. Backend contract is now stable; the page just needs to render a confirmation UI + POST to `/v1/auth/cli-authorize/bind` with the user's web session.

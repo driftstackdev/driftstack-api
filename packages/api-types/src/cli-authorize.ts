@@ -1,0 +1,104 @@
+// V-266 — Browser-based CLI / GUI authorization flow.
+//
+// Replaces the "find your API key in the dashboard, paste it into the
+// GUI" flow with an OAuth-style browser handshake:
+//
+//   1. CLI/GUI calls /v1/auth/cli-authorize/initiate, gets a one-shot
+//      `code` + a `browser_url` to open.
+//   2. CLI/GUI opens browser_url; user signs in to the dashboard if
+//      not already, sees a confirmation screen, clicks Authorize.
+//   3. Dashboard calls /v1/auth/cli-authorize/bind with web-session
+//      bearer auth; server mints a scoped API key and stores the
+//      plaintext keyed by `code` (Redis, 5-minute TTL).
+//   4. CLI/GUI polls /v1/auth/cli-authorize/exchange until status
+//      flips from `pending` → `bound` → returns plaintext API key.
+//
+// `code` is a 32+ byte random URL-safe string. `state` is a CSRF nonce
+// supplied by the CLI/GUI on initiate, echoed in the browser URL,
+// verified by the dashboard on bind, and re-verified by the CLI/GUI
+// on exchange — defends against the dashboard binding a code that
+// wasn't issued in the same session.
+
+import { z } from 'zod';
+import { ApiKeyScopeSchema, Iso8601Schema } from './common.js';
+
+// ─── /v1/auth/cli-authorize/initiate ──────────────────────────────
+
+export const CliAuthorizeInitiateRequestSchema = z.object({
+  /** Client-supplied CSRF nonce — echoed back in the browser URL and
+   *  re-verified at exchange time. Min 16 chars of URL-safe entropy
+   *  (the CLI/GUI generates this via crypto-random). */
+  state: z.string().min(16).max(128),
+  /** Human-friendly label that appears on the dashboard's confirmation
+   *  screen ("Driftstack desktop app on John's MacBook Pro") so the
+   *  user knows what they're authorizing. */
+  client_label: z.string().min(1).max(120).optional(),
+});
+export type CliAuthorizeInitiateRequest = z.infer<typeof CliAuthorizeInitiateRequestSchema>;
+
+export const CliAuthorizeInitiateResponseSchema = z.object({
+  /** One-shot opaque code; never displayed to the user. */
+  code: z.string(),
+  /** URL the CLI/GUI opens in the system browser. The dashboard's
+   *  /cli/authorize page reads `code` + `state` from the query string. */
+  browser_url: z.string().url(),
+  /** Wall-clock expiry of the code; the CLI/GUI gives up polling after this. */
+  expires_at: Iso8601Schema,
+});
+export type CliAuthorizeInitiateResponse = z.infer<typeof CliAuthorizeInitiateResponseSchema>;
+
+// ─── /v1/auth/cli-authorize/bind (web-session auth required) ───────
+
+export const CliAuthorizeBindRequestSchema = z.object({
+  code: z.string().min(16).max(128),
+  state: z.string().min(16).max(128),
+  /** Scopes to attach to the minted API key. Defaults to
+   *  ["account_owner"] server-side if omitted. */
+  scopes: z.array(ApiKeyScopeSchema).min(1).optional(),
+});
+export type CliAuthorizeBindRequest = z.infer<typeof CliAuthorizeBindRequestSchema>;
+
+export const CliAuthorizeBindResponseSchema = z.object({
+  ok: z.literal(true),
+  /** Echoed for the dashboard's confirmation UI ("Authorized as
+   *  acc_…"). The plaintext key NEVER returns through this endpoint —
+   *  only the CLI/GUI receives it via /exchange. */
+  account_id: z.string(),
+  expires_at: Iso8601Schema,
+});
+export type CliAuthorizeBindResponse = z.infer<typeof CliAuthorizeBindResponseSchema>;
+
+// ─── /v1/auth/cli-authorize/exchange ───────────────────────────────
+
+export const CliAuthorizeExchangeRequestSchema = z.object({
+  code: z.string().min(16).max(128),
+  state: z.string().min(16).max(128),
+});
+export type CliAuthorizeExchangeRequest = z.infer<typeof CliAuthorizeExchangeRequestSchema>;
+
+/**
+ * `pending` → keep polling. `bound` → key delivered (one-shot;
+ * subsequent calls 404). `expired` → user took too long; restart the
+ * flow.
+ */
+export const CliAuthorizeExchangeStatusSchema = z.enum(['pending', 'bound', 'expired']);
+export type CliAuthorizeExchangeStatus = z.infer<typeof CliAuthorizeExchangeStatusSchema>;
+
+export const CliAuthorizeExchangePendingResponseSchema = z.object({
+  status: z.literal('pending'),
+});
+export const CliAuthorizeExchangeBoundResponseSchema = z.object({
+  status: z.literal('bound'),
+  api_key: z.string(),
+  account_id: z.string(),
+});
+export const CliAuthorizeExchangeExpiredResponseSchema = z.object({
+  status: z.literal('expired'),
+});
+
+export const CliAuthorizeExchangeResponseSchema = z.discriminatedUnion('status', [
+  CliAuthorizeExchangePendingResponseSchema,
+  CliAuthorizeExchangeBoundResponseSchema,
+  CliAuthorizeExchangeExpiredResponseSchema,
+]);
+export type CliAuthorizeExchangeResponse = z.infer<typeof CliAuthorizeExchangeResponseSchema>;

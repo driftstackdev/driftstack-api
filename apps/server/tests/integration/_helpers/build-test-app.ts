@@ -51,6 +51,10 @@ import { InMemoryProfilesRepo } from './in-memory-profiles-repo.js';
 import { InMemoryBillingProvider, InMemoryBillingRepo } from './in-memory-billing.js';
 import { BillingService } from '../../../src/services/billing.js';
 import { AuthFlowsService } from '../../../src/services/auth-flows.js';
+import {
+  CliAuthorizeService,
+  InMemoryCliAuthorizeStore,
+} from '../../../src/services/cli-authorize.js';
 import { StripeWebhooksService } from '../../../src/services/stripe-webhooks.js';
 import { ProfilesService } from '../../../src/services/profiles.js';
 import { createEmailService } from '../../../src/services/email.js';
@@ -360,6 +364,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountAuditService, // V-224 — emit account.{email_verified,login,logout,password_changed}
   );
 
+  // V-266 — browser-OAuth flow with in-memory store for tests.
+  const cliAuthorizeService = new CliAuthorizeService({
+    store: new InMemoryCliAuthorizeStore(),
+    dashboardOrigin: 'http://localhost:5173',
+  });
+
   // V-168 — bridge web sessions issued by AuthFlowsService into the auth
   // path so a freshly-signed-up user's web-session bearer can authenticate
   // on routes that use requireAuth (e.g. POST /v1/api-keys). The Drizzle
@@ -494,6 +504,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountLifecycleService,
     scheduledJobsService,
     authFlowsService,
+    cliAuthorizeService,
     stripeWebhooksService,
     stripeWebhookSigningSecret,
     profilesService,

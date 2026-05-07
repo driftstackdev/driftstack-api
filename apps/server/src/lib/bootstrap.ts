@@ -57,6 +57,7 @@ import { AccountsAdminService } from '../services/admin-accounts.js';
 import { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import { LegalService } from '../services/legal.js';
 import { AuthFlowsService } from '../services/auth-flows.js';
+import { CliAuthorizeService } from '../services/cli-authorize.js';
 import { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import { ProfilesService } from '../services/profiles.js';
 import type { AccountTier } from '@driftstack/api-types';
@@ -296,6 +297,15 @@ export async function createProductionDeps(
     accountAuditService, // V-224 — emit account.{email_verified,login,logout,password_changed}
   );
 
+  // V-266: browser-OAuth-style CLI / GUI activation flow. Pure
+  // Redis state — no schema migration needed. Always wired (no
+  // configuration gate); the dashboard-side handler is what gates
+  // actual binding.
+  const cliAuthorizeService = new CliAuthorizeService({
+    redis,
+    dashboardOrigin: config.dashboardOrigin,
+  });
+
   // V-080: inbound Stripe webhook handler. Optional — only wired when
   // STRIPE_WEBHOOK_SECRET is configured. When absent, /v1/webhooks/stripe
   // is not registered and inbound deliveries 404 (Stripe will retry, but
@@ -407,6 +417,7 @@ export async function createProductionDeps(
     accountLifecycleService,
     scheduledJobsService,
     authFlowsService,
+    cliAuthorizeService,
     profilesService,
     // V-100: admin force-actions take direct repo + driver access.
     // V-237: profilesRepo also feeds /v1/account/me.
