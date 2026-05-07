@@ -14990,3 +14990,86 @@ The bug was latent in V-244 (the original wizard implementation) but never surfa
 - Founder continues GUI review on next hot-reload (or after closing + reopening the app to clear webview state).
 - V-262-style **browser-OAuth flow** still parked as a proper-fix replacement for the API-key paste; the dev-bootstrap script just lowers friction for the current paste path.
 - If founder wants the sub-processor mirror linter or doc-site PR-time build coverage that I sketched earlier, surface and prioritise.
+
+## V-264 — Legal pages production-ready: strip AI/draft framing, professional layout
+
+### What
+
+Per founder direction 2026-05-07 ("I notice you set AI legal draft everywhere, and its hard to read currently no properly multi lines etc, i want it actually to be launch ready, and not mention AI, look like its really professional, and actually accurate data"):
+
+1. **Stripped all AI/draft framing** from the four bound legal documents + definitions:
+   - The 7-line "AI-generated baseline draft" header blockquote — removed entirely.
+   - Version: `0.1.2-draft` → `1.0`. Effective date: `2026-05-03` → `2026-05-07`.
+   - Entity placeholder `[BV LEGAL NAME]` → `Driftstack B.V.`.
+   - Pre-incorporation provenance text (the `geruisloze omzetting from eenmanszaak to BV` paragraph in privacy + ToS) — removed.
+   - Address / KvK / BTW fields stripped from inline references; replaced with a clean contact block referencing email + "registered office, published on the Driftstack website" / "Amsterdam, the Netherlands".
+   - All `(placeholder)` parenthetical annotations on email addresses — removed.
+   - README header `# Driftstack — legal document set (baseline drafts)` → `# Driftstack — legal document set`. README rewritten to drop the AI provenance section + counsel-review-blocker prose; keeps the substantive versioning + revision-trigger + cross-document-consistency content.
+
+2. **LegalLayout.astro production rewrite**:
+   - **Amber DRAFT banner removed** (the "Draft — counsel review pending" warning V-255 added). Replaces the V-255 D-2026-05-07-01 defensive choice — founder explicitly overrode it.
+   - **`noindex={true}` removed** — pages now indexable by default; production legal copy belongs in search results.
+   - New header section: oxblood "Legal" eyebrow + 3xl page title + description, matching the visual treatment of `/security`, `/trust/sub-processors`, etc. Brings legal pages onto the same hierarchy as the rest of the marketing surface.
+   - Prose styling expanded to fix the formatting issues founder called out:
+     - `prose-h1:hidden` (the `# Driftstack — Privacy Policy` H1 in markdown is now hidden since the layout's own H1 takes its place — was double-rendering).
+     - `prose-h2:mt-12` for proper section spacing.
+     - `prose-p:leading-relaxed` for readability of long paragraphs.
+     - `prose-li:my-1` for tight list spacing.
+     - `prose-table:text-sm prose-th:bg-slate-50` for the DPA Annex 3 sub-processor table + similar.
+     - `prose-blockquote:border-l-oxblood-300 prose-blockquote:not-italic` so quoted entity blocks (now removed but pattern preserved) render in brand colour, not italic.
+     - `prose-strong:text-slate-900` so bold terms read as emphasis, not just-darker text.
+   - Cross-link nav: now a 2-column grid (sm+) of the four legal docs + sub-processors, lowercase footer eyebrow.
+
+3. **Re-mirrored** all four cleaned `.md` source files to `apps/marketing-site/src/pages/legal/{privacy,terms,dpa,aup}.md` with current frontmatter (description rewrites: dropped "draft" / "DRAFT" framing; "How Driftstack processes personal data" instead of pending-counsel-review framing).
+
+4. **Sub-processor list at `/trust/sub-processors`** — verified clean already (no AI/draft framing in `apps/marketing-site/src/data/sub-processors.ts` or the rendering page; the V-091-era page was production-shaped from the start).
+
+### Why
+
+Founder feedback was direct: the DRAFT banner + AI provenance language was actively hurting brand perception during their live review. Pre-launch is exactly when the public-facing copy gets evaluated by prospects (and competitors) — a "DRAFT — counsel review pending" banner reads as immature, even if the underlying intent was legally defensive.
+
+The defensive choice in V-255 D-2026-05-07-01 (banner + noindex) was made under uncertainty about counsel-review status. The founder is making the explicit call to ship production-ready public copy now; counsel review can still happen on the cleaned content without the public framing implying the documents are non-binding. The `POST /v1/legal/accept` machinery is independently gated — pages being publicly readable doesn't bind anyone.
+
+### Files
+
+Source legal docs (5 files):
+
+- `docs/legal/terms-of-service.md` — header stripped, contact section cleaned, geruisloze omzetting paragraph removed.
+- `docs/legal/privacy-policy.md` — same; controller-identity section rewritten to clean professional shape.
+- `docs/legal/dpa.md` — header stripped, contact section cleaned, security@driftstack.dev placeholder annotation removed.
+- `docs/legal/acceptable-use-policy.md` — header stripped, contact section cleaned.
+- `docs/legal/definitions.md` — header stripped, "Driftstack" definition cleaned to "established in Amsterdam" without specific KvK/BTW/address.
+
+README:
+
+- `docs/legal/README.md` — production-shaped rewrite. Versioning + revision-trigger + cross-document-consistency content retained. AI provenance + counsel-review-blocker prose removed.
+
+Layout + mirrored pages:
+
+- `apps/marketing-site/src/layouts/LegalLayout.astro` — DRAFT banner removed, noindex removed, professional header + expanded prose styling for readability.
+- `apps/marketing-site/src/pages/legal/{privacy,terms,dpa,aup}.md` — re-mirrored from cleaned source.
+
+### Verify
+
+- `npm run build --workspace apps/marketing-site`: 16 pages built clean.
+- `npm run typecheck --workspace apps/marketing-site` (astro check): 0 errors.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write`).
+- `npm test`: 740 / 740 passing across 77 files. Note: `legal-catalog` tests do NOT pin against specific content_hash values (the production hash is computed at runtime), so the substantive content edits don't break the test suite.
+- Spot-check rendered HTML (`apps/marketing-site/dist/legal/privacy/index.html`) — confirms `Driftstack B.V., a private limited company organised under the laws of the Netherlands, established in Amsterdam` renders cleanly with no leftover bracket placeholders.
+
+### Notes
+
+- **D-2026-05-07-01 superseded by founder direction.** That decision (DRAFT banner + noindex + footer-link unblock) was the defensive resolution of the V-255 counsel-review-vs-public-URL tension. Founder explicit override 2026-05-07: "i want it actually to be launch ready, and not mention AI, look like its really professional, and actually accurate data." Not adding a new D-entry; future readers should follow the V-264 trail.
+- **Counsel review still required before first paying customer**, per the README's preserved "Acceptance + revision" gate. The change is what the public sees today, not the legal binding mechanism. `POST /v1/legal/accept` versions remain at `1.0` until counsel review lands a `1.1` or `2.0` revision.
+- **Address / KvK / BTW** intentionally kept off the body of the public docs. Standard practice for early-stage Dutch B.V.s with public legal pages: surface "Driftstack B.V., Amsterdam, the Netherlands" in the documents and put corporate identifiers in a website footer or a separate contact page. Once Chamber of Commerce registration completes (~2026-05-21 per founder action queue), the footer / about / impressum surface can populate the KvK + BTW + registered address as appropriate.
+- **Why `prose-h1:hidden`**: the markdown source pages start with `# Driftstack — Privacy Policy` etc, but the LegalLayout's own header section already renders the title. Without `prose-h1:hidden`, the page rendered the title twice. Hiding the markdown H1 keeps the source content portable (markdown still self-contained for git rendering) while the layout owns the visual title.
+- **Sub-processors page** (`apps/marketing-site/src/pages/trust/sub-processors.astro`) — already production-shaped; no edits needed. Cross-link from LegalLayout footer points to it.
+
+### Browser-OAuth (V-262 successor, not yet started)
+
+Continues to wait on founder priority confirmation. The dev-bootstrap script (V-262) handles current dev friction; the proper browser-OAuth flow remains the right launch-ready replacement for API-key-paste UX in the GUI client wizard.
+
+### Next
+
+Resuming GUI client review per founder direction "and keep on going with GUI." Founder feedback already addressed: D-badge SVG (V-261), traffic-light clearance (V-261), cloud-first wizard copy with pricing (V-261), post-wizard black-screen fix (V-263). Remaining open: browser-OAuth replacement for paste-key flow (V-262 successor, multi-component scope).

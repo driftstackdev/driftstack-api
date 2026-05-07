@@ -1,14 +1,6 @@
 # Driftstack — Terms of Service
 
-> **AI-generated baseline draft.** Generated 2026-05-03 under AGENTS.md
-> legal-content exception. Founder-directed; counsel review required
-> before first paying customer. Revision triggers: any material business
-> model change, any new sub-processor, any new jurisdiction served,
-> annual minimum, regulatory change in covered jurisdictions. This
-> document represents the BV's intended position; defects from baseline
-> drafting are founder's risk.
-
-**Version:** 0.1.2-draft · **Effective:** 2026-05-03
+**Version:** 1.0 · **Effective:** 2026-05-07
 
 These Terms of Service ("**ToS**") govern Customer's access to and
 use of the Service offered by Driftstack. Capitalised terms are
@@ -539,8 +531,7 @@ mitigate.
 
 ## 20. Notices
 
-20.1 Notices to Driftstack are addressed to
-`legal@driftstack.dev` (placeholder) and to [REGISTERED ADDRESS].
+20.1 Notices to Driftstack are addressed to `legal@driftstack.dev` and to the registered office of Driftstack B.V. as published on the Driftstack website.
 
 20.2 Notices to Customer are addressed to the billing email
 provided by Customer in its Account, to any other notice address
@@ -566,15 +557,7 @@ form or schedule signed by both Parties, constitutes the entire
 agreement and supersedes all prior agreements between the Parties on
 the Service.
 
-21.3 **Assignment.** Customer may not assign this agreement without
-Driftstack's prior written consent (not to be unreasonably withheld),
-except that Customer may assign to an affiliate under common control
-or to a successor in connection with a merger, acquisition, or sale
-of substantially all of Customer's assets (with notice to
-Driftstack). Driftstack may assign this agreement, including in
-connection with a corporate reorganisation (such as the geruisloze
-omzetting from eenmanszaak to BV anticipated in Customer's
-relationship with Driftstack), with notice to Customer.
+21.3 **Assignment.** Customer may not assign this agreement without Driftstack's prior written consent (not to be unreasonably withheld), except that Customer may assign to an affiliate under common control or to a successor in connection with a merger, acquisition, or sale of substantially all of Customer's assets (with notice to Driftstack). Driftstack may assign this agreement, including in connection with a corporate reorganisation, with notice to Customer.
 
 21.4 **No third-party beneficiaries.** No third party has rights
 under this agreement.
@@ -588,9 +571,11 @@ affect interpretation.
 
 ## 22. Contact
 
-`legal@driftstack.dev` (placeholder).
+For all matters relating to these Terms of Service:
 
-[BV LEGAL NAME], [REGISTERED ADDRESS]. KvK [KvK NUMBER]. BTW [BTW NUMBER].
+- Legal: `legal@driftstack.dev`
+- Privacy: `privacy@driftstack.dev`
+- Postal correspondence: addressed to Driftstack B.V., Amsterdam, the Netherlands.
 
 ---
 

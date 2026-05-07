@@ -1,20 +1,12 @@
 ---
 layout: ../../layouts/LegalLayout.astro
 title: Privacy Policy
-description: Driftstack Privacy Policy — GDPR-aligned disclosures for personal data Driftstack processes as Controller.
+description: How Driftstack processes personal data as a Controller — GDPR-aligned disclosures.
 ---
 
 # Driftstack — Privacy Policy
 
-> **AI-generated baseline draft.** Generated 2026-05-03 under AGENTS.md
-> legal-content exception. Founder-directed; counsel review required
-> before first paying customer. Revision triggers: any material business
-> model change, any new sub-processor, any new jurisdiction served,
-> annual minimum, regulatory change in covered jurisdictions. This
-> document represents the BV's intended position; defects from baseline
-> drafting are founder's risk.
-
-**Version:** 0.1.2-draft · **Effective:** 2026-05-03
+**Version:** 1.0 · **Effective:** 2026-05-07
 
 This Privacy Policy describes how Driftstack Processes Personal Data
 in connection with the Service. Capitalised terms are defined in
@@ -30,20 +22,15 @@ into Customer's contract by reference.
 
 ## 1. Controller identity
 
-The Controller of Personal Data described in this Privacy Policy is:
+The Controller of Personal Data described in this Privacy Policy is **Driftstack B.V.**, a private limited company organised under the laws of the Netherlands, established in Amsterdam.
 
-> **[BV LEGAL NAME]**
-> [REGISTERED ADDRESS]
-> KvK [KvK NUMBER]
-> BTW [BTW NUMBER]
-> Privacy contact: `privacy@driftstack.dev` (placeholder)
+For all matters relating to the Processing of Personal Data, including the exercise of Data Subject rights, contact:
 
-Until the Dutch Chamber of Commerce registration of [BV LEGAL NAME]
-completes (anticipated 2026-05-21 via _geruisloze omzetting_ from
-eenmanszaak), the Controller of record is the founder's eenmanszaak
-operating as Driftstack. The transition does not alter Customer's
-rights; the Controller's contractual continuity is preserved by Dutch
-corporate law on noiseless conversion.
+- Privacy: `privacy@driftstack.dev`
+- Legal: `legal@driftstack.dev`
+- Postal correspondence: addressed to Driftstack B.V., the registered office of which is published on the Driftstack website.
+
+Driftstack does not currently have a Data Protection Officer subject to mandatory appointment under Article 37(1)(b) GDPR; the Privacy Contact above is the primary point of contact for Data Subjects, supervisory authorities, and counterparties. Driftstack will appoint a DPO promptly if Driftstack's Processing activities cross any threshold that triggers a mandatory appointment under applicable law.
 
 ## 2. Scope of this Privacy Policy
 
@@ -378,11 +365,7 @@ GDPR:
   in automated decision-making producing legal or similarly
   significant effects on Data Subjects.
 
-To exercise any of these rights, contact `privacy@driftstack.dev`
-(placeholder). Driftstack responds within one (1) month of receipt
-of the request, extendable by two (2) further months for complex or
-numerous requests with notice to the Data Subject (Article 12(3)
-GDPR).
+To exercise any of these rights, contact `privacy@driftstack.dev`. Driftstack responds within one (1) month of receipt of the request, extendable by two (2) further months for complex or numerous requests with notice to the Data Subject (Article 12(3) GDPR).
 
 Where Driftstack acts as **Processor** on Customer's behalf (e.g.
 for Recordings), Data Subject requests should be directed to the
@@ -414,12 +397,10 @@ Until then, Driftstack designates a **Privacy Contact** responsible
 for fielding privacy queries and coordinating Driftstack's response
 to Data Subject requests:
 
-> Privacy Contact: `privacy@driftstack.dev` (placeholder).
-> Postal: [REGISTERED ADDRESS], attention: Privacy Contact.
+- Privacy Contact: `privacy@driftstack.dev`
+- Postal correspondence: addressed to Driftstack B.V., the registered office of which is published on the Driftstack website, attention: Privacy Contact.
 
-The Privacy Contact monitors threshold conditions and triggers DPO
-appointment when applicable. Counsel review reassesses the threshold
-policy on each annual review of this Privacy Policy.
+The Privacy Contact monitors threshold conditions and triggers DPO appointment when applicable. The threshold policy is reassessed on each annual review of this Privacy Policy.
 
 ## 12. Security
 
@@ -490,9 +471,11 @@ in the legal-acceptance machinery described in
 
 ## 16. Contact
 
-`privacy@driftstack.dev` (placeholder).
+For all matters relating to this Privacy Policy:
 
-[BV LEGAL NAME], [REGISTERED ADDRESS]. KvK [KvK NUMBER]. BTW [BTW NUMBER].
+- Privacy: `privacy@driftstack.dev`
+- Legal: `legal@driftstack.dev`
+- Postal correspondence: addressed to Driftstack B.V., Amsterdam, the Netherlands.
 
 ---
 

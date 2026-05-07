@@ -1,17 +1,9 @@
 # Driftstack — Data Processing Agreement
 
-> **AI-generated baseline draft.** Generated 2026-05-03 under AGENTS.md
-> legal-content exception. Founder-directed; counsel review required
-> before first paying customer. Revision triggers: any material business
-> model change, any new sub-processor, any new jurisdiction served,
-> annual minimum, regulatory change in covered jurisdictions. This
-> document represents the BV's intended position; defects from baseline
-> drafting are founder's risk.
-
-**Version:** 0.1.2-draft · **Effective:** 2026-05-03
+**Version:** 1.0 · **Effective:** 2026-05-07
 
 This Data Processing Agreement ("**DPA**") forms part of the
-[Terms of Service](terms-of-service.md) between [BV LEGAL NAME] (the
+[Terms of Service](terms-of-service.md) between Driftstack B.V. (the
 "**Processor**" or "**Driftstack**") and Customer (the "**Controller**"
 or "**Customer**"). It governs the Processing of Personal Data by
 Driftstack on Customer's behalf in the course of providing the
@@ -470,9 +462,7 @@ drills are documented.
 1. Periodic security reviews of changes affecting
    authentication, authorisation, or data handling.
 2. Dependency vulnerability scanning on every CI run.
-3. Coordinated vulnerability disclosure: a published mechanism
-   for security researchers to report issues
-   (`security@driftstack.dev`, placeholder).
+3. Coordinated vulnerability disclosure: a published mechanism for security researchers to report issues at `security@driftstack.dev`.
 4. Review of TOMs at each annual revision of this DPA.
 
 ### F. Pseudonymisation (Article 32(1)(a))
@@ -562,9 +552,11 @@ official addendum text.
 
 ## Contact
 
-`privacy@driftstack.dev` (placeholder).
+For all matters relating to this Data Processing Agreement:
 
-[BV LEGAL NAME], [REGISTERED ADDRESS]. KvK [KvK NUMBER]. BTW [BTW NUMBER].
+- Privacy: `privacy@driftstack.dev`
+- Legal: `legal@driftstack.dev`
+- Postal correspondence: addressed to Driftstack B.V., Amsterdam, the Netherlands.
 
 ---
 

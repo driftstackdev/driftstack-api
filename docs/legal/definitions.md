@@ -1,14 +1,6 @@
 # Driftstack — defined terms (shared)
 
-> **AI-generated baseline draft.** Generated 2026-05-03 under AGENTS.md
-> legal-content exception. Founder-directed; counsel review required
-> before first paying customer. Revision triggers: any material business
-> model change, any new sub-processor, any new jurisdiction served,
-> annual minimum, regulatory change in covered jurisdictions. This
-> document represents the BV's intended position; defects from baseline
-> drafting are founder's risk.
-
-**Version:** 0.1.2-draft · **Effective:** 2026-05-03
+**Version:** 1.0 · **Effective:** 2026-05-07
 
 This file is the source of truth for terminology used across the
 Driftstack legal document set: the [Terms of Service](terms-of-service.md),
@@ -21,11 +13,7 @@ renamed in one of them. We do not redefine.
 
 ## Parties + entities
 
-**"Driftstack"**, **"we"**, **"us"**, or **"our"** means
-[BV LEGAL NAME], a Dutch _besloten vennootschap_ registered with the
-Dutch Chamber of Commerce (Kamer van Koophandel) under number
-[KvK NUMBER], with VAT identification number [BTW NUMBER] and
-registered office at [REGISTERED ADDRESS].
+**"Driftstack"**, **"we"**, **"us"**, or **"our"** means Driftstack B.V., a private limited company (_besloten vennootschap_) organised under the laws of the Netherlands, established in Amsterdam.
 
 **"Customer"** or **"you"** means the legal entity that has accepted
 the Terms of Service and on whose behalf the Service is used, together

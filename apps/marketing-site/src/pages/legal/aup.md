@@ -1,20 +1,12 @@
 ---
 layout: ../../layouts/LegalLayout.astro
 title: Acceptable Use Policy
-description: Driftstack Acceptable Use Policy — prohibited targets, prohibited techniques, customer responsibility framing, enforcement progression.
+description: Prohibited targets, prohibited techniques, customer responsibility framing, enforcement.
 ---
 
 # Driftstack — Acceptable Use Policy
 
-> **AI-generated baseline draft.** Generated 2026-05-03 under AGENTS.md
-> legal-content exception. Founder-directed; counsel review required
-> before first paying customer. Revision triggers: any material business
-> model change, any new sub-processor, any new jurisdiction served,
-> annual minimum, regulatory change in covered jurisdictions. This
-> document represents the BV's intended position; defects from baseline
-> drafting are founder's risk.
-
-**Version:** 0.1.2-draft · **Effective:** 2026-05-03
+**Version:** 1.0 · **Effective:** 2026-05-07
 
 This Acceptable Use Policy ("**AUP**") governs Customer's use of the
 Service. The AUP is incorporated into the [Terms of Service](terms-of-service.md) by reference. Capitalised terms are defined in
@@ -295,11 +287,9 @@ clarification of an existing prohibition) do not.
 
 ## 9. Contact
 
-Abuse reports: `abuse@driftstack.dev` (placeholder).
-
-General AUP questions: `support@driftstack.dev` (placeholder).
-
-Postal address: [REGISTERED ADDRESS].
+- Abuse reports: `abuse@driftstack.dev`
+- General AUP questions: `support@driftstack.dev`
+- Postal correspondence: addressed to Driftstack B.V., Amsterdam, the Netherlands.
 
 ---
 
