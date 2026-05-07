@@ -14579,3 +14579,69 @@ If founder wants the pages PULLED until counsel review (i.e. revert to footer-40
 ### Next
 
 V-256 — five customer-facing topic pages (`quickstart`, `sdks/installation`, `license-activation`, `profile-management`, `sessions/lifecycle`) authored fresh under `apps/docs/src/pages/`. Founder direction: SHIPPED features only, working code samples, locked pricing per ADR-004.
+
+## V-256 — Five customer-facing topic pages drafted on apps/docs
+
+### What
+
+Per founder direction 2026-05-07 (extended Tier-3 content authority): five fresh topic pages authored under `apps/docs/src/pages/`, each verified against shipped endpoints + locked pricing per ADR-004.
+
+New pages (all with `[Draft — founder review pending]` markers + working code samples):
+
+- `pages/quickstart.md` — top-level. Signup → API key → install SDK → first session in five minutes. Working TS / Python / Go samples that use only shipped endpoints (`sessions.create`, `sessions.navigate`, `sessions.capture`, `sessions.destroy`).
+- `pages/sdk/installation.md` — full install + configure for TS (npm-published), Python (alpha), Go (alpha). Resource matrix. Versioning cross-link.
+- `pages/license-activation.md` — top-level. GUI client first-run wizard mapped to the shipped flow in `apps/gui-client/src/views/FirstRunWizard.tsx` (Welcome → Mode → API key → First profile → Done). Cloud vs self-hosted toggle. Keychain storage notes per platform. Switching deployments. Update flow via Tauri Updater.
+- `pages/guides/profile-management.md` — full profile CRUD against `/v1/profiles`. Endpoint shapes verified against `packages/api-types/src/profiles.ts` (`ProfileSchema`, `CreateProfileRequestSchema`). Tier-cap table (Trial=1 / Solo=10 / Team=50 / Agency=200 / API Starter=25 / API Builder=100 / API Scale=500) per ADR-004. Archetype pinning behaviour.
+- `pages/guides/session-lifecycle.md` — state diagram (ready → active → destroyed), concurrency caps per tier per ADR-004, drive methods (navigate/interact/wait/state), capture semantics, idle-timeout, error shapes (429/402/404/409/503), webhook event references.
+
+Nav update: `apps/docs/src/data/nav.ts` adds two new sections:
+
+- "Get started" → Quickstart, License activation
+- Expanded "Guides" → Guides overview, Profile management, Session lifecycle
+- Expanded "SDKs" → SDK overview, Installation, Versioning policy
+
+Section ordering: Overview / Get started / SDKs / Guides / API reference / Webhooks. New customer's first click lands on Quickstart; Reference + Architecture remain at the bottom for spec-level depth.
+
+### Why
+
+A customer landing on `docs.driftstack.dev` with an API key in hand needed five tangible answers between signup and first successful session. Three of those (Quickstart, Installation, Lifecycle) are launch-critical onboarding surface; License activation specifically unblocks the GUI client's first-run, and Profile management is the single most-confusing concept for customers used to ephemeral browser automation. Drafted now so V-258's CF Pages deploy has real content to ship; founder reviews post-launch under V-NNN+.
+
+### Files
+
+- `apps/docs/src/data/nav.ts` — expanded.
+- `apps/docs/src/pages/quickstart.md` — new.
+- `apps/docs/src/pages/license-activation.md` — new.
+- `apps/docs/src/pages/sdk/installation.md` — new.
+- `apps/docs/src/pages/guides/profile-management.md` — new.
+- `apps/docs/src/pages/guides/session-lifecycle.md` — new.
+
+### Verify
+
+- `npm run build --workspace apps/docs`: 13 pages built clean.
+- `npm run typecheck --workspace apps/docs` (astro check): 0 errors / 0 warnings.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` on the five new `.md` files).
+- `npm test`: 740 / 740 passing across 77 files.
+
+### Notes — content-fidelity audit
+
+Verified explicit content claims against shipped code/contracts:
+
+- Quickstart code samples — `sessions.create` / `sessions.navigate` / `sessions.capture` / `sessions.destroy` all map to endpoints in `apps/server/src/routes/sessions.ts`. The TS sample matches the `@driftstack/sdk` 0.1.6 surface (verified against `packages/sdk-typescript/README.md`).
+- SDK Python `client.account.me()` exists (per FirstRunWizard usage). Resource matrix verified against `packages/sdk-python/README.md`.
+- Go install path: `github.com/driftstackdev/driftstack-api/packages/sdk-go` (per `packages/sdk-go/README.md`).
+- License activation: five-step wizard mapping verified verbatim against header comment in `apps/gui-client/src/views/FirstRunWizard.tsx`.
+- Profile-cap table per ADR-004 (Solo=10 / Team=50 / Agency=200 / Starter=25 / Builder=100 / Scale=500). Trial=1 per ADR-003.
+- Concurrent-cap table per ADR-004 (Trial=1 / Solo Manual=1 / Team Manual=3 / Agency Manual=8 / API Starter=2 / API Builder=8 / API Scale=24).
+- Locked archetype slug `iphone16pro_ios18_7_safari26_4` referenced in `packages/api-types/src/profiles.ts` (CreateProfileRequestSchema docstring).
+
+### Notes — explicit deferrals to founder review
+
+- The "What ships, what's planned" matrix in SDK installation page calls Streaming Responses + Recording Playback as ⏳ planned; founder may want to remove if those features aren't on the launch board, or add additional rows.
+- The session-lifecycle page calls out a planned `sessions.reconnect()` API. If the launch board doesn't include this, founder may want to delete the "What's NOT in the lifecycle yet" section.
+- The "first paying customers get a direct response window" line on the Quickstart's troubleshooting block is a tone choice; if founder wants a softer or harder framing, easy edit.
+- Profile-binding-via-`profile_id` field is described as "lands when the additive field stabilises" — verify the rollout timing or remove the speculative text if `profile_id` ships before launch.
+
+### Next
+
+V-257 — doc site landing improvements + cross-references. Then V-258 (Cloudflare Pages deploy for apps/docs + founder runbook for required GitHub secrets) → V-259 (CF Pages config for marketing site if missing).
