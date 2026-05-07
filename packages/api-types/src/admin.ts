@@ -181,6 +181,9 @@ export const AdminAuditActionSchema = z.enum([
   'incident.created',
   'incident.updated',
   'incident.resolved',
+  // V-295c3-tombstone: status-page email subscriber admin actions.
+  'status_subscriber.force_unsubscribed',
+  'status_subscriber.purged',
 ]);
 export type AdminAuditAction = z.infer<typeof AdminAuditActionSchema>;
 

@@ -16959,3 +16959,63 @@ V-295c3-followup (~2-4h) — incident notification fan-out (when `IncidentsServi
 ### Next
 
 V-295c3-tombstone-purge (~2-3h) — scheduled-jobs entry that purges email-column from `status_subscribers` rows where `unsubscribed_at < now - 90d`. Plus a small admin endpoint for "list confirmed subscribers" + "force-unsubscribe (abuse)". Then V-295d (Twitter/Slack notifications via webhook URL) and V-295e (real-time WebSocket + SLA reporting). NEVER STOP per founder direction.
+
+## V-295c3-tombstone — 90d email purge + admin list/force-unsubscribe
+
+**Tier**: 1 — Customer-trust + privacy compliance. Seventh slice of V-295.
+
+**Why**: V-295c3 promised in Privacy §3.10 that "the address itself is purged from this row 90 days after unsubscribe." V-295c3-tombstone closes that gap. Also adds the admin "list/force-unsubscribe" endpoints recorded as future work in V-295c3 notes.
+
+**Scope**
+
+- Schema: `status_subscribers.email` made nullable. Purged rows keep all other columns (id, created_at, unsubscribed_at) so the row persists per privacy promise; only the address is zeroed. Migration `0027_v295c3_tombstone_purge.sql` also extends `admin_audit_action` enum with `status_subscriber.force_unsubscribed` + `status_subscriber.purged`.
+- Service: 4 new methods on `StatusSubscribersService`:
+  - `listAll({ limit, offset })` — admin paginated read.
+  - `forceUnsubscribe(id, now)` — admin authority (no token required); idempotent if already unsubscribed.
+  - `processPurge(now, retentionMs)` — purges email column on rows where unsubscribed_at < now - 90d. Returns id+email snapshot for audit-logging.
+  - Repo extensions: `listAll`, `getById`, `listPurgeCandidates`, `purgeEmails`.
+- Admin endpoints:
+  - `GET /v1/admin/status-subscribers?limit=&offset=` — paginated list with `sub_<uuid>` public IDs.
+  - `POST /v1/admin/status-subscribers/:id/force-unsubscribe` — V-281 dual-write audit log via try/catch wrapper.
+- Bootstrap: 5th poller (24h cadence) that calls `processPurge`. Always-active in production; teardown clears the timer alongside the existing four.
+- Defensive null-narrowing in service: `confirm()`, `unsubscribe()`, `IncidentNotificationsService.fanOut()` all check `email !== null` before sending. Purged rows defensively bail out (the invariant says purged rows have no tokens, so these branches are unreachable in production — guards exist purely for type safety).
+- Idempotent purge: `email IS NOT NULL` guard in `listPurgeCandidates` ensures already-purged rows aren't re-processed. Test verifies: second call after first finds zero candidates.
+
+**Files**
+
+- `apps/server/src/db/schema.ts` — `email` nullable + 2 new admin_audit_action enum values.
+- `apps/server/src/db/migrations/0027_v295c3_tombstone_purge.sql` — new.
+- `apps/server/src/db/migrations/meta/_journal.json` — entry for idx 27.
+- `apps/server/src/services/admin-audit.ts` — 2 new audit-action union members.
+- `packages/api-types/src/admin.ts` — 2 new audit-action enum values.
+- `apps/server/src/services/status-subscribers.ts` — `listAll` / `forceUnsubscribe` / `processPurge` + null-narrowing in `confirm` + `unsubscribe`.
+- `apps/server/src/services/incident-notifications.ts` — null-narrowing in `fanOut`.
+- `apps/server/src/db/status-subscribers-repo.ts` — `listAll` / `getById` / `listPurgeCandidates` / `purgeEmails`.
+- `apps/server/src/routes/admin-status-subscribers.ts` — new (2 endpoints).
+- `apps/server/src/lib/app.ts` — admin route registration.
+- `apps/server/src/lib/bootstrap.ts` — 5th setInterval (24h purge poller) + teardown.
+- `apps/server/tests/integration/_helpers/in-memory-status-subscribers-repo.ts` — repo extensions.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — fixture exposes `statusSubscribersService` for direct purge invocation.
+- `apps/server/tests/integration/status-subscribers-tombstone.test.ts` — new (8 tests covering admin list / force-unsubscribe / 90d purge / no-touch-active / idempotent).
+
+### Verify
+
+- `npm test`: 880 / 880 passing across 92 files (was 872 / 91; +8 tombstone tests).
+- `npm run lint`: clean. Sub-processor mirror: 10 ↔ 11.
+- `npm run format:check`: clean.
+- Server typecheck: clean.
+
+### Notes — methodology choices
+
+- **Email column nullable, not row deleted**: Privacy §3.10 explicitly says the row remains. Deleting would (a) remove the audit trail of who unsubscribed when, and (b) allow re-subscribing from the same address without the tombstone gate. NULL preserves both.
+- **PostgreSQL UNIQUE allows multiple NULLs**: standard behavior — multiple purged rows coexist without conflict. No partial-unique-index gymnastics needed.
+- **Snapshot-before-mutation in `processPurge`**: in-memory repo's `purgeEmails` mutates the row object in-place, so the candidates list (returned by `listPurgeCandidates`) gets its email field nulled by the same mutation. Snapshotting `{id, email}` BEFORE calling `purgeEmails` keeps the return value stable. Drizzle repo doesn't have this issue (rows are fresh selects), but the snapshot also matches the audit-log promise: "WHEN purged AND for which email."
+- **5th poller (24h cadence) instead of scheduled-jobs**: V-202d scheduled-jobs is for time-shifted one-shot work. The purge is genuinely recurring. Same pattern as V-295b/V-295c2 (setInterval with try/catch + unref). 24h is fine — rows are eligible for 90 days; missing a day-1 tick means the purge runs day-2, well within tolerance.
+- **Defensive null-narrowing in confirm/unsubscribe/fanOut**: the invariant is that confirmTokenHash + unsubscribeTokenHash are NULL for purged rows (purgeEmails clears them). So the lookups by token hash in `confirm` / `unsubscribe` / `fanOut` should never return a purged row. The narrowing guards exist purely for type safety; documented inline.
+- **Force-unsubscribe is idempotent**: re-calling on an already-unsubscribed row returns the email without re-writing `unsubscribed_at`. Audit log still writes the action (admin took the action; the invariance is just that the underlying state didn't change).
+- **No `purgeAll` admin endpoint**: the purge is automated; manual override would invite "but I want this address gone NOW" support tickets. Force-unsubscribe + waiting 90d is the documented path.
+- **Public ID prefix `sub_<uuid>`**: matches `inc_` (V-295a) / `incu_` (V-295a) / `aud_` (V-281) admin scheme.
+
+### Next
+
+V-295d (~2-3h Tier-1) — Twitter/Slack outbound notifications via configurable webhook URLs (no Twitter API direct integration; the same outbound-webhook pattern Slack uses). Then V-295e (~3-4h) — SSE on /v1/status/stream + SLA reporting from cron snapshots. Then V-296 → V-303+ V-294 customer-trust catalog continuation. NEVER STOP — 8h+ autopilot through founder sleep window.

@@ -204,6 +204,8 @@ export interface TestAppFixture {
   incidentsRepo: InMemoryIncidentsRepo;
   /** V-295c3 — exposed so tests can assert subscriber state. */
   statusSubscribersRepo: InMemoryStatusSubscribersRepo;
+  /** V-295c3-tombstone — exposed for direct purge invocation in tests. */
+  statusSubscribersService: StatusSubscribersService;
   /** V-295c3 — recording email service: tests can read .sends to assert
    *  exactly which template fired with what variables. */
   emailSends: ReadonlyArray<EmailSendRecord>;
@@ -646,6 +648,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountAuditRepo,
     incidentsRepo,
     statusSubscribersRepo,
+    statusSubscribersService,
     emailSends,
     rateLimitOverridesRepo,
     sessionsRepo,

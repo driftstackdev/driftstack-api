@@ -27,7 +27,10 @@ export type AdminAuditAction =
   // V-295a: status-page incident management.
   | 'incident.created'
   | 'incident.updated'
-  | 'incident.resolved';
+  | 'incident.resolved'
+  // V-295c3-tombstone: status-page email subscriber admin actions.
+  | 'status_subscriber.force_unsubscribed'
+  | 'status_subscriber.purged';
 
 export interface AdminAuditLogRow {
   id: string;

@@ -22,6 +22,7 @@ import type { AccountsAdminService } from '../services/admin-accounts.js';
 import type { IncidentsService } from '../services/incidents.js';
 import type { StatusSubscribersService } from '../services/status-subscribers.js';
 import { registerStatusSubscribeRoutes } from '../routes/status-subscribe.js';
+import { registerAdminStatusSubscribersRoutes } from '../routes/admin-status-subscribers.js';
 import type { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import type { LegalService } from '../services/legal.js';
 import type { EmailPreferencesService } from '../services/email-preferences.js';
@@ -264,6 +265,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerStatusSubscribeRoutes(app, {
       service: deps.statusSubscribersService,
       rateLimitStore: deps.rateLimitStore,
+    });
+    registerAdminStatusSubscribersRoutes(app, {
+      service: deps.statusSubscribersService,
+      audit: deps.adminAuditService,
     });
   }
   registerAdminWebhookRoutes(app, {

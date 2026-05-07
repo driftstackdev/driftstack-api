@@ -58,6 +58,10 @@ export class IncidentNotificationsService {
     let ok = 0;
     let failed = 0;
     for (const sub of recipients) {
+      // V-295c3-tombstone — listConfirmed only returns rows where
+      // unsubscribed_at IS NULL, so email IS NOT NULL by invariant
+      // (purge only fires post-unsubscribe). Guard for type-narrowing.
+      if (sub.email === null) continue;
       try {
         const unsubPlaintext = await this.subscribers.rotateUnsubscribeToken(sub.id);
         const unsubscribeLink = `${this.baseUrl}/subscribe/unsubscribe?token=${encodeURIComponent(

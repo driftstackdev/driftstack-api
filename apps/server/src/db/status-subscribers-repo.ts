@@ -1,6 +1,6 @@
 // V-295c3 — Drizzle-backed StatusSubscribersRepo.
 
-import { and, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
 import type { StatusSubscriberRow, StatusSubscribersRepo } from '../services/status-subscribers.js';
 import type { Database } from './client.js';
 import { statusSubscribers } from './schema.js';
@@ -124,5 +124,48 @@ export class DrizzleStatusSubscribersRepo implements StatusSubscribersRepo {
         and(isNotNull(statusSubscribers.confirmedAt), isNull(statusSubscribers.unsubscribedAt)),
       );
     return rows.map(toRow);
+  }
+
+  async listAll(opts: { limit: number; offset: number }): Promise<StatusSubscriberRow[]> {
+    const rows = await this.database.db
+      .select()
+      .from(statusSubscribers)
+      .orderBy(desc(statusSubscribers.createdAt))
+      .limit(opts.limit)
+      .offset(opts.offset);
+    return rows.map(toRow);
+  }
+
+  async getById(id: string): Promise<StatusSubscriberRow | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(statusSubscribers)
+      .where(eq(statusSubscribers.id, id))
+      .limit(1);
+    return row ? toRow(row) : null;
+  }
+
+  async listPurgeCandidates(cutoff: Date): Promise<StatusSubscriberRow[]> {
+    const rows = await this.database.db
+      .select()
+      .from(statusSubscribers)
+      .where(and(lt(statusSubscribers.unsubscribedAt, cutoff), isNotNull(statusSubscribers.email)));
+    return rows.map(toRow);
+  }
+
+  async purgeEmails(ids: readonly string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const result = await this.database.db
+      .update(statusSubscribers)
+      .set({
+        email: null,
+        // Clear the tokens too — they're all derivative of the email.
+        confirmTokenHash: null,
+        confirmExpiresAt: null,
+        unsubscribeTokenHash: null,
+      })
+      .where(inArray(statusSubscribers.id, [...ids]))
+      .returning({ id: statusSubscribers.id });
+    return result.length;
   }
 }

@@ -87,6 +87,41 @@ export class InMemoryStatusSubscribersRepo implements StatusSubscribersRepo {
     return this.rows.filter((r) => r.confirmedAt !== null && r.unsubscribedAt === null);
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async listAll(opts: { limit: number; offset: number }): Promise<StatusSubscriberRow[]> {
+    return [...this.rows]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(opts.offset, opts.offset + opts.limit);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async getById(id: string): Promise<StatusSubscriberRow | null> {
+    return this.rows.find((r) => r.id === id) ?? null;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async listPurgeCandidates(cutoff: Date): Promise<StatusSubscriberRow[]> {
+    return this.rows.filter(
+      (r) => r.unsubscribedAt !== null && r.unsubscribedAt < cutoff && r.email !== null,
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async purgeEmails(ids: readonly string[]): Promise<number> {
+    let n = 0;
+    for (const id of ids) {
+      const row = this.rows.find((r) => r.id === id);
+      if (row && row.email !== null) {
+        row.email = null;
+        row.confirmTokenHash = null;
+        row.confirmExpiresAt = null;
+        row.unsubscribeTokenHash = null;
+        n++;
+      }
+    }
+    return n;
+  }
+
   /** Test-only — exposes raw rows for assertions. */
   getAll(): readonly StatusSubscriberRow[] {
     return this.rows;

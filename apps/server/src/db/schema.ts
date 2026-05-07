@@ -115,6 +115,9 @@ export const adminAuditAction = pgEnum('admin_audit_action', [
   'incident.created',
   'incident.updated',
   'incident.resolved',
+  // V-295c3-tombstone: status-page email subscriber admin actions.
+  'status_subscriber.force_unsubscribed',
+  'status_subscriber.purged',
 ]);
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1196,7 +1199,10 @@ export const statusSubscribers = pgTable(
     id: uuid('id')
       .primaryKey()
       .default(sql`gen_random_uuid()`),
-    email: text('email').notNull().unique(),
+    /** Null only when V-295c3-tombstone purge has zeroed the email out
+     *  (90d post-unsubscribe per Privacy §3.10). PostgreSQL UNIQUE
+     *  allows multiple NULLs, so purged rows coexist. */
+    email: text('email').unique(),
     /** sha256 hex of confirm-token plaintext. Null after confirmation. */
     confirmTokenHash: text('confirm_token_hash'),
     confirmExpiresAt: timestamp('confirm_expires_at', { withTimezone: true }),

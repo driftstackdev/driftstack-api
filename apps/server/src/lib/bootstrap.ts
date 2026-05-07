@@ -609,6 +609,38 @@ export async function createProductionDeps(
     : null;
   statusSnapshotTimer?.unref();
 
+  // V-295c3-tombstone — daily status-subscriber email-purge poller.
+  // Privacy §3.10 promises 90d post-unsubscribe email zero-out. Runs
+  // every 24 hours; first tick fires 24h after boot (acceptable —
+  // rows that just unsubscribed have 90 days before they're eligible
+  // anyway). Audit-logs each purge as a system action (no admin actor)
+  // — done via writes to admin_audit_log with the special
+  // 'status_subscriber.purged' action and adminAccountId set to null.
+  // The audit-log repo accepts null adminAccountId for system actions.
+  const STATUS_PURGE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+  const statusPurgeTimer = setInterval(() => {
+    void (async () => {
+      try {
+        const result = await statusSubscribersService.processPurge(new Date());
+        if (result.purged.length > 0) {
+          logger.info(
+            { component: 'status-subscriber-purge', count: result.purged.length },
+            'purged status-subscriber emails (90d post-unsubscribe)',
+          );
+        }
+      } catch (err) {
+        logger.warn(
+          {
+            component: 'status-subscriber-purge',
+            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+          },
+          'status-subscriber-purge threw unexpectedly (interval continues)',
+        );
+      }
+    })();
+  }, STATUS_PURGE_INTERVAL_MS);
+  statusPurgeTimer.unref();
+
   let torn = false;
   async function teardown(): Promise<void> {
     if (torn) return;
@@ -620,6 +652,7 @@ export async function createProductionDeps(
     clearInterval(validationHarnessTimer);
     if (healthProbeTimer) clearInterval(healthProbeTimer);
     if (statusSnapshotTimer) clearInterval(statusSnapshotTimer);
+    clearInterval(statusPurgeTimer);
     try {
       await sentry.flush(2000);
       await sentry.close(2000);
