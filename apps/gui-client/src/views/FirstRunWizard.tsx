@@ -27,6 +27,7 @@
 
 import { useEffect, useState } from 'react';
 import { Driftstack } from '@driftstack/sdk';
+import { TitleBar } from '../components/TitleBar';
 import { useSettings } from '../lib/SettingsContext';
 
 type WizardStep = 'welcome' | 'mode' | 'apikey' | 'profile' | 'done';
@@ -83,7 +84,7 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
 
   return (
     <div className="flex h-screen w-screen flex-col bg-surface-base">
-      <TitleBar />
+      <TitleBar subtitle="setup" />
       <main className="flex flex-1 items-center justify-center overflow-auto p-8">
         <div className="w-full max-w-xl">
           <Stepper current={step} />
@@ -112,24 +113,6 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
           {step === 'profile' && <ProfileStep onSkip={finish} onCreated={finish} />}
         </div>
       </main>
-    </div>
-  );
-}
-
-// ─── chrome ───────────────────────────────────────────────────────
-
-function TitleBar(): JSX.Element {
-  return (
-    <div
-      data-tauri-drag-region="true"
-      className="flex h-9 select-none items-center justify-between border-b border-surface-divider bg-surface-raised px-3"
-    >
-      <div className="flex items-center gap-2">
-        <div className="h-3.5 w-3.5 rounded-sm bg-accent" />
-        <span className="text-sm font-medium text-ink-primary">Driftstack</span>
-        <span className="mono text-ink-muted">·</span>
-        <span className="mono text-ink-secondary">setup</span>
-      </div>
     </div>
   );
 }
@@ -221,12 +204,18 @@ function ModeStep({
     <section>
       <h2 className="text-xl font-semibold text-ink-primary">Cloud or self-hosted?</h2>
       <p className="mt-2 text-sm text-ink-secondary">
-        Cloud means your sessions run on Driftstack's Mac Mini fleet. Self-hosted means you've
-        deployed the Driftstack server on your own infrastructure.
+        Almost everyone should choose <strong>Cloud</strong>. Self-hosted is for advanced teams
+        running their own Mac fleet — much higher cost and operational overhead.
       </p>
 
       <div className="mt-6 flex flex-col gap-3">
-        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-surface-divider bg-surface-raised p-4 hover:border-accent">
+        <label
+          className={`flex cursor-pointer items-start gap-3 rounded-md border p-4 transition ${
+            mode === 'cloud'
+              ? 'border-accent bg-surface-raised'
+              : 'border-surface-divider bg-surface-raised hover:border-accent'
+          }`}
+        >
           <input
             type="radio"
             name="mode"
@@ -235,14 +224,32 @@ function ModeStep({
             className="mt-1"
           />
           <div className="flex-1">
-            <div className="text-sm font-medium text-ink-primary">Cloud (recommended)</div>
-            <div className="mt-1 text-xs text-ink-secondary">
-              Connect to <span className="mono">api.driftstack.dev</span>. Driftstack runs the
-              fleet, handles updates, billing via Stripe.
+            <div className="flex items-baseline gap-2">
+              <div className="text-sm font-medium text-ink-primary">Cloud</div>
+              <span className="rounded-sm bg-accent-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
+                Recommended
+              </span>
             </div>
+            <div className="mt-1 text-xs text-ink-secondary">
+              From <strong>$2.99 trial pack</strong> or <strong>$79/mo</strong> Solo Manual.
+              Driftstack runs the fleet, handles updates, and bills via Stripe. Connects to{' '}
+              <span className="mono">api.driftstack.dev</span>.
+            </div>
+            <ul className="mt-2 space-y-0.5 text-[11px] text-ink-muted">
+              <li>• No hardware to buy or maintain</li>
+              <li>• Sessions ready in seconds</li>
+              <li>• Auto-updates, monitoring, and support included</li>
+            </ul>
           </div>
         </label>
-        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-surface-divider bg-surface-raised p-4 hover:border-accent">
+
+        <label
+          className={`flex cursor-pointer items-start gap-3 rounded-md border p-4 transition ${
+            mode === 'self-hosted'
+              ? 'border-accent bg-surface-raised'
+              : 'border-surface-divider bg-surface-base hover:border-surface-divider'
+          }`}
+        >
           <input
             type="radio"
             name="mode"
@@ -251,11 +258,25 @@ function ModeStep({
             className="mt-1"
           />
           <div className="flex-1">
-            <div className="text-sm font-medium text-ink-primary">Self-hosted</div>
-            <div className="mt-1 text-xs text-ink-secondary">
-              Connect to your own Driftstack server. Default{' '}
-              <span className="mono">http://localhost:7780</span>; change below if needed.
+            <div className="flex items-baseline gap-2">
+              <div className="text-sm font-medium text-ink-primary">Self-hosted</div>
+              <span className="rounded-sm border border-surface-divider px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-ink-muted">
+                Advanced
+              </span>
             </div>
+            <div className="mt-1 text-xs text-ink-secondary">
+              License from <strong>$1,000/mo</strong> on top of the Mac hardware you provide and
+              operate yourself. Pick this only if you already run your own Driftstack server.
+              Default <span className="mono">http://localhost:7780</span>; override below if your
+              server lives elsewhere.
+            </div>
+            <ul className="mt-2 space-y-0.5 text-[11px] text-ink-muted">
+              <li>• Bring your own Mac mini / Studio fleet</li>
+              <li>• Operate updates, backups, and capacity yourself</li>
+              <li>
+                • Pricing details: <span className="mono">driftstack.dev/pricing</span>
+              </li>
+            </ul>
             {mode === 'self-hosted' && (
               <input
                 type="url"

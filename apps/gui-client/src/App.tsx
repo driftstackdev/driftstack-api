@@ -7,6 +7,7 @@
 // history stack to integrate with.
 
 import { useEffect, useState } from 'react';
+import { TitleBar } from './components/TitleBar';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { ConnectivityView } from './views/ConnectivityView';
@@ -78,9 +79,10 @@ function Shell(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const mode = deploymentLabel(settings.baseUrl);
   return (
     <div className="flex h-screen w-screen flex-col bg-surface-base">
-      <TitleBar />
+      <TitleBar subtitle={mode} right={<span className="section-label">v0.0.1</span>} />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar current={view} onNavigate={setView} />
         <main className="flex-1 overflow-auto bg-surface-base">
@@ -170,28 +172,6 @@ function deploymentLabel(baseUrl: string): 'cloud' | 'self-hosted' {
     // since cloud customers wouldn't typo their base URL).
     return 'self-hosted';
   }
-}
-
-function TitleBar(): JSX.Element {
-  const { settings } = useSettings();
-  const mode = deploymentLabel(settings.baseUrl);
-  return (
-    <div
-      data-tauri-drag-region="true"
-      className="flex h-9 select-none items-center justify-between
-                 border-b border-surface-divider bg-surface-raised px-3"
-    >
-      <div className="flex items-center gap-2">
-        <div className="h-3.5 w-3.5 rounded-sm bg-accent" />
-        <span className="text-sm font-medium text-ink-primary">Driftstack</span>
-        <span className="mono text-ink-muted">·</span>
-        <span className="mono text-ink-secondary">{mode}</span>
-      </div>
-      <div className="flex items-center gap-2 text-ink-muted">
-        <span className="section-label">v0.0.1</span>
-      </div>
-    </div>
-  );
 }
 
 interface SidebarProps {

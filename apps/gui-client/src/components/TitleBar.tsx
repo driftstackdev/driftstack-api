@@ -1,0 +1,75 @@
+// V-261 — shared TitleBar component for the GUI client.
+//
+// Replaces the two duplicated TitleBar functions previously inlined in
+// `App.tsx` and `views/FirstRunWizard.tsx`. Single source of truth for:
+//   - the brand mark (proper inline D-badge SVG, not a flat colour box)
+//   - macOS traffic-light clearance (titleBarStyle: 'Overlay' in
+//     tauri.conf.json puts the close/min/max buttons over the top-left
+//     of the window; without left padding the in-app title text sits
+//     under them)
+//   - drag region (`data-tauri-drag-region` makes the bar a draggable
+//     handle for window movement)
+//
+// Subtitle is optional; right-side slot is for version label / status
+// pills / similar small chrome.
+
+import type { ReactNode } from 'react';
+
+const isMac = typeof navigator !== 'undefined' && navigator.platform.startsWith('Mac');
+
+interface Props {
+  subtitle?: string;
+  right?: ReactNode;
+}
+
+export function TitleBar({ subtitle, right }: Props): JSX.Element {
+  return (
+    <div
+      data-tauri-drag-region="true"
+      className={`flex h-9 select-none items-center justify-between border-b border-surface-divider bg-surface-raised pr-3 ${
+        isMac ? 'pl-20' : 'pl-3'
+      }`}
+    >
+      <div className="flex items-center gap-2" data-tauri-drag-region="true">
+        <DBadge />
+        <span className="text-sm font-medium text-ink-primary">driftstack</span>
+        {subtitle ? (
+          <>
+            <span className="mono text-ink-muted">·</span>
+            <span className="mono text-ink-secondary">{subtitle}</span>
+          </>
+        ) : null}
+      </div>
+      {right ? <div className="flex items-center gap-2 text-ink-muted">{right}</div> : null}
+    </div>
+  );
+}
+
+// Inline SVG mirrors the favicon in apps/marketing-site/src/layouts/
+// BaseLayout.astro — oxblood-700 (#722F37) rounded square with a white
+// "D" in serif type. Render at 18×18 in the title bar; the SVG scales
+// without aliasing.
+function DBadge(): JSX.Element {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 64 64"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <rect width="64" height="64" rx="12" fill="#722F37" />
+      <text
+        x="32"
+        y="42"
+        textAnchor="middle"
+        fill="white"
+        fontFamily="Georgia,serif"
+        fontSize="34"
+        fontWeight="700"
+      >
+        D
+      </text>
+    </svg>
+  );
+}

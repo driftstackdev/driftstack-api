@@ -14863,3 +14863,81 @@ If founder wants more autopilot work overnight, three queue candidates:
 3. **Wire `deploy-docs.yml` to also run on PRs** with build-only (no upload) — current deploy workflows only run post-merge; building on PRs would catch regressions earlier. Same pattern would apply to all four CF deploy workflows.
 
 All three are sub-1hr Tier 1 work. Pick whichever matches founder priority on wake.
+
+## V-261 — GUI client first-run polish: shared TitleBar + cloud-first mode framing
+
+### What
+
+Per founder direct feedback while reviewing the live GUI (2026-05-07 ~11:50 local):
+
+> "the icon is just a red box, and the X — minimize etc are interfering with the title of the GUI. Cloud / self-hosted, should be mentioned that most new users always use cloud, as its far cheaper, only advanced users would go for self-hosted eventually, should be clear about pricing first of all if they would go with self-hosted, and the differences at the GUI"
+
+Three independent fixes shipped together:
+
+1. **Shared `TitleBar` component** at `apps/gui-client/src/components/TitleBar.tsx`:
+   - Replaces the two duplicated inline TitleBar functions (one in `App.tsx`, one in `views/FirstRunWizard.tsx`) — single source of truth.
+   - Brand mark: proper inline SVG D-badge (oxblood-700 rounded square + white "D" in serif), matching the favicon SVG used in `apps/marketing-site/src/layouts/BaseLayout.astro`. Replaces the prior `bg-accent` flat coloured box that the founder called out as "just a red box."
+   - macOS traffic-light clearance: detects `navigator.platform.startsWith('Mac')` at module load and applies `pl-20` (80px) on macOS / `pl-3` elsewhere. Tauri 2's `titleBarStyle: 'Overlay'` (set in `tauri.conf.json`) puts the close/min/max buttons over the top-left of the window; without left padding the in-app title text was sitting under them.
+   - Wordmark uses lowercase `driftstack` (matches V-219 + Footer wordmark).
+   - Optional `subtitle` prop (e.g. "setup", "cloud", "self-hosted") and `right` slot (e.g. version label).
+   - `data-tauri-drag-region="true"` on the container + brand cluster so the whole bar drags the window.
+
+2. **Wizard `ModeStep` rewrite** (`apps/gui-client/src/views/FirstRunWizard.tsx`):
+   - Lead copy now reads: _"Almost everyone should choose Cloud. Self-hosted is for advanced teams running their own Mac fleet — much higher cost and operational overhead."_
+   - **Cloud option** (selected by default, visually prominent):
+     - "Recommended" pill (`bg-accent-subtle text-accent`).
+     - Pricing context: _"From $2.99 trial pack or $79/mo Solo Manual."_
+     - Three bullet differentiators: no hardware, sessions in seconds, auto-updates + monitoring + support included.
+   - **Self-hosted option** (visually muted, "Advanced" pill):
+     - Pricing context surfaced upfront: _"License from $1,000/mo on top of the Mac hardware you provide and operate yourself. Pick this only if you already run your own Driftstack server."_
+     - Three bullet differentiators: bring your own Mac fleet, operate updates/backups/capacity yourself, pricing pointer to driftstack.dev/pricing.
+
+3. **Removed duplicated TitleBar** from `App.tsx` and `FirstRunWizard.tsx`. Both now import + use the shared component.
+
+### Why
+
+Founder feedback was direct and accurate:
+
+- The flat red box wasn't reading as a brand mark; the proper D-badge SVG matches what visitors see on driftstack.dev.
+- macOS traffic-light overlap was a real visual collision — title text rendered partially under the close button in some window widths.
+- Cloud-vs-self-hosted framing was technically neutral but missed the commercial reality (Cloud is $79–$1,499/mo; self-hosted is $1,000+/mo + hardware + ops). Cloud-first framing matches both ADR-004 pricing and customer-acquisition reality (almost no first-time customer should choose self-hosted).
+
+### Files
+
+- `apps/gui-client/src/components/TitleBar.tsx` — new shared component.
+- `apps/gui-client/src/App.tsx` — imports shared TitleBar; passes subtitle (deployment label) + right (version) props; inline TitleBar removed.
+- `apps/gui-client/src/views/FirstRunWizard.tsx` — imports shared TitleBar with subtitle="setup"; ModeStep copy + visual treatment rewritten; inline TitleBar removed.
+
+### Verify
+
+- `npm run typecheck --workspace apps/gui-client`: clean.
+- `npm run build --workspace apps/gui-client`: 261 modules, 19.71 kB CSS / 303.86 kB JS gzipped.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write`).
+- `npm test`: 740 / 740 passing across 77 files.
+- Manual: founder reviewed live during Tauri hot-reload; first-run wizard now shows proper D-badge, no traffic-light collision, cloud-first framing.
+
+### Notes
+
+- The shared TitleBar's `pl-20` is macOS-conditional. On Windows / Linux the standard OS title bar lives on the right edge or is fully native, so the 80px left padding isn't needed there. `navigator.platform` is a reliable signal in the Tauri webview.
+- Pricing values (`$2.99 trial pack`, `$79/mo`, `$1,000/mo`) are pulled directly from ADR-004; no new pricing decisions made.
+- "Advanced" badge styling is a muted border (`border-surface-divider`) instead of the brand `bg-accent-subtle` — explicit visual de-emphasis vs the recommended Cloud option.
+- Did NOT change the welcome step copy (founder feedback didn't flag it). If they want the welcome to also lead cloud-first, that's a separate one-line edit.
+
+### Browser-OAuth flow (founder feedback, parked as V-262)
+
+> "find api key might be kinda hard / usually not the way it goes for non tech users, usually it opens up browser to login, to sync, might be more secure also"
+
+This is the right direction long-term. Implementation is a multi-component project:
+
+1. **Backend**: new endpoints `POST /v1/auth/cli-authorize/initiate` (returns short-lived authorization code + browser URL) + `POST /v1/auth/cli-authorize/exchange` (exchanges code for an API key bound to the requesting CLI/GUI install).
+2. **Customer dashboard**: new page `app.driftstack.dev/cli/authorize?code=…` that authenticates the user (signup or login), verifies the code, and confirms the GUI activation. Standard OAuth-style consent screen + scoped API key issuance.
+3. **GUI client**: register a custom URL scheme handler (`driftstack://auth/callback?code=…`) via Tauri 2's deep-link plugin. Wizard's API-key step replaced with "Sign in with browser" → opens system browser → user logs in → browser redirects back via deep link → GUI exchanges code for API key.
+4. **Cross-platform**: Tauri's deep-link plugin works on macOS, Windows, Linux. Each platform requires URL scheme registration (info.plist on macOS, registry on Windows, .desktop file on Linux); Tauri handles this via the bundle config.
+
+Not shippable in the next hour (multi-component work). Surfacing as **V-262** in the next-steps queue with founder direction expected after current GUI review wraps. Until V-262 lands, the API-key paste flow remains the wizard's path.
+
+### Next
+
+- **V-262** — browser-OAuth activation flow (multi-component scope: backend + dashboard + GUI deep-link). Awaiting founder confirmation on priority vs other engineering work.
+- The dev-server bootstrap path I just walked the founder through (signup → verify-email via debug_token → accept 4 legal docs with content_hash → POST /v1/api-keys) is also a candidate for a `bin/dev-bootstrap.sh` script. Reduces friction the next time anyone needs to spin up a working API key against local dev.
