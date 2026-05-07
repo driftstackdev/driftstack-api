@@ -60,6 +60,20 @@ export interface R2 {
 }
 
 export function createR2Client(config: R2Config): R2 {
+  return createR2ClientForBucket(config, config.bucketRecordings);
+}
+
+/**
+ * V-295c2 — factory for the public-snapshot bucket. Same R2 credentials,
+ * different bucket. Returns null when the public bucket is not configured;
+ * callers (status-snapshot writer) treat this as "feature disabled".
+ */
+export function createR2PublicClient(config: R2Config): R2 | null {
+  if (!config.bucketPublic) return null;
+  return createR2ClientForBucket(config, config.bucketPublic);
+}
+
+function createR2ClientForBucket(config: R2Config, bucket: string): R2 {
   const clientConfig: S3ClientConfig = {
     region: 'auto',
     endpoint: config.endpointUrl,
@@ -71,7 +85,6 @@ export function createR2Client(config: R2Config): R2 {
     forcePathStyle: false,
   };
   const s3 = new S3Client(clientConfig);
-  const bucket = config.bucketRecordings;
 
   return {
     bucket,

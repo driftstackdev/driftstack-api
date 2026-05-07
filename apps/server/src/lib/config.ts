@@ -23,6 +23,14 @@ const ConfigSchema = z.object({
       accessKeyId: z.string().min(1),
       secretAccessKey: z.string().min(1),
       bucketRecordings: z.string().min(1),
+      /**
+       * V-295c2 — separate public-readable bucket for the status-page
+       * snapshot. MUST be a different bucket from bucketRecordings —
+       * recordings contain Customer Data and must remain private. The
+       * public bucket holds operational JSON only (incident snapshots).
+       * Optional: when null, status-snapshot writer is disabled.
+       */
+      bucketPublic: z.string().min(1).nullable(),
       endpointUrl: z.string().url(),
     })
     .nullable(),
@@ -112,11 +120,19 @@ function readR2Config(env: NodeJS.ProcessEnv): R2Config | null {
   const accessKeyId = env.R2_ACCESS_KEY_ID;
   const secretAccessKey = env.R2_SECRET_ACCESS_KEY;
   const bucketRecordings = env.R2_BUCKET_RECORDINGS;
+  const bucketPublic = env.R2_BUCKET_PUBLIC ?? null;
   const endpointUrl = env.R2_ENDPOINT_URL;
   if (!accountId || !accessKeyId || !secretAccessKey || !bucketRecordings || !endpointUrl) {
     return null;
   }
-  return { accountId, accessKeyId, secretAccessKey, bucketRecordings, endpointUrl };
+  return {
+    accountId,
+    accessKeyId,
+    secretAccessKey,
+    bucketRecordings,
+    bucketPublic,
+    endpointUrl,
+  };
 }
 
 function readPostmarkConfig(env: NodeJS.ProcessEnv): PostmarkConfig | null {

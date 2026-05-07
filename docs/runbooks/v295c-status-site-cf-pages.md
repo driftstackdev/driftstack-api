@@ -29,7 +29,42 @@ takes over; future commits to `main` redeploy the static bundle from
    - `PUBLIC_API_BASE_URL` = `https://api.driftstack.dev` (production)
      and `https://api.staging.driftstack.dev` (preview, once staging
      exists; for now leave preview = production).
+   - `PUBLIC_STATUS_R2_URL` = the public-readable URL of the R2 status
+     snapshot, e.g. `https://r2-public.driftstack.dev/status/incidents-public.json`.
+     Required for the V-295c2 R2 fallback when the live API is
+     unreachable. The R2 bucket must have a custom public domain (see
+     "R2 public domain" section below).
 6. Click **Save and Deploy**. The first build runs ~90s.
+
+## R2 public bucket (V-295c2 fallback)
+
+The status site falls back to a public R2 object when the live API is
+unreachable. **A separate R2 bucket** holds this object — the recordings
+bucket stays private (it contains Customer Data; making it public would
+be a compliance break).
+
+Setup:
+
+1. Cloudflare dashboard → **R2** → **Create bucket** →
+   `driftstack-public` (or chosen name). Region: same as the recordings
+   bucket (EU per data-residency).
+2. New bucket → **Settings** → **Public access** → **Custom domain** →
+   connect `r2-public.driftstack.dev` (or chosen subdomain). Add the
+   matching CNAME in the DNS panel as Cloudflare prompts.
+3. Set the API server env `R2_BUCKET_PUBLIC` to the new bucket name in
+   the Hetzner deploy `.env`. (The same R2 credentials that already
+   write the recordings bucket work for the public bucket — both share
+   the same R2 token; bucket-level scoping is enforced by the bucket
+   name in the request.)
+4. Restart the API server (or wait for the next deploy). Within 60s
+   after restart, the snapshot writer poller should produce the file.
+5. Confirm the public URL works:
+   `curl -sS https://r2-public.driftstack.dev/status/incidents-public.json`
+   should return JSON `{ generated_at, data: [...] }`.
+
+If `R2_BUCKET_PUBLIC` is unset the API server logs a warning at boot and
+the snapshot writer is disabled; the status site then has no fallback
+and shows "Status currently unavailable" if the live API is down.
 
 ## DNS — point status.driftstack.dev at the Pages project
 

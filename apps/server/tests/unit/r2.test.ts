@@ -36,6 +36,7 @@ const config = {
   accessKeyId: 'key',
   secretAccessKey: 'secret',
   bucketRecordings: 'recordings',
+  bucketPublic: null,
   endpointUrl: 'https://acc.r2.cloudflarestorage.com',
 };
 

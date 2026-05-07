@@ -1,11 +1,16 @@
 ---
 import StatusLayout from '../layouts/StatusLayout.astro';
 
-// Build-time API origin. Set via PUBLIC_API_BASE_URL env at build time;
-// the client-side fetch reads from this baked-in constant. Falls back
-// to api.driftstack.dev for production CF Pages builds where the env
-// is not set explicitly.
+// Build-time API origin + R2 fallback URL. Both baked into the page at
+// build time via env. PUBLIC_API_BASE_URL is the live API origin;
+// PUBLIC_STATUS_R2_URL points at the public-readable R2 snapshot
+// (V-295c2: `<r2-public-base>/status/incidents-public.json`). The page
+// tries the live API first and falls back to the snapshot if the API
+// is unreachable.
 const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.dev';
+const R2_FALLBACK_URL =
+  import.meta.env.PUBLIC_STATUS_R2_URL ??
+  'https://r2-public.driftstack.dev/status/incidents-public.json';
 ---
 
 <StatusLayout title="Driftstack — Service status">
@@ -52,7 +57,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   </section>
 </StatusLayout>
 
-<script is:inline define:vars={{ API_BASE }}>
+<script is:inline define:vars={{ API_BASE, R2_FALLBACK_URL }}>
   const SEVERITY_BADGE = {
     minor: ['bg-amber-50', 'text-amber-700'],
     major: ['bg-orange-50', 'text-orange-700'],
@@ -163,16 +168,38 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     });
   }
 
-  async function fetchAndRender() {
-    const list = document.getElementById('incidents-list');
-    if (!list) return;
+  async function fetchSource() {
+    // Primary: live API. Fallback: R2-mirrored snapshot. The snapshot
+    // is up to ~60s stale (V-295c2 poller cadence) but stays available
+    // when the API is unreachable.
     try {
       const res = await fetch(`${API_BASE}/v1/status/incidents`, {
         headers: { accept: 'application/json' },
         cache: 'no-store',
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const body = await res.json();
+      return { source: 'live', body: await res.json() };
+    } catch (apiErr) {
+      try {
+        const r2 = await fetch(R2_FALLBACK_URL, {
+          headers: { accept: 'application/json' },
+          cache: 'no-store',
+        });
+        if (!r2.ok) throw new Error(`R2 HTTP ${r2.status}`);
+        return { source: 'snapshot', body: await r2.json() };
+      } catch (r2Err) {
+        const apiMsg = apiErr instanceof Error ? apiErr.message : String(apiErr);
+        const r2Msg = r2Err instanceof Error ? r2Err.message : String(r2Err);
+        throw new Error(`API ${apiMsg}; R2 fallback ${r2Msg}`);
+      }
+    }
+  }
+
+  async function fetchAndRender() {
+    const list = document.getElementById('incidents-list');
+    if (!list) return;
+    try {
+      const { source, body } = await fetchSource();
       const incidents = Array.isArray(body.data) ? body.data : [];
 
       // Hydrate updates for each open incident in parallel. Resolved
@@ -192,13 +219,24 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       const open = detailed.filter((i) => i.status !== 'resolved');
       const resolved = detailed.filter((i) => i.status === 'resolved');
 
-      const overall =
-        open.some((i) => i.severity === 'outage')
-          ? 'outage'
-          : open.length > 0
-            ? 'degraded'
-            : 'operational';
+      const overall = open.some((i) => i.severity === 'outage')
+        ? 'outage'
+        : open.length > 0
+          ? 'degraded'
+          : 'operational';
       renderOverall(overall, open.length);
+
+      // Surface the data source — when on the R2 snapshot we let
+      // visitors know the data may be slightly stale. Same place as
+      // the loading-state subtext so it's visible without scrolling.
+      if (source === 'snapshot') {
+        const summary = document.getElementById('overall-summary');
+        if (summary) {
+          summary.textContent =
+            (summary.textContent ?? '') +
+            ' · API temporarily unreachable; showing the last cached snapshot (≤60s old).';
+        }
+      }
 
       if (detailed.length === 0) {
         list.innerHTML = `

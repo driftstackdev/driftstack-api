@@ -56,8 +56,23 @@ describe('loadConfig', () => {
       accessKeyId: 'key',
       secretAccessKey: 'secret',
       bucketRecordings: 'recordings',
+      bucketPublic: null,
       endpointUrl: 'https://acc.r2.cloudflarestorage.com',
     });
+  });
+
+  it('reads R2_BUCKET_PUBLIC when set', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      R2_ACCOUNT_ID: 'acc',
+      R2_ACCESS_KEY_ID: 'key',
+      R2_SECRET_ACCESS_KEY: 'secret',
+      R2_BUCKET_RECORDINGS: 'recordings',
+      R2_BUCKET_PUBLIC: 'driftstack-public',
+      R2_ENDPOINT_URL: 'https://acc.r2.cloudflarestorage.com',
+    });
+    expect(cfg.r2?.bucketPublic).toBe('driftstack-public');
   });
 
   it('returns r2: null when any R2 var is missing', () => {

@@ -58,6 +58,7 @@ import { IncidentsService } from '../services/incidents.js';
 import { DrizzleIncidentsRepo } from '../db/incidents-repo.js';
 import { FetchProber, HealthProbeService } from '../services/health-probe.js';
 import { DrizzleProbesRepo } from '../db/health-probes-repo.js';
+import { StatusSnapshotService } from '../services/status-snapshot.js';
 import { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import { LegalService } from '../services/legal.js';
 import { AuthFlowsService } from '../services/auth-flows.js';
@@ -74,7 +75,7 @@ import { RedisAuthCache } from '../services/auth-cache.js';
 import { AuthCoalescer } from '../services/auth-coalescer.js';
 import { RedisRateLimitStore } from '../lib/redis-rate-limit-store.js';
 import { createDriver } from '../drivers/index.js';
-import { createR2Client, r2ReadinessCheck, type R2 } from './r2.js';
+import { createR2Client, createR2PublicClient, r2ReadinessCheck, type R2 } from './r2.js';
 import { createEmailService, type EmailService } from '../services/email.js';
 import { initSentry, type SentryClient } from './sentry.js';
 import type { AppDeps, ReadinessCheck } from './app.js';
@@ -275,6 +276,25 @@ export async function createProductionDeps(
           },
         ],
       })
+    : null;
+
+  // V-295c2 — public status snapshot writer. Writes the same data the
+  // public /v1/status/incidents endpoint surfaces to a SEPARATE
+  // public-readable R2 bucket so the status site can fall back to the
+  // snapshot when the live API fetch fails. The recordings bucket is
+  // intentionally NOT used — recordings contain Customer Data and must
+  // remain private. Active only when R2_BUCKET_PUBLIC is configured.
+  const r2Public = config.r2 !== null ? createR2PublicClient(config.r2) : null;
+  if (config.r2 !== null && r2Public === null) {
+    logger.warn(
+      { component: 'r2-public' },
+      'R2_BUCKET_PUBLIC not set — status-snapshot writer disabled. ' +
+        'Status page will fail open when API is unreachable. ' +
+        'Set R2_BUCKET_PUBLIC + a public custom domain to enable V-295c2 fallback.',
+    );
+  }
+  const statusSnapshotService = r2Public
+    ? new StatusSnapshotService(incidentsService, r2Public, logger)
     : null;
 
   // Legal catalog — reads docs/legal/*.md from the runtime image.
@@ -538,6 +558,29 @@ export async function createProductionDeps(
     : null;
   healthProbeTimer?.unref();
 
+  // V-295c2 — status snapshot poller. Same 60s cadence; independent
+  // of the probe poller so a snapshot failure doesn't stall probe
+  // ticks (and vice versa). Only runs when R2 is configured.
+  const statusSnapshotTimer = statusSnapshotService
+    ? setInterval(() => {
+        void (async () => {
+          try {
+            await statusSnapshotService.processSnapshot(new Date());
+          } catch (err) {
+            logger.warn(
+              {
+                component: 'status-snapshot-poller',
+                err:
+                  err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+              },
+              'status-snapshot processSnapshot threw unexpectedly (interval continues)',
+            );
+          }
+        })();
+      }, POLLER_INTERVAL_MS)
+    : null;
+  statusSnapshotTimer?.unref();
+
   let torn = false;
   async function teardown(): Promise<void> {
     if (torn) return;
@@ -548,6 +591,7 @@ export async function createProductionDeps(
     clearInterval(scheduledJobsTimer);
     clearInterval(validationHarnessTimer);
     if (healthProbeTimer) clearInterval(healthProbeTimer);
+    if (statusSnapshotTimer) clearInterval(statusSnapshotTimer);
     try {
       await sentry.flush(2000);
       await sentry.close(2000);

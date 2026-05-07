@@ -16794,3 +16794,55 @@ V-295c (~6-8h, may split) — public CF Pages status site (status.driftstack.dev
 ### Next
 
 V-295c2 (~4-6h) — R2 snapshot fallback. Bootstrap writes `incidents-public.json` to R2 every probe tick; status page falls back to the R2 URL when the live API fetch fails. Adds resilience: status page stays current even during API outages. Then V-295c3 (~4-6h) — email subscription (`POST /v1/status/subscribe` + Postmark integration + DPA Annex if Postmark scope expands; current Annex already covers Postmark for transactional). NEVER STOP per founder direction.
+
+## V-295c2 — R2 snapshot fallback for status site
+
+**Tier**: 1 — Customer-trust resilience. Fourth slice of V-295.
+
+**Why**: V-295c1 ships the public status page that fetches from the live API. That works when the API is up — but if the API is the thing that's down, the status page can't tell anyone it's down. V-295c2 closes that loop: a 60s background poller writes a JSON snapshot of public incidents to a separate public-readable R2 bucket. The status site tries the live API first, falls back to the R2 URL when that fails, and only shows "currently unavailable" if both sources fail.
+
+**Scope**
+
+- New `StatusSnapshotService` (apps/server/src/services/status-snapshot.ts) — pure-logic service that takes IncidentsService + R2 + logger and writes `status/incidents-public.json` (matching the live API's wire shape).
+- New separate R2 bucket: `R2_BUCKET_PUBLIC` env var, distinct from `R2_BUCKET_RECORDINGS`. Recordings stay private (Customer Data); public bucket is custom-domain-exposed for read-only external access.
+- New `createR2PublicClient()` factory in `lib/r2.ts` — same credentials, different bucket.
+- `R2Config.bucketPublic` config field (nullable).
+- Bootstrap wires a 4th 60s `setInterval` (status-snapshot poller) when `R2_BUCKET_PUBLIC` is set. Independent of the V-295b health-probe poller.
+- Status site index.astro: new `fetchSource()` helper. Tries live API first; falls back to `${R2_FALLBACK_URL}` on any error. When fallback served, the overall-card subtext appends "API temporarily unreachable; showing the last cached snapshot (≤60s old)".
+- Runbook updated with R2-public-bucket setup steps + explicit "do not make recordings bucket public" warning.
+- Changes-log entry: V-295c2 doesn't add legal text — same Cloudflare R2 sub-processor row already covers the public bucket.
+
+**Files**
+
+- `apps/server/src/services/status-snapshot.ts` — new.
+- `apps/server/src/lib/r2.ts` — `createR2PublicClient` factory + shared `createR2ClientForBucket`.
+- `apps/server/src/lib/config.ts` — `bucketPublic` config + `R2_BUCKET_PUBLIC` env.
+- `apps/server/src/lib/bootstrap.ts` — `r2Public` + StatusSnapshotService + 4th poller + teardown.
+- `apps/server/tests/integration/status-snapshot.test.ts` — new (4 tests).
+- `apps/server/tests/unit/r2.test.ts` — fixture extended.
+- `apps/server/tests/unit/config.test.ts` — fixture extended + new "reads R2_BUCKET_PUBLIC when set" test.
+- `apps/status-site/src/pages/index.astro` — `fetchSource()` + R2 fallback + source-aware subtext.
+- `docs/runbooks/v295c-status-site-cf-pages.md` — `R2_BUCKET_PUBLIC` env + new "R2 public bucket" section.
+- `docs/legal/changes-log.md` — V-295c2 entry (no legal-text change).
+
+### Verify
+
+- `npm test`: 858 / 858 passing across 89 files (was 853 / 88; +4 status-snapshot, +1 config test).
+- `npm run lint`: clean. Sub-processor mirror: 10 ↔ 11 (unchanged).
+- `npm run format:check`: clean.
+- Status-site build: clean.
+- Server typecheck: clean.
+
+### Notes — methodology choices
+
+- **Separate public bucket, NOT same bucket public**: making the recordings bucket public would expose Customer Data via custom-domain access. The recordings bucket has no per-key ACL (R2 is bucket-level). A new bucket is the only safe option. The runbook warns explicitly against the alternative.
+- **Same R2 credentials, different bucket**: existing token has bucket-creation scope; bucket-name is the only difference. No new credentials, no new IAM.
+- **Independent poller, not piggybacked on probe poller**: a snapshot write taking 800ms shouldn't block the probe tick. Two separate setIntervals, both unref()-ed, both teardown-cleared.
+- **Fallback JSON shape matches the API exactly**: `{ data: Incident[] }` envelope. The status-site rendering code is source-agnostic. Adds a `generated_at` timestamp at the top level (informational; future "data ≥N minutes old" UI can use it).
+- **Status-site source indicator**: appends to the existing summary line rather than a separate badge. Keeps the page visually identical when the API is up.
+- **Build-time env defaults with hardcoded fallback URL**: if a CF Pages deploy goes out before the R2 public domain is set up, fallback fetch fails; page degrades to "Status currently unavailable" — not worse than no fallback. Runbook step 5 verifies.
+- **No direct test for status-site fallback path**: unit-testing inline `<script>` against a fake fetch is doable but expensive (jsdom + fetch mock). The data path through StatusSnapshotService is fully unit-tested; the JS branching in index.astro is straight `fetch()` orchestration. Consider revisiting with a Playwright e2e in V-295e.
+
+### Next
+
+V-295c3 (~4-6h) — email subscription (`POST /v1/status/subscribe` + new `status_subscribers` table + send-on-incident-create/resolve via Postmark + double-opt-in + unsubscribe link). Privacy/DPA review for new email-collection surface. Then V-295d (Twitter/Slack notifications) and V-295e (real-time WebSocket + SLA reporting). NEVER STOP per founder direction.

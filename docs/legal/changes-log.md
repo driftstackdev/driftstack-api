@@ -40,3 +40,16 @@ references the corresponding rows in this log.
   Driftstack-operational data only — no Customer Data, Account Data,
   or Recording content. No processing-purpose, retention category, or
   data-subject right changes. Reviewed and confirmed during V-295c1.
+
+## 2026-05-07 — V-295c2 (R2 fallback)
+
+- **No legal-document text changes**. V-295c2 introduces a separate
+  R2 bucket (`R2_BUCKET_PUBLIC`) holding `status/incidents-public.json`
+  used as a fallback source when the live API endpoint is unreachable.
+  The bucket holds operational JSON only (incident snapshots) — no
+  Customer Data, no Account Data, no Recording content. The same
+  Cloudflare R2 sub-processor row in DPA Annex 3 covers it (storage
+  vendor doesn't change; only the bucket-name configuration differs).
+  Reviewed against Privacy §3.9 (added in V-295c1) — wording already
+  permits the fallback because the data shown is the same data the
+  live API surfaces.
