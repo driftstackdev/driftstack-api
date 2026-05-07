@@ -29,8 +29,12 @@ export interface IncidentRow {
   public: boolean;
   startedAt: Date;
   resolvedAt: Date | null;
-  createdByAdminId: string;
-  createdByAdminKeyId: string;
+  /** Null when auto-created by V-295b health probe poller. */
+  createdByAdminId: string | null;
+  /** Null when auto-created by V-295b health probe poller. */
+  createdByAdminKeyId: string | null;
+  /** Non-null only for poller-auto-created incidents (e.g. 'api'). */
+  autoProbeTarget: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,8 +44,10 @@ export interface IncidentUpdateRow {
   incidentId: string;
   message: string;
   status: IncidentStatus;
-  postedByAdminId: string;
-  postedByAdminKeyId: string;
+  /** Null when posted by V-295b health probe poller. */
+  postedByAdminId: string | null;
+  /** Null when posted by V-295b health probe poller. */
+  postedByAdminKeyId: string | null;
   postedAt: Date;
 }
 
@@ -53,23 +59,31 @@ export interface CreateIncidentInput {
   affectedComponents: readonly string[];
   public: boolean;
   startedAt: Date;
-  createdByAdminId: string;
-  createdByAdminKeyId: string;
+  /** Null only for V-295b auto-created incidents. */
+  createdByAdminId: string | null;
+  /** Null only for V-295b auto-created incidents. */
+  createdByAdminKeyId: string | null;
+  /** Set only for V-295b auto-created incidents. */
+  autoProbeTarget?: string | null;
 }
 
 export interface AddUpdateInput {
   incidentId: string;
   message: string;
   status: IncidentStatus;
-  postedByAdminId: string;
-  postedByAdminKeyId: string;
+  /** Null only for V-295b auto-posted updates. */
+  postedByAdminId: string | null;
+  /** Null only for V-295b auto-posted updates. */
+  postedByAdminKeyId: string | null;
 }
 
 export interface ResolveIncidentInput {
   incidentId: string;
   message: string;
-  postedByAdminId: string;
-  postedByAdminKeyId: string;
+  /** Null only for V-295b auto-resolved incidents. */
+  postedByAdminId: string | null;
+  /** Null only for V-295b auto-resolved incidents. */
+  postedByAdminKeyId: string | null;
 }
 
 export interface ListIncidentsOpts {
@@ -87,6 +101,11 @@ export interface IncidentsRepo {
   resolve(
     input: ResolveIncidentInput,
   ): Promise<{ incident: IncidentRow; update: IncidentUpdateRow }>;
+  /**
+   * V-295b — find the open auto-incident for a given probe target,
+   * or null. Used by the poller to decide auto-resolve vs. no-op.
+   */
+  findOpenAutoIncident(target: string): Promise<IncidentRow | null>;
 }
 
 export class IncidentsService {
@@ -129,5 +148,10 @@ export class IncidentsService {
     input: ResolveIncidentInput,
   ): Promise<{ incident: IncidentRow; update: IncidentUpdateRow }> {
     return this.repo.resolve(input);
+  }
+
+  /** V-295b — auto-poller hook. */
+  async findOpenAutoIncident(target: string): Promise<IncidentRow | null> {
+    return this.repo.findOpenAutoIncident(target);
   }
 }

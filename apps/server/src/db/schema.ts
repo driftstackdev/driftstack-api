@@ -1082,12 +1082,19 @@ export const incidents = pgTable(
     public: boolean('public').notNull().default(true),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
-    createdByAdminId: uuid('created_by_admin_id')
-      .notNull()
-      .references(() => accounts.id, { onDelete: 'restrict' }),
-    createdByAdminKeyId: uuid('created_by_admin_key_id')
-      .notNull()
-      .references(() => apiKeys.id, { onDelete: 'restrict' }),
+    /** Null when the incident was auto-created by the V-295b health
+     *  probe poller (no admin actor). Non-null for admin-posted ones. */
+    createdByAdminId: uuid('created_by_admin_id').references(() => accounts.id, {
+      onDelete: 'restrict',
+    }),
+    /** Null when auto-created by health probe poller; see above. */
+    createdByAdminKeyId: uuid('created_by_admin_key_id').references(() => apiKeys.id, {
+      onDelete: 'restrict',
+    }),
+    /** V-295b — non-null only for auto-created incidents. The probe target
+     *  whose 3-consecutive-fail triggered creation (e.g. 'api'). Used by the
+     *  poller to find the open auto-incident for auto-resolve. */
+    autoProbeTarget: text('auto_probe_target'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -1098,6 +1105,7 @@ export const incidents = pgTable(
   (t) => [
     index('incidents_started_at_idx').on(t.startedAt),
     index('incidents_public_status_idx').on(t.public, t.status),
+    index('incidents_auto_probe_open_idx').on(t.autoProbeTarget, t.status),
   ],
 );
 
@@ -1112,12 +1120,14 @@ export const incidentUpdates = pgTable(
       .references(() => incidents.id, { onDelete: 'cascade' }),
     message: text('message').notNull(),
     status: incidentStatus('status').notNull(),
-    postedByAdminId: uuid('posted_by_admin_id')
-      .notNull()
-      .references(() => accounts.id, { onDelete: 'restrict' }),
-    postedByAdminKeyId: uuid('posted_by_admin_key_id')
-      .notNull()
-      .references(() => apiKeys.id, { onDelete: 'restrict' }),
+    /** Null when posted by the V-295b auto poller (no admin actor). */
+    postedByAdminId: uuid('posted_by_admin_id').references(() => accounts.id, {
+      onDelete: 'restrict',
+    }),
+    /** Null when posted by the V-295b auto poller; see above. */
+    postedByAdminKeyId: uuid('posted_by_admin_key_id').references(() => apiKeys.id, {
+      onDelete: 'restrict',
+    }),
     postedAt: timestamp('posted_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -1129,3 +1139,34 @@ export type Incident = typeof incidents.$inferSelect;
 export type NewIncident = typeof incidents.$inferInsert;
 export type IncidentUpdate = typeof incidentUpdates.$inferSelect;
 export type NewIncidentUpdate = typeof incidentUpdates.$inferInsert;
+
+// V-295b — health probe history.
+//
+// Each row is one probe attempt against a configured target (e.g. 'api'
+// → http://localhost:3000/health). The poller writes a row every 60s
+// and consults the last 3 rows per target for consecutive-fail / pass
+// thresholding (auto-create / auto-resolve incidents). Rows older than
+// 30 days are pruned by a cleanup tick.
+export const systemHealthProbes = pgTable(
+  'system_health_probes',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    /** Target identifier — matches incidents.auto_probe_target. */
+    target: text('target').notNull(),
+    probedAt: timestamp('probed_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    ok: boolean('ok').notNull(),
+    latencyMs: integer('latency_ms'),
+    /** HTTP status when reachable; null for connection-level failure. */
+    httpStatus: integer('http_status'),
+    /** Short error message when ok=false; null otherwise. */
+    errorMessage: text('error_message'),
+  },
+  (t) => [index('system_health_probes_target_probed_at_idx').on(t.target, t.probedAt)],
+);
+
+export type SystemHealthProbe = typeof systemHealthProbes.$inferSelect;
+export type NewSystemHealthProbe = typeof systemHealthProbes.$inferInsert;

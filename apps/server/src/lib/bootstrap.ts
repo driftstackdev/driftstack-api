@@ -56,6 +56,8 @@ import { AdminAuditService } from '../services/admin-audit.js';
 import { AccountsAdminService } from '../services/admin-accounts.js';
 import { IncidentsService } from '../services/incidents.js';
 import { DrizzleIncidentsRepo } from '../db/incidents-repo.js';
+import { FetchProber, HealthProbeService } from '../services/health-probe.js';
+import { DrizzleProbesRepo } from '../db/health-probes-repo.js';
 import { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import { LegalService } from '../services/legal.js';
 import { AuthFlowsService } from '../services/auth-flows.js';
@@ -256,6 +258,24 @@ export async function createProductionDeps(
   // V-295a — public-status incidents service.
   const incidentsRepo = new DrizzleIncidentsRepo(dbHandle);
   const incidentsService = new IncidentsService(incidentsRepo);
+
+  // V-295b — health-probe poller. The default probe target is this
+  // server's own /health endpoint via env-configured PUBLIC_API_BASE_URL
+  // (Hetzner deploy sets this). When unset (local dev), we skip probing
+  // — there's no useful target to probe from inside the same process.
+  const publicApiBaseUrl = process.env.PUBLIC_API_BASE_URL;
+  const probesRepo = new DrizzleProbesRepo(dbHandle);
+  const healthProbeService = publicApiBaseUrl
+    ? new HealthProbeService(probesRepo, incidentsService, new FetchProber(), logger, {
+        targets: [
+          {
+            id: 'api',
+            label: 'API server',
+            url: `${publicApiBaseUrl.replace(/\/+$/, '')}/health`,
+          },
+        ],
+      })
+    : null;
 
   // Legal catalog — reads docs/legal/*.md from the runtime image.
   // V-051 Dockerfile copies these into the image at build time.
@@ -494,6 +514,30 @@ export async function createProductionDeps(
   }, POLLER_INTERVAL_MS);
   validationHarnessTimer.unref();
 
+  // V-295b — health probe poller. Same 60s cadence; guarded by the
+  // same try/catch so a one-tick failure never kills the interval.
+  // Only runs in environments where PUBLIC_API_BASE_URL is set
+  // (production via Hetzner deploy). Local dev = no-op.
+  const healthProbeTimer = healthProbeService
+    ? setInterval(() => {
+        void (async () => {
+          try {
+            await healthProbeService.processTick(new Date());
+          } catch (err) {
+            logger.warn(
+              {
+                component: 'health-probe-poller',
+                err:
+                  err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+              },
+              'health-probe processTick threw unexpectedly (interval continues)',
+            );
+          }
+        })();
+      }, POLLER_INTERVAL_MS)
+    : null;
+  healthProbeTimer?.unref();
+
   let torn = false;
   async function teardown(): Promise<void> {
     if (torn) return;
@@ -503,6 +547,7 @@ export async function createProductionDeps(
     // doesn't try to acquire a closing redis/db handle.
     clearInterval(scheduledJobsTimer);
     clearInterval(validationHarnessTimer);
+    if (healthProbeTimer) clearInterval(healthProbeTimer);
     try {
       await sentry.flush(2000);
       await sentry.close(2000);

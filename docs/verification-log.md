@@ -16685,3 +16685,54 @@ Standing by for founder Tier-2 ack on the 6 questions before V-295+ starts. V-29
 ### Next
 
 V-295b (~4-6h) — Status auto-polling (Hetzner cron probes /v1/health every 60s, writes incidents to `system_health_probes` table, auto-creates incidents on 3-consecutive-fail). Then V-295c (CF Pages status site + email subscription + privacy/DPA legal updates + `/docs/legal/changes-log.md` creation + V-295c CF Pages founder runbook). NEVER STOP per founder direction.
+
+## V-295b — Status auto-polling + auto-incident on probe failure
+
+**Tier**: 1 — Customer-trust surface, second slice of V-295.
+
+**Why**: V-295a delivered the manual-posting half. V-295b automates the rest: a 60s in-process poller that hits `/health` against the public API URL, records every probe to `system_health_probes`, auto-creates an incident on 3 consecutive failures, and auto-resolves on 3 consecutive successes. Eliminates "I forgot to post" gap; eliminates "I forgot to resolve" gap; gives status.driftstack.dev real signal even when the founder isn't watching.
+
+**Scope**
+
+- New `system_health_probes` table (target / probed_at / ok / latency_ms / http_status / error_message + `target+probed_at` index).
+- Schema mutation: `incidents.created_by_admin_*` + `incident_updates.posted_by_admin_*` made nullable. New `incidents.auto_probe_target` text column (with `(auto_probe_target, status)` index for "find open auto-incident" lookup). Migration `0025_v295b_health_probes.sql`.
+- New `HealthProbeService` with injectable `Prober` interface — pure logic / no fetch / no Date.now in the service path. Default `FetchProber` uses native `fetch` with AbortController timeout. Configurable failure / recovery thresholds (default 3 + 3) + retention window (30d).
+- Hourly automatic prune of probe rows older than retention.
+- Bootstrap wires a third 60s `setInterval` poller next to scheduledJobs + validationHarness. `unref()`-ed; teardown clears all three. Active only when `PUBLIC_API_BASE_URL` is set (production via Hetzner deploy); local dev no-op.
+- Auto-created incidents have `createdByAdminId = null` + `autoProbeTarget = 'api'`. Auto-resolve writes a final `posted_by_admin_id = null` update + stamps `resolved_at`. Manual incidents (with non-null `auto_probe_target = null`) are never touched by the auto-resolve path — invariant tested.
+
+**Files**
+
+- `apps/server/src/db/schema.ts` — `incidents` admin-attribution columns nullable + `autoProbeTarget` + index; `incident_updates` posted-by columns nullable; new `systemHealthProbes` table + index.
+- `apps/server/src/db/migrations/0025_v295b_health_probes.sql` — new (ALTER for nullable + ADD COLUMN + new table + 2 indexes).
+- `apps/server/src/db/migrations/meta/_journal.json` — entry for idx 25.
+- `apps/server/src/services/incidents.ts` — `IncidentRow.createdByAdminId` / `Key` widened to `string | null`; `CreateIncidentInput.autoProbeTarget` added; `IncidentsService.findOpenAutoIncident()` + `IncidentsRepo.findOpenAutoIncident()`.
+- `apps/server/src/services/health-probe.ts` — new (`HealthProbeService`, `FetchProber`, `Prober` interface, `ProbesRepo` interface).
+- `apps/server/src/db/incidents-repo.ts` — `findOpenAutoIncident` + `autoProbeTarget` round-trip in `toRow` / `create`.
+- `apps/server/src/db/health-probes-repo.ts` — new (`DrizzleProbesRepo`).
+- `apps/server/src/lib/bootstrap.ts` — health-probe wiring + 3rd poller setInterval + teardown clearInterval.
+- `apps/server/tests/integration/_helpers/in-memory-incidents-repo.ts` — `findOpenAutoIncident` + `autoProbeTarget`.
+- `apps/server/tests/integration/_helpers/in-memory-probes-repo.ts` — new.
+- `apps/server/tests/integration/health-probe.test.ts` — new (9 tests covering record / threshold / recovery / fail-recover-fail sequence / error swallow / manual-incident isolation).
+
+### Verify
+
+- `npm test`: 853 / 853 passing across 88 files (was 844 / 87; +9 health-probe tests, +1 file).
+- `npm run lint`: clean. Sub-processor mirror linter: 10 public ↔ 11 DPA Annex 3.
+- `npm run format:check`: all matched files use Prettier code style.
+- Server typecheck: clean. `Drizzle pgEnum` + api-types unchanged (no new audit actions in this slice).
+
+### Notes — methodology choices
+
+- **Pure-logic service via injection**: `HealthProbeService` takes `Prober`, `ProbesRepo`, `IncidentsService` + `Logger` only. No fetch / no Date.now / no setInterval inside. Bootstrap wraps it. Tests use a `ScriptedProber` that walks an array of pre-canned `ProbeResult`s. This is the same testability lesson as V-289's `__pollIntervalMs` / `__pollTimeoutMs` opts — externalize all timing-side-effects.
+- **No admin attribution for auto-actions**: making `incidents.created_by_admin_*` nullable is the right model. Other options (a fake "system" account row, a sentinel UUID, a `source` enum) all leak unreal information into the schema. NULL means "no actor"; the `auto_probe_target` column tells you it was the poller, not a human admin.
+- **`auto_probe_target` index on `(target, status)`**: lets the auto-resolve path find the open auto-incident in one indexed lookup per tick. Without the index a scan of all incidents per tick would be O(n) per target.
+- **Hourly prune, not per-tick**: per-tick pruning would N×60 the DELETE op count for a fixed retention. Hourly + only-if-elapsed gives the same outcome at 1/60th the DB load.
+- **`PUBLIC_API_BASE_URL` gate**: probing localhost from the same process is meaningless (the process being probed IS the probe source). Require an external-facing URL. Hetzner deploy will populate this; local dev runs without the poller. No new env validation — absence is documented as the off-state.
+- **Production cadence is V-202d setInterval pattern, not a separate cron**: founder direction in the locked execution order said "Hetzner cron + R2", but in-process setInterval matches the existing V-173 / V-202d / V-218 pattern (60s tick) and avoids needing a separate process. The R2 piece is V-295c (CF Pages mirror), not the polling tick itself. If founder later wants real cron isolation (process resilience to API outage), the same `processTick(now)` interface drops into a separate worker without changing service code.
+- **Probe rows ARE the audit trail for auto-actions**: `system_health_probes` records every probe + outcome + latency + http_status. Combined with `incidents.auto_probe_target` + `incidents.created_at`, you can fully reconstruct why an auto-incident fired. Skipping `admin_audit_log` writes for auto-actions is correct — there is no admin actor to log.
+- **No legal-page update needed for V-295b**: still no new PII processing / sub-processor surface. The probe writes don't touch any account data — only system-level health.
+
+### Next
+
+V-295c (~6-8h, may split) — public CF Pages status site (status.driftstack.dev) reading R2-mirrored snapshots; email subscription via Postmark; privacy-policy "Status page" sub-section + DPA Annex update if email-subscription introduces a sub-processor row; `/docs/legal/changes-log.md` creation per V-293 methodology; V-295c CF Pages founder runbook (DNS + Pages project setup). NEVER STOP per founder direction.

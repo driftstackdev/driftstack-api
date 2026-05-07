@@ -1,6 +1,6 @@
 // V-295a — Drizzle-backed IncidentsRepo.
 
-import { and, desc, eq, gte } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull, ne } from 'drizzle-orm';
 import type {
   AddUpdateInput,
   CreateIncidentInput,
@@ -30,6 +30,7 @@ function toRow(row: IncidentDbRow): IncidentRow {
     resolvedAt: row.resolvedAt,
     createdByAdminId: row.createdByAdminId,
     createdByAdminKeyId: row.createdByAdminKeyId,
+    autoProbeTarget: row.autoProbeTarget,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -63,10 +64,27 @@ export class DrizzleIncidentsRepo implements IncidentsRepo {
         startedAt: input.startedAt,
         createdByAdminId: input.createdByAdminId,
         createdByAdminKeyId: input.createdByAdminKeyId,
+        autoProbeTarget: input.autoProbeTarget ?? null,
       })
       .returning();
     if (!row) throw new Error('incidents insert returned no row');
     return toRow(row);
+  }
+
+  async findOpenAutoIncident(target: string): Promise<IncidentRow | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(incidents)
+      .where(
+        and(
+          eq(incidents.autoProbeTarget, target),
+          ne(incidents.status, 'resolved'),
+          isNotNull(incidents.autoProbeTarget),
+        ),
+      )
+      .orderBy(desc(incidents.startedAt))
+      .limit(1);
+    return row ? toRow(row) : null;
   }
 
   async list(opts: ListIncidentsOpts): Promise<IncidentRow[]> {

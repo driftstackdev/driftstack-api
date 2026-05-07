@@ -31,11 +31,20 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
       resolvedAt: null,
       createdByAdminId: input.createdByAdminId,
       createdByAdminKeyId: input.createdByAdminKeyId,
+      autoProbeTarget: input.autoProbeTarget ?? null,
       createdAt: now,
       updatedAt: now,
     };
     this.incidents.push(row);
     return row;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async findOpenAutoIncident(target: string): Promise<IncidentRow | null> {
+    const row = this.incidents
+      .filter((r) => r.autoProbeTarget === target && r.status !== 'resolved')
+      .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
+    return row ?? null;
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
