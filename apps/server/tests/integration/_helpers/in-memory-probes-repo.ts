@@ -50,6 +50,39 @@ export class InMemoryProbesRepo implements ProbesRepo {
     return removed;
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async countByTargetSince(since: Date): Promise<
+    {
+      target: string;
+      okCount: number;
+      failCount: number;
+      lastProbeAt: Date;
+      lastFailureAt: Date | null;
+    }[]
+  > {
+    const inWindow = this.rows.filter((r) => r.probedAt >= since);
+    const byTarget = new Map<
+      string,
+      { okCount: number; failCount: number; lastProbeAt: Date; lastFailureAt: Date | null }
+    >();
+    for (const row of inWindow) {
+      const cur = byTarget.get(row.target) ?? {
+        okCount: 0,
+        failCount: 0,
+        lastProbeAt: row.probedAt,
+        lastFailureAt: null,
+      };
+      if (row.ok) cur.okCount += 1;
+      else cur.failCount += 1;
+      if (row.probedAt > cur.lastProbeAt) cur.lastProbeAt = row.probedAt;
+      if (!row.ok && (cur.lastFailureAt === null || row.probedAt > cur.lastFailureAt)) {
+        cur.lastFailureAt = row.probedAt;
+      }
+      byTarget.set(row.target, cur);
+    }
+    return Array.from(byTarget.entries()).map(([target, agg]) => ({ target, ...agg }));
+  }
+
   /** Test-only — exposes raw rows for assertions. */
   getAll(): readonly ProbeRecordRow[] {
     return this.rows;

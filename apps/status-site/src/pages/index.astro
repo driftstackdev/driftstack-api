@@ -275,5 +275,29 @@ const R2_FALLBACK_URL =
   }
 
   fetchAndRender();
+
+  // V-295e — real-time SSE updates. Initial render above gives the
+  // user something to look at immediately; the SSE stream then pushes
+  // incident.created / incident.resolved as they fire (within a second
+  // or two of admin posting). Periodic 60s refetch is kept as a safety
+  // net for clients that lose the SSE connection (proxy timeout, network
+  // hiccup) — they still get fresh data within a minute either way.
+  try {
+    const sse = new EventSource(`${API_BASE}/v1/status/stream`);
+    function onIncidentEvent() {
+      // Re-fetch + render — simpler than splicing the event into the
+      // current DOM and lets us keep all rendering logic in one place.
+      // The fetch is cache-disabled so we always pull the new state.
+      fetchAndRender();
+    }
+    sse.addEventListener('incident.created', onIncidentEvent);
+    sse.addEventListener('incident.resolved', onIncidentEvent);
+    sse.addEventListener('error', function () {
+      // EventSource auto-reconnects; nothing to do here. The 60s
+      // safety-net interval below covers extended SSE outages.
+    });
+  } catch (e) {
+    // EventSource unsupported / blocked — fall back to polling only.
+  }
   setInterval(fetchAndRender, 60_000);
 </script>

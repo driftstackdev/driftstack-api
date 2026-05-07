@@ -63,6 +63,8 @@ import { StatusSubscribersService } from '../services/status-subscribers.js';
 import { DrizzleStatusSubscribersRepo } from '../db/status-subscribers-repo.js';
 import { IncidentNotificationsService } from '../services/incident-notifications.js';
 import { IncidentBroadcastService } from '../services/incident-broadcast.js';
+import { IncidentEventBus } from '../services/incident-event-bus.js';
+import { SlaReportingService } from '../services/sla-reporting.js';
 import { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import { LegalService } from '../services/legal.js';
 import { AuthFlowsService } from '../services/auth-flows.js';
@@ -293,18 +295,25 @@ export async function createProductionDeps(
     logger,
   );
 
+  // V-295e — incident event bus (in-process pub/sub for SSE clients).
+  // SlaReportingService constructed below once probesRepo exists.
+  const incidentEventBus = new IncidentEventBus();
+
   // V-295a — public-status incidents service. Lifecycle dispatches both
   // email fan-out AND outbound broadcasts in parallel; one failing
   // doesn't stall the other.
   const incidentsRepo = new DrizzleIncidentsRepo(dbHandle);
   const incidentsService = new IncidentsService(incidentsRepo, {
     onPublicCreated: async (incident, update) => {
+      // V-295e — bus emit is sync + in-process; doesn't need awaiting.
+      incidentEventBus.publishCreated(incident, update);
       await Promise.all([
         incidentNotifications.notifyCreated(incident, update),
         incidentBroadcast.notifyCreated(incident, update),
       ]);
     },
     onPublicResolved: async (incident, update) => {
+      incidentEventBus.publishResolved(incident, update);
       await Promise.all([
         incidentNotifications.notifyResolved(incident, update),
         incidentBroadcast.notifyResolved(incident, update),
@@ -318,6 +327,7 @@ export async function createProductionDeps(
   // — there's no useful target to probe from inside the same process.
   const publicApiBaseUrl = process.env.PUBLIC_API_BASE_URL;
   const probesRepo = new DrizzleProbesRepo(dbHandle);
+  const slaReportingService = new SlaReportingService(probesRepo);
   const healthProbeService = publicApiBaseUrl
     ? new HealthProbeService(probesRepo, incidentsService, new FetchProber(), logger, {
         targets: [
@@ -508,6 +518,8 @@ export async function createProductionDeps(
     accountsAdminService,
     incidentsService,
     statusSubscribersService,
+    incidentEventBus,
+    slaReportingService,
     rateLimitOverridesService,
     legalService,
     emailPreferencesService,

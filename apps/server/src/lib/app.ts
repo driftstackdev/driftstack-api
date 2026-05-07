@@ -23,6 +23,9 @@ import type { IncidentsService } from '../services/incidents.js';
 import type { StatusSubscribersService } from '../services/status-subscribers.js';
 import { registerStatusSubscribeRoutes } from '../routes/status-subscribe.js';
 import { registerAdminStatusSubscribersRoutes } from '../routes/admin-status-subscribers.js';
+import type { IncidentEventBus } from '../services/incident-event-bus.js';
+import type { SlaReportingService } from '../services/sla-reporting.js';
+import { registerStatusStreamRoutes } from '../routes/status-stream.js';
 import type { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import type { LegalService } from '../services/legal.js';
 import type { EmailPreferencesService } from '../services/email-preferences.js';
@@ -119,6 +122,10 @@ export interface AppDeps {
    *  URL used for confirm + unsubscribe links is owned by the service
    *  itself (passed at construction). */
   statusSubscribersService?: StatusSubscribersService;
+  /** V-295e — in-process pub/sub bus for /v1/status/stream SSE. */
+  incidentEventBus?: IncidentEventBus;
+  /** V-295e — rolling 30d SLA reporter for /v1/status/sla. */
+  slaReportingService?: SlaReportingService;
   rateLimitOverridesService: RateLimitOverridesService;
   legalService: LegalService;
   /** V-204: customer email notification preferences. */
@@ -269,6 +276,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAdminStatusSubscribersRoutes(app, {
       service: deps.statusSubscribersService,
       audit: deps.adminAuditService,
+    });
+  }
+  if (deps.incidentEventBus !== undefined && deps.slaReportingService !== undefined) {
+    registerStatusStreamRoutes(app, {
+      bus: deps.incidentEventBus,
+      sla: deps.slaReportingService,
     });
   }
   registerAdminWebhookRoutes(app, {

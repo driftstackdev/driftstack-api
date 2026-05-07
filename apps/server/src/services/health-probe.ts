@@ -70,6 +70,20 @@ export interface ProbesRepo {
   recentForTarget(target: string, n: number): Promise<ProbeRecordRow[]>;
   /** Delete probes older than `before`. Returns count pruned. */
   pruneOlderThan(before: Date): Promise<number>;
+  /**
+   * V-295e — counts of ok/not-ok probes per target since `since`.
+   * Used by the SLA endpoint. Returns one row per target that has
+   * at least one probe in the window.
+   */
+  countByTargetSince(since: Date): Promise<
+    {
+      target: string;
+      okCount: number;
+      failCount: number;
+      lastProbeAt: Date;
+      lastFailureAt: Date | null;
+    }[]
+  >;
 }
 
 export interface HealthProbeServiceConfig {

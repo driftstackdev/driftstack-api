@@ -23,6 +23,9 @@ import { InMemoryStatusSubscribersRepo } from './in-memory-status-subscribers-re
 import { StatusSubscribersService } from '../../../src/services/status-subscribers.js';
 import { IncidentNotificationsService } from '../../../src/services/incident-notifications.js';
 import { IncidentBroadcastService } from '../../../src/services/incident-broadcast.js';
+import { IncidentEventBus } from '../../../src/services/incident-event-bus.js';
+import { SlaReportingService } from '../../../src/services/sla-reporting.js';
+import { InMemoryProbesRepo } from './in-memory-probes-repo.js';
 import type { EmailService } from '../../../src/services/email.js';
 import { RateLimitOverridesService } from '../../../src/services/rate-limit-overrides.js';
 import { LegalService } from '../../../src/services/legal.js';
@@ -213,6 +216,10 @@ export interface TestAppFixture {
   statusSubscribersService: StatusSubscribersService;
   /** V-295d — recorded outbound broadcast HTTP calls (URL + parsed JSON body). */
   broadcastFetchCalls: ReadonlyArray<{ url: string; body: unknown }>;
+  /** V-295e — exposed for direct event-bus subscription in tests. */
+  incidentEventBus: IncidentEventBus;
+  /** V-295e — exposed so tests can seed probe history before calling SLA. */
+  probesRepo: InMemoryProbesRepo;
   /** V-295c3 — recording email service: tests can read .sends to assert
    *  exactly which template fired with what variables. */
   emailSends: ReadonlyArray<EmailSendRecord>;
@@ -376,6 +383,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     { statusPageBaseUrl: 'https://status.driftstack.test' },
   );
 
+  // V-295e — incident event bus + SLA reporting. Probes repo is also
+  // exposed so SLA tests can seed probe history directly.
+  const probesRepo = new InMemoryProbesRepo();
+  const slaReportingService = new SlaReportingService(probesRepo);
+  const incidentEventBus = new IncidentEventBus();
+
   // V-295d — outbound incident broadcasts. Recording fetcher captures
   // POST calls so tests can assert payloads without real HTTP.
   const broadcastFetchCalls: { url: string; body: unknown }[] = [];
@@ -403,12 +416,14 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const incidentsRepo = new InMemoryIncidentsRepo();
   const incidentsService = new IncidentsService(incidentsRepo, {
     onPublicCreated: async (incident, update) => {
+      incidentEventBus.publishCreated(incident, update);
       await Promise.all([
         incidentNotifications.notifyCreated(incident, update),
         incidentBroadcast.notifyCreated(incident, update),
       ]);
     },
     onPublicResolved: async (incident, update) => {
+      incidentEventBus.publishResolved(incident, update);
       await Promise.all([
         incidentNotifications.notifyResolved(incident, update),
         incidentBroadcast.notifyResolved(incident, update),
@@ -657,6 +672,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountsAdminService,
     incidentsService,
     statusSubscribersService,
+    incidentEventBus,
+    slaReportingService,
     rateLimitOverridesService,
     legalService,
     emailPreferencesService,
@@ -689,6 +706,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     statusSubscribersRepo,
     statusSubscribersService,
     broadcastFetchCalls,
+    incidentEventBus,
+    probesRepo,
     emailSends,
     rateLimitOverridesRepo,
     sessionsRepo,

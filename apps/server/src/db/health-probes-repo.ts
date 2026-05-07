@@ -1,6 +1,6 @@
 // V-295b — Drizzle-backed ProbesRepo.
 
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, sql } from 'drizzle-orm';
 import type { ProbeRecordRow, ProbesRepo } from '../services/health-probe.js';
 import type { Database } from './client.js';
 import { systemHealthProbes } from './schema.js';
@@ -61,5 +61,36 @@ export class DrizzleProbesRepo implements ProbesRepo {
       .where(and(lt(systemHealthProbes.probedAt, before)))
       .returning({ id: systemHealthProbes.id });
     return rows.length;
+  }
+
+  async countByTargetSince(since: Date): Promise<
+    {
+      target: string;
+      okCount: number;
+      failCount: number;
+      lastProbeAt: Date;
+      lastFailureAt: Date | null;
+    }[]
+  > {
+    // Single aggregation query — count ok vs not-ok per target, plus
+    // max(probed_at) overall + max(probed_at) where ok=false.
+    const rows = await this.database.db
+      .select({
+        target: systemHealthProbes.target,
+        okCount: sql<string>`count(*) filter (where ${systemHealthProbes.ok} = true)`,
+        failCount: sql<string>`count(*) filter (where ${systemHealthProbes.ok} = false)`,
+        lastProbeAt: sql<Date>`max(${systemHealthProbes.probedAt})`,
+        lastFailureAt: sql<Date | null>`max(${systemHealthProbes.probedAt}) filter (where ${systemHealthProbes.ok} = false)`,
+      })
+      .from(systemHealthProbes)
+      .where(gte(systemHealthProbes.probedAt, since))
+      .groupBy(systemHealthProbes.target);
+    return rows.map((r) => ({
+      target: r.target,
+      okCount: Number(r.okCount),
+      failCount: Number(r.failCount),
+      lastProbeAt: new Date(r.lastProbeAt),
+      lastFailureAt: r.lastFailureAt ? new Date(r.lastFailureAt) : null,
+    }));
   }
 }

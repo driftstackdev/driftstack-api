@@ -17065,3 +17065,59 @@ V-295d (~2-3h Tier-1) — Twitter/Slack outbound notifications via configurable 
 ### Next
 
 V-295e (~3-4h Tier-1) — Server-Sent Events on `/v1/status/stream` for real-time status-page updates + SLA reporting (rolling 30-day uptime per component computed from `system_health_probes` snapshots). Then V-296 (API key rotation flow) → V-303+ per V-294 catalog priority. NEVER STOP autopilot.
+
+## V-295e — SSE on /v1/status/stream + SLA reporting
+
+**Tier**: 1 — Customer-trust real-time signal. Ninth slice of V-295. Closes the V-295 status-page arc.
+
+**Why**: Status site V-295c1 polls every 60s. SSE drops latency from "up to 60s" to "instant" for incident notifications visible to anyone watching the page. SLA endpoint exposes the rolling 30d uptime metric customers/prospects need to evaluate Driftstack reliability.
+
+**Scope**
+
+- New `IncidentEventBus` service — in-process pub/sub. Subscribers register via `subscribe(listener)` returning an unsubscribe function. Lifecycle dispatcher publishes `incident.created` + `incident.resolved` events. Listener errors swallowed (one bad listener can't poison others).
+- New `SlaReportingService` — pure-logic. Wraps ProbesRepo. `report(now, windowMs?)` returns `[{ target, uptimePct, totalProbes, okCount, failCount, lastProbeAt, lastFailureAt, windowStart, windowEnd }]`. Default window: 30 days.
+- Drizzle ProbesRepo extension: `countByTargetSince(since)` — single aggregate query (count(\*) filter ok=true / ok=false / max(probed_at) / max(probed_at) filter ok=false) grouped by target. In-memory equivalent for tests.
+- New routes:
+  - `GET /v1/status/stream` — Server-Sent Events. `text/event-stream` with `incident.created` / `incident.resolved` named events + 30s comment heartbeat. Hijacks the Fastify reply, subscribes to bus, cleans up on connection close.
+  - `GET /v1/status/sla` — JSON `{ data: SlaTargetReport[] }`. No-auth, same posture as `/v1/status/incidents`.
+- Status site index.astro: `EventSource(`${API_BASE}/v1/status/stream`)` listens for both events; on receive, refetches + re-renders. 60s polling kept as safety net for connection-loss cases.
+- IncidentsService lifecycle now dispatches THREE channels in parallel: email fan-out (V-295c3-followup) + outbound webhooks (V-295d) + bus emit (V-295e). Bus emit is sync + in-process so no Promise.all entry needed.
+- Test fixture: probesRepo (InMemoryProbesRepo) + incidentEventBus + slaReportingService exposed on TestAppFixture.
+
+**Files**
+
+- `apps/server/src/services/incident-event-bus.ts` — new (in-process bus + public-shape mapping).
+- `apps/server/src/services/sla-reporting.ts` — new.
+- `apps/server/src/services/health-probe.ts` — `ProbesRepo.countByTargetSince` interface extension.
+- `apps/server/src/db/health-probes-repo.ts` — Drizzle aggregate impl.
+- `apps/server/tests/integration/_helpers/in-memory-probes-repo.ts` — in-memory aggregate impl.
+- `apps/server/src/routes/status-stream.ts` — new (SSE + SLA endpoints).
+- `apps/server/src/lib/app.ts` — `incidentEventBus?` + `slaReportingService?` + route registration.
+- `apps/server/src/lib/bootstrap.ts` — service construction + lifecycle bus emit + deps return.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — fixture wiring (probesRepo, bus, sla).
+- `apps/server/tests/integration/status-stream-sla.test.ts` — new (10 tests).
+- `apps/status-site/src/pages/index.astro` — EventSource subscription + safety-net polling kept.
+
+### Verify
+
+- `npm test`: 897 / 897 passing across 94 files (was 887 / 93; +10 status-stream-sla tests).
+- `npm run lint`: clean. Sub-processor mirror: 10 ↔ 11.
+- `npm run format:check`: clean.
+- Status-site build: clean (single page, ~380ms).
+- Server typecheck: clean.
+
+### Notes — methodology choices
+
+- **In-process bus, not Redis Pub/Sub**: Driftstack ships a single API instance at launch. Multi-instance scaling is a separate problem; SSE clients hold open connections and naturally need sticky sessions anyway. When that scaling moment arrives, the right answer is sticky-session routing OR a dedicated SSE relay tier — not in-process Redis Pub/Sub bridging that breaks deterministic at-most-once semantics.
+- **Bus listener-error isolation**: V-295c3-followup pattern — one listener throwing must not prevent others from firing. Caught + ignored in `emit()`.
+- **`reply.hijack()` for SSE**: standard Fastify pattern for streaming responses. Headers written manually; cleanup wired on `request.raw.on('close', ...)`. Heartbeat interval `unref()`-ed so it doesn't keep the event loop alive.
+- **30s heartbeat**: Cloudflare's idle-timeout default is 100s; conservative half-life keeps the connection alive through any commodity proxy.
+- **Status site: SSE + 60s polling safety net**: SSE is best-effort. Connection drops happen (network blips, captive portals, proxy bugs). The polling fallback ensures stale clients catch up within a minute even if the stream is gone. Not double-fetching when both fire on the same window — `fetchAndRender` is idempotent.
+- **`uptimePct` rounded to 3 decimals**: avoids "99.9999999%" rendering noise. 99.000% / 99.500% / 99.900% / 99.990% all clearly distinguish.
+- **PostgreSQL `count(*) filter (where ...)` aggregate**: cleanest way to compute ok/fail/lastProbeAt/lastFailureAt in a single query. Filter clauses are SQL-standard since PG 9.4; index on `(target, probed_at)` makes the GROUP BY efficient.
+- **No legal-page update**: SSE + SLA expose the same data the existing `/v1/status/incidents` already surfaces, just over a different transport / aggregation. Privacy §3.9 already covers it. Probe history for SLA computation is the same operational data already documented.
+- **Bus emit is sync inside the lifecycle async**: `incidentEventBus.publishCreated` is a synchronous call (no I/O). Putting it OUTSIDE the `Promise.all` keeps the SSE-fanout latency at ~0ms regardless of whether the email/webhook channels are slow.
+
+### Next
+
+V-296 (~3-4h Tier-1) — API key rotation flow. Customer self-service rotation via dashboard `/api-keys` page. Existing key continues working for grace period (24h); new key shown once. Audit log entry: `api_key.rotated`. Then V-297 (audit log download), V-298+ V-294 customer-trust catalog continuation. NEVER STOP autopilot.
