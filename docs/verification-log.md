@@ -14758,3 +14758,59 @@ The runbook covers all four. Estimated total time: ~10 minutes once founder has 
 ### Next
 
 V-259 — verify Cloudflare Pages config for marketing site is current; if any drift between deploy-marketing.yml and the now-canonical deploy-docs.yml shape, sync it. (Likely no-op since deploy-docs.yml was forked from deploy-marketing.yml.)
+
+## V-259 — Cloudflare Pages consolidated founder runbook + queue update
+
+### What
+
+Per founder direction 2026-05-07: V-259 was specced as "marketing site CF deploy config if missing." The marketing-site workflow already exists and matches V-258's pattern (verified by diff — only meaningful diffs are workflow name, paths, build target, project-name variable, environment URL, dist path, concurrency group). So V-259's deliverable rotated to:
+
+1. **Consolidated founder runbook** at `docs/founder-actions/v259-cloudflare-pages-all-projects-setup.md` covering all four CF Pages projects in one Cloudflare-dashboard session:
+   - `driftstack-marketing` (workflow wired V-091 era).
+   - `driftstack-docs` (workflow wired V-258).
+   - `driftstack-customer-dashboard` (workflow planned).
+   - `driftstack-admin-panel` (workflow planned, V-135).
+   - Per-project five-step shape: create project (direct upload mode) → set repo variable → trigger first deploy → wire custom domain → verify.
+   - Shared prereqs (CF API token + account ID + DNS zone).
+   - Path-filter verification recipe (push under one app should trigger only its workflow).
+   - Rollback (CF dashboard atomic + repo `git revert`).
+   - Troubleshooting (5 most-likely failure modes).
+2. **`docs/founder-action-queue.md` update** — Cloudflare Pages projects entry now lists 4 projects (was 3), references both V-258 and V-259 runbooks.
+
+### Why
+
+V-258 covered docs-specific setup. V-259 was supposed to verify the marketing parity, but the workflow itself was already current. The actually-useful deliverable: a single consolidated runbook so the founder doesn't bounce between `v258-…md` and ad-hoc dashboard knowledge for the marketing project. Future deploy-workflow V-NNNs (customer-dashboard, admin-panel V-135) update the SAME runbook in lockstep — single source of truth.
+
+The queue update closes a stale-doc gap: the queue listed 3 CF projects, the actual product needs 4 (docs is new since V-258).
+
+### Files
+
+- `docs/founder-actions/v259-cloudflare-pages-all-projects-setup.md` — new consolidated runbook.
+- `docs/founder-action-queue.md` — Cloudflare Pages entry updated to 4 projects + runbook references.
+
+### Verify
+
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Cross-doc link check: V-258 runbook references survive (still load-bearing for docs-specific deep dive); V-259 references V-258 explicitly so the reader can drill in.
+
+### Notes — surfaced for founder
+
+- **CF setup is still PENDING in `docs/founder-action-queue.md`.** Both deploy workflows (marketing + docs) currently exit cleanly without uploading because `CLOUDFLARE_API_TOKEN` is unset. So push-to-main is safe right now; deploys will start populating once the founder runs through the V-259 runbook. Estimated total time for all four pre-launch-relevant projects: ~30 minutes once CF dashboard credentials are in front of the founder (10 minutes for the marketing + docs projects that have wired workflows; 5 minutes each for pre-staging the dashboard + admin-panel projects so future workflow rollouts land cleanly).
+- **Customer-dashboard + admin-panel deploy workflows** are NOT in scope for V-259 — they'll land in their own V-NNN entries when the apps are ready to publish (admin-panel waits on V-135's Cloudflare Access SSO gate per V-246-P1-003 mitigation).
+- **Two pre-staged repo variables** (`CLOUDFLARE_DASHBOARD_PROJECT_NAME` + `CLOUDFLARE_ADMIN_PROJECT_NAME`) named in the runbook so the future workflow PRs can reference them by name without naming-collision risk.
+
+### Next
+
+V-254 → V-259 content arc complete. Surfacings parked for founder review:
+
+- **D-2026-05-07-01** — DRAFT-banner-vs-counsel-review trade-off on `/legal/*` pages. Defensive choice taken (banner + noindex + footer-link unblock); founder can revert to footer-404 if banner is judged insufficient.
+- **V-256 explicit deferrals** — SDK matrix Streaming/Recording rows + `sessions.reconnect()` mention + `profile_id` field rollout text + Quickstart troubleshooting tone. Easy edits if founder wants different framing.
+- **V-256 path deviation** — V-254 `/api/versioning/` etc. (not founder's literal `api-versioning.astro`). Already surfaced in V-254 entry.
+- **CF Pages projects** — 4 projects pending creation per V-259 runbook (10-30 min dashboard work).
+
+If founder wakes and wants further engineering autopilot work, sensible queue:
+
+1. Wire dashboard deploy workflow (parity with deploy-docs.yml, gated on `apps/customer-dashboard/` build readiness).
+2. Surface a per-V-NNN workflow that runs apps/docs build on PRs (sibling to deploy-docs.yml's main-only trigger) so doc-site regressions get caught at PR time, not after merge.
+3. Audit + fix the 5 explicit deferrals from V-256 once founder has a verdict on each.

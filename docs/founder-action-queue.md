@@ -29,15 +29,21 @@ the founder needs to do.
 
 - **Status:** PENDING
 - **Blocks:** marketing site deploy + customer dashboard deploy +
-  admin panel deploy (V-135).
-- **Action:** Create 3 Cloudflare Pages projects in the Cloudflare
+  admin panel deploy (V-135) + doc site deploy (V-258).
+- **Action:** Create 4 Cloudflare Pages projects in the Cloudflare
   dashboard:
   - `driftstack-marketing` → custom domains `driftstack.dev` + `www.driftstack.dev`
   - `driftstack-customer-dashboard` → custom domain `app.driftstack.dev`
   - `driftstack-admin-panel` → custom domain `admin.driftstack.dev` (Cloudflare Access SSO gate planned at the origin level)
+  - `driftstack-docs` → custom domain `docs.driftstack.dev` (V-258)
 - **Reference:** `apps/marketing-site/astro.config.mjs`,
   `apps/customer-dashboard/astro.config.mjs`,
-  `apps/admin-panel/astro.config.mjs`.
+  `apps/admin-panel/astro.config.mjs`,
+  `apps/docs/astro.config.mjs`.
+- **Runbook:** `docs/founder-actions/v259-cloudflare-pages-all-projects-setup.md`
+  consolidates the per-project setup; per-project deep-dives in the
+  per-V-NNN runbooks where they exist (e.g.
+  `docs/founder-actions/v258-cloudflare-pages-docs-setup.md`).
 
 ### Neon EU database
 
