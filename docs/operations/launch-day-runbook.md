@@ -274,6 +274,7 @@ If any red: stop, close the gap, re-verify.
 ## Related docs
 
 - `docs/launch/pre-launch-checklist.md` — V-279 audit + priority queue.
+- `docs/operations/release-policy.md` — V-283 deploy.yml=staging / server-deploy.yml=production split.
 - `docs/founder-actions/v278-hetzner-deploy-keys.md` — Hetzner provisioning runbook.
 - `docs/operations/production-env-schema.md` — env-var schema in provisioning order.
 - `docs/deployment/runbook.md` — day-to-day operations (logs, restart, scale).

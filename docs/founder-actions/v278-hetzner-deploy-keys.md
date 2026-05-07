@@ -176,6 +176,7 @@ git push origin main
 ## Related docs
 
 - `docs/adr/ADR-001-control-plane-hosting-hetzner.md` — why Hetzner, why Falkenstein.
+- `docs/operations/release-policy.md` — V-283 deploy.yml=staging / server-deploy.yml=production split.
 - `docs/deployment/env-vars.md` — full env-var schema (every variable, every default).
 - `docs/operations/production-env-schema.md` — provisioning-order summary of the same data.
 - `docs/deployment/runbook.md` — day-to-day operations (logs, restart, scale).

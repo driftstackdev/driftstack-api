@@ -15965,3 +15965,44 @@ V-282-arc closes the V-256 parked queue. Continuing parallel-to-Agent-1 launch-i
 - **Customer-dashboard scaffold-shape pages** — sessions / profiles / billing / usage / webhooks live-read works but UI polish varies (per V-279 audit "PARTIAL" rating).
 
 Standing by for direction OR continuing autonomously per "NEVER STOP" rule.
+
+## V-283 — Release policy doc per V-282 founder lock
+
+### What
+
+`docs/operations/release-policy.md` — locks the V-278 dual-workflow ambiguity per founder direction 2026-05-07.
+
+Canonical split:
+
+- `deploy.yml` → **staging** (push-on-main, continuous delivery for integration testing).
+- `server-deploy.yml` → **production** (`server-v*` tag-triggered, explicit-release semantics).
+
+Doc covers: the split table, why each shape fits its environment, how to handle the legacy `deploy-production` job in `deploy.yml` (backstop only; not canonical path; surface if approving regularly), per-release decision tree (routine staging vs production cut vs emergency rollback), what changes when policy is locked (founder workflow, audit trail, hotfix discipline), tag versioning (SemVer for `server-v*`), tag-creation rules (no retag, no skipping versions, annotated only, from main only), policy-review triggers.
+
+Cross-references added to `docs/operations/launch-day-runbook.md` + `docs/founder-actions/v278-hetzner-deploy-keys.md` so the policy is discoverable from the two most-likely entry points.
+
+### Why
+
+Founder explicit policy lock + "predictability over flexibility" framing. Without canonical doc, the two workflows would drift in usage as different operators (eventually) make per-release calls; written policy keeps the muscle memory aligned.
+
+### Files
+
+- `docs/operations/release-policy.md` — new (locked policy).
+- `docs/operations/launch-day-runbook.md` — Related docs section adds release-policy link.
+- `docs/founder-actions/v278-hetzner-deploy-keys.md` — Related docs section adds release-policy link.
+
+### Verify
+
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Cross-references checked: every linked doc exists at the named path.
+
+### Notes
+
+- **No engineering work in V-283**: workflows untouched. The legacy `deploy-production` job in `deploy.yml` stays as a backstop per the policy, not removed. If founder later wants it stripped, that's a one-line follow-up V-NNN.
+- **Tag-versioning rules** are documented but not enforced in CI yet. Future V-NNN could add a `validate-tag-shape` workflow that fires on push to `refs/tags/server-v*` + checks SemVer + annotated-tag + branch=main. Not blocking.
+- **`gui-v*`, `sdk-ts-v*`, `sdk-py-v*`, `sdk-go-v*`** explicitly listed as independent tag namespaces — the same repo has multiple shippable surfaces with independent release cycles.
+
+### Next
+
+V-284 — Customer-dashboard PARTIAL pages polish per V-279 audit. Same empty-state + loading-state + error-state vocabulary V-275/V-276/V-277 established (oxblood D-badge + heading + body + optional CTA).
