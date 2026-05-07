@@ -92,6 +92,13 @@ export const SUB_PROCESSORS: SubProcessor[] = [
       'Cryptocurrency payment processing (BTC, LTC, USDT, USDC, ETH, XMR). Engaged only when a customer opts to pay with cryptocurrency at checkout; bypassed entirely for Stripe-paying customers.',
     transferMechanism: 'EEA-internal — no transfer mechanism required.',
   },
+  {
+    name: 'LiveKit',
+    region: 'United States (regional endpoints; EU preferred)',
+    purpose:
+      'WebRTC live-session signaling and media SFU for the optional "live session" feature, where customer or Driftstack support views an in-progress browser session in real time. Disabled by default; engaged only when explicitly initiated.',
+    transferMechanism: '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.',
+  },
 ];
 
 export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-05-03';

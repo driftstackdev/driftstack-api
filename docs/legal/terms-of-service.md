@@ -60,6 +60,21 @@ event-level primitives through the customer-facing SDKs. (See L-001
 in `docs/locked-decisions.md` for the architectural reasoning, which
 informs but is not part of this ToS.)
 
+**Live-session viewing (optional, opt-in).** Where Customer or
+Driftstack support explicitly initiates a "live session", the
+in-progress browser is viewed in real time via WebRTC streamed
+through LiveKit, Inc. (Sub-processor — see Privacy Policy §7 and
+DPA Annex 3). Live sessions are ephemeral: media is not stored;
+frames stream through the SFU and are dropped on session end. If
+Customer wants a durable copy, the standard Recording feature
+(written to Cloudflare R2) is the durable path. Driftstack-initiated
+live sessions for support assistance require Customer's explicit
+authorisation via the support-impersonation gate; staff-initiated
+support viewing without authorisation is a violation of the
+authorised-action invariants in §11. End-to-end encryption is
+enabled by default for live sessions; the LiveKit SFU forwards
+encrypted media without the ability to decrypt.
+
 ## 4. Account + authorised users
 
 4.1 **Account.** Customer registers an Account with the legal entity

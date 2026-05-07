@@ -76,6 +76,30 @@ references the corresponding rows in this log.
   status site is gated behind no-traffic until then; Privacy §3.10
   is accurate forward-looking).
 
+## 2026-05-08 — V-306a (LiveKit live-session sub-processor + Privacy + ToS)
+
+- **DPA Annex 3 (sub-processors table)**: added "LiveKit, Inc.
+  (US, Delaware) — conditional, opt-in only" row. Role: WebRTC live-
+  session signaling + media SFU. Transfer mechanism: 2021 SCCs Module
+  2 + EU-US DPF. Engaged only when Customer or Driftstack support
+  explicitly initiates a live-session view; disabled by default.
+- **Privacy Policy §3.11 (new)**: "Live-session media (optional,
+  opt-in only)". Documents the data flowing through the live-session
+  pipeline (WebRTC frames, screen-coordinate metadata, optional audio,
+  LiveKit room id, connection metadata) plus the explicit non-storage
+  promise (frames drop on session end; durable copy only via the
+  existing V-054 Recording feature). Calls out E2EE on by default.
+- **Privacy Policy §7 (Sub-processors table)**: matching new row.
+- **Terms of Service §3 (The Service)**: extended with a "Live-
+  session viewing (optional, opt-in)" paragraph. Documents ephemeral
+  semantics, support-impersonation gate requirement, E2EE default.
+- **Marketing-site sub-processors data**: matching public-facing
+  entry. V-271 mirror linter passes at 12 ↔ 13.
+- **No engineering work in this slice**: V-306b (server signaling),
+  V-306c (GUI capture), and V-306d (admin viewer) will wire the
+  actual WebRTC pipeline. Legal scaffolding lands first per V-293
+  methodology.
+
 ## 2026-05-08 — V-308a (NowPayments crypto sub-processor + ToS clause)
 
 - **DPA Annex 3 (sub-processors table)**: added "NowPayments OÜ

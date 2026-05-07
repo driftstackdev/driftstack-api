@@ -17241,3 +17241,38 @@ V-298 → V-303 (V-294 catalog customer self-service) — account settings page 
 ### Next
 
 V-308b (~3-4h) — NowPayments sandbox webhook handler in apps/server. POST /v1/webhooks/nowpayments receiver, signature verification, payment-status state machine (waiting → confirming → confirmed → finished, or expired/failed paths). Idempotent like Stripe webhook handler (V-088). Then V-308c (customer checkout flow) + V-308d (admin reconciliation UI). NEVER STOP autopilot.
+
+## V-306a — LiveKit live-session: sub-processor + Privacy + ToS scaffolding
+
+**Tier**: 1 — Legal/contractual prerequisites for V-306b/c/d WebRTC engineering. Companion to V-308a.
+
+**Why**: Per V-294 verdict, "WebRTC LiveKit INCLUDED v1." Live-session viewing is the bigest-risk customer-trust feature in V-1 because the data passing through is in-progress browser content (potentially containing customer PII the automated browsing encounters). Privacy + ToS coverage MUST exist before any WebRTC plumbing ships, even sandbox/test traffic. Same V-293 atomic-with-engineering pattern as V-308a.
+
+**Scope**
+
+- DPA Annex 3: new "LiveKit, Inc. (US, Delaware) — conditional, opt-in only" row. WebRTC live-session signaling + media SFU. Transfer mechanism: 2021 SCCs Module 2 + EU-US DPF.
+- Privacy §3.11 (new): full subsection "Live-session media (optional, opt-in only)". Data shape (frames + coords + optional audio + room id + connection metadata), legal basis (Art 6(1)(b) performance + Art 6(1)(a) explicit consent for support-initiated paths), source, retention (NOT STORED — frames stream-and-drop), recipients, no-cookies, E2EE-on-by-default cryptography note.
+- Privacy §7: matching sub-processors table row.
+- ToS §3: extended with "Live-session viewing (optional, opt-in)" paragraph. Documents the ephemeral non-storage invariant, the support-impersonation-gate requirement (V-275), the durable-copy fallback path (existing V-054 Recording feature), and the E2EE default.
+- Marketing-site `sub-processors.ts`: matching public-facing entry. V-271 mirror linter now 12 ↔ 13.
+- Changes-log V-306a entry.
+
+### Verify
+
+- `npm run lint`: clean. **Sub-processor mirror linter at 12 ↔ 13** (was 11 ↔ 12 after V-308a; +1 each side).
+- `npm test`: 910 / 910 unchanged (V-306a is docs-only).
+- `npm run format:check`: clean.
+
+### Notes — methodology choices
+
+- **"Frames are not stored" is the load-bearing privacy claim**: the entire live-session feature's privacy posture rests on this. The Privacy text states it explicitly + the implementation must enforce it (V-306b/c/d). If we ever want to add a "record live session to R2" toggle, that's a Privacy update + a separate consent gate — NOT a silent default.
+- **E2EE default**: LiveKit supports SDK-level E2EE; counsel will verify configuration at the time we ship V-306c. Privacy text commits to "E2EE on by default", which means the engineering MUST set the default to E2EE-on. If for any reason E2EE has to be off (rare protocol issue), Privacy needs an update first.
+- **Support-impersonation gate (V-275) cited**: the existing customer-grants-support-access invariant covers Driftstack-initiated support live sessions. Without it, we'd need a separate consent UX. Reusing the gate keeps the consent flow consistent.
+- **Durable-copy path is the existing Recording feature**: customers who want a record use V-054 Recording; live-session is for ephemeral observation. Decoupling these prevents accidentally turning live-session into a stealth recording feature.
+- **"Engaged only when explicitly initiated"**: matches the Anthropic + NowPayments conditional-opt-in pattern. Customers who never use live-session never have any data flowing through LiveKit.
+- **No engineering shipped**: V-306b (server signaling) + V-306c (GUI capture + viewer) + V-306d (admin viewer in admin-panel) will wire the actual pipeline. They depend on (a) legal text in place AND (b) LiveKit account creation by founder. (a) done; (b) on founder.
+- **Counsel-verify markers**: both DPA and Privacy entries include "(verify)" parenthetical on transfer mechanisms. Keeps founder + counsel aware these need re-verification at signing time + when LiveKit's certifications change.
+
+### Next
+
+V-306b (~4-6h) — WebRTC server signaling endpoint in apps/server: token issuance for LiveKit room admission, room lifecycle, IncidentsService-style lifecycle hooks for connect/disconnect events. Then V-306c (GUI client capture + customer viewer) + V-306d (admin viewer in admin-panel). NEVER STOP autopilot.
