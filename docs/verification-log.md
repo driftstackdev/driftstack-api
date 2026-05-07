@@ -14369,3 +14369,39 @@ The thresholds are sized for "legitimate customer can complete the flow without 
 V-252 — V-243 founder-actions runbook fix (file paths + stdin password callout, ~5min docs).
 V-253 — V-246-P1-003 mitigation note in `docs/operations/` documenting V-135 Cloudflare Access dependency (~15min docs).
 V-254+ — Per-topic doc-site page migrations.
+
+## V-252 — V-243 founder-actions runbook fix (file paths + stdin password callout)
+
+### What
+
+Per founder direction 2026-05-07: corrects two issues in `docs/founder-actions/v243-tauri-updater-keys.md`.
+
+1. **File path correction.** Tauri 2.x signer outputs `~/.driftstack-keys/gui-update` (no extension) + `~/.driftstack-keys/gui-update.pub`. The earlier runbook revision listed `gui-update.key` + `gui-update.key.pub` — wrong. Founder hit this during runbook execution. Fixed all four references (Outputs section + GitHub-secrets `gh secret set` commands) and added an explicit "V-252 correction" callout under Outputs noting the prior incorrect names so anyone reading a cached copy sees the diff.
+
+2. **Stdin-password callout.** Original runbook had `gh secret set TAURI_UPDATER_PRIVKEY_PASSWORD --body 'the-password-from-1Password'` which exposes the password to shell history (`history` command captures `--body` arguments). Replaced with `<<<` heredoc-redirect; added explicit callout: "Use stdin (`<`) for the password — never `--body 'the-password'` because shell history captures `--body` arguments." Web-UI alternative also documented as the safer path.
+
+### Why
+
+Founder ran the runbook while uploading the Tauri Updater secrets and hit both issues. Fixing both prevents the next operator (founder rotating the key, or a future Driftstack staff member) from hitting the same paper-cuts.
+
+The stdin-password fix is mildly security-relevant — a password in shell history can be exfiltrated by anything with read access to `~/.zsh_history` (other processes, backup software, cloud-sync clients). Not catastrophic given the password protects an offline-stored private key, but cheap to fix correctly.
+
+### Files
+
+- `docs/founder-actions/v243-tauri-updater-keys.md` — file path fix in two sections; stdin callout added.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck` / `lint` / `format:check`: clean.
+- `npm test`: 740 / 740 passing across 77 files (pure docs).
+- pre-push hook: clean on push.
+
+### Notes
+
+- The runbook continues to recommend the web UI as an alternative to `gh` CLI for the password specifically. Both are safe; the CLI shape is just easier to copy-paste.
+- The "V-252 correction" callout under Outputs uses a `>` blockquote so it visually stands out; future revisions can drop the callout once enough time passes that no operator is likely to be reading a cached old copy.
+
+### Next
+
+V-253 — V-246-P1-003 mitigation note in `docs/operations/`.

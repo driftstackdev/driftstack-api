@@ -19,33 +19,49 @@ npx tauri signer generate -w ~/.driftstack-keys/gui-update
 The command prompts for a password (interactive). Choose a strong one;
 record it in 1Password under "Driftstack GUI Updater Signing Key".
 
-## Outputs
+## Outputs (V-252 corrected — Tauri 2.x signer file naming)
 
-Two files at `~/.driftstack-keys/gui-update`:
+Two files at `~/.driftstack-keys/`:
 
-- `gui-update.key` — **private** key. Never commit. Never share.
+- `gui-update` — **private** key. NO file extension. Never commit. Never share.
   Upload to GitHub Actions secret `TAURI_UPDATER_PRIVKEY`.
-- `gui-update.key.pub` — **public** key. Safe to embed in app
-  bundles + commit to repo. Upload to GitHub Actions secret
-  `TAURI_UPDATER_PUBKEY` AND replace the `$TAURI_UPDATER_PUBKEY`
-  placeholder in `apps/gui-client/src-tauri/tauri.conf.json` with the
-  literal public-key string before the first release build.
+- `gui-update.pub` — **public** key. Safe to embed in app bundles +
+  commit to repo. Upload to GitHub Actions secret `TAURI_UPDATER_PUBKEY`
+  AND replace the `$TAURI_UPDATER_PUBKEY` placeholder in
+  `apps/gui-client/src-tauri/tauri.conf.json` with the literal
+  public-key string before the first release build.
 
   (The CI workflow `.github/workflows/gui-release.yml` does this
   substitution automatically using the `TAURI_UPDATER_PUBKEY` secret;
   the placeholder in the committed config is a build-time reminder.)
 
+> **V-252 correction**: an earlier revision of this runbook listed the
+> outputs as `gui-update.key` + `gui-update.key.pub`. Tauri 2.x signer
+> actually emits `gui-update` (no extension) + `gui-update.pub`. Use
+> the file names exactly as written above.
+
 ## GitHub Actions secrets to set
 
-After generating + recording the password:
+After generating + recording the password. **Use stdin (`<`) for the
+password — never `--body 'the-password'`** because shell history
+captures `--body` arguments and exposes the secret to anyone who runs
+`history` on the founder's machine:
 
-```
-gh secret set TAURI_UPDATER_PUBKEY < ~/.driftstack-keys/gui-update.key.pub
-gh secret set TAURI_UPDATER_PRIVKEY < ~/.driftstack-keys/gui-update.key
-gh secret set TAURI_UPDATER_PRIVKEY_PASSWORD --body 'the-password-from-1Password'
+```sh
+# Public key — paste-from-stdin, never appears in shell history
+gh secret set TAURI_UPDATER_PUBKEY < ~/.driftstack-keys/gui-update.pub
+
+# Private key — same posture, paste-from-stdin
+gh secret set TAURI_UPDATER_PRIVKEY < ~/.driftstack-keys/gui-update
+
+# Password — read-from-stdin via heredoc. NOT --body 'password' which
+# would expose the secret to shell history.
+gh secret set TAURI_UPDATER_PRIVKEY_PASSWORD <<< 'the-password-from-1Password'
 ```
 
-(Or set via the GitHub web UI under **Settings → Secrets and variables → Actions**.)
+Alternative: set the password via the GitHub web UI under
+**Settings → Secrets and variables → Actions**. The web UI never
+captures the value in any shell history.
 
 ## After the secrets are set
 
