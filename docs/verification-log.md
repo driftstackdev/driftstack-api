@@ -14446,3 +14446,65 @@ V-246-P1-003 was deferred under the assumption that V-135 Cloudflare Access prev
 ### Next
 
 V-254+ — Per-topic doc-site page migrations from `/docs/*.md` → `apps/docs/src/pages/`. Founder direction listed five high-value topics (api-quickstart, sdk-installation, license-activation, profile-management, session-lifecycle); pick by highest-immediate-value when starting V-254.
+
+## V-254 — Migrate three architecture/reference docs to apps/docs Astro site
+
+### What
+
+Per founder direction 2026-05-07 (extended Tier-3 content authority): migrate three existing `docs/*.md` files into the `apps/docs` Astro site as first-class pages with brand-aligned styling and a sidebar nav.
+
+New scaffolding in `apps/docs`:
+
+- `src/data/nav.ts` — central `DOC_NAV` array (5 sections: Overview / API reference / Webhooks / SDKs / Guides). Single source of truth so adding a topic = one edit.
+- `src/layouts/DocLayout.astro` — wraps `BaseLayout` with a sidebar that renders `DOC_NAV` + an `isActive()` helper that handles trailing-slash variants. Content area uses `prose prose-slate` with oxblood `prose-a`, mono `prose-code`, slate-900 `prose-pre`. Reads `frontmatter.title` from `.md` pages OR a `title` prop from `.astro` pages — single layout serves both.
+- `package.json` + `tailwind.config.mjs` — adds `@tailwindcss/typography ^0.5.15` for `prose` classes.
+
+Three migrated markdown pages (use Astro's native `.md` page support with `layout:` frontmatter):
+
+- `src/pages/api/versioning.md` (171 lines) — content from `docs/architecture/api-versioning.md`.
+- `src/pages/webhooks/events.md` (280 lines) — content from `docs/api/webhook-events.md`.
+- `src/pages/sdk/versioning.md` (179 lines) — content from `docs/architecture/sdk-versioning.md`.
+
+Four landing pages rewritten to use `DocLayout`:
+
+- `src/pages/index.astro` — "Where to start" 2-column grid + "What's documented today" linking the three migrated docs.
+- `src/pages/api/index.astro` — lists `/api/versioning/` + `/webhooks/events/`.
+- `src/pages/sdk/index.astro` — 3-card grid (TypeScript live, Python live, Go planned) + `/sdk/versioning/` link.
+- `src/pages/guides/index.astro` — "Architecture + reference" links to the three migrated topics + repo `docs/` tree.
+
+### Why
+
+Public-facing doc site needs the canonical references rendered with brand identity (oxblood D-badge + lowercase mono "driftstack" wordmark + Geist Sans + Berkeley Mono + slate palette per V-219\* visual alignment), not just GitHub-rendered raw markdown. Deep-link bookmarks survive future content additions because nav structure is established now.
+
+### Files
+
+- `apps/docs/src/data/nav.ts` — new (DOC_NAV).
+- `apps/docs/src/layouts/DocLayout.astro` — new (sidebar + prose content).
+- `apps/docs/src/pages/api/versioning.md` — new (migrated).
+- `apps/docs/src/pages/webhooks/events.md` — new (migrated).
+- `apps/docs/src/pages/sdk/versioning.md` — new (migrated).
+- `apps/docs/src/pages/index.astro` — rewritten (uses DocLayout).
+- `apps/docs/src/pages/api/index.astro` — rewritten (uses DocLayout).
+- `apps/docs/src/pages/sdk/index.astro` — rewritten (uses DocLayout).
+- `apps/docs/src/pages/guides/index.astro` — rewritten (uses DocLayout).
+- `apps/docs/package.json` + `apps/docs/tailwind.config.mjs` — `@tailwindcss/typography` plugin.
+- `apps/docs/package-lock.json` (or workspace lockfile) — updated by `npm install`.
+
+### Verify
+
+- `npm run build --workspace apps/docs`: 8 pages built clean (after fixing one `..`-too-many in the webhooks/events.md layout path).
+- `npm run typecheck --workspace apps/docs` (astro check): 12 files, 0 errors.
+- `npm run lint`: clean.
+- `npm run format:check`: clean (after `prettier --write` on the three new `.md` files).
+- `npm test`: 740 / 740 passing across 77 files (pure scaffolding addition; no behavior change).
+
+### Notes
+
+- Path deviation from founder's literal direction: founder listed `apps/docs/src/pages/api-versioning.astro` etc., but I went with `apps/docs/src/pages/api/versioning.md` to fit under the `/api/` section structure they also requested (sidebar grouping). Markdown over astro because the source `.md` content survives migration with only frontmatter prepended — zero hand-conversion. Surfacing this deviation; if founder wants flat `/api-versioning` URLs instead, route reshape is one rename.
+- Layout-path gotcha: `webhooks/events.md` is one directory deeper than the api/ + sdk/ files, so its `layout:` path is `../../layouts/...` not `../../../layouts/...`. First build failed loudly; trivially fixed.
+- Did NOT yet add per-doc breadcrumb / prev-next nav / search. Post-V-256 polish.
+- The 5 customer-facing topics founder listed (api-quickstart, sdk-installation, license-activation, profile-management, session-lifecycle) don't exist as `/docs/*.md` files. Per extended Tier-3 content authority, they'll be authored fresh in V-256 (with [PLACEHOLDER] for any unconfirmed values + [DRAFT — founder review pending] markers) instead of mechanically migrated.
+
+### Next
+
+V-255 — legal pages drafting (privacy / terms / dpa / aup / sub-processors) under `apps/marketing-site/src/pages/legal/`. NL/EU GDPR + Dutch BV compliance, [PLACEHOLDER] markers for BV-specific data (legal name, KvK, BTW, address, DPO contact).

@@ -1,0 +1,71 @@
+---
+// V-254 — doc-page layout. Wraps BaseLayout with a sidebar nav (from
+// `data/nav.ts`) and a content column. Used as `layout:` frontmatter
+// in `.md` doc pages so markdown content renders into the slot with
+// the doc-site brand chrome around it.
+//
+// Frontmatter contract: pages set `title` (required), optionally
+// `description` (overrides BaseLayout default).
+import BaseLayout from './BaseLayout.astro';
+import { DOC_NAV } from '../data/nav';
+
+interface Props {
+  /** Frontmatter object from `.md` pages or direct prop from `.astro` pages. */
+  frontmatter?: { title: string; description?: string };
+  /** Direct title prop for `.astro` pages without frontmatter. */
+  title?: string;
+  /** Direct description prop. */
+  description?: string;
+}
+
+const props = Astro.props;
+const title = props.frontmatter?.title ?? props.title ?? 'Driftstack docs';
+const description = props.frontmatter?.description ?? props.description;
+const pathname = Astro.url.pathname;
+
+function isActive(href: string): boolean {
+  if (href === '/') return pathname === '/';
+  // Match exact or trailing-slash variant.
+  return pathname === href || pathname === href.replace(/\/$/, '');
+}
+---
+
+<BaseLayout title={title} description={description}>
+  <div class="mx-auto flex max-w-6xl gap-8 px-6 py-8">
+    <aside class="hidden w-56 shrink-0 md:block">
+      <nav class="sticky top-6">
+        {
+          DOC_NAV.map((section) => (
+            <div class="mb-5">
+              <p class="font-mono text-xs uppercase tracking-wide text-slate-500">
+                {section.label}
+              </p>
+              <ul class="mt-2 space-y-1">
+                {section.items.map((item) => (
+                  <li>
+                    <a
+                      href={item.href}
+                      class:list={[
+                        'block rounded px-2 py-1 text-sm transition-colors',
+                        isActive(item.href)
+                          ? 'bg-oxblood-50 text-oxblood-700 font-medium'
+                          : 'text-slate-700 hover:bg-slate-100',
+                      ]}
+                    >
+                      {item.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        }
+      </nav>
+    </aside>
+    <article
+      class="prose prose-slate max-w-3xl flex-1 prose-headings:font-semibold prose-headings:text-slate-900 prose-a:text-oxblood-700 prose-a:no-underline hover:prose-a:underline prose-code:font-mono prose-code:text-[0.875em] prose-code:rounded prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-pre:bg-slate-900 prose-pre:text-slate-100"
+    >
+      <slot />
+    </article>
+  </div>
+</BaseLayout>

@@ -1,3 +1,8 @@
+// V-254 — typography plugin imported at top-level so the config
+// itself stays synchronous (Tailwind's config loader expects a sync
+// default export).
+import typography from '@tailwindcss/typography';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./src/**/*.{astro,html,js,jsx,md,mdx,ts,tsx}'],
@@ -42,5 +47,7 @@ export default {
       },
     },
   },
-  plugins: [],
+  // V-254 — typography plugin enables `prose` classes for markdown
+  // content rendering in DocLayout.astro.
+  plugins: [typography],
 };

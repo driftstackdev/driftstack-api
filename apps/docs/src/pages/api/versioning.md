@@ -1,0 +1,172 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: API versioning policy
+description: Driftstack API versioning policy — additive vs breaking changes, deprecation cycle, when /v2/* is justified.
+---
+
+# API versioning strategy
+
+V-220 — versioning policy for the HTTP API surface (`/v1/*`,
+eventually `/v2/*`). Distinct from the SDK versioning policy at
+`docs/architecture/sdk-versioning.md` (V-177): SDKs version
+independently of the API; this doc covers the API endpoint contract.
+
+## TL;DR
+
+- One major version active at a time. `/v1/*` today.
+- Additive changes are free — new endpoints, new optional request
+  fields, new response fields, new enum values. Customers don't
+  break.
+- Breaking changes go through a deprecation cycle, then a new
+  major version. `/v2/*` only when justified; not on a calendar.
+- The OpenAPI spec at `/openapi.json` is the contract. Generated
+  from Zod schemas in `packages/api-types/`; there is no second
+  source of truth.
+
+## What counts as additive vs breaking
+
+| Change                                                    | Class                                  |
+| --------------------------------------------------------- | -------------------------------------- |
+| New endpoint                                              | Additive                               |
+| New optional request field with sensible default          | Additive                               |
+| New response field                                        | Additive                               |
+| New enum value (sent BY server, e.g. webhook event types) | **Breaking for closed-enum consumers** |
+| New enum value (accepted FROM client, e.g. tier IDs)      | Additive (server is permissive)        |
+| Renaming an existing field                                | Breaking                               |
+| Removing an existing field                                | Breaking                               |
+| Changing a field's type (e.g. number → string)            | Breaking                               |
+| Tightening a validation constraint                        | Breaking                               |
+| Loosening a validation constraint                         | Additive                               |
+| Changing default behaviour of an existing endpoint        | Breaking                               |
+| Changing HTTP status code returned                        | Breaking                               |
+| Changing error type URI in problem-detail                 | Breaking                               |
+| Adding a new error type URI                               | Additive                               |
+| Changing rate-limit caps                                  | Operational; not contract              |
+
+The "new enum value" row deserves emphasis: when the **server**
+sends a closed enum value the **client** doesn't know about (e.g.
+a new `webhook_event_type`), strictly-typed clients break. SDKs
+mitigate this with a passthrough escape hatch, but the contract
+itself is breaking — bump major version, OR ship the new value
+behind a feature flag, OR add a transitional period where both
+old and new values are emitted.
+
+## Deprecation cycle for breaking changes
+
+When a breaking change is necessary, the sequence is:
+
+1. **Announce the deprecation** in a `Deprecation` HTTP response
+   header on every affected endpoint, with a `Sunset` header
+   pointing at the planned removal date (RFC 8594).
+2. **Document the migration path** in the OpenAPI spec via
+   `deprecated: true` on the affected operation / field, plus a
+   `description` pointing at the replacement.
+3. **Email customers** using the deprecated surface. Use the audit
+   log + last-30-day usage data to identify them; send a
+   transactional notice (one-shot, not a recurring nag).
+4. **Minimum 90 days** between announcement and removal. Longer
+   for high-impact changes (e.g. session lifecycle shape).
+5. **Remove the surface** in the next major version OR — if the
+   change is small enough to fit within the existing major — ship
+   it as a separate operation while leaving the old one in place
+   for a defined sunset window.
+
+## When a new major version is justified
+
+`/v2/*` ships when:
+
+- A breaking change can't be avoided (e.g. session lifecycle
+  redesign that needs different state-machine semantics).
+- Multiple breaking changes batch sensibly (don't spread breakage
+  across many minor announcements when one batched cut is cleaner).
+- An entirely new architectural shape lands (e.g. switch from REST
+  semantics to RPC, or vice versa — extreme; we have no plans).
+
+It does NOT ship when:
+
+- Pre-1.0-style restlessness wants to "clean things up." We
+  instead deprecate + phase out within `/v1/*`.
+- A single field rename is desired. Announce, deprecate, support
+  both for a sunset window, drop the old name.
+
+## Operating two majors simultaneously
+
+When `/v2/*` does ship, expect:
+
+- `/v1/*` continues to work for the announced sunset window
+  (typically 12+ months).
+- Both versions share the same auth + rate-limit infrastructure.
+- Server-side handlers are duplicated where shape diverges; shared
+  service layer where the underlying behaviour is identical.
+- Test fixtures cover both; the OpenAPI spec exposes both.
+- Customers can pin a version via the URL prefix; no header-based
+  versioning today.
+
+## Per-resource versioning notes
+
+- **`/v1/sessions/*`** — session lifecycle is the most-likely
+  candidate for a future `/v2/*` cut. Customers already opt into
+  schema evolution via `purpose` + `archetype` fields (V-169);
+  shape changes within the lifecycle (e.g. new states, new
+  required fields) are breaking and trigger the deprecation cycle.
+- **`/v1/api-keys/*`** — scope enum is the breaking-change risk
+  (V-174 was the most recent expansion; future scopes may need
+  the deprecation cycle if the meaning of `account_owner`
+  narrows or splits further).
+- **`/v1/webhooks/*`** — `WebhookEventType` enum is closed. Adding
+  a new event type IS technically breaking for strictly-typed
+  consumers. We mitigate via the SDK passthrough pattern +
+  documented "we may send unknown event types; ignore + continue"
+  (the catalog of all event types lives at `docs/api/webhook-events.md`
+  per V-203, and the system-design rationale at
+  `docs/architecture/webhook-system-design.md`). Customers are
+  encouraged to subscribe with explicit `events: [...]` arrays so the
+  server only ever sends event types the customer already opted into.
+  New event types are then additive at the wire level; subscription is
+  opt-in.
+- **`/v1/billing/*`** — Stripe-driven; subscription/trial-pack
+  state shapes are stable across `/v1/*`'s lifetime. Mid-major
+  changes here are extremely unlikely.
+- **`/v1/admin/*`** — internal-staff surface; staff = founder pre-
+  launch. Breaking changes don't trigger external deprecation
+  cycle; staff updates the panel + the docs in lock-step.
+- **`/v1/account/*`** — customer self-serve account data
+  (audit-log, email-preferences, rate-limits per V-216 / V-204 /
+  V-219). Same external-facing breaking-change discipline as
+  `/v1/sessions/*`.
+
+## What customers should do
+
+- Pin to a specific major in their integration. SDKs handle this
+  by encoding the major in the URL constants they ship.
+- Subscribe explicitly to webhook events they handle; ignore +
+  continue on unknown event types (defensive parsing).
+- Watch the `Deprecation` + `Sunset` response headers in
+  production logs. Generic SDK middleware can surface these
+  automatically.
+- Read the CHANGELOG for the SDK they use; SDK CHANGELOGs
+  cross-reference API-side deprecations relevant to that
+  language's surface.
+
+## What we don't do
+
+- **Header-based versioning** (`API-Version: 2024-05-01`) —
+  considered but rejected. URL-prefix is more discoverable, easier
+  to debug in logs, and matches industry convention (Stripe-style
+  `/v1/`).
+- **Date-based versioning per-account** (Stripe's "API version
+  pinning") — useful at very high scale; overkill at our current
+  scale + customer count. Revisit post-launch if a deprecation
+  cycle proves painful.
+- **Continuous breaking changes** — pre-1.0 SDKs ship them
+  (V-201 broke AccountTier; documented + intended). The HTTP API
+  itself is post-1.0 from the customer's perspective even though
+  Driftstack is pre-launch — customers pinning to `/v1/*` should
+  see additive-only changes.
+
+## Related
+
+- SDK versioning policy: `docs/architecture/sdk-versioning.md` (V-177).
+- OpenAPI spec generation: `apps/server/src/lib/openapi.ts`.
+- Locked tech-stack: `AGENTS.md` (Zod single-source-of-truth).
+- Webhook event catalog: `docs/api/webhook-events.md` (V-203).
