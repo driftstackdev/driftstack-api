@@ -15833,3 +15833,76 @@ The 10-step T-24h smoke test is the load-bearing artefact. Running through it on
 ### Next
 
 V-281 — Customer support tooling enhancement. Admin panel improvements: customer-search-by-email, audit-log timeline viewer per customer, manual refund initiation, manual subscription state override. Closes the V-280 manual-refund-procedure gap.
+
+## V-281 — Customer-support tooling: audit-only refund recording + support notes
+
+### What
+
+Per founder direction's V-281 spec — admin panel improvements for launch-day customer support. Audit-only flows (no money movement, no Stripe API call) — both surface as buttons on the admin panel's account-detail page.
+
+Two new endpoints:
+
+1. `POST /v1/admin/accounts/:id/audit-note` — operator attaches a free-form support note (1-2000 chars) to a customer's audit log. Use case: "called customer about rate-limit issue, will follow up tomorrow." Records BOTH an `admin_audit_log` row (action=`audit_note.added`) AND an `account_audit_log` row (action=`admin.support_note`, actor_type=`staff`) so the note is visible in the customer's `/v1/account/audit-log` slice + the admin-side audit table.
+2. `POST /v1/admin/accounts/:id/refund-record` — operator records that they manually issued a Stripe refund via the Stripe dashboard. Required fields: `external_reference` (Stripe charge / payment_intent / invoice id), `amount_cents` (positive integer), `reason` (1-500 chars). Optional `currency` (defaults to USD). Same dual-write pattern: admin row (action=`refund.recorded`) + customer row (action=`admin.refund_recorded`, target_resource_id=Stripe ref).
+
+**Crucial design choice — no Stripe API call.** Per the founder's tier-3 boundary on direct financial actions + the V-280 launch-day-runbook's "actual refund issued via Stripe dashboard" framing, neither endpoint touches Stripe. They record post-action receipts only. Operator does the actual refund in Stripe; both audit logs reflect the truth of what happened.
+
+Schema changes:
+
+- `AccountAuditActionSchema` (api-types) — added `'admin.refund_recorded'`, `'admin.support_note'`.
+- `AdminAuditActionSchema` (api-types) + `AdminAuditAction` (server) — added `'audit_note.added'`, `'refund.recorded'`.
+- `adminAuditAction` Postgres enum (Drizzle) — same two values.
+- New migration `0023_v281_audit_actions.sql` extends the enum with `IF NOT EXISTS` for safe re-running. Journal entry added at idx 23.
+
+Admin panel UI changes:
+
+- `apps/admin-panel/src/pages/accounts/[id].astro` — two new buttons in the admin-actions row: "Add support note" (oxblood-default styling) + "Record refund (audit-only)" (amber styling so operators don't confuse this with a Stripe-refunding button).
+- New JS handlers `addSupportNote()` + `recordRefund()` use `window.prompt` for inline data entry (consistent with the existing `changeTier` / `suspend` / `unsuspend` pattern). Refund flow validates positive-integer cents client-side before sending.
+- Banner message after refund recording explicitly reminds: "actual refund is issued via Stripe dashboard — this endpoint is audit-only."
+
+### Why
+
+V-280's launch-day runbook had a manual-refund-procedure section explicitly tagged "(manual, pre-V-281)". V-281 closes that gap. Without it, operators on launch day would have only the Stripe dashboard as a refund interface + a separate admin-audit endpoint to record the action — two-step workflow with split-brain risk. Now: refund the customer in Stripe, click the button in the admin panel, both audit surfaces update in lockstep with the same metadata.
+
+The support-note endpoint is the same shape: any operator action that doesn't have a dedicated endpoint can be captured with a free-form note. Audit completeness without proliferating endpoints.
+
+### Files
+
+- `packages/api-types/src/accounts.ts` — `AccountAuditActionSchema` extended.
+- `packages/api-types/src/admin.ts` — `AddSupportNoteRequestSchema` + `RecordRefundRequestSchema` + `AdminAuditActionSchema` extended.
+- `apps/server/src/services/admin-audit.ts` — `AdminAuditAction` extended.
+- `apps/server/src/db/schema.ts` — `adminAuditAction` pgEnum extended.
+- `apps/server/src/db/migrations/0023_v281_audit_actions.sql` — new migration.
+- `apps/server/src/db/migrations/meta/_journal.json` — idx 23 entry.
+- `apps/server/src/routes/admin-accounts.ts` — two new routes; `accountAudit` injected via optional opt.
+- `apps/server/src/lib/app.ts` — `accountAuditService` passed through to admin-accounts route deps.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — `accountAuditRepo` exposed on the fixture for assertions.
+- `apps/server/tests/integration/_helpers/in-memory-account-audit-repo.ts` — `getAll()` test helper.
+- `apps/server/tests/integration/admin-audit-note.test.ts` — 10 new integration tests covering happy path + 7 edge cases (empty / over-limit / unauth scope) for both endpoints.
+- `apps/admin-panel/src/pages/accounts/[id].astro` — UI buttons + handlers.
+
+### Verify
+
+- `npm test`: 761 / 761 across 79 files (was 751 / 78; +10 tests, +1 file).
+- `npm run typecheck`: clean.
+- `npm run lint`: clean (subprocessor mirror gate green).
+- `npm run format:check`: clean.
+- `npm run build --workspace apps/admin-panel`: clean.
+- New tests cover: dual audit-row writes, scope enforcement (403 without `driftstack_internal_admin`), input validation (empty / too-long / non-positive amount / empty reason / too-short ref), default-currency-USD behavior, and the audit row metadata is captured correctly on both surfaces.
+
+### Notes
+
+- **V-228-class regression sweep performed**: the new test fixture surface (`accountAuditRepo` on `TestAppFixture`) is the second consumer of the in-memory repo (V-216 was the first). Updated `build-test-app.ts` interface + return shape; existing tests don't reference it so no breakage.
+- **Migration is enum-extension only** (no data migration needed). `IF NOT EXISTS` makes re-running safe. Drizzle journal entry uses idx 23, when=current-time-1ms-after-22 to avoid collision.
+- **Refund external_reference is unconstrained shape** — accepts `ch_*` (Stripe charge), `pi_*` (payment*intent), `in*\_`(invoice),`re\_\_`(refund),`cs\_\*` (checkout_session). Validation is just length 3-120 chars; operator picks the right shape per the actual Stripe operation. Keeps the audit row pointing at the most-useful Stripe object.
+- **No Stripe API integration** — keeping financial actions entirely operator-driven matches the tier-3 founder-only boundary. Future V-NNN could add Stripe-API-driven refunds if the support volume justifies the additional complexity (idempotency keys, partial-refund tracking, webhook reconciliation), but not before launch.
+- **`window.prompt` for the UI flow** is intentionally simple — three serial prompts (ref → amount → reason) rather than a modal form. Matches the existing change-tier / suspend pattern. Can upgrade to a proper form modal in a follow-up if operators report friction.
+
+### Next
+
+V-282+ — continue parked queue per founder spec:
+
+- V-256 explicit deferrals (SDK matrix Streaming/Recording rows, `sessions.reconnect()` mention, `profile_id` field rollout text, Quickstart troubleshooting tone).
+- Performance optimization passes if obvious bottlenecks surface.
+- Test coverage gaps if obvious.
+- GUI ProxiesView further polish if any list view lacks the V-275–V-277 pattern.

@@ -68,6 +68,45 @@ export const UnsuspendAccountRequestSchema = z.object({
 export type UnsuspendAccountRequest = z.infer<typeof UnsuspendAccountRequestSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
+// V-281 — admin audit-note + refund-record (audit-only)
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Records a free-form admin note on the customer's audit log. Operator
+ * uses this to attach context the audit log doesn't capture
+ * automatically — post-incident summary, customer-support call notes,
+ * out-of-band action receipts.
+ *
+ * Audit-only: never touches billing / sessions / keys. Recording does
+ * not produce a side effect on the account state.
+ */
+export const AddSupportNoteRequestSchema = z.object({
+  note: z.string().min(1).max(2000),
+});
+export type AddSupportNoteRequest = z.infer<typeof AddSupportNoteRequestSchema>;
+
+/**
+ * Records that the operator manually issued a refund via the Stripe
+ * dashboard. The endpoint does NOT call Stripe. Money movement happens
+ * out-of-band; the audit row is the post-action receipt for compliance
+ * and customer support follow-up.
+ *
+ * Per V-280 launch-day-runbook + the founder's tier-3 boundary on
+ * direct financial actions.
+ */
+export const RecordRefundRequestSchema = z.object({
+  /** The Stripe charge / payment_intent / invoice id refunded. */
+  external_reference: z.string().min(3).max(120),
+  /** Refund amount in cents. May be partial. */
+  amount_cents: z.number().int().positive(),
+  /** Currency ISO 4217; defaults to USD if omitted. */
+  currency: z.string().length(3).optional(),
+  /** Reason recorded on the audit row + the customer-visible audit slice. */
+  reason: z.string().min(1).max(500),
+});
+export type RecordRefundRequest = z.infer<typeof RecordRefundRequestSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
 // Admin account view (mirrors AccountSchema; returned by mutation endpoints
 // so callers see the post-update state without an extra GET).
 // ───────────────────────────────────────────────────────────────────────────
@@ -135,6 +174,9 @@ export const AdminAuditActionSchema = z.enum([
   // V-100: force actions on customer resources.
   'session.destroyed_by_admin',
   'api_key.revoked_by_admin',
+  // V-281: customer-support tooling (audit-only).
+  'audit_note.added',
+  'refund.recorded',
 ]);
 export type AdminAuditAction = z.infer<typeof AdminAuditActionSchema>;
 

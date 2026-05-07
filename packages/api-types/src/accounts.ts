@@ -75,6 +75,13 @@ export const AccountAuditActionSchema = z.enum([
   'subscription.tier_changed',
   'webhook_endpoint.created',
   'webhook_endpoint.deleted',
+  // V-281 — admin-recorded notes. Refund recording is audit-only;
+  // actual money movement happens via Stripe dashboard manually per
+  // the V-280 launch-day runbook. Support notes are free-form
+  // operator notes attached to a customer account for post-incident
+  // / context-passing visibility.
+  'admin.refund_recorded',
+  'admin.support_note',
 ]);
 export type AccountAuditAction = z.infer<typeof AccountAuditActionSchema>;
 

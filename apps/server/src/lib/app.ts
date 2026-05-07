@@ -239,6 +239,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     usage: deps.usageService,
     rateLimitOverrides: deps.rateLimitOverridesService,
     audit: deps.adminAuditService,
+    accountAudit: deps.accountAuditService,
   });
   registerAdminWebhookRoutes(app, {
     webhooksAdmin: deps.webhooksAdminService,

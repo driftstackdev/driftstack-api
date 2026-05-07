@@ -111,6 +111,8 @@ export interface TestAppFixture {
   usageRepo: InMemoryUsageRepo;
   webhooksRepo: InMemoryWebhooksRepo;
   adminAuditRepo: InMemoryAdminAuditLogRepo;
+  /** V-281 — exposed so tests can assert customer-audit rows post admin action. */
+  accountAuditRepo: InMemoryAccountAuditRepo;
   rateLimitOverridesRepo: InMemoryRateLimitOverridesRepo;
   rateLimitStore: MemoryRateLimitStore;
   authFlowsRepo: InMemoryAuthFlowsRepo;
@@ -523,6 +525,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     authCoalescer,
     webhooksRepo,
     adminAuditRepo,
+    accountAuditRepo,
     rateLimitOverridesRepo,
     sessionsRepo,
     apiKeysRepo,

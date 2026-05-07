@@ -20,7 +20,10 @@ export type AdminAuditAction =
   | 'rate_limit_override.cleared'
   // V-100: force actions on customer resources.
   | 'session.destroyed_by_admin'
-  | 'api_key.revoked_by_admin';
+  | 'api_key.revoked_by_admin'
+  // V-281: customer-support tooling (audit-only).
+  | 'audit_note.added'
+  | 'refund.recorded';
 
 export interface AdminAuditLogRow {
   id: string;

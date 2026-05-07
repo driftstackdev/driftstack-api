@@ -30,6 +30,11 @@ export class InMemoryAccountAuditRepo implements AccountAuditRepo {
     return Promise.resolve(row);
   }
 
+  /** Test-only — returns every row inserted, regardless of account. */
+  getAll(): readonly AccountAuditEntryRow[] {
+    return this.rows;
+  }
+
   list(accountId: string, opts: ListAccountAuditOpts): Promise<ListAccountAuditPage> {
     const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
     const filtered = this.rows

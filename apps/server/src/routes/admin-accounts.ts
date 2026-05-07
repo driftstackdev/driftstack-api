@@ -17,8 +17,10 @@ import { z } from 'zod';
 import {
   AccountStatusSchema,
   AccountTierSchema,
+  AddSupportNoteRequestSchema,
   ChangeTierRequestSchema,
   ClearQuotaOverrideQuerySchema,
+  RecordRefundRequestSchema,
   SetQuotaOverrideRequestSchema,
   SuspendAccountRequestSchema,
   UnsuspendAccountRequestSchema,
@@ -32,6 +34,7 @@ const ListAdminAccountsQuerySchema = z.object({
   email_contains: z.string().min(1).max(254).optional(),
 });
 import type { AccountsAdminService } from '../services/admin-accounts.js';
+import type { AccountAuditService } from '../services/account-audit.js';
 import type { AdminAuditService, AdminAuditAction } from '../services/admin-audit.js';
 import type { AccountRow } from '../services/auth.js';
 import type {
@@ -102,13 +105,21 @@ export interface AdminAccountsRoutesOptions {
   usage: UsageService;
   rateLimitOverrides: RateLimitOverridesService;
   audit: AdminAuditService;
+  /**
+   * V-281 — customer-audit recorder. Used by the new
+   * `audit-note` + `record-refund` endpoints to write a customer-
+   * visible audit row in addition to the admin-audit row. Optional
+   * during the migration window — when omitted, the new endpoints
+   * are not registered.
+   */
+  accountAudit?: AccountAuditService;
 }
 
 export function registerAdminAccountsRoutes(
   app: FastifyInstance,
   opts: AdminAccountsRoutesOptions,
 ): void {
-  const { accountsAdmin, usage, rateLimitOverrides, audit } = opts;
+  const { accountsAdmin, usage, rateLimitOverrides, audit, accountAudit } = opts;
 
   // Helper that wraps a mutation with audit-on-success + audit-on-error.
   // The route logic stays focused on the action; the wrapper enforces
@@ -363,6 +374,87 @@ export function registerAdminAccountsRoutes(
       return reply.code(204).send();
     },
   );
+
+  // ── V-281 — POST /v1/admin/accounts/:id/audit-note ─────────────────────
+  // Records a free-form admin support note on the customer's audit log.
+  // Audit-only — no side effect on account state. Both surfaces (the
+  // admin_audit_log via withAudit, and the customer-visible
+  // account_audit log via accountAudit.record) are written so the note
+  // is visible on the per-customer audit slice + the admin audit table.
+  if (accountAudit !== undefined) {
+    app.post<{ Params: { id: string } }>(
+      '/v1/admin/accounts/:id/audit-note',
+      {
+        preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
+      },
+      async (request, reply) => {
+        const ctx = request.account;
+        if (!ctx) throw new Error('account context missing after requireAuth');
+        const accountId = uuidFromPrefixedId(request.params.id, 'acc');
+        const body = AddSupportNoteRequestSchema.parse(request.body ?? {});
+
+        // Confirm target exists.
+        await accountsAdmin.getAccount(ctx, accountId);
+
+        await withAudit(request, 'audit_note.added', accountId, { note: body.note }, async () => {
+          await accountAudit.record({
+            accountId,
+            actorType: 'staff',
+            actorAccountId: ctx.account.id,
+            actorKeyId: ctx.apiKey.id,
+            action: 'admin.support_note',
+            targetResourceId: null,
+            payload: { note: body.note },
+          });
+          return await accountsAdmin.getAccount(ctx, accountId);
+        });
+
+        return reply.code(201).send({ ok: true as const });
+      },
+    );
+
+    // ── V-281 — POST /v1/admin/accounts/:id/refund-record ─────────────────
+    // Records that the operator manually refunded a Stripe charge via
+    // the Stripe dashboard. Audit-only — does NOT call Stripe. Money
+    // movement is always operator-driven via Stripe per the V-280
+    // launch-day runbook + the founder's tier-3 boundary on direct
+    // financial actions.
+    app.post<{ Params: { id: string } }>(
+      '/v1/admin/accounts/:id/refund-record',
+      {
+        preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
+      },
+      async (request, reply) => {
+        const ctx = request.account;
+        if (!ctx) throw new Error('account context missing after requireAuth');
+        const accountId = uuidFromPrefixedId(request.params.id, 'acc');
+        const body = RecordRefundRequestSchema.parse(request.body ?? {});
+
+        await accountsAdmin.getAccount(ctx, accountId);
+
+        const payload = {
+          external_reference: body.external_reference,
+          amount_cents: body.amount_cents,
+          currency: body.currency ?? 'USD',
+          reason: body.reason,
+        };
+        await withAudit(request, 'refund.recorded', accountId, payload, async () => {
+          await accountAudit.record({
+            accountId,
+            actorType: 'staff',
+            actorAccountId: ctx.account.id,
+            actorKeyId: ctx.apiKey.id,
+            action: 'admin.refund_recorded',
+            targetResourceId: body.external_reference,
+            payload,
+          });
+          return await accountsAdmin.getAccount(ctx, accountId);
+        });
+
+        return reply.code(201).send({ ok: true as const });
+      },
+    );
+  }
 
   // ─── helpers for override-specific audit shape ──────────────────────────
 

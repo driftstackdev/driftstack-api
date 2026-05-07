@@ -155,6 +155,16 @@ const accountId = account.id;
         <button type="button" data-action="set-override" class="btn-secondary text-sm">
           Set rate-limit override
         </button>
+        <button type="button" data-action="add-note" class="btn-secondary text-sm">
+          Add support note
+        </button>
+        <button
+          type="button"
+          data-action="record-refund"
+          class="btn-secondary text-sm border-amber-300 text-amber-800 hover:bg-amber-50"
+        >
+          Record refund (audit-only)
+        </button>
       </div>
 
       <!--
@@ -585,7 +595,69 @@ const accountId = account.id;
         else if (action === 'unsuspend') unsuspend();
         else if (action === 'set-override') showOverrideForm();
         else if (action === 'cancel-override') hideOverrideForm();
+        else if (action === 'add-note') addSupportNote();
+        else if (action === 'record-refund') recordRefund();
       });
+
+      // V-281 — audit-only support tooling.
+      function addSupportNote() {
+        const note = window.prompt(
+          'Support note (free-form, max 2000 chars). Recorded on this customer\'s audit log + admin audit:',
+        );
+        if (!note || !note.trim()) return;
+        showBanner('Recording support note…');
+        authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/audit-note', {
+          method: 'POST',
+          body: JSON.stringify({ note: note.trim() }),
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(() => {
+            showBanner('Support note recorded.');
+            load();
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't record note (" + msg + ').');
+          });
+      }
+
+      function recordRefund() {
+        const externalRef = window.prompt(
+          'Stripe charge / payment_intent / invoice id (the actual refund happens via Stripe dashboard):',
+        );
+        if (!externalRef || !externalRef.trim()) return;
+        const amountStr = window.prompt('Refund amount in cents (e.g. 299 for $2.99):');
+        const amount_cents = Number(amountStr);
+        if (!Number.isInteger(amount_cents) || amount_cents <= 0) {
+          showBanner('Refund amount must be a positive integer (cents).');
+          return;
+        }
+        const reason = window.prompt('Reason (recorded in customer audit log + admin audit):');
+        if (!reason || !reason.trim()) {
+          showBanner('Refund reason is required.');
+          return;
+        }
+        showBanner('Recording refund (audit-only)…');
+        authedFetch('/v1/admin/accounts/' + encodeURIComponent(prefixedId) + '/refund-record', {
+          method: 'POST',
+          body: JSON.stringify({
+            external_reference: externalRef.trim(),
+            amount_cents,
+            reason: reason.trim(),
+          }),
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(() => {
+            showBanner(
+              'Refund recorded. Reminder: actual refund is issued via Stripe dashboard — this endpoint is audit-only.',
+            );
+            load();
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't record refund (" + msg + ').');
+          });
+      }
 
       if (overrideForm instanceof HTMLFormElement) {
         overrideForm.addEventListener('submit', (ev) => {
