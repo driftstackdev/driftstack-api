@@ -14645,3 +14645,55 @@ Verified explicit content claims against shipped code/contracts:
 ### Next
 
 V-257 — doc site landing improvements + cross-references. Then V-258 (Cloudflare Pages deploy for apps/docs + founder runbook for required GitHub secrets) → V-259 (CF Pages config for marketing site if missing).
+
+## V-257 — Doc-site landing reorganisation + cross-references
+
+### What
+
+Per founder direction 2026-05-07: improve the doc-site landing + section indexes so the V-256 topic pages are reachable from any landing path, not just the sidebar.
+
+Changes:
+
+- `apps/docs/src/pages/index.astro` — reorganised into three sections:
+  - **Get started** (3-card grid): Quickstart / SDK installation / License activation.
+  - **Concept guides** (2-card grid): Profile management / Session lifecycle.
+  - **Reference** (3-card grid): API versioning / Webhook events / SDK versioning.
+  - Old "Where to start" + "What's documented today" replaced with this onboarding-shaped lead.
+  - Footer paragraph keeps the link to the repo `docs/` tree + marketing-site product pages + support email.
+- `apps/docs/src/pages/api/index.astro` — added "Practical use" section linking Quickstart + Session lifecycle + Profile management. Reference + auth + rate-limit copy unchanged.
+- `apps/docs/src/pages/sdk/index.astro` — three SDK status cards updated:
+  - TypeScript: "published, pre-1.0" (was "live").
+  - Python: "alpha; PyPI tag pending" + correct dist name `driftstack-sdk` (was "live" + import name).
+  - Go: "alpha; first tag pending" (was "planned").
+  - New "Get started" section with Installation + Quickstart links.
+- `apps/docs/src/pages/guides/index.astro` — promoted concept guides to the top section ("Concept guides" leads). Added "Get started" cross-links. Architecture + reference + repo-tree sections preserved at bottom.
+
+### Why
+
+V-256 published the per-topic pages but only the sidebar surfaced them. Customers landing on `/api/`, `/sdk/`, `/guides/` from external links (search results, product copy) didn't see paths into the practical pages. Cross-references close that loop without restructuring the nav.
+
+The SDK status accuracy fix is also a customer-trust correction: prior copy said Python and Go were "live"/"planned", but actual state is both alpha + the install commands shown were wrong (Python dist name is `driftstack-sdk`, not `driftstack`; Go was listed as planned when it actually has a working alpha codebase). Worth fixing before either deploys publicly.
+
+### Files
+
+- `apps/docs/src/pages/index.astro` — reorganised.
+- `apps/docs/src/pages/api/index.astro` — practical-use cross-links added.
+- `apps/docs/src/pages/sdk/index.astro` — status cards corrected, get-started section added.
+- `apps/docs/src/pages/guides/index.astro` — concept guides promoted.
+
+### Verify
+
+- `npm run build --workspace apps/docs`: 13 pages built clean.
+- `npm run typecheck --workspace apps/docs` (astro check): 0 errors / 0 warnings.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+
+### Notes
+
+- Did not move any pages or rename URLs — all V-254/V-256 deep-link targets remain stable.
+- The marketing site (`apps/marketing-site`) has its own docs landing copy on `/docs.astro` (out of scope here); V-258 deployment will route `docs.driftstack.dev` to the apps/docs build separately.
+- Repo-tree fallback link kept on the index for parity with the V-254 framing — visitors who came expecting raw markdown still see a path.
+
+### Next
+
+V-258 — Cloudflare Pages deployment config for apps/docs (`docs.driftstack.dev`) + founder runbook for required GitHub secrets (CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID).
