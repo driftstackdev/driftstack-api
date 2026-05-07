@@ -59,6 +59,8 @@ import { DrizzleIncidentsRepo } from '../db/incidents-repo.js';
 import { FetchProber, HealthProbeService } from '../services/health-probe.js';
 import { DrizzleProbesRepo } from '../db/health-probes-repo.js';
 import { StatusSnapshotService } from '../services/status-snapshot.js';
+import { StatusSubscribersService } from '../services/status-subscribers.js';
+import { DrizzleStatusSubscribersRepo } from '../db/status-subscribers-repo.js';
 import { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import { LegalService } from '../services/legal.js';
 import { AuthFlowsService } from '../services/auth-flows.js';
@@ -297,6 +299,17 @@ export async function createProductionDeps(
     ? new StatusSnapshotService(incidentsService, r2Public, logger)
     : null;
 
+  // V-295c3 — public status-page email subscribers service. Always
+  // active; emails no-op when Postmark is unconfigured (createEmailService
+  // returns a stub that swallows sends). The status-page base URL is the
+  // origin the subscribe-confirmation + unsubscribe emails embed; falls
+  // back to https://status.driftstack.dev when env-unset.
+  const statusPageBaseUrl = process.env.PUBLIC_STATUS_PAGE_URL ?? 'https://status.driftstack.dev';
+  const statusSubscribersRepo = new DrizzleStatusSubscribersRepo(dbHandle);
+  const statusSubscribersService = new StatusSubscribersService(statusSubscribersRepo, email, {
+    statusPageBaseUrl,
+  });
+
   // Legal catalog — reads docs/legal/*.md from the runtime image.
   // V-051 Dockerfile copies these into the image at build time.
   const legalCatalog = buildLegalCatalog({ repoRoot: resolve(process.cwd()) });
@@ -455,6 +468,7 @@ export async function createProductionDeps(
     adminAuditService,
     accountsAdminService,
     incidentsService,
+    statusSubscribersService,
     rateLimitOverridesService,
     legalService,
     emailPreferencesService,

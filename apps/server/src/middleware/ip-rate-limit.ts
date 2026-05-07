@@ -104,4 +104,8 @@ export const AUTH_IP_LIMITS = {
   signup: { capacity: 5, refillPerSecond: 5 / 60 },
   verifyEmail: { capacity: 10, refillPerSecond: 10 / 60 },
   passwordResetRequest: { capacity: 3, refillPerSecond: 3 / 60 },
+  // V-295c3 — public status-page email subscribe. Tighter than
+  // signup because we don't create a paying account, and the form is
+  // explicitly anonymous (no captcha layer); easier abuse vector.
+  statusSubscribe: { capacity: 3, refillPerSecond: 3 / 60 },
 } as const;

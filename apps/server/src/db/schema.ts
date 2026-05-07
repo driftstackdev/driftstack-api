@@ -1170,3 +1170,50 @@ export const systemHealthProbes = pgTable(
 
 export type SystemHealthProbe = typeof systemHealthProbes.$inferSelect;
 export type NewSystemHealthProbe = typeof systemHealthProbes.$inferInsert;
+
+// V-295c3 — public status-page email subscribers.
+//
+// Double-opt-in flow:
+//   1. POST /v1/status/subscribe — stores email + confirm_token_hash;
+//      sends confirmation email containing the plaintext token.
+//   2. GET /v1/status/subscribe/confirm?token=... — sets confirmed_at.
+//   3. Each public-incident state change triggers an email to all
+//      subscribers where confirmed_at IS NOT NULL AND unsubscribed_at
+//      IS NULL.
+//   4. GET /v1/status/subscribe/unsubscribe?token=... — sets
+//      unsubscribed_at; subsequent incident emails skip the row.
+//
+// Tokens are sha256-hashed at rest (auth-tokens.ts pattern). Plaintext
+// confirm + unsubscribe tokens are sent in the URLs of the respective
+// emails and never logged.
+//
+// Email is the natural primary key. Re-subscribing after unsubscribe
+// resets confirmed_at + unsubscribed_at + tokens (same row, fresh
+// double-opt-in).
+export const statusSubscribers = pgTable(
+  'status_subscribers',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    email: text('email').notNull().unique(),
+    /** sha256 hex of confirm-token plaintext. Null after confirmation. */
+    confirmTokenHash: text('confirm_token_hash'),
+    confirmExpiresAt: timestamp('confirm_expires_at', { withTimezone: true }),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+    /** sha256 hex of unsubscribe-token plaintext. Generated at confirm. */
+    unsubscribeTokenHash: text('unsubscribe_token_hash'),
+    unsubscribedAt: timestamp('unsubscribed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index('status_subscribers_confirmed_idx').on(t.confirmedAt, t.unsubscribedAt),
+    index('status_subscribers_unsub_token_idx').on(t.unsubscribeTokenHash),
+    index('status_subscribers_confirm_token_idx').on(t.confirmTokenHash),
+  ],
+);
+
+export type StatusSubscriber = typeof statusSubscribers.$inferSelect;
+export type NewStatusSubscriber = typeof statusSubscribers.$inferInsert;

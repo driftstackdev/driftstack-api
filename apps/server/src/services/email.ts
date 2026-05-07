@@ -81,6 +81,21 @@ export interface EmailService {
   }): Promise<void>;
   /** V-202 — trial-pack expiry notice. Fires from the expiry job. */
   sendTrialPackExpired(args: { to: string; upgradeUrl: string }): Promise<void>;
+  /**
+   * V-295c3 — public-status-page subscriber double-opt-in confirmation.
+   * `confirmLink` is the URL containing the plaintext confirm token.
+   */
+  sendStatusSubscriptionConfirmation(args: {
+    to: string;
+    confirmLink: string;
+    expiresAt: Date;
+  }): Promise<void>;
+  /** V-295c3 — fires after successful confirmation. Includes unsub link. */
+  sendStatusSubscriptionWelcome(args: {
+    to: string;
+    statusPageUrl: string;
+    unsubscribeLink: string;
+  }): Promise<void>;
   /** True if the underlying client is configured + initialized. */
   readonly isConfigured: boolean;
 }
@@ -169,6 +184,22 @@ const TEMPLATES = {
     html: (v) =>
       `<p>Your Driftstack trial pack has expired (14-day window closed). Your account stays active but at <strong>$0/month</strong> — no charges.</p><p>Pick a paid tier when you're ready: <a href="${v.upgradeUrl}">${v.upgradeUrl}</a></p><p>The trial pack is once per account; subsequent activity goes through a regular subscription.</p><p>— Driftstack</p>`,
   },
+  // V-295c3 — DRAFT copy. Tier-3 review-gated; founder may revise the
+  // copy before launch. Engineering scaffolding ships unchanged.
+  'status-subscription-confirmation': {
+    subject: 'Confirm your Driftstack status updates',
+    text: (v) =>
+      `You asked to receive Driftstack service-status updates. Confirm with the link below — it expires at ${v.expiresAt} (UTC) and works once.\n\n${v.confirmLink}\n\nIf you didn't request this, ignore this email — no email address is added to the list until you confirm.\n\n— Driftstack`,
+    html: (v) =>
+      `<p>You asked to receive Driftstack service-status updates. Confirm with the link below — it expires at <strong>${v.expiresAt}</strong> (UTC) and works once.</p><p><a href="${v.confirmLink}">${v.confirmLink}</a></p><p>If you didn't request this, ignore this email — no email address is added to the list until you confirm.</p><p>— Driftstack</p>`,
+  },
+  'status-subscription-welcome': {
+    subject: 'You’re subscribed to Driftstack status',
+    text: (v) =>
+      `You're now subscribed to Driftstack service-status updates. We'll email you when an incident is posted and again when it's resolved — nothing else.\n\nLive status: ${v.statusPageUrl}\nUnsubscribe (one click): ${v.unsubscribeLink}\n\n— Driftstack`,
+    html: (v) =>
+      `<p>You're now subscribed to Driftstack service-status updates. We'll email you when an incident is posted and again when it's resolved — nothing else.</p><p>Live status: <a href="${v.statusPageUrl}">${v.statusPageUrl}</a><br />Unsubscribe (one click): <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
+  },
 } satisfies Record<string, Template>;
 
 type TemplateName = keyof typeof TEMPLATES;
@@ -218,6 +249,8 @@ export function createEmailService({
       sendTierChanged: async () => {},
       sendTrialPackPurchased: async () => {},
       sendTrialPackExpired: async () => {},
+      sendStatusSubscriptionConfirmation: async () => {},
+      sendStatusSubscriptionWelcome: async () => {},
     };
   }
 
@@ -287,5 +320,12 @@ export function createEmailService({
         dashboardUrl,
       }),
     sendTrialPackExpired: ({ to, upgradeUrl }) => send('trial-pack-expired', to, { upgradeUrl }),
+    sendStatusSubscriptionConfirmation: ({ to, confirmLink, expiresAt }) =>
+      send('status-subscription-confirmation', to, {
+        confirmLink,
+        expiresAt: expiresAt.toISOString(),
+      }),
+    sendStatusSubscriptionWelcome: ({ to, statusPageUrl, unsubscribeLink }) =>
+      send('status-subscription-welcome', to, { statusPageUrl, unsubscribeLink }),
   };
 }

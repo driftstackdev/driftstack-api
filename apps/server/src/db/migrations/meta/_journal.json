@@ -183,6 +183,13 @@
       "when": 1778090416000,
       "tag": "0025_v295b_health_probes",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1778090417000,
+      "tag": "0026_v295c3_status_subscribers",
+      "breakpoints": true
     }
   ]
 }

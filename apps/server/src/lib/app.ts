@@ -20,6 +20,8 @@ import type { WebhooksService, WebhooksAdminService } from '../services/webhooks
 import type { AdminAuditService } from '../services/admin-audit.js';
 import type { AccountsAdminService } from '../services/admin-accounts.js';
 import type { IncidentsService } from '../services/incidents.js';
+import type { StatusSubscribersService } from '../services/status-subscribers.js';
+import { registerStatusSubscribeRoutes } from '../routes/status-subscribe.js';
 import type { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import type { LegalService } from '../services/legal.js';
 import type { EmailPreferencesService } from '../services/email-preferences.js';
@@ -111,6 +113,11 @@ export interface AppDeps {
    *  when omitted, /v1/admin/incidents/* + /v1/status/incidents are
    *  not registered. */
   incidentsService?: IncidentsService;
+  /** V-295c3 — public-status email subscriber service. When omitted,
+   *  /v1/status/subscribe/* is not registered. The status-page base
+   *  URL used for confirm + unsubscribe links is owned by the service
+   *  itself (passed at construction). */
+  statusSubscribersService?: StatusSubscribersService;
   rateLimitOverridesService: RateLimitOverridesService;
   legalService: LegalService;
   /** V-204: customer email notification preferences. */
@@ -251,6 +258,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAdminIncidentsRoutes(app, {
       incidentsService: deps.incidentsService,
       audit: deps.adminAuditService,
+    });
+  }
+  if (deps.statusSubscribersService !== undefined) {
+    registerStatusSubscribeRoutes(app, {
+      service: deps.statusSubscribersService,
+      rateLimitStore: deps.rateLimitStore,
     });
   }
   registerAdminWebhookRoutes(app, {

@@ -53,3 +53,25 @@ references the corresponding rows in this log.
   Reviewed against Privacy §3.9 (added in V-295c1) — wording already
   permits the fallback because the data shown is the same data the
   live API surfaces.
+
+## 2026-05-07 — V-295c3 (status-page email subscriptions)
+
+- **Privacy Policy §3.10 (new)**: added "Status-page email
+  subscriptions" subsection. Documents: data shape (email + opaque
+  tokens), legal basis (Art 6(1)(a) consent via double-opt-in),
+  source, retention (active subscription + 90 days post-unsubscribe
+  tombstone), recipients (Postmark for delivery), no-cookies posture.
+- **No new sub-processor**: Postmark already enumerated in DPA
+  Annex 3 for transactional email; status-page subscriber emails
+  fall under the same processor purpose. Sub-processor mirror
+  linter unchanged (10 ↔ 11).
+- **No DPA / ToS / AUP / Definitions update**: notification emails
+  are operational status messages, not marketing. Consent is
+  obtained per-purpose (the subscribe form text is the only thing
+  the visitor signs up for); no overlap with marketing/sales scope
+  on driftstack.dev.
+- **No tombstone-purge job yet**: the 90-day post-unsubscribe purge
+  promised in Privacy §3.10 is not yet implemented as a scheduled
+  job. To be wired in V-295c3-followup before public launch (the
+  status site is gated behind no-traffic until then; Privacy §3.10
+  is accurate forward-looking).

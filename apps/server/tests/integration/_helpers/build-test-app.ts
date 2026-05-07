@@ -19,6 +19,9 @@ import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
 import { IncidentsService } from '../../../src/services/incidents.js';
 import { InMemoryIncidentsRepo } from './in-memory-incidents-repo.js';
+import { InMemoryStatusSubscribersRepo } from './in-memory-status-subscribers-repo.js';
+import { StatusSubscribersService } from '../../../src/services/status-subscribers.js';
+import type { EmailService } from '../../../src/services/email.js';
 import { RateLimitOverridesService } from '../../../src/services/rate-limit-overrides.js';
 import { LegalService } from '../../../src/services/legal.js';
 import { buildLegalCatalogFromContent } from '../../../src/services/legal-catalog.js';
@@ -61,6 +64,80 @@ import { StripeWebhooksService } from '../../../src/services/stripe-webhooks.js'
 import { ProfilesService } from '../../../src/services/profiles.js';
 import { createEmailService } from '../../../src/services/email.js';
 import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
+
+interface EmailSendRecord {
+  template: string;
+  to: string;
+  vars: Record<string, unknown>;
+}
+
+function createRecordingEmailService(realService: EmailService): {
+  service: EmailService;
+  sends: EmailSendRecord[];
+} {
+  const sends: EmailSendRecord[] = [];
+  const record = (template: string, args: { to: string } & Record<string, unknown>): void => {
+    const { to, ...vars } = args;
+    sends.push({ template, to, vars });
+  };
+
+  const service: EmailService = {
+    isConfigured: realService.isConfigured,
+    sendSignupVerification: async (args) => {
+      record('signup-verification', args);
+      await realService.sendSignupVerification(args);
+    },
+    sendPasswordReset: async (args) => {
+      record('password-reset', args);
+      await realService.sendPasswordReset(args);
+    },
+    sendBillingReceipt: async (args) => {
+      record('billing-receipt', args);
+      await realService.sendBillingReceipt(args);
+    },
+    sendBillingFailure: async (args) => {
+      record('billing-failure', args);
+      await realService.sendBillingFailure(args);
+    },
+    sendSubscriptionCancellation: async (args) => {
+      record('subscription-cancellation', args);
+      await realService.sendSubscriptionCancellation(args);
+    },
+    sendSupportAck: async (args) => {
+      record('support-ack', args);
+      await realService.sendSupportAck(args);
+    },
+    sendSignupWelcome: async (args) => {
+      record('signup-welcome', args);
+      await realService.sendSignupWelcome(args);
+    },
+    sendSessionFailedFirst: async (args) => {
+      record('session-failed-first', args);
+      await realService.sendSessionFailedFirst(args);
+    },
+    sendTierChanged: async (args) => {
+      record('tier-changed', args);
+      await realService.sendTierChanged(args);
+    },
+    sendTrialPackPurchased: async (args) => {
+      record('trial-pack-purchased', args);
+      await realService.sendTrialPackPurchased(args);
+    },
+    sendTrialPackExpired: async (args) => {
+      record('trial-pack-expired', args);
+      await realService.sendTrialPackExpired(args);
+    },
+    sendStatusSubscriptionConfirmation: async (args) => {
+      record('status-subscription-confirmation', args);
+      await realService.sendStatusSubscriptionConfirmation(args);
+    },
+    sendStatusSubscriptionWelcome: async (args) => {
+      record('status-subscription-welcome', args);
+      await realService.sendStatusSubscriptionWelcome(args);
+    },
+  };
+  return { service, sends };
+}
 
 export interface TestAppOptions {
   tier?: AccountTier;
@@ -117,6 +194,11 @@ export interface TestAppFixture {
   accountAuditRepo: InMemoryAccountAuditRepo;
   /** V-295a — exposed so tests can assert incident state. */
   incidentsRepo: InMemoryIncidentsRepo;
+  /** V-295c3 — exposed so tests can assert subscriber state. */
+  statusSubscribersRepo: InMemoryStatusSubscribersRepo;
+  /** V-295c3 — recording email service: tests can read .sends to assert
+   *  exactly which template fired with what variables. */
+  emailSends: ReadonlyArray<EmailSendRecord>;
   rateLimitOverridesRepo: InMemoryRateLimitOverridesRepo;
   rateLimitStore: MemoryRateLimitStore;
   authFlowsRepo: InMemoryAuthFlowsRepo;
@@ -212,7 +294,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // sessions can wire accountLifecycle. Test logger is reused below
   // by other services that take it explicitly.
   const testLogger = createTestLogger();
-  const noopEmail = createEmailService({ config: null, logger: testLogger });
+  const baseEmail = createEmailService({ config: null, logger: testLogger });
+  const { service: noopEmail, sends: emailSends } = createRecordingEmailService(baseEmail);
   const emailPreferencesRepo = new InMemoryEmailPreferencesRepo();
   const emailPreferencesService = new EmailPreferencesService(emailPreferencesRepo);
   const accountLifecycleRepo = new InMemoryAccountLifecycleRepo();
@@ -265,6 +348,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // V-295a — incidents service with in-memory repo.
   const incidentsRepo = new InMemoryIncidentsRepo();
   const incidentsService = new IncidentsService(incidentsRepo);
+
+  // V-295c3 — public-status email subscribers.
+  const statusSubscribersRepo = new InMemoryStatusSubscribersRepo();
+  const statusSubscribersService = new StatusSubscribersService(statusSubscribersRepo, noopEmail, {
+    statusPageBaseUrl: 'https://status.driftstack.test',
+  });
 
   const rateLimitOverridesRepo = new InMemoryRateLimitOverridesRepo(authRepo);
   const rateLimitOverridesService = new RateLimitOverridesService(
@@ -506,6 +595,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     adminAuditService,
     accountsAdminService,
     incidentsService,
+    statusSubscribersService,
     rateLimitOverridesService,
     legalService,
     emailPreferencesService,
@@ -535,6 +625,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     adminAuditRepo,
     accountAuditRepo,
     incidentsRepo,
+    statusSubscribersRepo,
+    emailSends,
     rateLimitOverridesRepo,
     sessionsRepo,
     apiKeysRepo,

@@ -16846,3 +16846,65 @@ V-295c2 (~4-6h) — R2 snapshot fallback. Bootstrap writes `incidents-public.jso
 ### Next
 
 V-295c3 (~4-6h) — email subscription (`POST /v1/status/subscribe` + new `status_subscribers` table + send-on-incident-create/resolve via Postmark + double-opt-in + unsubscribe link). Privacy/DPA review for new email-collection surface. Then V-295d (Twitter/Slack notifications) and V-295e (real-time WebSocket + SLA reporting). NEVER STOP per founder direction.
+
+## V-295c3 — Status-page email subscriptions (subscribe + double-opt-in + unsubscribe)
+
+**Tier**: 1 — Customer-trust surface, fifth slice of V-295. (Note: incident notification fan-out — sending emails when an incident fires — is V-295c3-followup. This slice ships only the subscribe/confirm/unsubscribe data plane + the two enrollment emails. Notification fan-out is the next slice; the enrollment plumbing is independently testable + meaningful.)
+
+**Why**: Without an email subscription, the status page is pull-only — visitors have to remember to check it. Email-on-incident is the table-stakes signal for prospect trust ("I'll know if Driftstack goes down without watching"). V-295c3 ships the data plane (subscribe form → double-opt-in → unsubscribe) so the marketing copy on the status site can promise the feature truthfully when CF Pages goes live.
+
+**Scope**
+
+- New `status_subscribers` table (Drizzle schema + migration `0026_v295c3_status_subscribers.sql`). Columns: id / email (unique) / confirm_token_hash / confirm_expires_at / confirmed_at / unsubscribe_token_hash / unsubscribed_at / created_at. 3 indexes (confirmed-pair, confirm-token, unsubscribe-token).
+- New `StatusSubscribersService` with three flows:
+  - `subscribe(email, now)` — upserts the row with a fresh confirm token (24h TTL) + sends the confirmation email.
+  - `confirm(token, now)` — verifies hash + expiry + sets `confirmed_at` + generates lifelong unsubscribe token + sends welcome email with unsub link.
+  - `unsubscribe(token, now)` — sets `unsubscribed_at`. Subsequent confirmed-list queries exclude the row.
+- `StatusSubscribersRepo` interface + Drizzle implementation with `INSERT ... ON CONFLICT (email) DO UPDATE` for the re-subscribe path.
+- 3 unauthenticated routes (`POST /v1/status/subscribe`, `GET /v1/status/subscribe/confirm`, `GET /v1/status/subscribe/unsubscribe`). All gated by a single IP rate limiter (`statusSubscribe` config: 3/min) — tighter than signup.
+- 2 new email templates in `email.ts`: `status-subscription-confirmation` + `status-subscription-welcome`. **Tier-3 review-gated copy** — DRAFT inline; founder may revise before launch.
+- New `R2Config` env-pair stays — V-295c2 paths unchanged.
+- Privacy Policy §3.10 (new) — "Status-page email subscriptions". Documents the data, legal basis (Art 6(1)(a) consent via double-opt-in), retention (active + 90d post-unsubscribe tombstone), Postmark dispatch.
+- Changes-log V-295c3 entry — no new sub-processor (Postmark already in DPA Annex 3); 90-day tombstone-purge job promised for V-295c3-followup.
+- Test fixture upgrade: `createRecordingEmailService` wraps the noop email with a recording proxy. New `emailSends: ReadonlyArray<EmailSendRecord>` field on `TestAppFixture` lets tests assert exactly which template fired with which vars. Used by all 9 V-295c3 integration tests.
+
+**Files**
+
+- `apps/server/src/db/schema.ts` — `statusSubscribers` table.
+- `apps/server/src/db/migrations/0026_v295c3_status_subscribers.sql` — new.
+- `apps/server/src/db/migrations/meta/_journal.json` — entry for idx 26.
+- `apps/server/src/services/status-subscribers.ts` — new (service + repo interface).
+- `apps/server/src/db/status-subscribers-repo.ts` — new (Drizzle).
+- `apps/server/src/services/email.ts` — 2 new send methods + 2 new template entries (DRAFT copy).
+- `apps/server/src/routes/status-subscribe.ts` — new (3 routes, IP-rate-limited).
+- `apps/server/src/middleware/ip-rate-limit.ts` — new `statusSubscribe` IP-limit config.
+- `apps/server/src/lib/app.ts` — `statusSubscribersService?` + route registration.
+- `apps/server/src/lib/bootstrap.ts` — service wiring + always-active (no env gate).
+- `apps/server/tests/integration/_helpers/in-memory-status-subscribers-repo.ts` — new.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — `createRecordingEmailService` + fixture wiring.
+- `apps/server/tests/integration/status-subscribe.test.ts` — new (9 tests).
+- `docs/legal/privacy-policy.md` — §3.10.
+- `docs/legal/changes-log.md` — V-295c3 entry.
+
+### Verify
+
+- `npm test`: 867 / 867 passing across 90 files (was 858 / 89; +9 status-subscribe).
+- `npm run lint`: clean. Sub-processor mirror: 10 ↔ 11.
+- `npm run format:check`: clean.
+- Server typecheck: clean.
+
+### Notes — methodology choices
+
+- **Double-opt-in is the consent gate**: Art 6(1)(a) consent requires a "freely given, specific, informed and unambiguous indication" — clicking a link in an email Driftstack sent is the standard pattern. Single-opt-in would be cheaper but legally weaker; not worth the saving for a non-paying flow.
+- **Service owns the email send, not the route**: matches the V-079 auth-flows pattern. The service constructor takes `EmailService`, and `subscribe()` / `confirm()` send their own emails. Route layer stays thin — just parse + dispatch + 200/202.
+- **Token shape: 32-byte URL-safe base64, sha256 at rest** — same primitive as the existing auth-tokens (signup-verification / magic-link / password-reset). Reuses `generateAuthToken()` + `tokenHash()`. No divergence from established patterns.
+- **Re-subscribe = upsert, not duplicate row**: `INSERT ... ON CONFLICT (email) DO UPDATE` keeps the email column unique. Re-subscribing after unsubscribe resets the row to a fresh pending state — same email, fresh double-opt-in. Better than tracking subscription history (which would invite "did you sign me up multiple times?" support tickets).
+- **Tombstone retention is documented but NOT yet enforced**: Privacy §3.10 promises "the address itself is purged from this row 90 days after unsubscribe." That purge job is a V-295c3-followup. The status site is gated behind no public traffic until launch, so the privacy text is forward-looking-accurate; the implementation gap is recorded in the changes-log.
+- **`statusSubscribe` IP rate limit at 3/min**: tighter than `signup` (5/min) because the status form has lower legitimate-customer flow rate (you only subscribe once) but easier abuse vector (no captcha; anonymous form). 3/min is enough for a legitimate user retrying after a typo + still trips abuse fast.
+- **Recording email-service wrapper, not a fake**: the recording proxy delegates to the real (no-op) email service rather than replacing it, so the existing cascade of fire-and-forget tests stays unchanged. Recording is purely additive instrumentation. Wraps with named arrow functions to satisfy the `unbound-method` ESLint rule.
+- **Email templates DRAFT, not final**: marked inline as Tier-3 review-gated. The engineering scaffolding (table + service + routes + tests) is Tier-1 and ships on push-to-main per the cadence rule. Founder can revise the subject + body copy without changing any plumbing — just edit the strings in `email.ts:status-subscription-confirmation` + `:status-subscription-welcome`.
+- **No /v1/status/subscribers admin endpoint yet**: founder will need a "see who's subscribed + force-unsubscribe abuser" path eventually. Punted to V-295c3-followup with the tombstone-purge job; not required for the public flow to work.
+
+### Next
+
+V-295c3-followup (~2-4h) — incident notification fan-out (when `IncidentsService.create()` fires for a public incident, dispatch emails to all confirmed subscribers via Postmark; same on `resolve()`). Tombstone-purge cron job (90d post-unsubscribe email zero-out). New email template `status-incident-notification` (Tier-3 copy). Then V-295d (Twitter/Slack notifications) and V-295e (real-time WebSocket + SLA reporting). NEVER STOP per founder direction.
