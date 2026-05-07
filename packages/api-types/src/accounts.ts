@@ -68,6 +68,10 @@ export const AccountAuditActionSchema = z.enum([
   'account.password_changed',
   'api_key.minted',
   'api_key.revoked',
+  // V-296 — customer self-service rotation; old key continues for grace
+  // period (24h), new key shown once. Audit captures both ids for
+  // post-hoc reconstruction.
+  'api_key.rotated',
   'session.created',
   'session.destroyed',
   'profile.created',

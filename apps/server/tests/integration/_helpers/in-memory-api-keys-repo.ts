@@ -66,6 +66,16 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
     return Promise.resolve();
   }
 
+  setExpiresAt(id: string, expiresAt: Date): Promise<void> {
+    const r = this.byId.get(id);
+    if (r) {
+      const updated: ApiKeyRow = { ...r, expiresAt };
+      this.byId.set(id, updated);
+      if (this.authRepoMirror) this.authRepoMirror.upsertApiKey(updated);
+    }
+    return Promise.resolve();
+  }
+
   listAllApiKeys(opts: {
     limit: number;
     cursor?: string;

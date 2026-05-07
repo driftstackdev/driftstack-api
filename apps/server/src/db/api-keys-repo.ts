@@ -52,6 +52,10 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
     await this.database.db.update(apiKeys).set({ revokedAt: at }).where(eq(apiKeys.id, id));
   }
 
+  async setExpiresAt(id: string, expiresAt: Date): Promise<void> {
+    await this.database.db.update(apiKeys).set({ expiresAt }).where(eq(apiKeys.id, id));
+  }
+
   async listAllApiKeys(opts: {
     limit: number;
     cursor?: string;

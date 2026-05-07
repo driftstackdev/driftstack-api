@@ -303,11 +303,18 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           ? '<span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-slate-600">revoked ' +
             escapeHtml(fmtIso(k.revoked_at)) +
             '</span>'
-          : '<button type="button" data-revoke="' +
+          : '<div class="flex items-center gap-3">' +
+            '<button type="button" data-rotate="' +
+            escapeHtml(k.id) +
+            '" data-rotate-name="' +
+            escapeHtml(k.name) +
+            '" class="text-sm text-oxblood-700 hover:underline">Rotate</button>' +
+            '<button type="button" data-revoke="' +
             escapeHtml(k.id) +
             '" data-revoke-name="' +
             escapeHtml(k.name) +
-            '" class="text-sm text-rose-700 hover:underline">Revoke</button>';
+            '" class="text-sm text-rose-700 hover:underline">Revoke</button>' +
+            '</div>';
         return (
           '<li class="px-6 py-4">' +
           '<div class="flex items-start justify-between gap-6">' +
@@ -350,6 +357,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
               ul.classList.remove('hidden');
               ul.innerHTML = keys.map(keyLi).join('');
               wireRevokeButtons();
+              wireRotateButtons();
             }
             hideBanner();
           })
@@ -397,6 +405,58 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
                 );
                 btn.disabled = false;
                 btn.textContent = 'Revoke';
+              });
+          });
+        });
+      }
+
+      function wireRotateButtons() {
+        const buttons = ul.querySelectorAll('[data-rotate]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-rotate');
+            const name = btn.getAttribute('data-rotate-name') || '(unnamed)';
+            const ok = window.confirm(
+              'Rotate "' +
+                name +
+                '"? A new plaintext is shown ONCE; the old key keeps working for a 24h grace period so you can swap deployments without downtime.',
+            );
+            if (!ok) return;
+            btn.disabled = true;
+            btn.textContent = 'Rotating…';
+            fetch(apiBaseUrl + '/v1/api-keys/' + encodeURIComponent(id) + '/rotate', {
+              method: 'POST',
+              headers: {
+                authorization: 'Bearer ' + token,
+                'content-type': 'application/json',
+              },
+              body: '{}',
+            })
+              .then((r) => {
+                if (!r.ok) {
+                  return r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) =>
+                      Promise.reject(new Error(b.detail || 'HTTP ' + r.status)),
+                    );
+                }
+                return r.json();
+              })
+              .then((body) => {
+                // Reuse the create-flow reveal pane: same plaintext-shown-once
+                // UX. Body also has rotated_from + grace_period_ends_at fields
+                // which tell the user their old key still works for 24h.
+                revealPre.textContent = body.plaintext || '';
+                reveal.classList.remove('hidden');
+                return refresh();
+              })
+              .catch((err) => {
+                showBanner(
+                  'Rotate failed: ' + (err && err.message ? err.message : 'network error'),
+                );
+                btn.disabled = false;
+                btn.textContent = 'Rotate';
               });
           });
         });

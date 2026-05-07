@@ -99,6 +99,33 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
     },
   );
 
+  // ── POST /v1/api-keys/:id/rotate ───────────────────────────────────────
+  // V-296 — customer self-service rotation. Mints a fresh plaintext (shown
+  // once); old key continues working for 24h grace period via
+  // expires_at-driven auth gate. Optional `name` lets the caller rename
+  // the new key (useful when rotating "production-2024" → "production-2025").
+  app.post<{ Params: { id: string }; Body: { name?: string } }>(
+    '/v1/api-keys/:id/rotate',
+    {
+      preHandler: [app.requireAuth, app.rateLimit('global')],
+    },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const id = uuidFromPrefixedId(request.params.id, 'key');
+      const body = request.body ?? {};
+      const result = await apiKeysService.rotate(ctx, id, {
+        ...(typeof body.name === 'string' ? { name: body.name } : {}),
+      });
+      return reply.code(201).send({
+        ...publicApiKey(result.newRow),
+        plaintext: result.plaintext,
+        rotated_from: `key_${result.oldKey.id}`,
+        grace_period_ends_at: result.gracePeriodEndsAt.toISOString(),
+      });
+    },
+  );
+
   // ── GET /v1/usage ──────────────────────────────────────────────────────
   app.get(
     '/v1/usage',

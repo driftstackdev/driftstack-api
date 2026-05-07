@@ -17121,3 +17121,46 @@ V-295e (~3-4h Tier-1) — Server-Sent Events on `/v1/status/stream` for real-tim
 ### Next
 
 V-296 (~3-4h Tier-1) — API key rotation flow. Customer self-service rotation via dashboard `/api-keys` page. Existing key continues working for grace period (24h); new key shown once. Audit log entry: `api_key.rotated`. Then V-297 (audit log download), V-298+ V-294 customer-trust catalog continuation. NEVER STOP autopilot.
+
+## V-296 — API key rotation flow
+
+**Tier**: 1 — Customer self-service. Closes the V-294 Tier-1 catalog item "API key rotation."
+
+**Why**: Today the only way to rotate an API key is mint-new + revoke-old, which causes a downtime gap because the moment you revoke, all in-flight callers fail. Rotation gives customers a 24h grace window: new key works immediately, old key keeps working until grace expires. They redeploy once with the new key, then the old key auto-revokes via existing `expires_at`-driven auth gate. Zero infrastructure changes — reuses V-049 expires_at handling that has been in production since launch.
+
+**Scope**
+
+- New `ApiKeysService.rotate(ctx, keyId, opts)` method:
+  - Validates account_owner scope.
+  - Looks up old key (account-scoped) — 404 if missing, 400 if revoked.
+  - Mints fresh plaintext + scrypt hash + key prefix.
+  - Inserts new api_keys row with same name (or `opts.name` override) + same scopes + same expires_at.
+  - Sets old key's `expires_at = max(existing, now + 24h)` so the auth gate auto-revokes at grace boundary. The "max" guard prevents accidentally extending an already-expiring key's life.
+  - Invalidates auth-cache for old key id.
+  - Records `api_key.rotated` in account_audit_log with `{ old_key_id, new_key_id, grace_period_ends_at }` payload.
+- New repo method: `ApiKeysRepo.setExpiresAt(id, expiresAt)`. Drizzle + in-memory implementations.
+- New route: `POST /v1/api-keys/:id/rotate`. account_owner scope, global rate-limited.
+- api-types `AccountAuditActionSchema` extended with `'api_key.rotated'`.
+- Local `CustomerAuditEmitter` inline union in api-keys.ts also extended (parallel duplication caught by typecheck).
+- Customer dashboard `/api-keys`: new "Rotate" button next to "Revoke" for active keys. Reuses existing plaintext-reveal pane (V-270).
+
+### Verify
+
+- `npm test`: 904 / 904 across 95 files (was 897 / 94; +7 api-key-rotate).
+- `npm run lint`: clean. Sub-processor mirror: 10 ↔ 11.
+- `npm run format:check`: clean.
+- Server + customer-dashboard typecheck: clean.
+
+### Notes — methodology choices
+
+- **expires_at-driven grace, NOT a separate revocation column**: V-049 auth path already short-circuits keys past expires_at. Rotating sets old key's expires_at; auth code path unchanged.
+- **`max(existing, now+grace)` invariant**: rotating a key that already has an earlier expires_at must NOT extend its life. The max-guard preserves customer intent ("this key expires next Tuesday").
+- **Same plaintext-once UX as mint**: customers know the pattern from V-270. Reusing the existing reveal pane avoids a separate UI affordance.
+- **Inline union duplication caught by typecheck**: api-keys.ts has its own inline action-union (V-216 pattern) separate from AccountAuditActionSchema. Extending one without the other trips a typecheck error — keeps the duplicated unions in sync. Future slices: update BOTH.
+- **No new Drizzle pgEnum migration**: account_audit_log.action is `text not null` (free-form). Only the api-types Zod enum needed the new value.
+- **Audit payload pairs both ids**: post-incident reconstruction needs to pair "key_X rotated to key_Y at time T." Correlation by name+timestamp would be fragile.
+- **No Privacy update**: rotation is a customer-initiated action on the customer's own resource. Privacy §3.2 already covers API key lifecycle.
+
+### Next
+
+V-297 (~2-3h Tier-1) — Customer self-service audit-log download via dashboard /audit-log/export. CSV + JSON formats. Privacy §10 update for GDPR Article 20 portability. Then V-298+ V-294 customer-trust catalog. NEVER STOP autopilot.

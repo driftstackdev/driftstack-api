@@ -20,7 +20,7 @@ import type { AccountContext } from './auth.js';
 import type { ApiKeyRow } from './auth.js';
 import type { AuthCache } from './auth-cache.js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../lib/api-keys.js';
-import { LegalAcceptanceRequiredError } from '../lib/errors.js';
+import { BadRequestError, LegalAcceptanceRequiredError } from '../lib/errors.js';
 import { NotFoundError, requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
 
 /**
@@ -49,6 +49,10 @@ export interface ApiKeysRepo {
   /** Find an API key by id WITHOUT account scoping (admin force-actions only). */
   findApiKeyUnscoped(id: string): Promise<ApiKeyRow | null>;
   markRevoked(id: string, at: Date): Promise<void>;
+  /** V-296 — set expires_at on an existing key. Used by rotate() to
+   *  schedule the old key's automatic revocation at the end of the
+   *  grace period. Idempotent — last write wins. */
+  setExpiresAt(id: string, expiresAt: Date): Promise<void>;
   /**
    * Cross-account list for admin tooling. Filters by accountId
    * optionally; supports cursor pagination by createdAt DESC. Optional
@@ -96,6 +100,7 @@ export interface CustomerAuditEmitter {
       | 'account.password_changed'
       | 'api_key.minted'
       | 'api_key.revoked'
+      | 'api_key.rotated'
       | 'session.created'
       | 'session.destroyed'
       | 'profile.created'
@@ -185,6 +190,101 @@ export class ApiKeysService {
   ): Promise<{ items: ApiKeyRow[]; nextCursor: string | null }> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
     return this.repo.listAllApiKeys(opts);
+  }
+
+  /**
+   * V-296 — customer self-service rotation. Mints a fresh plaintext +
+   * hash for a new api_keys row (same name + scopes + accountId), and
+   * sets `expires_at` on the OLD key to `now + gracePeriodMs`. The old
+   * key continues to authenticate until that timestamp; after that the
+   * existing expires_at gate in auth.ts rejects it cleanly.
+   *
+   * Returns { newRow, plaintext, oldKey, gracePeriodEndsAt }. The
+   * plaintext is shown once — same UX as initial mint.
+   *
+   * Idempotency: rotating an already-rotated key (one whose expires_at
+   * is already set near the grace boundary) just mints another new key.
+   * The old key's expires_at is the LATEST of (existing, now+grace) so
+   * we never accidentally extend the old key's life.
+   */
+  async rotate(
+    ctx: AccountContext,
+    keyId: string,
+    opts: { gracePeriodMs?: number; name?: string } = {},
+  ): Promise<{
+    newRow: ApiKeyRow;
+    plaintext: string;
+    oldKey: ApiKeyRow;
+    gracePeriodEndsAt: Date;
+  }> {
+    throwIfMissingScope(ctx, 'account_owner');
+
+    const oldKey = await this.repo.findApiKey(keyId, ctx.account.id);
+    if (!oldKey) throw new NotFoundError(`API key "${keyId}" not found.`);
+    if (oldKey.revokedAt !== null) {
+      throw new BadRequestError(
+        'Cannot rotate a revoked key. Mint a fresh one via POST /v1/api-keys.',
+      );
+    }
+
+    // Mint the new key.
+    const env = ctx.account.tier === 'trial_pack' ? 'test' : 'live';
+    const plaintext = generateApiKey(env);
+    const keyHash = await hashApiKey(plaintext);
+    const keyPrefix = keyPrefixFromPlaintext(plaintext);
+    const newRow = await this.repo.insertApiKey({
+      accountId: ctx.account.id,
+      name: opts.name ?? oldKey.name,
+      scopes: oldKey.scopes,
+      keyPrefix,
+      keyHash,
+      expiresAt: oldKey.expiresAt, // preserve original expiry (may be null)
+    });
+
+    // Schedule the old key's automatic revocation. The old key's
+    // expires_at becomes the later of (existing, now + grace). The auth
+    // path already rejects keys past expires_at; no separate cron needed.
+    const gracePeriodMs = opts.gracePeriodMs ?? 24 * 60 * 60 * 1000;
+    const candidate = new Date(Date.now() + gracePeriodMs);
+    const gracePeriodEndsAt =
+      oldKey.expiresAt && oldKey.expiresAt < candidate ? oldKey.expiresAt : candidate;
+    await this.repo.setExpiresAt(oldKey.id, gracePeriodEndsAt);
+
+    // Cache invalidation for the OLD key — its expires_at changed, so
+    // any cached AccountContext for that key is now stale. The cache
+    // entry doesn't carry expires_at, but the service is still correct
+    // because the next miss-path hits the DB and sees the new value.
+    if (this.authCache) {
+      try {
+        await this.authCache.invalidateKey(oldKey.id);
+      } catch {
+        /* swallow */
+      }
+    }
+
+    // V-216 — record customer-facing audit entry. Captures both ids so
+    // post-incident reconstruction can pair the rotation.
+    if (this.accountAudit) {
+      try {
+        await this.accountAudit.record({
+          accountId: ctx.account.id,
+          actorType: 'customer',
+          actorAccountId: ctx.account.id,
+          actorKeyId: ctx.apiKey.id,
+          action: 'api_key.rotated',
+          targetResourceId: `key_${oldKey.id}`,
+          payload: {
+            old_key_id: `key_${oldKey.id}`,
+            new_key_id: `key_${newRow.id}`,
+            grace_period_ends_at: gracePeriodEndsAt.toISOString(),
+          },
+        });
+      } catch {
+        /* swallow */
+      }
+    }
+
+    return { newRow, plaintext, oldKey, gracePeriodEndsAt };
   }
 
   async revoke(ctx: AccountContext, keyId: string): Promise<void> {
