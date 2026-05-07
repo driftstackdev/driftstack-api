@@ -54,6 +54,8 @@ import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
 import { AdminAuditService } from '../services/admin-audit.js';
 import { AccountsAdminService } from '../services/admin-accounts.js';
+import { IncidentsService } from '../services/incidents.js';
+import { DrizzleIncidentsRepo } from '../db/incidents-repo.js';
 import { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import { LegalService } from '../services/legal.js';
 import { AuthFlowsService } from '../services/auth-flows.js';
@@ -251,6 +253,9 @@ export async function createProductionDeps(
     rateLimitOverridesRepo,
     authCache,
   );
+  // V-295a — public-status incidents service.
+  const incidentsRepo = new DrizzleIncidentsRepo(dbHandle);
+  const incidentsService = new IncidentsService(incidentsRepo);
 
   // Legal catalog — reads docs/legal/*.md from the runtime image.
   // V-051 Dockerfile copies these into the image at build time.
@@ -409,6 +414,7 @@ export async function createProductionDeps(
     webhooksAdminService,
     adminAuditService,
     accountsAdminService,
+    incidentsService,
     rateLimitOverridesService,
     legalService,
     emailPreferencesService,

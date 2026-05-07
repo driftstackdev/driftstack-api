@@ -17,6 +17,8 @@ import { UsageService } from '../../../src/services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../../../src/services/webhooks.js';
 import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
+import { IncidentsService } from '../../../src/services/incidents.js';
+import { InMemoryIncidentsRepo } from './in-memory-incidents-repo.js';
 import { RateLimitOverridesService } from '../../../src/services/rate-limit-overrides.js';
 import { LegalService } from '../../../src/services/legal.js';
 import { buildLegalCatalogFromContent } from '../../../src/services/legal-catalog.js';
@@ -113,6 +115,8 @@ export interface TestAppFixture {
   adminAuditRepo: InMemoryAdminAuditLogRepo;
   /** V-281 — exposed so tests can assert customer-audit rows post admin action. */
   accountAuditRepo: InMemoryAccountAuditRepo;
+  /** V-295a — exposed so tests can assert incident state. */
+  incidentsRepo: InMemoryIncidentsRepo;
   rateLimitOverridesRepo: InMemoryRateLimitOverridesRepo;
   rateLimitStore: MemoryRateLimitStore;
   authFlowsRepo: InMemoryAuthFlowsRepo;
@@ -258,6 +262,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
 
   const accountsAdminRepo = new InMemoryAccountsAdminRepo(authRepo);
   const accountsAdminService = new AccountsAdminService(accountsAdminRepo, authCache);
+  // V-295a — incidents service with in-memory repo.
+  const incidentsRepo = new InMemoryIncidentsRepo();
+  const incidentsService = new IncidentsService(incidentsRepo);
 
   const rateLimitOverridesRepo = new InMemoryRateLimitOverridesRepo(authRepo);
   const rateLimitOverridesService = new RateLimitOverridesService(
@@ -498,6 +505,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     webhooksAdminService,
     adminAuditService,
     accountsAdminService,
+    incidentsService,
     rateLimitOverridesService,
     legalService,
     emailPreferencesService,
@@ -526,6 +534,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     webhooksRepo,
     adminAuditRepo,
     accountAuditRepo,
+    incidentsRepo,
     rateLimitOverridesRepo,
     sessionsRepo,
     apiKeysRepo,

@@ -107,3 +107,60 @@ export const MOCK_LEADS: MockLead[] = [
     notes: null,
   },
 ];
+
+export type MockIncidentSeverity = 'minor' | 'major' | 'outage';
+export type MockIncidentStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved';
+
+export interface MockIncidentUpdate {
+  id: string;
+  message: string;
+  status: MockIncidentStatus;
+  postedAt: string;
+}
+
+export interface MockIncident {
+  id: string;
+  title: string;
+  description: string;
+  severity: MockIncidentSeverity;
+  status: MockIncidentStatus;
+  affectedComponents: string[];
+  public: boolean;
+  startedAt: string;
+  resolvedAt: string | null;
+  updates: MockIncidentUpdate[];
+}
+
+export const MOCK_INCIDENTS: MockIncident[] = [
+  {
+    id: 'inc_00000000-0000-4000-8000-0000000000a1',
+    title: 'API server elevated 5xx — eu-west-1',
+    description: 'Investigating elevated error rate on /v1/sessions/create after 14:02 UTC deploy.',
+    severity: 'major',
+    status: 'monitoring',
+    affectedComponents: ['api', 'sessions'],
+    public: true,
+    startedAt: '2026-05-06T14:05:00Z',
+    resolvedAt: null,
+    updates: [
+      {
+        id: 'incu_00000000-0000-4000-8000-0000000000b1',
+        message: 'Investigating elevated error rate on /v1/sessions/create after 14:02 UTC deploy.',
+        status: 'investigating',
+        postedAt: '2026-05-06T14:05:00Z',
+      },
+      {
+        id: 'incu_00000000-0000-4000-8000-0000000000b2',
+        message: 'Cause identified — rate-limiter regression in deploy 0a3f. Rolling back.',
+        status: 'identified',
+        postedAt: '2026-05-06T14:18:00Z',
+      },
+      {
+        id: 'incu_00000000-0000-4000-8000-0000000000b3',
+        message: 'Rollback complete; error rate is back to baseline. Monitoring.',
+        status: 'monitoring',
+        postedAt: '2026-05-06T14:31:00Z',
+      },
+    ],
+  },
+];

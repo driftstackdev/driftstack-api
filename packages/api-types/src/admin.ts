@@ -177,6 +177,10 @@ export const AdminAuditActionSchema = z.enum([
   // V-281: customer-support tooling (audit-only).
   'audit_note.added',
   'refund.recorded',
+  // V-295a: status-page incident management.
+  'incident.created',
+  'incident.updated',
+  'incident.resolved',
 ]);
 export type AdminAuditAction = z.infer<typeof AdminAuditActionSchema>;
 

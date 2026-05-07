@@ -16620,3 +16620,68 @@ Output structure:
 ### Next
 
 Standing by for founder Tier-2 ack on the 6 questions before V-295+ starts. V-295+ does NOT begin until verdict received per V-294 founder direction "Pre-codegen scope review mandatory — same lesson as V-381/V-382 lessons applied at architectural-scope scale."
+
+## V-295a — Status page admin endpoint + manual incident posting
+
+**Tier**: 1 — Customer-trust surface, first slice of V-294 catalog post-ack.
+
+**Why**: Founder Tier-2 ack locked all 6 V-294 verdicts (priority `customer-trust → SDK → admin → ops`, 4-6h slice cap, AI v1 = shell, WebRTC v1, NowPayments crypto, team RBAC v1). V-295a is the first 4-6h slice — the manual posting half of the status page (auto-polling lands in V-295b, CF Pages mirror in V-295c).
+
+**Scope**
+
+- New tables `incidents` + `incident_updates` (Drizzle schema + migration `0024_v295a_incidents.sql`).
+- 5 admin endpoints + 1 public endpoint:
+  - `POST   /v1/admin/incidents` — create + initial timeline update
+  - `GET    /v1/admin/incidents` — list (scope=all default, supports `since`, `limit`)
+  - `GET    /v1/admin/incidents/:id` — incident + updates
+  - `POST   /v1/admin/incidents/:id/updates` — append timeline + bump status
+  - `POST   /v1/admin/incidents/:id/resolve` — final update + `resolved_at` stamp
+  - `GET    /v1/status/incidents` — public, no-auth, last-30-days default, `public=true` only
+- All 5 admin mutations dual-write `admin_audit_log` (V-281 pattern) with target `inc_<uuid>`.
+- New `admin_audit_action` enum values: `incident.created`, `incident.updated`, `incident.resolved` (api-types Zod + Drizzle pgEnum + migration `ALTER TYPE`).
+- IncidentsService + DrizzleIncidentsRepo (production) + InMemoryIncidentsRepo (tests).
+- Admin-panel `/incidents/` index + detail UI (scaffold + form-handler stubs; live wiring lands in V-295c when CF Pages goes up).
+- Nav link added to admin layout.
+
+**Files**
+
+- `apps/server/src/db/schema.ts` — incidentSeverity + incidentStatus enums, `incidents` + `incident_updates` tables, 3 new admin_audit_action values.
+- `apps/server/src/db/migrations/0024_v295a_incidents.sql` — new.
+- `apps/server/src/db/migrations/meta/_journal.json` — entry for idx 24.
+- `packages/api-types/src/incidents.ts` — new (Zod schemas).
+- `packages/api-types/src/index.ts` — re-export.
+- `packages/api-types/src/admin.ts` — extended AdminAuditActionSchema.
+- `apps/server/src/services/incidents.ts` — IncidentsService + IncidentsRepo interface.
+- `apps/server/src/services/admin-audit.ts` — extended AdminAuditAction union.
+- `apps/server/src/db/incidents-repo.ts` — DrizzleIncidentsRepo (transactional addUpdate/resolve).
+- `apps/server/src/routes/admin-incidents.ts` — 5 admin + 1 public endpoint.
+- `apps/server/src/lib/app.ts` — wiring + AppDeps extension.
+- `apps/server/src/lib/bootstrap.ts` — wiring.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — fixture wiring.
+- `apps/server/tests/integration/_helpers/in-memory-incidents-repo.ts` — new.
+- `apps/server/tests/integration/admin-incidents.test.ts` — new (11 tests).
+- `apps/admin-panel/src/data/mocks.ts` — MOCK_INCIDENTS + types.
+- `apps/admin-panel/src/pages/incidents/index.astro` — list + create form.
+- `apps/admin-panel/src/pages/incidents/[id].astro` — detail + add-update + resolve forms.
+- `apps/admin-panel/src/layouts/AdminLayout.astro` — nav entry.
+
+### Verify
+
+- `npm test`: 844 / 844 passing across 87 files (was 833 / 86; +11 admin-incidents tests, +1 file).
+- `npm run lint`: clean. Sub-processor mirror linter: 10 public ↔ 11 DPA Annex 3 (V-271 invariant intact).
+- `npm run format:check`: clean.
+- `npm run build`: clean (admin-panel renders both new pages with mock data; only the recognized `ES2023` tsup warning + pre-existing CF Pages SESSION-binding hint).
+- Server typecheck: clean. Drizzle pgEnum + api-types AdminAuditActionSchema parity preserved (V-281 lesson re-applied).
+
+### Notes — methodology choices
+
+- **V-281 dual-write pattern, no shortcuts**: each admin mutation runs through `withAudit` so the audit row is written even on failure (`result: error: <code>`). Same pattern as `admin-accounts.ts` resilience tests.
+- **Public ID prefixes (`inc_`, `incu_`)**: matches V-191/V-281 admin scheme; lets cross-resource audit-log filtering by `targetResourceId` LIKE `'inc_%'`.
+- **Public endpoint no-auth, last-30-days default, public=true only**: same defaults as the upcoming CF Pages mirror will consume in V-295c. Hard-coded `since=now-30d` if caller omits, hard-coded `limit=50` if caller omits.
+- **Admin-panel scaffold over live wire**: forms are intentionally stubs that alert "wiring lands in V-295c". Reason: the CF Pages mirror + R2 propagation pipeline is the load-bearing part of "manual posting works end-to-end". Wiring the forms now would require admin-panel auth which is V-296+ scope. Per V-294 4-6h cap, scaffold-only this slice.
+- **NotFoundError handling in resolve/addUpdate**: surfaced through 404 by Fastify's existing error mapper (no new mapping needed). Confirmed in tests via the bad-id case being a route-validation failure, not a service-layer one.
+- **No legal-page update needed for V-295a**: status incidents do not introduce new PII processing or sub-processor surface. V-293 catalog (privacy / DPA / ToS) untouched. Privacy-policy "Status page" sub-section will be added in V-295c when the public mirror + email subscription land.
+
+### Next
+
+V-295b (~4-6h) — Status auto-polling (Hetzner cron probes /v1/health every 60s, writes incidents to `system_health_probes` table, auto-creates incidents on 3-consecutive-fail). Then V-295c (CF Pages status site + email subscription + privacy/DPA legal updates + `/docs/legal/changes-log.md` creation + V-295c CF Pages founder runbook). NEVER STOP per founder direction.

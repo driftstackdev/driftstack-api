@@ -111,6 +111,10 @@ export const adminAuditAction = pgEnum('admin_audit_action', [
   // V-281: customer-support tooling (audit-only).
   'audit_note.added',
   'refund.recorded',
+  // V-295a: status-page incident management.
+  'incident.created',
+  'incident.updated',
+  'incident.resolved',
 ]);
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1039,3 +1043,89 @@ export const scheduledJobs = pgTable(
 
 export type ScheduledJob = typeof scheduledJobs.$inferSelect;
 export type NewScheduledJob = typeof scheduledJobs.$inferInsert;
+
+// V-295a — public-status incidents.
+//
+// Two-table shape: `incidents` holds the current state (severity,
+// status, resolved_at) and `incident_updates` holds the chronological
+// timeline. The status page renders incidents.public=true; the admin
+// surface reads + writes both sides via /v1/admin/incidents/*.
+
+export const incidentSeverity = pgEnum('incident_severity', ['minor', 'major', 'outage']);
+export const incidentStatus = pgEnum('incident_status', [
+  'investigating',
+  'identified',
+  'monitoring',
+  'resolved',
+]);
+
+export const incidents = pgTable(
+  'incidents',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    title: text('title').notNull(),
+    /** Markdown description; rendered on the status page. */
+    description: text('description').notNull(),
+    severity: incidentSeverity('severity').notNull(),
+    status: incidentStatus('status').notNull().default('investigating'),
+    /** Component slugs the incident affects. Free-form text array;
+     *  the status page recognises 'api' / 'gui-distribution' /
+     *  'stripe' / 'marketing' / 'docs' / 'status' but accepts any. */
+    affectedComponents: jsonb('affected_components')
+      .notNull()
+      .default(sql`'[]'::jsonb`)
+      .$type<readonly string[]>(),
+    /** When false, the incident is admin-only (e.g. internal triage
+     *  before public confirmation). */
+    public: boolean('public').notNull().default(true),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    createdByAdminId: uuid('created_by_admin_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'restrict' }),
+    createdByAdminKeyId: uuid('created_by_admin_key_id')
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index('incidents_started_at_idx').on(t.startedAt),
+    index('incidents_public_status_idx').on(t.public, t.status),
+  ],
+);
+
+export const incidentUpdates = pgTable(
+  'incident_updates',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    incidentId: uuid('incident_id')
+      .notNull()
+      .references(() => incidents.id, { onDelete: 'cascade' }),
+    message: text('message').notNull(),
+    status: incidentStatus('status').notNull(),
+    postedByAdminId: uuid('posted_by_admin_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'restrict' }),
+    postedByAdminKeyId: uuid('posted_by_admin_key_id')
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: 'restrict' }),
+    postedAt: timestamp('posted_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index('incident_updates_incident_id_idx').on(t.incidentId, t.postedAt)],
+);
+
+export type Incident = typeof incidents.$inferSelect;
+export type NewIncident = typeof incidents.$inferInsert;
+export type IncidentUpdate = typeof incidentUpdates.$inferSelect;
+export type NewIncidentUpdate = typeof incidentUpdates.$inferInsert;

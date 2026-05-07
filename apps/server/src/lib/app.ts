@@ -19,6 +19,7 @@ import type { UsageService } from '../services/usage.js';
 import type { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
 import type { AdminAuditService } from '../services/admin-audit.js';
 import type { AccountsAdminService } from '../services/admin-accounts.js';
+import type { IncidentsService } from '../services/incidents.js';
 import type { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import type { LegalService } from '../services/legal.js';
 import type { EmailPreferencesService } from '../services/email-preferences.js';
@@ -50,6 +51,7 @@ import { registerStatusRoutes } from '../routes/status.js';
 import { registerOpenApiRoutes } from '../routes/openapi.js';
 import { registerWebhookRoutes } from '../routes/webhooks.js';
 import { registerAdminAccountsRoutes } from '../routes/admin-accounts.js';
+import { registerAdminIncidentsRoutes } from '../routes/admin-incidents.js';
 import { registerAdminWebhookRoutes } from '../routes/admin-webhooks.js';
 import { registerAdminAuditLogRoutes } from '../routes/admin-audit-log.js';
 import { registerAdminOverviewRoutes } from '../routes/admin-overview.js';
@@ -105,6 +107,10 @@ export interface AppDeps {
   webhooksAdminService: WebhooksAdminService;
   adminAuditService: AdminAuditService;
   accountsAdminService: AccountsAdminService;
+  /** V-295a — incidents service. Optional during migration window;
+   *  when omitted, /v1/admin/incidents/* + /v1/status/incidents are
+   *  not registered. */
+  incidentsService?: IncidentsService;
   rateLimitOverridesService: RateLimitOverridesService;
   legalService: LegalService;
   /** V-204: customer email notification preferences. */
@@ -241,6 +247,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     audit: deps.adminAuditService,
     accountAudit: deps.accountAuditService,
   });
+  if (deps.incidentsService !== undefined) {
+    registerAdminIncidentsRoutes(app, {
+      incidentsService: deps.incidentsService,
+      audit: deps.adminAuditService,
+    });
+  }
   registerAdminWebhookRoutes(app, {
     webhooksAdmin: deps.webhooksAdminService,
     audit: deps.adminAuditService,
