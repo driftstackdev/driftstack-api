@@ -15693,3 +15693,57 @@ The full parked-follow-up queue from V-272 is closed:
 **Skipped**: Tauri custom URL scheme (`driftstack://auth/callback`) deep-link replacement for V-268 polling. The polling flow works end-to-end already; the deep-link variant requires Rust-side plugin install + cross-platform URL scheme registration (info.plist macOS, registry Windows, .desktop Linux), all of which is high-effort polish over a working baseline. Worth doing eventually but not blocking launch.
 
 Repo state: 751 / 751 tests, all checks green. Pre-launch GUI client + dashboard surfaces are now launch-quality across the entry-point + key-management + identity flows.
+
+## V-278 — Hetzner deployment automation (skip-on-missing-secret + tag-triggered + founder runbook)
+
+### What
+
+Per founder direction 2026-05-07 next-work-order. Substantial pre-existing infrastructure (Dockerfile, host-side compose, deploy.yml push-on-main pipeline, env-vars schema doc) — V-278 closes four gaps to make the system deploy-ready without further engineering work, founder ops only.
+
+Gaps closed:
+
+1. **Skip-on-missing-secret in `deploy.yml`** — both `deploy-staging` + `deploy-production` jobs gate on a "Check Hetzner secrets are set" step that exits cleanly when any of `HETZNER_HOST`, `HETZNER_USER`, `HETZNER_SSH_KEY`, `DEPLOY_DOTENV_BASE64` is empty. Image still builds + pushes to ghcr.io; deploy step skips with a "secrets not set, see V-278 runbook" message. Mirrors the same pattern V-258/V-259/V-260 use for Cloudflare Pages workflows.
+2. **New tag-triggered `.github/workflows/server-deploy.yml`** — triggered on `server-v*` tags + `workflow_dispatch`. Production-only (no staging hop). Same skip-on-missing-secret gate. Companion to `deploy.yml` for explicit-release-cut semantics post-launch when continuous-delivery shape isn't right anymore.
+3. **`docs/founder-actions/v278-hetzner-deploy-keys.md`** — end-to-end runbook covering: VM provisioning per ADR-001 (CCX13 staging + CCX23 prod, Falkenstein), bootstrap commands (Docker install, `driftstack` user, `/opt/driftstack/` setup), per-environment SSH key generation + `ssh-copy-id`, GitHub Environments configuration (staging no-gate vs production approval gate + secret population via `gh secret set --env <env>`), .env construction from the schema doc, first-deploy options (push-on-main vs tag-triggered), verification checklist, rollback procedures (image-level + workflow-level), troubleshooting for the five most-likely failure modes.
+4. **`docs/operations/production-env-schema.md`** — provisioning-order summary of every env var the server reads. Sections in dependency order: process/runtime → DB → Redis → auth-flow URLs → email → R2 → Sentry → Stripe → driver. Sub-processor → env-var crosswalk maps each of the 10 DPA Annex 3 entries to the env vars that wire each integration (compliance-audit-ready). Long-form per-variable spec stays in the existing `docs/deployment/env-vars.md`.
+
+### Why
+
+The deploy pipeline existed but wasn't deploy-ready: missing secrets caused workflow failures (red CI checks for legitimately pre-provisioning state), the founder had no consolidated runbook for the steps from "fresh repo" to "first successful deploy," the env-var schema lived in one verbose document mixing operations + per-variable detail, and there was no tag-triggered alternative to push-on-main for explicit production cuts.
+
+V-278 is purely infrastructure-readiness: every change is paid back the moment the founder runs through the runbook. No code execution path is altered for already-provisioned environments.
+
+### Files
+
+- `.github/workflows/deploy.yml` — skip-on-missing-secret gate added to deploy-staging + deploy-production.
+- `.github/workflows/server-deploy.yml` — new tag-triggered production-only deploy workflow.
+- `docs/founder-actions/v278-hetzner-deploy-keys.md` — new founder runbook.
+- `docs/operations/production-env-schema.md` — new operations-focused env summary + sub-processor crosswalk.
+
+### Verify
+
+- `npm run lint`: clean (subprocessor mirror gate green: 10 public / 11 DPA Annex 3 rows matched).
+- `npm run format:check`: clean.
+- Both workflow YAMLs validated by mirroring the `deploy-marketing.yml` / `deploy-docs.yml` shape proven across V-258/V-259/V-260.
+- `deploy.yml` skip-on-missing-secret tested logically: when `HETZNER_HOST` is empty, the gate step prints "secrets not set" + exits 0; downstream `Deploy via SSH` step has `if: steps.gate.outputs.ready == 'true'` so it skips. No appleboy/ssh-action invocation = no failure on missing key. Build-image job (which doesn't depend on Hetzner secrets) still runs unconditionally.
+
+### Notes — surfaced for founder verdict
+
+**Two coexisting deploy workflows** — `deploy.yml` (push-on-main, staging-auto + prod-approval) AND `server-deploy.yml` (tag-on-`server-v*`, prod-only). Per founder direction both are wired; either can be used per release. The discipline question: which is the canonical post-launch path?
+
+- **Continuous-delivery (deploy.yml)** — every main commit is a candidate prod deploy after staging hop + manual approval. Right shape during the Q4-2026/Q1-2027 launch window when iteration velocity matters more than release ceremony.
+- **Explicit-release (server-deploy.yml)** — production cuts happen only when the founder tags `server-vX.Y.Z`. Right shape post-launch when production is stable and infrequent / scheduled releases reduce blast-radius variance.
+
+Both can coexist; founder picks per release. No autonomous decision needed; if direction changes, removing one workflow is a single-file delete.
+
+### Notes — design decisions
+
+- **Skip-on-missing-secret pattern reuses V-258's shape.** Same gate-step + `if:` pattern across all five workflows now (`deploy-marketing.yml`, `deploy-docs.yml`, `deploy-customer-dashboard.yml`, `deploy.yml`, `server-deploy.yml`). Pre-push-hook safe; CI green during pre-provisioning; deploys cleanly upgrade once secrets land.
+- **Tag-triggered workflow checks out the tag's commit, not main.** Important when the tagged commit isn't main HEAD anymore — the image is built from exactly the tagged source.
+- **`infra/hetzner/docker-compose.yml`** unchanged. The host-side compose file was correctly shaped from earlier phases; the deploy workflow assumes its presence at `/opt/driftstack/docker-compose.yml` and the founder runbook section 2 covers the bootstrap step that copies it there.
+- **Sub-processor crosswalk in `production-env-schema.md`** is the load-bearing audit artefact: each DPA Annex 3 entry has a documented mapping to the env-var that wires it. Future sub-processor additions update both the DPA + the crosswalk in lockstep (V-271 mirror linter ensures public list + DPA stay aligned; this crosswalk is the third leg making sure operational env-vars track the same set).
+- **`live_mode Stripe keys via SSH-write only`** is preserved per the `stripe_credential_handling` memory rule — explicitly called out in both the runbook + the schema doc. Test-mode `sk_test_…` is fine via `DEPLOY_DOTENV_BASE64`; live-mode `sk_live_…` goes via `ssh driftstack@host` + manual `.env` edit only.
+
+### Next
+
+V-279 — pre-launch comprehensive checklist. Roll up current state across backend / GUI / marketing / docs / support readiness; surface explicit founder action queue with priority + blocking-launch yes/no.
