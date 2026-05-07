@@ -14405,3 +14405,44 @@ The stdin-password fix is mildly security-relevant — a password in shell histo
 ### Next
 
 V-253 — V-246-P1-003 mitigation note in `docs/operations/`.
+
+## V-253 — V-246-P1-003 ops mitigation note (V-135 Cloudflare Access dependency)
+
+### What
+
+Per founder direction 2026-05-07: documents the operational dependency the V-246-P1-003 deferral relies on.
+
+New `docs/operations/admin-scope-mitigation.md` (~75 lines):
+
+- **TL;DR** explaining the gap (`'account_owner'` scope reach into `/v1/admin/*`) + the load-bearing mitigation (V-135 Cloudflare Access on `admin.driftstack.dev`).
+- **What's actually in app code** — pointer at the `KNOWN GAP` comment in `apps/server/src/services/auth.ts` lines ~255-267 + explanation of why the V-174 scope split was originally permissive.
+- **What V-135 actually does** — Cloudflare Access policy enforcing identity + access list scoped to `@driftstack.dev`. Customer API keys can't pass the gate, regardless of scope.
+- **Conditions for safely closing the V-135 dependency** — 4-step checklist for the future V-NNN that closes the underlying scope reach (split admin routes / replace remaining customer uses with `/v1/account/*` / verify with integration tests / remove `KNOWN GAP` comment).
+- **Verification checklist (founder, on Cloudflare config)** — 6-item checklist for the founder to verify when configuring Cloudflare Access on `admin.driftstack.dev`. Most-important item: scope to `@driftstack.dev` email domain only, NOT "any authenticated user."
+
+The doc explicitly says: **"DO NOT remove or bypass the Cloudflare Access front-door without first closing the scope reach in app code."** The mitigation is load-bearing; documented as such so future maintenance doesn't accidentally re-introduce the gap.
+
+### Why
+
+V-246-P1-003 was deferred under the assumption that V-135 Cloudflare Access prevents customer reach. Founder direction 2026-05-07 made the deferral conditional on actually verifying V-135 deployment + access-list scope to staff only. This doc captures the dependency so the assumption is durable across staff changes / Cloudflare config rotations.
+
+### Files
+
+- `docs/operations/admin-scope-mitigation.md` — new ops note.
+- `docs/verification-log.md` — this entry.
+
+### Verify
+
+- `npm run typecheck` / `lint` / `format:check`: clean.
+- `npm test`: 740 / 740 passing across 77 files (pure docs).
+- pre-push hook: clean on push.
+
+### Notes
+
+- The 4-step checklist for closing the V-135 dependency is intentionally specific (split route registrations + replace customer uses + audit dashboard code + integration test). Future "I should refactor the scope" V-NNN can grep for V-253 and pick up the checklist verbatim. No archaeology needed.
+- The Cloudflare verification checklist's "Allow: any authenticated user" warning is the single most common misconfiguration — it lets ANY Google Workspace account in the world reach the admin panel. Documented inline so the founder can catch it during config.
+- Did NOT split the admin routes in this V-NNN. That's the future V-NNN the doc references; this V-entry is purely the operational note. Splitting routes touches admin endpoint registration in `app.ts`, customer-dashboard code, and admin-panel code — multi-commit work that benefits from being its own V-NNN with its own focused review.
+
+### Next
+
+V-254+ — Per-topic doc-site page migrations from `/docs/*.md` → `apps/docs/src/pages/`. Founder direction listed five high-value topics (api-quickstart, sdk-installation, license-activation, profile-management, session-lifecycle); pick by highest-immediate-value when starting V-254.
