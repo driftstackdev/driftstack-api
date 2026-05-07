@@ -16392,3 +16392,82 @@ The four list views (Sessions / Profiles / Recordings / Proxies) share the V-275
 ### Next
 
 V-291 — FirstRunWizard.tsx::ApiKeyStep view tests. Browser-sign-in path UI states (idle → opening → waiting → success → error) + click handler tests. Mocks the V-289 hook + asserts the component renders correctly per state.
+
+## V-291 — FirstRunWizard ApiKeyStep view tests
+
+### What
+
+Per founder direction: 12 tests covering ApiKeyStep's render-per-state matrix + click handlers + paste-fallback toggle. Mocks the V-274 useBrowserSignIn hook (V-289 already covers its lifecycle); V-291 is the rendering-layer-only.
+
+`apps/gui-client/tests/unit/api-key-step.test.tsx`:
+
+- **5 state-render tests**: `idle` / `opening` / `waiting` / `success` / `error`. Each test re-mocks the hook to return that state slice + asserts the corresponding UI shell (button, copy, pulsing dot, etc.) is visible.
+- **3 click-handler tests**: "Sign in with browser" → `start()`; "Cancel" (waiting state) → `cancel()`; "Try again" (error state) → `start()`. Use `@testing-library/user-event` for realistic click simulation.
+- **4 paste-fallback tests**: toggle reveals API-key input + Validate button; Validate fires `onValidate` when key non-empty; Validate disabled when key empty; error prop renders in `role="alert"` element.
+
+`apps/gui-client/src/views/FirstRunWizard.tsx` — `ApiKeyStep` function added `export` keyword. Prevents the test from needing module-internal access tricks. No production callers outside the file; safe export.
+
+### Why
+
+The browser-OAuth UI is the customer's first impression of the wizard at the security-sensitive moment. Render-per-state + click correctness ensures future code changes don't accidentally:
+
+- Hide the "Try again" button when the error state fires (silently stranding customers).
+- Forget to wire Cancel to `cancel()` (timer leak after dismiss).
+- Disable Validate when it should be enabled (or vice versa).
+
+V-289 covered the hook's state machine; V-291 covers the component's render-per-state mapping. Together they exhaustively verify the V-268/V-274 flow.
+
+### Files
+
+- `apps/gui-client/src/views/FirstRunWizard.tsx` — `ApiKeyStep` exported.
+- `apps/gui-client/tests/unit/api-key-step.test.tsx` — new (12 tests).
+
+### Verify
+
+- `npx vitest run --project gui-jsdom`: passes (12 new + earlier 11 = 23 total in gui-jsdom).
+- `npm test`: 788 / 788 passing — wait that's V-291 only count. Combined V-291 + V-292: 793 / 793 across 85 files.
+
+## V-292 — Dashboard /profiles ↔ GUI ProfilesView empty-state parity
+
+### What
+
+Per founder direction: cheap cross-surface vocabulary consistency check.
+
+`apps/customer-dashboard/tests/unit/profiles-empty-state-parity.test.ts` — pure-Node test (no DOM); reads both source files + asserts:
+
+1. **Four shared phrases** appear verbatim in both surfaces:
+   - `No profiles yet`
+   - `persistent identity`
+   - `cookies, localStorage, IndexedDB`
+   - `Create your first profile`
+2. **Both surfaces use oxblood-tinted icon containers** — dashboard uses `bg-oxblood-50` / `text-oxblood-700` directly (marketing-site Tailwind tokens); GUI uses `bg-accent-subtle` / `text-accent` semantic tokens (which map to the same palette via the gui-client tailwind.config.ts).
+
+### Why
+
+V-275/V-284 deliberately set up the same vocabulary across the GUI and the dashboard so customers see one product. Without a regression check, future copy edits to one surface drift over time. V-292 pins the contract.
+
+### Files
+
+- `apps/customer-dashboard/tests/unit/profiles-empty-state-parity.test.ts` — new (5 tests via `it.each`).
+
+### Verify
+
+- `npx vitest run apps/customer-dashboard/tests/unit/profiles-empty-state-parity.test.ts`: 5 / 5.
+- Full suite: 793 / 793 passing across 85 files (was 776 / 83; +17 tests from V-291's 12 + V-292's 5; +2 files).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+
+### Notes — V-292 design choice
+
+- **Source-string match over rendered-DOM match.** Astro pages are server-rendered; testing them via Vitest + jsdom would require a heavier setup (Astro container API or a build-then-grep pipeline). The brittleness is intentional: if either source file moves, the test fails loudly + needs updating in the same commit, which is exactly the discipline the parity check enforces.
+- **`it.each` over the SHARED_PHRASES array** so per-phrase failures surface one at a time. If three phrases drift, the test produces three distinct failure messages instead of one combined "got fewer matches than expected" assertion.
+
+### Next
+
+V-289 + V-290 + V-291 + V-292 closed the founder's V-289+ execution order. Remaining founder spec items:
+
+- DEFERRED: browser-driving admin-panel Playwright (V-281 UI handlers; multi-hour scope; V-285 covers at API layer).
+- DEFERRED for founder bundle: /forgot-password + /reset-password founder-attended smoke (~10min, bundle with V-379 founder bundle).
+- DEFERRED post-launch: customer-dashboard PARTIAL pages polish (sessions / billing / usage / webhooks).
+
+Standing by per "NEVER STOP" — no obvious launch-blocking work remaining in the parked queue. Will continue with cheap-coverage / polish if any, otherwise truly idle until founder direction.

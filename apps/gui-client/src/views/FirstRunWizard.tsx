@@ -330,7 +330,7 @@ function ModeStep({
 // V-274 — moved the state-machine + poll logic to
 // `lib/browser-sign-in.ts` so SettingsView can reuse it.
 
-function ApiKeyStep({
+export function ApiKeyStep({
   mode,
   baseUrl,
   apiKey,
