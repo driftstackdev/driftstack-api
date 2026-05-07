@@ -16353,3 +16353,42 @@ The double-underscore prefix flags these as test-only — production callers mus
 ### Next
 
 V-290 — empty-state view render tests (V-275 ProfilesView + V-276 RecordingsView + V-277 ProxiesView). Parameterised describe.each() since shape is shared.
+
+## V-290 — Empty-state render tests for ProfilesView + RecordingsView + ProxiesView
+
+### What
+
+Per founder direction V-288 ack: cheap regression coverage protecting the V-275/V-276/V-277 empty-state vocabulary from accidental drift.
+
+`apps/gui-client/tests/unit/empty-states.test.tsx` — three render-without-crash assertions, one per list view:
+
+1. **V-275 ProfilesView**: heading `No profiles yet` + body explaining persistent-identity/cookies/localStorage/IndexedDB + inline `Create your first profile` CTA (tier-cap not exceeded → button enabled) + footnote about ephemeral sessions.
+2. **V-276 RecordingsView**: heading `No recordings yet` + body explaining every-frame capture + Record guidance text + footnote about in-memory persistence.
+3. **V-277 ProxiesView**: heading `No proxies configured` + body explaining SOCKS5 routing + local-only-storage commitment + footnote about API contract dependency.
+
+### Why
+
+The four list views (Sessions / Profiles / Recordings / Proxies) share the V-275 vocabulary (oxblood-tinted icon + heading + body + optional CTA + footnote). Without regression coverage, accidental copy drift or layout changes can leave the four surfaces visually inconsistent over time. V-290 pins each view's distinctive phrasing so future changes that touch one surface either keep the matcher passing or trip a clear test failure.
+
+### Files
+
+- `apps/gui-client/tests/unit/empty-states.test.tsx` — new (3 tests).
+
+### Verify
+
+- `npx vitest run --project gui-jsdom`: 11 / 11 across 3 files (V-288 SettingsView + V-289 hook + V-290 empty-states).
+- `npm test`: 776 / 776 passing across 83 files (was 773 / 82; +3 tests, +1 file).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+
+### Notes — design choices
+
+- **Three describe blocks instead of `describe.each`**: each view consumes a different hook surface (`useSettings` for Profiles, `useRecordings` for Recordings, `lib/proxies` module for Proxies), so the mock setup per view is structurally different. Parameterised tests would obscure that. Three blocks keep the per-view mock + assertion shape readable.
+- **Stable mock-return references**: each `vi.mock(...)` factory closes over a `const stable = { ... }` and returns it from the inner hook. Without this, every render produces a new context value reference → useEffect deps change → infinite re-render → OOM the worker. Comment in the file explicitly flags this trap for future test authors.
+- **`getAllByText(...).length > 0` over `getByText(...)`** for phrases that appear in multiple places (the page header has the same descriptive text as the empty-state body in some views). Stricter matchers would force coupling the test to specific DOM positions which defeats the purpose of testing vocabulary, not layout.
+- **`findByRole('heading', { name: ... })`** for the headings — survives any future layout reshuffle that keeps the heading semantic but moves it within the tree.
+- **No interaction tests**: V-290 is render-only. Click-through tests for the inline CTAs land as separate V-NNNs alongside the features they exercise (e.g. V-291 wires the FirstRunWizard click-through).
+
+### Next
+
+V-291 — FirstRunWizard.tsx::ApiKeyStep view tests. Browser-sign-in path UI states (idle → opening → waiting → success → error) + click handler tests. Mocks the V-289 hook + asserts the component renders correctly per state.
