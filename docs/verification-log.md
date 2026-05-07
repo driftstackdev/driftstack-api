@@ -15747,3 +15747,43 @@ Both can coexist; founder picks per release. No autonomous decision needed; if d
 ### Next
 
 V-279 — pre-launch comprehensive checklist. Roll up current state across backend / GUI / marketing / docs / support readiness; surface explicit founder action queue with priority + blocking-launch yes/no.
+
+## V-279 — Pre-launch comprehensive checklist
+
+### What
+
+`docs/launch/pre-launch-checklist.md` — single-page roll-up of every item between current state and "first paying customer can sign up, pay, and use the product."
+
+Structure: ten sections (backend / SDKs / GUI client / customer dashboard / marketing site / doc site / infrastructure / legal+corporate / customer support / observability+operations). Each item tagged status (READY / PENDING ENG / PENDING FOUNDER / PARTIAL / DEFERRED), owner (eng / founder / Agent 1), blocks-launch (yes / no / softens UX), notes pointing at the per-item runbook or V-NNN.
+
+Three derived rollups at the bottom:
+
+1. **Minimum-launchable surface (technical)** — what's needed to make the technical product work end-to-end. ~30-60min of founder dashboard work spread across V-258/V-259/V-278 runbooks.
+2. **Minimum-launchable surface (first-paying-customer-acceptable)** — adds BV KvK + counsel review + Stripe live-mode + macOS code signing + first gui-v0.1.0 tag.
+3. **Founder action queue (priority order)** — 12-item ordered list from "Hetzner provisioning" (item 1) through "first paying customer" (item 12). Each item has a runbook reference + estimated time.
+
+### Why
+
+Founder asked for the comprehensive audit + priority queue. Roll-up was scattered across `docs/founder-action-queue.md` (which lists items but doesn't roll up by category or sequence them), per-V-NNN entries, and the V-269/V-272 etc. notes sections. Single-page audit makes the launch path scannable in one read.
+
+The status taxonomy (READY / PENDING ENG / PENDING FOUNDER / PARTIAL / DEFERRED) is intentionally narrow — every item must answer "is this work blocking, who closes it, what's the artefact." Items like "softens UX" are explicitly tagged "no" for blocking-launch so the founder doesn't get pulled into perfectionism on items that aren't gates.
+
+### Files
+
+- `docs/launch/pre-launch-checklist.md` — new (single-page audit + queue).
+
+### Verify
+
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Cross-references checked: every linked V-NNN exists in verification-log.md; every linked runbook exists at the named path; every "PENDING FOUNDER" item has a runbook reference.
+
+### Notes
+
+- **Cross-repo dep with Agent 1** explicitly called out at the bottom — none of Agent 2's launch-infrastructure work is gated on Agent 1's WebKit-fork remediation. Driver swap from `mock` to `webkit` is the only Agent 2 ↔ Agent 1 handoff and it's a config-flag change.
+- **"PARTIAL" status used sparingly** — only where a feature is functional but cosmetically incomplete (dashboard sub-pages with mock fallback, status page surface deferred, admin panel core endpoints exist but UI is scaffolding). Founder can decide per-item whether to upgrade to PENDING ENG (= V-281 or later) or accept as launch-acceptable.
+- **The 12-item priority queue is the load-bearing artefact.** Reading top-to-bottom = minimum cognitive overhead for "what do I do next." Each item has a documented runbook OR a clear gating dependency on a prior item. No item depends on something not in the list.
+
+### Next
+
+V-280 — Launch-day runbook. Smoke tests, DNS cutover, Stripe live-mode toggle, day-1 monitoring + support, rollback procedure.
