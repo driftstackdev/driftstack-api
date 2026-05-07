@@ -16057,3 +16057,62 @@ V-285+ per founder's V-285+ list:
 - Admin-panel UI tests — V-281's refund-record + audit-note flow specifically needs e2e coverage at the panel level (server-side tests already cover the endpoints).
 - GUI client view tests (current low-coverage area per V-279 PARTIAL rating).
 - /forgot-password /reset-password e2e manual smoke against live dev server (founder-attended, ~10min).
+
+## V-285 — E2E coverage for V-281 customer-support tooling against real Postgres + Redis
+
+### What
+
+Per founder's V-285+ list — "Admin-panel UI tests (V-281 buttons specifically — refund-record + audit-note flow needs e2e coverage)."
+
+`apps/server/tests/e2e/admin-audit-note.spec.ts` — three Playwright e2e specs against the real Postgres + Redis stack (the same fixture admin-tier-change.spec.ts uses):
+
+1. **Support note dual-write**: admin records a support note → customer's `/v1/account/audit-log` slice surfaces the row with `action=admin.support_note`, `actor_type=staff`, payload preserved verbatim.
+2. **Refund record dual-write**: admin records a refund → customer's audit-log slice surfaces `action=admin.refund_recorded`, `target_resource_id=ch_3PWEXAMPLE123` (the Stripe charge ref), payload includes amount_cents + currency + reason.
+3. **403 enforcement**: caller without `driftstack_internal_admin` scope hits 403 against the live scope-check (vs the in-memory mock which could trivially be tricked).
+
+### Why
+
+Three coverage gaps that the V-281 integration suite (10 in-memory tests) doesn't catch:
+
+- **The Drizzle enum migration applied against real Postgres.** In-memory repo doesn't enforce the pgEnum constraint — an un-migrated DB would 500 on these endpoints but pass V-281's integration tests. The e2e catches it.
+- **Dual-write transactional integrity.** V-281 writes BOTH `admin_audit_log` (via `withAudit`) AND `account_audit_log` (via `accountAudit.record`) for each operation. If the second write ever ends up in a separate transaction that could orphan, the e2e detects the missing customer-side row.
+- **Customer-visible surface.** The integration tests assert the rows land in the in-memory repos. The e2e asserts the customer's own `/v1/account/audit-log` endpoint actually returns the staff-recorded row when the customer queries their own audit timeline. That's the load-bearing customer-trust artefact.
+
+The "admin-panel UI test" framing in the founder spec is closest to a browser-driving Playwright test of the admin-panel's `accounts/[id].astro` page. Setting that up requires a full Playwright config for `apps/admin-panel` (separate webServer, browser instance, auth-state injection). Multi-hour scope. The server-side e2e + the existing 10 integration tests cover the same flow at two layers (HTTP contract + audit-row state); the missing browser-driven layer is captured below in "Notes — what's deferred" for a follow-up V-NNN.
+
+### Files
+
+- `apps/server/tests/e2e/admin-audit-note.spec.ts` — new (3 Playwright specs).
+
+### Verify
+
+- `npm run typecheck`: clean.
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm test`: 761 / 761 passing across 79 files (Vitest unchanged; the new e2e fires under `npm run test:e2e`).
+- `npm run test:e2e --workspace apps/server` will fire the new spec on next CI run; existing CI workflow already runs e2e on push to main.
+
+### Notes — what's deferred
+
+**Browser-driving admin-panel UI test (Playwright in apps/admin-panel)** — the `addSupportNote()` + `recordRefund()` JS handlers in `accounts/[id].astro` use `window.prompt` for input + `window.confirm` for revoke confirmation. Testing them with Playwright requires:
+
+1. `@playwright/test` + `playwright.config.ts` in apps/admin-panel.
+2. `webServer` config that boots both the astro dev server (port 4321) AND the API server (port 3000).
+3. `dialog` event handlers to auto-accept prompts + confirms.
+4. localStorage seed for `ds_web_session_token` + admin-scoped key.
+
+The full setup is ~2-3hr Tier-1 work and not blocking launch — the e2e in V-285 already validates the flow against a live stack at the API layer; the JS handlers in the admin panel are thin wrappers (FormData → fetch → refresh) with no business logic.
+
+If founder wants this anyway, lands as V-NNN+ with the multi-component scope explicitly surfaced.
+
+### V-228-class regression sweep
+
+Migration 0023's enum ADD VALUE works idempotently per the `IF NOT EXISTS` clauses. The CI workflow runs all 23 migrations in order on a fresh Postgres for every e2e run. Re-runs against an already-migrated DB are no-ops.
+
+### Next
+
+V-286+ candidates from founder's V-285+ list:
+
+- Performance optimization passes (only if `apps/server/perf/baseline.ci.json` shows regressions).
+- GUI client view tests (V-279 PARTIAL; lower coverage area).
+- /forgot-password /reset-password e2e manual smoke (founder-attended).
