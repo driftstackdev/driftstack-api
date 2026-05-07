@@ -53,6 +53,22 @@ function Shell(): JSX.Element {
   // configure via Settings.
   const [wizardDismissed, setWizardDismissed] = useState(false);
 
+  // V-263 — Cmd+, shortcut. MUST live above any conditional returns
+  // below; React hooks order is positional, so registering the effect
+  // after an early-return pulls the hooks count out of sync between
+  // the wizard render (early return) and the post-wizard render (full
+  // shell), which unmounts the entire tree and shows a black screen.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (e.metaKey && e.key === ',') {
+        e.preventDefault();
+        setView({ kind: 'settings' });
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // While settings load, render nothing rather than flashing the wizard.
   if (loading) {
     return (
@@ -66,18 +82,6 @@ function Shell(): JSX.Element {
   if (settings.apiKey === null && !wizardDismissed) {
     return <FirstRunWizard onComplete={() => setWizardDismissed(true)} />;
   }
-
-  // Cmd+, → Settings (macOS convention).
-  useEffect(() => {
-    function onKey(e: KeyboardEvent): void {
-      if (e.metaKey && e.key === ',') {
-        e.preventDefault();
-        setView({ kind: 'settings' });
-      }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
 
   const mode = deploymentLabel(settings.baseUrl);
   return (

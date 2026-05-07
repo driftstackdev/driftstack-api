@@ -14941,3 +14941,52 @@ Not shippable in the next hour (multi-component work). Surfacing as **V-262** in
 
 - **V-262** — browser-OAuth activation flow (multi-component scope: backend + dashboard + GUI deep-link). Awaiting founder confirmation on priority vs other engineering work.
 - The dev-server bootstrap path I just walked the founder through (signup → verify-email via debug_token → accept 4 legal docs with content_hash → POST /v1/api-keys) is also a candidate for a `bin/dev-bootstrap.sh` script. Reduces friction the next time anyone needs to spin up a working API key against local dev.
+
+## V-262 / V-263 — dev-bootstrap script + post-wizard black-screen fix
+
+### V-262: scripts/dev-bootstrap.sh
+
+Surfaced as a candidate in V-261's notes, shipped now: end-to-end script that automates signup → email-verify → legal acceptance → API-key creation against a local control plane.
+
+**`scripts/dev-bootstrap.sh`** (executable):
+
+- Posts to `/v1/auth/signup` (requires server started with `AUTH_EXPOSE_DEBUG_TOKEN=true` so signup response includes the verification token plaintext).
+- Verifies the email with `POST /v1/auth/verify-email` to get a web-session token.
+- Fetches current document hashes via `GET /v1/legal/documents`.
+- Accepts all four (tos / privacy / dpa / aup) via `POST /v1/legal/accept` with version + content_hash per document.
+- Creates an API key via `POST /v1/api-keys` with `scopes: ["account_owner"]`.
+- Prints the plaintext key, account ID, and base URL ready to paste into the GUI wizard or export as `DRIFTSTACK_API_KEY`.
+
+Tested end-to-end; produces a working key in <2 seconds.
+
+### V-263: post-wizard black screen — React hooks-order violation
+
+Founder reported a black screen after the wizard completed. Root cause: the `useEffect` registering the Cmd+, shortcut in `apps/gui-client/src/App.tsx::Shell` was registered AFTER the conditional `return` blocks for `loading` and the wizard. React's hooks rules require positional consistency — registering an effect after an early-return means the wizard render has hooks count N, the post-wizard render has hooks count N+1. React detects the mismatch and unmounts the entire tree on the next render, producing a black screen with no foreground content.
+
+Fix: moved the `useEffect` above all conditional returns. Hooks are now called in identical order across all render paths.
+
+The bug was latent in V-244 (the original wizard implementation) but never surfaced before because no prior session had completed the wizard end-to-end against a live control plane. V-261's title-bar / mode-step polish was unrelated to this; the founder's "ok done, but i get black screen now" came after pasting a working API key (V-262 dev-bootstrap output) and dismissing the wizard.
+
+### Files
+
+- `scripts/dev-bootstrap.sh` — new executable script (V-262).
+- `apps/gui-client/src/App.tsx` — `useEffect` for Cmd+, moved above conditional returns + V-263 comment explaining why (V-263).
+
+### Verify
+
+- `./scripts/dev-bootstrap.sh` against running local server: ✓ produces working API key.
+- `npm run typecheck --workspace apps/gui-client`: clean.
+- `npm run build --workspace apps/gui-client`: clean.
+- Founder will see the fix on next Tauri hot-reload / app restart — wizard → main shell transition no longer crashes.
+
+### Notes
+
+- The hooks-order rule is well-known but easy to violate when adding a "while loading" or "first-run gate" early-return. Worth documenting in the GUI client README at some point: "All useState / useEffect calls must live above conditional returns. Always."
+- The dev-bootstrap script lives at `scripts/dev-bootstrap.sh` (matching the existing `scripts/` dir which already has `check-bench-regression.mjs`). Could add a `bin/` directory if more dev scripts accumulate, but a single shell script doesn't justify it.
+- The script is dev-only — production servers won't have `AUTH_EXPOSE_DEBUG_TOKEN=true` and the signup response won't include the debug_token, so the script would fail at step 1 with a clear error. Defence-in-depth.
+
+### Next
+
+- Founder continues GUI review on next hot-reload (or after closing + reopening the app to clear webview state).
+- V-262-style **browser-OAuth flow** still parked as a proper-fix replacement for the API-key paste; the dev-bootstrap script just lowers friction for the current paste path.
+- If founder wants the sub-processor mirror linter or doc-site PR-time build coverage that I sketched earlier, surface and prioritise.
