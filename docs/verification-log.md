@@ -14697,3 +14697,64 @@ The SDK status accuracy fix is also a customer-trust correction: prior copy said
 ### Next
 
 V-258 — Cloudflare Pages deployment config for apps/docs (`docs.driftstack.dev`) + founder runbook for required GitHub secrets (CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID).
+
+## V-258 — Cloudflare Pages deploy workflow for apps/docs + founder runbook
+
+### What
+
+Per founder direction 2026-05-07: ship the GitHub Actions workflow that deploys `apps/docs` to Cloudflare Pages on push-to-main, plus a founder runbook covering one-time CF setup steps.
+
+New files:
+
+- `.github/workflows/deploy-docs.yml` — mirror of `deploy-marketing.yml` with these adaptations:
+  - Path-filter targets `apps/docs/**` + `package.json` + `package-lock.json` + the workflow file.
+  - Build step: `npm run build --workspace apps/docs`.
+  - Project-name variable: `CLOUDFLARE_DOCS_PROJECT_NAME` (distinct from marketing's `CLOUDFLARE_PAGES_PROJECT_NAME` — two CF projects, two slugs).
+  - Environment URL: `https://docs.driftstack.dev`.
+  - Upload step gate: skips with a clear "secret unset" message if `CLOUDFLARE_API_TOKEN` is missing, so pre-secret-setup pushes don't fail. Build still runs, surfaces Astro errors at PR time.
+- `docs/founder-actions/v258-cloudflare-pages-docs-setup.md` — runbook covering:
+  - Create the CF Pages project via direct upload (NOT GitHub integration — would race the workflow).
+  - Set repo variable `CLOUDFLARE_DOCS_PROJECT_NAME`.
+  - Confirm shared secrets `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` already exist (reused from marketing-site).
+  - Two paths to trigger first deploy (push-to-main edit OR manual workflow_dispatch).
+  - Custom domain wiring: `docs.driftstack.dev` CNAME via CF Pages dashboard.
+  - Verification checklist for the V-256 page set.
+  - Rollback: CF dashboard atomic rollback OR `git revert` + repush.
+  - Troubleshooting: 5 most-likely failure modes documented.
+
+### Why
+
+V-254 → V-257 stood up a real doc site under `apps/docs` with brand identity, sidebar nav, and onboarding-shaped content. V-258 closes the loop so push-to-main actually publishes to `docs.driftstack.dev`. Reusing CF Pages (same hosting platform as marketing site) keeps the ops surface small — same secrets, same wrangler CLI, same dashboard.
+
+### Files
+
+- `.github/workflows/deploy-docs.yml` — new workflow.
+- `docs/founder-actions/v258-cloudflare-pages-docs-setup.md` — founder runbook.
+
+### Verify
+
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Workflow YAML syntax — verified by mirroring the working `deploy-marketing.yml` structure exactly + only varying the path-filter, build target, project-name variable, environment URL, and dist-output path.
+- Path-filter trigger — confirmed: pushing changes only under `apps/server/**` won't run this workflow (matches deploy-marketing.yml's same exclusion behaviour).
+
+### Notes — founder ops dependencies
+
+These are the manual steps needed before the first successful deploy. None block the workflow from passing (build succeeds even without secrets — upload step exits 0 with a "skipped — secret unset" message), so push-to-main is safe right now.
+
+1. Create CF Pages project `driftstack-docs` (or any slug) via direct upload mode.
+2. Set repo variable `CLOUDFLARE_DOCS_PROJECT_NAME` to match.
+3. Trigger first deploy via workflow_dispatch or any apps/docs/\*\* edit.
+4. Wire `docs.driftstack.dev` CNAME via CF Pages → Custom domains.
+
+The runbook covers all four. Estimated total time: ~10 minutes once founder has CF dashboard credentials in front of them.
+
+### Notes — workflow design
+
+- **Skip-on-missing-secret pattern** preserved from marketing-site workflow. Non-fatal upload skip means: pre-secret-setup pushes verify the build is good without spamming red CI checks. Once secrets land, the same workflow upgrades to deploying without code change.
+- **Distinct project-name variable** (`CLOUDFLARE_DOCS_PROJECT_NAME` vs marketing's `CLOUDFLARE_PAGES_PROJECT_NAME`) — one variable per CF project. Avoids cross-deploy collisions if the marketing workflow ever picks up a docs path or vice versa.
+- **Concurrency group** scoped to `deploy-docs-${{ github.ref }}` — same pattern as marketing. Two pushes in quick succession queue; no cancel-in-progress (the second push's deploy supersedes whatever the first deployed, but neither aborts mid-upload).
+
+### Next
+
+V-259 — verify Cloudflare Pages config for marketing site is current; if any drift between deploy-marketing.yml and the now-canonical deploy-docs.yml shape, sync it. (Likely no-op since deploy-docs.yml was forked from deploy-marketing.yml.)
