@@ -134,13 +134,41 @@ export function ProxiesView(): JSX.Element {
 // ─── subcomponents ────────────────────────────────────────────────
 
 function Empty({ loading }: { loading: boolean }): JSX.Element {
+  if (loading) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded border border-dashed border-surface-divider px-8 py-12 text-center">
+        <span className="section-label">Loading…</span>
+        <p className="max-w-md text-sm text-ink-secondary">Reading from local store.</p>
+      </div>
+    );
+  }
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded border border-dashed border-surface-divider px-8 py-12 text-center">
-      <span className="section-label">{loading ? 'Loading…' : 'No proxies configured'}</span>
-      <p className="max-w-md text-sm text-ink-secondary">
-        {loading
-          ? 'Reading from local store.'
-          : 'Click "New proxy" above to add a SOCKS5 endpoint.'}
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded border border-dashed border-surface-divider px-8 py-16 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent-subtle text-accent">
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66l4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66l4.24-4.24" />
+        </svg>
+      </div>
+      <div className="flex flex-col gap-1">
+        <h3 className="text-base font-medium text-ink-primary">No proxies configured</h3>
+        <p className="max-w-md text-sm text-ink-secondary">
+          Add a SOCKS5 endpoint to route session traffic through your own egress IP. Proxies are
+          stored locally on this device only — never uploaded to the Driftstack control plane.
+        </p>
+      </div>
+      <p className="text-xs text-ink-muted">
+        Click <span className="mono">New proxy</span> above to add one. Wiring to session creation
+        lands when the API contract grows a <span className="mono">proxy</span> field.
       </p>
     </div>
   );

@@ -25,10 +25,10 @@
 // Anonymity (V-211 mirror): "Driftstack" voice everywhere; no
 // founder name; no AI / Anthropic references in any visible string.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Driftstack } from '@driftstack/sdk';
-import { open as openInBrowser } from '@tauri-apps/plugin-shell';
 import { TitleBar } from '../components/TitleBar';
+import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { useSettings } from '../lib/SettingsContext';
 
 type WizardStep = 'welcome' | 'mode' | 'apikey' | 'profile' | 'done';
@@ -327,30 +327,8 @@ function ModeStep({
 // who already have a key, or self-hosted deployments where the
 // dashboard isn't reachable).
 //
-// The browser path is the recommended UX per founder direction
-// 2026-05-07 ("usually it opens up browser to login, to sync, might
-// be more secure also").
-
-const POLL_INTERVAL_MS = 2000;
-const POLL_TIMEOUT_MS = 5 * 60 * 1000;
-
-interface InitiateResponse {
-  code: string;
-  browser_url: string;
-  expires_at: string;
-}
-
-interface ExchangeResponse {
-  status: 'pending' | 'bound' | 'expired';
-  api_key?: string;
-  account_id?: string;
-}
-
-function generateState(): string {
-  const bytes = new Uint8Array(24);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
+// V-274 — moved the state-machine + poll logic to
+// `lib/browser-sign-in.ts` so SettingsView can reuse it.
 
 function ApiKeyStep({
   mode,
@@ -372,134 +350,23 @@ function ApiKeyStep({
   onValidate: () => void;
 }): JSX.Element {
   const [path, setPath] = useState<'browser' | 'paste'>('browser');
-  const [browserState, setBrowserState] = useState<
-    | { kind: 'idle' }
-    | { kind: 'opening' }
-    | { kind: 'waiting'; code: string; state: string; expiresAt: number }
-    | { kind: 'success' }
-    | { kind: 'error'; message: string }
-  >({ kind: 'idle' });
-  const pollHandleRef = useRef<number | null>(null);
-  const timeoutHandleRef = useRef<number | null>(null);
 
-  // Cleanup any pending poll / timeout on unmount or path change.
-  useEffect(() => {
-    return () => {
-      if (pollHandleRef.current !== null) window.clearInterval(pollHandleRef.current);
-      if (timeoutHandleRef.current !== null) window.clearTimeout(timeoutHandleRef.current);
-    };
-  }, []);
-
-  function stopPolling(): void {
-    if (pollHandleRef.current !== null) {
-      window.clearInterval(pollHandleRef.current);
-      pollHandleRef.current = null;
-    }
-    if (timeoutHandleRef.current !== null) {
-      window.clearTimeout(timeoutHandleRef.current);
-      timeoutHandleRef.current = null;
-    }
-  }
-
-  async function startBrowserSignIn(): Promise<void> {
-    setBrowserState({ kind: 'opening' });
-    const trimmedUrl = baseUrl.trim().replace(/\/+$/, '');
-    const stateToken = generateState();
-    try {
-      const initiateRes = await fetch(`${trimmedUrl}/v1/auth/cli-authorize/initiate`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          state: stateToken,
-          client_label: `Driftstack desktop on ${navigator.platform}`,
-        }),
-      });
-      if (!initiateRes.ok) {
-        const body = (await initiateRes.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(body.detail ?? `HTTP ${initiateRes.status.toString()}`);
-      }
-      const initiate = (await initiateRes.json()) as InitiateResponse;
-
-      // Open the browser. shell.open() returns once the OS hands off to
-      // the browser; it does NOT wait for the user to complete anything.
-      await openInBrowser(initiate.browser_url);
-
-      const expiresAt = new Date(initiate.expires_at).getTime();
-      setBrowserState({
-        kind: 'waiting',
-        code: initiate.code,
-        state: stateToken,
-        expiresAt,
-      });
-
-      // Begin polling exchange.
-      pollHandleRef.current = window.setInterval(() => {
-        void pollOnce(trimmedUrl, initiate.code, stateToken);
-      }, POLL_INTERVAL_MS);
-      timeoutHandleRef.current = window.setTimeout(() => {
-        stopPolling();
-        setBrowserState({
-          kind: 'error',
-          message: 'Authorization expired. Click "Sign in with browser" to try again.',
-        });
-      }, POLL_TIMEOUT_MS);
-    } catch (err) {
-      setBrowserState({
-        kind: 'error',
-        message: err instanceof Error ? err.message : 'Failed to start browser sign-in.',
-      });
-    }
-  }
-
-  async function pollOnce(serverUrl: string, code: string, stateToken: string): Promise<void> {
-    try {
-      const res = await fetch(`${serverUrl}/v1/auth/cli-authorize/exchange`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ code, state: stateToken }),
-      });
-      if (!res.ok) {
-        // Don't kill the loop on transient 5xx — but DO kill on 4xx.
-        if (res.status >= 400 && res.status < 500) {
-          stopPolling();
-          const body = (await res.json().catch(() => ({}))) as { detail?: string };
-          setBrowserState({
-            kind: 'error',
-            message: body.detail ?? 'Authorization request rejected.',
-          });
-        }
-        return;
-      }
-      const body = (await res.json()) as ExchangeResponse;
-      if (body.status === 'pending') return; // keep polling
-      if (body.status === 'expired') {
-        stopPolling();
-        setBrowserState({
-          kind: 'error',
-          message: 'Authorization expired. Click "Sign in with browser" to try again.',
-        });
-        return;
-      }
-      if (body.status === 'bound' && body.api_key) {
-        stopPolling();
-        // Hand the plaintext key off to the existing paste/validate
-        // flow so the same code path persists to keychain + advances
-        // the wizard.
-        onApiKeyChange(body.api_key);
-        setBrowserState({ kind: 'success' });
-        // Defer one tick so React commits the apiKey state before
-        // onValidate reads it.
-        window.setTimeout(() => onValidate(), 0);
-      }
-    } catch {
-      // Network blip — silent retry on next interval.
-    }
-  }
-
-  function cancelBrowserSignIn(): void {
-    stopPolling();
-    setBrowserState({ kind: 'idle' });
-  }
+  const {
+    state: browserState,
+    start: startBrowserSignIn,
+    cancel: cancelBrowserSignIn,
+  } = useBrowserSignIn({
+    baseUrl,
+    onSuccess: (issuedKey) => {
+      // Hand the plaintext key off to the existing paste/validate
+      // flow so the same code path persists to keychain + advances
+      // the wizard.
+      onApiKeyChange(issuedKey);
+      // Defer one tick so React commits the apiKey state before
+      // onValidate reads it.
+      window.setTimeout(() => onValidate(), 0);
+    },
+  });
 
   return (
     <section>

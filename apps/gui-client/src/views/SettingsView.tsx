@@ -13,6 +13,7 @@
 // stale "npm run admin:create-key" instruction.
 
 import { useState } from 'react';
+import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { useSettings } from '../lib/SettingsContext';
 import { isCloudBaseUrl } from '../lib/telemetry';
 
@@ -34,6 +35,21 @@ export function SettingsView(): JSX.Element {
   }
 
   const isFirstRun = settings.apiKey === null;
+
+  // V-274 — inline browser sign-in (re-uses V-268 plumbing). Lets the
+  // customer re-authorize without restarting the app post-Sign-out.
+  const browserSignIn = useBrowserSignIn({
+    baseUrl: draftUrl.trim().replace(/\/+$/, '') || settings.baseUrl,
+    onSuccess: async (issuedKey, _accountId) => {
+      await update({
+        apiKey: issuedKey,
+        baseUrl: draftUrl.trim().replace(/\/+$/, '') || settings.baseUrl,
+        telemetryOptIn: draftTelemetry,
+      });
+      setDraftKey(issuedKey);
+      setSavedAt(Date.now());
+    },
+  });
 
   async function handleSave(): Promise<void> {
     setSaving(true);
@@ -75,10 +91,50 @@ export function SettingsView(): JSX.Element {
         <div className="max-w-xl rounded border border-accent/30 bg-accent-subtle/40 px-4 py-3">
           <span className="section-label text-accent">No API key yet</span>
           <p className="mt-1 text-sm text-ink-secondary">
-            The setup wizard usually mints a key for you via "Sign in with browser." If you skipped
-            past it, restart the app or paste a key from{' '}
-            <span className="mono">app.driftstack.dev/api-keys</span> below.
+            Sign in with your browser to mint a fresh API key bound to your account, or paste an
+            existing key from <span className="mono">app.driftstack.dev/api-keys</span> below.
           </p>
+
+          {browserSignIn.state.kind === 'idle' && (
+            <button
+              type="button"
+              className="btn-primary mt-3"
+              onClick={() => void browserSignIn.start()}
+            >
+              Sign in with browser
+            </button>
+          )}
+          {browserSignIn.state.kind === 'opening' && (
+            <p className="mt-3 text-xs text-ink-secondary">Opening browser…</p>
+          )}
+          {browserSignIn.state.kind === 'waiting' && (
+            <div className="mt-3 flex items-center gap-3">
+              <div className="h-3 w-3 animate-pulse rounded-full bg-accent" aria-hidden="true" />
+              <p className="text-xs text-ink-secondary">Waiting for browser confirmation…</p>
+              <button
+                type="button"
+                className="text-xs text-ink-muted underline"
+                onClick={browserSignIn.cancel}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {browserSignIn.state.kind === 'success' && (
+            <p className="mt-3 text-xs text-status-success">Authorized. Key saved.</p>
+          )}
+          {browserSignIn.state.kind === 'error' && (
+            <div className="mt-3">
+              <p className="text-xs text-status-error">{browserSignIn.state.message}</p>
+              <button
+                type="button"
+                className="btn-primary mt-2"
+                onClick={() => void browserSignIn.start()}
+              >
+                Try again
+              </button>
+            </div>
+          )}
         </div>
       )}
 

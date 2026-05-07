@@ -167,14 +167,49 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
       )}
 
       {state.profiles.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center">
-          <div className="max-w-md text-center">
-            <span className="section-label">No profiles</span>
-            <p className="mt-2 text-sm text-ink-secondary">
-              Profiles let you persist cookies + localStorage across sessions for recurring
-              workloads. Create one to attach sessions to a persistent identity.
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded border border-dashed border-surface-divider px-8 py-16 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent-subtle text-accent">
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+          </div>
+          <div className="flex flex-col gap-1">
+            <h3 className="text-base font-medium text-ink-primary">No profiles yet</h3>
+            <p className="max-w-md text-sm text-ink-secondary">
+              A profile is a persistent identity — cookies, localStorage, IndexedDB — reused across
+              sessions. Bind a session to a profile to keep login state, returning-visitor signals,
+              and stealth fingerprints stable between runs.
             </p>
           </div>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => setCreateOpen(true)}
+            disabled={atProfileCap}
+            title={
+              atProfileCap
+                ? `Profile cap reached (${(profileCap ?? 0).toString()} for ${
+                    accountMe?.tier ?? 'this tier'
+                  }). Upgrade to add more.`
+                : undefined
+            }
+          >
+            Create your first profile
+          </button>
+          <p className="text-xs text-ink-muted">
+            Sessions without a profile start ephemeral — fresh state every run.
+          </p>
         </div>
       ) : (
         <ul className="flex flex-col divide-y divide-surface-divider rounded-md border border-surface-divider bg-surface-raised">

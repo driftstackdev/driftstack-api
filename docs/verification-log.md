@@ -15526,3 +15526,170 @@ Optional polish remaining (parked, not chasing without explicit founder directio
 - **V-NNN Tauri custom URL scheme** (`driftstack://auth/callback`) — replaces V-268 polling with deep-link callback.
 - **GUI Settings inline "Sign in with browser"** — runs V-268 initiate→poll without restarting the app post-sign-out.
 - **GUI ProfilesView / RecordingsView / ProxiesView / ConnectivityView polish** — V-265 surveyed these as scaffold-shaped but they aren't first-impression surfaces, so lower priority than the entry-point flows.
+
+## V-273 — Forgot/reset password dashboard pages
+
+### What
+
+Per the parked V-272-era queue: public dashboard surface for the V-079 password-reset endpoints. Two new Astro pages + a "Forgot your password?" link on `/login`.
+
+1. **`apps/customer-dashboard/src/pages/forgot-password.astro`** — anti-enumeration shape: form posts to `POST /v1/auth/password-reset/request`, response is always `{sent, expires_at}` regardless of whether the email matches. Page shows "Check your inbox" with the email + expiry window. In dev mode (server with `AUTH_EXPOSE_DEBUG_TOKEN=true`), surfaces the `debug_token` as a clickable link to `/reset-password?token=…` for paste-free local flow.
+2. **`apps/customer-dashboard/src/pages/reset-password.astro`** — reads `?token=` from URL, shows missing-token error if absent. Form takes new password + confirmation (12+ chars, must match), POSTs `{token, new_password}` to `POST /v1/auth/password-reset/confirm`. Server returns a fresh web session on success; page writes `ds_web_session_token` to localStorage and redirects to `/`.
+3. **`apps/customer-dashboard/src/pages/login.astro`** — added "Forgot your password?" link below the sign-in button.
+
+### Why
+
+V-269 shipped `/login` but the password-reset surface was a known gap. Customers who forgot their password had no way to recover their account self-serve — would need to email support. With V-273, the V-079 backend (which has worked since the auth-flows service shipped) now has a public face.
+
+### Files
+
+- `apps/customer-dashboard/src/pages/forgot-password.astro` — new.
+- `apps/customer-dashboard/src/pages/reset-password.astro` — new.
+- `apps/customer-dashboard/src/pages/login.astro` — added "Forgot your password?" link.
+
+### Verify
+
+- `npm run build --workspace apps/customer-dashboard`: clean; `dist/forgot-password/index.html` + `dist/reset-password/index.html` generated.
+- `npm run typecheck --workspace apps/customer-dashboard`: 0 errors.
+- `npm run lint`: clean.
+- Manual flow (vs local control plane): `/login` → "Forgot your password?" → enter email → "Check your inbox" with dev_token link → click → new password form → submit → session token written → redirected to `/`.
+
+### Notes
+
+- **Anti-enumeration preserved**: response shape is identical regardless of email-match. Server doesn't leak account-existence via this endpoint; page mirrors that.
+- **Dev-mode convenience link** only appears when the server returns `debug_token`. Production servers (which keep `AUTH_EXPOSE_DEBUG_TOKEN=false`) never trip this branch.
+- **Session token** issued on successful reset follows the same shape as signup → verify-email + login. Customer can use the dashboard immediately after resetting; no separate sign-in step.
+- **`?next=` not honoured here** — password-reset is the entry point for "I'm locked out," not a deep-link interception path. Adding `?next=` later if the use case surfaces.
+
+## V-274 — Shared browser-sign-in hook + GUI Settings inline button
+
+### What
+
+Two-part change to make V-268's browser-OAuth flow reusable across the GUI:
+
+1. **`apps/gui-client/src/lib/browser-sign-in.ts`** — new shared hook `useBrowserSignIn({baseUrl, clientLabel?, onSuccess})`. Encapsulates the V-268 state machine (idle / opening / waiting / success / error), `fetch` to `/v1/auth/cli-authorize/initiate`, `@tauri-apps/plugin-shell` `open()`, 2-second poll loop with 5-minute backstop timeout, cleanup on unmount. Returns `{state, start, cancel}`. Also exports `generateBrowserSignInState()` for callers that want the same 24-byte hex CSRF token shape.
+2. **`apps/gui-client/src/views/FirstRunWizard.tsx`** — refactored `ApiKeyStep` to consume the hook. ~140 lines of state-machine logic deleted; hook handles all of it. Same UX, same code path on success (`onApiKeyChange` → `onValidate`).
+3. **`apps/gui-client/src/views/SettingsView.tsx`** — wired the hook into the "No API key yet" panel. New "Sign in with browser" button reproduces the wizard's V-268 flow inline; on success calls `update({apiKey, baseUrl, telemetryOptIn})` directly (same persistence path the wizard's `validateAndSave` uses). Five-state UI inline (idle / opening / waiting / success / error) matching the wizard.
+
+### Why
+
+V-272's notes flagged: "After Sign out, the user has to either restart the app (wizard runs again) OR paste a fresh key. V-NNN follow-up could add a 'Sign in with browser' button directly to Settings that runs the V-268 initiate→poll flow inline, avoiding the wizard restart." V-274 lands that follow-up. As a side benefit, deduplicates the V-268 state-machine code so future view that needs browser-sign-in (e.g. a re-auth flow on 401) gets it for free.
+
+### Files
+
+- `apps/gui-client/src/lib/browser-sign-in.ts` — new shared hook + helper.
+- `apps/gui-client/src/views/FirstRunWizard.tsx` — `ApiKeyStep` refactored to consume the hook (~140 lines deleted).
+- `apps/gui-client/src/views/SettingsView.tsx` — `useBrowserSignIn` consumed; isFirstRun panel renders the inline button + state.
+
+### Verify
+
+- `npm run typecheck --workspace apps/gui-client`: clean.
+- `npm run build --workspace apps/gui-client`: clean (~95kB gzip JS, +0.3kB over V-272).
+- `npm run lint`: clean.
+- Manual: Settings → Sign out → "No API key yet" panel shows "Sign in with browser" → click → browser opens → confirm → key lands in keychain without restarting app.
+
+### Notes
+
+- **No-RC race**: cleanup runs once on unmount and clears both `setInterval` + `setTimeout` handles via `useRef`. State-machine transitions are React-state-batched (no manual `flushSync`).
+- **Hook also supports the wizard call site cleanly** — the only caller-specific bit is `onSuccess`. Wizard hands the plaintext to `onApiKeyChange + onValidate`; Settings calls `update()` directly because there's no wizard-state-machine to advance.
+- **Plugin-shell allowlist** unchanged from V-268 (dev / staging / prod `/cli/authorize` URLs only). The Settings flow uses the same set of dashboard origins.
+
+## V-275 — GUI ProfilesView empty-state polish
+
+### What
+
+`apps/gui-client/src/views/ProfilesView.tsx` — empty-state rewritten with onboarding-quality treatment matching V-265's SessionsView pattern.
+
+Before: thin centered text "No profiles" + 2-line description, no inline call-to-action.
+
+After:
+
+- Oxblood-tinted person-outline SVG icon.
+- Heading: "No profiles yet."
+- Body: explains what a profile is (cookies / localStorage / IndexedDB persistent identity) + when to use one (login state, returning-visitor signals, stealth fingerprint stability).
+- Inline "Create your first profile" button that opens the same modal as the header's "New profile" — gated on the tier profile-cap, with the same tooltip the header button has when at-cap.
+- Footnote: "Sessions without a profile start ephemeral — fresh state every run."
+
+### Why
+
+ProfilesView is the second-most-visited GUI view (after Sessions) for customers using profiles for persistence. The previous empty state was scaffold-shaped — informative but not actionable. Customers landing on the view with 0 profiles needed a discoverable path to create one.
+
+### Files
+
+- `apps/gui-client/src/views/ProfilesView.tsx` — empty-state rewritten.
+
+### Verify
+
+- `npm run typecheck --workspace apps/gui-client`: clean.
+- `npm run build --workspace apps/gui-client`: clean.
+- `npm run lint`: clean.
+
+### Notes
+
+- Tier-cap gating preserved on the inline button — exact same `disabled` + `title` props as the header's New-profile button. If the customer's at cap, the button shows the upgrade tooltip.
+
+## V-276 — GUI RecordingsView empty-state polish
+
+### What
+
+`apps/gui-client/src/views/RecordingsView.tsx::Empty` — onboarding-quality empty state matching V-265 + V-275 pattern.
+
+Before: thin centered text "No recordings yet" + one-line "Open a live session and click Record."
+
+After:
+
+- Oxblood-tinted bullseye-style SVG icon (concentric circles — recording indicator).
+- Heading: "No recordings yet."
+- Body: explains what recordings are (every-frame capture for replay + audit) + how to start one (open live session → Record → frames stream into memory).
+- Footnote: preserved the "Recordings live in memory until app restarts" disclosure since persistence-to-disk is still pending.
+- Loading state separated cleanly into its own branch (was a ternary inside the same div).
+
+### Why
+
+RecordingsView is the GUI's closest thing to "session history" for audit + post-mortem. Its empty state was the same scaffold-shape pattern V-265 / V-275 rewrote elsewhere. Bringing it into line so the empty-state vocabulary is consistent across all four list views (Sessions / Profiles / Recordings / Proxies).
+
+### Files
+
+- `apps/gui-client/src/views/RecordingsView.tsx` — Empty component rewritten.
+
+### Verify
+
+- Same workspace checks as V-275.
+
+## V-277 — GUI ProxiesView empty-state polish + ConnectivityView audit
+
+### What
+
+1. **`apps/gui-client/src/views/ProxiesView.tsx::Empty`** — same onboarding-quality treatment as V-275 / V-276. Oxblood-tinted SVG icon (network-spoke shape), heading + body explaining SOCKS5 routing + local-only-storage commitment, footnote about the API contract dependency for actual session-creation wiring.
+2. **`apps/gui-client/src/views/ConnectivityView.tsx`** — audited; no changes needed. The view is functional, clear, and exercises a real API call (`client.sessions.list({limit: 1})`) for the round-trip check. UI surfaces masked key + base URL + duration + error kind cleanly.
+
+### Why
+
+Same vocabulary-consistency motivation as V-275 / V-276. ProxiesView is the only remaining list view with the old thin-empty-state shape; bringing it in line completes the GUI's empty-state pass.
+
+### Files
+
+- `apps/gui-client/src/views/ProxiesView.tsx` — Empty component rewritten.
+
+### Verify
+
+- Same workspace checks as V-275.
+
+### Notes
+
+- **ConnectivityView intentionally skipped** — already in good shape; rewriting for the sake of touching every view would be churn without gain. The "Network" section vocabulary (Connectivity check + ProxiesView) is now consistent.
+- **Recordings/Profiles/Proxies/Sessions** all share the same empty-state shape now: oxblood-tinted square icon + heading + body + optional footnote + optional inline CTA. Future list-view additions inherit the pattern.
+
+### Next
+
+The full parked-follow-up queue from V-272 is closed:
+
+- ✅ V-273 — `/forgot-password` + `/reset-password` dashboard pages.
+- ✅ V-274 — Shared browser-sign-in hook + GUI Settings inline button.
+- ✅ V-275 — GUI ProfilesView empty-state polish.
+- ✅ V-276 — GUI RecordingsView empty-state polish.
+- ✅ V-277 — GUI ProxiesView empty-state polish + ConnectivityView audit.
+
+**Skipped**: Tauri custom URL scheme (`driftstack://auth/callback`) deep-link replacement for V-268 polling. The polling flow works end-to-end already; the deep-link variant requires Rust-side plugin install + cross-platform URL scheme registration (info.plist macOS, registry Windows, .desktop Linux), all of which is high-effort polish over a working baseline. Worth doing eventually but not blocking launch.
+
+Repo state: 751 / 751 tests, all checks green. Pre-launch GUI client + dashboard surfaces are now launch-quality across the entry-point + key-management + identity flows.

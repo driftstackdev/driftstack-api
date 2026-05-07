@@ -118,17 +118,45 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
 }
 
 function Empty({ loading }: { loading: boolean }): JSX.Element {
+  if (loading) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded border border-dashed border-surface-divider px-8 py-12 text-center">
+        <span className="section-label">Loading recordings…</span>
+        <p className="max-w-md text-sm text-ink-secondary">
+          Reading the recordings index from disk.
+        </p>
+      </div>
+    );
+  }
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded border border-dashed border-surface-divider px-8 py-12 text-center">
-      <span className="section-label">{loading ? 'Loading recordings…' : 'No recordings yet'}</span>
-      <p className="max-w-md text-sm text-ink-secondary">
-        {loading ? (
-          'Reading the recordings index from disk.'
-        ) : (
-          <>
-            Open a live session and click <span className="mono">Record</span> to capture frames.
-          </>
-        )}
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded border border-dashed border-surface-divider px-8 py-16 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent-subtle text-accent">
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      </div>
+      <div className="flex flex-col gap-1">
+        <h3 className="text-base font-medium text-ink-primary">No recordings yet</h3>
+        <p className="max-w-md text-sm text-ink-secondary">
+          Recordings capture every frame of a live session for replay + audit. Open a live session,
+          click <span className="mono">Record</span>, and frames stream into memory while the
+          session runs.
+        </p>
+      </div>
+      <p className="text-xs text-ink-muted">
+        Recordings live in memory until the app restarts. Persistence to disk lands in a follow-up
+        phase.
       </p>
     </div>
   );
