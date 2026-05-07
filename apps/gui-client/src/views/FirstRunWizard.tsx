@@ -168,13 +168,28 @@ function WelcomeStep({ onNext }: { onNext: () => void }): JSX.Element {
     <section>
       <h1 className="text-2xl font-semibold text-ink-primary">Welcome to Driftstack</h1>
       <p className="mt-3 text-sm text-ink-secondary">
-        Driftstack runs real iPhone Safari sessions on a Mac Mini fleet you control or rent. This
-        desktop client is your control panel — spin sessions up, drive them, save profile state,
-        review recordings.
+        Real iPhone Safari sessions, on demand. Spin them up, drive them with the SDK or this
+        desktop control panel, save profile state across runs, capture recordings.
       </p>
-      <p className="mt-3 text-sm text-ink-secondary">
-        Setup takes about a minute: choose cloud or self-hosted, paste your API key, optionally
-        create a first profile.
+      <ul className="mt-4 space-y-2 text-sm text-ink-secondary">
+        <li className="flex items-start gap-2">
+          <span className="mt-0.5 text-accent">•</span>
+          <span>
+            <strong className="text-ink-primary">Cloud sessions</strong> run on Driftstack's managed
+            iPhone fleet. No hardware, no setup — just a key and you're live.
+          </span>
+        </li>
+        <li className="flex items-start gap-2">
+          <span className="mt-0.5 text-accent">•</span>
+          <span>
+            <strong className="text-ink-primary">Self-hosted</strong> connects to a Driftstack
+            server you operate yourself. For advanced teams running their own Mac fleet.
+          </span>
+        </li>
+      </ul>
+      <p className="mt-4 text-sm text-ink-secondary">
+        Setup takes about a minute: pick deployment, paste your API key, optionally create a first
+        profile.
       </p>
       <div className="mt-6 flex justify-end">
         <button type="button" className="btn-primary" onClick={onNext}>

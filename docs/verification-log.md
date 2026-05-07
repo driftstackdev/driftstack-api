@@ -15073,3 +15073,47 @@ Continues to wait on founder priority confirmation. The dev-bootstrap script (V-
 ### Next
 
 Resuming GUI client review per founder direction "and keep on going with GUI." Founder feedback already addressed: D-badge SVG (V-261), traffic-light clearance (V-261), cloud-first wizard copy with pricing (V-261), post-wizard black-screen fix (V-263). Remaining open: browser-OAuth replacement for paste-key flow (V-262 successor, multi-component scope).
+
+## V-265 — GUI welcome + sessions empty-state polish
+
+### What
+
+Continuing GUI client review per founder direction "keep on going with GUI." Two onboarding-surface improvements:
+
+1. **`WelcomeStep` rewrite** (`apps/gui-client/src/views/FirstRunWizard.tsx`):
+   - Removed "Mac Mini fleet you control or rent" — confusing for first-time users.
+   - Lead value-prop now: "Real iPhone Safari sessions, on demand."
+   - Added a 2-bullet structured intro of Cloud vs Self-hosted that pairs with the next step's pricing context — Cloud framed as "managed iPhone fleet, no hardware, no setup," Self-hosted as "advanced teams running their own Mac fleet."
+   - Tracks the V-261 cloud-first framing without duplicating the pricing details (those land on the ModeStep).
+
+2. **`EmptyList` rewrite** (`apps/gui-client/src/views/SessionsView.tsx`):
+   - Previous: a thin dashed-border box with one short line ("Click 'New session' above…").
+   - New: oxblood-tinted icon (iPhone outline SVG) + clear heading ("No active sessions yet") + paragraph explaining what a session is + concurrent-slot footnote.
+   - Onboarding-quality empty state — the first screen a new customer sees post-wizard now teaches them what's about to happen, instead of leaving them looking at a blank panel.
+
+### Why
+
+Founder feedback during live wizard review surfaced the "Welcome step has stale framing" + "post-wizard is unclear what to do next" patterns. These are the highest-visibility surfaces in the GUI; both were minimal scaffolding from earlier phases. Polish here matters more than polish on internal-only views (Recordings, Connectivity, etc.).
+
+### Files
+
+- `apps/gui-client/src/views/FirstRunWizard.tsx` — WelcomeStep rewritten.
+- `apps/gui-client/src/views/SessionsView.tsx` — EmptyList rewritten with icon + onboarding copy.
+
+### Verify
+
+- `npm run typecheck --workspace apps/gui-client`: clean.
+- `npm run build --workspace apps/gui-client`: clean (264 modules; bundle size ~93kB gzip JS, ~4kB gzip CSS).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Founder will see updates on next Tauri hot-reload (or app restart if hot-reload is paused).
+
+### Notes
+
+- The empty-state icon is an inline SVG (no asset dependency) — small phone outline that reads as "device" without being literal-pixel iPhone. Matches the V-219 oxblood + slate brand palette via Tailwind classes.
+- Footer line "Each session uses one of your account's concurrent slots until you destroy it or it idle-times-out" is the same framing that ships in `apps/docs/src/pages/guides/session-lifecycle.md` from V-256 — same vocabulary across docs + GUI is intentional.
+- The post-wizard black-screen fix from V-263 should now be reflected for the founder's session — combined with these onboarding-quality empty states, the "what do I do next" gap closes meaningfully.
+
+### Next
+
+Continuing GUI surface polish based on founder review of subsequent views (LiveSessionView, ProfilesView, RecordingsView, SettingsView). Open queue items: V-262 successor (browser-OAuth replacement for API-key-paste), founder's potential follow-up feedback.

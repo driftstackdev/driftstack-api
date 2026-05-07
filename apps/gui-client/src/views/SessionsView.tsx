@@ -209,13 +209,42 @@ function EmptyConnect({
 }
 
 function EmptyList({ loading }: { loading: boolean }): JSX.Element {
+  if (loading) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded border border-dashed border-surface-divider px-8 py-12 text-center">
+        <span className="section-label">Loading…</span>
+        <p className="max-w-md text-sm text-ink-secondary">Fetching the current session list.</p>
+      </div>
+    );
+  }
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded border border-dashed border-surface-divider px-8 py-12 text-center">
-      <span className="section-label">{loading ? 'Loading…' : 'No active sessions'}</span>
-      <p className="max-w-md text-sm text-ink-secondary">
-        {loading
-          ? 'Fetching the current session list.'
-          : 'Click "New session" above to spin up a Driftstack session.'}
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded border border-dashed border-surface-divider px-8 py-16 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent-subtle text-accent">
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+          <line x1="12" y1="18" x2="12" y2="18" />
+        </svg>
+      </div>
+      <div className="flex flex-col gap-1">
+        <h3 className="text-base font-medium text-ink-primary">No active sessions yet</h3>
+        <p className="max-w-md text-sm text-ink-secondary">
+          A session is one running iPhone Safari instance. Click <strong>New session</strong> above
+          to spin one up — sessions show up here with a live status while they run.
+        </p>
+      </div>
+      <p className="text-xs text-ink-muted">
+        Each session uses one of your account's concurrent slots until you destroy it or it
+        idle-times-out.
       </p>
     </div>
   );
