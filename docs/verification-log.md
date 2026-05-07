@@ -14814,3 +14814,52 @@ If founder wakes and wants further engineering autopilot work, sensible queue:
 1. Wire dashboard deploy workflow (parity with deploy-docs.yml, gated on `apps/customer-dashboard/` build readiness).
 2. Surface a per-V-NNN workflow that runs apps/docs build on PRs (sibling to deploy-docs.yml's main-only trigger) so doc-site regressions get caught at PR time, not after merge.
 3. Audit + fix the 5 explicit deferrals from V-256 once founder has a verdict on each.
+
+## V-260 — Customer-dashboard Cloudflare Pages deploy workflow
+
+### What
+
+Per V-259 runbook section C: `apps/customer-dashboard` deploy workflow was noted as "planned" with the project-name variable name (`CLOUDFLARE_DASHBOARD_PROJECT_NAME`) reserved. V-260 ships it.
+
+New file: `.github/workflows/deploy-customer-dashboard.yml`. Mirrors `deploy-docs.yml` / `deploy-marketing.yml` exactly with these adaptations:
+
+- Path-filter targets `apps/customer-dashboard/**` + workflow file + root manifests.
+- Build step: `npm run build --workspace apps/customer-dashboard`.
+- Project-name variable: `CLOUDFLARE_DASHBOARD_PROJECT_NAME` (third distinct variable, distinct from marketing's + docs').
+- Environment URL: `https://app.driftstack.dev`.
+- Concurrency group: `deploy-customer-dashboard-${{ github.ref }}`.
+
+The dashboard uses Astro SSR via `@astrojs/cloudflare` adapter, so the `dist/` output contains both static HTML (most pages) AND `_worker.js` (Pages Functions for any pages with `prerender=false`). `wrangler pages deploy` handles both shapes natively — no workflow changes needed beyond the path filter.
+
+### Why
+
+V-259 surfaced the dashboard deploy workflow as "planned." Verified the customer-dashboard builds clean today (`npm run build --workspace apps/customer-dashboard` → 16+ pages including `_worker.js`). No code-level reason to defer; only blocker was someone writing the YAML. Done now.
+
+The workflow follows the same skip-on-missing-secret pattern as its siblings: pre-secret-setup pushes verify the build is good without spamming red CI checks; once `CLOUDFLARE_API_TOKEN` + the new `CLOUDFLARE_DASHBOARD_PROJECT_NAME` variable land, the workflow upgrades to deploying without code change.
+
+### Files
+
+- `.github/workflows/deploy-customer-dashboard.yml` — new workflow.
+
+### Verify
+
+- `npm run build --workspace apps/customer-dashboard`: builds with `_worker.js` + static HTML output (16+ pages).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- Workflow YAML syntax: verified by mirroring `deploy-docs.yml` shape.
+
+### Notes
+
+- **Pre-deploy founder action still required.** Section C of the V-259 runbook covers the steps: create CF Pages project `driftstack-customer-dashboard` via direct upload + set repo variable `CLOUDFLARE_DASHBOARD_PROJECT_NAME` to match. Custom domain (`app.driftstack.dev`) wiring follows the first successful deploy.
+- **Customer dashboard is content-complete enough to publish?** That's a separate question. The V-260 deliverable is the deploy plumbing, not a product-readiness assertion. The dashboard has signup/login/tier-select/profile-mgmt/etc. pages scaffolded; how mature each one is depends on the V-NNN history of that area.
+- **Why not also wire admin-panel?** V-135 + V-246-P1-003 mitigation gates the admin-panel deploy on Cloudflare Access SSO config, which is a founder ops dependency not engineering. Wiring the workflow before SSO is misleading (any deploy would expose admin endpoints publicly until SSO attaches at the origin). Wait for V-135.
+
+### Next
+
+If founder wants more autopilot work overnight, three queue candidates:
+
+1. **Sub-processor-mirror linter** (~30 min) — script that diffs `apps/marketing-site/src/data/sub-processors.ts` against the Annex 3 entries in `docs/legal/dpa.md` so they can't drift. V-255 explicitly noted manual lockstep is fine pre-launch but a linter would make this a CI gate.
+2. **Doc-site sitemap audit** (~30 min) — verify all V-256 + V-254 pages are in the generated sitemap.xml.
+3. **Wire `deploy-docs.yml` to also run on PRs** with build-only (no upload) — current deploy workflows only run post-merge; building on PRs would catch regressions earlier. Same pattern would apply to all four CF deploy workflows.
+
+All three are sub-1hr Tier 1 work. Pick whichever matches founder priority on wake.
