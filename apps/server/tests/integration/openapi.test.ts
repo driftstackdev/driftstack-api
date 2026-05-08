@@ -49,10 +49,24 @@ describe('OpenAPI spec generation', () => {
         '/v1/admin/webhook-dlq/{id}/requeue',
         '/v1/account/audit-log',
         '/v1/account/email-preferences',
+        // V-353 MFA endpoints
+        '/v1/account/mfa',
+        '/v1/account/mfa/disable',
+        '/v1/account/mfa/enroll',
+        '/v1/account/mfa/recovery-codes/regenerate',
+        '/v1/account/mfa/verify',
         '/v1/account/rate-limits',
+        // V-355 web-session list / revoke
+        '/v1/account/web-sessions',
+        '/v1/account/web-sessions/{id}',
         '/v1/api-keys',
         '/v1/api-keys/{id}',
         '/v1/api-keys/{id}/rotate',
+        // V-353d/e auth MFA flows (public — no BearerAuth required)
+        '/v1/auth/mfa/challenge',
+        '/v1/auth/mfa/step-up',
+        // V-313 profile clone
+        '/v1/profiles/{id}/clone',
         '/v1/sessions',
         '/v1/sessions/{id}',
         '/v1/sessions/{id}/capture',
@@ -67,6 +81,9 @@ describe('OpenAPI spec generation', () => {
         '/v1/team/owners',
         '/v1/usage',
         '/v1/webhook-deliveries/{deliveryId}/replay',
+        // V-356 + V-359 webhook test + rotate
+        '/v1/webhooks/{id}/rotate-secret',
+        '/v1/webhooks/{id}/test',
       ].sort(),
     );
   });
@@ -91,11 +108,16 @@ describe('OpenAPI spec generation', () => {
     expect(schemes?.BearerAuth).toMatchObject({ type: 'http', scheme: 'bearer' });
   });
 
-  it('all v1 routes require BearerAuth', () => {
+  it('all v1 routes require BearerAuth (except /v1/auth/* public flows)', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();
     for (const [path, methods] of Object.entries(spec.paths ?? {})) {
       if (!path.startsWith('/v1/')) continue;
+      // V-353d/e — auth-flow endpoints are public by design (the
+      // bearer is what they MINT or REFRESH). They live under
+      // /v1/auth/* and intentionally don't carry a BearerAuth
+      // security requirement.
+      if (path.startsWith('/v1/auth/')) continue;
       const ops = methods as Record<string, { security?: unknown[] }>;
       for (const [method, op] of Object.entries(ops)) {
         if (!['get', 'post', 'delete', 'put', 'patch'].includes(method)) continue;

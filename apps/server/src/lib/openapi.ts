@@ -1159,6 +1159,318 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // ── V-353 MFA (TOTP) ───────────────────────────────────────────────────
+  const MfaStatusResponseOpenApi = z.object({
+    enrolled: z.boolean(),
+    enrolled_at: z.string().nullable(),
+    last_used_at: z.string().nullable(),
+    unused_recovery_codes: z.number().int().nonnegative(),
+  });
+  const MfaEnrollResponseOpenApi = z.object({
+    otpauth_uri: z.string(),
+    secret_base32: z.string(),
+    algorithm: z.literal('SHA1'),
+    digits: z.literal(6),
+    period_seconds: z.literal(30),
+  });
+  const MfaVerifyRequestOpenApi = z.object({
+    code: z.string().regex(/^\d{6}$/),
+  });
+  const MfaVerifyResponseOpenApi = z.object({
+    recovery_codes: z.array(z.string()).length(10),
+  });
+  const MfaDisableRequestOpenApi = z.object({
+    confirm: z.literal('disable-mfa'),
+  });
+  const MfaChallengeRequestOpenApi = z.object({
+    challenge_token: z.string(),
+    code: z
+      .string()
+      .regex(/^\d{6}$/)
+      .optional(),
+    recovery_code: z.string().optional(),
+  });
+  const MfaChallengeResponseOpenApi = z.object({
+    session: z.object({
+      token: z.string(),
+      expires_at: z.string(),
+      account_id: z.string(),
+    }),
+    via: z.enum(['totp', 'recovery']),
+  });
+  const MfaStepUpRequestOpenApi = z.object({
+    code: z
+      .string()
+      .regex(/^\d{6}$/)
+      .optional(),
+    recovery_code: z.string().optional(),
+  });
+  const MfaStepUpResponseOpenApi = z.object({
+    via: z.enum(['totp', 'recovery']),
+    mfa_satisfied_at: z.string(),
+  });
+
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/mfa',
+    summary: 'MFA enrollment status for the calling account',
+    tags: ['account', 'mfa'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'enrolled flag + timestamps + remaining recovery-code count.',
+        content: { 'application/json': { schema: MfaStatusResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/account/mfa/enroll',
+    summary: 'Start MFA TOTP enrollment (returns otpauth URI + base32 secret)',
+    tags: ['account', 'mfa'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Pending enrollment row created; secret shown once for QR / manual entry.',
+        content: { 'application/json': { schema: MfaEnrollResponseOpenApi } },
+      },
+      409: { description: 'Already enrolled — disable first.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/account/mfa/verify',
+    summary: 'Confirm enrollment with first 6-digit code; returns 10 single-use recovery codes',
+    tags: ['account', 'mfa'],
+    security: auth,
+    request: { body: { content: { 'application/json': { schema: MfaVerifyRequestOpenApi } } } },
+    responses: {
+      200: {
+        description: 'Enrollment activated; recovery codes shown ONCE.',
+        content: { 'application/json': { schema: MfaVerifyResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/account/mfa',
+    summary: 'Disable MFA. Step-up gated (requires fresh MFA proof).',
+    tags: ['account', 'mfa'],
+    security: auth,
+    request: { body: { content: { 'application/json': { schema: MfaDisableRequestOpenApi } } } },
+    responses: {
+      204: { description: 'MFA disabled; recovery codes invalidated.' },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/account/mfa/disable',
+    summary: 'POST alias for DELETE /v1/account/mfa. Same step-up gate.',
+    tags: ['account', 'mfa'],
+    security: auth,
+    request: { body: { content: { 'application/json': { schema: MfaDisableRequestOpenApi } } } },
+    responses: {
+      204: { description: 'MFA disabled.' },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/account/mfa/recovery-codes/regenerate',
+    summary: 'Mint 10 fresh recovery codes; old codes invalidated',
+    tags: ['account', 'mfa'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Fresh recovery codes shown ONCE.',
+        content: { 'application/json': { schema: MfaVerifyResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/mfa/challenge',
+    summary: 'Exchange a login challenge_token for a real session via TOTP / recovery code',
+    tags: ['auth', 'mfa'],
+    request: {
+      body: { content: { 'application/json': { schema: MfaChallengeRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'Session issued; via discriminator says totp or recovery.',
+        content: { 'application/json': { schema: MfaChallengeResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/mfa/step-up',
+    summary: 'Refresh mfa_satisfied_at on the calling web session (no new session issued)',
+    tags: ['auth', 'mfa'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: MfaStepUpRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'mfa_satisfied_at advanced to now.',
+        content: { 'application/json': { schema: MfaStepUpResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+
+  // ── V-355 web-session list / revoke ────────────────────────────────────
+  const WebSessionEntryOpenApi = z.object({
+    id: z.string(),
+    os: z.string(),
+    browser: z.string(),
+    last_used_at: z.string(),
+    expires_at: z.string(),
+    current: z.boolean(),
+  });
+  const ListWebSessionsResponseOpenApi = z.object({
+    data: z.array(WebSessionEntryOpenApi),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/web-sessions',
+    summary: 'Active dashboard sign-ins for the calling account',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Active web sessions; current session marked.',
+        content: { 'application/json': { schema: ListWebSessionsResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/account/web-sessions/{id}',
+    summary: 'Revoke a specific dashboard sign-in by id',
+    tags: ['account'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+    },
+    responses: {
+      204: { description: 'Session revoked.' },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/account/web-sessions',
+    summary: 'Bulk-revoke every dashboard sign-in except the calling one (?keep=current)',
+    tags: ['account'],
+    security: auth,
+    request: {
+      query: z.object({ keep: z.literal('current') }),
+    },
+    responses: {
+      200: {
+        description: 'Other sessions revoked.',
+        content: {
+          'application/json': {
+            schema: z.object({ revoked: z.number().int().nonnegative() }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+
+  // ── V-356 webhook test-delivery + V-359 secret rotation ────────────────
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/webhooks/{id}/test',
+    summary: 'Enqueue a synthetic test.ping delivery (bypass subscription)',
+    tags: ['webhooks'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      202: {
+        description: 'Test delivery enqueued.',
+        content: {
+          'application/json': {
+            schema: z.object({
+              delivery_id: z.string(),
+              event_id: z.string(),
+              event_type: z.literal('test.ping'),
+            }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  const RotateSecretResponseOpenApi = z.object({
+    id: z.string(),
+    secret: z.string(),
+    secret_prefix: z.string(),
+    prev_secret_prefix: z.string(),
+    grace_expires_at: z.string(),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/webhooks/{id}/rotate-secret',
+    summary: 'Rotate the signing secret with a 24h grace (worker dual-signs during grace)',
+    tags: ['webhooks'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description: 'Fresh plaintext shown ONCE; prev secret stays valid for 24h.',
+        content: { 'application/json': { schema: RotateSecretResponseOpenApi } },
+      },
+      409: {
+        description: 'Endpoint is disabled; cannot rotate.',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
+  // ── V-313 profile cloning ──────────────────────────────────────────────
+  const CloneProfileRequestOpenApi = z.object({
+    name: z.string().optional(),
+  });
+  const ProfileResponseOpenApi = z.object({
+    id: z.string(),
+    name: z.string(),
+    archetype: z.string(),
+    description: z.string().nullable(),
+    last_used_at: z.string().nullable(),
+    created_at: z.string(),
+    updated_at: z.string(),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/profiles/{id}/clone',
+    summary: 'Duplicate an existing profile metadata row with an auto-derived "(copy)" name',
+    tags: ['profiles'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: { content: { 'application/json': { schema: CloneProfileRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'Cloned profile.',
+        content: { 'application/json': { schema: ProfileResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+
   return r;
 }
 
