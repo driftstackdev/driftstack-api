@@ -18853,3 +18853,28 @@ No version-string bump (clarification, not material change per
 §15). Legal-acceptance content_hash will refresh on next deploy
 without requiring re-acceptance from existing accounts (since this
 is a clarification, not new collection).
+
+## V-374 — /trust/sub-processors region-preference explainer section
+
+**Tier**: 1 (customer-facing trust-page clarification on V-298b
+region semantics).
+
+apps/marketing-site/src/pages/trust/sub-processors.astro gains a
+"Region preference vs. region routing" section between the table
+and the "How sub-processor changes work" closing block.
+
+Three plain-language paragraphs:
+
+1. The /settings region selector is a stated preference and does
+   NOT move data; today every customer's data sits on the
+   EU-jurisdiction infrastructure listed in the table above.
+2. The preference exists for the future multi-region rollout. When
+   it ships, accounts holding non-EU preferences get the standard
+   Article 28(2) 30-day amendment notice with opt-out / EU-stay
+   rights before any migration.
+3. "no preference" today produces identical behaviour to selecting
+   "eu" — no surprise drift.
+
+Trust-page narrative now matches /settings copy + privacy.md
+disclosure (V-373) + DPA Annex 3 routing claim. No data-handling
+change; pure transparency.
