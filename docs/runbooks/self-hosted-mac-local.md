@@ -44,16 +44,26 @@ npm run build
 
 ## Run the control plane locally
 
-The repo has 6 surfaces. Run each in its own terminal pane:
+V-336 — single command starts every surface concurrently:
 
-| Surface            | Command                                                  | URL                     |
-| ------------------ | -------------------------------------------------------- | ----------------------- |
-| API server         | `npm run dev --workspace @driftstack/server`             | <http://localhost:3000> |
-| Customer dashboard | `npm run dev --workspace @driftstack/customer-dashboard` | <http://localhost:4321> |
-| Admin panel        | `npm run dev --workspace @driftstack/admin-panel`        | <http://localhost:4322> |
-| Marketing site     | `npm run dev --workspace @driftstack/marketing-site`     | <http://localhost:4323> |
-| Docs site          | `npm run dev --workspace @driftstack/docs`               | <http://localhost:4324> |
-| Status site        | `npm run dev --workspace @driftstack/status-site`        | <http://localhost:4325> |
+```sh
+npm run dev:all
+```
+
+`concurrently` prefixes each surface's stdout with its name + a
+distinct color. Ctrl+C stops every surface cleanly.
+
+If you'd rather run them in separate panes (e.g. for log isolation
+when debugging one surface):
+
+| Surface            | Command                 | URL                     |
+| ------------------ | ----------------------- | ----------------------- |
+| API server         | `npm run dev:server`    | <http://localhost:3000> |
+| Customer dashboard | `npm run dev:dashboard` | <http://localhost:4321> |
+| Admin panel        | `npm run dev:admin`     | <http://localhost:4322> |
+| Marketing site     | `npm run dev:marketing` | <http://localhost:4323> |
+| Docs site          | `npm run dev:docs`      | <http://localhost:4324> |
+| Status site        | `npm run dev:status`    | <http://localhost:4325> |
 
 `PUBLIC_API_BASE_URL` defaults to `http://localhost:3000` for all
 Astro apps in dev — they pick up the local API automatically.
