@@ -50,6 +50,9 @@ export const DOC_NAV: DocNavSection[] = [
     items: [
       { href: '/api/', label: 'API overview' },
       { href: '/api/versioning/', label: 'Versioning policy' },
+      { href: '/api/api-keys/', label: 'API keys' },
+      { href: '/api/team/', label: 'Team RBAC' },
+      { href: '/api/mfa/', label: 'Two-factor auth (MFA)' },
     ],
   },
   {

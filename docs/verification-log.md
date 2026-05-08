@@ -18527,3 +18527,30 @@ alias one-liner in V-353e; g shipped in V-353b). MFA TOTP product
 surface end-to-end customer-facing functional: enroll, verify,
 login challenge, step-up reauth, disable, recovery-code
 regenerate, dashboard UI.
+
+## V-358 — docs/api/mfa.md customer-facing MFA reference
+
+**Tier**: 1 (Tier-3 tone, post-hoc review per memory rule —
+marketing/docs cadence).
+
+`apps/docs/src/pages/api/mfa.md` covers the full V-353 surface for
+customer reference: enroll dance, verify + recovery codes, status,
+login challenge with `mfa_required` discriminated-union response,
+step-up reauth with the `requires_mfa_step_up` 403 envelope, disable
+
+- idempotent semantics, recovery-code regeneration, algorithm
+  specifics (SHA-1 / 30s / 6-digit / ±1 window / AES-256-GCM at-rest
+  / scrypt-hashed recovery codes / 5-min challenge TTL / 15-min step-
+  up freshness), and the audit-log lifecycle entries
+  (`account.mfa_enrolled` / `_disabled` / `recovery_code_used` plus
+  `account.login` `method: mfa_totp | mfa_recovery`).
+
+Nav: api-keys / team / mfa entries added to the API reference
+sidebar (`apps/docs/src/data/nav.ts`); the api-keys + team entries
+were missing from nav too — added now alongside MFA.
+
+`npx astro check`: 0/0/0 (errors/warnings/hints); `astro build`:
+19 pages built clean.
+
+V-353 cycle wrap: 8 sub-slices (a-h) + V-358 docs = 9 commits, MFA
+TOTP customer-facing surface complete.
