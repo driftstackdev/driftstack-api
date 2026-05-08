@@ -45,9 +45,16 @@ export class EmailPreferencesService {
    * type, with `opted_in` true by default for any event type that
    * doesn't have a row.
    */
-  async list(ctx: AccountContext): Promise<EmailPreferenceRecord[]> {
+  async list(
+    ctx: AccountContext,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<EmailPreferenceRecord[]> {
     throwIfMissingScope(ctx, 'account_owner');
-    const stored = await this.repo.list(ctx.account.id);
+    // V-330d — when effectiveAccountId is set, list the OWNER's
+    // preferences. Read-only — both 'member' and 'admin' roles
+    // allowed (gate is at the route layer; service stays neutral).
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const stored = await this.repo.list(accountId);
     const storedMap = new Map(stored.map((r) => [r.eventType, r]));
 
     const allEvents: OptOutableEmailEvent[] = [
@@ -69,7 +76,7 @@ export class EmailPreferencesService {
       // surface a stable epoch instead so consumers can detect
       // "never customised".
       return {
-        accountId: ctx.account.id,
+        accountId,
         eventType,
         optedIn: true,
         updatedAt: new Date(0),
@@ -77,9 +84,20 @@ export class EmailPreferencesService {
     });
   }
 
-  async set(ctx: AccountContext, eventType: OptOutableEmailEvent, optedIn: boolean): Promise<void> {
+  async set(
+    ctx: AccountContext,
+    eventType: OptOutableEmailEvent,
+    optedIn: boolean,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<void> {
     throwIfMissingScope(ctx, 'account_owner');
-    await this.repo.set(ctx.account.id, eventType, optedIn);
+    // V-330d — when effectiveAccountId is set, the route layer has
+    // already enforced the 'admin' role requirement (Q2 verdict —
+    // member role is read-only on writes). Service writes to the
+    // OWNER's account; the audit footprint of the change is the
+    // owner's audit log, not the caller's.
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    await this.repo.set(accountId, eventType, optedIn);
   }
 
   /**

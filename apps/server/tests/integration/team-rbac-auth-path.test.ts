@@ -436,6 +436,98 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     expect(res.statusCode).toBe(403);
   });
 
+  it('PUT /v1/account/email-preferences as admin team member updates the OWNER preferences', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'admin',
+      },
+    ]);
+    const res = await fx.app.inject({
+      method: 'PUT',
+      url: '/v1/account/email-preferences',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+      payload: { event_type: 'billing-renewal-reminder', opted_in: false },
+    });
+    expect(res.statusCode).toBe(204);
+
+    // Read back as the same admin → reflects the change on the
+    // OWNER's preferences (not the caller's).
+    const get = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/email-preferences',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    expect(get.statusCode).toBe(200);
+    const body = get.json<{ data: { event_type: string; opted_in: boolean }[] }>();
+    const renewal = body.data.find((r) => r.event_type === 'billing-renewal-reminder');
+    expect(renewal?.opted_in).toBe(false);
+
+    // Caller's OWN preferences are unchanged (default opted-in).
+    const own = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/email-preferences',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const ownBody = own.json<{ data: { event_type: string; opted_in: boolean }[] }>();
+    const ownRenewal = ownBody.data.find((r) => r.event_type === 'billing-renewal-reminder');
+    expect(ownRenewal?.opted_in).toBe(true);
+  });
+
+  it('PUT /v1/account/email-preferences as MEMBER role gets 403 (admin-only writes)', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'member',
+      },
+    ]);
+    const res = await fx.app.inject({
+      method: 'PUT',
+      url: '/v1/account/email-preferences',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+      payload: { event_type: 'billing-renewal-reminder', opted_in: false },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('GET /v1/account/email-preferences as MEMBER role reads OWNER preferences (read is role-agnostic)', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'member',
+      },
+    ]);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/email-preferences',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ data: { event_type: string; opted_in: boolean }[] }>();
+    // Default is opted-in across all event types.
+    expect(body.data.every((r) => r.opted_in)).toBe(true);
+  });
+
   it('GET /v1/sessions returns 403 when X-Driftstack-Account references a non-member owner', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
