@@ -7,9 +7,15 @@ const ConfigSchema = z.object({
   logLevel: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   databaseUrl: z.string().url(),
   redisUrl: z.string().url(),
-  driver: z.enum(['mock', 'webkit']).default('mock'),
+  driver: z.enum(['mock', 'webkit', 'playwright']).default('mock'),
   mockNavigateLatencyMs: z.coerce.number().int().nonnegative().default(120),
   mockInteractLatencyMs: z.coerce.number().int().nonnegative().default(40),
+  // V-333b — Playwright driver channel. Consulted only when
+  // driver === 'playwright'. Defaults to webkit (closest to iPhone
+  // Safari for non-stealth E2E smoke testing on Mac).
+  playwrightBrowser: z.enum(['webkit', 'chromium', 'firefox']).default('webkit'),
+  // V-333b — true = visible window (Mac dev), false = headless (CI).
+  playwrightHeaded: z.coerce.boolean().default(false),
   // V-113: Slow-query log threshold. When set, queries at or above this
   // duration emit a warn-level structured log via postgres-js client
   // instrumentation. Unset = disabled (default for dev/test).
@@ -201,6 +207,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     driver: env.DRIVER,
     mockNavigateLatencyMs: env.MOCK_NAVIGATE_LATENCY_MS,
     mockInteractLatencyMs: env.MOCK_INTERACT_LATENCY_MS,
+    playwrightBrowser: env.PLAYWRIGHT_BROWSER,
+    playwrightHeaded: env.PLAYWRIGHT_HEADED,
     slowQueryLogThresholdMs: env.SLOW_QUERY_LOG_THRESHOLD_MS,
     r2: readR2Config(env),
     postmark: readPostmarkConfig(env),

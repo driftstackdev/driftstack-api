@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { createDriver, MockDriver, WebKitDriver } from '../../src/drivers/index.js';
+import {
+  createDriver,
+  MockDriver,
+  PlaywrightDriver,
+  WebKitDriver,
+} from '../../src/drivers/index.js';
 import { DriverNotIntegratedError } from '../../src/lib/errors.js';
 
 const baseConfig = {
   mockNavigateLatencyMs: 0,
   mockInteractLatencyMs: 0,
+  playwrightBrowser: 'webkit' as const,
+  playwrightHeaded: false,
 };
 
 describe('createDriver factory', () => {
@@ -16,6 +23,11 @@ describe('createDriver factory', () => {
   it('returns a WebKitDriver stub when driver=webkit', () => {
     const d = createDriver({ ...baseConfig, driver: 'webkit' });
     expect(d).toBeInstanceOf(WebKitDriver);
+  });
+
+  it('returns a PlaywrightDriver when driver=playwright', () => {
+    const d = createDriver({ ...baseConfig, driver: 'playwright' });
+    expect(d).toBeInstanceOf(PlaywrightDriver);
   });
 });
 
