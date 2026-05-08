@@ -89,17 +89,24 @@ configuration through the API or GUI.
 **What:** API Keys (stored as scrypt-hashed values; the plaintext key
 is shown to Customer once at issuance and is not recoverable
 thereafter), session tokens for the GUI Client, key prefixes and
-last-used-at timestamps.
+last-used-at timestamps. Optional second-factor authentication
+state when Customer enrolls: a TOTP secret encrypted at rest with
+AES-256-GCM (only the encrypted ciphertext is stored; the plaintext
+exists only in memory during signature verification), 10 single-use
+recovery codes stored as scrypt-hashed values (raw codes shown
+once at enrollment), and a per-session "MFA-satisfied-at"
+timestamp used to gate sensitive operations.
 
-**Why:** to authenticate API requests, scope operations, and detect
-or remediate compromise.
+**Why:** to authenticate API requests, scope operations, detect
+or remediate compromise, and enforce step-up reauthentication on
+sensitive operations.
 
 **Legal basis:** Article 6(1)(b) — performance of the contract.
 Article 6(1)(c) — compliance with legal obligation under Article 32
 GDPR (security of processing).
 
-**Source:** Driftstack generates API Keys at Customer's request;
-Customer stores and manages them.
+**Source:** Driftstack generates API Keys + MFA secrets at
+Customer's request; Customer stores and manages them.
 
 ### 3.3 Session metadata
 

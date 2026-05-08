@@ -23,6 +23,35 @@ references the corresponding rows in this log.
 
 ---
 
+## 2026-05-09 — V-353 + V-359 + V-298a + V-352b cycle disclosure refresh
+
+- **Privacy Policy §3.2 (Authentication data)**: extended the "What"
+  list to disclose the optional second-factor enrollment state when
+  Customer opts into MFA. Specifically: AES-256-GCM-encrypted TOTP
+  secret (plaintext exists only in memory during verification),
+  10 scrypt-hashed single-use recovery codes (raw codes shown once
+  at enrollment), and the per-session `mfa_satisfied_at` timestamp
+  used to gate sensitive operations. Same legal basis (Art 6(1)(b)
+  - 6(1)(c) Art 32 security) — no new sub-processor.
+- **No DPA / sub-processor change**: MFA data lives entirely in the
+  existing Postgres sub-processor (Neon, EU Frankfurt). No new
+  vendor relationship; the recovery-code KDF is the same scrypt
+  used for API keys.
+- **No retention change**: MFA state is deleted with the account
+  per existing §6 retention schedule. Disabling MFA via DELETE
+  /v1/account/mfa clears the row + recovery codes immediately.
+- **No ToS / AUP / Definitions update**: MFA is a security feature
+  on top of the existing authentication relationship; no new
+  processing purpose, no new data subject, no new transfer.
+
+This entry batches the disclosure refresh for the customer-facing
+work that landed during the 2026-05-09 cycle: V-353 (MFA TOTP), V-359
+(webhook secret rotation — server-side encryption stays under the
+existing same-vendor stack; no disclosure change), V-298a (account
+slug — slug is Customer-chosen text in an existing column, no new
+vendor), V-352b avatars already disclosed in the prior 2026-05-08
+entry.
+
 ## 2026-05-08 — V-352b (customer-uploaded avatars)
 
 - **Privacy Policy §3.1 (Account data)**: extended the "What" list to
