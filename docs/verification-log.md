@@ -17754,3 +17754,109 @@ slower hand-off, not failure.
 
 - `npm test`: 971/971 (V-327 baseline 968 + 3 new).
 - `npm run typecheck @driftstack/gui-client`: clean.
+
+## V-326e — Team RBAC write-side cycle (5 sub-slices)
+
+**Tier**: 1 with founder Q1 verdict locked.
+
+**Why**: V-326a–d shipped the Team RBAC backbone but only wired one
+read endpoint (GET /v1/sessions). V-326e completes the cycle so every
+customer-write route honors X-Driftstack-Account with admin-only
+role gating per Q1 verdict.
+
+**Slices**:
+
+- **V-326e1** — POST /v1/sessions admin-only on owner accounts.
+  Service.create gains effectiveAccountId + effectiveTier opts;
+  audit row + concurrent-cap check use the OWNER. Route loads owner
+  via authRepo.getAccount.
+- **V-326e2** — DELETE /v1/sessions/:id admin-only. Service.destroy
+  gains effectiveAccountId; webhook fan-out + first-success email
+  fan-out switch to session.accountId (resource owner is the
+  audience; caller is the actor).
+- **V-326e3** — POST /v1/sessions/:id/{navigate,interact,wait,
+  capture,gui-input} admin-only; GET /v1/sessions/:id/state read
+  role-agnostic. requireOwned gains effectiveAccountId; route helper
+  effectiveAccountIdForWrite factors out the resolve+admin-gate.
+  runWithFailureCapture uses session.accountId for downstream fan-
+  out (no more ctx.account.id leak).
+- **V-326e4** — POST/PATCH/DELETE /v1/profiles admin-only. Profile
+  service signatures already accept accountId directly; route
+  helper threads effectiveAccountId. POST loads owner via authRepo
+  for tier-derived profile cap.
+- **V-326e5** — POST/DELETE /v1/webhooks admin-only. Service.create
+  - .delete BYPASS the legacy literal-'admin' apiKey scope check
+    when effectiveAccountId is set (the team-admin role IS the
+    authorization basis, not the legacy apiKey scope). countActive +
+    insertEndpoint + audit emit follow the OWNER's account.
+
+**Verify**:
+
+- npm test: 989/989 across the 5 slices.
+- Each sub-slice tests both happy-path (admin → succeeds on owner)
+  and gate (member → 403).
+
+## V-328e — dashboard /cli/authorize emits driftstack:// redirect
+
+**Tier**: 1.
+
+**Why**: V-328 wired the desktop's deep-link listener; V-328e closes
+the loop on the server side so the OS hand-off actually fires after
+a successful cli-authorize bind.
+
+**Implementation**: 600ms-delayed window.location.assign of
+`driftstack://auth/callback?code=…&state=…` after the bind succeeds.
+Per-platform native-bundle test still pending per docs/founder-
+actions/v328-tauri-deep-link-test.md, but the dashboard side is
+ready. Polling fallback in browser-sign-in.ts continues to work in
+the meantime.
+
+## V-330d — Team RBAC on /v1/account/email-preferences (admin-only PUT per Q2)
+
+**Tier**: 1 with founder Q2 verdict locked.
+
+First write-side route to enforce the Q2 admin-only policy. Service
+list + set both gain effectiveAccountId opts. Route layer:
+read role-agnostic (both 'member' and 'admin'); PUT enforces 'admin'
+team role with explicit ForbiddenError. 3 new tests.
+
+## V-330e — Team RBAC on /v1/usage + /v1/usage/series
+
+**Tier**: 1.
+
+Read-only on both; both 'member' and 'admin' roles. The OWNER's
+tier drives quota cap (members don't override the cap by being on
+the team); route loads owner via authRepo.getAccount when team-
+scoped. 1 new test.
+
+## V-330f — Team RBAC on /v1/webhooks read endpoints (list / get / listDeliveries)
+
+**Tier**: 1.
+
+Read-only on all three GET endpoints. Service signatures gain
+effectiveAccountId opts (listWithCounts, get, listDeliveries). Both
+roles allowed. POST/DELETE deferred to V-326e5 (admin-only). 1 new
+test.
+
+## V-331 — customer-dashboard "Acting as <owner>" account picker
+
+**Tier**: 1 (UI).
+
+DashboardLayout gains:
+
+- "Acting as" picker widget below the sidebar logo (auto-hides for
+  self-only customers).
+- "Acting as" indicator banner above main content when active.
+- `window.driftstackActAsHeaders()` global helper for inline-script
+  pages to spread into request headers.
+
+Per founder rule #17 batched into a single slice. Index page (V-316)
+is wired to the helper; remaining pages adopt incrementally as
+V-331b sub-slices.
+
+## V-332 — V-log catch-up for V-326e/V-328e/V-330d-f/V-331
+
+**Tier**: 1 (documentation).
+
+Per persistent rule #17 (terse V-log per V-NNN). Consolidates the 10
+sub-slices since the last sweep into one indexed entry per V-NNN.
