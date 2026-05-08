@@ -21,6 +21,7 @@ interface AccountMeResponse {
   name: string | null;
   tier: string;
   status: string;
+  timezone: string | null;
   concurrent_session_cap: number;
   concurrent_session_active: number;
   profile_cap: number | null;
@@ -117,5 +118,62 @@ describe('GET /v1/account/me', () => {
       url: '/v1/account/me',
     });
     expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('PATCH /v1/account/me (V-352)', () => {
+  it('200 updates name + timezone', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { name: 'Updated', timezone: 'Europe/Amsterdam' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ name: string; timezone: string }>();
+    expect(body.name).toBe('Updated');
+    expect(body.timezone).toBe('Europe/Amsterdam');
+    // Read-back via GET shows the new values.
+    const me = await fx.app.inject({ method: 'GET', url: '/v1/account/me', headers: auth(fx) });
+    const meBody = me.json<AccountMeResponse>();
+    expect(meBody.name).toBe('Updated');
+    expect(meBody.timezone).toBe('Europe/Amsterdam');
+  });
+
+  it('200 clears name to null + clears timezone to null', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { name: null, timezone: null },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ name: string | null; timezone: string | null }>();
+    expect(body.name).toBeNull();
+    expect(body.timezone).toBeNull();
+  });
+
+  it('400 when body has no fields', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('400 when timezone is not an IANA name', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { timezone: 'PST' },
+    });
+    expect(res.statusCode).toBe(400);
   });
 });

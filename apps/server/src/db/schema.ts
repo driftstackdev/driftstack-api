@@ -164,6 +164,10 @@ export const accounts = pgTable(
     // the customer's first successful session completes. One-shot
     // (subsequent sessions don't email; the dashboard takes over).
     firstSuccessEmailSentAt: timestamp('first_success_email_sent_at', { withTimezone: true }),
+    // V-352 — IANA timezone name (e.g. "Europe/Amsterdam", "America/Los_Angeles").
+    // Used by the dashboard + outbound emails to render timestamps in
+    // the customer's local TZ. Optional; falls back to UTC display.
+    timezone: text('timezone'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

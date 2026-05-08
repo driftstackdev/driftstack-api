@@ -30,6 +30,8 @@ export interface AccountRow {
   name: string | null;
   tier: AccountTier;
   status: 'active' | 'suspended' | 'deleted';
+  /** V-352 — IANA timezone name (e.g. "Europe/Amsterdam"). null = UTC fallback. */
+  timezone: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -91,6 +93,17 @@ export interface AccountAuthRepo {
    * service's accept / removeMember paths.
    */
   findTeamMemberships(memberAccountId: string): Promise<TeamMembership[]>;
+  /**
+   * V-352 — patch self-editable basics on the account (name,
+   * timezone). Returns the updated row. Used by PATCH /v1/account/me.
+   * Email + tier + status + stripeCustomerId are NOT editable here —
+   * those go through dedicated flows (auth-flows for email; Stripe
+   * webhooks for tier; admin force-actions for status).
+   */
+  updateAccountBasics(
+    id: string,
+    patch: { name?: string | null; timezone?: string | null },
+  ): Promise<AccountRow | null>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

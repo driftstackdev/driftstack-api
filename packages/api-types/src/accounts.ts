@@ -59,6 +59,36 @@ export const SetEmailPreferenceRequestSchema = z.object({
 export type SetEmailPreferenceRequest = z.infer<typeof SetEmailPreferenceRequestSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
+// V-352 — PATCH /v1/account/me request shape
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * V-352 — partial update of self-editable basics. At least one
+ * field must be provided. `name` may be set to null to clear; the
+ * email-display fallback uses the email address. `timezone` accepts
+ * an IANA name (e.g. `Europe/Amsterdam`) or null to clear (UTC fallback).
+ */
+export const UpdateAccountMeRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).nullable().optional(),
+    timezone: z
+      .string()
+      .trim()
+      .min(1)
+      .max(64)
+      .regex(
+        /^[A-Za-z]+(?:\/[A-Za-z0-9_+-]+)+$/,
+        'Must be an IANA timezone name like "Europe/Amsterdam".',
+      )
+      .nullable()
+      .optional(),
+  })
+  .refine((v) => v.name !== undefined || v.timezone !== undefined, {
+    message: 'At least one field (name or timezone) must be provided.',
+  });
+export type UpdateAccountMeRequest = z.infer<typeof UpdateAccountMeRequestSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
 // V-216 — customer-facing audit log
 // ───────────────────────────────────────────────────────────────────────────
 

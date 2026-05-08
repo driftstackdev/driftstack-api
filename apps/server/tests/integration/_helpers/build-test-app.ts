@@ -284,6 +284,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     name: 'Tester',
     tier: opts.tier ?? 'api_builder',
     status: opts.accountStatus ?? 'active',
+    timezone: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
   });
@@ -613,6 +614,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
         name: row.name,
         tier: row.tier,
         status: row.status,
+        timezone: null,
         createdAt: row.createdAt,
         updatedAt: row.createdAt,
       };
@@ -798,6 +800,7 @@ export async function seedAdditionalAccount(
     name: opts.name ?? 'Tester-2',
     tier: opts.tier ?? 'api_builder',
     status: opts.accountStatus ?? 'active',
+    timezone: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
   });

@@ -21,6 +21,7 @@ function sampleAccount(): AccountRow {
     name: 'Bench Account',
     tier: 'api_builder',
     status: 'active',
+    timezone: null,
     createdAt: new Date('2026-05-04T00:00:00Z'),
     updatedAt: new Date('2026-05-04T00:00:00Z'),
   };

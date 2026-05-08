@@ -211,6 +211,13 @@
       "when": 1778090420000,
       "tag": "0029_v298a_team_members",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1778090421000,
+      "tag": "0030_v352_account_timezone",
+      "breakpoints": true
     }
   ]
 }

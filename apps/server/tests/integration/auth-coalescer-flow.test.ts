@@ -51,6 +51,10 @@ class CountingAuthRepo implements AccountAuthRepo {
   findTeamMemberships(): Promise<never[]> {
     return Promise.resolve([]);
   }
+  // V-352 — account basics stubbed; not exercised by coalescer tests.
+  updateAccountBasics(): Promise<null> {
+    return Promise.resolve(null);
+  }
 }
 
 async function seed(repo: CountingAuthRepo): Promise<{ plaintext: string; accountId: string }> {
@@ -62,6 +66,7 @@ async function seed(repo: CountingAuthRepo): Promise<{ plaintext: string; accoun
     name: null,
     tier: 'api_builder',
     status: 'active',
+    timezone: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
   });
@@ -147,6 +152,7 @@ describe('coalescer integrated with authenticate()', () => {
         name: null,
         tier: 'api_builder',
         status: 'active',
+        timezone: null,
         createdAt: new Date('2026-01-01T00:00:00Z'),
         updatedAt: new Date('2026-01-01T00:00:00Z'),
       });

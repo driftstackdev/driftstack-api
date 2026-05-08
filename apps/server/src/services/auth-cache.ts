@@ -62,6 +62,8 @@ interface SerializedAccount {
   name: string | null;
   tier: string;
   status: string;
+  /** V-352 — optional. Pre-V-352 cache entries lack this; deserialize defaults to null. */
+  timezone?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -136,6 +138,7 @@ function serialize(ctx: AccountContext): SerializedContext {
       name: ctx.account.name,
       tier: ctx.account.tier,
       status: ctx.account.status,
+      timezone: ctx.account.timezone,
       createdAt: ctx.account.createdAt.toISOString(),
       updatedAt: ctx.account.updatedAt.toISOString(),
     },
@@ -181,6 +184,7 @@ function deserialize(s: SerializedContext): AccountContext {
       name: s.account.name,
       tier: s.account.tier as AccountContext['account']['tier'],
       status: s.account.status as AccountContext['account']['status'],
+      timezone: s.account.timezone ?? null,
       createdAt: new Date(s.account.createdAt),
       updatedAt: new Date(s.account.updatedAt),
     },

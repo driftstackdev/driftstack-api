@@ -117,6 +117,21 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
       role: r.role,
     }));
   }
+
+  async updateAccountBasics(
+    id: string,
+    patch: { name?: string | null; timezone?: string | null },
+  ): Promise<AccountRow | null> {
+    const set: Record<string, unknown> = { updatedAt: new Date() };
+    if (patch.name !== undefined) set.name = patch.name;
+    if (patch.timezone !== undefined) set.timezone = patch.timezone;
+    const [row] = await this.database.db
+      .update(accounts)
+      .set(set)
+      .where(eq(accounts.id, id))
+      .returning();
+    return row ? toAccountRow(row) : null;
+  }
 }
 
 function toApiKeyRow(r: typeof apiKeys.$inferSelect): ApiKeyRow {
@@ -141,6 +156,7 @@ function toAccountRow(r: typeof accounts.$inferSelect): AccountRow {
     name: r.name,
     tier: r.tier,
     status: r.status,
+    timezone: r.timezone,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };

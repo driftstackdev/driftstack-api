@@ -331,6 +331,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAccountMeRoutes(app, {
       sessionRepo: deps.sessionRepo,
       profilesRepo: deps.profilesRepo,
+      authRepo: deps.authRepo,
+      authCache: deps.authCache,
     });
   }
   // V-176 — public-facing status endpoint. Reuses the readinessChecks

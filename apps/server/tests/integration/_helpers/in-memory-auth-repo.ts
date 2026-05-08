@@ -136,6 +136,23 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
     return Promise.resolve(this.teamMemberships.get(memberAccountId) ?? []);
   }
 
+  // ── V-352 account basics (name + timezone) update ─────────────────
+  updateAccountBasics(
+    id: string,
+    patch: { name?: string | null; timezone?: string | null },
+  ): Promise<AccountRow | null> {
+    const r = this.accounts.get(id);
+    if (!r) return Promise.resolve(null);
+    const updated: AccountRow = {
+      ...r,
+      name: patch.name !== undefined ? patch.name : r.name,
+      timezone: patch.timezone !== undefined ? patch.timezone : r.timezone,
+      updatedAt: new Date(),
+    };
+    this.accounts.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
   /** Test helper: seed team memberships for a member account. */
   setTeamMemberships(memberAccountId: string, rows: TeamMembership[]): void {
     this.teamMemberships.set(memberAccountId, rows);
