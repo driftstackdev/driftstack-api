@@ -64,11 +64,41 @@ async function main(): Promise<void> {
   });
   console.log(`  → ${updated.id}  new name="${updated.name}"`);
 
-  // 5. Delete. Idempotent — calling it on a missing profile returns
-  //    404, but on a profile already-deleted returns 404 too (gone).
-  console.log('deleting profile…');
-  await client.profiles.delete(created.id);
-  console.log('  → deleted');
+  // 5. V-313 — clone the profile. Server auto-derives "(copy)" /
+  //    "(copy 2)" / ... naming when no name is supplied. Tier-cap +
+  //    name-conflict are checked the same as create (429 / 409).
+  console.log('cloning profile…');
+  const cloned = await client.profiles.clone(updated.id);
+  console.log(`  → ${cloned.id}  name="${cloned.name}"`);
+
+  // 6. V-312 — capture an immutable point-in-time snapshot of the
+  //    parent profile. The snapshot is frozen; the parent keeps
+  //    evolving.
+  console.log('capturing snapshot…');
+  const snapshot = await client.profileSnapshots.capture(updated.id, {
+    label: 'baseline',
+    description: 'Captured by the profile-management example',
+  });
+  console.log(`  → ${snapshot.id}  label="${snapshot.label}"`);
+
+  // 7. Restore the snapshot into a NEW profile. The original parent
+  //    profile is never modified.
+  console.log('restoring snapshot into a new profile…');
+  const restored = await client.profileSnapshots.restore(snapshot.id, {
+    name: `${updated.name}-restored`,
+  });
+  console.log(`  → ${restored.id}  name="${restored.name}"`);
+
+  // 8. Cleanup — delete the snapshot, the cloned profile, the
+  //    restored profile, and the original. Snapshots have no
+  //    automatic lifecycle; capture as many as you want, delete
+  //    when you no longer need them.
+  console.log('cleaning up…');
+  await client.profileSnapshots.delete(snapshot.id);
+  await client.profiles.delete(restored.id);
+  await client.profiles.delete(cloned.id);
+  await client.profiles.delete(updated.id);
+  console.log('  → cleaned up');
 }
 
 main().catch((err: unknown) => {

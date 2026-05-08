@@ -19248,3 +19248,18 @@ group gains a new entry between "Where is my data stored?" and
 
 Tone matches the existing "Where is my data stored?" entry.
 Founder reviews tone post-hoc per cadence rule.
+
+## V-390 — TS SDK profile-management example extends with V-313 + V-312
+
+**Tier**: 1 (V-376/379 example coverage; the example previously
+stopped at delete).
+
+`packages/sdk-typescript/examples/profile-management.ts` now
+walks the full CRUD + V-313 + V-312 surface end-to-end:
+
+1-4. (existing) create / list / get / update. 5. **clone** — server-auto-derives "(copy)" naming. 6. **snapshot capture** — immutable point-in-time copy. 7. **snapshot restore** — creates a NEW profile; parent untouched. 8. **cleanup** — delete snapshot + restored profile + cloned
+profile + parent profile.
+
+Customers running `npx tsx examples/profile-management.ts` see
+the full V-312 + V-313 surface in action. Python + Go example
+files queued (V-391 / V-392) for parity.
