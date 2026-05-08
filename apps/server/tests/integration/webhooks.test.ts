@@ -299,3 +299,93 @@ describe('account scoping', () => {
     }
   });
 });
+
+describe('PATCH /v1/webhooks/:id (V-351)', () => {
+  it('200 updates url + events + description + active', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: {
+        url: 'https://x.test/v1',
+        events: ['session.completed'],
+        description: 'old desc',
+      },
+    });
+    const created = create.json<{ id: string }>();
+
+    const patch = await fx.app.inject({
+      method: 'PATCH',
+      url: `/v1/webhooks/${created.id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: {
+        url: 'https://x.test/v2',
+        events: ['session.completed', 'session.failed'],
+        description: 'new desc',
+        active: false,
+      },
+    });
+    expect(patch.statusCode).toBe(200);
+    const body = patch.json<Record<string, unknown>>();
+    expect(body.url).toBe('https://x.test/v2');
+    expect(body.events).toEqual(['session.completed', 'session.failed']);
+    expect(body.description).toBe('new desc');
+    expect(body.active).toBe(false);
+  });
+
+  it('400 when body has no fields', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: { url: 'https://x.test/h', events: ['session.completed'] },
+    });
+    const created = create.json<{ id: string }>();
+
+    const patch = await fx.app.inject({
+      method: 'PATCH',
+      url: `/v1/webhooks/${created.id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: {},
+    });
+    expect(patch.statusCode).toBe(400);
+  });
+
+  it('409 when targeting a soft-deleted endpoint', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: { url: 'https://x.test/h', events: ['session.completed'] },
+    });
+    const created = create.json<{ id: string }>();
+
+    await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/webhooks/${created.id}`,
+      headers: auth(fx),
+    });
+
+    const patch = await fx.app.inject({
+      method: 'PATCH',
+      url: `/v1/webhooks/${created.id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { description: 'late edit' },
+    });
+    expect(patch.statusCode).toBe(409);
+  });
+
+  it('404 when endpoint id is unknown', async () => {
+    fx = await buildTestApp();
+    const patch = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/webhooks/whk_00000000-0000-4000-8000-deadbeef0000',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { active: false },
+    });
+    expect(patch.statusCode).toBe(404);
+  });
+});

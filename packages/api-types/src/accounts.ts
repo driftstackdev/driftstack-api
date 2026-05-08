@@ -83,6 +83,7 @@ export const AccountAuditActionSchema = z.enum([
   'profile.deleted',
   'subscription.tier_changed',
   'webhook_endpoint.created',
+  'webhook_endpoint.updated',
   'webhook_endpoint.deleted',
   // V-307 — customer self-service replay of a webhook delivery.
   'webhook_delivery.replayed',

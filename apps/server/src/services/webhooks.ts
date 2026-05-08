@@ -103,6 +103,22 @@ export interface WebhooksRepo {
   countActiveEndpoints(accountId: string): Promise<number>;
   /** Soft-delete: set disabled_at + active=false. */
   disableEndpoint(id: string, at: Date): Promise<void>;
+  /**
+   * V-351 — patch endpoint fields. Pass `undefined` for any field
+   * to leave it unchanged. Returns the updated row, or null when
+   * the row was not found / owned by a different account. Cannot
+   * be used to RE-enable a disabled endpoint (disabledAt is sticky;
+   * disabled rows are tombstones for audit purposes — customer
+   * mints a fresh endpoint instead).
+   */
+  updateEndpoint(input: {
+    id: string;
+    accountId: string;
+    url?: string;
+    events?: WebhookEventType[];
+    description?: string | null;
+    active?: boolean;
+  }): Promise<WebhookEndpointRow | null>;
 
   /**
    * V-185 — aggregate per-endpoint delivery counts (delivered, failed,
@@ -192,7 +208,7 @@ export class WebhooksService {
 
   private async emitAuditBestEffort(
     ctx: AccountContext,
-    action: 'webhook_endpoint.created' | 'webhook_endpoint.deleted',
+    action: 'webhook_endpoint.created' | 'webhook_endpoint.updated' | 'webhook_endpoint.deleted',
     targetResourceId: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
@@ -294,6 +310,61 @@ export class WebhooksService {
     const row = await this.repo.findEndpoint(id, accountId);
     if (!row) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
     return row;
+  }
+
+  /**
+   * V-351 — partial-update an existing endpoint. Mirror of create()
+   * for the V-326e5 admin-only-on-team gate; trusts the route layer
+   * when effectiveAccountId is set. Cannot re-enable a soft-deleted
+   * endpoint (the repo enforces this — disabledAt is sticky).
+   */
+  async update(
+    ctx: AccountContext,
+    id: string,
+    input: {
+      url?: string;
+      events?: WebhookEventType[];
+      description?: string | null;
+      active?: boolean;
+    },
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<WebhookEndpointRow> {
+    if (opts.effectiveAccountId === undefined) {
+      throwIfMissingScope(ctx, 'admin');
+    }
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const before = await this.repo.findEndpoint(id, accountId);
+    if (!before) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
+    if (before.disabledAt !== null) {
+      throw new ConflictError('Cannot update a disabled endpoint. Mint a fresh one instead.');
+    }
+    if (input.events !== undefined && input.events.length === 0) {
+      throw new ConflictError('events must contain at least one event type.');
+    }
+    const url = input.url !== undefined ? parseHttpsUrl(input.url) : undefined;
+    const repoInput: {
+      id: string;
+      accountId: string;
+      url?: string;
+      events?: WebhookEventType[];
+      description?: string | null;
+      active?: boolean;
+    } = { id, accountId };
+    if (url !== undefined) repoInput.url = url;
+    if (input.events !== undefined) repoInput.events = input.events;
+    if (input.description !== undefined) repoInput.description = input.description;
+    if (input.active !== undefined) repoInput.active = input.active;
+    const updated = await this.repo.updateEndpoint(repoInput);
+    if (!updated) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
+
+    await this.emitAuditBestEffort(ctx, 'webhook_endpoint.updated', `webhook_endpoint_${id}`, {
+      url: url ? url.toString() : before.url,
+      events: input.events ?? before.events,
+      description: input.description ?? before.description,
+      active: input.active ?? before.active,
+    });
+
+    return updated;
   }
 
   async delete(

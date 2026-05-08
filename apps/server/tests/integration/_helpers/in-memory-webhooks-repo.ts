@@ -86,6 +86,30 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     return Promise.resolve();
   }
 
+  updateEndpoint(input: {
+    id: string;
+    accountId: string;
+    url?: string;
+    events?: WebhookEventType[];
+    description?: string | null;
+    active?: boolean;
+  }): Promise<WebhookEndpointRow | null> {
+    const r = this.endpoints.get(input.id);
+    if (!r || r.accountId !== input.accountId || r.disabledAt !== null) {
+      return Promise.resolve(null);
+    }
+    const updated: WebhookEndpointRow = {
+      ...r,
+      url: input.url !== undefined ? input.url : r.url,
+      events: input.events !== undefined ? input.events : r.events,
+      description: input.description !== undefined ? input.description : r.description,
+      active: input.active !== undefined ? input.active : r.active,
+      updatedAt: new Date(),
+    };
+    this.endpoints.set(input.id, updated);
+    return Promise.resolve(updated);
+  }
+
   enqueueDelivery(input: NewWebhookDeliveryInput): Promise<void> {
     const now = new Date();
     const row: WebhookDeliveryRow = {

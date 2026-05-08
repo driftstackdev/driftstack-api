@@ -62,6 +62,33 @@ export type CreateWebhookRequest = z.infer<typeof CreateWebhookRequestSchema>;
 export const CreateWebhookResponseSchema = WebhookEndpointSchema.extend({
   secret: z.string().describe('Plaintext signing secret. Returned ONCE; not retrievable later.'),
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// V-351 — Update
+// ───────────────────────────────────────────────────────────────────────────
+
+export const UpdateWebhookRequestSchema = z
+  .object({
+    url: z
+      .string()
+      .url()
+      .refine((u) => u.startsWith('https://'), {
+        message: 'Webhook URL must use https://',
+      })
+      .optional(),
+    events: z.array(WebhookEventTypeSchema).min(1).max(10).optional(),
+    description: z.string().max(200).nullable().optional(),
+    active: z.boolean().optional(),
+  })
+  .refine(
+    (v) =>
+      v.url !== undefined ||
+      v.events !== undefined ||
+      v.description !== undefined ||
+      v.active !== undefined,
+    { message: 'At least one field must be provided.' },
+  );
+export type UpdateWebhookRequest = z.infer<typeof UpdateWebhookRequestSchema>;
 export type CreateWebhookResponse = z.infer<typeof CreateWebhookResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────

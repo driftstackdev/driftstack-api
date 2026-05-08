@@ -2,7 +2,11 @@
 // + GET /v1/webhooks/:id/deliveries.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { CreateWebhookRequestSchema, ListDeliveriesQuerySchema } from '@driftstack/api-types';
+import {
+  CreateWebhookRequestSchema,
+  ListDeliveriesQuerySchema,
+  UpdateWebhookRequestSchema,
+} from '@driftstack/api-types';
 import { BadRequestError, ForbiddenError } from '../lib/errors.js';
 import type {
   WebhookDeliveryRow,
@@ -168,6 +172,30 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
       const eff = effectiveAccountIdForWrite(request, ctx);
       await service.delete(ctx, id, eff !== undefined ? { effectiveAccountId: eff } : {});
       return reply.code(204).send();
+    },
+  );
+
+  // V-351 — partial update. Mirror of POST + DELETE for the
+  // V-326e5 admin-only-on-team gate. Disabled endpoints cannot be
+  // updated (the repo enforces; this returns 409).
+  app.patch<{ Params: { id: string } }>(
+    '/v1/webhooks/:id',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const id = uuidFromPrefixedId(request.params.id, 'whk');
+      const parsed = UpdateWebhookRequestSchema.safeParse(request.body);
+      if (!parsed.success)
+        throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid body.');
+      const eff = effectiveAccountIdForWrite(request, ctx);
+      const row = await service.update(
+        ctx,
+        id,
+        parsed.data,
+        eff !== undefined ? { effectiveAccountId: eff } : {},
+      );
+      return publicEndpoint(row);
     },
   );
 

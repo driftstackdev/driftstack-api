@@ -1,6 +1,6 @@
 // Drizzle-backed implementation of WebhooksRepo.
 
-import { and, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm';
 import type {
   EndpointDeliveryCounts,
   ListDeliveriesPage,
@@ -100,6 +100,34 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
       .update(webhookEndpoints)
       .set({ active: false, disabledAt: at, updatedAt: new Date() })
       .where(eq(webhookEndpoints.id, id));
+  }
+
+  async updateEndpoint(input: {
+    id: string;
+    accountId: string;
+    url?: string;
+    events?: WebhookEventType[];
+    description?: string | null;
+    active?: boolean;
+  }): Promise<WebhookEndpointRow | null> {
+    const set: Record<string, unknown> = { updatedAt: new Date() };
+    if (input.url !== undefined) set.url = input.url;
+    if (input.events !== undefined) set.events = input.events;
+    if (input.description !== undefined) set.description = input.description;
+    if (input.active !== undefined) set.active = input.active;
+    // Account-scoped + not-disabled — disabled rows are tombstones.
+    const [row] = await this.database.db
+      .update(webhookEndpoints)
+      .set(set)
+      .where(
+        and(
+          eq(webhookEndpoints.id, input.id),
+          eq(webhookEndpoints.accountId, input.accountId),
+          isNull(webhookEndpoints.disabledAt),
+        ),
+      )
+      .returning();
+    return row ? toEndpointRow(row) : null;
   }
 
   async enqueueDelivery(input: NewWebhookDeliveryInput): Promise<void> {
