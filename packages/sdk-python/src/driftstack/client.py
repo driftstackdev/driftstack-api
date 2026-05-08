@@ -19,6 +19,10 @@ from driftstack.http import AsyncHttpClient, HttpClient
 from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
 from driftstack.resources.auth import AsyncAuthResource, AuthResource
 from driftstack.resources.billing import AsyncBillingResource, BillingResource
+from driftstack.resources.profile_snapshots import (
+    AsyncProfileSnapshotsResource,
+    ProfileSnapshotsResource,
+)
 from driftstack.resources.profiles import AsyncProfilesResource, ProfilesResource
 from driftstack.resources.sessions import AsyncSessionsResource, SessionsResource
 from driftstack.resources.team import AsyncTeamResource, TeamResource
@@ -74,6 +78,8 @@ class Driftstack:
         self.usage = UsageResource(self._http)
         self.webhooks = WebhooksResource(self._http)
         self.profiles = ProfilesResource(self._http)
+        # V-312 — immutable point-in-time profile snapshots.
+        self.profile_snapshots = ProfileSnapshotsResource(self._http)
         self.billing = BillingResource(self._http)
         self.auth = AuthResource(self._http)
         # V-298c — Team RBAC. Auth path integration is V-298d.
@@ -119,6 +125,8 @@ class AsyncDriftstack:
         self.usage = AsyncUsageResource(self._http)
         self.webhooks = AsyncWebhooksResource(self._http)
         self.profiles = AsyncProfilesResource(self._http)
+        # V-312 — immutable point-in-time profile snapshots.
+        self.profile_snapshots = AsyncProfileSnapshotsResource(self._http)
         self.billing = AsyncBillingResource(self._http)
         self.auth = AsyncAuthResource(self._http)
         # V-298c — Team RBAC. Auth path integration is V-298d.

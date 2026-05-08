@@ -18933,3 +18933,32 @@ HttpClient verifies path + method + body shape. All pass.
 
 Python + Go SDK ports queued (V-377 / V-378). Customers using
 @driftstack/sdk on next minor bump get snapshot methods immediately.
+
+## V-377 — Python SDK profile-snapshots resource
+
+**Tier**: 1 (V-376 Python mirror).
+
+`packages/sdk-python/src/driftstack/resources/profile_snapshots.py`
+adds sync `ProfileSnapshotsResource` + async
+`AsyncProfileSnapshotsResource` with parity surface to TS:
+
+- `capture(profile_id, body)`
+- `list_for_profile(profile_id, *, limit, cursor)`
+- `list(*, limit, cursor)` cross-account
+- `iterate(*, limit)` — sync `Iterator` / async `AsyncIterator` via
+  `iterate_paginated` / `aiterate_paginated`
+- `get(snapshot_id)`
+- `restore(snapshot_id, body)`
+- `delete(snapshot_id)`
+
+Wired into `Driftstack` + `AsyncDriftstack` as
+`client.profile_snapshots`.
+
+Tests (test_resources_iterate.py): 3 new tests covering sync path
+verification across capture/list/restore/delete, sync
+multi-page iterate, async iterate. 138 / 138 pass (was 135 + 3).
+
+Type-strictness on bodies remains `dict[str, Any]` matching
+profiles.py — Pydantic models land on next `scripts/generate.sh`
+regen pass; no-any-return baseline matches the rest of the
+hand-written resources.

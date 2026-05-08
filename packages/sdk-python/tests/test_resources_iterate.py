@@ -10,6 +10,10 @@ from typing import Any
 
 import pytest
 
+from driftstack.resources.profile_snapshots import (
+    AsyncProfileSnapshotsResource,
+    ProfileSnapshotsResource,
+)
 from driftstack.resources.profiles import AsyncProfilesResource, ProfilesResource
 from driftstack.resources.sessions import AsyncSessionsResource, SessionsResource
 from driftstack.resources.webhooks import AsyncWebhooksResource, WebhooksResource
@@ -163,6 +167,62 @@ async def test_async_profiles_iterate_walks_pages() -> None:
     async for p in profiles.iterate():
         ids.append(p["id"])
     assert ids == ["prof_x"]
+
+
+# ── profile snapshots (V-312, dict-shaped pages) ──────────────────────
+
+
+def test_profile_snapshots_capture_and_paths() -> None:
+    """Sync resource — capture / list / restore / delete hit the right paths."""
+    http = FakeSyncHttp(
+        [
+            {"id": "psnap_1", "label": "before-iOS-26"},
+            {"data": [{"id": "psnap_a"}], "next_cursor": None},
+            {"data": [{"id": "psnap_b"}], "next_cursor": None},
+            {"id": "prof_new", "name": "restored"},
+            None,
+        ],
+    )
+    snaps = ProfileSnapshotsResource(http)  # type: ignore[arg-type]
+    snaps.capture("prof_p", {"label": "before-iOS-26"})
+    snaps.list_for_profile("prof_p", limit=10)
+    snaps.list(limit=10)
+    snaps.restore("psnap_1", {"name": "restored"})
+    snaps.delete("psnap_1")
+    paths = [(c["method"], c["path"]) for c in http.calls]
+    assert paths == [
+        ("POST", "/v1/profiles/prof_p/snapshots"),
+        ("GET", "/v1/profiles/prof_p/snapshots?limit=10"),
+        ("GET", "/v1/profile-snapshots?limit=10"),
+        ("POST", "/v1/profile-snapshots/psnap_1/restore"),
+        ("DELETE", "/v1/profile-snapshots/psnap_1"),
+    ]
+
+
+def test_profile_snapshots_iterate_walks_pages() -> None:
+    http = FakeSyncHttp(
+        [
+            {"data": [{"id": "psnap_1"}, {"id": "psnap_2"}], "next_cursor": "cur_2"},
+            {"data": [{"id": "psnap_3"}], "next_cursor": None},
+        ],
+    )
+    snaps = ProfileSnapshotsResource(http)  # type: ignore[arg-type]
+    ids = [s["id"] for s in snaps.iterate(limit=2)]
+    assert ids == ["psnap_1", "psnap_2", "psnap_3"]
+
+
+@pytest.mark.asyncio
+async def test_async_profile_snapshots_iterate_walks_pages() -> None:
+    http = FakeAsyncHttp(
+        [
+            {"data": [{"id": "psnap_x"}], "next_cursor": None},
+        ],
+    )
+    snaps = AsyncProfileSnapshotsResource(http)  # type: ignore[arg-type]
+    ids: list[str] = []
+    async for s in snaps.iterate():
+        ids.append(s["id"])
+    assert ids == ["psnap_x"]
 
 
 # ── webhooks deliveries (status filter threaded) ──────────────────────
