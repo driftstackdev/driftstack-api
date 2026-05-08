@@ -21,6 +21,7 @@ from driftstack.resources.auth import AsyncAuthResource, AuthResource
 from driftstack.resources.billing import AsyncBillingResource, BillingResource
 from driftstack.resources.profiles import AsyncProfilesResource, ProfilesResource
 from driftstack.resources.sessions import AsyncSessionsResource, SessionsResource
+from driftstack.resources.team import AsyncTeamResource, TeamResource
 from driftstack.resources.usage import AsyncUsageResource, UsageResource
 from driftstack.resources.webhooks import AsyncWebhooksResource, WebhooksResource
 from driftstack.retry import RetryConfig
@@ -75,6 +76,8 @@ class Driftstack:
         self.profiles = ProfilesResource(self._http)
         self.billing = BillingResource(self._http)
         self.auth = AuthResource(self._http)
+        # V-298c — Team RBAC. Auth path integration is V-298d.
+        self.team = TeamResource(self._http)
 
     def close(self) -> None:
         self._http.close()
@@ -118,6 +121,8 @@ class AsyncDriftstack:
         self.profiles = AsyncProfilesResource(self._http)
         self.billing = AsyncBillingResource(self._http)
         self.auth = AsyncAuthResource(self._http)
+        # V-298c — Team RBAC. Auth path integration is V-298d.
+        self.team = AsyncTeamResource(self._http)
 
     async def aclose(self) -> None:
         await self._http.aclose()
