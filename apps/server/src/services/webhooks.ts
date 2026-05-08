@@ -212,15 +212,27 @@ export class WebhooksService {
     }
   }
 
-  async create(ctx: AccountContext, input: CreateWebhookInput): Promise<CreatedWebhookEndpoint> {
-    throwIfMissingScope(ctx, 'admin');
+  async create(
+    ctx: AccountContext,
+    input: CreateWebhookInput,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<CreatedWebhookEndpoint> {
+    // V-326e5 — when effectiveAccountId is set, the route layer has
+    // already enforced team admin role on the OWNER's team. Trust
+    // that decision and skip the 'admin' apiKey-scope check (the
+    // member's own apiKey may only carry account_owner scope; being
+    // a team admin is the authorization for the OWNER's resource).
+    if (opts.effectiveAccountId === undefined) {
+      throwIfMissingScope(ctx, 'admin');
+    }
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
 
     const url = parseHttpsUrl(input.url);
     if (input.events.length === 0) {
       throw new ConflictError('events must contain at least one event type.');
     }
 
-    const active = await this.repo.countActiveEndpoints(ctx.account.id);
+    const active = await this.repo.countActiveEndpoints(accountId);
     if (active >= MAX_ENDPOINTS_PER_ACCOUNT) {
       throw new ConflictError(
         `Account already has ${active.toString()} active webhook endpoints; limit is ${MAX_ENDPOINTS_PER_ACCOUNT.toString()}.`,
@@ -231,7 +243,7 @@ export class WebhooksService {
     const secretPrefix = webhookSecretPrefix(plaintextSecret);
 
     const row = await this.repo.insertEndpoint({
-      accountId: ctx.account.id,
+      accountId,
       url,
       secret: plaintextSecret,
       secretPrefix,
@@ -284,9 +296,19 @@ export class WebhooksService {
     return row;
   }
 
-  async delete(ctx: AccountContext, id: string): Promise<void> {
-    throwIfMissingScope(ctx, 'admin');
-    const row = await this.repo.findEndpoint(id, ctx.account.id);
+  async delete(
+    ctx: AccountContext,
+    id: string,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<void> {
+    // V-326e5 — same pattern as create(): trust the route's team-
+    // admin gate when effectiveAccountId is set; otherwise enforce
+    // the literal 'admin' api-key scope.
+    if (opts.effectiveAccountId === undefined) {
+      throwIfMissingScope(ctx, 'admin');
+    }
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const row = await this.repo.findEndpoint(id, accountId);
     if (!row) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
     if (row.disabledAt !== null) return; // idempotent — no audit emit on no-op
     await this.repo.disableEndpoint(id, new Date());

@@ -3,7 +3,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { CreateWebhookRequestSchema, ListDeliveriesQuerySchema } from '@driftstack/api-types';
-import { BadRequestError } from '../lib/errors.js';
+import { BadRequestError, ForbiddenError } from '../lib/errors.js';
 import type {
   WebhookDeliveryRow,
   WebhookEndpointRow,
@@ -17,6 +17,24 @@ function readEffectiveAccountHeader(request: FastifyRequest): string | undefined
   const raw = request.headers[EFFECTIVE_ACCOUNT_HEADER];
   if (Array.isArray(raw)) return raw[0];
   return raw;
+}
+
+/**
+ * V-326e5 — admin-only gate for webhook write operations on team
+ * owners. Returns the effective accountId (string) when team write
+ * should proceed, or undefined when self-scoped. Throws ForbiddenError
+ * on member-role team requests.
+ */
+function effectiveAccountIdForWrite(
+  request: FastifyRequest,
+  ctx: NonNullable<FastifyRequest['account']>,
+): string | undefined {
+  const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+  if (effective.kind !== 'team') return undefined;
+  if (effective.role !== 'admin') {
+    throw new ForbiddenError('Webhook writes on a team owner require admin role on that team.');
+  }
+  return effective.accountId;
 }
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
@@ -78,6 +96,7 @@ export interface WebhookRoutesOptions {
 export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesOptions): void {
   const { service } = opts;
 
+  // V-326e5 — admin-only when targeting a team owner.
   app.post(
     '/v1/webhooks',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
@@ -85,11 +104,16 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const body = CreateWebhookRequestSchema.parse(request.body ?? {});
-      const created = await service.create(ctx, {
-        url: body.url,
-        events: body.events,
-        description: body.description ?? null,
-      });
+      const eff = effectiveAccountIdForWrite(request, ctx);
+      const created = await service.create(
+        ctx,
+        {
+          url: body.url,
+          events: body.events,
+          description: body.description ?? null,
+        },
+        eff !== undefined ? { effectiveAccountId: eff } : {},
+      );
       return reply.code(201).send({
         ...publicEndpoint(created.row),
         secret: created.plaintextSecret,
@@ -133,6 +157,7 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
     },
   );
 
+  // V-326e5 — admin-only when targeting a team owner.
   app.delete<{ Params: { id: string } }>(
     '/v1/webhooks/:id',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
@@ -140,7 +165,8 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const id = uuidFromPrefixedId(request.params.id, 'whk');
-      await service.delete(ctx, id);
+      const eff = effectiveAccountIdForWrite(request, ctx);
+      await service.delete(ctx, id, eff !== undefined ? { effectiveAccountId: eff } : {});
       return reply.code(204).send();
     },
   );

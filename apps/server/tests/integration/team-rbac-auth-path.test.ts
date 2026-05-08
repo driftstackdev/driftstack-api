@@ -939,6 +939,79 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     expect(res.statusCode).toBe(403);
   });
 
+  it('POST /v1/webhooks as admin team member creates webhook on the OWNER account', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.upsertAccount({
+      id: OWNER_ACCOUNT_ID,
+      email: 'owner@example.test',
+      name: null,
+      tier: 'api_scale',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'admin',
+      },
+    ]);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+      payload: {
+        url: 'https://owner.example.test/wh',
+        events: ['session.completed'],
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json<{ id: string }>();
+    // Endpoint should live on the OWNER's account.
+    const ownerEndpoints = await fx.webhooksRepo.listEndpoints(OWNER_ACCOUNT_ID);
+    expect(ownerEndpoints.map((e) => e.url)).toContain('https://owner.example.test/wh');
+    expect(body.id).toBeTruthy();
+  });
+
+  it('POST /v1/webhooks as MEMBER role gets 403 (admin-only writes)', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.upsertAccount({
+      id: OWNER_ACCOUNT_ID,
+      email: 'owner@example.test',
+      name: null,
+      tier: 'api_scale',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'member',
+      },
+    ]);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+      payload: {
+        url: 'https://blocked.example.test/wh',
+        events: ['session.completed'],
+      },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it('GET /v1/sessions returns 403 when X-Driftstack-Account references a non-member owner', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
