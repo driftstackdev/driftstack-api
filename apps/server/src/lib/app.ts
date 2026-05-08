@@ -347,7 +347,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
   }
   if (deps.profilesService !== undefined) {
-    registerProfileRoutes(app, { service: deps.profilesService });
+    registerProfileRoutes(app, { service: deps.profilesService, authRepo: deps.authRepo });
   }
   if (deps.billingService !== undefined) {
     registerBillingRoutes(app, { service: deps.billingService });

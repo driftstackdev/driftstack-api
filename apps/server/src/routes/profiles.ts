@@ -17,7 +17,8 @@ import {
   UpdateProfileRequestSchema,
 } from '@driftstack/api-types';
 import type { ProfileRecord, ProfilesService } from '../services/profiles.js';
-import { BadRequestError, ValidationError } from '../lib/errors.js';
+import { BadRequestError, ForbiddenError, ValidationError } from '../lib/errors.js';
+import type { AccountAuthRepo } from '../services/auth.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 
 const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';
@@ -26,6 +27,24 @@ function readEffectiveAccountHeader(request: FastifyRequest): string | undefined
   const raw = request.headers[EFFECTIVE_ACCOUNT_HEADER];
   if (Array.isArray(raw)) return raw[0];
   return raw;
+}
+
+/**
+ * V-326e4 — admin-only gate for profile write operations on team
+ * owners. Returns the effective accountId (string) when the team
+ * write should proceed, or undefined when the request is self-scoped.
+ * Throws ForbiddenError on member-role team requests.
+ */
+function effectiveAccountIdForWrite(
+  request: FastifyRequest,
+  ctx: NonNullable<FastifyRequest['account']>,
+): string | undefined {
+  const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+  if (effective.kind !== 'team') return undefined;
+  if (effective.role !== 'admin') {
+    throw new ForbiddenError('Profile writes on a team owner require admin role on that team.');
+  }
+  return effective.accountId;
 }
 
 const PROFILE_ID_RE = /^prof_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
@@ -57,12 +76,19 @@ function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['accoun
 
 export interface ProfileRoutesDeps {
   service: ProfilesService;
+  /**
+   * V-326e4 — needed to look up the OWNER's tier for the profile-cap
+   * check on POST /v1/profiles when team-scoped.
+   */
+  authRepo: AccountAuthRepo;
 }
 
 export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesDeps): void {
-  const { service } = deps;
+  const { service, authRepo } = deps;
 
   // ── POST /v1/profiles ────────────────────────────────────────────────
+  // V-326e4 — admin-only when targeting a team owner; profile cap +
+  // accountId derive from the OWNER. Member role gets 403.
   app.post(
     '/v1/profiles',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
@@ -71,9 +97,19 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       const parsed = CreateProfileRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
+      const eff = effectiveAccountIdForWrite(req, ctx);
+      let accountId = ctx.account.id;
+      let tier = ctx.account.tier;
+      if (eff !== undefined) {
+        const owner = await authRepo.getAccount(eff);
+        if (!owner) throw new ForbiddenError('Owner account no longer exists.');
+        accountId = owner.id;
+        tier = owner.tier;
+      }
+
       const profile = await service.create({
-        accountId: ctx.account.id,
-        tier: ctx.account.tier,
+        accountId,
+        tier,
         name: parsed.data.name,
         ...(parsed.data.archetype !== undefined ? { archetype: parsed.data.archetype } : {}),
         ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
@@ -126,6 +162,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   );
 
   // ── PATCH /v1/profiles/:id ───────────────────────────────────────────
+  // V-326e4 — admin-only on team scope.
   app.patch<{ Params: { id: string } }>(
     '/v1/profiles/:id',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
@@ -139,19 +176,24 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       if (parsed.data.name !== undefined) updates.name = parsed.data.name;
       if (parsed.data.description !== undefined) updates.description = parsed.data.description;
 
-      const row = await service.update({ id, accountId: ctx.account.id, updates });
+      const eff = effectiveAccountIdForWrite(req, ctx);
+      const accountId = eff ?? ctx.account.id;
+      const row = await service.update({ id, accountId, updates });
       return publicProfile(row);
     },
   );
 
   // ── DELETE /v1/profiles/:id ──────────────────────────────────────────
+  // V-326e4 — admin-only on team scope.
   app.delete<{ Params: { id: string } }>(
     '/v1/profiles/:id',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
       const id = uuidFromProfileId(req.params.id);
-      await service.delete({ id, accountId: ctx.account.id });
+      const eff = effectiveAccountIdForWrite(req, ctx);
+      const accountId = eff ?? ctx.account.id;
+      await service.delete({ id, accountId });
       return reply.code(204).send();
     },
   );

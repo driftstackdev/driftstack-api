@@ -870,6 +870,75 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     expect(res.statusCode).not.toBe(403);
   });
 
+  it('POST /v1/profiles as admin team member creates profile on the OWNER account', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.upsertAccount({
+      id: OWNER_ACCOUNT_ID,
+      email: 'owner@example.test',
+      name: null,
+      tier: 'api_scale',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'admin',
+      },
+    ]);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+      payload: { name: 'team-profile' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    // Profile lives on the OWNER's account.
+    const ownerProfiles = await fx.profilesRepo.list({
+      accountId: OWNER_ACCOUNT_ID,
+      limit: 10,
+    });
+    expect(ownerProfiles.data.map((p) => p.name)).toContain('team-profile');
+  });
+
+  it('POST /v1/profiles as MEMBER role gets 403 (admin-only writes)', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.upsertAccount({
+      id: OWNER_ACCOUNT_ID,
+      email: 'owner@example.test',
+      name: null,
+      tier: 'api_scale',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'member',
+      },
+    ]);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+      payload: { name: 'should-403' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it('GET /v1/sessions returns 403 when X-Driftstack-Account references a non-member owner', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
