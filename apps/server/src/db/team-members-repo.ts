@@ -183,12 +183,12 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
     return rows.map(toInviteRow);
   }
 
-  async removeMember(membershipId: string, ownerAccountId: string): Promise<boolean> {
+  async removeMember(membershipId: string, ownerAccountId: string): Promise<string | null> {
     const result = await this.database.db
       .delete(teamMembers)
       .where(and(eq(teamMembers.id, membershipId), eq(teamMembers.ownerAccountId, ownerAccountId)))
-      .returning({ id: teamMembers.id });
-    return result.length > 0;
+      .returning({ memberAccountId: teamMembers.memberAccountId });
+    return result.length > 0 ? (result[0]?.memberAccountId ?? null) : null;
   }
 
   /** Helper — when an upsertMembership returns just the team_members row,

@@ -64,6 +64,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/team/invites/accept',
         '/v1/team/members',
         '/v1/team/members/{id}',
+        '/v1/team/owners',
         '/v1/usage',
         '/v1/webhook-deliveries/{deliveryId}/replay',
       ].sort(),

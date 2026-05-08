@@ -129,6 +129,26 @@ export function registerTeamRoutes(app: FastifyInstance, opts: TeamRoutesOptions
     },
   );
 
+  // V-326c — list owner accounts the caller is a member of. Read
+  // straight from ctx.teams (already loaded on auth-cache miss); no
+  // DB call. The mirror of GET /v1/team/members (which lists "MY
+  // members"); this is "teams I am ON".
+  app.get(
+    '/v1/team/owners',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      return {
+        data: ctx.teams.map((t) => ({
+          owner_account_id: `acc_${t.ownerAccountId}`,
+          role: t.role,
+          membership_id: `mem_${t.membershipId}`,
+        })),
+      };
+    },
+  );
+
   app.delete<{ Params: { id: string } }>(
     '/v1/team/members/:id',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },

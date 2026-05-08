@@ -415,6 +415,16 @@ function buildRegistry(): OpenAPIRegistry {
     })
     .openapi('TeamInvite');
 
+  // V-326c — minimal "owner" view of a membership for the
+  // member-facing GET /v1/team/owners endpoint.
+  const TeamOwnerSchema = z
+    .object({
+      owner_account_id: z.string(),
+      role: z.enum(['member', 'admin']),
+      membership_id: z.string(),
+    })
+    .openapi('TeamOwner');
+
   registerRoute(r, {
     method: 'post',
     path: '/v1/team/invites',
@@ -501,6 +511,21 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description: 'Team members.',
         content: { 'application/json': { schema: z.object({ data: z.array(TeamMemberSchema) }) } },
+      },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/team/owners',
+    summary: 'List owner accounts the caller is a member of (V-326c)',
+    tags: ['Team'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Owner accounts the caller is a team member of.',
+        content: { 'application/json': { schema: z.object({ data: z.array(TeamOwnerSchema) }) } },
       },
       ...errors4xx,
     },

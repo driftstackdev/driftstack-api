@@ -25,6 +25,7 @@ interface AccountMeResponse {
   concurrent_session_active: number;
   profile_cap: number | null;
   profile_count: number;
+  teams: Array<{ owner_account_id: string; role: 'member' | 'admin'; membership_id: string }>;
 }
 
 const auth = (fixture: TestAppFixture): { authorization: string } => ({

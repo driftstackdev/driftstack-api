@@ -286,6 +286,7 @@ export async function createProductionDeps(
     email,
     { dashboardBaseUrl },
     accountAuditService,
+    authCache,
   );
 
   // V-295c3-followup — incident-notification fan-out. Wired into the

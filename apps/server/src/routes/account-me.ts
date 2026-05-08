@@ -66,6 +66,15 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         concurrent_session_active: activeSessions,
         profile_cap: profileCapFor(tier),
         profile_count: profileCount,
+        // V-326c — owner accounts the caller is a member of (empty
+        // array when not on any team). Each entry exposes the public
+        // owner id + the role granted to the caller. Used by the
+        // dashboard / GUI to render an "acting as" account picker.
+        teams: ctx.teams.map((t) => ({
+          owner_account_id: `acc_${t.ownerAccountId}`,
+          role: t.role,
+          membership_id: `mem_${t.membershipId}`,
+        })),
       };
     },
   );

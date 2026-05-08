@@ -115,13 +115,14 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
-  async removeMember(membershipId: string, ownerAccountId: string): Promise<boolean> {
+  async removeMember(membershipId: string, ownerAccountId: string): Promise<string | null> {
     const idx = this.members.findIndex(
       (m) => m.id === membershipId && m.ownerAccountId === ownerAccountId,
     );
-    if (idx === -1) return false;
+    if (idx === -1) return null;
+    const removed = this.members[idx];
     this.members.splice(idx, 1);
-    return true;
+    return removed?.memberAccountId ?? null;
   }
 
   /** Test-only — exposes raw rows for assertions. */

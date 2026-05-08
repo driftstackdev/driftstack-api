@@ -26,6 +26,7 @@
 import { generateAuthToken, tokenHash } from '../lib/auth-tokens.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import type { AccountAuditService } from './account-audit.js';
+import type { AuthCache } from './auth-cache.js';
 import type { EmailService } from './email.js';
 
 export type TeamRole = 'member' | 'admin';
@@ -85,8 +86,13 @@ export interface TeamMembersRepo {
   listMembers(ownerAccountId: string): Promise<TeamMemberRow[]>;
   /** List pending (unaccepted) invites for an owner account. */
   listPendingInvites(ownerAccountId: string): Promise<TeamInviteRow[]>;
-  /** Remove a member by membership id; returns true if removed. */
-  removeMember(membershipId: string, ownerAccountId: string): Promise<boolean>;
+  /**
+   * Remove a member by membership id. Returns the removed member's
+   * account id when the row was found + deleted (so the caller can
+   * invalidate that member's auth cache); null when the row was not
+   * found or owned by a different account.
+   */
+  removeMember(membershipId: string, ownerAccountId: string): Promise<string | null>;
 }
 
 export const TEAM_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -107,8 +113,29 @@ export class TeamMembersService {
      *  accept / remove emit customer-audit-log entries (best-effort;
      *  failures never break the underlying operation). */
     private readonly accountAudit: AccountAuditService | null = null,
+    /** V-326b — optional auth cache. When wired, accept / removeMember
+     *  bump the affected member account's auth version so cached
+     *  AccountContext entries miss on the next request and rebuild
+     *  with the updated teams[]. Without it, membership changes only
+     *  take effect after the 30s cache TTL elapses. */
+    private readonly authCache: AuthCache | null = null,
   ) {
     this.dashboardBaseUrl = config.dashboardBaseUrl.replace(/\/+$/, '');
+  }
+
+  /**
+   * V-326b — best-effort cache invalidation. Failures swallowed:
+   * stale teams[] degrades to "no team grants" (safe default), and
+   * the next 30s TTL expiry self-heals. We never fail the calling
+   * operation just because Redis is unhappy.
+   */
+  private async invalidateAuthCache(memberAccountId: string): Promise<void> {
+    if (!this.authCache) return;
+    try {
+      await this.authCache.invalidateAccount(memberAccountId);
+    } catch {
+      /* swallow */
+    }
   }
 
   /**
@@ -203,6 +230,7 @@ export class TeamMembersService {
       invitedByAccountId: invite.invitedByAccountId,
     });
     await this.repo.markInviteAccepted(invite.id, now);
+    await this.invalidateAuthCache(input.acceptingAccountId);
     if (this.accountAudit) {
       try {
         await this.accountAudit.record({
@@ -236,8 +264,13 @@ export class TeamMembersService {
   /** Remove a member from the team. Returns true if removed; false if
    *  membership not found or owned by a different account. */
   async removeMember(input: { membershipId: string; ownerAccountId: string }): Promise<boolean> {
-    const removed = await this.repo.removeMember(input.membershipId, input.ownerAccountId);
-    if (removed && this.accountAudit) {
+    const removedMemberAccountId = await this.repo.removeMember(
+      input.membershipId,
+      input.ownerAccountId,
+    );
+    if (removedMemberAccountId === null) return false;
+    await this.invalidateAuthCache(removedMemberAccountId);
+    if (this.accountAudit) {
       try {
         await this.accountAudit.record({
           accountId: input.ownerAccountId,
@@ -252,6 +285,6 @@ export class TeamMembersService {
         /* swallow */
       }
     }
-    return removed;
+    return true;
   }
 }
