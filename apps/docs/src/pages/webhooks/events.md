@@ -25,6 +25,7 @@ site (when it lands as a Tier 3 visual surface).
 | `api_key.revoked`          | [LIVE]     | API key revoked (customer or admin)                   |
 | `quota.warning_80pct`      | [DECLARED] | Account hits 80% of tier quota                        |
 | `quota.exceeded`           | [DECLARED] | Account hits 100% of tier quota                       |
+| `test.ping`                | [LIVE]     | Synthetic test event from POST /v1/webhooks/:id/test  |
 | `session.created`          | [PLANNED]  | Session transitions `creating` → `ready`              |
 | `session.destroyed`        | [PLANNED]  | Distinct from `session.completed` (no semantic shift) |
 | `profile.created`          | [PLANNED]  | New profile created                                   |
@@ -167,6 +168,34 @@ Planned shape:
   "period_end": "2026-06-01T00:00:00.000Z"
 }
 ```
+
+### `test.ping` [LIVE]
+
+Synthetic test event emitted by `POST /v1/webhooks/:id/test`
+(V-356). Fires REGARDLESS of subscription so customers can verify
+their handler signature-checks correctly without subscribing to it.
+Customers cannot subscribe to `test.ping` (the create / update Zod
+schemas reject it); the test endpoint dispatches once per call.
+
+Payload:
+
+```json
+{
+  "id": "<uuid>",
+  "type": "test.ping",
+  "created_at": "2026-05-09T22:30:00.000Z",
+  "data": {
+    "message": "Test event from the Driftstack dashboard.",
+    "endpoint_id": "whk_<endpoint-uuid>",
+    "triggered_by_account_id": "acc_<caller-account-uuid>"
+  }
+}
+```
+
+Sent over the same delivery infrastructure as production events:
+HMAC-signed, retried on failure per the standard backoff schedule,
+audit-logged as `webhook_delivery.replayed` with
+`payload.via: send_test_event`.
 
 ## Planned events (not yet in enum)
 
