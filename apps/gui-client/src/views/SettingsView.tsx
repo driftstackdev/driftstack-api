@@ -270,6 +270,42 @@ export function SettingsView(): JSX.Element {
           </button>
           {savedAt !== null && !dirty && <span className="text-2xs text-ink-muted">Saved.</span>}
         </div>
+
+        {/* V-324 — help links so customers don't have to dig through
+            the marketing site to find status / docs / support contact
+            from inside the app. */}
+        <div className="mt-8 max-w-xl border-t border-surface-divider pt-4">
+          <span className="section-label">Need help?</span>
+          <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-ink-secondary">
+            <li>
+              <a
+                href="https://status.driftstack.dev"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:underline"
+              >
+                Status
+              </a>
+              <span className="ml-1 text-2xs text-ink-muted">— uptime + incidents</span>
+            </li>
+            <li>
+              <a
+                href="https://docs.driftstack.dev"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:underline"
+              >
+                Docs
+              </a>
+              <span className="ml-1 text-2xs text-ink-muted">— quickstart + reference</span>
+            </li>
+            <li>
+              <a href="mailto:support@driftstack.dev" className="text-accent hover:underline">
+                support@driftstack.dev
+              </a>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
   );
