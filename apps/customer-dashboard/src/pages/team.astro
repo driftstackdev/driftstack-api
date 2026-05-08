@@ -1,176 +1,371 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import { MOCK_ACCOUNT } from '../data/mocks.ts';
 
-// V-134 scaffolding. Real reads against /v1/team land later.
-// Note: team-management is a Phase 2 product feature — multi-seat
-// accounts. For solo accounts (current default) the page surfaces
-// only the owner; invite flow renders an upsell hint pointing at the
-// Team / Agency tiers.
+// V-298c — wires the page to the live /v1/team/* endpoints. Members
+// view shows confirmed memberships; pending invites surfaced below.
+// Invite form posts to POST /v1/team/invites; remove posts DELETE
+// /v1/team/members/:id. The auth path itself does NOT yet honor team
+// membership (V-298d) — invited members can sign in but the
+// membership grants no implicit permissions on the owner's resources
+// until V-298d wires it.
 
-interface MockTeamMember {
-  id: string;
-  email: string;
-  name: string | null;
-  role: 'owner' | 'admin' | 'member' | 'viewer';
-  invited_at: string;
-  joined_at: string | null;
-}
-
-const MOCK_TEAM: MockTeamMember[] = [
-  {
-    id: MOCK_ACCOUNT.id,
-    email: MOCK_ACCOUNT.email,
-    name: MOCK_ACCOUNT.name,
-    role: 'owner',
-    invited_at: MOCK_ACCOUNT.createdAt,
-    joined_at: MOCK_ACCOUNT.createdAt,
-  },
-];
-
-// Mock — real source: /v1/billing tier capabilities. team_max=1 means
-// no inviting allowed.
-const seatLimit: number = 1;
-const seatLimitText = seatLimit === 1 ? 'Solo account' : `${seatLimit.toString()} seats`;
-const canInvite = seatLimit > MOCK_TEAM.length;
-
-function fmtIsoDay(iso: string | null): string {
-  if (iso === null) return '—';
-  return new Date(iso).toISOString().slice(0, 10);
-}
-
-const ROLE_LABEL: Record<MockTeamMember['role'], string> = {
-  owner: 'Owner',
-  admin: 'Admin',
-  member: 'Member',
-  viewer: 'Viewer',
-};
-
-const ROLE_BADGE_CLASS: Record<MockTeamMember['role'], string> = {
-  owner: 'bg-oxblood-50 text-oxblood-700',
-  admin: 'bg-blue-50 text-blue-700',
-  member: 'bg-slate-100 text-slate-600',
-  viewer: 'bg-slate-100 text-slate-500',
-};
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 ---
 
 <DashboardLayout title="Team">
-  <div class="mx-auto max-w-4xl px-6 py-10">
+  <div class="mx-auto max-w-4xl px-6 py-10" data-page="team">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-slate-500">{seatLimitText}</p>
+        <p class="text-sm text-slate-500">Account-scoped team</p>
         <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Team</h1>
         <p class="mt-2 max-w-prose text-sm text-slate-500">
-          Members with access to this Driftstack account. Each member uses
-          their own login + their own dashboard sessions; API keys are
-          account-scoped (shared) but creation is admin-gated.
+          Members with access to this Driftstack account. Each member uses their own login + their
+          own dashboard sessions; API keys remain account-scoped (shared) and admin-gated.
         </p>
       </div>
-      <a
-        href="#invite"
-        class:list={['btn-primary shrink-0', !canInvite && 'pointer-events-none opacity-50']}
-        aria-disabled={!canInvite ? 'true' : undefined}
-      >
-        Invite member
-      </a>
+      <button type="button" data-show-invite class="btn-primary shrink-0">Invite member</button>
     </header>
 
-    {
-      !canInvite && (
-        <div class="mb-6 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <span class="font-mono text-xs uppercase">!</span>
-          <p>
-            Solo accounts (Solo Manual / API Starter) include 1 seat. Upgrade to{' '}
-            <a href="/subscription#upgrade" class="font-medium underline">
-              Team Manual ($249/mo, 5 seats)
-            </a>
-            ,{' '}
-            <a href="/subscription#upgrade" class="font-medium underline">
-              Agency ($699/mo, 15 seats)
-            </a>
-            , or any API tier (5+ seats) to invite teammates.
-          </p>
+    <!-- Invite form (hidden by default) -->
+    <div
+      data-invite-form-wrap
+      class="mb-8 hidden rounded-lg border border-slate-200 bg-white p-6"
+    >
+      <h2 class="text-lg font-semibold text-slate-900">Invite a member</h2>
+      <form data-invite-form class="mt-4 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700" for="invite-email">Email</label>
+          <input
+            id="invite-email"
+            name="email"
+            type="email"
+            required
+            placeholder="teammate@example.com"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+          />
         </div>
-      )
-    }
+        <div>
+          <label class="block text-sm font-medium text-slate-700" for="invite-role">Role</label>
+          <select
+            id="invite-role"
+            name="role"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+          >
+            <option value="member">Member</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <p
+          data-invite-error
+          class="hidden rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        >
+        </p>
+        <div class="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <button
+            type="button"
+            data-invite-cancel
+            class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            data-invite-submit
+            class="inline-flex items-center rounded-md bg-oxblood-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-oxblood-800"
+          >
+            Send invite
+          </button>
+        </div>
+      </form>
+    </div>
 
-    <ul class="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
-      {
-        MOCK_TEAM.map((member) => (
-          <li class="flex items-start justify-between gap-6 px-6 py-4">
-            <div class="min-w-0">
-              <p class="text-base font-medium text-slate-900">
-                {member.name ?? member.email}
-              </p>
-              {member.name !== null && (
-                <p class="mt-1 text-sm text-slate-500">{member.email}</p>
-              )}
-              <p class="mt-1 text-xs text-slate-500">
-                Joined {fmtIsoDay(member.joined_at)}
-                {member.joined_at === null && (
-                  <>
-                    {' · invited '}
-                    {fmtIsoDay(member.invited_at)} · pending acceptance
-                  </>
-                )}
-              </p>
-            </div>
-            <div class="flex shrink-0 items-center gap-3">
-              <span
-                class:list={[
-                  'inline-flex rounded-full px-2 py-0.5 text-xs font-medium',
-                  ROLE_BADGE_CLASS[member.role],
-                ]}
-              >
-                {ROLE_LABEL[member.role]}
-              </span>
-              {member.role !== 'owner' && (
-                <a
-                  href={`#remove-${member.id}`}
-                  class="text-sm text-red-700 hover:underline"
-                >
-                  Remove
-                </a>
-              )}
-            </div>
-          </li>
-        ))
-      }
+    <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Members</h2>
+    <ul
+      data-members-list
+      class="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white"
+    >
+      <li class="px-6 py-4 text-sm text-slate-500">Loading…</li>
     </ul>
 
-    <!-- Role explainer -->
-    <section class="mt-10 dashboard-card">
-      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Roles</p>
-      <h2 class="mt-2 text-lg font-semibold text-slate-900">What each role can do</h2>
-      <dl class="mt-6 space-y-4">
-        <div>
-          <dt class="text-sm font-medium text-slate-900">Owner</dt>
-          <dd class="mt-1 text-sm text-slate-600">
-            Full account access including billing + member management. One
-            owner per account; transferable on request.
-          </dd>
-        </div>
-        <div>
-          <dt class="text-sm font-medium text-slate-900">Admin</dt>
-          <dd class="mt-1 text-sm text-slate-600">
-            Manage profiles, sessions, API keys, webhooks. Cannot change
-            billing or invite members.
-          </dd>
-        </div>
-        <div>
-          <dt class="text-sm font-medium text-slate-900">Member</dt>
-          <dd class="mt-1 text-sm text-slate-600">
-            Drive sessions and read profiles + usage. Cannot create or revoke
-            API keys.
-          </dd>
-        </div>
-        <div>
-          <dt class="text-sm font-medium text-slate-900">Viewer</dt>
-          <dd class="mt-1 text-sm text-slate-600">
-            Read-only access for stakeholders monitoring usage + billing.
-          </dd>
-        </div>
-      </dl>
-    </section>
+    <h2 class="mb-3 mt-10 text-sm font-semibold uppercase tracking-wide text-slate-500">
+      Pending invites
+    </h2>
+    <ul
+      data-invites-list
+      class="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white"
+    >
+      <li class="px-6 py-4 text-sm text-slate-500">Loading…</li>
+    </ul>
+
+    <p class="mt-8 text-xs text-slate-500">
+      Invitees receive an email with a 7-day accept link. They must accept while signed in to the
+      same email address. Until V-298d ships the auth-path integration, accepted members can sign
+      in but cannot yet act on this account's resources — the membership row is recorded; the
+      permission lift lands next.
+    </p>
   </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="team"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const membersList = root.querySelector('[data-members-list]');
+      const invitesList = root.querySelector('[data-invites-list]');
+      const showInviteBtn = root.querySelector('[data-show-invite]');
+      const inviteFormWrap = root.querySelector('[data-invite-form-wrap]');
+      const inviteForm = root.querySelector('[data-invite-form]');
+      const inviteCancel = root.querySelector('[data-invite-cancel]');
+      const inviteSubmit = root.querySelector('[data-invite-submit]');
+      const inviteError = root.querySelector('[data-invite-error]');
+
+      function getToken() {
+        try {
+          return localStorage.getItem('driftstack_session_token') || '';
+        } catch (_) {
+          return '';
+        }
+      }
+
+      function showBanner(msg) {
+        if (!banner) return;
+        banner.textContent = msg;
+        banner.classList.remove('hidden');
+      }
+
+      function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+          if (c === '&') return '&amp;';
+          if (c === '<') return '&lt;';
+          if (c === '>') return '&gt;';
+          if (c === '"') return '&quot;';
+          return '&#39;';
+        });
+      }
+
+      function fmtIsoDay(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().slice(0, 10);
+      }
+
+      function memberRow(m) {
+        const removeBtn =
+          '<button type="button" data-remove="' +
+          escapeHtml(m.id) +
+          '" data-remove-email="' +
+          escapeHtml(m.member_email) +
+          '" class="text-sm text-red-700 hover:underline">Remove</button>';
+        const roleClass =
+          m.role === 'admin' ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-600';
+        return (
+          '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
+          '<div class="min-w-0">' +
+          '<p class="text-base font-medium text-slate-900">' +
+          escapeHtml(m.member_email) +
+          '</p>' +
+          '<p class="mt-1 font-mono text-xs text-slate-500">' +
+          escapeHtml(m.id) +
+          '</p>' +
+          '<p class="mt-1 text-xs text-slate-500">Joined ' +
+          escapeHtml(fmtIsoDay(m.accepted_at)) +
+          '</p></div>' +
+          '<div class="flex shrink-0 items-center gap-3">' +
+          '<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium ' +
+          roleClass +
+          '">' +
+          escapeHtml(m.role) +
+          '</span>' +
+          removeBtn +
+          '</div></li>'
+        );
+      }
+
+      function inviteRow(inv) {
+        return (
+          '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
+          '<div class="min-w-0">' +
+          '<p class="text-base font-medium text-slate-900">' +
+          escapeHtml(inv.invitee_email) +
+          '</p>' +
+          '<p class="mt-1 text-xs text-slate-500">Invited ' +
+          escapeHtml(fmtIsoDay(inv.created_at)) +
+          ' · expires ' +
+          escapeHtml(fmtIsoDay(inv.expires_at)) +
+          '</p></div>' +
+          '<span class="inline-flex shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-amber-700">pending</span>' +
+          '</li>'
+        );
+      }
+
+      function refresh() {
+        const token = getToken();
+        if (!token) {
+          if (membersList)
+            membersList.innerHTML =
+              '<li class="px-6 py-4 text-sm text-slate-500">Sign in to see team members.</li>';
+          if (invitesList)
+            invitesList.innerHTML =
+              '<li class="px-6 py-4 text-sm text-slate-500">Sign in to see pending invites.</li>';
+          return;
+        }
+        Promise.all([
+          fetch(apiBaseUrl + '/v1/team/members', {
+            headers: { authorization: 'Bearer ' + token },
+          }).then(function (r) {
+            if (!r.ok) throw new Error('members HTTP ' + r.status);
+            return r.json();
+          }),
+          fetch(apiBaseUrl + '/v1/team/invites', {
+            headers: { authorization: 'Bearer ' + token },
+          }).then(function (r) {
+            if (!r.ok) throw new Error('invites HTTP ' + r.status);
+            return r.json();
+          }),
+        ])
+          .then(function (results) {
+            const members = results[0].data || [];
+            const invites = results[1].data || [];
+            if (membersList) {
+              membersList.innerHTML =
+                members.length === 0
+                  ? '<li class="px-6 py-4 text-sm text-slate-500">No team members yet. Invite one above.</li>'
+                  : members.map(memberRow).join('');
+              wireRemoveButtons();
+            }
+            if (invitesList) {
+              invitesList.innerHTML =
+                invites.length === 0
+                  ? '<li class="px-6 py-4 text-sm text-slate-500">No pending invites.</li>'
+                  : invites.map(inviteRow).join('');
+            }
+          })
+          .catch(function (err) {
+            showBanner(
+              'Failed to load team: ' + (err && err.message ? err.message : 'network error'),
+            );
+          });
+      }
+
+      function wireRemoveButtons() {
+        if (!membersList) return;
+        const buttons = membersList.querySelectorAll('[data-remove]');
+        buttons.forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            const id = btn.getAttribute('data-remove');
+            const email = btn.getAttribute('data-remove-email') || '(unknown)';
+            const ok = window.confirm(
+              'Remove ' +
+                email +
+                ' from the team? They keep their Driftstack account but lose team access.',
+            );
+            if (!ok) return;
+            const token = getToken();
+            btn.disabled = true;
+            btn.textContent = 'Removing…';
+            fetch(apiBaseUrl + '/v1/team/members/' + encodeURIComponent(id), {
+              method: 'DELETE',
+              headers: { authorization: 'Bearer ' + token },
+            })
+              .then(function (r) {
+                if (!r.ok && r.status !== 204) throw new Error('HTTP ' + r.status);
+                return refresh();
+              })
+              .catch(function (err) {
+                showBanner(
+                  'Remove failed: ' + (err && err.message ? err.message : 'network error'),
+                );
+                btn.disabled = false;
+                btn.textContent = 'Remove';
+              });
+          });
+        });
+      }
+
+      function showInvite() {
+        if (!getToken()) {
+          showBanner('Sign in to invite team members.');
+          return;
+        }
+        if (inviteFormWrap) inviteFormWrap.classList.remove('hidden');
+        const emailInput = inviteForm && inviteForm.querySelector('input[name="email"]');
+        if (emailInput) emailInput.focus();
+      }
+      function hideInvite() {
+        if (inviteFormWrap) inviteFormWrap.classList.add('hidden');
+        if (inviteError) {
+          inviteError.classList.add('hidden');
+          inviteError.textContent = '';
+        }
+        if (inviteForm) inviteForm.reset();
+      }
+
+      if (showInviteBtn) showInviteBtn.addEventListener('click', showInvite);
+      if (inviteCancel) inviteCancel.addEventListener('click', hideInvite);
+      if (inviteForm) {
+        inviteForm.addEventListener('submit', function (event) {
+          event.preventDefault();
+          const formData = new FormData(inviteForm);
+          const email = String(formData.get('email') || '').trim();
+          const role = String(formData.get('role') || 'member');
+          if (!email) {
+            if (inviteError) {
+              inviteError.textContent = 'Email is required.';
+              inviteError.classList.remove('hidden');
+            }
+            return;
+          }
+          const token = getToken();
+          if (inviteSubmit) {
+            inviteSubmit.disabled = true;
+            inviteSubmit.textContent = 'Sending…';
+          }
+          fetch(apiBaseUrl + '/v1/team/invites', {
+            method: 'POST',
+            headers: {
+              authorization: 'Bearer ' + token,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({ email: email, role: role }),
+          })
+            .then(function (r) {
+              if (!r.ok && r.status !== 202) {
+                return r
+                  .json()
+                  .catch(function () {
+                    return {};
+                  })
+                  .then(function (b) {
+                    throw new Error(b.detail || 'HTTP ' + r.status);
+                  });
+              }
+              return refresh();
+            })
+            .then(function () {
+              hideInvite();
+            })
+            .catch(function (err) {
+              if (inviteError) {
+                inviteError.textContent = err && err.message ? err.message : 'Invite failed.';
+                inviteError.classList.remove('hidden');
+              }
+            })
+            .finally(function () {
+              if (inviteSubmit) {
+                inviteSubmit.disabled = false;
+                inviteSubmit.textContent = 'Send invite';
+              }
+            });
+        });
+      }
+
+      refresh();
+    })();
+  </script>
 </DashboardLayout>
