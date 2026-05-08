@@ -1,90 +1,271 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import {
-  MOCK_ACCOUNT,
-  MOCK_API_KEYS,
-  MOCK_PROFILES,
-  MOCK_SUBSCRIPTION,
-  MOCK_USAGE_SUMMARY,
-  MOCK_SESSIONS,
-} from '../data/mocks.ts';
 
-// V-099 scaffolding only: mock data on the page. Real reads against
-// /v1/billing, /v1/profiles, /v1/api-keys, /v1/sessions, /v1/usage
-// land when the dashboard moves past scaffolding.
+// V-316 — wires the dashboard home page to live data. Replaces the
+// V-099 mock-data scaffolding. Reads:
+//   - GET /v1/account/me (account + concurrent caps + profile count)
+//   - GET /v1/api-keys
+//   - GET /v1/sessions
+//   - GET /v1/billing
+// Each call is independent; failures in one section don't blank the
+// rest. Render is client-side so the dashboard server stays static
+// (Astro's hybrid mode is intentionally avoided here).
 
-const activeSessions = MOCK_SESSIONS.filter((s) => s.status !== 'destroyed' && s.status !== 'errored');
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 ---
 
 <DashboardLayout title="Overview">
-  <div class="mx-auto max-w-6xl px-6 py-10">
-    <header class="mb-10 flex items-center justify-between">
-      <div>
+  <div class="mx-auto max-w-6xl px-6 py-10" data-page="overview">
+    <header class="mb-10 flex items-center justify-between gap-6">
+      <div class="min-w-0">
         <p class="text-sm text-slate-500">Welcome back</p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">
-          {MOCK_ACCOUNT.name ?? MOCK_ACCOUNT.email}
+        <h1
+          data-account-name
+          class="mt-1 truncate text-3xl font-semibold tracking-tight text-slate-900"
+        >
+          —
         </h1>
       </div>
-      <span class="rounded-full bg-oxblood-50 px-3 py-1 text-xs font-medium uppercase tracking-wide text-oxblood-700">
-        {MOCK_ACCOUNT.tier}
+      <span
+        data-account-tier
+        class="rounded-full bg-oxblood-50 px-3 py-1 text-xs font-medium uppercase tracking-wide text-oxblood-700"
+      >
+        —
       </span>
     </header>
+
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+      role="status"
+    >
+    </div>
 
     <section class="grid gap-6 md:grid-cols-3">
       <div class="dashboard-card">
         <p class="text-xs font-mono uppercase tracking-widest text-slate-500">Concurrent now</p>
         <p class="mt-3 text-3xl font-semibold text-slate-900">
-          {MOCK_USAGE_SUMMARY.concurrent_now}
-          <span class="text-base font-normal text-slate-500">/ {MOCK_USAGE_SUMMARY.concurrent_limit}</span>
+          <span data-stat-concurrent>—</span>
+          <span class="text-base font-normal text-slate-500">
+            / <span data-stat-concurrent-cap>—</span>
+          </span>
         </p>
         <p class="mt-1 text-sm text-slate-500">live sessions in flight</p>
       </div>
       <div class="dashboard-card">
         <p class="text-xs font-mono uppercase tracking-widest text-slate-500">Profiles</p>
-        <p class="mt-3 text-3xl font-semibold text-slate-900">{MOCK_PROFILES.length}</p>
+        <p class="mt-3 text-3xl font-semibold text-slate-900">
+          <span data-stat-profiles>—</span>
+          <span data-stat-profiles-cap class="text-base font-normal text-slate-500"></span>
+        </p>
         <p class="mt-1 text-sm text-slate-500">persistent identity slots</p>
       </div>
       <div class="dashboard-card">
         <p class="text-xs font-mono uppercase tracking-widest text-slate-500">API keys</p>
-        <p class="mt-3 text-3xl font-semibold text-slate-900">{MOCK_API_KEYS.length}</p>
+        <p class="mt-3 text-3xl font-semibold text-slate-900"><span data-stat-api-keys>—</span></p>
         <p class="mt-1 text-sm text-slate-500">active keys</p>
       </div>
     </section>
 
     <section class="mt-10">
-      <h2 class="text-lg font-semibold text-slate-900">Active sessions</h2>
-      {activeSessions.length === 0 ? (
-        <p class="mt-3 text-sm text-slate-500">No sessions running right now.</p>
-      ) : (
-        <ul class="mt-4 divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white">
-          {activeSessions.map((s) => (
-            <li class="flex items-center justify-between px-6 py-4">
-              <div>
-                <p class="font-mono text-sm text-slate-900">{s.id}</p>
-                <p class="mt-1 text-xs text-slate-500">{s.archetype} · started {new Date(s.created_at).toISOString()}</p>
-              </div>
-              <span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium uppercase tracking-wide text-emerald-700">
-                {s.status}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-slate-900">Active sessions</h2>
+        <a href="/sessions" class="text-sm text-oxblood-700 hover:underline">View all →</a>
+      </div>
+      <div data-sessions-empty class="mt-3 hidden text-sm text-slate-500">
+        No sessions running right now.
+      </div>
+      <ul
+        data-sessions-list
+        class="mt-4 hidden divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white"
+      >
+      </ul>
     </section>
 
     <section class="mt-10">
       <h2 class="text-lg font-semibold text-slate-900">Subscription</h2>
-      {MOCK_SUBSCRIPTION ? (
-        <div class="dashboard-card mt-4">
-          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">{MOCK_SUBSCRIPTION.tier} · {MOCK_SUBSCRIPTION.status}</p>
-          <p class="mt-3 text-sm text-slate-600">
-            Period ends {MOCK_SUBSCRIPTION.current_period_end ? new Date(MOCK_SUBSCRIPTION.current_period_end).toISOString().slice(0, 10) : '—'}.
-          </p>
-          <a href="/billing" class="btn-secondary mt-4 inline-flex">Manage billing</a>
-        </div>
-      ) : (
-        <p class="mt-3 text-sm text-slate-500">No active subscription.</p>
-      )}
+      <div data-subscription-empty class="mt-3 hidden text-sm text-slate-500">
+        No active subscription. <a href="/select-tier" class="text-oxblood-700 hover:underline">Pick a tier →</a>
+      </div>
+      <div data-subscription-card class="dashboard-card mt-4 hidden">
+        <p
+          data-subscription-line
+          class="font-mono text-xs uppercase tracking-widest text-slate-500"
+        >
+        </p>
+        <p data-subscription-period class="mt-3 text-sm text-slate-600"></p>
+        <a href="/billing" class="btn-secondary mt-4 inline-flex">Manage billing</a>
+      </div>
+      <div data-trial-pack class="dashboard-card mt-4 hidden border-emerald-200 bg-emerald-50">
+        <p class="font-mono text-xs uppercase tracking-widest text-emerald-700">Trial pack</p>
+        <p data-trial-pack-line class="mt-3 text-sm text-emerald-900"></p>
+      </div>
     </section>
   </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="overview"]');
+      if (!root) return;
+
+      function getToken() {
+        try {
+          return localStorage.getItem('driftstack_session_token') || '';
+        } catch (_) {
+          return '';
+        }
+      }
+
+      function showBanner(msg) {
+        const b = root.querySelector('[data-banner]');
+        if (!b) return;
+        b.textContent = msg;
+        b.classList.remove('hidden');
+      }
+
+      function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+          if (c === '&') return '&amp;';
+          if (c === '<') return '&lt;';
+          if (c === '>') return '&gt;';
+          if (c === '"') return '&quot;';
+          return '&#39;';
+        });
+      }
+
+      function fmtIsoDay(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().slice(0, 10);
+      }
+
+      const token = getToken();
+      if (!token) {
+        showBanner('Sign in to see live account data.');
+        return;
+      }
+      const headers = { Authorization: 'Bearer ' + token, accept: 'application/json' };
+
+      async function getJson(path) {
+        const r = await fetch(apiBaseUrl + path, { headers });
+        if (!r.ok) throw new Error(path + ' returned ' + r.status);
+        return r.json();
+      }
+
+      // ─── /v1/account/me ────────────────────────────────────────────────
+      getJson('/v1/account/me')
+        .then(function (me) {
+          const nameEl = root.querySelector('[data-account-name]');
+          if (nameEl) nameEl.textContent = me.name || me.email || '—';
+          const tierEl = root.querySelector('[data-account-tier]');
+          if (tierEl) tierEl.textContent = String(me.tier || '—');
+
+          const concurrent = root.querySelector('[data-stat-concurrent]');
+          if (concurrent) concurrent.textContent = String(me.concurrent_session_active ?? 0);
+          const concurrentCap = root.querySelector('[data-stat-concurrent-cap]');
+          if (concurrentCap) concurrentCap.textContent = String(me.concurrent_session_cap ?? '—');
+
+          const profiles = root.querySelector('[data-stat-profiles]');
+          if (profiles) profiles.textContent = String(me.profile_count ?? 0);
+          const profilesCap = root.querySelector('[data-stat-profiles-cap]');
+          if (profilesCap && me.profile_cap != null) profilesCap.textContent = ' / ' + me.profile_cap;
+        })
+        .catch(function (err) {
+          showBanner('Could not load account: ' + err.message);
+        });
+
+      // ─── /v1/api-keys ──────────────────────────────────────────────────
+      getJson('/v1/api-keys')
+        .then(function (resp) {
+          const keys = Array.isArray(resp.data) ? resp.data : [];
+          const active = keys.filter(function (k) {
+            return !k.revoked_at;
+          }).length;
+          const el = root.querySelector('[data-stat-api-keys]');
+          if (el) el.textContent = String(active);
+        })
+        .catch(function () {
+          /* leave dash */
+        });
+
+      // ─── /v1/sessions ──────────────────────────────────────────────────
+      getJson('/v1/sessions')
+        .then(function (resp) {
+          const all = Array.isArray(resp.data) ? resp.data : [];
+          const active = all.filter(function (s) {
+            return s.status !== 'destroyed' && s.status !== 'errored';
+          });
+          const empty = root.querySelector('[data-sessions-empty]');
+          const list = root.querySelector('[data-sessions-list]');
+          if (active.length === 0) {
+            if (empty) empty.classList.remove('hidden');
+            return;
+          }
+          if (!list) return;
+          list.classList.remove('hidden');
+          const html = active
+            .slice(0, 5)
+            .map(function (s) {
+              return (
+                '<li class="flex items-center justify-between px-6 py-4">' +
+                '<div class="min-w-0">' +
+                '<p class="font-mono text-sm text-slate-900">' +
+                escapeHtml(s.id) +
+                '</p>' +
+                '<p class="mt-1 text-xs text-slate-500">' +
+                escapeHtml(s.archetype || '—') +
+                ' · started ' +
+                escapeHtml(s.created_at || '') +
+                '</p></div>' +
+                '<span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium uppercase tracking-wide text-emerald-700">' +
+                escapeHtml(s.status || '—') +
+                '</span></li>'
+              );
+            })
+            .join('');
+          list.innerHTML = html;
+        })
+        .catch(function () {
+          const empty = root.querySelector('[data-sessions-empty]');
+          if (empty) {
+            empty.textContent = 'Could not load sessions.';
+            empty.classList.remove('hidden');
+          }
+        });
+
+      // ─── /v1/billing ───────────────────────────────────────────────────
+      getJson('/v1/billing')
+        .then(function (b) {
+          const sub = b.subscription;
+          const empty = root.querySelector('[data-subscription-empty]');
+          const card = root.querySelector('[data-subscription-card]');
+          if (sub) {
+            if (card) card.classList.remove('hidden');
+            const line = root.querySelector('[data-subscription-line]');
+            if (line) line.textContent = String(sub.tier) + ' · ' + String(sub.status);
+            const period = root.querySelector('[data-subscription-period]');
+            if (period) period.textContent = 'Period ends ' + fmtIsoDay(sub.current_period_end) + '.';
+          } else if (empty) {
+            empty.classList.remove('hidden');
+          }
+
+          const trial = b.trial_pack;
+          if (trial && trial.active) {
+            const tEl = root.querySelector('[data-trial-pack]');
+            const tLine = root.querySelector('[data-trial-pack-line]');
+            if (tEl) tEl.classList.remove('hidden');
+            const cents = Number(trial.credit_cents_remaining || 0);
+            const dollars = (cents / 100).toFixed(2);
+            const exp = trial.expires_at ? ' Expires ' + fmtIsoDay(trial.expires_at) + '.' : '';
+            if (tLine) tLine.textContent = '$' + dollars + ' credit remaining.' + exp;
+          }
+        })
+        .catch(function () {
+          const empty = root.querySelector('[data-subscription-empty]');
+          if (empty) {
+            empty.textContent = 'Could not load billing.';
+            empty.classList.remove('hidden');
+          }
+        });
+    })();
+  </script>
 </DashboardLayout>
