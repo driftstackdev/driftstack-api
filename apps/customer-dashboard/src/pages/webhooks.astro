@@ -577,7 +577,17 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           activeBadge +
           '">' +
           (e.active ? 'active' : 'paused') +
-          '</span></div>' +
+          '</span>' +
+          // V-359 — rotation-in-flight indicator. When the endpoint is
+          // dual-signing, surface the grace expiry inline so customers
+          // know how long they have to roll the new secret across
+          // their verifier infra.
+          (e.rotation_grace_expires_at
+            ? '<span class="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-amber-800" title="Old secret stays valid until this time. Roll your verifier forward before then.">rotating · ends ' +
+              escapeHtml(fmtIsoDay(e.rotation_grace_expires_at)) +
+              '</span>'
+            : '') +
+          '</div>' +
           description +
           '<p class="mt-2 font-mono text-xs text-slate-500">' +
           escapeHtml(e.id) +

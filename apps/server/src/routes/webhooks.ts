@@ -59,10 +59,26 @@ function publicEndpoint(
     dlq: 0,
   },
 ): Record<string, unknown> {
+  // V-359 — surface the rotation grace state when active. The previous
+  // secret's first-12-chars are non-sensitive (same shape as the
+  // current secret_prefix display); the grace expiry lets the
+  // dashboard show "rotation ends in <X>" so customers know how much
+  // longer dual-signing is in effect. Both null when no rotation in
+  // flight.
+  const rotationActive =
+    row.secretPrev !== null &&
+    row.secretPrevExpiresAt !== null &&
+    row.secretPrevExpiresAt.getTime() > Date.now();
   return {
     id: `whk_${row.id}`,
     url: row.url,
     secret_prefix: row.secretPrefix,
+    prev_secret_prefix:
+      rotationActive && row.secretPrev !== null ? row.secretPrev.slice(0, 12) : null,
+    rotation_grace_expires_at:
+      rotationActive && row.secretPrevExpiresAt !== null
+        ? row.secretPrevExpiresAt.toISOString()
+        : null,
     events: row.events,
     description: row.description,
     active: row.active,
