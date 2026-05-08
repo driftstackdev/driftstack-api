@@ -17,6 +17,12 @@ const {
 const fullTitle = `${title} · Driftstack`;
 const pathname = Astro.url.pathname;
 
+// V-331 — backend API base URL surfaced to the inline "act as" picker
+// script. Per existing pages: localStorage uses `ds_web_session_token`
+// for the bearer (V-141), and we add `ds_act_as_account` for the
+// optional team-owner override.
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+
 const navItems = [
   { href: '/', label: 'Overview' },
   { href: '/profiles', label: 'Profiles' },
@@ -82,6 +88,29 @@ const navItems = [
                   <span>driftstack</span>
                 </a>
               </div>
+              {/*
+                V-331 — "Acting as" picker. Hidden until JS confirms the
+                user is on at least one team. Switching changes
+                localStorage.ds_act_as_account + reloads the page so
+                downstream fetches pick up the new X-Driftstack-Account
+                header. Self-only customers never see this widget.
+              */}
+              <div
+                data-act-as-picker-wrap
+                class="hidden border-b border-slate-200 px-4 py-3"
+              >
+                <label
+                  for="act-as-picker"
+                  class="block text-[10px] font-mono uppercase tracking-widest text-slate-500"
+                >
+                  Acting as
+                </label>
+                <select
+                  id="act-as-picker"
+                  data-act-as-picker
+                  class="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+                ></select>
+              </div>
               <nav class="px-4 py-6">
                 <ul class="space-y-1">
                   {navItems.map((item) => (
@@ -105,9 +134,139 @@ const navItems = [
           )
         }
         <main class="flex-1">
+          <!-- V-331 — "Acting as" indicator banner. Hidden by default.
+               JS below toggles + populates when the local
+               ds_act_as_account selection differs from self. -->
+          <div
+            data-act-as-banner
+            class="hidden border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-900"
+            role="status"
+          >
+            <div class="mx-auto flex max-w-6xl items-center justify-between gap-4">
+              <span>
+                Acting as <span class="font-mono" data-act-as-owner>—</span>. All actions
+                read + write that team's resources.
+              </span>
+              <button
+                type="button"
+                data-act-as-clear
+                class="rounded border border-amber-300 bg-white px-3 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100"
+              >
+                Switch back to self
+              </button>
+            </div>
+          </div>
           <slot />
         </main>
       </div>
+      <script is:inline define:vars={{ apiBaseUrl }}>
+        // V-331 — "Acting as" picker + global helper.
+        // Exposes window.driftstackActAsHeaders() returning either
+        // { 'x-driftstack-account': 'acc_<uuid>' } or {}. Inline-script
+        // pages call it when building fetch headers so they pick up
+        // the active team selection. Reads localStorage; never blocks
+        // the render. Picker UI auto-hides for self-only accounts.
+        (function () {
+          window.driftstackActAsHeaders = function () {
+            try {
+              const v = localStorage.getItem('ds_act_as_account');
+              return v && v.length > 0 ? { 'x-driftstack-account': v } : {};
+            } catch (_) {
+              return {};
+            }
+          };
+
+          const banner = document.querySelector('[data-act-as-banner]');
+          const ownerEl = document.querySelector('[data-act-as-owner]');
+          const clearBtn = document.querySelector('[data-act-as-clear]');
+          const wrap = document.querySelector('[data-act-as-picker-wrap]');
+          const picker = document.querySelector('[data-act-as-picker]');
+
+          function getToken() {
+            try {
+              return localStorage.getItem('ds_web_session_token') || '';
+            } catch (_) {
+              return '';
+            }
+          }
+
+          function getActiveOwnerId() {
+            try {
+              return localStorage.getItem('ds_act_as_account') || '';
+            } catch (_) {
+              return '';
+            }
+          }
+
+          if (clearBtn) {
+            clearBtn.addEventListener('click', function () {
+              try {
+                localStorage.removeItem('ds_act_as_account');
+              } catch (_) {
+                /* swallow */
+              }
+              window.location.reload();
+            });
+          }
+
+          // Toggle the indicator banner based on current selection.
+          const active = getActiveOwnerId();
+          if (active && banner) {
+            banner.classList.remove('hidden');
+            if (ownerEl) ownerEl.textContent = active;
+          }
+
+          // Fetch /v1/account/me to populate the picker. Quiet failure:
+          // no token / network blip leaves the picker hidden (no
+          // regression from pre-V-331 behaviour).
+          const token = getToken();
+          if (!token || !picker || !wrap) return;
+          fetch(apiBaseUrl + '/v1/account/me', {
+            headers: { authorization: 'Bearer ' + token },
+          })
+            .then(function (r) {
+              return r.ok ? r.json() : null;
+            })
+            .then(function (me) {
+              if (!me || !Array.isArray(me.teams) || me.teams.length === 0) return;
+              // Build options: Self + each team owner.
+              const options = [
+                { value: '', label: 'Self (' + (me.email || me.id) + ')' },
+              ];
+              for (const t of me.teams) {
+                options.push({
+                  value: t.owner_account_id,
+                  label: t.owner_account_id + ' (' + t.role + ')',
+                });
+              }
+              picker.innerHTML = '';
+              for (const opt of options) {
+                const el = document.createElement('option');
+                el.value = opt.value;
+                el.textContent = opt.label;
+                if (opt.value === active) el.selected = true;
+                picker.appendChild(el);
+              }
+              wrap.classList.remove('hidden');
+              picker.addEventListener('change', function (e) {
+                const v = e.target.value;
+                try {
+                  if (v && v.length > 0) {
+                    localStorage.setItem('ds_act_as_account', v);
+                  } else {
+                    localStorage.removeItem('ds_act_as_account');
+                  }
+                } catch (_) {
+                  /* swallow */
+                }
+                window.location.reload();
+              });
+            })
+            .catch(function () {
+              /* swallow — picker stays hidden */
+            });
+        })();
+      </script>
       <footer class="border-t border-slate-200 bg-white">
         <div
           class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4 text-xs text-slate-500"
