@@ -17,6 +17,7 @@ import { ProfilesView } from './views/ProfilesView';
 import { ProxiesView } from './views/ProxiesView';
 import { RecordingPlayerView } from './views/RecordingPlayerView';
 import { RecordingsView } from './views/RecordingsView';
+import { SessionsHistoryView } from './views/SessionsHistoryView';
 import { SessionsView } from './views/SessionsView';
 import { SettingsView } from './views/SettingsView';
 
@@ -142,6 +143,7 @@ function CurrentView({
     case 'profiles':
       return <ProfilesView onGoToSettings={() => onNavigate({ kind: 'settings' })} />;
     case 'sessions-history':
+      return <SessionsHistoryView />;
     case 'fleet':
       return <NotYet label={view.kind} />;
   }
