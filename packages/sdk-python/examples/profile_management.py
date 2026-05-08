@@ -71,10 +71,39 @@ def main() -> int:
     )
     print(f"  → {updated['id']}  new name={updated['name']!r}")
 
-    # 5. Delete.
-    print("deleting profile…")
-    client.profiles.delete(created["id"])
-    print("  → deleted")
+    # 5. V-313 — clone the profile. Server auto-derives "(copy)"
+    #    naming when no body is supplied.
+    print("cloning profile…")
+    cloned = client.profiles.clone(updated["id"])
+    print(f"  → {cloned['id']}  name={cloned['name']!r}")
+
+    # 6. V-312 — capture an immutable point-in-time snapshot.
+    print("capturing snapshot…")
+    snap = client.profile_snapshots.capture(
+        updated["id"],
+        {
+            "label": "baseline",
+            "description": "Captured by the profile-management example",
+        },
+    )
+    print(f"  → {snap['id']}  label={snap['label']!r}")
+
+    # 7. Restore the snapshot into a NEW profile. The original parent
+    #    profile is never modified.
+    print("restoring snapshot into a new profile…")
+    restored = client.profile_snapshots.restore(
+        snap["id"],
+        {"name": f"{updated['name']}-restored"},
+    )
+    print(f"  → {restored['id']}  name={restored['name']!r}")
+
+    # 8. Cleanup.
+    print("cleaning up…")
+    client.profile_snapshots.delete(snap["id"])
+    client.profiles.delete(restored["id"])
+    client.profiles.delete(cloned["id"])
+    client.profiles.delete(updated["id"])
+    print("  → cleaned up")
     return 0
 
 

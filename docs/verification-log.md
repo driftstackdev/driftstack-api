@@ -19263,3 +19263,18 @@ profile + parent profile.
 Customers running `npx tsx examples/profile-management.ts` see
 the full V-312 + V-313 surface in action. Python + Go example
 files queued (V-391 / V-392) for parity.
+
+## V-391 — Python SDK profile-management example extends with V-313 + V-312
+
+**Tier**: 1 (V-377 example coverage; mirrors V-390 TS example).
+
+`packages/sdk-python/examples/profile_management.py` now walks
+the full surface end-to-end:
+
+1-4. (existing) create / list / get / update. 5. **clone** — `client.profiles.clone(profile_id)`. 6. **snapshot capture** — `client.profile_snapshots.capture(...)`. 7. **snapshot restore** — `.restore(...)` creates a new profile. 8. **cleanup** — delete snapshot + restored + cloned + parent.
+
+Mypy clean.
+
+Go example for the profile surface doesn't exist yet (Go has
+quickstart / pagination / billing-flow / etc but no
+profile-management) — V-392 queued to scaffold one if useful.
