@@ -19290,3 +19290,19 @@ Restore / cleanup. `go build` + `go vet` clean.
 
 Three-SDK profile-management example parity now matches three-SDK
 V-312/V-313 surface parity (V-376/377/378/379).
+
+## V-393 — audit-log doc surfaces V-312 restored_from_snapshot payload
+
+**Tier**: 1 (docs precision; the action catalog row for
+profile.created mentioned V-313 cloned_from but missed V-312
+restored_from_snapshot).
+
+`apps/docs/src/pages/api/audit-log.md` action-catalog row updated
+to call out both payload tags emitted on profile.created:
+
+- `payload.cloned_from` (V-313 clone)
+- `payload.restored_from_snapshot` (V-312 snapshot restore)
+
+Customers reading the audit catalog now see both differentiation
+tags + know to filter / branch on payload to distinguish creation
+mechanism.
