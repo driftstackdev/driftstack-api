@@ -95,6 +95,11 @@ export function registerAccountAuditRoutes(
       if (!parsed.success) throw new BadRequestError('Invalid query parameters.');
       const format = parsed.data.format;
 
+      // V-330c — same effective-account semantic as the read endpoint
+      // above. A team member can export the owner's audit log when
+      // they pass X-Driftstack-Account.
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+
       // Walk pages until we have all rows or hit the ceiling. Service
       // already enforces account-scoping; we just iterate.
       const all: AccountAuditEntryRow[] = [];
@@ -103,6 +108,7 @@ export function registerAccountAuditRoutes(
         const page = await accountAudit.list(ctx, {
           limit: EXPORT_PAGE_SIZE,
           ...(cursor !== undefined ? { cursor } : {}),
+          ...(effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {}),
         });
         all.push(...page.items);
         if (page.nextCursor === null) break;
