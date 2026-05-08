@@ -19020,3 +19020,27 @@ any SDK. This slice closes that.
 
 Tests: 2 TS + 2 Python + 2 Go. All pass; full pre-push gate green.
 Three-SDK V-313 parity now matches three-SDK V-312 parity.
+
+## V-380 — apps/docs API index enumerates all existing API pages
+
+**Tier**: 1 (docs polish — closes a discovery gap).
+
+`apps/docs/src/pages/api/index.astro` previously listed only
+api-keys / team / versioning under "What's here". The other
+existing API doc pages (profiles, sessions, usage, audit-log, mfa)
+were unlinked — readers had to know the URL or guess at a sidebar
+that wasn't there.
+
+Index now enumerates every API doc page in the section:
+
+- /api/api-keys
+- /api/sessions
+- /api/profiles (with V-312 + V-313 callouts)
+- /api/usage
+- /api/audit-log
+- /api/mfa
+- /api/team
+- /api/versioning
+
+astro check clean (0 errors). No content change to existing pages;
+pure cross-link discovery fix.

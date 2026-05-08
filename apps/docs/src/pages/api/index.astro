@@ -18,6 +18,26 @@ import DocLayout from '../../layouts/DocLayout.astro';
       Scopes table.
     </li>
     <li>
+      <a href="/api/sessions/">Sessions</a> — create, navigate, interact, capture, wait, destroy.
+      Session lifecycle + concurrency caps.
+    </li>
+    <li>
+      <a href="/api/profiles/">Profiles</a> — persistent identity slots; create, list, get, patch,
+      clone (V-313), delete. Snapshots (V-312) — capture / list / restore / delete.
+    </li>
+    <li>
+      <a href="/api/usage/">Usage</a> — current-period meter for sessions / api-calls / data
+      transfer with tier caps surfaced.
+    </li>
+    <li>
+      <a href="/api/audit-log/">Audit log</a> — every account-level action with payload + filters
+      + paginated read.
+    </li>
+    <li>
+      <a href="/api/mfa/">Two-factor authentication</a> — TOTP enrol / verify / disable + recovery
+      codes; step-up gate semantics.
+    </li>
+    <li>
       <a href="/api/team/">Team RBAC</a> — invite + accept + list + remove for multi-user teams
       (V-298c shipped; auth path integration is V-298d).
     </li>
