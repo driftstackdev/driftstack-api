@@ -76,6 +76,8 @@ import { AuthFlowsService } from '../services/auth-flows.js';
 import { CliAuthorizeService } from '../services/cli-authorize.js';
 import { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import { ProfilesService } from '../services/profiles.js';
+import { ProfileSnapshotsService } from '../services/profile-snapshots.js';
+import { DrizzleProfileSnapshotsRepo } from '../db/profile-snapshots-repo.js';
 import type { AccountTier } from '@driftstack/api-types';
 import { BillingService, type BillingProvider } from '../services/billing.js';
 import { StripeBillingProvider } from '../services/stripe-billing-provider.js';
@@ -493,6 +495,13 @@ export async function createProductionDeps(
   // V-225 — accountAudit wired for profile.{created,deleted}.
   const profilesRepo = new DrizzleProfilesRepo(dbHandle);
   const profilesService = new ProfilesService(profilesRepo, accountAuditService);
+  // V-312 — profile snapshots service shares the profiles repo for
+  // tier-cap + name-conflict enforcement on restore.
+  const profileSnapshotsService = new ProfileSnapshotsService(
+    new DrizzleProfileSnapshotsRepo(dbHandle),
+    profilesRepo,
+    accountAuditService,
+  );
 
   // V-082 + V-088: Billing service. Activates only when all three of
   // STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS + STRIPE_TRIAL_PACK_PRICE_ID
@@ -578,6 +587,7 @@ export async function createProductionDeps(
     authFlowsService,
     cliAuthorizeService,
     profilesService,
+    profileSnapshotsService,
     // V-100: admin force-actions take direct repo + driver access.
     // V-237: profilesRepo also feeds /v1/account/me.
     sessionRepo: sessionsRepo,

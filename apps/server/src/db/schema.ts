@@ -400,6 +400,58 @@ export const profiles = pgTable(
   ],
 );
 
+/**
+ * V-312 — profile snapshots. Immutable point-in-time copy of a
+ * profile's metadata + state at capture time. Per founder Tier-2
+ * verdict 2026-05-09: standard pg_dump / GitHub-commit-SHA model —
+ * the parent profile keeps evolving independently; the snapshot is
+ * frozen.
+ *
+ * `parent_profile_id` is ON DELETE SET NULL: snapshots survive a
+ * parent-profile delete. `account_id` cascades on account delete
+ * (the snapshot is the customer's data; if the customer goes, so
+ * does the data).
+ *
+ * `state_blob` is jsonb. v1 is metadata-only (browser state isn't
+ * surfaced through the customer API yet); the column exists so a
+ * future driver integration can populate it without a migration.
+ */
+export const profileSnapshots = pgTable(
+  'profile_snapshots',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    parentProfileId: uuid('parent_profile_id').references(() => profiles.id, {
+      onDelete: 'set null',
+    }),
+    /** Customer-set short label, max 120 chars. */
+    label: text('label').notNull(),
+    description: text('description'),
+    /** Captured at snapshot time so a future repin of the parent
+     *  profile's archetype doesn't mutate this snapshot's identity. */
+    parentArchetype: text('parent_archetype').notNull(),
+    parentName: text('parent_name').notNull(),
+    /** v1: empty object. Forward-compat slot for future state capture. */
+    stateBlob: jsonb('state_blob')
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    capturedAt: timestamp('captured_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index('profile_snapshots_account_idx').on(t.accountId),
+    index('profile_snapshots_parent_idx').on(t.parentProfileId),
+  ],
+);
+
 // processed_stripe_events — append-only idempotency ledger for inbound
 // Stripe webhooks. The Stripe `event.id` is unique across the lifetime
 // of a Stripe account; we record it here on first successful handling

@@ -285,6 +285,11 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           '" data-clone-name="' +
           escapeHtml(p.name) +
           '" class="text-sm text-oxblood-700 hover:underline">Clone</button>' +
+          '<button type="button" data-snapshot="' +
+          escapeHtml(p.id) +
+          '" data-snapshot-name="' +
+          escapeHtml(p.name) +
+          '" class="text-sm text-oxblood-700 hover:underline">Snapshot</button>' +
           '<button type="button" data-delete="' +
           escapeHtml(p.id) +
           '" data-delete-name="' +
@@ -343,6 +348,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           list.innerHTML = profiles.map(profileLi).join('');
           wireDeleteButtons();
           wireCloneButtons();
+          wireSnapshotButtons();
         }
       }
 
@@ -366,6 +372,53 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             usageLine.appendChild(span);
           }
         }
+      }
+
+      // V-312 — snapshot-button wiring. Prompts for a label, POSTs
+      // /v1/profiles/:id/snapshots, banners the captured snapshot id.
+      function wireSnapshotButtons() {
+        const buttons = list.querySelectorAll('[data-snapshot]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-snapshot');
+            const name = btn.getAttribute('data-snapshot-name') || '(unnamed)';
+            if (!id) return;
+            const label = window.prompt(
+              'Snapshot label (e.g. "before-migration"):\n\nThis captures profile "' +
+                name +
+                '" as an immutable point-in-time copy. The original profile keeps evolving; the snapshot is frozen.',
+            );
+            if (!label || !label.trim()) return;
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = 'Capturing…';
+            authedFetch('/v1/profiles/' + encodeURIComponent(id) + '/snapshots', {
+              method: 'POST',
+              body: JSON.stringify({ label: label.trim() }),
+            })
+              .then((r) =>
+                r.ok
+                  ? r.json()
+                  : r
+                      .json()
+                      .catch(() => ({}))
+                      .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+              )
+              .then((body) => {
+                showBanner('Snapshot captured: ' + (body.label || '(no label)'));
+              })
+              .catch((err) => {
+                showBanner(
+                  'Snapshot failed: ' +
+                    (err && err.message ? err.message : 'network error'),
+                );
+              })
+              .finally(() => {
+                btn.disabled = false;
+                btn.textContent = original;
+              });
+          });
+        });
       }
 
       // V-313 — clone-button wiring. POSTs /v1/profiles/:id/clone with

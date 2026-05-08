@@ -1,0 +1,100 @@
+// V-312 — Drizzle implementation of ProfileSnapshotsRepo.
+
+import { and, desc, eq, lt, or } from 'drizzle-orm';
+import type {
+  ListSnapshotsArgs,
+  ListSnapshotsPage,
+  NewSnapshotInput,
+  ProfileSnapshotRecord,
+  ProfileSnapshotsRepo,
+} from '../services/profile-snapshots.js';
+import type { Database } from './client.js';
+import { profileSnapshots } from './schema.js';
+
+function toRow(r: typeof profileSnapshots.$inferSelect): ProfileSnapshotRecord {
+  return {
+    id: r.id,
+    accountId: r.accountId,
+    parentProfileId: r.parentProfileId,
+    label: r.label,
+    description: r.description,
+    parentArchetype: r.parentArchetype,
+    parentName: r.parentName,
+    stateBlob: (r.stateBlob ?? {}) as Record<string, unknown>,
+    capturedAt: r.capturedAt,
+    createdAt: r.createdAt,
+  };
+}
+
+export class DrizzleProfileSnapshotsRepo implements ProfileSnapshotsRepo {
+  constructor(private readonly database: Database) {}
+
+  async insert(input: NewSnapshotInput): Promise<ProfileSnapshotRecord> {
+    const [row] = await this.database.db
+      .insert(profileSnapshots)
+      .values({
+        accountId: input.accountId,
+        parentProfileId: input.parentProfileId,
+        label: input.label,
+        description: input.description,
+        parentArchetype: input.parentArchetype,
+        parentName: input.parentName,
+        stateBlob: input.stateBlob,
+      })
+      .returning();
+    if (!row) throw new Error('insert: no row returned');
+    return toRow(row);
+  }
+
+  async list(args: ListSnapshotsArgs): Promise<ListSnapshotsPage> {
+    const limit = Math.min(args.limit ?? 50, 100);
+    const filters = [eq(profileSnapshots.accountId, args.accountId)];
+    if (args.parentProfileId !== undefined) {
+      filters.push(eq(profileSnapshots.parentProfileId, args.parentProfileId));
+    }
+    if (args.cursor !== undefined) {
+      const [c] = await this.database.db
+        .select({
+          createdAt: profileSnapshots.createdAt,
+          id: profileSnapshots.id,
+        })
+        .from(profileSnapshots)
+        .where(eq(profileSnapshots.id, args.cursor))
+        .limit(1);
+      if (c) {
+        const cur = or(
+          lt(profileSnapshots.createdAt, c.createdAt),
+          and(eq(profileSnapshots.createdAt, c.createdAt), lt(profileSnapshots.id, c.id)),
+        );
+        if (cur !== undefined) filters.push(cur);
+      }
+    }
+    const rows = await this.database.db
+      .select()
+      .from(profileSnapshots)
+      .where(and(...filters))
+      .orderBy(desc(profileSnapshots.createdAt), desc(profileSnapshots.id))
+      .limit(limit + 1);
+    const hasMore = rows.length > limit;
+    const data = rows.slice(0, limit).map(toRow);
+    const nextCursor = hasMore && data.length > 0 ? data[data.length - 1]!.id : null;
+    return { data, hasMore, nextCursor };
+  }
+
+  async findById(args: { id: string; accountId: string }): Promise<ProfileSnapshotRecord | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(profileSnapshots)
+      .where(and(eq(profileSnapshots.id, args.id), eq(profileSnapshots.accountId, args.accountId)))
+      .limit(1);
+    return row ? toRow(row) : null;
+  }
+
+  async delete(args: { id: string; accountId: string }): Promise<boolean> {
+    const rows = await this.database.db
+      .delete(profileSnapshots)
+      .where(and(eq(profileSnapshots.id, args.id), eq(profileSnapshots.accountId, args.accountId)))
+      .returning({ id: profileSnapshots.id });
+    return rows.length > 0;
+  }
+}

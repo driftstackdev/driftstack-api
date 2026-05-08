@@ -64,6 +64,7 @@ import { MfaService } from '../../../src/services/mfa.js';
 import { InMemoryMfaChallengeStore } from '../../../src/services/mfa-challenge-store.js';
 import { InMemoryStripeWebhooksRepo } from './in-memory-stripe-webhooks-repo.js';
 import { InMemoryProfilesRepo } from './in-memory-profiles-repo.js';
+import { InMemoryProfileSnapshotsRepo } from './in-memory-profile-snapshots-repo.js';
 import { InMemoryBillingProvider, InMemoryBillingRepo } from './in-memory-billing.js';
 import { BillingService } from '../../../src/services/billing.js';
 import { AuthFlowsService } from '../../../src/services/auth-flows.js';
@@ -73,6 +74,7 @@ import {
 } from '../../../src/services/cli-authorize.js';
 import { StripeWebhooksService } from '../../../src/services/stripe-webhooks.js';
 import { ProfilesService } from '../../../src/services/profiles.js';
+import { ProfileSnapshotsService } from '../../../src/services/profile-snapshots.js';
 import { createEmailService } from '../../../src/services/email.js';
 import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
 
@@ -738,6 +740,13 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const profilesRepo = new InMemoryProfilesRepo();
   // V-225 — accountAudit wired for profile.{created,deleted}.
   const profilesService = new ProfilesService(profilesRepo, accountAuditService);
+  // V-312 — profile snapshots service shares the profiles repo for
+  // tier-cap + name-conflict enforcement on restore.
+  const profileSnapshotsService = new ProfileSnapshotsService(
+    new InMemoryProfileSnapshotsRepo(),
+    profilesRepo,
+    accountAuditService,
+  );
 
   // V-082: Billing service against an in-memory provider. The seeded
   // account is registered with the billing repo so getAccount + the
@@ -801,6 +810,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     stripeWebhooksService,
     stripeWebhookSigningSecret,
     profilesService,
+    profileSnapshotsService,
     billingService,
     sessionRepo: sessionsRepo,
     apiKeysRepo,

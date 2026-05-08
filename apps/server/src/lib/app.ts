@@ -43,6 +43,7 @@ import type { AuthFlowsService } from '../services/auth-flows.js';
 import type { CliAuthorizeService } from '../services/cli-authorize.js';
 import type { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import type { ProfilesService } from '../services/profiles.js';
+import type { ProfileSnapshotsService } from '../services/profile-snapshots.js';
 import type { BillingService } from '../services/billing.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
@@ -75,6 +76,7 @@ import { registerAuthRoutes } from '../routes/auth.js';
 import { registerAuthCliRoutes } from '../routes/auth-cli.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
+import { registerProfileSnapshotsRoutes } from '../routes/profile-snapshots.js';
 import { registerBillingRoutes } from '../routes/billing.js';
 import { registerAdminForceActionRoutes } from '../routes/admin-force-actions.js';
 import {
@@ -181,6 +183,11 @@ export interface AppDeps {
   stripeWebhookSigningSecret?: string;
   /** V-081: profile CRUD service. Optional during scaffolding window. */
   profilesService?: ProfilesService;
+  /**
+   * V-312 — profile snapshots service. Optional; routes register
+   * only when this AND profilesService are both wired.
+   */
+  profileSnapshotsService?: ProfileSnapshotsService;
   /** V-082: billing service (Stripe checkout / portal / trial-pack). Optional. */
   billingService?: BillingService;
   /**
@@ -393,6 +400,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   }
   if (deps.profilesService !== undefined) {
     registerProfileRoutes(app, { service: deps.profilesService, authRepo: deps.authRepo });
+    // V-312 — profile snapshots routes share the profiles service +
+    // auth repo. Registers only when profilesService is wired.
+    if (deps.profileSnapshotsService !== undefined) {
+      registerProfileSnapshotsRoutes(app, {
+        service: deps.profileSnapshotsService,
+        profilesService: deps.profilesService,
+        authRepo: deps.authRepo,
+      });
+    }
   }
   if (deps.billingService !== undefined) {
     registerBillingRoutes(app, { service: deps.billingService });

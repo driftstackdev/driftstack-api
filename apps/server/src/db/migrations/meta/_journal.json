@@ -260,6 +260,13 @@
       "when": 1778090427000,
       "tag": "0036_v298b_account_region",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1778090428000,
+      "tag": "0037_v312_profile_snapshots",
+      "breakpoints": true
     }
   ]
 }

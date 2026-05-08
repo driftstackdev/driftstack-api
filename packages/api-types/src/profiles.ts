@@ -59,6 +59,40 @@ export const CloneProfileRequestSchema = z.object({
 });
 export type CloneProfileRequest = z.infer<typeof CloneProfileRequestSchema>;
 
+// ───────────────────────────────────────────────────────────────────────────
+// V-312 — profile snapshots (immutable point-in-time copies)
+// ───────────────────────────────────────────────────────────────────────────
+
+export const ProfileSnapshotSchema = z.object({
+  id: z.string(),
+  parent_profile_id: z.string().nullable(),
+  label: z.string(),
+  description: z.string().nullable(),
+  parent_archetype: z.string(),
+  parent_name: z.string(),
+  captured_at: Iso8601Schema,
+  created_at: Iso8601Schema,
+});
+export type ProfileSnapshot = z.infer<typeof ProfileSnapshotSchema>;
+
+export const CaptureSnapshotRequestSchema = z.object({
+  label: z.string().trim().min(1).max(120),
+  description: z.string().max(2048).optional(),
+});
+export type CaptureSnapshotRequest = z.infer<typeof CaptureSnapshotRequestSchema>;
+
+export const ListSnapshotsResponseSchema = z.object({
+  data: z.array(ProfileSnapshotSchema),
+  has_more: z.boolean(),
+  next_cursor: z.string().nullable(),
+});
+export type ListSnapshotsResponse = z.infer<typeof ListSnapshotsResponseSchema>;
+
+export const RestoreSnapshotRequestSchema = z.object({
+  name: ProfileNameSchema,
+});
+export type RestoreSnapshotRequest = z.infer<typeof RestoreSnapshotRequestSchema>;
+
 export const ListProfilesResponseSchema = z.object({
   data: z.array(ProfileSchema),
   has_more: z.boolean(),

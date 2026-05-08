@@ -18764,3 +18764,40 @@ note that the field is informational + cross-link to
 Tests: 13 new integration tests (set + GET, clear, all 3 valid
 regions, 6 invalid shapes 400). Bulk-perl extended fixtures with
 `region: null`. 1102 / 1102 tests pass.
+
+## V-312 — profile snapshots (immutable point-in-time copy)
+
+**Tier**: 1 (founder Tier-2 verdict 2026-05-09: pg_dump /
+GitHub-commit-SHA model).
+
+Schema (migration 0037): `profile_snapshots` table.
+`parent_profile_id` ON DELETE SET NULL (snapshots survive parent
+delete); `account_id` ON DELETE CASCADE; `parent_archetype` +
+`parent_name` captured at snapshot time so a future repin of the
+parent doesn't mutate snapshot identity. `state_blob` jsonb default
+`{}` — v1 metadata-only; forward-compat slot for future driver
+integration.
+
+Service: capture / list (per-profile + per-account, cursor) / get /
+restore (creates NEW profile, shared tier-cap + name-conflict path) /
+delete.
+
+Routes:
+
+- POST /v1/profiles/:id/snapshots
+- GET /v1/profiles/:id/snapshots
+- GET /v1/profile-snapshots
+- GET /v1/profile-snapshots/:id
+- POST /v1/profile-snapshots/:id/restore
+- DELETE /v1/profile-snapshots/:id
+
+Public id prefix `psnap_<uuid>`. Restore audit emits
+`profile.created` with `payload.restored_from_snapshot:
+psnap_<id>`.
+
+UI: /profiles "Snapshot" button per row prompts for label.
+
+Tests: 9 new integration tests. 1111 / 1111 pass.
+
+V-314 (profile state cleanup) stays queued — depends on driver
+integration landing the state-blob write path.
