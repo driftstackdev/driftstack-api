@@ -1,0 +1,218 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+
+// V-312 — admin view of status-page email subscribers (V-295c3 +
+// V-295c3-tombstone). Read /v1/admin/status-subscribers; expose a
+// force-unsubscribe button per row. Audit log dual-write happens
+// server-side (V-281 pattern).
+---
+
+<AdminLayout title="Status-page subscribers">
+  <div class="mx-auto max-w-6xl px-6 py-10" data-page="status-subscribers">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
+    <header class="mb-10 flex items-start justify-between gap-6">
+      <div>
+        <h1 class="text-3xl font-semibold tracking-tight text-slate-900">
+          Status-page subscribers
+        </h1>
+        <p class="mt-2 max-w-prose text-sm text-slate-500">
+          Email addresses subscribed to status.driftstack.dev incident notifications. Confirmed
+          subscribers receive emails when public incidents are posted or resolved (V-295c3-followup
+          fan-out). Force-unsubscribe writes admin_audit_log via V-281 dual-write.
+        </p>
+      </div>
+    </header>
+
+    <div class="rounded-lg border border-slate-200 bg-white">
+      <ul data-list class="divide-y divide-slate-100">
+        <li class="px-6 py-4 text-sm text-slate-500">Loading subscribers…</li>
+      </ul>
+    </div>
+
+    <p class="mt-6 text-xs text-slate-500">
+      Subscribers list paginated server-side (default 50 per page; <code>?limit=&amp;offset=</code>
+      query params for paging). Confirmed-and-still-subscribed rows trigger fan-out emails on
+      public incident state changes (V-295c3-followup). Tombstoned rows (90d post-unsubscribe via
+      V-295c3-tombstone purge cron) appear with email = <code>null</code>.
+    </p>
+  </div>
+
+  <script is:inline>
+    (function () {
+      const root = document.querySelector('[data-page="status-subscribers"]');
+      if (!root) return;
+      const list = root.querySelector('[data-list]');
+      const banner = root.querySelector('[data-banner]');
+
+      function getToken() {
+        try {
+          return localStorage.getItem('driftstack_admin_token') || '';
+        } catch (_) {
+          return '';
+        }
+      }
+
+      function showBanner(msg, isError) {
+        if (!banner) return;
+        banner.textContent = msg;
+        banner.classList.remove('hidden');
+        if (isError) {
+          banner.classList.add('border-red-200', 'bg-red-50', 'text-red-700');
+        } else {
+          banner.classList.remove('border-red-200', 'bg-red-50', 'text-red-700');
+        }
+      }
+
+      function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+          if (c === '&') return '&amp;';
+          if (c === '<') return '&lt;';
+          if (c === '>') return '&gt;';
+          if (c === '"') return '&quot;';
+          return '&#39;';
+        });
+      }
+
+      function fmtIso(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+
+      function statusBadge(sub) {
+        if (sub.unsubscribed_at) {
+          return '<span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-slate-600">unsubscribed ' +
+            escapeHtml(fmtIso(sub.unsubscribed_at)) +
+            '</span>';
+        }
+        if (sub.confirmed_at) {
+          return '<span class="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-emerald-700">confirmed</span>';
+        }
+        return '<span class="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-amber-700">pending</span>';
+      }
+
+      function row(sub) {
+        const canForceUnsub = !sub.unsubscribed_at && sub.email;
+        const action = canForceUnsub
+          ? '<button type="button" data-force-unsub="' +
+            escapeHtml(sub.id) +
+            '" data-email="' +
+            escapeHtml(sub.email) +
+            '" class="text-sm text-rose-700 hover:underline">Force unsubscribe</button>'
+          : '<span class="text-xs text-slate-400">no action</span>';
+        const emailDisplay = sub.email
+          ? escapeHtml(sub.email)
+          : '<span class="font-mono text-xs text-slate-400">(purged — V-295c3-tombstone)</span>';
+        return (
+          '<li class="px-6 py-4">' +
+          '<div class="flex items-start justify-between gap-6">' +
+          '<div class="min-w-0 flex-1">' +
+          '<p class="text-base font-medium text-slate-900">' +
+          emailDisplay +
+          '</p>' +
+          '<p class="mt-1 font-mono text-xs text-slate-500">' +
+          escapeHtml(sub.id) +
+          '</p>' +
+          '<p class="mt-1 text-xs text-slate-500">Created ' +
+          escapeHtml(fmtIso(sub.created_at)) +
+          (sub.confirmed_at
+            ? ' · confirmed ' + escapeHtml(fmtIso(sub.confirmed_at))
+            : '') +
+          '</p></div>' +
+          '<div class="flex shrink-0 flex-col items-end gap-2">' +
+          statusBadge(sub) +
+          action +
+          '</div></div></li>'
+        );
+      }
+
+      function refresh() {
+        const token = getToken();
+        if (!token) {
+          if (list)
+            list.innerHTML =
+              '<li class="px-6 py-4 text-sm text-slate-500">Sign in with an admin key to load subscribers.</li>';
+          return;
+        }
+        fetch('/v1/admin/status-subscribers?limit=200', {
+          headers: { authorization: 'Bearer ' + token },
+        })
+          .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function (body) {
+            const subs = body.data || [];
+            if (subs.length === 0) {
+              if (list)
+                list.innerHTML =
+                  '<li class="px-6 py-4 text-sm text-slate-500">No subscribers yet.</li>';
+              return;
+            }
+            if (list) {
+              list.innerHTML = subs.map(row).join('');
+              wireForceUnsub();
+            }
+          })
+          .catch(function (err) {
+            showBanner(
+              'Failed to load subscribers: ' +
+                (err && err.message ? err.message : 'network error'),
+              true,
+            );
+          });
+      }
+
+      function wireForceUnsub() {
+        if (!list) return;
+        const buttons = list.querySelectorAll('[data-force-unsub]');
+        buttons.forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            const id = btn.getAttribute('data-force-unsub');
+            const email = btn.getAttribute('data-email');
+            const ok = window.confirm(
+              'Force-unsubscribe ' +
+                email +
+                '? Writes admin_audit_log. Customer can re-subscribe via the public form.',
+            );
+            if (!ok) return;
+            const token = getToken();
+            btn.disabled = true;
+            btn.textContent = 'Unsubscribing…';
+            fetch('/v1/admin/status-subscribers/' + encodeURIComponent(id) + '/force-unsubscribe', {
+              method: 'POST',
+              headers: {
+                authorization: 'Bearer ' + token,
+                'content-type': 'application/json',
+              },
+              body: '{}',
+            })
+              .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+              })
+              .then(function () {
+                refresh();
+              })
+              .catch(function (err) {
+                showBanner(
+                  'Force-unsubscribe failed: ' +
+                    (err && err.message ? err.message : 'network error'),
+                  true,
+                );
+                btn.disabled = false;
+                btn.textContent = 'Force unsubscribe';
+              });
+          });
+        });
+      }
+
+      refresh();
+    })();
+  </script>
+</AdminLayout>
