@@ -495,12 +495,9 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           ' consecutive failure(s)</p>' +
           '</div>' +
           '<div class="flex shrink-0 flex-col items-end gap-2">' +
-          '<a href="#edit-' +
+          '<button type="button" data-delete="' +
           escapeHtml(e.id) +
-          '" class="text-sm text-oxblood-700 hover:underline">Edit</a>' +
-          '<a href="#delete-' +
-          escapeHtml(e.id) +
-          '" class="text-sm text-red-700 hover:underline">Delete</a>' +
+          '" class="text-sm text-red-700 hover:underline">Delete</button>' +
           '</div></div>' +
           '<div class="mt-4 flex flex-wrap gap-1.5">' +
           events +
@@ -665,6 +662,47 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         });
       }
 
+      // V-347b — wire the per-row Delete buttons. DELETE
+      // /v1/webhooks/:id is admin-only on team-scoped requests
+      // (V-326e5); the act-as helper handles team scope.
+      function wireDeleteButtons() {
+        const buttons = ul.querySelectorAll('[data-delete]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-delete');
+            if (!id) return;
+            if (!window.confirm('Delete webhook endpoint ' + id + '? This cannot be undone.')) {
+              return;
+            }
+            btn.disabled = true;
+            btn.textContent = 'Deleting…';
+            fetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id), {
+              method: 'DELETE',
+              headers: {
+                authorization: 'Bearer ' + token,
+                ...(typeof window.driftstackActAsHeaders === 'function'
+                  ? window.driftstackActAsHeaders()
+                  : {}),
+              },
+            })
+              .then((r) => {
+                if (!r.ok && r.status !== 204) {
+                  return r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+                }
+                window.location.reload();
+              })
+              .catch((err) => {
+                showBanner('Delete failed: ' + (err && err.message ? err.message : 'network error'));
+                btn.disabled = false;
+                btn.textContent = 'Delete';
+              });
+          });
+        });
+      }
+
       if (!token) {
         showBanner('Sign in to see live webhook endpoints. Showing preview data below.');
         return;
@@ -685,6 +723,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             ul.classList.remove('hidden');
             ul.innerHTML = endpoints.map(endpointCard).join('');
             wireDeliveryToggles();
+            wireDeleteButtons();
           }
           showBanner(
             'Live data loaded. Aggregate delivery counts (delivered/failed/DLQ) not yet exposed via /v1/webhooks — coming soon.',
