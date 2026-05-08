@@ -2,6 +2,11 @@
 import AdminLayout from '../../layouts/AdminLayout.astro';
 import { MOCK_INCIDENTS } from '../../data/mocks.ts';
 
+// V-338 — incident form is now wired to POST /v1/admin/incidents.
+// SSG renders MOCK_INCIDENTS as the initial fallback; the inline
+// script below replaces with live data on mount + handles the form.
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+
 function fmtIso(iso: string): string {
   return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }
@@ -105,10 +110,15 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
             </label>
           </div>
         </div>
+        <p
+          id="form-error"
+          class="hidden rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        ></p>
         <div class="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
           <button
+            id="submit-btn"
             type="submit"
-            class="inline-flex items-center rounded-md bg-oxblood-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-oxblood-800 focus:outline-none focus:ring-2 focus:ring-oxblood-700 focus:ring-offset-2"
+            class="inline-flex items-center rounded-md bg-oxblood-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-oxblood-800 focus:outline-none focus:ring-2 focus:ring-oxblood-700 focus:ring-offset-2 disabled:opacity-50"
           >
             Post incident
           </button>
@@ -209,12 +219,101 @@ const resolved = MOCK_INCIDENTS.filter((i) => i.status === 'resolved');
     </p>
   </div>
 
-  <script>
-    // Progressive enhancement only — wired to live API in V-295c when CF Pages goes up.
-    document.getElementById('new-incident-form')?.addEventListener('submit', (event) => {
-      event.preventDefault();
-      // eslint-disable-next-line no-alert
-      alert('V-295a admin UI scaffold — POST /v1/admin/incidents wiring lands in V-295c.');
-    });
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    // V-338 — wires the new-incident form to POST /v1/admin/incidents.
+    // SSG-rendered list stays as preview until the page reloads after a
+    // successful create.
+    (function () {
+      const form = document.getElementById('new-incident-form');
+      const submit = document.getElementById('submit-btn');
+      const errEl = document.getElementById('form-error');
+      if (!form || !submit || !errEl) return;
+
+      function showErr(msg) {
+        errEl.textContent = msg;
+        errEl.classList.remove('hidden');
+      }
+      function hideErr() {
+        errEl.classList.add('hidden');
+        errEl.textContent = '';
+      }
+
+      function getToken() {
+        try {
+          return localStorage.getItem('ds_web_session_token') || '';
+        } catch (_) {
+          return '';
+        }
+      }
+
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        hideErr();
+        const token = getToken();
+        if (!token) {
+          showErr('Sign in with a staff admin account before posting an incident.');
+          return;
+        }
+        const fd = new FormData(form);
+        const title = (fd.get('title') || '').toString().trim();
+        const description = (fd.get('description') || '').toString().trim();
+        const severity = (fd.get('severity') || 'major').toString();
+        const affectedRaw = (fd.get('affected') || '').toString().trim();
+        const affected_components = affectedRaw
+          ? affectedRaw
+              .split(',')
+              .map(function (s) {
+                return s.trim();
+              })
+              .filter(function (s) {
+                return s.length > 0;
+              })
+          : [];
+        const isPublic = fd.get('public') === 'on';
+        if (!title || !description) {
+          showErr('Title + initial update are required.');
+          return;
+        }
+        submit.disabled = true;
+        submit.textContent = 'Posting…';
+        fetch(apiBaseUrl + '/v1/admin/incidents', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: 'Bearer ' + token,
+          },
+          body: JSON.stringify({
+            title: title,
+            description: description,
+            severity: severity,
+            status: 'investigating',
+            affected_components: affected_components,
+            public: isPublic,
+          }),
+        })
+          .then(function (r) {
+            if (!r.ok) {
+              return r
+                .json()
+                .catch(function () {
+                  return {};
+                })
+                .then(function (b) {
+                  return Promise.reject(new Error(b.detail || 'HTTP ' + r.status));
+                });
+            }
+            return r.json();
+          })
+          .then(function () {
+            // Reload to show the new incident in the open list.
+            window.location.reload();
+          })
+          .catch(function (err) {
+            showErr(err && err.message ? err.message : 'Failed to post incident.');
+            submit.disabled = false;
+            submit.textContent = 'Post incident';
+          });
+      });
+    })();
   </script>
 </AdminLayout>
