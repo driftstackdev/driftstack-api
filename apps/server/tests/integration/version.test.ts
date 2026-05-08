@@ -16,6 +16,8 @@ interface VersionResponse {
   git_sha: string;
   started_at: string;
   node_version: string;
+  driver: 'mock' | 'webkit' | 'playwright';
+  playwright_browser?: 'webkit' | 'chromium' | 'firefox';
 }
 
 describe('GET /version', () => {
@@ -57,5 +59,15 @@ describe('GET /version', () => {
     } finally {
       if (prev !== undefined) process.env.GIT_SHA = prev;
     }
+  });
+
+  it('V-337 — surfaces driver name; defaults to mock for tests', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({ method: 'GET', url: '/version' });
+    const body = res.json<VersionResponse>();
+    // Test fixture doesn't pass driverName explicitly → defaults to mock.
+    expect(body.driver).toBe('mock');
+    // playwright_browser only included when driver === 'playwright'.
+    expect(body.playwright_browser).toBeUndefined();
   });
 });

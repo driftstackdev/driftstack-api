@@ -566,6 +566,10 @@ export async function createProductionDeps(
     // error-capture + breadcrumb hooks. Both are no-ops when
     // sentry.isInitialized is false (i.e. SENTRY_DSN unset).
     sentry,
+    // V-337 — driver name + playwright browser surface on /version
+    // for client observability (GUI Connectivity test, ops tooling).
+    driverName: config.driver,
+    playwrightBrowser: config.playwrightBrowser,
   };
 
   // V-232 — background poller startup. Both processTick methods own

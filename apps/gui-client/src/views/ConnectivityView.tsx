@@ -6,7 +6,7 @@
 // /healthz route — every authenticated endpoint exercises the same
 // auth + rate-limit + DB chain, and `list` is the cheapest one.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError } from '../lib/client';
 
@@ -17,10 +17,38 @@ interface CheckResult {
   errorKind?: string;
 }
 
+interface ServerVersion {
+  version: string;
+  git_sha: string;
+  driver: 'mock' | 'webkit' | 'playwright';
+  playwright_browser?: 'webkit' | 'chromium' | 'firefox';
+}
+
 export function ConnectivityView(): JSX.Element {
   const { client, settings } = useSettings();
   const [result, setResult] = useState<CheckResult | null>(null);
   const [running, setRunning] = useState(false);
+  // V-337 — surface the server's driver mode + version when we can
+  // reach the public /version endpoint. Helps the founder spot
+  // "you're talking to a mock server" mismatches without running
+  // /version manually.
+  const [serverInfo, setServerInfo] = useState<ServerVersion | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const trimmed = settings.baseUrl.replace(/\/+$/, '');
+    fetch(`${trimmed}/version`)
+      .then((r) => (r.ok ? (r.json() as Promise<ServerVersion>) : null))
+      .then((info) => {
+        if (!cancelled && info) setServerInfo(info);
+      })
+      .catch(() => {
+        if (!cancelled) setServerInfo(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.baseUrl]);
 
   async function runCheck(): Promise<void> {
     if (!client) return;
@@ -69,6 +97,25 @@ export function ConnectivityView(): JSX.Element {
             )}
           </span>
         </Row>
+        {/* V-337 — server-reported driver mode + version. */}
+        {serverInfo !== null && (
+          <>
+            <Row label="Server driver">
+              <span className="mono text-ink-secondary">
+                {serverInfo.driver}
+                {serverInfo.driver === 'playwright' && serverInfo.playwright_browser
+                  ? ` (${serverInfo.playwright_browser})`
+                  : ''}
+              </span>
+            </Row>
+            <Row label="Server version">
+              <span className="mono text-ink-secondary">
+                {serverInfo.version}
+                {serverInfo.git_sha !== 'unknown' ? ` · ${serverInfo.git_sha.slice(0, 7)}` : ''}
+              </span>
+            </Row>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-2 pt-1">

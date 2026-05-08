@@ -212,6 +212,16 @@ export interface AppDeps {
    * Tests routinely omit this — Sentry stays out of the test path.
    */
   sentry?: SentryClient;
+  /**
+   * V-337 — minimal driver-mode marker exposed on /version so the
+   * GUI's Connectivity test + admin observability can show "this
+   * server is running on the playwright dev driver / mock / webkit
+   * fork". No customer-impactful info; settable via DRIVER env, so
+   * disclosure is not a leak. Defaults to 'mock' when omitted.
+   */
+  driverName?: 'mock' | 'webkit' | 'playwright';
+  /** V-337 — playwright browser channel, surfaced when driverName === 'playwright'. */
+  playwrightBrowser?: 'webkit' | 'chromium' | 'firefox';
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
@@ -388,6 +398,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     git_sha: gitSha,
     started_at: startedAt,
     node_version: process.version,
+    // V-337 — surface driver mode so clients can show "this server is
+    // running on the playwright dev driver / mock / webkit fork".
+    // Useful for the GUI's Connectivity test + admin observability.
+    // No customer-impactful info exposed; the driver name is already
+    // settable via DRIVER env, so disclosing it is no leak.
+    driver: deps.driverName ?? 'mock',
+    ...(deps.driverName === 'playwright' && deps.playwrightBrowser !== undefined
+      ? { playwright_browser: deps.playwrightBrowser }
+      : {}),
   }));
 
   // Readiness endpoint — public, no auth, no rate limit. Returns 200
