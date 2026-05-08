@@ -14,12 +14,20 @@ import DocLayout from '../../layouts/DocLayout.astro';
 
   <ul>
     <li>
+      <a href="/api/api-keys/">API keys</a> — create, list, rotate (V-296 24-hour grace), revoke.
+      Scopes table.
+    </li>
+    <li>
       <a href="/api/versioning/">Versioning policy</a> — additive vs breaking changes, deprecation
       cycle, when <code>/v2/*</code> is justified.
     </li>
     <li>
       <a href="/webhooks/events/">Webhook events catalog</a> — every event type Driftstack emits,
       payload shape, signature verification, retry policy.
+    </li>
+    <li>
+      <a href="/webhooks/replay/">Replaying deliveries</a> — V-307 customer self-service replay
+      for failed and DLQ webhook deliveries.
     </li>
   </ul>
 
