@@ -17,6 +17,24 @@ interface ChangelogEntry {
 
 const ENTRIES: readonly ChangelogEntry[] = [
   {
+    date: '2026-05-08',
+    category: 'sdk',
+    title: 'Team RBAC, API key rotation, and webhook replay land in all three SDKs',
+    body: 'TypeScript, Python, and Go SDKs gain client.team.{invite,listMembers,listInvites,acceptInvite,removeMember}, client.apiKeys.rotate (24-hour grace on the prior key), and client.webhooks.replayDelivery (one delivery, fresh attempt, same idempotency key). Documentation at docs.driftstack.dev/api/team, /api/api-keys, /webhooks/replay.',
+  },
+  {
+    date: '2026-05-08',
+    category: 'launch',
+    title: 'Public status page at status.driftstack.dev',
+    body: 'Live system status, incident history, and a 30-day SLA panel. Subscribe by email for incident notifications (double-opt-in, per-email unsubscribe link). The site is independent of api.driftstack.dev so a control-plane outage does not take the status page down.',
+  },
+  {
+    date: '2026-05-08',
+    category: 'security',
+    title: 'GDPR Article 20 portability — full audit log export',
+    body: 'Customers can now export their complete account audit log as CSV or JSON via /v1/account/audit-log/export from the dashboard. 10K-row ceiling per export with cursor pagination beyond.',
+  },
+  {
     date: '2026-05-04',
     category: 'sdk',
     title: 'Pagination iterators land in TypeScript + Python SDKs',
