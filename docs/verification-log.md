@@ -17860,3 +17860,66 @@ V-331b sub-slices.
 
 Per persistent rule #17 (terse V-log per V-NNN). Consolidates the 10
 sub-slices since the last sweep into one indexed entry per V-NNN.
+
+## V-326e6 — Team RBAC writes for /v1/api-keys (closes V-326e cycle)
+
+**Tier**: 1.
+
+Final write-side route in the V-326e cycle. POST/DELETE/rotate
+admin-only on team owners; GET role-agnostic. Service ops (create /
+list / rotate / revoke) gain effectiveAccountId + effectiveTier opts.
+Tier-derived test/live env switch follows OWNER's tier; legal-
+acceptance gate checks OWNER's pending acceptances. Audit + webhook
+fan-out follow OWNER. Test fixture exposes legalRepo + legalCatalog
+so tests can seed acceptances on non-calling accounts. 2 new tests.
+
+V-326e cycle now complete:
+
+- e1: POST /v1/sessions
+- e2: DELETE /v1/sessions/:id
+- e3: 5 session action endpoints + 1 read
+- e4: 3 profile writes
+- e5: 2 webhooks writes
+- e6: 3 api-keys writes (this slice)
+
+## V-333 — PlaywrightDriver scaffolding + self-hosted Mac runbook
+
+**Tier**: 1.
+
+**Why**: Founder asked for "preparing to open real browsers... on
+self-hosted on my mac". WebKit fork (Agent 1 repo) lands the
+production driver separately; PlaywrightDriver lets the founder
+exercise a real browser locally for E2E smoke testing without
+waiting on Agent 1.
+
+**What shipped**:
+
+- New PlaywrightDriver class wraps @playwright/test (already a
+  dev-dep). createSession + navigate + getState + capture
+  (screenshot only) wired; interact / wait / guiInput / capture
+  (state/pdf) throw DriverNotIntegratedError so the gap is loud.
+- Best-effort iPhone-archetype → viewport + UA mapping.
+- Configurable browser channel (webkit/chromium/firefox) +
+  headed/headless mode.
+- driver enum extends to ['mock', 'webkit', 'playwright'].
+- New env vars: PLAYWRIGHT_BROWSER, PLAYWRIGHT_HEADED.
+- New runbook docs/runbooks/self-hosted-mac-local.md with full
+  step-by-step for running the entire control plane locally.
+
+**Trade-offs**:
+
+- Playwright's WebKit channel is upstream WebKit; does NOT include
+  Driftstack source modifications. Adequate for non-stealth E2E;
+  insufficient for fingerprint quality evaluation.
+- DRIVER=playwright is dev/test only; production stays on
+  DRIVER=webkit (Agent 1's fork).
+
+## V-334 — GUI client SessionsHistoryView
+
+**Tier**: 1.
+
+Pre-V-334 the GUI sidebar's Sessions → History link routed to a
+NotYet placeholder. V-334 ships the actual view: terminated sessions
+sorted newest-first with id, archetype, lifetime, terminal timestamp,
+status badge. ErrorBanner with dismiss; refresh button (no auto-poll
+since past sessions don't move).
