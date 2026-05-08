@@ -9,11 +9,20 @@
 // to avoid pathological cases. Pagination via subsequent
 // `?since=<timestamp>` calls if more is needed (rare in practice).
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { ListAccountAuditLogQuerySchema } from '@driftstack/api-types';
 import type { AccountAuditEntryRow, AccountAuditService } from '../services/account-audit.js';
 import { BadRequestError } from '../lib/errors.js';
+import { resolveEffectiveAccount } from '../services/auth.js';
 import { z } from 'zod';
+
+const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';
+
+function readEffectiveAccountHeader(request: FastifyRequest): string | undefined {
+  const raw = request.headers[EFFECTIVE_ACCOUNT_HEADER];
+  if (Array.isArray(raw)) return raw[0];
+  return raw;
+}
 
 function publicEntry(row: AccountAuditEntryRow): Record<string, unknown> {
   return {
@@ -50,10 +59,16 @@ export function registerAccountAuditRoutes(
       const parsed = ListAccountAuditLogQuerySchema.safeParse(request.query ?? {});
       if (!parsed.success) throw new BadRequestError('Invalid query parameters.');
 
+      // V-330b — honor X-Driftstack-Account: a team member with a
+      // valid membership reads the owner's audit log. Read-only;
+      // both 'member' and 'admin' roles allowed.
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+
       const page = await accountAudit.list(ctx, {
         limit: parsed.data.limit,
         ...(parsed.data.cursor !== undefined ? { cursor: parsed.data.cursor } : {}),
         ...(parsed.data.action !== undefined ? { action: parsed.data.action } : {}),
+        ...(effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {}),
       });
 
       return {

@@ -353,6 +353,76 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     ]);
   });
 
+  it('GET /v1/account/audit-log returns owner audit entries when caller is a member + sets X-Driftstack-Account', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'admin',
+      },
+    ]);
+    // Seed: 1 caller-owned audit entry + 2 owner-owned.
+    await fx.accountAuditRepo.insert({
+      accountId: fx.accountId,
+      actorType: 'customer',
+      actorAccountId: fx.accountId,
+      actorKeyId: null,
+      action: 'account.login',
+      targetResourceId: null,
+      payload: { kind: 'self' },
+    });
+    await fx.accountAuditRepo.insert({
+      accountId: OWNER_ACCOUNT_ID,
+      actorType: 'customer',
+      actorAccountId: OWNER_ACCOUNT_ID,
+      actorKeyId: null,
+      action: 'account.login',
+      targetResourceId: null,
+      payload: { kind: 'owner-1' },
+    });
+    await fx.accountAuditRepo.insert({
+      accountId: OWNER_ACCOUNT_ID,
+      actorType: 'customer',
+      actorAccountId: OWNER_ACCOUNT_ID,
+      actorKeyId: null,
+      action: 'api_key.minted',
+      targetResourceId: null,
+      payload: { kind: 'owner-2' },
+    });
+
+    // No header → caller's own audit log.
+    const own = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(own.statusCode).toBe(200);
+    const ownBody = own.json<{
+      data: { account_id: string; payload: Record<string, unknown> | null }[];
+    }>();
+    expect(ownBody.data).toHaveLength(1);
+    expect(ownBody.data[0]!.account_id).toBe(`acc_${fx.accountId}`);
+
+    // With header → owner's audit log.
+    const owner = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    expect(owner.statusCode).toBe(200);
+    const ownerBody = owner.json<{
+      data: { account_id: string; payload: Record<string, unknown> | null }[];
+    }>();
+    expect(ownerBody.data).toHaveLength(2);
+    for (const row of ownerBody.data) {
+      expect(row.account_id).toBe(`acc_${OWNER_ACCOUNT_ID}`);
+    }
+  });
+
   it('GET /v1/profiles returns 403 when X-Driftstack-Account references a non-member owner', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
