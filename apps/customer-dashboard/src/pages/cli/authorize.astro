@@ -100,11 +100,14 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
     <div data-state="success" class="mt-8 hidden">
       <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-center text-sm text-emerald-900">
         <p class="font-medium">Desktop client authorized.</p>
-        <p class="mt-1 text-emerald-800">
-          You can return to the Driftstack desktop app — it will pick up the credentials
-          on the next poll.
+        <p class="mt-1 text-emerald-800" data-deep-link-status>
+          Returning you to the Driftstack desktop app…
         </p>
       </div>
+      <p class="mt-4 text-center text-xs text-slate-500" data-fallback-hint>
+        The desktop app should reopen automatically. If it doesn't, switch back to it
+        manually — it will pick up the credentials on the next poll.
+      </p>
       <a href="/api-keys" class="mt-6 block text-center text-sm text-oxblood-700 underline">
         View your API keys
       </a>
@@ -204,6 +207,25 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           )
           .then(() => {
             show('success');
+            // V-328e — fire the OS deep-link redirect to hand off the
+            // authorization to the desktop app's onOpenUrl listener
+            // (V-328). The polling fallback in browser-sign-in.ts
+            // continues to work for installs where the URL scheme
+            // registration didn't take. Brief delay so the user sees
+            // the success confirmation before the OS hand-off swap
+            // takes focus away from the browser.
+            window.setTimeout(() => {
+              try {
+                const target =
+                  'driftstack://auth/callback?code=' +
+                  encodeURIComponent(code) +
+                  '&state=' +
+                  encodeURIComponent(state);
+                window.location.assign(target);
+              } catch (_) {
+                /* swallow — fallback hint already visible */
+              }
+            }, 600);
           })
           .catch((err) => {
             showError(err && err.message ? err.message : 'Authorization failed.');
