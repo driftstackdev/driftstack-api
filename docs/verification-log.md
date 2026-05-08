@@ -18103,3 +18103,58 @@ the endpoint, updates preview from the response.
 Tests: 7 new integration tests on /v1/account/me/avatar (success,
 MIME reject, byte-cap reject, empty reject, bodyLimit reject,
 delete idempotency, 401 unauth). 1012 / 1012 tests pass.
+
+## V-353a — MFA design pre-check (Tier-3 BLOCKING)
+
+**Tier**: 3 (security architecture).
+
+`docs/architecture/v353-mfa-design.md` drafts the TOTP + recovery-
+codes scope for the V-301 catalog row. Surfaces 8 open questions for
+founder verdict (TOTP-only-v1, encryption-at-rest option A vs B,
+step-up scope, freshness window, enforcement posture, recovery-code
+count, GUI deferral, pricing-tier gating). Code on V-353b → V-353h
+paused until verdicts land. Per never_stop_rule the agent continues
+on parallel slices that don't share security-architecture surface.
+
+## V-354 — audit-log filter dropdown + load-more pagination
+
+**Tier**: 1.
+
+Backend already supported `?action=` + cursor pagination (V-216);
+this slice surfaces both. 16-option filter dropdown (logins,
+password changes, API key lifecycle, sessions, subscription
+changes, webhooks, team events) + Load-more button against
+`next_cursor`. Closes the V-303 catalog gap (per-user security
+audit surface) via filtered presets without a new page. ACTION_LABEL
+extended with five missing labels (webhook_endpoint.updated,
+webhook_delivery.replayed, three team events).
+
+## V-355 — /v1/account/web-sessions list + revoke
+
+**Tier**: 1.
+
+Backend: `AuthFlowsRepo.listActiveWebSessionsForAccount`,
+`findWebSessionByIdForAccount`, `revokeAllWebSessionsExcept`. New
+service methods on AuthFlowsService (audit emit, auth-cache flush
+on revoke). Three new endpoints:
+
+- GET /v1/account/web-sessions — list active rows with `current` flag
+- DELETE /v1/account/web-sessions/:id — single revoke (404 cross-account)
+- DELETE /v1/account/web-sessions?keep=current — bulk; refuses without
+  the explicit `keep=current` param + refuses if caller is API-key
+  authed (no current session to keep)
+
+User-agent strings reduced to coarse OS + browser buckets via
+`bucketUserAgent` (macOS · Safari, Windows · Chrome, etc.) — full UA
+is fingerprintable + version-rich. IP omitted entirely from the
+response, matching the existing /settings privacy comment.
+
+UI: customer-dashboard /settings "Active sign-ins" section live-
+wired (replaces the V-217 mock entry). Per-row revoke button with
+confirm() guard; "Sign out everywhere else" bulk button when ≥1
+non-current session exists.
+
+Tests: 8 new integration tests (list w/ multiple UAs, current
+marker, 401 unauth, single revoke, malformed id 400, cross-account
+404, bulk revoke 200 + verifies other tokens 401, missing-confirm
+400, API-key-caller 400). 1020 / 1020 tests pass.

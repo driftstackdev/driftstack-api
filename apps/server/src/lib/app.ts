@@ -47,6 +47,7 @@ import type { BillingService } from '../services/billing.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import { registerAccountMeRoutes } from '../routes/account-me.js';
+import { registerAccountWebSessionsRoutes } from '../routes/account-web-sessions.js';
 import type { ApiKeysRepo } from '../services/api-keys.js';
 import type { Driver } from '../drivers/types.js';
 import type { R2 } from './r2.js';
@@ -354,6 +355,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       service: deps.authFlowsService,
       rateLimitStore: deps.rateLimitStore,
     });
+    // V-355 — customer-facing web-session list + revoke. Lives next to
+    // the auth flows since it shares the AuthFlowsService surface.
+    registerAccountWebSessionsRoutes(app, { service: deps.authFlowsService });
   }
   if (deps.cliAuthorizeService !== undefined) {
     registerAuthCliRoutes(app, {

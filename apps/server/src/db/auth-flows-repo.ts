@@ -5,7 +5,7 @@
 // + `web_sessions` + the new `accounts.password_hash` /
 // `accounts.email_verified_at` columns.
 
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm';
 import type {
   AuthFlowAccountRow,
   AuthFlowKind,
@@ -220,5 +220,44 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
       .update(webSessions)
       .set({ revokedAt: at })
       .where(and(eq(webSessions.id, id), isNull(webSessions.revokedAt)));
+  }
+
+  async listActiveWebSessionsForAccount(accountId: string, now: Date): Promise<WebSessionRow[]> {
+    const rows = await this.database.db
+      .select()
+      .from(webSessions)
+      .where(
+        and(
+          eq(webSessions.accountId, accountId),
+          isNull(webSessions.revokedAt),
+          gt(webSessions.expiresAt, now),
+        ),
+      )
+      .orderBy(desc(webSessions.lastUsedAt));
+    return rows.map(toWebSessionRow);
+  }
+
+  async findWebSessionByIdForAccount(id: string, accountId: string): Promise<WebSessionRow | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(webSessions)
+      .where(and(eq(webSessions.id, id), eq(webSessions.accountId, accountId)))
+      .limit(1);
+    return row ? toWebSessionRow(row) : null;
+  }
+
+  async revokeAllWebSessionsExcept(accountId: string, exceptId: string, at: Date): Promise<number> {
+    const rows = await this.database.db
+      .update(webSessions)
+      .set({ revokedAt: at })
+      .where(
+        and(
+          eq(webSessions.accountId, accountId),
+          isNull(webSessions.revokedAt),
+          ne(webSessions.id, exceptId),
+        ),
+      )
+      .returning({ id: webSessions.id });
+    return rows.length;
   }
 }

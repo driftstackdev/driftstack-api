@@ -139,30 +139,36 @@ const EMAIL_EVENTS = [
       </div>
     </section>
 
-    <!-- Sessions / devices -->
-    <section class="dashboard-card mt-6">
+    <!-- Sessions / devices (V-355) -->
+    <section class="dashboard-card mt-6" data-region="web-sessions">
       <h2 class="text-lg font-semibold text-slate-900">Active sign-ins</h2>
       <p class="mt-2 text-sm text-slate-500">
         Browser sessions where you're signed in to the dashboard. Distinct
         from your driver sessions on /sessions.
       </p>
-      <ul class="mt-6 divide-y divide-slate-100">
-        <li class="flex items-start justify-between gap-6 py-3">
-          <div>
-            <p class="text-sm font-medium text-slate-900">macOS · Safari · current</p>
-            <p class="mt-1 text-xs text-slate-500">
-              Signed in {fmtIso('2026-05-04T08:00:00Z')} · IP omitted from
-              dashboard for privacy
-            </p>
-          </div>
-          <span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
-            current
-          </span>
+      <ul class="mt-6 divide-y divide-slate-100" data-list="web-sessions">
+        <li class="py-3 text-sm text-slate-500" data-field="web-sessions-empty">
+          Sign in to load your active sessions.
         </li>
       </ul>
-      <p class="mt-4 text-xs text-slate-400">
-        Sign-in tracking endpoint lands as a follow-up slice; current entry is
-        scaffolding.
+      <div class="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
+        <p
+          data-field="web-sessions-status"
+          class="text-xs text-slate-500"
+        ></p>
+        <button
+          type="button"
+          data-button="web-sessions-revoke-all"
+          class="btn-secondary text-sm text-red-700"
+          hidden
+        >
+          Sign out everywhere else
+        </button>
+      </div>
+      <p class="mt-3 text-xs text-slate-400">
+        IP omitted for privacy. The "current" session is the one you're using
+        right now and can't be revoked from this list — sign out from the menu
+        instead.
       </p>
     </section>
 
@@ -715,6 +721,137 @@ const EMAIL_EVENTS = [
           });
       }
 
+      // V-355 — active sign-ins live wire.
+      const webSessionsList = root.querySelector('[data-list="web-sessions"]');
+      const webSessionsEmpty = root.querySelector('[data-field="web-sessions-empty"]');
+      const webSessionsStatus = root.querySelector('[data-field="web-sessions-status"]');
+      const webSessionsRevokeAllBtn = root.querySelector(
+        '[data-button="web-sessions-revoke-all"]',
+      );
+
+      function fmtRelative(iso) {
+        if (!iso) return '—';
+        const t = new Date(iso).getTime();
+        const ms = Date.now() - t;
+        if (ms < 60_000) return 'just now';
+        const min = Math.floor(ms / 60_000);
+        if (min < 60) return min + 'm ago';
+        const hr = Math.floor(min / 60);
+        if (hr < 24) return hr + 'h ago';
+        const d = Math.floor(hr / 24);
+        return d + 'd ago';
+      }
+
+      function renderWebSessions(sessions) {
+        if (!webSessionsList) return;
+        if (sessions.length === 0) {
+          webSessionsList.innerHTML =
+            '<li class="py-3 text-sm text-slate-500">No active sign-ins.</li>';
+          if (webSessionsRevokeAllBtn) webSessionsRevokeAllBtn.hidden = true;
+          if (webSessionsStatus) webSessionsStatus.textContent = '';
+          return;
+        }
+        webSessionsList.innerHTML = sessions
+          .map((s) => {
+            const label =
+              escapeHtml(s.os) + ' · ' + escapeHtml(s.browser) + (s.current ? ' · current' : '');
+            const meta =
+              'Last used ' +
+              escapeHtml(fmtRelative(s.last_used_at)) +
+              ' · expires ' +
+              escapeHtml(fmtIso(s.expires_at));
+            const action = s.current
+              ? '<span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">current</span>'
+              : '<button type="button" class="btn-secondary text-sm text-red-700" data-revoke-id="' +
+                escapeHtml(s.id) +
+                '">Revoke</button>';
+            return (
+              '<li class="flex items-start justify-between gap-6 py-3">' +
+              '<div><p class="text-sm font-medium text-slate-900">' +
+              label +
+              '</p><p class="mt-1 text-xs text-slate-500">' +
+              meta +
+              '</p></div>' +
+              action +
+              '</li>'
+            );
+          })
+          .join('');
+        const others = sessions.filter((s) => !s.current).length;
+        if (webSessionsRevokeAllBtn) webSessionsRevokeAllBtn.hidden = others === 0;
+        if (webSessionsStatus)
+          webSessionsStatus.textContent =
+            sessions.length + (sessions.length === 1 ? ' active session' : ' active sessions');
+      }
+
+      function loadWebSessions() {
+        if (!token || !webSessionsList) return;
+        if (webSessionsEmpty) webSessionsEmpty.classList.add('hidden');
+        authedFetch('/v1/account/web-sessions', { method: 'GET' })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => renderWebSessions(body.data || []))
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't load active sign-ins (" + msg + ').');
+          });
+      }
+
+      function revokeWebSession(id) {
+        authedFetch('/v1/account/web-sessions/' + encodeURIComponent(id), {
+          method: 'DELETE',
+        })
+          .then((r) => {
+            if (r.status === 204 || r.ok) return null;
+            return Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then(() => {
+            showBanner('Session revoked.');
+            setTimeout(hideBanner, 2000);
+            loadWebSessions();
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't revoke session (" + msg + ').');
+          });
+      }
+
+      if (webSessionsList) {
+        webSessionsList.addEventListener('click', (ev) => {
+          const target = ev.target;
+          if (!target || !target.closest) return;
+          const btn = target.closest('[data-revoke-id]');
+          if (!btn) return;
+          const id = btn.getAttribute('data-revoke-id');
+          if (!id) return;
+          if (!window.confirm('Revoke this sign-in? It will need to sign in again.')) return;
+          revokeWebSession(id);
+        });
+      }
+
+      if (webSessionsRevokeAllBtn) {
+        webSessionsRevokeAllBtn.addEventListener('click', () => {
+          if (
+            !window.confirm(
+              'Sign out of every other browser? You will stay signed in here.',
+            )
+          )
+            return;
+          authedFetch('/v1/account/web-sessions?keep=current', { method: 'DELETE' })
+            .then((r) =>
+              r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)),
+            )
+            .then((body) => {
+              showBanner('Signed out of ' + (body.revoked || 0) + ' other sessions.');
+              setTimeout(hideBanner, 3000);
+              loadWebSessions();
+            })
+            .catch((err) => {
+              const msg = err && err.message ? err.message : 'network error';
+              showBanner("Couldn't bulk-revoke (" + msg + ').');
+            });
+        });
+      }
+
       // V-079 — change password trigger via password-reset request.
       function changePassword() {
         if (!token) {
@@ -760,6 +897,7 @@ const EMAIL_EVENTS = [
 
       loadEmailPrefs();
       loadAudit();
+      loadWebSessions();
     })();
   </script>
 </DashboardLayout>

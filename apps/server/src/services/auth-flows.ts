@@ -110,6 +110,25 @@ export interface AuthFlowsRepo {
   findActiveWebSession(args: { tokenHash: string; now: Date }): Promise<WebSessionRow | null>;
   touchWebSession(id: string, at: Date): Promise<void>;
   revokeWebSession(id: string, at: Date): Promise<void>;
+  /**
+   * V-355 — list non-revoked, non-expired web sessions for the given
+   * account. Sorted by lastUsedAt desc so the active one(s) sort
+   * first. Caller is responsible for matching `currentTokenHash` to
+   * the calling request to mark which row is "this device".
+   */
+  listActiveWebSessionsForAccount(accountId: string, now: Date): Promise<WebSessionRow[]>;
+  /**
+   * V-355 — find a web-session by id scoped to an account; null if
+   * absent or owned by another account. Used for the revoke handler
+   * so callers can't burn another account's session by id.
+   */
+  findWebSessionByIdForAccount(id: string, accountId: string): Promise<WebSessionRow | null>;
+  /**
+   * V-355 — bulk-revoke every active web session for the account
+   * EXCEPT the one matching `exceptId`. Used by "Sign out everywhere
+   * else." Returns count of rows updated.
+   */
+  revokeAllWebSessionsExcept(accountId: string, exceptId: string, at: Date): Promise<number>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -552,6 +571,79 @@ export class AuthFlowsService {
     await this.emitAuditBestEffort(row.accountId, 'account.logout', {
       session_id: row.id,
     });
+  }
+
+  // ──────────────────── V-355: web-session list / revoke ────────────────────
+
+  /**
+   * V-355 — list the calling account's currently-active web sessions
+   * for the dashboard's "Active sign-ins" section. Filtered to
+   * non-revoked + non-expired rows. Tokens are NOT returned (token-
+   * hash is derived from the plaintext that the caller already has;
+   * exposing it serves no purpose and risks accidental log capture).
+   */
+  async listActiveWebSessions(accountId: string, now = new Date()): Promise<WebSessionRow[]> {
+    return this.repo.listActiveWebSessionsForAccount(accountId, now);
+  }
+
+  /**
+   * V-355 — revoke a single web session by id, scoped to an account.
+   * Returns false when the session doesn't exist or belongs to a
+   * different account (route layer turns false into 404). Already-
+   * revoked sessions short-circuit to true (idempotent). On success,
+   * invalidates the auth cache so the next request from that token
+   * misses and re-resolves to the now-revoked row.
+   */
+  async revokeWebSessionForAccount(
+    accountId: string,
+    sessionId: string,
+    now = new Date(),
+  ): Promise<boolean> {
+    const row = await this.repo.findWebSessionByIdForAccount(sessionId, accountId);
+    if (row === null) return false;
+    if (row.revokedAt === null) {
+      await this.repo.revokeWebSession(row.id, now);
+      if (this.authCache) {
+        try {
+          await this.authCache.invalidateAccount(accountId);
+        } catch {
+          /* cache TTLs out within 30s */
+        }
+      }
+      await this.emitAuditBestEffort(accountId, 'account.logout', {
+        session_id: row.id,
+        revoked_via: 'self_dashboard',
+      });
+    }
+    return true;
+  }
+
+  /**
+   * V-355 — bulk-revoke every web session for the account except the
+   * one the caller is currently using. Used by "Sign out everywhere
+   * else." Returns the count of rows revoked.
+   */
+  async revokeAllWebSessionsExceptCurrent(
+    accountId: string,
+    currentSessionId: string,
+    now = new Date(),
+  ): Promise<number> {
+    const n = await this.repo.revokeAllWebSessionsExcept(accountId, currentSessionId, now);
+    if (n > 0 && this.authCache) {
+      try {
+        await this.authCache.invalidateAccount(accountId);
+      } catch {
+        /* cache TTLs out within 30s */
+      }
+    }
+    if (n > 0) {
+      await this.emitAuditBestEffort(accountId, 'account.logout', {
+        revoked_via: 'self_dashboard_revoke_all',
+        revoked_count: n,
+        kept_session_id: currentSessionId,
+      });
+    }
+    return n;
   }
 
   // ──────────────────── helpers ────────────────────

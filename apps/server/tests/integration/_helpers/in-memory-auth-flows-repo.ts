@@ -174,4 +174,36 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     this.webSessions.set(id, { ...row, revokedAt: at });
     return Promise.resolve();
   }
+
+  // ── V-355 — list / lookup / bulk-revoke per account ───────────────
+  listActiveWebSessionsForAccount(accountId: string, now: Date): Promise<WebSessionRow[]> {
+    const out: WebSessionRow[] = [];
+    for (const row of this.webSessions.values()) {
+      if (row.accountId !== accountId) continue;
+      if (row.revokedAt !== null) continue;
+      if (row.expiresAt.getTime() <= now.getTime()) continue;
+      out.push(row);
+    }
+    out.sort((a, b) => b.lastUsedAt.getTime() - a.lastUsedAt.getTime());
+    return Promise.resolve(out);
+  }
+
+  findWebSessionByIdForAccount(id: string, accountId: string): Promise<WebSessionRow | null> {
+    const row = this.webSessions.get(id);
+    if (!row) return Promise.resolve(null);
+    if (row.accountId !== accountId) return Promise.resolve(null);
+    return Promise.resolve(row);
+  }
+
+  revokeAllWebSessionsExcept(accountId: string, exceptId: string, at: Date): Promise<number> {
+    let n = 0;
+    for (const row of this.webSessions.values()) {
+      if (row.accountId !== accountId) continue;
+      if (row.id === exceptId) continue;
+      if (row.revokedAt !== null) continue;
+      this.webSessions.set(row.id, { ...row, revokedAt: at });
+      n++;
+    }
+    return Promise.resolve(n);
+  }
 }
