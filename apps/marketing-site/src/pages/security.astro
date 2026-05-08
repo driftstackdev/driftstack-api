@@ -95,10 +95,29 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </p>
         </div>
 
-        <!-- Pillar 5 — full width -->
+        <!-- Pillar 5 -->
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+            05 · Team RBAC
+          </p>
+          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+            Admin / member roles, scope-gated writes.
+          </h2>
+          <p class="mt-3 text-slate-600">
+            Team members read the owner's resources but only admin-role
+            members can write. Sessions, profiles, webhooks, API keys,
+            email preferences — every write route enforces the role
+            check at the route layer + audit-logs the actor (member id)
+            separately from the resource owner. Team owners review who
+            did what on their account at any time via
+            <code class="font-mono">/v1/account/audit-log</code>.
+          </p>
+        </div>
+
+        <!-- Pillar 6 — full width -->
         <div class="md:col-span-2">
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
-            05 · No-customer-data-access posture
+            06 · No-customer-data-access posture
           </p>
           <h2 class="mt-3 text-2xl font-semibold text-slate-900">
             Driftstack staff cannot read your sessions.
