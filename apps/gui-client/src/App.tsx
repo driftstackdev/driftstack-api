@@ -17,6 +17,7 @@ import { ProfilesView } from './views/ProfilesView';
 import { ProxiesView } from './views/ProxiesView';
 import { RecordingPlayerView } from './views/RecordingPlayerView';
 import { RecordingsView } from './views/RecordingsView';
+import { FleetView } from './views/FleetView';
 import { SessionsHistoryView } from './views/SessionsHistoryView';
 import { SessionsView } from './views/SessionsView';
 import { SettingsView } from './views/SettingsView';
@@ -145,17 +146,8 @@ function CurrentView({
     case 'sessions-history':
       return <SessionsHistoryView />;
     case 'fleet':
-      return <NotYet label={view.kind} />;
+      return <FleetView />;
   }
-}
-
-function NotYet({ label }: { label: string }): JSX.Element {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center">
-      <span className="section-label">{label}</span>
-      <p className="max-w-md text-sm text-ink-secondary">Lands in a later GUI phase.</p>
-    </div>
-  );
 }
 
 // ─── chrome ───────────────────────────────────────────────────────
