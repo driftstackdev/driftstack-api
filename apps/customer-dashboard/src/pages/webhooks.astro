@@ -74,8 +74,119 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           <code class="font-mono">verifyWebhookSignature</code> helper.
         </p>
       </div>
-      <a href="#new" class="btn-primary shrink-0">New endpoint</a>
+      <button type="button" data-show-create class="btn-primary shrink-0">New endpoint</button>
     </header>
+
+    <!--
+      V-347 — Create-endpoint form. Hidden by default; reveals when
+      "New endpoint" is clicked. Posts to POST /v1/webhooks. On
+      success the secret is shown ONCE — same pattern as the V-296
+      api-key reveal pane.
+    -->
+    <div data-create-wrap class="mb-8 hidden rounded-lg border border-slate-200 bg-white p-6">
+      <h2 class="text-lg font-semibold text-slate-900">New webhook endpoint</h2>
+      <form data-create-form class="mt-4 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700" for="webhook-url">
+            URL
+          </label>
+          <input
+            id="webhook-url"
+            name="url"
+            type="url"
+            required
+            placeholder="https://hooks.example.com/driftstack"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+          />
+          <p class="mt-1 text-xs text-slate-500">
+            HTTPS required. The endpoint must respond 2xx within 10s for delivery to count
+            as successful.
+          </p>
+        </div>
+        <div>
+          <span class="block text-sm font-medium text-slate-700">Events to subscribe to</span>
+          <div class="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-slate-700">
+            <label class="inline-flex items-center gap-2">
+              <input type="checkbox" name="event" value="session.completed" checked
+                class="rounded border-slate-300 text-oxblood-700 focus:ring-oxblood-700"
+              />
+              <span class="font-mono text-xs">session.completed</span>
+            </label>
+            <label class="inline-flex items-center gap-2">
+              <input type="checkbox" name="event" value="session.failed"
+                class="rounded border-slate-300 text-oxblood-700 focus:ring-oxblood-700"
+              />
+              <span class="font-mono text-xs">session.failed</span>
+            </label>
+            <label class="inline-flex items-center gap-2">
+              <input type="checkbox" name="event" value="api_key.revoked"
+                class="rounded border-slate-300 text-oxblood-700 focus:ring-oxblood-700"
+              />
+              <span class="font-mono text-xs">api_key.revoked</span>
+            </label>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700" for="webhook-description">
+            Description (optional)
+          </label>
+          <input
+            id="webhook-description"
+            name="description"
+            type="text"
+            placeholder="production hook for the EU region"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+          />
+        </div>
+        <p
+          data-create-error
+          class="hidden rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        ></p>
+        <div class="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <button
+            type="button"
+            data-create-cancel
+            class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            data-create-submit
+            class="btn-primary"
+          >
+            Create endpoint
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!--
+      Post-create reveal pane — the secret is shown ONCE. Same posture
+      as the V-296 api-key reveal.
+    -->
+    <div
+      data-create-reveal
+      class="mb-8 hidden rounded-lg border border-emerald-200 bg-emerald-50 p-6"
+    >
+      <h2 class="text-lg font-semibold text-emerald-900">Endpoint created</h2>
+      <p class="mt-1 text-sm text-emerald-800">
+        Copy this signing secret now — it won't be shown again. Use it with the SDK's
+        <code class="font-mono">verifyWebhookSignature</code> helper to authenticate
+        incoming deliveries.
+      </p>
+      <pre
+        data-reveal-secret
+        class="mt-3 overflow-x-auto rounded border border-emerald-200 bg-white px-3 py-2 font-mono text-xs text-slate-900"
+      ></pre>
+      <button
+        type="button"
+        data-reveal-dismiss
+        class="btn-secondary mt-4"
+      >
+        I've copied it
+      </button>
+    </div>
 
     <div
       data-empty
@@ -203,6 +314,111 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       const ul = root.querySelector('[data-list]');
       const empty = root.querySelector('[data-empty]');
       const token = localStorage.getItem('ds_web_session_token');
+
+      // V-347 — wire the create form.
+      const showCreateBtn = root.querySelector('[data-show-create]');
+      const createWrap = root.querySelector('[data-create-wrap]');
+      const createForm = root.querySelector('[data-create-form]');
+      const createCancel = root.querySelector('[data-create-cancel]');
+      const createSubmit = root.querySelector('[data-create-submit]');
+      const createError = root.querySelector('[data-create-error]');
+      const createReveal = root.querySelector('[data-create-reveal]');
+      const revealSecret = root.querySelector('[data-reveal-secret]');
+      const revealDismiss = root.querySelector('[data-reveal-dismiss]');
+
+      function showCreate() {
+        if (!token) {
+          showBanner('Sign in to create webhook endpoints.');
+          return;
+        }
+        if (createWrap) createWrap.classList.remove('hidden');
+        if (createReveal) createReveal.classList.add('hidden');
+      }
+      function hideCreate() {
+        if (createWrap) createWrap.classList.add('hidden');
+        if (createForm) createForm.reset();
+        if (createError) {
+          createError.classList.add('hidden');
+          createError.textContent = '';
+        }
+      }
+      function showCreateError(msg) {
+        if (!createError) return;
+        createError.textContent = msg;
+        createError.classList.remove('hidden');
+      }
+
+      if (showCreateBtn) showCreateBtn.addEventListener('click', showCreate);
+      if (createCancel) createCancel.addEventListener('click', hideCreate);
+      if (revealDismiss) {
+        revealDismiss.addEventListener('click', () => {
+          if (createReveal) createReveal.classList.add('hidden');
+        });
+      }
+      if (createForm) {
+        createForm.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          if (createError) {
+            createError.classList.add('hidden');
+            createError.textContent = '';
+          }
+          const fd = new FormData(createForm);
+          const url = (fd.get('url') || '').toString().trim();
+          const description = (fd.get('description') || '').toString().trim();
+          const events = fd.getAll('event').map((v) => v.toString());
+          if (!url) {
+            showCreateError('URL is required.');
+            return;
+          }
+          if (events.length === 0) {
+            showCreateError('Pick at least one event.');
+            return;
+          }
+          if (createSubmit) {
+            createSubmit.disabled = true;
+            createSubmit.textContent = 'Creating…';
+          }
+          fetch(apiBaseUrl + '/v1/webhooks', {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              authorization: 'Bearer ' + token,
+              ...(typeof window.driftstackActAsHeaders === 'function'
+                ? window.driftstackActAsHeaders()
+                : {}),
+            },
+            body: JSON.stringify({
+              url: url,
+              events: events,
+              description: description.length > 0 ? description : null,
+            }),
+          })
+            .then((r) =>
+              r.ok
+                ? r.json()
+                : r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+            )
+            .then((body) => {
+              hideCreate();
+              if (createReveal && revealSecret) {
+                revealSecret.textContent = body.secret || '(no secret returned)';
+                createReveal.classList.remove('hidden');
+              }
+              // Reload to refresh the endpoint list.
+              window.setTimeout(() => window.location.reload(), 8000);
+            })
+            .catch((err) => {
+              showCreateError(err && err.message ? err.message : 'Failed to create endpoint.');
+              if (createSubmit) {
+                createSubmit.disabled = false;
+                createSubmit.textContent = 'Create endpoint';
+              }
+            });
+        });
+      }
 
       function showBanner(text) {
         if (!banner) return;
