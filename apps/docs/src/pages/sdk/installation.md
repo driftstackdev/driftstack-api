@@ -60,7 +60,19 @@ client.profiles.delete(id);
 
 client.apiKeys.create(body); // requires admin scope
 client.apiKeys.list();
+client.apiKeys.rotate(id); // V-296: 24-hour grace on prior key
 client.apiKeys.revoke(id); // requires admin scope
+
+client.webhooks.create(body);
+client.webhooks.list();
+client.webhooks.listDeliveries(webhookId, query?);
+client.webhooks.replayDelivery(deliveryId); // V-307
+
+client.team.invite(email, opts?); // V-298
+client.team.listMembers();
+client.team.listInvites();
+client.team.acceptInvite(token);
+client.team.removeMember(membershipId);
 
 client.usage.current();
 client.account.me();
@@ -110,14 +122,15 @@ asyncio.run(main())
 
 **Resources:**
 
-| Accessor          | Methods                                                                                    |
-| ----------------- | ------------------------------------------------------------------------------------------ |
-| `client.sessions` | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `destroy` |
-| `client.profiles` | `create`, `list`, `get`, `delete`                                                          |
-| `client.api_keys` | `create`, `list`, `revoke`                                                                 |
-| `client.usage`    | `current_period`                                                                           |
-| `client.webhooks` | `create`, `list`, `get`, `delete`, `list_deliveries`                                       |
-| `client.account`  | `me`                                                                                       |
+| Accessor          | Methods                                                                                               |
+| ----------------- | ----------------------------------------------------------------------------------------------------- |
+| `client.sessions` | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `destroy`            |
+| `client.profiles` | `create`, `list`, `get`, `delete`                                                                     |
+| `client.api_keys` | `create`, `list`, `rotate` (V-296), `revoke`                                                          |
+| `client.usage`    | `current_period`                                                                                      |
+| `client.webhooks` | `create`, `list`, `get`, `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` (V-307) |
+| `client.team`     | `invite`, `list_members`, `list_invites`, `accept_invite`, `remove_member` (V-298)                    |
+| `client.account`  | `me`                                                                                                  |
 
 Inputs accept either a Pydantic model OR a plain `dict`. Outputs are typed Pydantic models.
 
@@ -167,13 +180,15 @@ The HTTP API and the SDKs version independently. SDKs at any version stay compat
 
 ## What ships
 
-| Capability | TS  | Python | Go  | Notes                                  |
-| ---------- | --- | ------ | --- | -------------------------------------- |
-| Sessions   | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait     |
-| Profiles   | ✅  | ✅     | ✅  | Create, list, get, delete              |
-| API keys   | ✅  | ✅     | ✅  | Admin scope required for create/revoke |
-| Webhooks   | ✅  | ✅     | ✅  | CRUD + delivery introspection          |
-| Usage      | ✅  | ✅     | ✅  | Current-period read                    |
+| Capability   | TS  | Python | Go  | Notes                                                    |
+| ------------ | --- | ------ | --- | -------------------------------------------------------- |
+| Sessions     | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait                       |
+| Profiles     | ✅  | ✅     | ✅  | Create, list, get, delete                                |
+| API keys     | ✅  | ✅     | ✅  | Includes `rotate` with 24h grace (V-296)                 |
+| Webhooks     | ✅  | ✅     | ✅  | CRUD + delivery introspection + `replayDelivery` (V-307) |
+| Team RBAC    | ✅  | ✅     | ✅  | Invite/accept/list/remove (V-298)                        |
+| Usage        | ✅  | ✅     | ✅  | Current-period read                                      |
+| Account self | ✅  | ✅     | ✅  | `me` returns tier + concurrent + profile counts          |
 
 ## Next steps
 
