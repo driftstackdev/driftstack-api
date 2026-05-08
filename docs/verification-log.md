@@ -19205,3 +19205,25 @@ Now the entire /v1/account/me self-edit surface (read + edit +
 avatar upload + avatar clear) is in the OpenAPI spec; Scalar UI
 
 - SDK regen pick up all four routes on next pass.
+
+## V-388 — V-294 catalog status refresh for V-298a/b + V-312 + V-313
+
+**Tier**: 1 (catalog hygiene; closes the SHIPPED-status drift on
+features that landed since the last catalog review).
+
+`docs/architecture/v294-feature-catalog.md` status updates:
+
+- **Profile state versioning + snapshots** (line 145): DEFERRED →
+  SHIPPED (V-312); legal updates noted (privacy §3.1 + §9 + DPA
+  Annex 3 V-373/V-384).
+- **Profile cloning** (line 240): DEFERRED → SHIPPED (V-313 +
+  V-379 SDK ports).
+- **Profile snapshot management** (line 241): DEFERRED → SHIPPED
+  (V-312 + V-375 dashboard page); legal updates noted.
+- **/settings account + slug + region** (line 280): DEFERRED →
+  SHIPPED (V-298a + V-298b); legal updates noted.
+
+Counts in the aggregate-summary table (SHIPPED 87 → 91, DEFERRED
+41 → 37) stay accurate at the slice level even if the cumulative
+totals lag. The line-level status is what feeds the priority
+sequencing logic in this file.

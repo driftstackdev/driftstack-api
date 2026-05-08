@@ -139,16 +139,16 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 
 **Persistent profiles** (planning file 17 + 35):
 
-| Feature                                         | Status       | Slice   | Tier-1h | Legal updates         |
-| ----------------------------------------------- | ------------ | ------- | ------- | --------------------- |
-| Profile CRUD (create / list / get / delete)     | SHIPPED      | V-081   | —       | —                     |
-| Profile state versioning + snapshots            | DEFERRED     | V-312   | 6       | —                     |
-| Profile-to-session binding                      | IN-FLIGHT    | partial | 3       | —                     |
-| Profile state encryption + S3 storage           | UNDISCOVERED | future  | 8       | DPA Annex 3 + privacy |
-| Profile session history audit                   | SHIPPED      | V-216   | —       | —                     |
-| Profile cleanup operations                      | DEFERRED     | V-314   | 4       | —                     |
-| Cross-region profile portability                | OUT-OF-SCOPE | post-v1 | n/a     | —                     |
-| Concurrent session prevention (exclusive lease) | UNDISCOVERED | future  | 4       | —                     |
+| Feature                                         | Status       | Slice   | Tier-1h | Legal updates                                 |
+| ----------------------------------------------- | ------------ | ------- | ------- | --------------------------------------------- |
+| Profile CRUD (create / list / get / delete)     | SHIPPED      | V-081   | —       | —                                             |
+| Profile state versioning + snapshots            | SHIPPED      | V-312   | —       | privacy §3.1 + §9 + DPA Annex 3 (V-373/V-384) |
+| Profile-to-session binding                      | IN-FLIGHT    | partial | 3       | —                                             |
+| Profile state encryption + S3 storage           | UNDISCOVERED | future  | 8       | DPA Annex 3 + privacy                         |
+| Profile session history audit                   | SHIPPED      | V-216   | —       | —                                             |
+| Profile cleanup operations                      | DEFERRED     | V-314   | 4       | —                                             |
+| Cross-region profile portability                | OUT-OF-SCOPE | post-v1 | n/a     | —                                             |
+| Concurrent session prevention (exclusive lease) | UNDISCOVERED | future  | 4       | —                                             |
 
 **Behavioral customization** (planning file 05 + 35):
 
@@ -232,16 +232,16 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 
 **Persistent profile management UI** (planning file 47):
 
-| Feature                             | Status       | Slice  | Tier-1h | Legal updates     |
-| ----------------------------------- | ------------ | ------ | ------- | ----------------- |
-| Profile list + search / filter      | SHIPPED      | V-284  | —       | —                 |
-| Profile detail view                 | IN-FLIGHT    | V-NNN+ | 4       | —                 |
-| Profile creation form               | SHIPPED      | V-284  | —       | —                 |
-| Profile cloning                     | DEFERRED     | V-313  | 3       | —                 |
-| Profile snapshot management         | DEFERRED     | V-312  | 6       | —                 |
-| Profile state cleanup UI            | DEFERRED     | V-314  | 4       | —                 |
-| Profile archiving (30-day recovery) | UNDISCOVERED | V-NNN+ | 6       | privacy retention |
-| Profile sharing within team         | UNDISCOVERED | V-NNN+ | 8       | privacy           |
+| Feature                             | Status       | Slice         | Tier-1h | Legal updates      |
+| ----------------------------------- | ------------ | ------------- | ------- | ------------------ |
+| Profile list + search / filter      | SHIPPED      | V-284         | —       | —                  |
+| Profile detail view                 | IN-FLIGHT    | V-NNN+        | 4       | —                  |
+| Profile creation form               | SHIPPED      | V-284         | —       | —                  |
+| Profile cloning                     | SHIPPED      | V-313 + V-379 | —       | —                  |
+| Profile snapshot management         | SHIPPED      | V-312 + V-375 | —       | privacy §9 (V-373) |
+| Profile state cleanup UI            | DEFERRED     | V-314         | 4       | —                  |
+| Profile archiving (30-day recovery) | UNDISCOVERED | V-NNN+        | 6       | privacy retention  |
+| Profile sharing within team         | UNDISCOVERED | V-NNN+        | 8       | privacy            |
 
 **Workflows + recording** (planning file 47):
 
@@ -265,24 +265,24 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 
 **API keys / webhooks / billing / usage / team / settings UI** (planning file 47):
 
-| Feature                                     | Status       | Slice  | Tier-1h | Legal updates |
-| ------------------------------------------- | ------------ | ------ | ------- | ------------- |
-| /api-keys CRUD                              | SHIPPED      | V-270  | —       | —             |
-| /webhooks list + status                     | IN-FLIGHT    | V-310  | 3       | —             |
-| /webhooks delivery history                  | DEFERRED     | V-311  | 4       | —             |
-| /usage summary + visualization              | IN-FLIGHT    | V-299  | 4       | —             |
-| /usage historical trends + cost projections | DEFERRED     | V-299  | 6       | —             |
-| /billing plan picker + payment methods      | IN-FLIGHT    | V-300  | 4       | —             |
-| /billing portal redirect                    | DEFERRED     | V-300  | 3       | —             |
-| /billing invoice history + PDF download     | DEFERRED     | V-300  | 4       | privacy       |
-| /team member list + invitation              | UNDISCOVERED | V-NNN+ | 8       | privacy + ToS |
-| /team RBAC                                  | UNDISCOVERED | V-NNN+ | 6       | ToS           |
-| /settings account + slug + region           | DEFERRED     | V-298  | 4       | —             |
-| /settings personal profile                  | DEFERRED     | V-302  | 4       | privacy       |
-| /settings security (password / MFA)         | DEFERRED     | V-301  | 8       | privacy       |
-| /settings active sessions list + revoke     | DEFERRED     | V-303  | 4       | —             |
-| /settings security audit log                | DEFERRED     | V-303  | 3       | —             |
-| /settings notification preferences          | DEFERRED     | V-309  | 4       | privacy       |
+| Feature                                     | Status       | Slice           | Tier-1h | Legal updates                                  |
+| ------------------------------------------- | ------------ | --------------- | ------- | ---------------------------------------------- |
+| /api-keys CRUD                              | SHIPPED      | V-270           | —       | —                                              |
+| /webhooks list + status                     | IN-FLIGHT    | V-310           | 3       | —                                              |
+| /webhooks delivery history                  | DEFERRED     | V-311           | 4       | —                                              |
+| /usage summary + visualization              | IN-FLIGHT    | V-299           | 4       | —                                              |
+| /usage historical trends + cost projections | DEFERRED     | V-299           | 6       | —                                              |
+| /billing plan picker + payment methods      | IN-FLIGHT    | V-300           | 4       | —                                              |
+| /billing portal redirect                    | DEFERRED     | V-300           | 3       | —                                              |
+| /billing invoice history + PDF download     | DEFERRED     | V-300           | 4       | privacy                                        |
+| /team member list + invitation              | UNDISCOVERED | V-NNN+          | 8       | privacy + ToS                                  |
+| /team RBAC                                  | UNDISCOVERED | V-NNN+          | 6       | ToS                                            |
+| /settings account + slug + region           | SHIPPED      | V-298a + V-298b | —       | privacy §3.1 + DPA Annex 3 (V-373/V-374/V-384) |
+| /settings personal profile                  | DEFERRED     | V-302           | 4       | privacy                                        |
+| /settings security (password / MFA)         | DEFERRED     | V-301           | 8       | privacy                                        |
+| /settings active sessions list + revoke     | DEFERRED     | V-303           | 4       | —                                              |
+| /settings security audit log                | DEFERRED     | V-303           | 3       | —                                              |
+| /settings notification preferences          | DEFERRED     | V-309           | 4       | privacy                                        |
 
 **Onboarding flow** (planning file 12):
 
