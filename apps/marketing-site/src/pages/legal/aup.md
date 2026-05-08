@@ -161,9 +161,8 @@ The following framing is constitutive, not advisory:
 
 ## 4. Reporting + abuse mechanism
 
-Driftstack maintains an abuse-reporting channel at `abuse@driftstack.dev`
-(placeholder address; production address may differ). Reports are
-triaged within five (5) business days. Driftstack accepts reports
+Driftstack maintains an abuse-reporting channel at `abuse@driftstack.dev`.
+Reports are triaged within five (5) business days. Driftstack accepts reports
 from:
 
 1. **Target operators** who believe Customer's use of the Service

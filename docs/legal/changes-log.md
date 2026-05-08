@@ -76,6 +76,23 @@ references the corresponding rows in this log.
   status site is gated behind no-traffic until then; Privacy §3.10
   is accurate forward-looking).
 
+## 2026-05-08 — V-313 (legal placeholder cleanup post-V-295 launch)
+
+- **ToS §9.3 (Maintenance)**: replaced `(placeholder: status.driftstack.dev)`
+  with the live URL `<https://status.driftstack.dev>` plus a sentence
+  noting subscription is available via the form on the status page.
+  V-295c1 status site is live; the placeholder language is no longer
+  accurate.
+- **AUP §4 (Reporting + abuse mechanism)**: removed the parenthetical
+  "(placeholder address; production address may differ)" qualifier on
+  `abuse@driftstack.dev`. The address is the production address.
+- **Both ToS + AUP edits applied to both copies**: `docs/legal/*.md`
+  (canonical) and `apps/marketing-site/src/pages/legal/*.md`
+  (customer-facing). The two surfaces stay in sync manually until a
+  build-time sync script lands.
+- **No new sub-processor / no DPA / no Privacy update**: this slice is
+  pure language cleanup; no new processing surface.
+
 ## 2026-05-08 — V-306a (LiveKit live-session sub-processor + Privacy + ToS)
 
 - **DPA Annex 3 (sub-processors table)**: added "LiveKit, Inc.
