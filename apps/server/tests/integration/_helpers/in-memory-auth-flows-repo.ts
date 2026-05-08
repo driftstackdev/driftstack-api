@@ -145,6 +145,7 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       revokedAt: null,
       issuedFromIp: args.issuedFromIp,
       userAgent: args.userAgent,
+      mfaSatisfiedAt: null,
       createdAt: now,
     };
     this.webSessions.set(row.id, row);
@@ -205,5 +206,11 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       n++;
     }
     return Promise.resolve(n);
+  }
+
+  markWebSessionMfaSatisfied(id: string, at: Date): Promise<void> {
+    const row = this.webSessions.get(id);
+    if (row) this.webSessions.set(id, { ...row, mfaSatisfiedAt: at });
+    return Promise.resolve();
   }
 }

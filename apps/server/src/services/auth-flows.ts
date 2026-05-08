@@ -18,6 +18,14 @@ import type { Logger } from '../lib/logger.js';
 import type { EmailService } from './email.js';
 import type { AuthCache } from './auth-cache.js';
 import type { AccountAuditService } from './account-audit.js';
+import type { MfaService } from './mfa.js';
+import {
+  type MfaChallengePayload,
+  type MfaChallengeStore,
+  generateChallengeToken,
+  redisKey as mfaChallengeKey,
+  MFA_CHALLENGE_TTL_SECONDS,
+} from './mfa-challenge-store.js';
 import {
   AUTH_TOKEN_TTL_MS,
   generateAuthToken,
@@ -60,6 +68,12 @@ export interface WebSessionRow {
   revokedAt: Date | null;
   issuedFromIp: string | null;
   userAgent: string | null;
+  /** V-353d — most recent successful MFA challenge on this session,
+   *  or null if never satisfied. Step-up gates check
+   *  `now - mfaSatisfiedAt < 15min`. Sessions issued via the legacy
+   *  pre-MFA-enrollment login path also start null and are lazily
+   *  satisfied on first post-enrollment request. */
+  mfaSatisfiedAt: Date | null;
   createdAt: Date;
 }
 
@@ -129,6 +143,11 @@ export interface AuthFlowsRepo {
    * else." Returns count of rows updated.
    */
   revokeAllWebSessionsExcept(accountId: string, exceptId: string, at: Date): Promise<number>;
+  /**
+   * V-353d — set web_sessions.mfa_satisfied_at on a session id. Used
+   * by completeMfaChallenge so step-up gates pass.
+   */
+  markWebSessionMfaSatisfied(id: string, at: Date): Promise<void>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -204,9 +223,38 @@ export interface LoginArgs {
   userAgent: string | null;
 }
 
-export interface LoginResult {
+export type LoginResult =
+  | {
+      kind: 'session';
+      account: AuthFlowAccountRow;
+      session: { plaintext: string; row: WebSessionRow };
+    }
+  | {
+      kind: 'mfa_required';
+      account: AuthFlowAccountRow;
+      challengeToken: string;
+      challengeExpiresAt: Date;
+    };
+
+/** V-353d — body of /v1/auth/mfa/challenge. Either `code` (TOTP
+ *  6-digit) or `recovery_code` (10-char recovery; hyphen optional). */
+export interface MfaChallengeArgs {
+  challengeToken: string;
+  code?: string;
+  recoveryCode?: string;
+  /** Source IP of the challenge attempt — must match the issuing IP
+   *  to refuse cross-channel theft. Best-effort defense. */
+  sourceIp: string | null;
+  userAgent: string | null;
+}
+
+export interface MfaChallengeResult {
   account: AuthFlowAccountRow;
   session: { plaintext: string; row: WebSessionRow };
+  /** Whether the customer used a recovery code. The route emits a
+   *  different audit action on recovery vs TOTP, and the dashboard
+   *  may want to surface a "you used 1/10 recovery codes" reminder. */
+  via: 'totp' | 'recovery';
 }
 
 export interface MagicLinkRequestArgs {
@@ -287,6 +335,19 @@ export class AuthFlowsService {
      * Tests that don't exercise the audit log pass null.
      */
     private readonly accountAudit: AccountAuditService | null = null,
+    /**
+     * V-353d — optional MFA service. When wired, login() consults
+     * mfa.getStatus(account) and returns a challenge_token instead of
+     * a session if the account is enrolled. Tests that don't exercise
+     * MFA pass null (login behaves as pre-V-353d).
+     */
+    private readonly mfa: MfaService | null = null,
+    /**
+     * V-353d — optional challenge-token store. Required when `mfa` is
+     * non-null; stores `MfaChallengePayload` JSON for 5min, single-
+     * use consumption on /v1/auth/mfa/challenge.
+     */
+    private readonly mfaChallenges: MfaChallengeStore | null = null,
   ) {}
 
   private async emitAuditBestEffort(
@@ -404,13 +465,130 @@ export class AuthFlowsService {
       throw new AuthFlowError('email_not_verified');
     }
 
+    // V-353d — branch on MFA enrollment. If enrolled, issue a
+    // challenge token instead of a session; the customer exchanges it
+    // at /v1/auth/mfa/challenge with their 6-digit code (or recovery
+    // code) to get the actual session.
+    if (this.mfa && this.mfaChallenges) {
+      const status = await this.mfa.getStatus(account.id);
+      if (status.enrolled) {
+        const token = generateChallengeToken();
+        const payload: MfaChallengePayload = {
+          account_id: account.id,
+          email: account.email,
+          source_ip: args.issuedFromIp,
+          issued_at: Date.now(),
+          issued_user_agent: args.userAgent,
+        };
+        await this.mfaChallenges.set(
+          mfaChallengeKey(token),
+          JSON.stringify(payload),
+          MFA_CHALLENGE_TTL_SECONDS,
+        );
+        return {
+          kind: 'mfa_required',
+          account,
+          challengeToken: token,
+          challengeExpiresAt: new Date(Date.now() + MFA_CHALLENGE_TTL_SECONDS * 1000),
+        };
+      }
+    }
+
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
     await this.emitAuditBestEffort(account.id, 'account.login', {
       method: 'password',
       issued_from_ip: args.issuedFromIp,
       user_agent: args.userAgent,
     });
-    return { account, session };
+    return { kind: 'session', account, session };
+  }
+
+  /**
+   * V-353d — exchange a challenge_token + 6-digit (or recovery code)
+   * for the real session. Single-use: success consumes the token,
+   * failure leaves the token alive so the customer can retype the
+   * code (rate-limit on the route limits brute force).
+   *
+   * IP binding: if the challenge was issued from a different IP than
+   * the consume request, refuse without consuming. Customer who
+   * actually got their token via the legitimate /login response will
+   * be on the same IP. Defense-in-depth — token is also short-lived
+   * + bound to one account.
+   */
+  async completeMfaChallenge(args: MfaChallengeArgs): Promise<MfaChallengeResult> {
+    if (!this.mfa || !this.mfaChallenges) {
+      throw new AuthFlowError('invalid_auth_token', 'MFA challenge not available on this server.');
+    }
+    if (!args.code && !args.recoveryCode) {
+      throw new AuthFlowError(
+        'invalid_auth_token',
+        'Either `code` or `recovery_code` must be provided.',
+      );
+    }
+
+    // Peek first so an IP mismatch doesn't consume the token (legit
+    // user can still retry from the right IP).
+    const peek = await this.mfaChallenges.peek(mfaChallengeKey(args.challengeToken));
+    if (peek === null) {
+      throw new AuthFlowError(
+        'invalid_auth_token',
+        'Challenge token is unknown or expired. Sign in again.',
+      );
+    }
+    const payload = JSON.parse(peek) as MfaChallengePayload;
+    if (
+      payload.source_ip !== null &&
+      args.sourceIp !== null &&
+      payload.source_ip !== args.sourceIp
+    ) {
+      throw new AuthFlowError(
+        'invalid_auth_token',
+        'Challenge token was issued from a different IP. Sign in again.',
+      );
+    }
+
+    const input = args.code ?? args.recoveryCode!;
+    const result = await this.mfa.verifyCode({ accountId: payload.account_id, input });
+    if (result === null) {
+      // Failed verify — leave the token alive so customer can retype.
+      // Route layer enforces a rate limit; service stays simple.
+      throw new AuthFlowError(
+        'invalid_auth_token',
+        'Code is invalid. Try again or use a recovery code.',
+      );
+    }
+
+    // Success — consume the token, issue the session with the user-
+    // agent recorded at /login time (so the resulting session row
+    // looks like the original login attempt, not the challenge POST).
+    await this.mfaChallenges.consume(mfaChallengeKey(args.challengeToken));
+
+    const account = await this.repo.findAccountById(payload.account_id);
+    if (account === null) {
+      // Account vanished between issue + consume — treat as expired.
+      throw new AuthFlowError('invalid_auth_token', 'Account is no longer active.');
+    }
+    if (account.status !== 'active') {
+      throw new AuthFlowError('account_suspended');
+    }
+
+    const session = await this.issueWebSession(
+      account,
+      payload.source_ip,
+      payload.issued_user_agent,
+    );
+    // V-353d — mark the freshly-issued session as MFA-satisfied so
+    // step-up gates pass on it. The repo adapter handles the column
+    // update; service stays opaque to the column name.
+    await this.repo.markWebSessionMfaSatisfied(session.row.id, new Date());
+
+    await this.emitAuditBestEffort(account.id, 'account.login', {
+      method: result === 'recovery' ? 'mfa_recovery' : 'mfa_totp',
+      issued_from_ip: payload.source_ip,
+      user_agent: payload.issued_user_agent,
+    });
+
+    return { account, session, via: result };
   }
 
   async requestMagicLink(args: MagicLinkRequestArgs): Promise<MagicLinkRequestResult> {

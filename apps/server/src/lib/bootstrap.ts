@@ -52,6 +52,7 @@ import { SessionsService } from '../services/sessions.js';
 import { ApiKeysService } from '../services/api-keys.js';
 import { MfaService } from '../services/mfa.js';
 import { DrizzleMfaRepo } from '../db/mfa-repo.js';
+import { RedisMfaChallengeStore } from '../services/mfa-challenge-store.js';
 import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
 import { AdminAuditService } from '../services/admin-audit.js';
@@ -430,6 +431,10 @@ export async function createProductionDeps(
 
   // V-079: user-facing auth flows.
   const authFlowsRepo = new DrizzleAuthFlowsRepo(dbHandle);
+  // V-353d — Redis-backed challenge-token store for the MFA login
+  // hand-off. Always wired (lightweight); gated by MFA being
+  // enrolled per-account in login(). Five-minute TTL; single-use.
+  const mfaChallengeStore = new RedisMfaChallengeStore(redis);
   const authFlowsService = new AuthFlowsService(
     authFlowsRepo,
     email,
@@ -442,6 +447,8 @@ export async function createProductionDeps(
     },
     authCache, // V-168 — cache invalidation on logout
     accountAuditService, // V-224 — emit account.{email_verified,login,logout,password_changed}
+    mfaService, // V-353d — branch login() on enrollment status
+    mfaChallengeStore, // V-353d — short-lived challenge store
   );
 
   // V-266: browser-OAuth-style CLI / GUI activation flow. Pure

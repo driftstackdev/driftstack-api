@@ -18377,3 +18377,56 @@ V-353c-V-353h queued: login flow integration (POST /v1/auth/password
 returns `challenge_token` when MFA enrolled; POST /v1/auth/mfa/
 challenge exchanges), step-up gate with 15 min freshness, dashboard
 /settings/security UI, docs/api/mfa.md, audit-email plumbing.
+
+## V-353d — login flow MFA challenge integration
+
+**Tier**: 1.
+
+POST /v1/auth/login is now a discriminated-union response:
+
+- MFA NOT enrolled (default): unchanged.
+- MFA enrolled: `{ mfa_required: true, challenge_token,
+challenge_expires_at }` (5 min TTL) without issuing a session.
+
+POST /v1/auth/mfa/challenge consumes the token + a 6-digit TOTP code
+OR a 10-char recovery code and returns the real session + a
+`via: 'totp' | 'recovery'` discriminator.
+
+Storage: `MfaChallengeStore` with Redis impl (`SET … EX 300` + atomic
+`GETDEL` for single-use consumption) + in-memory impl for tests.
+Mirrors the V-266 cli-authorize store pattern. Payload binds the
+challenge to account_id, email, source_ip, issued_at,
+issued_user_agent. The UA is carried into the resulting web_session
+so the session looks like the original login attempt.
+
+IP binding: peek first; consume-time IP mismatch refuses without
+consuming (legit user retries from the right IP). Failed verify does
+NOT consume the token; customer retypes within the 5 min TTL.
+Successful verify atomically consumes (GETDEL).
+
+Schema: `web_sessions.mfa_satisfied_at` (added V-353b migration 0033)
+is stamped via the new `AuthFlowsRepo.markWebSessionMfaSatisfied`
+method. Step-up gates (V-353e) will read this column for the 15-min
+freshness window.
+
+Service wiring: `AuthFlowsService` constructor extended with optional
+`mfa` + `mfaChallenges`. Null = back-compat single-step session issue.
+
+Recovery-code hashing fix discovered + closed: `completeEnrollment` +
+`regenerateRecoveryCodes` now hash the NORMALIZED form (hyphen-
+stripped, uppercased) so `verifyCode` matches against either typed
+form. Caught by the V-353d recovery test.
+
+Other auth flows (signup-verify, magic-link, password-reset confirm)
+are intentionally NOT gated by MFA — those prove ownership of email
+via single-use link; MFA at the next /login is the standard model.
+
+Tests: 8 new integration tests (login MFA-enrolled returns challenge,
+login MFA-not-enrolled back-compat, TOTP exchange + via=totp,
+recovery exchange + code consumed + 9 unused, 400 missing-both-
+fields, unknown token rejected, wrong TOTP retryable, consumed-
+token re-use refused). 1048 / 1048 tests pass.
+
+V-353e queued: step-up gate middleware on the locked Q3 endpoints
+(DELETE /v1/account/mfa, DELETE /v1/account when self-service
+deletion lands).

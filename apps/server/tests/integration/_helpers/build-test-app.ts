@@ -61,6 +61,7 @@ import { InMemoryLegalRepo } from './in-memory-legal-repo.js';
 import { InMemoryAuthFlowsRepo } from './in-memory-auth-flows-repo.js';
 import { InMemoryMfaRepo } from './in-memory-mfa-repo.js';
 import { MfaService } from '../../../src/services/mfa.js';
+import { InMemoryMfaChallengeStore } from '../../../src/services/mfa-challenge-store.js';
 import { InMemoryStripeWebhooksRepo } from './in-memory-stripe-webhooks-repo.js';
 import { InMemoryProfilesRepo } from './in-memory-profiles-repo.js';
 import { InMemoryBillingProvider, InMemoryBillingRepo } from './in-memory-billing.js';
@@ -610,25 +611,6 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // testLogger + noopEmail constructed earlier for V-202c lifecycle
   // service; reused here.
   const authFlowsRepo = new InMemoryAuthFlowsRepo();
-  const authFlowsService = new AuthFlowsService(
-    authFlowsRepo,
-    noopEmail,
-    testLogger,
-    {
-      verifyEmailUrl: 'http://localhost:5173/auth/verify-email',
-      magicLinkUrl: 'http://localhost:5173/auth/magic-link',
-      passwordResetUrl: 'http://localhost:5173/auth/password-reset',
-      exposeDebugToken: true,
-    },
-    authCache, // V-168 — cache invalidation on logout
-    accountAuditService, // V-224 — emit account.{email_verified,login,logout,password_changed}
-  );
-
-  // V-266 — browser-OAuth flow with in-memory store for tests.
-  const cliAuthorizeService = new CliAuthorizeService({
-    store: new InMemoryCliAuthorizeStore(),
-    dashboardOrigin: 'http://localhost:5173',
-  });
 
   // V-353b — MFA service backed by in-memory repo. Encryption key is
   // a fixed 32-byte test key so tests are deterministic.
@@ -641,6 +623,32 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     },
     accountAuditService,
   );
+
+  // V-353d — in-memory challenge token store for the MFA login
+  // hand-off. Lives in tests as a Map; production wires Redis.
+  const mfaChallengeStore = new InMemoryMfaChallengeStore();
+
+  const authFlowsService = new AuthFlowsService(
+    authFlowsRepo,
+    noopEmail,
+    testLogger,
+    {
+      verifyEmailUrl: 'http://localhost:5173/auth/verify-email',
+      magicLinkUrl: 'http://localhost:5173/auth/magic-link',
+      passwordResetUrl: 'http://localhost:5173/auth/password-reset',
+      exposeDebugToken: true,
+    },
+    authCache, // V-168 — cache invalidation on logout
+    accountAuditService, // V-224 — emit account.{email_verified,login,logout,password_changed}
+    mfaService, // V-353d — branch login() on MFA enrollment
+    mfaChallengeStore, // V-353d — short-lived challenge store
+  );
+
+  // V-266 — browser-OAuth flow with in-memory store for tests.
+  const cliAuthorizeService = new CliAuthorizeService({
+    store: new InMemoryCliAuthorizeStore(),
+    dashboardOrigin: 'http://localhost:5173',
+  });
 
   // V-168 — bridge web sessions issued by AuthFlowsService into the auth
   // path so a freshly-signed-up user's web-session bearer can authenticate

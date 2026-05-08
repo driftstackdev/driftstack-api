@@ -24,6 +24,7 @@ import {
   LogoutRequestSchema,
   MagicLinkConsumeRequestSchema,
   MagicLinkRequestSchema,
+  MfaChallengeRequestSchema,
   PasswordResetConfirmRequestSchema,
   PasswordResetRequestSchema,
   RefreshSessionRequestSchema,
@@ -175,7 +176,44 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
         issuedFromIp: clientIp(req),
         userAgent: userAgent(req),
       });
+      // V-353d — discriminated-union response. MFA-enrolled accounts
+      // get a challenge token instead of a session; client posts the
+      // token + 6-digit (or recovery) to /v1/auth/mfa/challenge.
+      if (result.kind === 'mfa_required') {
+        return {
+          mfa_required: true as const,
+          challenge_token: result.challengeToken,
+          challenge_expires_at: result.challengeExpiresAt.toISOString(),
+        };
+      }
       return sessionResponse(result);
+    } catch (e) {
+      mapAuthFlowError(e);
+    }
+  });
+
+  // V-353d — exchange the challenge_token + 6-digit (or recovery) for
+  // a real session. Rate-limited via the same loginGate (per-IP).
+  app.post('/v1/auth/mfa/challenge', { preHandler: [loginGate] }, async (req) => {
+    const parsed = MfaChallengeRequestSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+
+    try {
+      const result = await service.completeMfaChallenge({
+        challengeToken: parsed.data.challenge_token,
+        code: parsed.data.code,
+        recoveryCode: parsed.data.recovery_code,
+        sourceIp: clientIp(req),
+        userAgent: userAgent(req),
+      });
+      return {
+        session: {
+          token: result.session.plaintext,
+          expires_at: result.session.row.expiresAt.toISOString(),
+          account_id: `acc_${result.account.id}`,
+        },
+        via: result.via,
+      };
     } catch (e) {
       mapAuthFlowError(e);
     }

@@ -68,6 +68,7 @@ function toWebSessionRow(r: typeof webSessions.$inferSelect): WebSessionRow {
     revokedAt: r.revokedAt,
     issuedFromIp: r.issuedFromIp,
     userAgent: r.userAgent,
+    mfaSatisfiedAt: r.mfaSatisfiedAt,
     createdAt: r.createdAt,
   };
 }
@@ -259,5 +260,12 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
       )
       .returning({ id: webSessions.id });
     return rows.length;
+  }
+
+  async markWebSessionMfaSatisfied(id: string, at: Date): Promise<void> {
+    await this.database.db
+      .update(webSessions)
+      .set({ mfaSatisfiedAt: at })
+      .where(eq(webSessions.id, id));
   }
 }

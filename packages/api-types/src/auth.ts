@@ -104,6 +104,47 @@ export const LoginResponseSchema = z.object({
 });
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
 
+// V-353d — alternate login response when the account has MFA enrolled.
+// The customer must POST the challenge_token + 6-digit code (or
+// recovery code) to /v1/auth/mfa/challenge to exchange for the real
+// session.
+export const LoginMfaRequiredResponseSchema = z.object({
+  mfa_required: z.literal(true),
+  challenge_token: z.string(),
+  challenge_expires_at: Iso8601Schema,
+});
+export type LoginMfaRequiredResponse = z.infer<typeof LoginMfaRequiredResponseSchema>;
+
+/** Discriminated-union response shape for /v1/auth/login. Clients
+ *  branch on `mfa_required` (presence + literal true) to decide
+ *  whether to drop into the challenge UI or store the session. */
+export const LoginResponseUnionSchema = z.union([
+  LoginResponseSchema,
+  LoginMfaRequiredResponseSchema,
+]);
+export type LoginResponseUnion = z.infer<typeof LoginResponseUnionSchema>;
+
+// V-353d — POST /v1/auth/mfa/challenge body.
+export const MfaChallengeRequestSchema = z
+  .object({
+    challenge_token: z.string().min(1),
+    code: z
+      .string()
+      .regex(/^\d{6}$/, 'Must be a 6-digit code.')
+      .optional(),
+    recovery_code: z.string().min(1).optional(),
+  })
+  .refine((v) => v.code !== undefined || v.recovery_code !== undefined, {
+    message: 'Either `code` or `recovery_code` must be provided.',
+  });
+export type MfaChallengeRequest = z.infer<typeof MfaChallengeRequestSchema>;
+
+export const MfaChallengeResponseSchema = z.object({
+  session: WebSessionSchema,
+  via: z.enum(['totp', 'recovery']),
+});
+export type MfaChallengeResponse = z.infer<typeof MfaChallengeResponseSchema>;
+
 // ───────────────────────────────────────────────────────────────────────────
 // Magic link
 // ───────────────────────────────────────────────────────────────────────────

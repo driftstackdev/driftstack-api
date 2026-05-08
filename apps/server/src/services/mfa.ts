@@ -177,7 +177,9 @@ export class MfaService {
     });
 
     const codes = generateRecoveryCodes();
-    const hashes = await Promise.all(codes.map((c) => hashApiKey(c)));
+    // Hash the NORMALIZED form (hyphen-stripped, uppercased) so verify
+    // can check against either typed form (with or without hyphen).
+    const hashes = await Promise.all(codes.map((c) => hashApiKey(normalizeRecoveryCode(c))));
     await this.repo.insertRecoveryCodes({
       accountId: args.accountId,
       hashes,
@@ -306,7 +308,7 @@ export class MfaService {
     const now = new Date();
     await this.repo.markAllRecoveryCodesUsed(args.accountId, now);
     const codes = generateRecoveryCodes();
-    const hashes = await Promise.all(codes.map((c) => hashApiKey(c)));
+    const hashes = await Promise.all(codes.map((c) => hashApiKey(normalizeRecoveryCode(c))));
     await this.repo.insertRecoveryCodes({ accountId: args.accountId, hashes, now });
     return { recoveryCodes: codes };
   }
