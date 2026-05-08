@@ -19184,3 +19184,24 @@ Scalar UI + downstream SDK regen pick up the route).
 Avatar routes (POST/DELETE /v1/account/me/avatar) are deferred to
 V-387 — UploadAvatarRequestSchema + presigned-URL response shape
 need a small additional schema definition pass.
+
+## V-387 — /v1/account/me/avatar OpenAPI registration
+
+**Tier**: 1 (V-386 deferred follow-through; closes the avatar
+surface in spec).
+
+`apps/server/src/lib/openapi.ts`:
+
+- Imports `UploadAvatarRequestSchema` from api-types.
+- Defines `UploadAvatarResponseOpenApi` inline (avatar_url +
+  content_type + bytes).
+- Registers POST /v1/account/me/avatar (200 + 413 oversize +
+  503 storage-unavailable + standard 4xx).
+- Registers DELETE /v1/account/me/avatar (204 + standard 4xx).
+
+`openapi.test.ts` registered-paths fixture extended.
+
+Now the entire /v1/account/me self-edit surface (read + edit +
+avatar upload + avatar clear) is in the OpenAPI spec; Scalar UI
+
+- SDK regen pick up all four routes on next pass.

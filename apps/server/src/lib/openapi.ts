@@ -31,6 +31,7 @@ import {
   AccountTierSchema,
   AdminAccountResponseSchema,
   UpdateAccountMeRequestSchema,
+  UploadAvatarRequestSchema,
   AdminAuditLogEntrySchema,
   ApiKeySchema,
   CaptureRequestSchema,
@@ -996,6 +997,49 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Slug already in use by another account.',
         content: problemContent,
       },
+    },
+  });
+
+  // V-387 — avatar upload + clear.
+  const UploadAvatarResponseOpenApi = z.object({
+    avatar_url: z.string().nullable(),
+    content_type: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+    bytes: z.number().int().nonnegative(),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/account/me/avatar',
+    summary: 'Upload (or replace) the calling account avatar (V-352b)',
+    tags: ['account'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: UploadAvatarRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Avatar stored; presigned read URL returned.',
+        content: { 'application/json': { schema: UploadAvatarResponseOpenApi } },
+      },
+      ...errors4xx,
+      413: {
+        description: 'Avatar payload exceeds the per-route body limit.',
+        content: problemContent,
+      },
+      503: {
+        description: 'Avatar storage unavailable in this deploy.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/account/me/avatar',
+    summary: 'Clear the calling account avatar pointer (V-352b)',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      204: { description: 'Avatar cleared.' },
+      ...errors4xx,
     },
   });
 

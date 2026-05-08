@@ -49,8 +49,9 @@ describe('OpenAPI spec generation', () => {
         '/v1/admin/webhook-dlq/{id}/requeue',
         '/v1/account/audit-log',
         '/v1/account/email-preferences',
-        // V-386 — account self-edit surface
+        // V-386 / V-387 — account self-edit surface + avatar
         '/v1/account/me',
+        '/v1/account/me/avatar',
         // V-353 MFA endpoints
         '/v1/account/mfa',
         '/v1/account/mfa/disable',
