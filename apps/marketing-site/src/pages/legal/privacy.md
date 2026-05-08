@@ -68,7 +68,11 @@ for the purposes and on the legal bases set out below.
 number, primary contact name, primary contact email, billing email,
 optional support contacts, time zone, optional profile avatar
 (Customer-uploaded image, stored in the Cloudflare R2 sub-processor;
-see §17 / DPA Annex 3).
+see §17 / DPA Annex 3), optional Customer-stated infrastructure
+region preference (one of "us" / "eu" / "apac"; informational and
+non-binding for v1, since all production data resides on
+EU-jurisdiction infrastructure today — see §6 / §7 for the
+authoritative routing).
 
 **Why:** to administer the contractual relationship, generate
 VAT-compliant invoices, send service notifications, provide
@@ -339,16 +343,17 @@ the response observed during the Session.
 
 ## 9. Retention
 
-| Category                                            | Retention period                                                                                                                              |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Account data                                        | Duration of Subscription + 7 years post-termination (Article 52 _Algemene wet inzake rijksbelastingen_ — 7-year retention of administration). |
-| Authentication data (hashed API keys, key metadata) | Until revocation; revoked records retained 90 days for audit then deleted.                                                                    |
-| Session metadata                                    | 90 days operational; aggregated counters (no PII) retained indefinitely for capacity planning.                                                |
-| Session Recordings                                  | Customer-controlled (1–365 days, default 30); none retained beyond Customer's configured window.                                              |
-| Customer-Provided Secrets                           | Deleted within 30 days of Customer Account termination, or earlier on Customer's documented request.                                          |
-| Billing data                                        | 7 years post-transaction (Dutch tax law, AWR Art 52).                                                                                         |
-| Support correspondence                              | 3 years post-resolution.                                                                                                                      |
-| Marketing-site access logs                          | 30 days.                                                                                                                                      |
+| Category                                            | Retention period                                                                                                                                                                                                           |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Account data                                        | Duration of Subscription + 7 years post-termination (Article 52 _Algemene wet inzake rijksbelastingen_ — 7-year retention of administration).                                                                              |
+| Authentication data (hashed API keys, key metadata) | Until revocation; revoked records retained 90 days for audit then deleted.                                                                                                                                                 |
+| Session metadata                                    | 90 days operational; aggregated counters (no PII) retained indefinitely for capacity planning.                                                                                                                             |
+| Session Recordings                                  | Customer-controlled (1–365 days, default 30); none retained beyond Customer's configured window.                                                                                                                           |
+| Customer-Provided Secrets                           | Deleted within 30 days of Customer Account termination, or earlier on Customer's documented request.                                                                                                                       |
+| Profile metadata + Profile Snapshots                | Customer-controlled. Profile rows persist until Customer deletes them; Profile Snapshots (immutable point-in-time copies) persist until Customer deletes them. All deleted within 30 days of Customer Account termination. |
+| Billing data                                        | 7 years post-transaction (Dutch tax law, AWR Art 52).                                                                                                                                                                      |
+| Support correspondence                              | 3 years post-resolution.                                                                                                                                                                                                   |
+| Marketing-site access logs                          | 30 days.                                                                                                                                                                                                                   |
 
 When the retention period for a category expires, Driftstack
 deletes the Personal Data or anonymises it (rendering it no longer

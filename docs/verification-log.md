@@ -18831,3 +18831,25 @@ restore / delete with the parent-survives-delete behavior
 documented.
 
 855 server tests + monorepo typecheck clean.
+
+## V-373 — privacy.md disclosure refresh for V-298b region + V-312 snapshots
+
+**Tier**: 1 (clarification update per privacy §15 — additional
+transparency on already-collected / customer-managed data; no
+material scope change; no version bump from 1.0).
+
+§3.1 Account data — adds optional Customer-stated infrastructure
+region preference (us/eu/apac) with a clear "informational and
+non-binding for v1, EU-jurisdiction infrastructure today" caveat
+cross-linking §6 + §7 for authoritative routing.
+
+§9 Retention — adds Profile metadata + Profile Snapshots row:
+Customer-controlled persistence; deleted within 30 days of Account
+termination. Sets the explicit retention surface for both V-313
+profile rows and V-312 snapshot rows that previously sat under the
+implicit Account-data umbrella.
+
+No version-string bump (clarification, not material change per
+§15). Legal-acceptance content_hash will refresh on next deploy
+without requiring re-acceptance from existing accounts (since this
+is a clarification, not new collection).
