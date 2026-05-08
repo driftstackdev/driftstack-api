@@ -18904,3 +18904,32 @@ DashboardLayout.
 Capture stays on /profiles (per-row Snapshot button shipped in
 V-312); /snapshots covers list / restore / delete only. astro
 check clean (0 errors).
+
+## V-376 — TypeScript SDK ProfileSnapshotsResource
+
+**Tier**: 1 (V-312 SDK follow-through; first of three SDK ports —
+Python + Go in subsequent slices).
+
+`packages/sdk-typescript/src/resources/profile-snapshots.ts` — new
+resource class with seven methods mirroring the server surface:
+
+- `capture(profileId, body)`
+- `listForProfile(profileId, query?)`
+- `list(query?)` — cross-account
+- `iterate(opts?)` — cursor-walking generator over `list`
+- `get(id)`
+- `restore(id, body)`
+- `delete(id)`
+
+Wired into `Driftstack` client as `client.profileSnapshots`.
+Re-exported `ProfileSnapshotsListPage` + the V-312 api-types
+schemas (`ProfileSnapshot`, `CaptureSnapshotRequest`,
+`RestoreSnapshotRequest`) so SDK consumers don't need a second
+@driftstack/api-types dep.
+
+Tests: 5 unit tests covering capture / list+listForProfile /
+iterate (multi-page cursor walk) / restore / delete. Mock
+HttpClient verifies path + method + body shape. All pass.
+
+Python + Go SDK ports queued (V-377 / V-378). Customers using
+@driftstack/sdk on next minor bump get snapshot methods immediately.

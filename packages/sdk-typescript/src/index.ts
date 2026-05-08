@@ -8,6 +8,7 @@ export type { SessionsListPage } from './resources/sessions.js';
 export type { ApiKeyList } from './resources/api-keys.js';
 export type { WebhookEndpointList, WebhookDeliveryListPage } from './resources/webhooks.js';
 export type { ProfilesListPage } from './resources/profiles.js';
+export type { ProfileSnapshotsListPage } from './resources/profile-snapshots.js';
 export type { AccountSelfProfile } from './resources/account.js';
 
 // Errors
@@ -110,6 +111,10 @@ export type {
   ProfileId,
   CreateProfileRequest,
   UpdateProfileRequest,
+  // V-312 profile snapshots
+  ProfileSnapshot,
+  CaptureSnapshotRequest,
+  RestoreSnapshotRequest,
   // V-082 billing
   BillingPeriod,
   CreateCheckoutSessionRequest,

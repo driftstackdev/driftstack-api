@@ -8,6 +8,7 @@ import { ApiKeysResource } from './resources/api-keys.js';
 import { UsageResource } from './resources/usage.js';
 import { WebhooksResource } from './resources/webhooks.js';
 import { ProfilesResource } from './resources/profiles.js';
+import { ProfileSnapshotsResource } from './resources/profile-snapshots.js';
 import { BillingResource } from './resources/billing.js';
 import { AuthResource } from './resources/auth.js';
 import { AccountResource } from './resources/account.js';
@@ -35,6 +36,8 @@ export class Driftstack {
   readonly usage: UsageResource;
   readonly webhooks: WebhooksResource;
   readonly profiles: ProfilesResource;
+  /** V-312 — immutable point-in-time profile snapshots. */
+  readonly profileSnapshots: ProfileSnapshotsResource;
   readonly billing: BillingResource;
   readonly auth: AuthResource;
   readonly account: AccountResource;
@@ -62,6 +65,7 @@ export class Driftstack {
     this.usage = new UsageResource(this.http);
     this.webhooks = new WebhooksResource(this.http);
     this.profiles = new ProfilesResource(this.http);
+    this.profileSnapshots = new ProfileSnapshotsResource(this.http);
     this.billing = new BillingResource(this.http);
     this.auth = new AuthResource(this.http);
     this.account = new AccountResource(this.http);
