@@ -54,6 +54,7 @@ export const DOC_NAV: DocNavSection[] = [
       { href: '/api/team/', label: 'Team RBAC' },
       { href: '/api/mfa/', label: 'Two-factor auth (MFA)' },
       { href: '/api/usage/', label: 'Usage + quotas' },
+      { href: '/api/audit-log/', label: 'Audit log' },
     ],
   },
   {
