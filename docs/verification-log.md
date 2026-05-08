@@ -17322,3 +17322,38 @@ V-306b (~4-6h) — WebRTC server signaling endpoint in apps/server: token issuan
 ### Next
 
 V-307b (~2-3h) — customer-dashboard webhook delivery list UI with Replay buttons. Either expand-in-place on /webhooks page or new /webhooks/[id] sub-page. Then V-304 (onboarding email orchestration) → V-305 (Tauri deep-link replacement) → V-298+ remaining. NEVER STOP autopilot.
+
+## V-307b — Webhook deliveries UI in customer-dashboard
+
+**Tier**: 1 — Customer self-service ergonomics. UI counterpart to V-307.
+
+**Why**: V-307 shipped the engineering data plane (POST /v1/webhook-deliveries/:deliveryId/replay). V-307b makes it accessible from the dashboard. Otherwise customers have to hit the endpoint manually with curl — fine for power users, friction for everyone else.
+
+**Scope**
+
+- Customer-dashboard `/webhooks` page: replaced the dead-end `#deliveries-${id}` anchor with an in-place expandable delivery list per endpoint. Click "View delivery log →" → loads `GET /v1/webhooks/:id/deliveries?limit=20` → renders rows. Each row shows status badge / event type / timestamp / last error. Replay button on each `failed` / `dlq` / `delivered` row → POSTs `/v1/webhook-deliveries/:id/replay` and shows "Replayed ✓" on success.
+- Toggle button collapses the list back. Clicking re-opens AND re-fetches (so customers see the freshest state after a replay).
+- Replay error path: button re-enables + banner shows the error message.
+
+**Files**
+
+- `apps/customer-dashboard/src/pages/webhooks.astro` — `data-toggle-deliveries` button replaces the dead anchor; `data-deliveries` container renders below; new `loadDeliveries`/`deliveryRow`/`wireReplayButtons`/`wireDeliveryToggles` functions; called from the existing endpoints fetch path.
+
+### Verify
+
+- `npm test`: 914 / 914 unchanged (V-307b is UI-only).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+- `npm run typecheck --workspace apps/customer-dashboard`: 0 errors.
+
+### Notes — methodology choices
+
+- **Inline expand vs separate sub-page**: separate `/webhooks/[id].astro` would need Astro dynamic routes which require either getStaticPaths (build-time, doesn't work for live IDs) or SSR (the customer-dashboard is currently static-only). Inline expand is simpler + zero build-config change.
+- **Reload on each open, not cached**: trades one HTTP round-trip for "the freshest state when you click." Customers opening + closing the same endpoint repeatedly to check replay status see live data each time.
+- **Replay-button visible on `delivered` too**: customers sometimes want to re-fire a successful delivery (e.g. their downstream had a stuck queue and dropped the first one). The endpoint accepts it; the UI permits it.
+- **No optimistic UI on replay**: the button shows "Replaying…" → "Replayed ✓" only after the server confirms. Server-truth-first matches V-216 customer audit pattern (the replay IS audit-logged, so showing it as done before the server acks would mismatch the audit log).
+- **No deeper history pagination yet**: limit=20 default. Customers needing more can hit `/v1/webhooks/:id/deliveries?cursor=...` directly. Adding a "Load more" button in the UI is a small follow-up if support tickets indicate need.
+
+### Next
+
+V-304 (~4-6h) — onboarding email orchestration. Welcome email post-signup + first-session wizard email post-first-API-call + billing reminder emails (pre-renewal, 7d / 1d). Postmark templates already in V-057; orchestration via V-202d scheduled-jobs. Then V-305 Tauri deep-link replacement, then V-298+ remaining V-294 catalog. NEVER STOP autopilot.

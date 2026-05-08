@@ -306,13 +306,139 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           '</dd></div>' +
           '</dl>' +
           '<div class="mt-4 flex items-center justify-between">' +
-          '<a href="#deliveries-' +
+          '<button type="button" data-toggle-deliveries="' +
           escapeHtml(e.id) +
-          '" class="text-sm text-oxblood-700 hover:underline">View delivery log →</a>' +
+          '" class="text-sm text-oxblood-700 hover:underline">View delivery log →</button>' +
           requeueLink +
+          '</div>' +
+          '<div data-deliveries="' +
+          escapeHtml(e.id) +
+          '" class="hidden mt-4 border-t border-slate-100 pt-4">' +
+          '<p class="text-sm text-slate-500">Loading deliveries…</p>' +
           '</div>' +
           '</li>'
         );
+      }
+
+      function fmtIsoMin(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+
+      function deliveryRow(d) {
+        const statusBadge =
+          'inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ';
+        const statusClass =
+          d.status === 'delivered'
+            ? statusBadge + 'bg-emerald-50 text-emerald-700'
+            : d.status === 'pending' || d.status === 'in_flight'
+              ? statusBadge + 'bg-amber-50 text-amber-700'
+              : d.status === 'failed'
+                ? statusBadge + 'bg-orange-50 text-orange-700'
+                : statusBadge + 'bg-red-50 text-red-700';
+        const replayBtn =
+          d.status === 'failed' || d.status === 'dlq' || d.status === 'delivered'
+            ? '<button type="button" data-replay="' +
+              escapeHtml(d.id) +
+              '" class="text-xs text-oxblood-700 hover:underline">Replay</button>'
+            : '';
+        return (
+          '<li class="flex items-start justify-between gap-3 py-2 text-sm">' +
+          '<div class="min-w-0 flex-1">' +
+          '<div class="flex flex-wrap items-center gap-2">' +
+          '<span class="' +
+          statusClass +
+          '">' +
+          escapeHtml(d.status) +
+          '</span>' +
+          '<span class="font-mono text-xs text-slate-700">' +
+          escapeHtml(d.event_type) +
+          '</span>' +
+          '<span class="text-xs text-slate-500">' +
+          escapeHtml(fmtIsoMin(d.created_at)) +
+          '</span>' +
+          '</div>' +
+          (d.last_error
+            ? '<p class="mt-1 text-xs text-red-700">' + escapeHtml(d.last_error) + '</p>'
+            : '') +
+          '</div>' +
+          replayBtn +
+          '</li>'
+        );
+      }
+
+      function loadDeliveries(endpointId, container) {
+        if (!token) return;
+        container.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
+        fetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(endpointId) + '/deliveries?limit=20', {
+          headers: { authorization: 'Bearer ' + token },
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => {
+            const deliveries = body.data || [];
+            if (deliveries.length === 0) {
+              container.innerHTML = '<p class="text-sm text-slate-500">No deliveries recorded yet for this endpoint.</p>';
+              return;
+            }
+            container.innerHTML =
+              '<ul class="divide-y divide-slate-100">' + deliveries.map(deliveryRow).join('') + '</ul>';
+            wireReplayButtons(container);
+          })
+          .catch((err) => {
+            container.innerHTML =
+              '<p class="text-sm text-red-700">Failed to load deliveries: ' +
+              escapeHtml(err && err.message ? err.message : 'network error') +
+              '</p>';
+          });
+      }
+
+      function wireReplayButtons(scope) {
+        const buttons = scope.querySelectorAll('[data-replay]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-replay');
+            btn.disabled = true;
+            btn.textContent = 'Replaying…';
+            fetch(apiBaseUrl + '/v1/webhook-deliveries/' + encodeURIComponent(id) + '/replay', {
+              method: 'POST',
+              headers: {
+                authorization: 'Bearer ' + token,
+                'content-type': 'application/json',
+              },
+              body: '{}',
+            })
+              .then((r) => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                btn.textContent = 'Replayed ✓';
+                btn.classList.add('text-emerald-700');
+              })
+              .catch((err) => {
+                btn.disabled = false;
+                btn.textContent = 'Replay';
+                showBanner('Replay failed: ' + (err && err.message ? err.message : 'network error'));
+              });
+          });
+        });
+      }
+
+      function wireDeliveryToggles() {
+        const buttons = ul.querySelectorAll('[data-toggle-deliveries]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-toggle-deliveries');
+            const container = ul.querySelector('[data-deliveries="' + id + '"]');
+            if (!container) return;
+            const isHidden = container.classList.contains('hidden');
+            if (isHidden) {
+              container.classList.remove('hidden');
+              btn.textContent = 'Hide delivery log';
+              loadDeliveries(id, container);
+            } else {
+              container.classList.add('hidden');
+              btn.textContent = 'View delivery log →';
+            }
+          });
+        });
       }
 
       if (!token) {
@@ -334,6 +460,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             empty.classList.add('hidden');
             ul.classList.remove('hidden');
             ul.innerHTML = endpoints.map(endpointCard).join('');
+            wireDeliveryToggles();
           }
           showBanner(
             'Live data loaded. Aggregate delivery counts (delivered/failed/DLQ) not yet exposed via /v1/webhooks — coming soon.',
