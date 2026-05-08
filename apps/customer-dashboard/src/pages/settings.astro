@@ -166,6 +166,59 @@ const EMAIL_EVENTS = [
       </p>
     </section>
 
+    <!-- Profile basics (V-352 — name + timezone) -->
+    <section class="dashboard-card mt-6" data-region="profile">
+      <h2 class="text-lg font-semibold text-slate-900">Profile</h2>
+      <p class="mt-2 text-sm text-slate-500">
+        Display name + timezone. Used by the dashboard + outbound emails to
+        render timestamps in your local time.
+      </p>
+      <form data-form="profile" class="mt-6 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700" for="profile-name">
+            Display name
+          </label>
+          <input
+            id="profile-name"
+            data-field="profile-name"
+            type="text"
+            placeholder="Optional — leave blank to use your email"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700" for="profile-timezone">
+            Timezone (IANA)
+          </label>
+          <input
+            id="profile-timezone"
+            data-field="profile-timezone"
+            type="text"
+            placeholder="Europe/Amsterdam"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+          />
+          <p class="mt-1 text-xs text-slate-500">
+            IANA name like <code class="font-mono">Europe/Amsterdam</code> or
+            <code class="font-mono">America/Los_Angeles</code>. Leave blank for UTC.
+          </p>
+        </div>
+        <p
+          data-field="profile-error"
+          class="hidden rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+        ></p>
+        <div class="flex items-center justify-between border-t border-slate-100 pt-4">
+          <span data-field="profile-status" class="text-xs text-slate-500"></span>
+          <button
+            type="submit"
+            data-button="profile-save"
+            class="btn-primary"
+          >
+            Save
+          </button>
+        </div>
+      </form>
+    </section>
+
     <!-- Email notifications (V-204 — live-wired) -->
     <section class="dashboard-card mt-6" data-region="email-prefs">
       <h2 class="text-lg font-semibold text-slate-900">Email notifications</h2>
@@ -264,6 +317,92 @@ const EMAIL_EVENTS = [
       function fmtIso(iso) {
         if (!iso) return '—';
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+
+      // V-352c — wire the profile (name + timezone) form.
+      const profileForm = root.querySelector('[data-form="profile"]');
+      const profileNameInput = root.querySelector('[data-field="profile-name"]');
+      const profileTzInput = root.querySelector('[data-field="profile-timezone"]');
+      const profileError = root.querySelector('[data-field="profile-error"]');
+      const profileStatus = root.querySelector('[data-field="profile-status"]');
+      const profileSaveBtn = root.querySelector('[data-button="profile-save"]');
+
+      function showProfileError(msg) {
+        if (!profileError) return;
+        profileError.textContent = msg;
+        profileError.classList.remove('hidden');
+      }
+
+      // Load current profile values (GET /v1/account/me).
+      if (token && profileNameInput && profileTzInput) {
+        fetch(apiBaseUrl + '/v1/account/me', {
+          headers: { authorization: 'Bearer ' + token },
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((me) => {
+            if (!me) return;
+            if (me.name) profileNameInput.value = me.name;
+            if (me.timezone) profileTzInput.value = me.timezone;
+          })
+          .catch(() => {
+            /* leave inputs blank */
+          });
+      }
+
+      if (profileForm) {
+        profileForm.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          if (profileError) {
+            profileError.classList.add('hidden');
+            profileError.textContent = '';
+          }
+          if (!token) {
+            showProfileError('Sign in to update your profile.');
+            return;
+          }
+          const name = profileNameInput.value.trim();
+          const tz = profileTzInput.value.trim();
+          if (profileSaveBtn) {
+            profileSaveBtn.disabled = true;
+            profileSaveBtn.textContent = 'Saving…';
+          }
+          fetch(apiBaseUrl + '/v1/account/me', {
+            method: 'PATCH',
+            headers: {
+              'content-type': 'application/json',
+              authorization: 'Bearer ' + token,
+            },
+            body: JSON.stringify({
+              name: name.length > 0 ? name : null,
+              timezone: tz.length > 0 ? tz : null,
+            }),
+          })
+            .then((r) =>
+              r.ok
+                ? r.json()
+                : r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+            )
+            .then(() => {
+              if (profileStatus) {
+                profileStatus.textContent = 'Saved.';
+                window.setTimeout(() => {
+                  if (profileStatus) profileStatus.textContent = '';
+                }, 3000);
+              }
+            })
+            .catch((err) => {
+              showProfileError(err && err.message ? err.message : 'Failed to save.');
+            })
+            .finally(() => {
+              if (profileSaveBtn) {
+                profileSaveBtn.disabled = false;
+                profileSaveBtn.textContent = 'Save';
+              }
+            });
+        });
       }
 
       function authedFetch(path, init = {}) {
