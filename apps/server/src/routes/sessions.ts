@@ -35,6 +35,28 @@ function readEffectiveAccountHeader(request: FastifyRequest): string | undefined
   return raw;
 }
 
+/**
+ * V-326e3 — resolves the effective account for a write-type session
+ * action (navigate / interact / wait / capture / etc.) and enforces
+ * the Q1 admin-only role gate. Returns the effective accountId
+ * (string) when team-scoped, undefined when self-scoped (route uses
+ * ctx.account.id default).
+ *
+ * Read-type actions (getState) accept any role and use the simpler
+ * resolveEffectiveAccount inline.
+ */
+function effectiveAccountIdForWrite(
+  request: FastifyRequest,
+  ctx: NonNullable<FastifyRequest['account']>,
+): string | undefined {
+  const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+  if (effective.kind !== 'team') return undefined;
+  if (effective.role !== 'admin') {
+    throw new ForbiddenError('This action on a team owner requires admin role on that team.');
+  }
+  return effective.accountId;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // ID helpers
 // ───────────────────────────────────────────────────────────────────────────
@@ -158,6 +180,8 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   );
 
   // ── POST /v1/sessions/:id/navigate ─────────────────────────────────────
+  // V-326e3 — admin-only when targeting an owner via X-Driftstack-
+  // Account; member role gets 403.
   app.post<{ Params: { id: string } }>(
     '/v1/sessions/:id/navigate',
     {
@@ -167,7 +191,13 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = NavigateRequestSchema.parse(request.body ?? {});
-      const result = await service.navigate(ctx, id, body);
+      const eff = effectiveAccountIdForWrite(request, ctx);
+      const result = await service.navigate(
+        ctx,
+        id,
+        body,
+        eff !== undefined ? { effectiveAccountId: eff } : {},
+      );
       return {
         url: result.url,
         final_url: result.finalUrl,
@@ -178,6 +208,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   );
 
   // ── POST /v1/sessions/:id/interact ─────────────────────────────────────
+  // V-326e3 — same admin-only gate as navigate.
   app.post<{ Params: { id: string } }>(
     '/v1/sessions/:id/interact',
     {
@@ -187,7 +218,13 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = InteractRequestSchema.parse(request.body ?? {});
-      const result = await service.interact(ctx, id, body);
+      const eff = effectiveAccountIdForWrite(request, ctx);
+      const result = await service.interact(
+        ctx,
+        id,
+        body,
+        eff !== undefined ? { effectiveAccountId: eff } : {},
+      );
       return { ok: true as const, duration_ms: result.durationMs };
     },
   );
@@ -197,6 +234,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   // the behavioral simulation layer. Gated behind `gui_control` scope —
   // customer keys never carry this; only enterprise self-hosted GUI
   // keys do. See docs/locked-decisions.md.
+  // V-326e3 — same admin-only gate as the other write actions.
   app.post<{ Params: { id: string } }>(
     '/v1/sessions/:id/gui-input',
     {
@@ -206,12 +244,19 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = GUIInputRequestSchema.parse(request.body ?? {});
-      const result = await service.guiInput(ctx, id, body);
+      const eff = effectiveAccountIdForWrite(request, ctx);
+      const result = await service.guiInput(
+        ctx,
+        id,
+        body,
+        eff !== undefined ? { effectiveAccountId: eff } : {},
+      );
       return { ok: true as const, duration_ms: result.durationMs };
     },
   );
 
   // ── POST /v1/sessions/:id/wait ─────────────────────────────────────────
+  // V-326e3 — same admin-only gate.
   app.post<{ Params: { id: string } }>(
     '/v1/sessions/:id/wait',
     {
@@ -221,12 +266,19 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = WaitRequestSchema.parse(request.body ?? {});
-      const result = await service.wait(ctx, id, body);
+      const eff = effectiveAccountIdForWrite(request, ctx);
+      const result = await service.wait(
+        ctx,
+        id,
+        body,
+        eff !== undefined ? { effectiveAccountId: eff } : {},
+      );
       return { satisfied: result.satisfied, duration_ms: result.durationMs };
     },
   );
 
   // ── GET /v1/sessions/:id/state ─────────────────────────────────────────
+  // V-326e3 — getState is a READ; both 'member' and 'admin' allowed.
   app.get<{ Params: { id: string } }>(
     '/v1/sessions/:id/state',
     {
@@ -235,7 +287,12 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
-      const state = await service.getState(ctx, id);
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      const state = await service.getState(
+        ctx,
+        id,
+        effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {},
+      );
       return {
         url: state.url,
         title: state.title,
@@ -247,6 +304,9 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   );
 
   // ── POST /v1/sessions/:id/capture ──────────────────────────────────────
+  // V-326e3 — capture is a WRITE (it mutates the driver state via
+  // screenshot/snapshot ops + records billed events). Admin-only on
+  // team-scoped requests.
   app.post<{ Params: { id: string } }>(
     '/v1/sessions/:id/capture',
     {
@@ -256,7 +316,13 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
       const body = CaptureRequestSchema.parse(request.body ?? {});
-      const result = await service.capture(ctx, id, body);
+      const eff = effectiveAccountIdForWrite(request, ctx);
+      const result = await service.capture(
+        ctx,
+        id,
+        body,
+        eff !== undefined ? { effectiveAccountId: eff } : {},
+      );
       return {
         kind: result.kind,
         data: result.data,

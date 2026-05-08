@@ -254,13 +254,14 @@ export class SessionsService {
     ctx: AccountContext,
     sessionId: string,
     body: NavigateRequest,
+    opts: { effectiveAccountId?: string } = {},
   ): Promise<{
     url: string;
     finalUrl: string;
     status: number;
     durationMs: number;
   }> {
-    const session = await this.requireOwned(ctx, sessionId);
+    const session = await this.requireOwned(ctx, sessionId, opts);
     const result = await this.runWithFailureCapture(ctx, session, 'navigate', () =>
       this.deps.driver.navigate(session.driverSessionId, {
         url: body.url,
@@ -281,8 +282,9 @@ export class SessionsService {
     ctx: AccountContext,
     sessionId: string,
     body: InteractRequest,
+    opts: { effectiveAccountId?: string } = {},
   ): Promise<{ durationMs: number }> {
-    const session = await this.requireOwned(ctx, sessionId);
+    const session = await this.requireOwned(ctx, sessionId, opts);
     const result = await this.runWithFailureCapture(ctx, session, 'interact', () =>
       this.deps.driver.interact(session.driverSessionId, {
         action: body.action,
@@ -302,8 +304,9 @@ export class SessionsService {
     ctx: AccountContext,
     sessionId: string,
     body: GUIInputRequest,
+    opts: { effectiveAccountId?: string } = {},
   ): Promise<{ durationMs: number }> {
-    const session = await this.requireOwned(ctx, sessionId);
+    const session = await this.requireOwned(ctx, sessionId, opts);
     const result = await this.runWithFailureCapture(ctx, session, 'gui_input', () =>
       this.deps.driver.guiInput(session.driverSessionId, {
         action: body.action,
@@ -323,8 +326,9 @@ export class SessionsService {
     ctx: AccountContext,
     sessionId: string,
     body: WaitRequest,
+    opts: { effectiveAccountId?: string } = {},
   ): Promise<{ satisfied: boolean; durationMs: number }> {
-    const session = await this.requireOwned(ctx, sessionId);
+    const session = await this.requireOwned(ctx, sessionId, opts);
     const result = await this.runWithFailureCapture(ctx, session, 'wait', () =>
       this.deps.driver.wait(session.driverSessionId, {
         condition: body.condition,
@@ -343,6 +347,7 @@ export class SessionsService {
   async getState(
     ctx: AccountContext,
     sessionId: string,
+    opts: { effectiveAccountId?: string } = {},
   ): Promise<{
     url: string | null;
     title: string | null;
@@ -350,7 +355,7 @@ export class SessionsService {
     localStorage: Record<string, string>;
     capturedAt: Date;
   }> {
-    const session = await this.requireOwned(ctx, sessionId);
+    const session = await this.requireOwned(ctx, sessionId, opts);
     const state = await this.runWithFailureCapture(ctx, session, 'state_capture', () =>
       this.deps.driver.getState(session.driverSessionId),
     );
@@ -370,6 +375,7 @@ export class SessionsService {
     ctx: AccountContext,
     sessionId: string,
     body: CaptureRequest,
+    opts: { effectiveAccountId?: string } = {},
   ): Promise<{
     kind: CaptureKind;
     data: string;
@@ -377,7 +383,7 @@ export class SessionsService {
     byteSize: number;
     durationMs: number;
   }> {
-    const session = await this.requireOwned(ctx, sessionId);
+    const session = await this.requireOwned(ctx, sessionId, opts);
     const result = await this.runWithFailureCapture(ctx, session, 'capture', () =>
       this.deps.driver.capture(session.driverSessionId, {
         kind: body.kind,
@@ -514,8 +520,17 @@ export class SessionsService {
 
   // ─────────────────────────────────────────────────────────────────────────
 
-  private async requireOwned(ctx: AccountContext, sessionId: string): Promise<SessionRecord> {
-    const session = await this.deps.repo.findSession(sessionId, ctx.account.id);
+  private async requireOwned(
+    ctx: AccountContext,
+    sessionId: string,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<SessionRecord> {
+    // V-326e3 — when effectiveAccountId is set, look up the session
+    // on the OWNER's account (route layer has already enforced the
+    // 'admin' role for write actions). Read actions (getState) allow
+    // both 'member' and 'admin' roles per the V-330 read pattern.
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const session = await this.deps.repo.findSession(sessionId, accountId);
     if (!session) throw new NotFoundError(`Session "${sessionId}" not found.`);
     // V-090 founder-approved semantic: a session that has entered the
     // 'errored' state behaves the same as 'destroyed' for the customer
@@ -540,7 +555,7 @@ export class SessionsService {
    * emissions are not a risk.
    */
   private async runWithFailureCapture<T>(
-    ctx: AccountContext,
+    _ctx: AccountContext,
     session: SessionRecord,
     operation: string,
     fn: () => Promise<T>,
@@ -578,10 +593,15 @@ export class SessionsService {
 
       // Emit session.failed webhook event. Same fire-and-forget posture
       // as session.completed in destroy().
+      // V-326e3 — fan-out goes to the SESSION OWNER (session.accountId),
+      // not the caller. When a member fails on an owner's session,
+      // the owner's webhook subscription fires + the owner gets the
+      // first-failure email. The caller is the actor; the resource's
+      // owner is the audience.
       if (this.deps.webhooks) {
         const durationMs = erroredAt.getTime() - session.createdAt.getTime();
         try {
-          await this.deps.webhooks.enqueueEvent(ctx.account.id, 'session.failed', {
+          await this.deps.webhooks.enqueueEvent(session.accountId, 'session.failed', {
             session_id: `ses_${session.id}`,
             duration_ms: durationMs,
             operation,
@@ -600,7 +620,7 @@ export class SessionsService {
       // driver error from the customer.
       if (this.deps.accountLifecycle) {
         try {
-          await this.deps.accountLifecycle.emit(ctx.account.id, {
+          await this.deps.accountLifecycle.emit(session.accountId, {
             kind: 'session.failed.first',
             sessionId: `ses_${session.id}`,
             errorMessage,

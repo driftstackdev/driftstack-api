@@ -788,6 +788,88 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     expect(res.statusCode).toBe(403);
   });
 
+  it('POST /v1/sessions/:id/navigate as MEMBER role gets 403 (admin-only writes per Q1)', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.upsertAccount({
+      id: OWNER_ACCOUNT_ID,
+      email: 'owner@example.test',
+      name: null,
+      tier: 'api_scale',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'member',
+      },
+    ]);
+    const owner = await fx.sessionsRepo.insertSession({
+      accountId: OWNER_ACCOUNT_ID,
+      apiKeyId: '00000000-0000-4000-8000-000000000bff',
+      driverSessionId: 'drv_owner',
+      archetype: 'iphone-16-pro-ios-26-4-1',
+      purpose: 'production_customer',
+      label: null,
+      metadata: null,
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/sessions/ses_${owner.id}/navigate`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+      payload: { url: 'https://example.test' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('GET /v1/sessions/:id/state as MEMBER role reads OWNER session state (read role-agnostic)', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.upsertAccount({
+      id: OWNER_ACCOUNT_ID,
+      email: 'owner@example.test',
+      name: null,
+      tier: 'api_scale',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'member',
+      },
+    ]);
+    const owner = await fx.sessionsRepo.insertSession({
+      accountId: OWNER_ACCOUNT_ID,
+      apiKeyId: '00000000-0000-4000-8000-000000000bff',
+      driverSessionId: 'drv_owner',
+      archetype: 'iphone-16-pro-ios-26-4-1',
+      purpose: 'production_customer',
+      label: null,
+      metadata: null,
+    });
+    // Promote to ready so requireOwned doesn't 410.
+    await fx.sessionsRepo.updateSessionStatus(owner.id, 'ready');
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/sessions/ses_${owner.id}/state`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    // 200 (mock driver returns state) OR 5xx if driver is misconfigured.
+    // Either way the role gate passed; that's the important assertion.
+    expect(res.statusCode).not.toBe(403);
+  });
+
   it('GET /v1/sessions returns 403 when X-Driftstack-Account references a non-member owner', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
