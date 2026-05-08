@@ -15,7 +15,7 @@
 // scope retains compat-alias semantics during migration via
 // requireScope() — existing 'admin'-scoped keys keep working.
 
-import type { ApiKeyScope } from '@driftstack/api-types';
+import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
 import type { AccountContext } from './auth.js';
 import type { ApiKeyRow } from './auth.js';
 import type { AuthCache } from './auth-cache.js';
@@ -122,15 +122,30 @@ export class ApiKeysService {
     private readonly accountAudit: CustomerAuditEmitter | null = null,
   ) {}
 
-  async create(ctx: AccountContext, input: CreateApiKeyServiceInput): Promise<CreatedApiKey> {
+  async create(
+    ctx: AccountContext,
+    input: CreateApiKeyServiceInput,
+    opts: { effectiveAccountId?: string; effectiveTier?: AccountTier } = {},
+  ): Promise<CreatedApiKey> {
     throwIfMissingScope(ctx, 'account_owner');
+
+    // V-326e6 — when team-scoped, mint the key on the OWNER's
+    // account. Route layer has already enforced 'admin' team role
+    // per Q1. Tier-derived test/live env switch follows the OWNER's
+    // tier (a member acting for an api_starter owner mints
+    // ds_live_… keys; member's own tier doesn't matter).
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const tier = opts.effectiveTier ?? ctx.account.tier;
 
     // Block issuance until the account has accepted all currently-required
     // legal documents. Production wiring supplies the gate; tests that
     // don't exercise the legal track pass null (skips the check). Per
     // V-049 + the founder direction "API-key-issuance-block first".
+    // V-326e6 — gate against the OWNER's pending acceptances when
+    // team-scoped. The OWNER's legal posture, not the member's,
+    // determines whether keys can mint on the OWNER's account.
     if (this.legalGate !== null) {
-      const pending = await this.legalGate.required(ctx.account.id);
+      const pending = await this.legalGate.required(accountId);
       if (pending.length > 0) {
         throw new LegalAcceptanceRequiredError(
           pending.map((p) => ({
@@ -141,13 +156,13 @@ export class ApiKeysService {
       }
     }
 
-    const env = ctx.account.tier === 'trial_pack' ? 'test' : 'live';
+    const env = tier === 'trial_pack' ? 'test' : 'live';
     const plaintext = generateApiKey(env);
     const keyHash = await hashApiKey(plaintext);
     const keyPrefix = keyPrefixFromPlaintext(plaintext);
 
     const row = await this.repo.insertApiKey({
-      accountId: ctx.account.id,
+      accountId,
       name: input.name,
       scopes: input.scopes,
       keyPrefix,
@@ -157,10 +172,12 @@ export class ApiKeysService {
 
     // V-216 — record customer-facing audit entry. Best-effort; never
     // breaks the mint flow.
+    // V-326e6 — audit on OWNER's log; actor stays the calling
+    // member.
     if (this.accountAudit) {
       try {
         await this.accountAudit.record({
-          accountId: ctx.account.id,
+          accountId,
           actorType: 'customer',
           actorAccountId: ctx.account.id,
           actorKeyId: ctx.apiKey.id,
@@ -176,8 +193,14 @@ export class ApiKeysService {
     return { row, plaintext };
   }
 
-  async list(ctx: AccountContext): Promise<ApiKeyRow[]> {
-    return this.repo.listApiKeys(ctx.account.id);
+  async list(
+    ctx: AccountContext,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<ApiKeyRow[]> {
+    // V-326e6 — read role-agnostic; both 'member' and 'admin' can
+    // list the OWNER's keys when team-scoped.
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    return this.repo.listApiKeys(accountId);
   }
 
   /**
@@ -210,7 +233,12 @@ export class ApiKeysService {
   async rotate(
     ctx: AccountContext,
     keyId: string,
-    opts: { gracePeriodMs?: number; name?: string } = {},
+    opts: {
+      gracePeriodMs?: number;
+      name?: string;
+      effectiveAccountId?: string;
+      effectiveTier?: AccountTier;
+    } = {},
   ): Promise<{
     newRow: ApiKeyRow;
     plaintext: string;
@@ -219,7 +247,12 @@ export class ApiKeysService {
   }> {
     throwIfMissingScope(ctx, 'account_owner');
 
-    const oldKey = await this.repo.findApiKey(keyId, ctx.account.id);
+    // V-326e6 — when team-scoped, rotate a key on the OWNER's
+    // account. Route layer enforces 'admin' team role.
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const tier = opts.effectiveTier ?? ctx.account.tier;
+
+    const oldKey = await this.repo.findApiKey(keyId, accountId);
     if (!oldKey) throw new NotFoundError(`API key "${keyId}" not found.`);
     if (oldKey.revokedAt !== null) {
       throw new BadRequestError(
@@ -228,12 +261,12 @@ export class ApiKeysService {
     }
 
     // Mint the new key.
-    const env = ctx.account.tier === 'trial_pack' ? 'test' : 'live';
+    const env = tier === 'trial_pack' ? 'test' : 'live';
     const plaintext = generateApiKey(env);
     const keyHash = await hashApiKey(plaintext);
     const keyPrefix = keyPrefixFromPlaintext(plaintext);
     const newRow = await this.repo.insertApiKey({
-      accountId: ctx.account.id,
+      accountId,
       name: opts.name ?? oldKey.name,
       scopes: oldKey.scopes,
       keyPrefix,
@@ -264,10 +297,12 @@ export class ApiKeysService {
 
     // V-216 — record customer-facing audit entry. Captures both ids so
     // post-incident reconstruction can pair the rotation.
+    // V-326e6 — audit row on OWNER's log; actor stays the calling
+    // member.
     if (this.accountAudit) {
       try {
         await this.accountAudit.record({
-          accountId: ctx.account.id,
+          accountId,
           actorType: 'customer',
           actorAccountId: ctx.account.id,
           actorKeyId: ctx.apiKey.id,
@@ -287,10 +322,18 @@ export class ApiKeysService {
     return { newRow, plaintext, oldKey, gracePeriodEndsAt };
   }
 
-  async revoke(ctx: AccountContext, keyId: string): Promise<void> {
+  async revoke(
+    ctx: AccountContext,
+    keyId: string,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<void> {
     throwIfMissingScope(ctx, 'account_owner');
 
-    const key = await this.repo.findApiKey(keyId, ctx.account.id);
+    // V-326e6 — when team-scoped, revoke a key on the OWNER's
+    // account. Route layer enforces 'admin' team role.
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+
+    const key = await this.repo.findApiKey(keyId, accountId);
     if (!key) throw new NotFoundError(`API key "${keyId}" not found.`);
     if (key.revokedAt !== null) return; // idempotent
 
@@ -311,9 +354,10 @@ export class ApiKeysService {
 
     // Emit api_key.revoked webhook event. Best-effort — failures here
     // never break revoke correctness.
+    // V-326e6 — fan-out goes to the OWNER's webhook subscriptions.
     if (this.webhooks) {
       try {
-        await this.webhooks.enqueueEvent(ctx.account.id, 'api_key.revoked', {
+        await this.webhooks.enqueueEvent(accountId, 'api_key.revoked', {
           api_key_id: `key_${keyId}`,
           name: key.name,
           revoked_at: revokedAt.toISOString(),
@@ -324,10 +368,12 @@ export class ApiKeysService {
     }
 
     // V-216 — record customer-facing audit entry.
+    // V-326e6 — audit row on OWNER's log; actor stays the calling
+    // member.
     if (this.accountAudit) {
       try {
         await this.accountAudit.record({
-          accountId: ctx.account.id,
+          accountId,
           actorType: 'customer',
           actorAccountId: ctx.account.id,
           actorKeyId: ctx.apiKey.id,

@@ -241,6 +241,10 @@ export interface TestAppFixture {
   teamMembersRepo: InMemoryTeamMembersRepo;
   /** V-298c — exposed for direct service tests beyond the route layer. */
   teamMembersService: TeamMembersService;
+  /** V-326e6 — exposed so tests can seed legal acceptances for an
+   *  OWNER account when exercising team-RBAC api-key writes. */
+  legalRepo: InMemoryLegalRepo;
+  legalCatalog: ReturnType<typeof buildLegalCatalogFromContent>;
   /** V-295c3 — recording email service: tests can read .sends to assert
    *  exactly which template fired with what variables. */
   emailSends: ReadonlyArray<EmailSendRecord>;
@@ -744,6 +748,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     probesRepo,
     teamMembersRepo,
     teamMembersService,
+    legalRepo,
+    legalCatalog,
     emailSends,
     rateLimitOverridesRepo,
     sessionsRepo,

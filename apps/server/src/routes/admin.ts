@@ -1,6 +1,8 @@
 // Admin routes — API key management + usage view.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+type AccountReq = NonNullable<FastifyRequest['account']>;
+import type { AccountTier } from '@driftstack/api-types';
 import { CreateApiKeyRequestSchema, UsageSeriesQuerySchema } from '@driftstack/api-types';
 import type { AccountAuthRepo, ApiKeyRow } from '../services/auth.js';
 import type { ApiKeysService } from '../services/api-keys.js';
@@ -63,7 +65,24 @@ export interface AdminRoutesOptions {
 export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptions): void {
   const { apiKeysService, usageService, authRepo } = opts;
 
+  // V-326e6 — admin-only gate for api-keys writes (POST / DELETE /
+  // rotate). Read (GET /v1/api-keys) is role-agnostic.
+  function effectiveAccountIdForKeyWrite(
+    request: FastifyRequest,
+    ctx: AccountReq,
+  ): string | undefined {
+    const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+    if (effective.kind !== 'team') return undefined;
+    if (effective.role !== 'admin') {
+      throw new ForbiddenError('API key writes on a team owner require admin role on that team.');
+    }
+    return effective.accountId;
+  }
+
   // ── POST /v1/api-keys ──────────────────────────────────────────────────
+  // V-326e6 — admin-only on team-scoped requests. The key is minted
+  // on the OWNER's account; tier-derived test/live env switch uses
+  // the OWNER's tier.
   app.post(
     '/v1/api-keys',
     {
@@ -73,11 +92,22 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const body = CreateApiKeyRequestSchema.parse(request.body ?? {});
-      const created = await apiKeysService.create(ctx, {
-        name: body.name,
-        scopes: body.scopes,
-        expiresAt: body.expires_at ? new Date(body.expires_at) : null,
-      });
+      const eff = effectiveAccountIdForKeyWrite(request, ctx);
+      let createOpts: { effectiveAccountId?: string; effectiveTier?: AccountTier } = {};
+      if (eff !== undefined) {
+        const owner = await authRepo.getAccount(eff);
+        if (!owner) throw new ForbiddenError('Owner account no longer exists.');
+        createOpts = { effectiveAccountId: owner.id, effectiveTier: owner.tier };
+      }
+      const created = await apiKeysService.create(
+        ctx,
+        {
+          name: body.name,
+          scopes: body.scopes,
+          expiresAt: body.expires_at ? new Date(body.expires_at) : null,
+        },
+        createOpts,
+      );
       return reply.code(201).send({
         ...publicApiKey(created.row),
         plaintext: created.plaintext,
@@ -86,6 +116,8 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
   );
 
   // ── GET /v1/api-keys ───────────────────────────────────────────────────
+  // V-326e6 — read role-agnostic; both 'member' and 'admin' can list
+  // the OWNER's keys.
   app.get(
     '/v1/api-keys',
     {
@@ -94,12 +126,17 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
-      const keys = await apiKeysService.list(ctx);
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      const keys = await apiKeysService.list(
+        ctx,
+        effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {},
+      );
       return { data: keys.map(publicApiKey) };
     },
   );
 
   // ── DELETE /v1/api-keys/:id ────────────────────────────────────────────
+  // V-326e6 — admin-only on team-scoped requests.
   app.delete<{ Params: { id: string } }>(
     '/v1/api-keys/:id',
     {
@@ -109,7 +146,8 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const id = uuidFromPrefixedId(request.params.id, 'key');
-      await apiKeysService.revoke(ctx, id);
+      const eff = effectiveAccountIdForKeyWrite(request, ctx);
+      await apiKeysService.revoke(ctx, id, eff !== undefined ? { effectiveAccountId: eff } : {});
       return reply.code(204).send();
     },
   );
@@ -119,6 +157,7 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
   // once); old key continues working for 24h grace period via
   // expires_at-driven auth gate. Optional `name` lets the caller rename
   // the new key (useful when rotating "production-2024" → "production-2025").
+  // V-326e6 — admin-only on team-scoped requests.
   app.post<{ Params: { id: string }; Body: { name?: string } }>(
     '/v1/api-keys/:id/rotate',
     {
@@ -129,9 +168,23 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
       if (!ctx) throw new Error('account context missing after requireAuth');
       const id = uuidFromPrefixedId(request.params.id, 'key');
       const body = request.body ?? {};
-      const result = await apiKeysService.rotate(ctx, id, {
-        ...(typeof body.name === 'string' ? { name: body.name } : {}),
-      });
+      const eff = effectiveAccountIdForKeyWrite(request, ctx);
+      let rotateOpts: {
+        name?: string;
+        effectiveAccountId?: string;
+        effectiveTier?: AccountTier;
+      } = {};
+      if (typeof body.name === 'string') rotateOpts.name = body.name;
+      if (eff !== undefined) {
+        const owner = await authRepo.getAccount(eff);
+        if (!owner) throw new ForbiddenError('Owner account no longer exists.');
+        rotateOpts = {
+          ...rotateOpts,
+          effectiveAccountId: owner.id,
+          effectiveTier: owner.tier,
+        };
+      }
+      const result = await apiKeysService.rotate(ctx, id, rotateOpts);
       return reply.code(201).send({
         ...publicApiKey(result.newRow),
         plaintext: result.plaintext,

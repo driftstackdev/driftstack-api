@@ -1012,6 +1012,89 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     expect(res.statusCode).toBe(403);
   });
 
+  it('POST /v1/api-keys as admin team member mints key on the OWNER account', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.upsertAccount({
+      id: OWNER_ACCOUNT_ID,
+      email: 'owner@example.test',
+      name: null,
+      tier: 'api_scale',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'admin',
+      },
+    ]);
+    // Seed legal acceptances for the OWNER (mirrors the buildTestApp
+    // pattern that seeds the calling account, but for the team
+    // owner's id). V-049 + V-326e6: api-key issuance is gated on
+    // OWNER's pending acceptances when team-scoped.
+    for (const entry of fx.legalCatalog.entries()) {
+      await fx.legalRepo.recordAcceptance({
+        accountId: OWNER_ACCOUNT_ID,
+        documentKey: entry.documentKey,
+        version: entry.version,
+        contentHash: entry.contentHash,
+        acceptedFromIp: null,
+        acceptedUserAgent: null,
+      });
+    }
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+      payload: { name: 'team-key', scopes: ['account_owner'] },
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json<{ id: string; key_prefix: string }>();
+    // Plaintext should be ds_live_… because OWNER's tier is api_scale.
+    expect(body.key_prefix.startsWith('ds_live_')).toBe(true);
+
+    // Key lives on the OWNER's account.
+    const ownerKeys = await fx.apiKeysRepo.listApiKeys(OWNER_ACCOUNT_ID);
+    expect(ownerKeys.map((k) => k.name)).toContain('team-key');
+  });
+
+  it('POST /v1/api-keys as MEMBER role gets 403 (admin-only writes)', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.upsertAccount({
+      id: OWNER_ACCOUNT_ID,
+      email: 'owner@example.test',
+      name: null,
+      tier: 'api_scale',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'member',
+      },
+    ]);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+      payload: { name: 'should-403', scopes: ['account_owner'] },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it('GET /v1/sessions returns 403 when X-Driftstack-Account references a non-member owner', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
