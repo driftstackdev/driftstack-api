@@ -18878,3 +18878,29 @@ Three plain-language paragraphs:
 Trust-page narrative now matches /settings copy + privacy.md
 disclosure (V-373) + DPA Annex 3 routing claim. No data-handling
 change; pure transparency.
+
+## V-375 — customer-dashboard /snapshots management page
+
+**Tier**: 1 (V-312 follow-through; closes the cross-account
+list / restore / delete UX gap).
+
+apps/customer-dashboard/src/pages/snapshots.astro — new page.
+Progressive enhancement pattern shared with /profiles, /sessions,
+/api-keys, etc:
+
+- Reads ds_web_session_token; if absent, renders zero state.
+- Fetches /v1/profile-snapshots; lists newest-first.
+- Per-row metadata: label, snapshot id, parent profile name (with
+  an "(parent profile deleted)" tag when parent_profile_id is null),
+  description (when set), captured_at.
+- Per-row actions: Restore (prompts for new name; defaults to
+  "{parent_name} (restored)"; surfaces 409 / 402 detail in banner)
+  - Delete (confirm dialog; banners on 204 vs error).
+- Banner-driven UX consistent with the rest of the dashboard.
+
+Nav entry inserted between "Profiles" and "Sessions" in
+DashboardLayout.
+
+Capture stays on /profiles (per-row Snapshot button shipped in
+V-312); /snapshots covers list / restore / delete only. astro
+check clean (0 errors).

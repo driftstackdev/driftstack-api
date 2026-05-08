@@ -1,0 +1,234 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+
+// V-375 — Profile snapshots management page. Cross-account list of
+// every snapshot the calling account owns, with Restore + Delete
+// actions. Capture happens on /profiles (per-row Snapshot button).
+//
+// Progressive enhancement: page renders an empty/zero state on
+// first paint; the inline script reads ds_web_session_token,
+// fetches /v1/profile-snapshots, and hydrates the list. Falls back
+// to the empty state when token absent or fetch fails.
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+---
+
+<DashboardLayout title="Snapshots">
+  <div class="mx-auto max-w-5xl px-6 py-10" data-page="snapshots">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
+    <header class="mb-10">
+      <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Profile snapshots</h1>
+      <p class="mt-2 max-w-prose text-sm text-slate-500">
+        Immutable point-in-time copies of saved profiles. Capture from <a
+          href="/profiles"
+          class="text-oxblood-700 underline">/profiles</a
+        >; restore here to clone a snapshot back into a new profile, or delete a snapshot
+        when you no longer need it. Restoring counts against your profile tier cap and
+        rejects on name conflict — the same way creating a profile does.
+      </p>
+    </header>
+
+    <ul
+      data-list
+      class="mb-10 hidden divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white"
+    >
+    </ul>
+
+    <div
+      data-empty
+      class="mb-10 rounded-lg border border-dashed border-slate-300 bg-white px-6 py-16 text-center text-sm text-slate-500"
+    >
+      No snapshots yet. Capture one from <a href="/profiles" class="text-oxblood-700 underline"
+        >/profiles</a
+      >.
+    </div>
+  </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="snapshots"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const list = root.querySelector('[data-list]');
+      const empty = root.querySelector('[data-empty]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+      function hideBanner() {
+        if (!banner) return;
+        banner.classList.add('hidden');
+      }
+      function escapeHtml(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;',
+            })[c],
+        );
+      }
+      function fmtIso(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().slice(0, 16).replace('T', ' ');
+      }
+
+      function authedFetch(path, init) {
+        return fetch(apiBaseUrl + path, {
+          ...(init || {}),
+          headers: {
+            ...((init && init.headers) || {}),
+            authorization: 'Bearer ' + token,
+            'content-type': 'application/json',
+            ...(typeof window.driftstackActAsHeaders === 'function'
+              ? window.driftstackActAsHeaders()
+              : {}),
+          },
+        });
+      }
+
+      function snapshotLi(s) {
+        return (
+          '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
+          '<div class="min-w-0">' +
+          '<p class="text-base font-medium text-slate-900">' +
+          escapeHtml(s.label || '(no label)') +
+          '</p>' +
+          '<p class="mt-1 font-mono text-xs text-slate-500">' +
+          escapeHtml(s.id) +
+          '</p>' +
+          (s.description
+            ? '<p class="mt-2 text-sm text-slate-600">' + escapeHtml(s.description) + '</p>'
+            : '') +
+          '<p class="mt-2 text-xs text-slate-500">From ' +
+          escapeHtml(s.parent_name) +
+          (s.parent_profile_id === null ? ' <em>(parent profile deleted)</em>' : '') +
+          ' · captured ' +
+          escapeHtml(fmtIso(s.captured_at)) +
+          '</p></div>' +
+          '<div class="flex shrink-0 flex-col items-end gap-2">' +
+          '<button type="button" data-restore="' +
+          escapeHtml(s.id) +
+          '" data-restore-from="' +
+          escapeHtml(s.parent_name) +
+          '" class="text-sm text-oxblood-700 hover:underline">Restore</button>' +
+          '<button type="button" data-delete="' +
+          escapeHtml(s.id) +
+          '" data-delete-label="' +
+          escapeHtml(s.label || '(no label)') +
+          '" class="text-sm text-rose-700 hover:underline">Delete</button>' +
+          '</div></li>'
+        );
+      }
+
+      function refresh() {
+        if (!token) return;
+        return authedFetch('/v1/profile-snapshots')
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => render(body.data || []))
+          .then(() => hideBanner())
+          .catch((err) => {
+            showBanner(
+              "Couldn't load snapshots (" +
+                (err && err.message ? err.message : 'network error') +
+                ').',
+            );
+          });
+      }
+
+      function render(snapshots) {
+        if (snapshots.length === 0) {
+          list.classList.add('hidden');
+          empty.classList.remove('hidden');
+          return;
+        }
+        empty.classList.add('hidden');
+        list.classList.remove('hidden');
+        list.innerHTML = snapshots.map(snapshotLi).join('');
+        wireRestoreButtons();
+        wireDeleteButtons();
+      }
+
+      function wireRestoreButtons() {
+        list.querySelectorAll('[data-restore]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-restore');
+            const from = btn.getAttribute('data-restore-from') || '';
+            const suggested = from + ' (restored)';
+            const name = window.prompt(
+              'Restore snapshot into a new profile.\n\nNew profile name:',
+              suggested,
+            );
+            if (!name) return;
+            authedFetch('/v1/profile-snapshots/' + encodeURIComponent(id) + '/restore', {
+              method: 'POST',
+              body: JSON.stringify({ name }),
+            })
+              .then(async (r) => {
+                if (r.ok) {
+                  const body = await r.json();
+                  showBanner('Restored to new profile: ' + (body.name || name));
+                  return refresh();
+                }
+                let msg;
+                try {
+                  const body = await r.json();
+                  msg = body.detail || body.title || 'HTTP ' + r.status;
+                } catch (_e) {
+                  msg = 'HTTP ' + r.status;
+                }
+                showBanner('Restore failed: ' + msg);
+              })
+              .catch((err) => {
+                showBanner(
+                  'Restore failed: ' + (err && err.message ? err.message : 'network error'),
+                );
+              });
+          });
+        });
+      }
+
+      function wireDeleteButtons() {
+        list.querySelectorAll('[data-delete]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-delete');
+            const label = btn.getAttribute('data-delete-label') || '(unnamed)';
+            if (!window.confirm('Delete snapshot "' + label + '"? This cannot be undone.')) {
+              return;
+            }
+            authedFetch('/v1/profile-snapshots/' + encodeURIComponent(id), {
+              method: 'DELETE',
+            })
+              .then((r) => {
+                if (r.status === 204) {
+                  showBanner('Snapshot deleted.');
+                  return refresh();
+                }
+                showBanner('Delete failed: HTTP ' + r.status);
+              })
+              .catch((err) => {
+                showBanner(
+                  'Delete failed: ' + (err && err.message ? err.message : 'network error'),
+                );
+              });
+          });
+        });
+      }
+
+      refresh();
+    })();
+  </script>
+</DashboardLayout>
