@@ -229,6 +229,87 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     expect(() => resolveEffectiveAccount(ctx, 'malformed-no-prefix')).toThrow(/Invalid/);
   });
 
+  it('GET /v1/sessions returns owner sessions when caller is a member + sets X-Driftstack-Account', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'admin',
+      },
+    ]);
+    // Seed sessions: 1 for caller + 2 for the owner.
+    await fx.sessionsRepo.insertSession({
+      accountId: fx.accountId,
+      apiKeyId: '00000000-0000-4000-8000-000000000b00',
+      driverSessionId: 'drv_self',
+      archetype: 'iphone-16-pro-ios-26-4-1',
+      purpose: 'production_customer',
+      label: 'self-session',
+      metadata: null,
+    });
+    await fx.sessionsRepo.insertSession({
+      accountId: OWNER_ACCOUNT_ID,
+      apiKeyId: '00000000-0000-4000-8000-000000000b01',
+      driverSessionId: 'drv_owner_1',
+      archetype: 'iphone-16-pro-ios-26-4-1',
+      purpose: 'production_customer',
+      label: 'owner-session-1',
+      metadata: null,
+    });
+    await fx.sessionsRepo.insertSession({
+      accountId: OWNER_ACCOUNT_ID,
+      apiKeyId: '00000000-0000-4000-8000-000000000b02',
+      driverSessionId: 'drv_owner_2',
+      archetype: 'iphone-16-pro-ios-26-4-1',
+      purpose: 'production_customer',
+      label: 'owner-session-2',
+      metadata: null,
+    });
+
+    // No header → caller's own session.
+    const own = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(own.statusCode).toBe(200);
+    const ownBody = own.json<{ data: { account_id: string; label: string }[] }>();
+    expect(ownBody.data.map((d) => d.label)).toEqual(['self-session']);
+
+    // With header → owner's sessions.
+    const owner = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    expect(owner.statusCode).toBe(200);
+    const ownerBody = owner.json<{ data: { account_id: string; label: string }[] }>();
+    expect(ownerBody.data.map((d) => d.label).sort()).toEqual([
+      'owner-session-1',
+      'owner-session-2',
+    ]);
+    for (const row of ownerBody.data) {
+      expect(row.account_id).toBe(`acc_${OWNER_ACCOUNT_ID}`);
+    }
+  });
+
+  it('GET /v1/sessions returns 403 when X-Driftstack-Account references a non-member owner', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': 'acc_00000000-0000-4000-8000-deadbeef0000',
+      },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it('returns kind:self when header references the caller’s own account', async () => {
     const { resolveEffectiveAccount } = await import('../../src/services/auth.js');
     const ctx = {

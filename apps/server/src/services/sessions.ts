@@ -450,9 +450,17 @@ export class SessionsService {
 
   async list(
     ctx: AccountContext,
-    opts: { limit: number; cursor?: string },
+    opts: { limit: number; cursor?: string; effectiveAccountId?: string },
   ): Promise<SessionListPage> {
-    return this.deps.repo.listSessions(ctx.account.id, opts);
+    // V-326d — when effectiveAccountId is set (route layer resolved
+    // X-Driftstack-Account to a team owner the caller is a member of),
+    // list the owner's sessions instead of the caller's. Otherwise
+    // default to the caller's own account. Authorization is enforced
+    // by the route — the resolver returns kind:'team' only when the
+    // caller is actually a member, so by the time we get here the
+    // override is already validated.
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    return this.deps.repo.listSessions(accountId, opts);
   }
 
   /**

@@ -24,6 +24,15 @@ import {
 import type { SessionRecord, SessionsService } from '../services/sessions.js';
 import { GUIInputRequestSchema } from '../schemas/gui-input.js';
 import { BadRequestError } from '../lib/errors.js';
+import { resolveEffectiveAccount } from '../services/auth.js';
+
+const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';
+
+function readEffectiveAccountHeader(request: FastifyRequest): string | undefined {
+  const raw = request.headers[EFFECTIVE_ACCOUNT_HEADER];
+  if (Array.isArray(raw)) return raw[0];
+  return raw;
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // ID helpers
@@ -94,6 +103,10 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   );
 
   // ── GET /v1/sessions ───────────────────────────────────────────────────
+  // V-326d — honors X-Driftstack-Account: a team member with a valid
+  // membership on the requested owner sees the owner's sessions.
+  // Without the header (or with the caller's own account id), behaves
+  // identically to pre-V-326d.
   app.get(
     '/v1/sessions',
     {
@@ -102,9 +115,11 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request: FastifyRequest) => {
       const ctx = requireCtx(request);
       const query = PaginationQuerySchema.parse(request.query ?? {});
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
       const page = await service.list(ctx, {
         limit: query.limit,
         ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
+        ...(effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {}),
       });
       return {
         data: page.items.map(publicSession),
