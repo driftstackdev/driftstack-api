@@ -167,3 +167,26 @@ references the corresponding rows in this log.
   access to via /v1/account/audit-log; portability is just a
   bulk-format wrapper. No processing-purpose, retention, or data-
   subject-right changes. Reviewed and confirmed.
+
+## 2026-05-08 — V-327 (renewal-reminder email lifecycle dispatch)
+
+- **Privacy Policy §3.6 (Billing data)** extended with a
+  "Renewal-reminder emails" paragraph disclosing the new outbound
+  trigger: Stripe's `invoice.upcoming` webhook (~7 days before each
+  recurring invoice generates) fans out one `billing-renewal-reminder`
+  email per upcoming invoice via Postmark. Customers can opt out via
+  the dashboard email preferences page; Stripe's contractual
+  notification (actual charge confirmation) remains non-opt-outable.
+- **No new sub-processor**: Postmark + Stripe were both already in
+  the sub-processor list for these data flows. Sub-processor mirror
+  linter unchanged.
+- **No DPA / ToS / AUP / Definitions update**: the trigger is a new
+  outbound-email occasion within the existing transactional-email
+  category already covered. No retention or processing-purpose
+  changes.
+- **Engineering surface**: V-327 wires `AccountLifecycleService.
+handleRenewalReminder` (mirror of `handleTierChanged`'s pattern)
+  - dispatches from the Stripe webhook handler's `invoice.upcoming`
+    case; the lifecycle event carries amount/currency/renewalDate +
+    the source `invoice.upcoming` event id. Mirrored to
+    `apps/marketing-site/src/pages/legal/privacy.md`.

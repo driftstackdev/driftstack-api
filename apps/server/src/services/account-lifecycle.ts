@@ -80,6 +80,19 @@ export type LifecycleEvent =
     }
   | {
       kind: 'subscription.trial_pack_expired';
+    }
+  | {
+      // V-327 — fires when Stripe's `invoice.upcoming` webhook arrives
+      // (~7 days before renewal). Email-only; no audit row (the
+      // upcoming-charge isn't a state change, just a heads-up). Per
+      // privacy.md §3.5 we disclose this trigger to customers under
+      // "Information about your subscription".
+      kind: 'subscription.renewal_reminder';
+      amountCents: number;
+      currency: string;
+      renewalDate: Date;
+      stripeEventId: string;
+      stripeInvoiceId: string;
     };
 
 export interface AccountLifecycleServiceConfig {
@@ -143,6 +156,9 @@ export class AccountLifecycleService {
           return;
         case 'subscription.trial_pack_expired':
           await this.handleTrialPackExpired(accountId);
+          return;
+        case 'subscription.renewal_reminder':
+          await this.handleRenewalReminder(accountId, event);
           return;
       }
     } catch (err) {
@@ -310,4 +326,80 @@ export class AccountLifecycleService {
       upgradeUrl: this.billingPortalUrl,
     });
   }
+
+  /**
+   * V-327 — fires on Stripe `invoice.upcoming` webhook (~7 days before
+   * renewal). Email-only — no audit row (the upcoming-charge isn't a
+   * state change, just a heads-up). Honors the
+   * `billing-renewal-reminder` opt-out. The dispatcher does NOT dedupe
+   * by stripeEventId; Stripe redelivers events only on handler failure
+   * (non-2xx response), and our handler returns 'handled' synchronously
+   * after the email enqueue. A duplicate email costs less than the
+   * dedup-table machinery, so we accept the worst-case noise.
+   */
+  private async handleRenewalReminder(
+    accountId: string,
+    event: {
+      amountCents: number;
+      currency: string;
+      renewalDate: Date;
+      stripeEventId: string;
+      stripeInvoiceId: string;
+    },
+  ): Promise<void> {
+    const allowed = await this.emailPreferences.shouldSend(accountId, 'billing-renewal-reminder');
+    if (!allowed) return;
+
+    const account = await this.repo.findForLifecycle(accountId);
+    if (account === null) return;
+
+    const amountFormatted = formatCents(event.amountCents, event.currency);
+
+    await this.email.sendBillingRenewalReminder({
+      to: account.email,
+      amountFormatted,
+      renewalDate: event.renewalDate,
+      portalUrl: this.billingPortalUrl,
+    });
+  }
+}
+
+/**
+ * V-327 helper — format Stripe-style cents + currency into a
+ * customer-facing string. Stripe currencies are ISO 4217 lowercase
+ * codes; cents are integers in the smallest unit (USD: cents,
+ * JPY: yen — JPY uses the same integer count but no fractional digit
+ * scaling). Handles the common cases; falls back to "X.XX <CODE>" for
+ * unknown currencies so the email always renders something useful.
+ */
+function formatCents(cents: number, currency: string): string {
+  const code = currency.toUpperCase();
+  // Zero-decimal currencies per Stripe's docs:
+  // https://stripe.com/docs/currencies#zero-decimal
+  const ZERO_DEC = new Set([
+    'BIF',
+    'CLP',
+    'DJF',
+    'GNF',
+    'JPY',
+    'KMF',
+    'KRW',
+    'MGA',
+    'PYG',
+    'RWF',
+    'UGX',
+    'VND',
+    'VUV',
+    'XAF',
+    'XOF',
+    'XPF',
+  ]);
+  if (ZERO_DEC.has(code)) {
+    return `${cents.toLocaleString('en-US')} ${code}`;
+  }
+  const dollars = (cents / 100).toFixed(2);
+  if (code === 'USD') return `$${dollars}`;
+  if (code === 'EUR') return `€${dollars}`;
+  if (code === 'GBP') return `£${dollars}`;
+  return `${dollars} ${code}`;
 }

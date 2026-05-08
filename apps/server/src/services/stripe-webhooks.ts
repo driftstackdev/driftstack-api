@@ -246,15 +246,12 @@ export class StripeWebhooksService {
           this.logEvent(event, 'invoice');
           return 'handled';
         case 'invoice.upcoming':
-          // V-304b — Stripe fires `invoice.upcoming` ~7 days before the
-          // invoice is generated. We log + handle but don't yet fan out
-          // the renewal-reminder email; the email template + opt-out
-          // surface are in place (sendBillingRenewalReminder), the
-          // wire-in lands in V-304b-wire once the AccountLifecycleService
-          // gains a handleRenewalReminder dispatch (mirror of the tier-
-          // changed pattern). Tracking as scaffolded-but-not-fired so
-          // tests don't break.
-          this.logEvent(event, 'invoice.upcoming');
+          // V-327 — Stripe fires `invoice.upcoming` ~7 days before the
+          // invoice is generated. Decode amount + currency + customer
+          // from the invoice payload, look up the account, and dispatch
+          // the renewal_reminder lifecycle event. Email send is
+          // opt-out-aware via EmailPreferencesService.
+          await this.handleInvoiceUpcoming(event);
           return 'handled';
         case 'customer.created':
         case 'customer.updated':
@@ -416,6 +413,63 @@ export class StripeWebhooksService {
     return 'handled';
   }
 
+  /**
+   * V-327 — `invoice.upcoming` handler. Decodes the invoice, resolves
+   * the customer to a local account, and dispatches the renewal_
+   * reminder lifecycle event. Bails silently on missing fields /
+   * unknown customer (Stripe dashboard may fire test events for
+   * customers we don't have).
+   */
+  private async handleInvoiceUpcoming(event: StripeEvent): Promise<void> {
+    const invoice = event.data.object;
+    const stripeCustomerId = readString(invoice, 'customer');
+    const amountDue = readNumber(invoice, 'amount_due');
+    const currency = readString(invoice, 'currency');
+    const renewalUnix = readUnixTimestamp(invoice, 'next_payment_attempt');
+    const stripeInvoiceId = readString(invoice, 'id');
+
+    if (
+      stripeCustomerId === null ||
+      amountDue === null ||
+      currency === null ||
+      renewalUnix === null ||
+      stripeInvoiceId === null
+    ) {
+      this.config.logger.warn(
+        { component: 'stripe-webhooks', eventId: event.id },
+        'invoice.upcoming missing required fields; skipping renewal reminder',
+      );
+      this.logEvent(event, 'invoice.upcoming (missing-fields)');
+      return;
+    }
+
+    const accountId = await this.repo.findAccountIdFromCustomerOrRef({
+      stripeCustomerId,
+      clientReferenceId: null,
+    });
+    if (accountId === null) {
+      this.config.logger.warn(
+        { component: 'stripe-webhooks', eventId: event.id, stripeCustomerId },
+        'invoice.upcoming references unknown customer; ignoring',
+      );
+      this.logEvent(event, 'invoice.upcoming (unknown-customer)');
+      return;
+    }
+
+    if (this.accountLifecycle !== null) {
+      await this.accountLifecycle.emit(accountId, {
+        kind: 'subscription.renewal_reminder',
+        amountCents: amountDue,
+        currency,
+        renewalDate: renewalUnix,
+        stripeEventId: event.id,
+        stripeInvoiceId,
+      });
+    }
+
+    this.logEvent(event, 'invoice.upcoming → renewal_reminder dispatched');
+  }
+
   private async handleCheckoutCompleted(event: StripeEvent): Promise<DispatchOutcome> {
     const session = event.data.object;
     const mode = readString(session, 'mode');
@@ -529,6 +583,11 @@ function readString(obj: Record<string, unknown>, key: string): string | null {
 function readBool(obj: Record<string, unknown>, key: string): boolean {
   const v = obj[key];
   return v === true;
+}
+
+function readNumber(obj: Record<string, unknown>, key: string): number | null {
+  const v = obj[key];
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
 function readUnixTimestamp(obj: Record<string, unknown>, key: string): Date | null {

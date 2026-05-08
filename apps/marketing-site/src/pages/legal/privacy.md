@@ -179,6 +179,16 @@ Dutch _Algemene wet inzake rijksbelastingen_; 7-year retention).
 webhook. Customer provides billing details at signup or via the
 customer portal.
 
+**Renewal-reminder emails.** Approximately seven (7) days before each
+recurring subscription invoice is generated, Stripe fires an
+`invoice.upcoming` webhook to Driftstack. We use this signal to send
+the billing email address one (1) `billing-renewal-reminder` email
+per upcoming invoice, summarising the upcoming amount, currency, and
+renewal date, and linking to the customer billing portal. Customers
+may opt out of this email at any time via the dashboard's email
+preferences page (the underlying contractual notification — actual
+charge confirmation — is sent by Stripe and is not opt-outable).
+
 ### 3.7 Support correspondence
 
 **What:** email content, support ticket content, attachments, and
