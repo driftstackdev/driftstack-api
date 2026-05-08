@@ -13,6 +13,9 @@ if (!incident) {
   return Astro.redirect('/incidents');
 }
 
+// V-344 — apiBaseUrl exposed to inline script for live form wiring.
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+
 function fmtIso(iso: string): string {
   return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }
@@ -184,16 +187,80 @@ const isResolved = incident.status === 'resolved';
     }
   </div>
 
-  <script>
-    document.getElementById('add-update-form')?.addEventListener('submit', (event) => {
-      event.preventDefault();
-      // eslint-disable-next-line no-alert
-      alert('V-295a admin UI scaffold — POST /v1/admin/incidents/:id/updates wiring lands in V-295c.');
-    });
-    document.getElementById('resolve-form')?.addEventListener('submit', (event) => {
-      event.preventDefault();
-      // eslint-disable-next-line no-alert
-      alert('V-295a admin UI scaffold — POST /v1/admin/incidents/:id/resolve wiring lands in V-295c.');
-    });
+  <script is:inline define:vars={{ apiBaseUrl, incidentId: incident.id }}>
+    // V-344 — wires Post-update + Mark-resolved forms to the live
+    // /v1/admin/incidents/:id/{updates,resolve} endpoints. Replaces
+    // the V-295a alert-stubs.
+    (function () {
+      function getToken() {
+        try {
+          return localStorage.getItem('ds_web_session_token') || '';
+        } catch (_) {
+          return '';
+        }
+      }
+
+      function bind(formId, urlSuffix, includeStatus) {
+        const form = document.getElementById(formId);
+        if (!form) return;
+        form.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          const token = getToken();
+          if (!token) {
+            // eslint-disable-next-line no-alert
+            alert('Sign in with a staff admin account before posting.');
+            return;
+          }
+          const fd = new FormData(form);
+          const message = (fd.get('message') || '').toString().trim();
+          if (!message) return;
+          const body = { message: message };
+          if (includeStatus) {
+            body.status = (fd.get('status') || 'monitoring').toString();
+          }
+          const submit = form.querySelector('button[type="submit"]');
+          if (submit) {
+            submit.disabled = true;
+            submit.dataset.origText = submit.textContent || '';
+            submit.textContent = 'Posting…';
+          }
+          fetch(apiBaseUrl + '/v1/admin/incidents/' + encodeURIComponent(incidentId) + urlSuffix, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              authorization: 'Bearer ' + token,
+            },
+            body: JSON.stringify(body),
+          })
+            .then(function (r) {
+              if (!r.ok) {
+                return r
+                  .json()
+                  .catch(function () {
+                    return {};
+                  })
+                  .then(function (b) {
+                    return Promise.reject(new Error(b.detail || 'HTTP ' + r.status));
+                  });
+              }
+              return r.json();
+            })
+            .then(function () {
+              window.location.reload();
+            })
+            .catch(function (err) {
+              // eslint-disable-next-line no-alert
+              alert('Post failed: ' + (err && err.message ? err.message : 'network error'));
+              if (submit) {
+                submit.disabled = false;
+                submit.textContent = submit.dataset.origText || 'Submit';
+              }
+            });
+        });
+      }
+
+      bind('add-update-form', '/updates', true);
+      bind('resolve-form', '/resolve', false);
+    })();
   </script>
 </AdminLayout>
