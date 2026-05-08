@@ -121,3 +121,31 @@ async def test_async_list_deliveries() -> None:
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
             result = await client.webhooks.list_deliveries("whk_xx")
         assert isinstance(result, WebhookDeliveryListPage)
+
+
+# V-307 — replay flow tests.
+
+
+def test_sync_replay_delivery() -> None:
+    pending = {**DELIVERY, "status": "pending", "attempts": 0, "delivered_at": None}
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/webhook-deliveries/wdl_xx/replay").mock(
+            return_value=httpx.Response(200, json=pending),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.webhooks.replay_delivery("wdl_xx")
+        assert route.called
+        assert isinstance(result, WebhookDelivery)
+        assert result.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_async_replay_delivery() -> None:
+    pending = {**DELIVERY, "status": "pending", "attempts": 0, "delivered_at": None}
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/webhook-deliveries/wdl_xx/replay").mock(
+            return_value=httpx.Response(200, json=pending),
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = await client.webhooks.replay_delivery("wdl_xx")
+        assert result.status == "pending"

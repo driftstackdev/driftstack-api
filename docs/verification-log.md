@@ -17449,3 +17449,40 @@ V-304b (~3-4h) — billing renewal reminders (7d + 1d before subscription renewa
 ### Next
 
 V-309b (~2-3h) — Python SDK rotate + replay. V-309c — Go SDK rotate + replay. Then V-304b (billing renewal reminders), V-298 Team RBAC v1 (substantial — splits into V-298a/b/c/d sub-slices), V-309+ V-294 catalog. NEVER STOP autopilot.
+
+## V-309b — Python SDK rotate + replay parity
+
+**Tier**: 1 — SDK parity.
+
+**Why**: V-309 added rotate + replay to the TypeScript SDK; the Python SDK was now behind. Pure mirror — same wire shape, same method names (snake_case for Python).
+
+**Scope**
+
+- `ApiKeysResource.rotate(key_id, *, name=None)` + `AsyncApiKeysResource.rotate`. Returns new `RotateApiKeyResponse(CreateApiKeyResponse)` with `rotated_from` + `grace_period_ends_at` fields.
+- `WebhooksResource.replay_delivery(delivery_id)` + `AsyncWebhooksResource.replay_delivery`. Returns `WebhookDelivery`.
+- 5 new pytest tests across `test_resources_api_keys.py` (3) + `test_resources_webhooks.py` (2). Sync + async paths each.
+
+**Files**
+
+- `packages/sdk-python/src/driftstack/resources/api_keys.py` — `rotate` + `RotateApiKeyResponse` + async variant.
+- `packages/sdk-python/src/driftstack/resources/webhooks.py` — `replay_delivery` + async variant.
+- `packages/sdk-python/tests/test_resources_api_keys.py` — 3 new tests.
+- `packages/sdk-python/tests/test_resources_webhooks.py` — 2 new tests.
+
+### Verify
+
+- `npm run sdk:python:test`: 121 / 121 (was 116 / 116; +5 SDK tests).
+- `npm run sdk:python:lint`: clean (ruff format auto-applied).
+- `npm test`: 920 / 920 unchanged (TS tests).
+- `npm run lint`: clean. Sub-processor mirror: 12 ↔ 13.
+
+### Notes — methodology choices
+
+- **Pydantic UUID validation in test fixtures**: `KEY_ROW.id` must match `^key_[0-9a-f]{8}-...` per the generated model's regex. Using `key_old` placeholder failed validation. Real UUID-shaped ids in tests.
+- **Inheritance for `RotateApiKeyResponse`**: same pattern as TS SDK. `RotateApiKeyResponse(CreateApiKeyResponse)` adds the two extra fields.
+- **`*` keyword-only `name=None`**: idiomatic Python for "optional rename", mirrors the TS SDK's `options.name` shape without polluting the positional arg space.
+- **Empty `json_body={}` for replay**: same explicit-default reason as the TS SDK.
+
+### Next
+
+V-309c (Go SDK rotate + replay) — same pattern. Then V-304b billing renewal reminders, V-298 Team RBAC v1 (split into V-298a/b/c/d). NEVER STOP autopilot.

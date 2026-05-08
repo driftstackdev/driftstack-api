@@ -18,6 +18,18 @@ class ApiKeyList(BaseModel):
     data: list[ApiKey]
 
 
+class RotateApiKeyResponse(CreateApiKeyResponse):
+    """V-296 — response shape for ``POST /v1/api-keys/:id/rotate``.
+
+    Extends ``CreateApiKeyResponse`` with the previous-key reference and
+    the timestamp at which the previous key auto-revokes via the
+    ``expires_at``-driven auth gate.
+    """
+
+    rotated_from: str
+    grace_period_ends_at: str
+
+
 class ApiKeysResource:
     """Synchronous API keys resource."""
 
@@ -42,6 +54,24 @@ class ApiKeysResource:
         """Revoke an API key. Idempotent — revoking an already-revoked key is a no-op."""
         self._http.request("DELETE", f"/v1/api-keys/{quote(key_id, safe='')}")
 
+    def rotate(self, key_id: str, *, name: str | None = None) -> RotateApiKeyResponse:
+        """V-296 — rotate an API key with a 24h grace period.
+
+        Mints a fresh plaintext + sets the OLD key's ``expires_at`` to
+        ``now + 24h``. Both keys work concurrently during the grace
+        window; deploy the new key, then the old key auto-revokes at
+        the grace boundary. Plaintext is in the response — store it now.
+        """
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        data = self._http.request(
+            "POST",
+            f"/v1/api-keys/{quote(key_id, safe='')}/rotate",
+            json_body=body,
+        )
+        return RotateApiKeyResponse.model_validate(data)
+
 
 class AsyncApiKeysResource:
     """Async API keys resource."""
@@ -59,3 +89,15 @@ class AsyncApiKeysResource:
 
     async def revoke(self, key_id: str) -> None:
         await self._http.request("DELETE", f"/v1/api-keys/{quote(key_id, safe='')}")
+
+    async def rotate(self, key_id: str, *, name: str | None = None) -> RotateApiKeyResponse:
+        """V-296 — async rotate. See :meth:`ApiKeysResource.rotate`."""
+        body: dict[str, Any] = {}
+        if name is not None:
+            body["name"] = name
+        data = await self._http.request(
+            "POST",
+            f"/v1/api-keys/{quote(key_id, safe='')}/rotate",
+            json_body=body,
+        )
+        return RotateApiKeyResponse.model_validate(data)

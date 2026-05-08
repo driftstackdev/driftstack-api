@@ -70,3 +70,64 @@ async def test_async_revoke() -> None:
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
             result = await client.api_keys.revoke("key_xx")
         assert result is None
+
+
+# V-296 — rotate flow tests.
+
+
+def test_sync_rotate() -> None:
+    response = {
+        **KEY_ROW,
+        "id": "key_00000000-0000-4000-8000-000000000002",
+        "name": "production-2025",
+        "plaintext": "ds_live_NEWKEYsecretsecretsecretsecretsecre",
+        "rotated_from": "key_00000000-0000-4000-8000-000000000001",
+        "grace_period_ends_at": "2026-05-09T00:00:00Z",
+    }
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/api-keys/key_00000000-0000-4000-8000-000000000001/rotate").mock(
+            return_value=httpx.Response(201, json=response),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.api_keys.rotate(
+                "key_00000000-0000-4000-8000-000000000001", name="production-2025"
+            )
+        assert route.called
+        assert result.rotated_from == "key_00000000-0000-4000-8000-000000000001"
+        assert result.grace_period_ends_at == "2026-05-09T00:00:00Z"
+        assert result.plaintext.startswith("ds_live_")
+
+
+def test_sync_rotate_without_name() -> None:
+    response = {
+        **KEY_ROW,
+        "plaintext": "ds_live_NEWKEYsecretsecretsecretsecretsecre",
+        "rotated_from": "key_00000000-0000-4000-8000-000000000001",
+        "grace_period_ends_at": "2026-05-09T00:00:00Z",
+    }
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/api-keys/key_00000000-0000-4000-8000-000000000001/rotate").mock(
+            return_value=httpx.Response(201, json=response),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.api_keys.rotate("key_00000000-0000-4000-8000-000000000001")
+        assert result.rotated_from == "key_00000000-0000-4000-8000-000000000001"
+
+
+@pytest.mark.asyncio
+async def test_async_rotate() -> None:
+    response = {
+        **KEY_ROW,
+        "plaintext": "ds_live_NEWKEYsecretsecretsecretsecretsecre",
+        "rotated_from": "key_00000000-0000-4000-8000-000000000001",
+        "grace_period_ends_at": "2026-05-09T00:00:00Z",
+    }
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/api-keys/key_00000000-0000-4000-8000-000000000001/rotate").mock(
+            return_value=httpx.Response(201, json=response),
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = await client.api_keys.rotate(
+                "key_00000000-0000-4000-8000-000000000001", name="prod-2025"
+            )
+        assert result.rotated_from == "key_00000000-0000-4000-8000-000000000001"

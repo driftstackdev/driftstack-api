@@ -102,6 +102,20 @@ class WebhooksResource:
 
         return iterate_paginated(fetch_page)
 
+    def replay_delivery(self, delivery_id: str) -> WebhookDelivery:
+        """V-307 — replay a webhook delivery.
+
+        Resets the delivery to ``pending`` so the worker re-fires it.
+        Account-scoped: the delivery must belong to an endpoint the
+        calling account owns.
+        """
+        data = self._http.request(
+            "POST",
+            f"/v1/webhook-deliveries/{quote(delivery_id, safe='')}/replay",
+            json_body={},
+        )
+        return WebhookDelivery.model_validate(data)
+
 
 class AsyncWebhooksResource:
     """Async webhooks resource."""
@@ -156,3 +170,12 @@ class AsyncWebhooksResource:
             return await self.list_deliveries(webhook_id, params)
 
         return aiterate_paginated(fetch_page)
+
+    async def replay_delivery(self, delivery_id: str) -> WebhookDelivery:
+        """V-307 — async replay. See :meth:`WebhooksResource.replay_delivery`."""
+        data = await self._http.request(
+            "POST",
+            f"/v1/webhook-deliveries/{quote(delivery_id, safe='')}/replay",
+            json_body={},
+        )
+        return WebhookDelivery.model_validate(data)
