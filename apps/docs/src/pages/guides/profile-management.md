@@ -118,6 +118,63 @@ await client.profiles.delete('prf_01HV...');
 
 If a session is currently bound to the profile, the deletion blocks until the session ends (or returns `409 Conflict` if you set `force=false`, the default).
 
+## Clone a profile (V-313)
+
+`POST /v1/profiles/:id/clone`. Duplicates the profile metadata into a new row carrying the source's `archetype` + `description`. Underlying storage state is NOT cloned — the new profile starts with a fresh state slot under the same archetype.
+
+```ts
+// Auto-derived "(copy)" / "(copy 2)" / ... naming.
+const copy = await client.profiles.clone('prf_01HV...');
+
+// Or pass an explicit name.
+const named = await client.profiles.clone('prf_01HV...', { name: 'staging-mirror' });
+```
+
+Tier-cap + name-conflict are checked the same way as `create`: 429 if your tier limit would be exceeded, 409 on explicit-name collision, 404 if the source profile isn't yours or doesn't exist. The audit-log entry for the new profile carries `payload.cloned_from: prof_<src>`.
+
+## Snapshots — immutable point-in-time copies (V-312)
+
+A snapshot is a frozen copy of a profile. The parent profile keeps evolving — its name, description, and storage state mutate as you use it. The snapshot does not.
+
+**Capture.** `POST /v1/profiles/:id/snapshots`.
+
+```ts
+const snap = await client.profileSnapshots.capture('prf_01HV...', {
+  label: 'before-iOS-26',
+  description: 'pre-rollout reference', // optional
+});
+// snap.id — "psnap_<uuid>"
+// snap.parent_archetype, snap.parent_name — frozen at capture time
+```
+
+**List.** Per-profile or cross-account.
+
+```ts
+const perProfile = await client.profileSnapshots.listForProfile('prf_01HV...');
+const everySnapshot = await client.profileSnapshots.list();
+
+// Iterate every snapshot in your account, walking cursor pages.
+for await (const s of client.profileSnapshots.iterate()) {
+  console.log(s.label, s.captured_at);
+}
+```
+
+**Restore.** Creates a NEW profile (the original is never modified).
+
+```ts
+const restored = await client.profileSnapshots.restore(snap.id, {
+  name: 'restored-from-baseline',
+});
+```
+
+Tier-cap + name-conflict apply the same way as create. The audit-log entry on the new profile carries `payload.restored_from_snapshot: psnap_<id>`.
+
+**Delete.** `DELETE /v1/profile-snapshots/:id`.
+
+Snapshots have no automatic lifecycle. Capture as many as you want; they sit until you delete them. Deleting the parent profile sets `parent_profile_id` to `null` but keeps the snapshot — the captured `parent_archetype`, `parent_name`, and state stay restorable.
+
+The same surface is available in the Python and Go SDKs as `client.profile_snapshots.*` and `client.ProfileSnapshots.*` respectively.
+
 ## Profile-name conventions
 
 Profile names are free-form strings up to 120 characters. Conventions that work well:

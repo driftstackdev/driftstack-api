@@ -19063,3 +19063,27 @@ Adds two presets after the session entries:
 - "Profiles deleted" maps to `profile.deleted`.
 
 Astro check clean. No backend or schema change.
+
+## V-382 — profile-management guide adds Clone (V-313) + Snapshots (V-312) sections
+
+**Tier**: 1 (docs SDK-walkthrough catch-up; profile-management
+guide previously stopped at delete).
+
+`apps/docs/src/pages/guides/profile-management.md` gains two
+sections inserted between Delete and Profile-name conventions:
+
+- **Clone a profile (V-313)** — POST /v1/profiles/:id/clone with
+  the auto-derived-name pattern + explicit name; tier-cap + 409
+  name-conflict + 404 source-missing semantics; audit payload
+  `cloned_from: prof_<src>`.
+- **Snapshots — immutable point-in-time copies (V-312)** — capture
+  / list / iterate / restore / delete walkthrough using the new
+  `client.profileSnapshots.*` SDK surface (V-376/377/378).
+  Documents parent-deletion semantics (parent*profile_id nulled,
+  snapshot retained), restore-creates-new-profile invariant, and
+  audit payload `restored_from_snapshot: psnap*<id>`.
+
+Cross-link to Python + Go SDK equivalents
+(`client.profile_snapshots.*`, `client.ProfileSnapshots.*`).
+
+Astro check clean (0 errors).
