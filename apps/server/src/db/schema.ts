@@ -180,6 +180,14 @@ export const accounts = pgTable(
     // hasn't uploaded one. R2 sub-processor disclosure already covers
     // avatar storage (privacy.md §3.1; sub-processors.ts).
     avatarR2Key: text('avatar_r2_key'),
+    // V-298a — readable account handle. Lowercase a-z + 0-9 + hyphen
+    // (no leading/trailing hyphen, 3-32 chars). Unique-when-set across
+    // all accounts. Nullable on creation; customer sets via PATCH
+    // /v1/account/me. Initial use: stable identifier in support /
+    // billing / audit references. URL routing semantics (e.g.
+    // dashboard.driftstack.dev/<slug>) is a future slice — founder
+    // decides whether slugs become public URL components.
+    slug: text('slug'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -187,7 +195,13 @@ export const accounts = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [uniqueIndex('accounts_email_unique').on(t.email)],
+  (t) => [
+    uniqueIndex('accounts_email_unique').on(t.email),
+    // V-298a — unique-when-set. Postgres treats NULLs as distinct in
+    // unique indexes by default, so multiple unset slugs coexist;
+    // the constraint only fires once a slug is set.
+    uniqueIndex('accounts_slug_unique').on(t.slug),
+  ],
 );
 
 // Single-use tokens for the user-facing auth flow.

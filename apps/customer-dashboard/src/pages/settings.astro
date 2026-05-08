@@ -429,6 +429,25 @@ const EMAIL_EVENTS = [
             <code class="font-mono">America/Los_Angeles</code>. Leave blank for UTC.
           </p>
         </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700" for="profile-slug">
+            Account handle (slug)
+          </label>
+          <input
+            id="profile-slug"
+            data-field="profile-slug"
+            type="text"
+            inputmode="text"
+            autocomplete="off"
+            placeholder="acme-corp"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+          />
+          <p class="mt-1 text-xs text-slate-500">
+            Lowercase a-z, 0-9, and hyphen. 3-32 chars. Used as a stable
+            handle on support tickets, billing references, and audit
+            entries. Leave blank to keep using the account UUID.
+          </p>
+        </div>
         <p
           data-field="profile-error"
           class="hidden rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
@@ -546,10 +565,11 @@ const EMAIL_EVENTS = [
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
       }
 
-      // V-352c — wire the profile (name + timezone) form.
+      // V-352c / V-298a — wire the profile (name + timezone + slug) form.
       const profileForm = root.querySelector('[data-form="profile"]');
       const profileNameInput = root.querySelector('[data-field="profile-name"]');
       const profileTzInput = root.querySelector('[data-field="profile-timezone"]');
+      const profileSlugInput = root.querySelector('[data-field="profile-slug"]');
       const profileError = root.querySelector('[data-field="profile-error"]');
       const profileStatus = root.querySelector('[data-field="profile-status"]');
       const profileSaveBtn = root.querySelector('[data-button="profile-save"]');
@@ -619,6 +639,7 @@ const EMAIL_EVENTS = [
             if (!me) return;
             if (me.name) profileNameInput.value = me.name;
             if (me.timezone) profileTzInput.value = me.timezone;
+            if (profileSlugInput && me.slug) profileSlugInput.value = me.slug;
             // V-352b — initial avatar preview.
             setAvatarPreview(me.avatar_url || null);
           })
@@ -725,9 +746,19 @@ const EMAIL_EVENTS = [
           }
           const name = profileNameInput.value.trim();
           const tz = profileTzInput.value.trim();
+          const slug = profileSlugInput ? profileSlugInput.value.trim() : '';
           if (profileSaveBtn) {
             profileSaveBtn.disabled = true;
             profileSaveBtn.textContent = 'Saving…';
+          }
+          const body = {
+            name: name.length > 0 ? name : null,
+            timezone: tz.length > 0 ? tz : null,
+          };
+          // V-298a — only include slug when the input exists; the backend
+          // refines reject of "no fields" still allows name/timezone-only.
+          if (profileSlugInput) {
+            body.slug = slug.length > 0 ? slug : null;
           }
           fetch(apiBaseUrl + '/v1/account/me', {
             method: 'PATCH',
@@ -735,10 +766,7 @@ const EMAIL_EVENTS = [
               'content-type': 'application/json',
               authorization: 'Bearer ' + token,
             },
-            body: JSON.stringify({
-              name: name.length > 0 ? name : null,
-              timezone: tz.length > 0 ? tz : null,
-            }),
+            body: JSON.stringify(body),
           })
             .then((r) =>
               r.ok

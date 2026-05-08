@@ -18626,3 +18626,54 @@ language matrix. All pass; full TS suite at 1067 / 1067; Python at
 
 V-359 cycle complete: server-side rotation + dual-sign worker +
 3-language SDK verifier helpers.
+
+## V-298a — account.slug schema + /v1/account/me surface
+
+**Tier**: 1 (URL routing semantics deferred to founder design).
+
+Schema (migration 0035): `accounts.slug` text column, nullable,
+`accounts_slug_unique` index (Postgres treats nulls as distinct, so
+multiple unset slugs coexist; uniqueness fires once a slug is set).
+
+Shape: lowercase a-z + 0-9 + hyphen, 3-32 chars, no leading/trailing
+hyphen, no consecutive hyphens. Validated client-side (Zod
+`AccountSlugSchema` in api-types) AND server-side (the column accepts
+anything; the route layer enforces shape via Zod).
+
+Service: `AccountAuthRepo.updateAccountBasics` patch shape gains
+optional `slug`; Drizzle impl translates Postgres unique-violation
+(SQLSTATE 23505 on `accounts_slug_unique`) into a `SLUG_TAKEN` error
+that the route maps to 409. In-memory impl mirrors the behavior with
+a linear scan — rejects the second account claiming an existing slug.
+
+Cache: auth-cache `SerializedAccount` gains optional `slug`
+(forward-compat: pre-V-298a entries deserialize to null).
+
+Routes:
+
+- GET /v1/account/me — `slug` field added to the response (null when
+  unset).
+- PATCH /v1/account/me — body `slug` accepted alongside name +
+  timezone. Returns 200 with the new slug; 400 on malformed shape;
+  409 when another account holds the value; the existing
+  "at least one field" refine widened to include slug.
+
+UI: customer-dashboard /settings Profile section gains an "Account
+handle (slug)" input below Timezone. Pre-fills from GET /me; PATCH
+sends `slug: null` when blank.
+
+URL routing semantics (e.g. dashboard.driftstack.dev/<slug>) stays
+DEFERRED — the slug is a stable readable identifier for support /
+billing / audit references; founder decides whether to surface it
+in URLs as a follow-up slice. No breaking-change risk because
+nothing currently routes on it.
+
+Tests: 14 new integration tests on PATCH /v1/account/me — slug
+(set + GET surfaces, clear to null, 11 invalid shapes 400, 409 on
+collision via seedAdditionalAccount). Bulk-perl-extended 18 test
+fixtures with `slug: null` after `avatarR2Key: null,` lines.
+1081 / 1081 tests pass.
+
+V-298b queued: account.region (data-residency hint) — separate
+slice; needs founder verdict on the region enum (eu / us /
+auto-pick / etc.) before schema lands.

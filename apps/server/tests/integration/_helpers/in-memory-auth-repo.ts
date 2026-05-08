@@ -136,22 +136,32 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
     return Promise.resolve(this.teamMemberships.get(memberAccountId) ?? []);
   }
 
-  // ── V-352 / V-352b account basics (name + timezone + avatarR2Key) update
+  // ── V-352 / V-352b / V-298a account basics update ──
   updateAccountBasics(
     id: string,
     patch: {
       name?: string | null;
       timezone?: string | null;
       avatarR2Key?: string | null;
+      slug?: string | null;
     },
   ): Promise<AccountRow | null> {
     const r = this.accounts.get(id);
     if (!r) return Promise.resolve(null);
+    // V-298a — enforce unique-when-set slug across the in-memory map.
+    if (patch.slug !== undefined && patch.slug !== null) {
+      for (const other of this.accounts.values()) {
+        if (other.id !== id && other.slug === patch.slug) {
+          return Promise.reject(new Error('SLUG_TAKEN'));
+        }
+      }
+    }
     const updated: AccountRow = {
       ...r,
       name: patch.name !== undefined ? patch.name : r.name,
       timezone: patch.timezone !== undefined ? patch.timezone : r.timezone,
       avatarR2Key: patch.avatarR2Key !== undefined ? patch.avatarR2Key : r.avatarR2Key,
+      slug: patch.slug !== undefined ? patch.slug : r.slug,
       updatedAt: new Date(),
     };
     this.accounts.set(id, updated);

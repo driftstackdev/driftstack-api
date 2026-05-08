@@ -125,18 +125,34 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
       name?: string | null;
       timezone?: string | null;
       avatarR2Key?: string | null;
+      slug?: string | null;
     },
   ): Promise<AccountRow | null> {
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (patch.name !== undefined) set.name = patch.name;
     if (patch.timezone !== undefined) set.timezone = patch.timezone;
     if (patch.avatarR2Key !== undefined) set.avatarR2Key = patch.avatarR2Key;
-    const [row] = await this.database.db
-      .update(accounts)
-      .set(set)
-      .where(eq(accounts.id, id))
-      .returning();
-    return row ? toAccountRow(row) : null;
+    if (patch.slug !== undefined) set.slug = patch.slug;
+    try {
+      const [row] = await this.database.db
+        .update(accounts)
+        .set(set)
+        .where(eq(accounts.id, id))
+        .returning();
+      return row ? toAccountRow(row) : null;
+    } catch (err) {
+      // V-298a — translate Postgres unique-violation on the slug
+      // index into a SlugTakenError so the route layer returns 409.
+      if (
+        typeof (err as { code?: unknown }).code === 'string' &&
+        (err as { code: string }).code === '23505' &&
+        typeof (err as { constraint_name?: unknown }).constraint_name === 'string' &&
+        (err as { constraint_name: string }).constraint_name === 'accounts_slug_unique'
+      ) {
+        throw new Error('SLUG_TAKEN');
+      }
+      throw err;
+    }
   }
 }
 
@@ -164,6 +180,7 @@ function toAccountRow(r: typeof accounts.$inferSelect): AccountRow {
     status: r.status,
     timezone: r.timezone,
     avatarR2Key: r.avatarR2Key,
+    slug: r.slug,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };

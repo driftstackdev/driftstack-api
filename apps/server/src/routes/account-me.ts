@@ -24,7 +24,12 @@ import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import type { MfaService } from '../services/mfa.js';
 import { avatarKey, type R2 } from '../lib/r2.js';
-import { BadRequestError, FeatureUnavailableError, NotFoundError } from '../lib/errors.js';
+import {
+  BadRequestError,
+  ConflictError,
+  FeatureUnavailableError,
+  NotFoundError,
+} from '../lib/errors.js';
 
 /** V-352b — avatar presigned-GET TTL. 1h is long enough that a single
  *  dashboard render doesn't churn signed URLs but short enough that
@@ -113,6 +118,8 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         status: ctx.account.status,
         // V-352 — IANA timezone (null = UTC fallback for client renders).
         timezone: ctx.account.timezone,
+        // V-298a — readable account handle (null when unset).
+        slug: ctx.account.slug,
         // V-352b — presigned R2 GET URL for the customer's uploaded
         // avatar; null when none uploaded or the public bucket isn't
         // wired in this deploy. URL is short-lived (1h).
@@ -153,7 +160,17 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       if (!parsed.success) {
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid body.');
       }
-      const updated = await authRepo.updateAccountBasics(ctx.account.id, parsed.data);
+      let updated;
+      try {
+        updated = await authRepo.updateAccountBasics(ctx.account.id, parsed.data);
+      } catch (err) {
+        // V-298a — repo throws SLUG_TAKEN when the unique-constraint
+        // collides with another account's slug. 409 surfaces it.
+        if (err instanceof Error && err.message === 'SLUG_TAKEN') {
+          throw new ConflictError('That slug is already taken. Pick a different one.');
+        }
+        throw err;
+      }
       if (!updated) throw new NotFoundError('Account not found.');
       // Invalidate the cached AccountContext so the next request reads
       // the freshly-updated row. Best-effort; cache failure must never
@@ -172,6 +189,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         tier: updated.tier,
         status: updated.status,
         timezone: updated.timezone,
+        slug: updated.slug,
       };
     },
   );

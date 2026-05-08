@@ -335,6 +335,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     status: opts.accountStatus ?? 'active',
     timezone: null,
     avatarR2Key: null,
+    slug: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
   });
@@ -686,6 +687,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
         status: row.status,
         timezone: null,
         avatarR2Key: null,
+        slug: null,
         createdAt: row.createdAt,
         updatedAt: row.createdAt,
       };
@@ -878,6 +880,7 @@ export async function seedAdditionalAccount(
     status: opts.accountStatus ?? 'active',
     timezone: null,
     avatarR2Key: null,
+    slug: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
   });

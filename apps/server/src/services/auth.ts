@@ -36,6 +36,12 @@ export interface AccountRow {
    *  null = no avatar uploaded. The route layer turns this into a
    *  presigned GET URL on /v1/account/me reads. */
   avatarR2Key: string | null;
+  /** V-298a — readable account handle (lowercase a-z + 0-9 + hyphen,
+   *  3-32 chars, unique-when-set across all accounts). null = unset.
+   *  Customer can set via PATCH /v1/account/me. URL routing using
+   *  the slug is a future slice — for now it's a stable identifier
+   *  for support / billing / audit references. */
+  slug: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -118,6 +124,12 @@ export interface AccountAuthRepo {
       name?: string | null;
       timezone?: string | null;
       avatarR2Key?: string | null;
+      /** V-298a — slug (lowercase a-z + 0-9 + hyphen, 3-32 chars).
+       *  null clears. Caller (route layer) is responsible for
+       *  validating shape; the repo layer just persists.  Returns
+       *  null if a unique-constraint conflict fires (e.g. another
+       *  account already owns the slug). */
+      slug?: string | null;
     },
   ): Promise<AccountRow | null>;
 }

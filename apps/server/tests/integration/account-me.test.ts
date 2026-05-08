@@ -182,7 +182,99 @@ describe('PATCH /v1/account/me (V-352)', () => {
   });
 });
 
-// ── V-352b — avatar upload + delete + GET presign ────────────────────
+// ── V-298a — account slug ────────────────────────────────────────────
+
+describe('PATCH /v1/account/me — slug (V-298a)', () => {
+  it('200 sets a valid slug + GET surfaces it', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { slug: 'acme-corp' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ slug: string }>().slug).toBe('acme-corp');
+
+    const me = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me',
+      headers: auth(fx),
+    });
+    expect(me.json<AccountMeResponse & { slug: string | null }>().slug).toBe('acme-corp');
+  });
+
+  it('200 clears slug to null', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { slug: 'foo-bar' },
+    });
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { slug: null },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ slug: string | null }>().slug).toBeNull();
+  });
+
+  it.each([
+    'AB', // too short
+    'a', // too short
+    'aa', // too short
+    '-leadhyphen', // leading hyphen
+    'trailhyphen-', // trailing hyphen
+    'double--hyphen',
+    'UPPER', // uppercase
+    'has_underscore',
+    'has space',
+    'a'.repeat(33), // too long
+    'has.dot',
+  ])('400 rejects invalid slug %p', async (slug) => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { slug },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('409 when slug is already taken by another account', async () => {
+    fx = await buildTestApp();
+    // First account claims the slug.
+    await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { slug: 'taken-slug' },
+    });
+
+    // Second account on the same fixture tries to claim the same slug.
+    const second = await import('./_helpers/build-test-app.js').then((m) =>
+      m.seedAdditionalAccount(fx, {
+        accountId: '00000000-0000-4000-8000-000000000099',
+        apiKeyId: '00000000-0000-4000-8000-000000000a99',
+        email: 'second@driftstack.local',
+      }),
+    );
+    const conflict = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: {
+        authorization: `Bearer ${second.plaintext}`,
+        'content-type': 'application/json',
+      },
+      payload: { slug: 'taken-slug' },
+    });
+    expect(conflict.statusCode).toBe(409);
+  });
+});
 
 // Smallest valid PNG: 1x1 transparent. Hand-built byte sequence.
 // Source: pngsuite-derived; bytes match what node-canvas et al emit for

@@ -66,6 +66,8 @@ interface SerializedAccount {
   timezone?: string | null;
   /** V-352b — optional. Pre-V-352b cache entries lack this; deserialize defaults to null. */
   avatarR2Key?: string | null;
+  /** V-298a — optional. Pre-V-298a cache entries lack this; deserialize defaults to null. */
+  slug?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -147,6 +149,7 @@ function serialize(ctx: AccountContext): SerializedContext {
       status: ctx.account.status,
       timezone: ctx.account.timezone,
       avatarR2Key: ctx.account.avatarR2Key,
+      slug: ctx.account.slug,
       createdAt: ctx.account.createdAt.toISOString(),
       updatedAt: ctx.account.updatedAt.toISOString(),
     },
@@ -202,6 +205,7 @@ function deserialize(s: SerializedContext): AccountContext {
       status: s.account.status as AccountContext['account']['status'],
       timezone: s.account.timezone ?? null,
       avatarR2Key: s.account.avatarR2Key ?? null,
+      slug: s.account.slug ?? null,
       createdAt: new Date(s.account.createdAt),
       updatedAt: new Date(s.account.updatedAt),
     },

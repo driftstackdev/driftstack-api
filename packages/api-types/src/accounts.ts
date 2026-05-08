@@ -68,6 +68,27 @@ export type SetEmailPreferenceRequest = z.infer<typeof SetEmailPreferenceRequest
  * email-display fallback uses the email address. `timezone` accepts
  * an IANA name (e.g. `Europe/Amsterdam`) or null to clear (UTC fallback).
  */
+/**
+ * V-298a — slug shape: lowercase a-z + 0-9 + hyphen, no leading or
+ * trailing hyphen, no consecutive hyphens, 3-32 chars total. Mirrors
+ * the standard "URL-safe handle" pattern (GitHub usernames, Stripe
+ * account ids). Server-side normalisation is deliberately strict: we
+ * reject mixed case rather than silently lowercase so customers
+ * don't get surprised by what they typed vs what's stored.
+ */
+export const AccountSlugSchema = z
+  .string()
+  .min(3)
+  .max(32)
+  .regex(
+    /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/,
+    'Must be 3-32 chars, lowercase a-z + 0-9 + hyphen, with no leading/trailing hyphen.',
+  )
+  .refine((s) => !s.includes('--'), {
+    message: 'Slug cannot contain consecutive hyphens.',
+  });
+export type AccountSlug = z.infer<typeof AccountSlugSchema>;
+
 export const UpdateAccountMeRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(120).nullable().optional(),
@@ -82,9 +103,13 @@ export const UpdateAccountMeRequestSchema = z
       )
       .nullable()
       .optional(),
+    // V-298a — readable account handle. Pass null to clear; pass a
+    // valid slug to set. Unique-when-set; the server returns 409 if
+    // another account already owns the value.
+    slug: AccountSlugSchema.nullable().optional(),
   })
-  .refine((v) => v.name !== undefined || v.timezone !== undefined, {
-    message: 'At least one field (name or timezone) must be provided.',
+  .refine((v) => v.name !== undefined || v.timezone !== undefined || v.slug !== undefined, {
+    message: 'At least one field (name, timezone, or slug) must be provided.',
   });
 export type UpdateAccountMeRequest = z.infer<typeof UpdateAccountMeRequestSchema>;
 
