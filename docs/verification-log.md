@@ -17357,3 +17357,56 @@ V-307b (~2-3h) — customer-dashboard webhook delivery list UI with Replay butto
 ### Next
 
 V-304 (~4-6h) — onboarding email orchestration. Welcome email post-signup + first-session wizard email post-first-API-call + billing reminder emails (pre-renewal, 7d / 1d). Postmark templates already in V-057; orchestration via V-202d scheduled-jobs. Then V-305 Tauri deep-link replacement, then V-298+ remaining V-294 catalog. NEVER STOP autopilot.
+
+## V-304a — First-session-success activation email
+
+**Tier**: 1 — Onboarding email orchestration. First slice of V-304.
+
+**Why**: V-202 wired the welcome-after-signup-verify email and the first-failure dedup-then-email pattern. The activation milestone — first SUCCESSFUL session — was unhandled. Customers' first-impression-of-success is the highest-value email in the lifecycle (correlates with retention; nudges them toward dashboard/docs/next features). One-shot per account; subsequent sessions don't email.
+
+**Scope**
+
+- New `account_lifecycle.first_success_email_sent_at` column on `accounts` table. Migration `0028_v304a_first_success_email.sql`. Drizzle schema + repo extended.
+- New `LifecycleEvent.kind = 'session.success.first'` variant; `AccountLifecycleService.handleSessionSuccessFirst` mirrors the V-202c first-failure pattern (atomic check-and-set via DB column → fire email if won the race).
+- New `EmailService.sendSessionSuccessFirst` method + new `'session-success-first'` template (DRAFT activation copy: celebrates the milestone, links to dashboard + quickstart, nudges API key minting; explicitly states "one-time email, dashboard takes over").
+- New `OptOutableEmailEvent` enum value `'session-success-first'` in api-types (customers can disable via /v1/account/email-preferences).
+- Sessions service `destroy()` path now emits `session.success.first` lifecycle event after the session.completed webhook enqueue. Best-effort; never breaks the session-destroy path.
+- Updated `email-preferences.ts` allEvents list (now 7 entries, was 6) — caller verified by integration test bump.
+- Account-lifecycle service unit test + new integration test (3 cases: fires-on-first / dedups-on-second / marks-row).
+
+**Files**
+
+- `apps/server/src/db/schema.ts` — `firstSuccessEmailSentAt` column.
+- `apps/server/src/db/migrations/0028_v304a_first_success_email.sql` — new.
+- `apps/server/src/db/migrations/meta/_journal.json` — entry idx 28.
+- `apps/server/src/services/account-lifecycle.ts` — LifecycleEvent +1 / handler / repo interface.
+- `apps/server/src/db/account-lifecycle-repo.ts` — Drizzle `markFirstSuccessEmailSent`.
+- `apps/server/src/services/email.ts` — `sendSessionSuccessFirst` method + template.
+- `apps/server/src/services/email-preferences.ts` — allEvents list +1.
+- `apps/server/src/services/sessions.ts` — emit on destroy success.
+- `packages/api-types/src/accounts.ts` — `OptOutableEmailEvent` enum +1.
+- `apps/server/tests/integration/_helpers/in-memory-account-lifecycle-repo.ts` — `markFirstSuccessEmailSent` impl + extended row shape.
+- `apps/server/tests/unit/account-lifecycle.test.ts` — TestRepo + seed updated.
+- `apps/server/tests/integration/email-preferences.test.ts` — assert 7 events not 6.
+- `apps/server/tests/integration/session-success-first-email.test.ts` — new (3 tests).
+
+### Verify
+
+- `npm test`: 917 / 917 across 98 files (was 914 / 97; +3 V-304a + email-prefs assertion fix).
+- `npm run lint`: clean. Sub-processor mirror: 12 ↔ 13.
+- `npm run format:check`: clean.
+- Server typecheck: clean.
+
+### Notes — methodology choices
+
+- **Same dedup pattern as V-202c first-failure**: atomic-check-and-set on a dedicated column; loser of the race skips the email. Consistent with V-090 pattern, predictable race semantics, no extra Redis/state needed.
+- **Best-effort emit on destroy path**: lifecycle dispatch failure must NEVER block the session-destroy operation. The session destroy IS the customer's primary action; the email is a follow-up courtesy.
+- **Email copy explicitly says "one-time"**: customers expect "no more emails after the first" — saying so up front prevents "unsubscribed me from session emails after the first session" support tickets.
+- **Opt-out via existing email preferences UI**: customers who don't want the activation email can disable it like any other lifecycle email. /v1/account/email-preferences already lists all opt-outable events; the V-304a addition flows through.
+- **Triggers on FIRST session.destroyed (not first session.created)**: a created-but-immediately-failed session shouldn't fire the success email. Destroy with no error path = success.
+- **No new Drizzle pgEnum migration needed**: account_audit_log doesn't track this (it's an email lifecycle event, not a customer-visible audit row). Email preferences event_type is `text not null`. Only the api-types Zod enum needs the new value.
+- **Existing email-prefs integration test had to bump 6→7**: every new opt-outable email is intentionally a structural change to the allEvents list. Test catches drift; expected to update in lockstep with the addition.
+
+### Next
+
+V-304b (~3-4h) — billing renewal reminders (7d + 1d before subscription renewal). Stripe webhook upcoming.invoice → schedule 2 jobs via V-202d scheduled-jobs → handler sends email. Then V-304c if needed (welcome email enhancements). Then V-309+ V-294 catalog. NEVER STOP autopilot.

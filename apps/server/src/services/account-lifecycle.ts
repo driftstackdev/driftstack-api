@@ -32,6 +32,7 @@ export interface AccountLifecycleRow {
   id: string;
   email: string;
   firstFailureEmailSentAt: Date | null;
+  firstSuccessEmailSentAt: Date | null;
 }
 
 export interface AccountLifecycleRepo {
@@ -45,6 +46,11 @@ export interface AccountLifecycleRepo {
    * already set it (skip the email).
    */
   markFirstFailureEmailSent(accountId: string, at: Date): Promise<boolean>;
+  /**
+   * V-304a — same atomic-check-and-set pattern as
+   * `markFirstFailureEmailSent`, but for the first successful session.
+   */
+  markFirstSuccessEmailSent(accountId: string, at: Date): Promise<boolean>;
 }
 
 export type LifecycleEvent =
@@ -52,6 +58,10 @@ export type LifecycleEvent =
       kind: 'session.failed.first';
       sessionId: string;
       errorMessage: string;
+    }
+  | {
+      kind: 'session.success.first';
+      sessionId: string;
     }
   | {
       kind: 'subscription.tier_changed';
@@ -122,6 +132,9 @@ export class AccountLifecycleService {
         case 'session.failed.first':
           await this.handleSessionFailedFirst(accountId, event);
           return;
+        case 'session.success.first':
+          await this.handleSessionSuccessFirst(accountId, event);
+          return;
         case 'subscription.tier_changed':
           await this.handleTierChanged(accountId, event);
           return;
@@ -170,6 +183,34 @@ export class AccountLifecycleService {
       sessionId: event.sessionId,
       errorMessage: event.errorMessage,
       docsUrl: `${this.docsBaseUrl}/sessions#failure-handling`,
+    });
+  }
+
+  /**
+   * V-304a — fires once per account on the first successful session.
+   * Same atomic-check-and-set pattern as handleSessionFailedFirst.
+   * The email celebrates the activation milestone + nudges the user
+   * toward the dashboard / docs / next features.
+   */
+  private async handleSessionSuccessFirst(
+    accountId: string,
+    event: { sessionId: string },
+  ): Promise<void> {
+    const account = await this.repo.findForLifecycle(accountId);
+    if (account === null) return;
+    if (account.firstSuccessEmailSentAt !== null) return;
+
+    const allowed = await this.emailPreferences.shouldSend(accountId, 'session-success-first');
+    if (!allowed) return;
+
+    const won = await this.repo.markFirstSuccessEmailSent(accountId, new Date());
+    if (!won) return;
+
+    await this.email.sendSessionSuccessFirst({
+      to: account.email,
+      sessionId: event.sessionId,
+      dashboardUrl: this.dashboardUrl,
+      docsUrl: `${this.docsBaseUrl}/quickstart`,
     });
   }
 

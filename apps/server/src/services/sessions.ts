@@ -164,11 +164,15 @@ export interface SessionsServiceDeps {
    * session.failed for an account triggers `session-failed-first`
    * email (deduped via `accounts.first_failure_email_sent_at`).
    * Subsequent failures no-op at the dedup gate.
+   * V-304a: also handles `session.success.first` for the activation
+   * milestone email; same once-per-account dedup pattern.
    */
   accountLifecycle?: {
     emit: (
       accountId: string,
-      event: { kind: 'session.failed.first'; sessionId: string; errorMessage: string },
+      event:
+        | { kind: 'session.failed.first'; sessionId: string; errorMessage: string }
+        | { kind: 'session.success.first'; sessionId: string },
     ) => Promise<void>;
   } | null;
 }
@@ -409,6 +413,20 @@ export class SessionsService {
         });
       } catch {
         // Webhook enqueue is best-effort; never break the user-facing op.
+      }
+    }
+
+    // V-304a — first-success activation email. Internal dedup via
+    // first_success_email_sent_at column (lifecycle service races to
+    // set; loser skips the email). Best-effort.
+    if (this.deps.accountLifecycle) {
+      try {
+        await this.deps.accountLifecycle.emit(ctx.account.id, {
+          kind: 'session.success.first',
+          sessionId: `ses_${session.id}`,
+        });
+      } catch {
+        /* swallow */
       }
     }
 

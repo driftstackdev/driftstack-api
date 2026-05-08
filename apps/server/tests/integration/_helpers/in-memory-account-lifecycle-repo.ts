@@ -1,4 +1,5 @@
 // V-202c — in-memory AccountLifecycleRepo for integration tests.
+// V-304a — extended with firstSuccessEmailSentAt parallel column.
 
 import type {
   AccountLifecycleRepo,
@@ -9,17 +10,24 @@ interface InMemoryRow {
   id: string;
   email: string;
   firstFailureEmailSentAt: Date | null;
+  firstSuccessEmailSentAt: Date | null;
 }
 
 export class InMemoryAccountLifecycleRepo implements AccountLifecycleRepo {
   private readonly rows = new Map<string, InMemoryRow>();
 
   /** Test seam — seed an account row into the lifecycle view. */
-  upsert(row: { id: string; email: string; firstFailureEmailSentAt?: Date | null }): void {
+  upsert(row: {
+    id: string;
+    email: string;
+    firstFailureEmailSentAt?: Date | null;
+    firstSuccessEmailSentAt?: Date | null;
+  }): void {
     this.rows.set(row.id, {
       id: row.id,
       email: row.email,
       firstFailureEmailSentAt: row.firstFailureEmailSentAt ?? null,
+      firstSuccessEmailSentAt: row.firstSuccessEmailSentAt ?? null,
     });
   }
 
@@ -38,6 +46,14 @@ export class InMemoryAccountLifecycleRepo implements AccountLifecycleRepo {
     if (!r) return Promise.resolve(false);
     if (r.firstFailureEmailSentAt !== null) return Promise.resolve(false);
     this.rows.set(accountId, { ...r, firstFailureEmailSentAt: at });
+    return Promise.resolve(true);
+  }
+
+  markFirstSuccessEmailSent(accountId: string, at: Date): Promise<boolean> {
+    const r = this.rows.get(accountId);
+    if (!r) return Promise.resolve(false);
+    if (r.firstSuccessEmailSentAt !== null) return Promise.resolve(false);
+    this.rows.set(accountId, { ...r, firstSuccessEmailSentAt: at });
     return Promise.resolve(true);
   }
 }

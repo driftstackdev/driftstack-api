@@ -64,6 +64,13 @@ export interface EmailService {
     errorMessage: string;
     docsUrl: string;
   }): Promise<void>;
+  /** V-304a — first successful session notice. Once-per-account; caller dedupes. */
+  sendSessionSuccessFirst(args: {
+    to: string;
+    sessionId: string;
+    dashboardUrl: string;
+    docsUrl: string;
+  }): Promise<void>;
   /** V-202 — tier change confirmation; fires on Stripe subscription.updated. */
   sendTierChanged(args: {
     to: string;
@@ -176,6 +183,15 @@ const TEMPLATES = {
     html: (v) =>
       `<p>One of your Driftstack sessions failed: <code>${v.sessionId}</code></p><p><strong>Error:</strong> ${v.errorMessage}</p><p>This is a one-time notice — we don't email on subsequent failures (the dashboard + webhooks track those). Common causes + fixes are documented at <a href="${v.docsUrl}">${v.docsUrl}</a>.</p><p>— Driftstack</p>`,
   },
+  // V-304a — DRAFT copy. First successful session = activation milestone.
+  // Once-per-account; caller dedupes via firstSuccessEmailSentAt column.
+  'session-success-first': {
+    subject: 'Driftstack — your first session is up',
+    text: (v) =>
+      `Your first Driftstack session ran successfully (${v.sessionId}). The control plane is wired, the Mac mini fleet is running your archetype, and webhook deliveries are firing.\n\nNext steps:\n  1. Watch live activity in the dashboard: ${v.dashboardUrl}\n  2. Skim the quickstart for advanced patterns (recordings, profiles, webhook events): ${v.docsUrl}\n  3. Mint additional API keys for staging / CI / per-app environments via the dashboard.\n\nThis is a one-time email — subsequent sessions don't notify you. The dashboard + webhooks take over from here.\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Your first Driftstack session ran successfully (<code>${v.sessionId}</code>). The control plane is wired, the Mac mini fleet is running your archetype, and webhook deliveries are firing.</p><p><strong>Next steps:</strong></p><ol><li>Watch live activity in the <a href="${v.dashboardUrl}">dashboard</a>.</li><li>Skim the <a href="${v.docsUrl}">quickstart</a> for advanced patterns (recordings, profiles, webhook events).</li><li>Mint additional API keys for staging / CI / per-app environments via the dashboard.</li></ol><p>This is a one-time email — subsequent sessions don't notify you. The dashboard + webhooks take over from here.</p><p>— Driftstack</p>`,
+  },
   'tier-changed': {
     subject: 'Driftstack — subscription tier changed',
     text: (v) =>
@@ -275,6 +291,7 @@ export function createEmailService({
       sendSupportAck: async () => {},
       sendSignupWelcome: async () => {},
       sendSessionFailedFirst: async () => {},
+      sendSessionSuccessFirst: async () => {},
       sendTierChanged: async () => {},
       sendTrialPackPurchased: async () => {},
       sendTrialPackExpired: async () => {},
@@ -336,6 +353,8 @@ export function createEmailService({
     sendSignupWelcome: ({ to, dashboardUrl }) => send('signup-welcome', to, { dashboardUrl }),
     sendSessionFailedFirst: ({ to, sessionId, errorMessage, docsUrl }) =>
       send('session-failed-first', to, { sessionId, errorMessage, docsUrl }),
+    sendSessionSuccessFirst: ({ to, sessionId, dashboardUrl, docsUrl }) =>
+      send('session-success-first', to, { sessionId, dashboardUrl, docsUrl }),
     sendTierChanged: ({ to, fromTier, toTier, effectiveAt, portalUrl }) =>
       send('tier-changed', to, {
         fromTier,

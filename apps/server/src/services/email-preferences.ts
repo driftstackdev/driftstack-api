@@ -53,6 +53,7 @@ export class EmailPreferencesService {
     const allEvents: OptOutableEmailEvent[] = [
       'signup-welcome',
       'session-failed-first',
+      'session-success-first',
       'tier-changed',
       'trial-pack-purchased',
       'trial-pack-expired',

@@ -120,6 +120,10 @@ function createRecordingEmailService(realService: EmailService): {
       record('session-failed-first', args);
       await realService.sendSessionFailedFirst(args);
     },
+    sendSessionSuccessFirst: async (args) => {
+      record('session-success-first', args);
+      await realService.sendSessionSuccessFirst(args);
+    },
     sendTierChanged: async (args) => {
       record('tier-changed', args);
       await realService.sendTierChanged(args);

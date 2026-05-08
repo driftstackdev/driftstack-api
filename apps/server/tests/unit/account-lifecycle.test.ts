@@ -49,6 +49,14 @@ class TestRepo implements AccountLifecycleRepo {
     this.rows.set(accountId, { ...r, firstFailureEmailSentAt: at });
     return Promise.resolve(true);
   }
+
+  markFirstSuccessEmailSent(accountId: string, at: Date): Promise<boolean> {
+    const r = this.rows.get(accountId);
+    if (!r) return Promise.resolve(false);
+    if (r.firstSuccessEmailSentAt !== null) return Promise.resolve(false);
+    this.rows.set(accountId, { ...r, firstSuccessEmailSentAt: at });
+    return Promise.resolve(true);
+  }
 }
 
 function build(opts: { firstFailureSent?: Date | null; shouldSend?: boolean } = {}): TestDeps {
@@ -57,6 +65,7 @@ function build(opts: { firstFailureSent?: Date | null; shouldSend?: boolean } = 
     id: 'acc_test',
     email: 'first-failure@driftstack.local',
     firstFailureEmailSentAt: opts.firstFailureSent ?? null,
+    firstSuccessEmailSentAt: null,
   });
 
   const email = {

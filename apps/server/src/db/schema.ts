@@ -160,6 +160,10 @@ export const accounts = pgTable(
     // to this account. Null until the first session.failed ever; one-shot
     // by design (subsequent failures don't email).
     firstFailureEmailSentAt: timestamp('first_failure_email_sent_at', { withTimezone: true }),
+    // V-304a — set when we send the `session-success-first` email after
+    // the customer's first successful session completes. One-shot
+    // (subsequent sessions don't email; the dashboard takes over).
+    firstSuccessEmailSentAt: timestamp('first_success_email_sent_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

@@ -14,6 +14,7 @@ export class DrizzleAccountLifecycleRepo implements AccountLifecycleRepo {
         id: accounts.id,
         email: accounts.email,
         firstFailureEmailSentAt: accounts.firstFailureEmailSentAt,
+        firstSuccessEmailSentAt: accounts.firstSuccessEmailSentAt,
       })
       .from(accounts)
       .where(eq(accounts.id, accountId))
@@ -29,6 +30,16 @@ export class DrizzleAccountLifecycleRepo implements AccountLifecycleRepo {
       .update(accounts)
       .set({ firstFailureEmailSentAt: at, updatedAt: at })
       .where(and(eq(accounts.id, accountId), isNull(accounts.firstFailureEmailSentAt)))
+      .returning({ id: accounts.id });
+    return result.length > 0;
+  }
+
+  async markFirstSuccessEmailSent(accountId: string, at: Date): Promise<boolean> {
+    // V-304a — same pattern as markFirstFailureEmailSent. Different column.
+    const result = await this.database.db
+      .update(accounts)
+      .set({ firstSuccessEmailSentAt: at, updatedAt: at })
+      .where(and(eq(accounts.id, accountId), isNull(accounts.firstSuccessEmailSentAt)))
       .returning({ id: accounts.id });
     return result.length > 0;
   }

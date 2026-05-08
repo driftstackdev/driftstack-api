@@ -197,6 +197,13 @@
       "when": 1778090418000,
       "tag": "0027_v295c3_tombstone_purge",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1778090419000,
+      "tag": "0028_v304a_first_success_email",
+      "breakpoints": true
     }
   ]
 }

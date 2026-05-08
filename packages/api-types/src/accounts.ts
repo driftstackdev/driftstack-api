@@ -29,6 +29,8 @@ export type Account = z.infer<typeof AccountSchema>;
 export const OptOutableEmailEventSchema = z.enum([
   'signup-welcome',
   'session-failed-first',
+  // V-304a — first successful session activation milestone email.
+  'session-success-first',
   'tier-changed',
   'trial-pack-purchased',
   'trial-pack-expired',
