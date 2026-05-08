@@ -3,6 +3,7 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 
 // V-216 — customer-facing audit log.
 // V-297 — added export (CSV / JSON) for GDPR Article 20 portability.
+// V-354 — filter dropdown + load-more pagination.
 
 const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 
@@ -20,10 +21,41 @@ const ACTION_LABEL: Record<string, string> = {
   'profile.deleted': 'Profile deleted',
   'subscription.tier_changed': 'Subscription changed',
   'webhook_endpoint.created': 'Webhook created',
+  'webhook_endpoint.updated': 'Webhook updated',
   'webhook_endpoint.deleted': 'Webhook deleted',
+  'webhook_delivery.replayed': 'Webhook delivery replayed',
+  'team.member_invited': 'Team member invited',
+  'team.invite_accepted': 'Team invite accepted',
+  'team.member_removed': 'Team member removed',
   'admin.refund_recorded': 'Refund recorded by support',
   'admin.support_note': 'Support note added',
 };
+
+// V-354 — preset filters. Each maps to a single AccountAuditAction
+// the backend already accepts on `?action=`. The "security" group
+// mirrors V-303 catalog intent — login / password / API-key lifecycle
+// — but since the backend takes one action at a time and not a list,
+// "security" is exposed as several adjacent presets in the dropdown
+// rather than one composite filter (composite filter would need a
+// backend change; this UI-only slice keeps backend untouched).
+const FILTER_OPTIONS = [
+  { value: '', label: 'All events' },
+  { value: 'account.login', label: 'Logins' },
+  { value: 'account.password_changed', label: 'Password changes' },
+  { value: 'api_key.minted', label: 'API key created' },
+  { value: 'api_key.rotated', label: 'API key rotated' },
+  { value: 'api_key.revoked', label: 'API key revoked' },
+  { value: 'session.created', label: 'Sessions created' },
+  { value: 'session.destroyed', label: 'Sessions destroyed' },
+  { value: 'subscription.tier_changed', label: 'Subscription changes' },
+  { value: 'webhook_endpoint.created', label: 'Webhooks created' },
+  { value: 'webhook_endpoint.updated', label: 'Webhooks updated' },
+  { value: 'webhook_endpoint.deleted', label: 'Webhooks deleted' },
+  { value: 'webhook_delivery.replayed', label: 'Webhook replays' },
+  { value: 'team.member_invited', label: 'Team invites sent' },
+  { value: 'team.invite_accepted', label: 'Team invites accepted' },
+  { value: 'team.member_removed', label: 'Team members removed' },
+] as const;
 ---
 
 <DashboardLayout title="Audit log">
@@ -58,12 +90,37 @@ const ACTION_LABEL: Record<string, string> = {
       </div>
     </header>
 
+    <div class="mb-4 flex flex-wrap items-center gap-3">
+      <label class="text-sm font-medium text-slate-700" for="audit-filter">Filter:</label>
+      <select
+        id="audit-filter"
+        data-filter
+        class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+      >
+        {
+          FILTER_OPTIONS.map((opt) => (
+            <option value={opt.value}>{opt.label}</option>
+          ))
+        }
+      </select>
+      <span class="text-xs text-slate-500" data-count>—</span>
+    </div>
+
     <div class="rounded-lg border border-slate-200 bg-white">
       <ul class="divide-y divide-slate-100" data-list>
         <li class="px-6 py-4 text-sm text-slate-500">Loading audit log…</li>
       </ul>
       <div class="hidden px-6 py-4 text-sm text-slate-500" data-empty>
         No audit entries yet. Events appear here as you take actions on your account.
+      </div>
+      <div class="hidden border-t border-slate-100 px-6 py-3" data-load-more-row>
+        <button
+          type="button"
+          data-load-more
+          class="text-sm font-medium text-oxblood-700 hover:text-oxblood-800 disabled:text-slate-400"
+        >
+          Load more
+        </button>
       </div>
     </div>
 
@@ -85,6 +142,15 @@ const ACTION_LABEL: Record<string, string> = {
       const empty = root.querySelector('[data-empty]');
       const exportCsvBtn = root.querySelector('[data-export-csv]');
       const exportJsonBtn = root.querySelector('[data-export-json]');
+      // V-354 — filter + load-more.
+      const filterSelect = root.querySelector('[data-filter]');
+      const countLabel = root.querySelector('[data-count]');
+      const loadMoreRow = root.querySelector('[data-load-more-row]');
+      const loadMoreBtn = root.querySelector('[data-load-more]');
+      let nextCursor = null;
+      let totalRendered = 0;
+      let activeFilter = '';
+      const PAGE_LIMIT = 50;
 
       function getToken() {
         try {
@@ -136,13 +202,39 @@ const ACTION_LABEL: Record<string, string> = {
         );
       }
 
-      function refresh() {
+      function updateCount() {
+        if (!countLabel) return;
+        const more = nextCursor ? '+' : '';
+        const filterTxt = activeFilter ? ' · filtered' : '';
+        countLabel.textContent =
+          totalRendered === 0
+            ? '—'
+            : totalRendered + more + ' shown' + filterTxt;
+      }
+
+      function setLoadMoreVisible(visible) {
+        if (!loadMoreRow) return;
+        if (visible) loadMoreRow.classList.remove('hidden');
+        else loadMoreRow.classList.add('hidden');
+      }
+
+      function buildUrl(cursor) {
+        const params = ['limit=' + PAGE_LIMIT];
+        if (activeFilter) params.push('action=' + encodeURIComponent(activeFilter));
+        if (cursor) params.push('cursor=' + encodeURIComponent(cursor));
+        return apiBaseUrl + '/v1/account/audit-log?' + params.join('&');
+      }
+
+      function fetchPage(cursor) {
         const token = getToken();
         if (!token) {
-          if (list) list.innerHTML = '<li class="px-6 py-4 text-sm text-slate-500">Sign in to view audit log.</li>';
-          return;
+          if (list)
+            list.innerHTML =
+              '<li class="px-6 py-4 text-sm text-slate-500">Sign in to view audit log.</li>';
+          setLoadMoreVisible(false);
+          return Promise.resolve();
         }
-        fetch(apiBaseUrl + '/v1/account/audit-log?limit=50', {
+        return fetch(buildUrl(cursor), {
           headers: {
             authorization: 'Bearer ' + token,
             ...(typeof window.driftstackActAsHeaders === 'function'
@@ -156,20 +248,64 @@ const ACTION_LABEL: Record<string, string> = {
           })
           .then(function (body) {
             const entries = body.data || [];
-            if (entries.length === 0) {
+            nextCursor = body.next_cursor || null;
+            const isFresh = !cursor;
+            if (isFresh) {
+              totalRendered = 0;
+              if (list) list.innerHTML = '';
+            }
+            if (entries.length === 0 && isFresh) {
               if (list) list.classList.add('hidden');
               if (empty) empty.classList.remove('hidden');
-            } else {
-              if (empty) empty.classList.add('hidden');
-              if (list) {
-                list.classList.remove('hidden');
-                list.innerHTML = entries.map(entryLi).join('');
-              }
+              setLoadMoreVisible(false);
+              updateCount();
+              return;
             }
+            if (empty) empty.classList.add('hidden');
+            if (list) {
+              list.classList.remove('hidden');
+              const html = entries.map(entryLi).join('');
+              list.insertAdjacentHTML('beforeend', html);
+            }
+            totalRendered += entries.length;
+            setLoadMoreVisible(!!nextCursor);
+            updateCount();
           })
           .catch(function (err) {
-            showBanner("Couldn't load audit log (" + (err && err.message ? err.message : 'network error') + ').');
+            showBanner(
+              "Couldn't load audit log (" +
+                (err && err.message ? err.message : 'network error') +
+                ').',
+            );
           });
+      }
+
+      function refresh() {
+        nextCursor = null;
+        totalRendered = 0;
+        return fetchPage(null);
+      }
+
+      if (filterSelect) {
+        filterSelect.addEventListener('change', function (ev) {
+          const target = ev.target;
+          if (target instanceof HTMLSelectElement) {
+            activeFilter = target.value || '';
+            refresh();
+          }
+        });
+      }
+
+      if (loadMoreBtn) {
+        loadMoreBtn.addEventListener('click', function () {
+          if (!nextCursor) return;
+          loadMoreBtn.disabled = true;
+          loadMoreBtn.textContent = 'Loading…';
+          fetchPage(nextCursor).finally(function () {
+            loadMoreBtn.disabled = false;
+            loadMoreBtn.textContent = 'Load more';
+          });
+        });
       }
 
       function downloadExport(format) {
