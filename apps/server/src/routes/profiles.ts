@@ -18,6 +18,15 @@ import {
 } from '@driftstack/api-types';
 import type { ProfileRecord, ProfilesService } from '../services/profiles.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
+import { resolveEffectiveAccount } from '../services/auth.js';
+
+const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';
+
+function readEffectiveAccountHeader(request: FastifyRequest): string | undefined {
+  const raw = request.headers[EFFECTIVE_ACCOUNT_HEADER];
+  if (Array.isArray(raw)) return raw[0];
+  return raw;
+}
 
 const PROFILE_ID_RE = /^prof_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
@@ -74,6 +83,9 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   );
 
   // ── GET /v1/profiles ─────────────────────────────────────────────────
+  // V-330 — honors X-Driftstack-Account: a team member with a valid
+  // membership lists the owner's profiles. Read-only routes treat all
+  // roles equivalently — both 'member' and 'admin' can read.
   app.get(
     '/v1/profiles',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
@@ -82,11 +94,12 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       const parsed = PaginationQuerySchema.safeParse(req.query);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
       const cursorUuid =
         parsed.data.cursor !== undefined ? uuidFromProfileId(parsed.data.cursor) : undefined;
 
       const page = await service.list({
-        accountId: ctx.account.id,
+        accountId: effective.accountId,
         limit: parsed.data.limit,
         ...(cursorUuid !== undefined ? { cursor: cursorUuid } : {}),
       });
@@ -99,13 +112,15 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   );
 
   // ── GET /v1/profiles/:id ─────────────────────────────────────────────
+  // V-330 — same effective-account scoping as the list endpoint above.
   app.get<{ Params: { id: string } }>(
     '/v1/profiles/:id',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
       const id = uuidFromProfileId(req.params.id);
-      const row = await service.get({ id, accountId: ctx.account.id });
+      const row = await service.get({ id, accountId: effective.accountId });
       return publicProfile(row);
     },
   );

@@ -297,6 +297,75 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     }
   });
 
+  it('GET /v1/profiles returns owner profiles when caller is a member + sets X-Driftstack-Account', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'member',
+      },
+    ]);
+    // Seed: 1 caller-owned profile + 2 owner-owned.
+    await fx.profilesRepo.insert({
+      accountId: fx.accountId,
+      name: 'self-profile',
+      archetype: 'iphone-16-pro-ios-26-4-1',
+      description: null,
+    });
+    await fx.profilesRepo.insert({
+      accountId: OWNER_ACCOUNT_ID,
+      name: 'owner-profile-1',
+      archetype: 'iphone-16-pro-ios-26-4-1',
+      description: null,
+    });
+    await fx.profilesRepo.insert({
+      accountId: OWNER_ACCOUNT_ID,
+      name: 'owner-profile-2',
+      archetype: 'iphone-16-pro-ios-26-4-1',
+      description: null,
+    });
+
+    // No header → caller's own profile.
+    const own = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(own.statusCode).toBe(200);
+    const ownBody = own.json<{ data: { name: string }[] }>();
+    expect(ownBody.data.map((d) => d.name)).toEqual(['self-profile']);
+
+    // With header → owner's profiles.
+    const owner = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/profiles',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    expect(owner.statusCode).toBe(200);
+    const ownerBody = owner.json<{ data: { name: string }[] }>();
+    expect(ownerBody.data.map((d) => d.name).sort()).toEqual([
+      'owner-profile-1',
+      'owner-profile-2',
+    ]);
+  });
+
+  it('GET /v1/profiles returns 403 when X-Driftstack-Account references a non-member owner', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/profiles',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': 'acc_00000000-0000-4000-8000-deadbeef0000',
+      },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it('GET /v1/sessions returns 403 when X-Driftstack-Account references a non-member owner', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
