@@ -17923,3 +17923,85 @@ NotYet placeholder. V-334 ships the actual view: terminated sessions
 sorted newest-first with id, archetype, lifetime, terminal timestamp,
 status badge. ErrorBanner with dismiss; refresh button (no auto-poll
 since past sessions don't move).
+
+## V-336 — npm run dev:all for concurrent local-dev
+
+**Tier**: 1 (DX).
+
+Single command brings up the entire control plane locally via the
+`concurrently` dev-dep. Per-surface scripts (`dev:server`, `dev:dashboard`,
+etc.) added for isolated debugging. Mac runbook updated.
+
+## V-337 — /version surfaces driver mode + GUI Connectivity reflects it
+
+**Tier**: 1.
+
+`/version` gains `driver` + `playwright_browser` fields. AppDeps
+gains optional `driverName` + `playwrightBrowser` markers; bootstrap
+threads config through. GUI Connectivity view fetches /version on
+mount and surfaces the server-reported driver. 1 new test.
+
+## V-338 / V-338b — admin /incidents form + list wired to live endpoints
+
+**Tier**: 1.
+
+V-295a left alert-stubs on the admin-panel /incidents form;
+V-338 wires the form to POST /v1/admin/incidents (with token gate +
+disabled-while-in-flight + reload-on-success). V-338b extends with
+list-side fetchAndRender on mount (replaces SSG MOCK with live
+data; keeps mock as no-token fallback).
+
+## V-339 — marketing /security gains a Team RBAC pillar
+
+**Tier**: 1 (Tier-3 tone, post-hoc review per memory).
+
+New pillar 05 surfaces V-326e Team RBAC as a security claim:
+admin/member roles, scope-gated writes, audit-log review path.
+
+## V-340 / V-340b — docs/api/team.md reflects V-326e end-to-end
+
+**Tier**: 1.
+
+V-298c stale notice replaced. New "Acting on behalf of an owner"
+section: header format, role gating, comprehensive endpoint list
+(honors / does-not-honor). New "Inverse view" section pointing at
+`GET /v1/team/owners`. Stale "Next steps / V-298d" notice dropped.
+
+## V-341 — OpenAPI spec info.description documents X-Driftstack-Account
+
+**Tier**: 1.
+
+Description-level documentation of the Team RBAC header + role
+gating + endpoint coverage. Per-route header parameter would
+require touching every registerRoute call; description-level is the
+pragmatic intermediate. Per-route refactor a future cleanup.
+
+## V-342 — customer-dashboard /team page reflects V-326e end-to-end
+
+**Tier**: 1.
+
+Stale V-298d "auth path doesn't yet honor team membership" comments
+replaced with V-326e end-to-end status. Footer hint links to
+docs.driftstack.dev/api/team for the role-gating reference.
+
+## V-343 — marketing changelog adds 2 entries for V-326e + V-333
+
+**Tier**: 1 (Tier-3 tone, post-hoc review per memory).
+
+Two new dated 2026-05-08 changelog entries: 'security' for Team
+RBAC end-to-end + 'sdk' for PlaywrightDriver self-hosted dev.
+
+## V-344 — admin /incidents/:id post-update + mark-resolved forms wired
+
+**Tier**: 1.
+
+Companion to V-338 / V-338b. Replaces the two remaining V-295a
+alert-stubs on the detail page with live POST handlers for
+/updates + /resolve. Shared bind() helper factors the
+token/disable/reload flow.
+
+## V-345 — V-log catch-up for V-336–V-344
+
+**Tier**: 1 (documentation).
+
+Per persistent rule #17.
