@@ -260,6 +260,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerAdminRoutes(app, {
     apiKeysService: deps.apiKeysService,
     usageService: deps.usageService,
+    authRepo: deps.authRepo,
   });
   registerWebhookRoutes(app, { service: deps.webhooksService });
   registerAdminAccountsRoutes(app, {

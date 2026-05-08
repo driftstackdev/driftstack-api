@@ -1,11 +1,20 @@
 // Admin routes — API key management + usage view.
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { CreateApiKeyRequestSchema, UsageSeriesQuerySchema } from '@driftstack/api-types';
-import type { ApiKeyRow } from '../services/auth.js';
+import type { AccountAuthRepo, ApiKeyRow } from '../services/auth.js';
 import type { ApiKeysService } from '../services/api-keys.js';
 import type { UsageService, UsageSummary } from '../services/usage.js';
-import { BadRequestError } from '../lib/errors.js';
+import { BadRequestError, ForbiddenError } from '../lib/errors.js';
+import { resolveEffectiveAccount } from '../services/auth.js';
+
+const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';
+
+function readEffectiveAccountHeader(request: FastifyRequest): string | undefined {
+  const raw = request.headers[EFFECTIVE_ACCOUNT_HEADER];
+  if (Array.isArray(raw)) return raw[0];
+  return raw;
+}
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
@@ -43,10 +52,16 @@ function publicUsage(s: UsageSummary): Record<string, unknown> {
 export interface AdminRoutesOptions {
   apiKeysService: ApiKeysService;
   usageService: UsageService;
+  /**
+   * V-330e — needed to load the OWNER's account row (for tier
+   * resolution) when a team member calls /v1/usage with an
+   * X-Driftstack-Account header.
+   */
+  authRepo: AccountAuthRepo;
 }
 
 export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptions): void {
-  const { apiKeysService, usageService } = opts;
+  const { apiKeysService, usageService, authRepo } = opts;
 
   // ── POST /v1/api-keys ──────────────────────────────────────────────────
   app.post(
@@ -127,6 +142,10 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
   );
 
   // ── GET /v1/usage ──────────────────────────────────────────────────────
+  // V-330e — honors X-Driftstack-Account: a team member with a valid
+  // membership reads the OWNER's usage. The OWNER's tier is the
+  // quota-cap source (members don't override the cap by being on the
+  // team); we look it up from the auth repo when the header is set.
   app.get(
     '/v1/usage',
     {
@@ -135,6 +154,18 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      if (effective.kind === 'team') {
+        const owner = await authRepo.getAccount(effective.accountId);
+        if (!owner) {
+          // Membership references an account that's been deleted between
+          // the auth-cache load and the route call. Surface as 403 — the
+          // membership is effectively invalid.
+          throw new ForbiddenError('Owner account no longer exists.');
+        }
+        const summary = await usageService.summaryFor(owner.id, owner.tier);
+        return publicUsage(summary);
+      }
       const summary = await usageService.currentPeriodSummary(ctx);
       return publicUsage(summary);
     },
@@ -146,6 +177,7 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
   // Empty buckets today (usage_records writers not wired); the endpoint
   // returns the contract shape with zeros so the dashboard can render
   // empty-state correctly.
+  // V-330e — same effective-account treatment as /v1/usage above.
   app.get(
     '/v1/usage/series',
     {
@@ -155,7 +187,10 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const query = UsageSeriesQuerySchema.parse(request.query ?? {});
-      const series = await usageService.dailySeries(ctx, query.days ?? 30);
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      const series = await usageService.dailySeries(ctx, query.days ?? 30, undefined, {
+        ...(effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {}),
+      });
       return {
         from_date: series.fromDate,
         to_date: series.toDate,

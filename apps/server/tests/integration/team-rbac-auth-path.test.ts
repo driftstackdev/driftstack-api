@@ -528,6 +528,46 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     expect(body.data.every((r) => r.opted_in)).toBe(true);
   });
 
+  it('GET /v1/usage as team member with X-Driftstack-Account returns OWNER tier-aware quotas', async () => {
+    fx = await buildTestApp({ tier: 'api_starter' });
+    // Seed the OWNER account row so the route can resolve the owner's tier.
+    fx.authRepo.upsertAccount({
+      id: OWNER_ACCOUNT_ID,
+      email: 'owner@example.test',
+      name: null,
+      tier: 'api_scale',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'member',
+      },
+    ]);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/usage',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ tier: string; quotas: Record<string, number | null> }>();
+    expect(body.tier).toBe('api_scale');
+
+    // Caller's own /v1/usage still reports the caller's tier.
+    const own = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/usage',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(own.json<{ tier: string }>().tier).toBe('api_starter');
+  });
+
   it('GET /v1/sessions returns 403 when X-Driftstack-Account references a non-member owner', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

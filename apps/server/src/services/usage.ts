@@ -222,6 +222,7 @@ export class UsageService {
     ctx: AccountContext,
     days: number = 30,
     now: Date = new Date(),
+    opts: { effectiveAccountId?: string } = {},
   ): Promise<{
     fromDate: string;
     toDate: string;
@@ -230,7 +231,12 @@ export class UsageService {
     const clampedDays = Math.max(1, Math.min(days, 90));
     const toDate = dayStartUtc(now);
     const fromDate = new Date(toDate.getTime() - clampedDays * 24 * 60 * 60 * 1000);
-    const raw = await this.repo.dailyBucketsForRange(ctx.account.id, fromDate, toDate);
+    // V-330e — pull the OWNER's daily buckets when called via team
+    // RBAC. Tier-derived quotas don't apply to the series response
+    // shape (it's just bucket counts), so we don't need the owner's
+    // tier here.
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const raw = await this.repo.dailyBucketsForRange(accountId, fromDate, toDate);
 
     // Fill missing days with empty buckets so the response is contiguous
     // (sparkline rendering doesn't need to handle gaps).
