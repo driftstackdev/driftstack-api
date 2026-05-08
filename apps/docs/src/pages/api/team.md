@@ -215,11 +215,8 @@ curl -H "Authorization: Bearer $DRIFTSTACK_API_KEY" \
   > team-history.csv
 ```
 
-## Next steps
+## Privacy / DPA
 
-- **V-298d** wires the auth path so that members acting as the owner
-  can read/write the owner's resources per their role. Until that
-  ships, accepted memberships are purely informational.
-- **Privacy / DPA**: a member is a separate Data Subject from the
-  owner. Their account email is processed under Privacy §3.1 (Account
-  data) on the same legal basis as any other Customer contact.
+A member is a separate Data Subject from the owner. Their account
+email is processed under Privacy §3.1 (Account data) on the same
+legal basis as any other Customer contact.
