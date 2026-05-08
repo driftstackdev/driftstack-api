@@ -33,6 +33,12 @@ const EMAIL_EVENTS = [
     description: 'One-time notice the first time a session fails on this account.',
   },
   {
+    type: 'session-success-first',
+    label: 'First session success',
+    description:
+      'One-time activation email after your first session completes successfully. Subsequent sessions don\'t notify; the dashboard takes over.',
+  },
+  {
     type: 'tier-changed',
     label: 'Subscription tier changed',
     description: 'Confirmation when your tier changes via the Stripe portal.',
