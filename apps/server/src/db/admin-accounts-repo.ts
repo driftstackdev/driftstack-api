@@ -102,6 +102,7 @@ function toRow(r: typeof accounts.$inferSelect): AccountRow {
     tier: r.tier,
     status: r.status,
     timezone: r.timezone,
+    avatarR2Key: r.avatarR2Key,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };

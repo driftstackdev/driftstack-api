@@ -45,6 +45,11 @@ export const PROBLEM_TYPES = {
   InvalidCredentials: 'https://errors.driftstack.dev/invalid-credentials',
   InvalidAuthToken: 'https://errors.driftstack.dev/invalid-auth-token',
   EmailNotVerified: 'https://errors.driftstack.dev/email-not-verified',
+  // V-352b — feature explicitly disabled at deploy-time (e.g. avatar
+  // upload requires the public R2 bucket; in environments where it
+  // isn't configured the endpoint returns 503 instead of a misleading
+  // 404 / 500).
+  FeatureUnavailable: 'https://errors.driftstack.dev/feature-unavailable',
 } as const;
 
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES];

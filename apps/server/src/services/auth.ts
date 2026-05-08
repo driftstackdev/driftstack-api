@@ -32,6 +32,10 @@ export interface AccountRow {
   status: 'active' | 'suspended' | 'deleted';
   /** V-352 — IANA timezone name (e.g. "Europe/Amsterdam"). null = UTC fallback. */
   timezone: string | null;
+  /** V-352b — R2 object key for the customer's uploaded avatar.
+   *  null = no avatar uploaded. The route layer turns this into a
+   *  presigned GET URL on /v1/account/me reads. */
+  avatarR2Key: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -99,10 +103,18 @@ export interface AccountAuthRepo {
    * Email + tier + status + stripeCustomerId are NOT editable here —
    * those go through dedicated flows (auth-flows for email; Stripe
    * webhooks for tier; admin force-actions for status).
+   *
+   * V-352b — `avatarR2Key` accepted too; null clears the avatar
+   * reference (the actual R2 object cleanup is best-effort handled
+   * by the route layer).
    */
   updateAccountBasics(
     id: string,
-    patch: { name?: string | null; timezone?: string | null },
+    patch: {
+      name?: string | null;
+      timezone?: string | null;
+      avatarR2Key?: string | null;
+    },
   ): Promise<AccountRow | null>;
 }
 

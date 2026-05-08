@@ -168,6 +168,12 @@ export const accounts = pgTable(
     // Used by the dashboard + outbound emails to render timestamps in
     // the customer's local TZ. Optional; falls back to UTC display.
     timezone: text('timezone'),
+    // V-352b — R2 key (path within bucketPublic) for the customer's
+    // uploaded avatar. Public-readable bucket; route layer surfaces a
+    // presigned GET URL on /v1/account/me reads. Null when the customer
+    // hasn't uploaded one. R2 sub-processor disclosure already covers
+    // avatar storage (privacy.md §3.1; sub-processors.ts).
+    avatarR2Key: text('avatar_r2_key'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

@@ -177,3 +177,164 @@ describe('PATCH /v1/account/me (V-352)', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+// ── V-352b — avatar upload + delete + GET presign ────────────────────
+
+// Smallest valid PNG: 1x1 transparent. Hand-built byte sequence.
+// Source: pngsuite-derived; bytes match what node-canvas et al emit for
+// a 1x1 RGBA image.
+const ONE_BY_ONE_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=';
+
+describe('POST /v1/account/me/avatar (V-352b)', () => {
+  it('200 uploads avatar, surfaces avatar_url on subsequent GET /me', async () => {
+    fx = await buildTestApp();
+    const upload = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/avatar',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: {
+        content_type: 'image/png',
+        data_base64: ONE_BY_ONE_PNG_BASE64,
+      },
+    });
+    expect(upload.statusCode).toBe(200);
+    const body = upload.json<{ avatar_url: string | null; bytes: number }>();
+    expect(body.avatar_url).toMatch(/^https:\/\/r2-fake\.test\//);
+    expect(body.bytes).toBeGreaterThan(0);
+
+    // R2 store recorded the put.
+    expect(fx.r2PublicStore.putCalls).toHaveLength(1);
+    expect(fx.r2PublicStore.putCalls[0]?.contentType).toBe('image/png');
+    expect(fx.r2PublicStore.putCalls[0]?.key).toBe(`avatars/${fx.accountId}.png`);
+
+    // GET /me surfaces the same presigned URL pattern.
+    const me = await fx.app.inject({ method: 'GET', url: '/v1/account/me', headers: auth(fx) });
+    expect(me.statusCode).toBe(200);
+    const meBody = me.json<AccountMeResponse & { avatar_url: string | null }>();
+    expect(meBody.avatar_url).toMatch(/^https:\/\/r2-fake\.test\//);
+  });
+
+  it('400 when content_type is not in the allow-list', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/avatar',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: {
+        content_type: 'image/gif',
+        data_base64: ONE_BY_ONE_PNG_BASE64,
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(fx.r2PublicStore.putCalls).toHaveLength(0);
+  });
+
+  it('400 when data_base64 decodes to over 2 MiB', async () => {
+    fx = await buildTestApp();
+    // 2 MiB + 1 of decoded bytes → just over the cap. Encode a buffer
+    // of all zeros at that size — Zod's max wire-size cap allows it
+    // through, the route's byte-cap check rejects it. Stays under the
+    // route's 3.5 MiB Fastify bodyLimit so we exercise our own 400.
+    const tooBigBuf = Buffer.alloc(2 * 1024 * 1024 + 1, 0);
+    const tooBigB64 = tooBigBuf.toString('base64');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/avatar',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: {
+        content_type: 'image/png',
+        data_base64: tooBigB64,
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(fx.r2PublicStore.putCalls).toHaveLength(0);
+  });
+
+  it('413 when payload exceeds Fastify bodyLimit', async () => {
+    fx = await buildTestApp();
+    // 4 MiB raw → ~5.5 MiB base64, well over the 3.5 MiB route limit.
+    const wayTooBig = Buffer.alloc(4 * 1024 * 1024, 0).toString('base64');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/avatar',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { content_type: 'image/png', data_base64: wayTooBig },
+    });
+    expect(res.statusCode).toBe(413);
+    expect(fx.r2PublicStore.putCalls).toHaveLength(0);
+  });
+
+  it('400 on empty data_base64 (Zod min)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/avatar',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { content_type: 'image/png', data_base64: '' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('401 without an Authorization header', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/avatar',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        content_type: 'image/png',
+        data_base64: ONE_BY_ONE_PNG_BASE64,
+      },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('DELETE /v1/account/me/avatar (V-352b)', () => {
+  it('204 clears avatar pointer; subsequent GET /me has avatar_url null', async () => {
+    fx = await buildTestApp();
+    // Upload first.
+    const up = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/avatar',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: {
+        content_type: 'image/png',
+        data_base64: ONE_BY_ONE_PNG_BASE64,
+      },
+    });
+    expect(up.statusCode).toBe(200);
+
+    // Delete.
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: '/v1/account/me/avatar',
+      headers: auth(fx),
+    });
+    expect(del.statusCode).toBe(204);
+
+    // GET /me should show avatar_url null again.
+    const me = await fx.app.inject({ method: 'GET', url: '/v1/account/me', headers: auth(fx) });
+    expect(me.json<{ avatar_url: string | null }>().avatar_url).toBeNull();
+  });
+
+  it('204 on delete when no avatar was previously set (idempotent)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'DELETE',
+      url: '/v1/account/me/avatar',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(204);
+  });
+
+  it('401 without an Authorization header', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'DELETE',
+      url: '/v1/account/me/avatar',
+    });
+    expect(res.statusCode).toBe(401);
+  });
+});

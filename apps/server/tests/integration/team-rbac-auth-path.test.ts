@@ -107,6 +107,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
         tier: 'api_starter' as const,
         status: 'active' as const,
         timezone: null,
+        avatarR2Key: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -139,6 +140,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
         tier: 'api_starter' as const,
         status: 'active' as const,
         timezone: null,
+        avatarR2Key: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -181,6 +183,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
         tier: 'api_starter' as const,
         status: 'active' as const,
         timezone: null,
+        avatarR2Key: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -212,6 +215,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
         tier: 'api_starter' as const,
         status: 'active' as const,
         timezone: null,
+        avatarR2Key: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -542,6 +546,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       tier: 'api_scale',
       status: 'active',
       timezone: null,
+      avatarR2Key: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -641,6 +646,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       tier: 'api_scale',
       status: 'active',
       timezone: null,
+      avatarR2Key: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -683,6 +689,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       tier: 'api_scale',
       status: 'active',
       timezone: null,
+      avatarR2Key: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -715,6 +722,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       tier: 'api_scale',
       status: 'active',
       timezone: null,
+      avatarR2Key: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -766,6 +774,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       tier: 'api_scale',
       status: 'active',
       timezone: null,
+      avatarR2Key: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -806,6 +815,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       tier: 'api_scale',
       status: 'active',
       timezone: null,
+      avatarR2Key: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -847,6 +857,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       tier: 'api_scale',
       status: 'active',
       timezone: null,
+      avatarR2Key: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -890,6 +901,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       tier: 'api_scale',
       status: 'active',
       timezone: null,
+      avatarR2Key: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -929,6 +941,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       tier: 'api_scale',
       status: 'active',
       timezone: null,
+      avatarR2Key: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -961,6 +974,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       tier: 'api_scale',
       status: 'active',
       timezone: null,
+      avatarR2Key: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -1001,6 +1015,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       tier: 'api_scale',
       status: 'active',
       timezone: null,
+      avatarR2Key: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -1036,6 +1051,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       tier: 'api_scale',
       status: 'active',
       timezone: null,
+      avatarR2Key: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -1089,6 +1105,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       tier: 'api_scale',
       status: 'active',
       timezone: null,
+      avatarR2Key: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -1135,6 +1152,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
         tier: 'api_starter' as const,
         status: 'active' as const,
         timezone: null,
+        avatarR2Key: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       },

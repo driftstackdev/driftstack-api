@@ -7,6 +7,7 @@
 // Returns the app, plain-text key, and helpers for direct repo manipulation.
 
 import { buildApp } from '../../../src/lib/app.js';
+import type { R2 } from '../../../src/lib/r2.js';
 import { createTestLogger } from '../../../src/lib/logger.js';
 import { MemoryRateLimitStore } from '../../../src/lib/memory-rate-limit-store.js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../../../src/lib/api-keys.js';
@@ -268,12 +269,57 @@ export interface TestAppFixture {
   plaintext: string;
   accountId: string;
   apiKeyId: string;
+  /** V-352b — in-memory bucket + putCalls inspector for avatar tests. */
+  r2PublicStore: R2FakeStore;
   cleanup: () => Promise<void>;
+}
+
+/**
+ * V-352b — in-memory R2 fake for avatar upload tests. Stores objects
+ * by key in a Map; presigned GETs return a synthetic
+ * `https://r2-fake.test/<bucket>/<key>?sig=...` URL so tests can
+ * inspect what would have been served. Mirrors the real R2 interface
+ * surface used by the route layer (putObject, presignGet, headObject).
+ */
+export interface R2FakeStore {
+  /** All objects currently in the fake bucket, keyed by R2 key. */
+  readonly objects: Map<string, { body: Buffer; contentType?: string }>;
+  /** putObject calls in order — useful for asserting upload count. */
+  readonly putCalls: Array<{ key: string; size: number; contentType?: string }>;
+}
+
+function makeR2Fake(): { r2: R2; store: R2FakeStore } {
+  const objects = new Map<string, { body: Buffer; contentType?: string }>();
+  const putCalls: R2FakeStore['putCalls'] = [];
+  const bucket = 'driftstack-test-public';
+  const r2: R2 = {
+    bucket,
+    headObject(key) {
+      return Promise.resolve({ exists: objects.has(key) });
+    },
+    putObject({ key, body, contentType }) {
+      const buf = typeof body === 'string' ? Buffer.from(body) : Buffer.from(body);
+      objects.set(key, { body: buf, contentType });
+      putCalls.push({ key, size: buf.length, contentType });
+      return Promise.resolve();
+    },
+    presignPut({ key }) {
+      return Promise.resolve(`https://r2-fake.test/${bucket}/${key}?put=1`);
+    },
+    presignGet({ key, expiresIn }) {
+      const ttl = expiresIn ?? 900;
+      return Promise.resolve(`https://r2-fake.test/${bucket}/${key}?ttl=${ttl}`);
+    },
+  };
+  return { r2, store: { objects, putCalls } };
 }
 
 export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFixture> {
   const authRepo = new InMemoryAuthRepo();
   const rateLimitStore = new MemoryRateLimitStore();
+  const r2PublicFakeBundle = makeR2Fake();
+  const r2PublicFake = r2PublicFakeBundle.r2;
+  const r2PublicStore = r2PublicFakeBundle.store;
 
   const accountId = opts.accountId ?? '00000000-0000-4000-8000-000000000001';
   const apiKeyId = opts.apiKeyId ?? '00000000-0000-4000-8000-000000000a01';
@@ -285,6 +331,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     tier: opts.tier ?? 'api_builder',
     status: opts.accountStatus ?? 'active',
     timezone: null,
+    avatarR2Key: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
   });
@@ -615,6 +662,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
         tier: row.tier,
         status: row.status,
         timezone: null,
+        avatarR2Key: null,
         createdAt: row.createdAt,
         updatedAt: row.createdAt,
       };
@@ -729,6 +777,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     sessionRepo: sessionsRepo,
     apiKeysRepo,
     profilesRepo,
+    // V-352b — fake R2 public bucket so /v1/account/me/avatar can be
+    // exercised in integration tests without touching real Cloudflare.
+    r2Public: r2PublicFake,
     driver,
     permissiveCors: true,
   });
@@ -771,6 +822,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     plaintext,
     accountId,
     apiKeyId,
+    r2PublicStore,
     cleanup: async () => {
       await app.close();
     },
@@ -801,6 +853,7 @@ export async function seedAdditionalAccount(
     tier: opts.tier ?? 'api_builder',
     status: opts.accountStatus ?? 'active',
     timezone: null,
+    avatarR2Key: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
   });

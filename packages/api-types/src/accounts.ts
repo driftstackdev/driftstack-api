@@ -89,6 +89,36 @@ export const UpdateAccountMeRequestSchema = z
 export type UpdateAccountMeRequest = z.infer<typeof UpdateAccountMeRequestSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
+// V-352b — POST /v1/account/me/avatar request shape
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * V-352b — customer-uploaded avatar. The image is sent inline as
+ * base64 (no multipart on this control plane). Storage backend is
+ * the existing R2 public-snapshot bucket (already disclosed as a
+ * sub-processor for status-page snapshots; per V-294 the disclosure
+ * scope is updated atomically with this slice to also cover avatars).
+ *
+ * Cap: 2 MiB raw bytes. The base64 wire size is ~33% larger; the
+ * base64 string is bounded at ~2.8 MiB to keep the request body
+ * inside Fastify's default JSON body limit.
+ */
+export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+export const AVATAR_ALLOWED_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+export const AvatarContentTypeSchema = z.enum(AVATAR_ALLOWED_CONTENT_TYPES);
+export type AvatarContentType = z.infer<typeof AvatarContentTypeSchema>;
+
+export const UploadAvatarRequestSchema = z.object({
+  content_type: AvatarContentTypeSchema,
+  data_base64: z
+    .string()
+    .min(4)
+    .max(Math.ceil((AVATAR_MAX_BYTES * 4) / 3) + 4)
+    .regex(/^[A-Za-z0-9+/=]+$/, 'Must be base64-encoded.'),
+});
+export type UploadAvatarRequest = z.infer<typeof UploadAvatarRequestSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
 // V-216 — customer-facing audit log
 // ───────────────────────────────────────────────────────────────────────────
 

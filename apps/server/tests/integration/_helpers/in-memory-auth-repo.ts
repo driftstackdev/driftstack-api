@@ -136,10 +136,14 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
     return Promise.resolve(this.teamMemberships.get(memberAccountId) ?? []);
   }
 
-  // ── V-352 account basics (name + timezone) update ─────────────────
+  // ── V-352 / V-352b account basics (name + timezone + avatarR2Key) update
   updateAccountBasics(
     id: string,
-    patch: { name?: string | null; timezone?: string | null },
+    patch: {
+      name?: string | null;
+      timezone?: string | null;
+      avatarR2Key?: string | null;
+    },
   ): Promise<AccountRow | null> {
     const r = this.accounts.get(id);
     if (!r) return Promise.resolve(null);
@@ -147,6 +151,7 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
       ...r,
       name: patch.name !== undefined ? patch.name : r.name,
       timezone: patch.timezone !== undefined ? patch.timezone : r.timezone,
+      avatarR2Key: patch.avatarR2Key !== undefined ? patch.avatarR2Key : r.avatarR2Key,
       updatedAt: new Date(),
     };
     this.accounts.set(id, updated);

@@ -11,16 +11,24 @@
 
 import type { FastifyInstance } from 'fastify';
 import {
+  AVATAR_MAX_BYTES,
   PROFILES_PER_TIER,
   TIER_CONCURRENT_SESSION_LIMITS,
   UpdateAccountMeRequestSchema,
+  UploadAvatarRequestSchema,
   type AccountTier,
 } from '@driftstack/api-types';
 import type { AccountAuthRepo } from '../services/auth.js';
 import type { AuthCache } from '../services/auth-cache.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
-import { BadRequestError, NotFoundError } from '../lib/errors.js';
+import { avatarKey, type R2 } from '../lib/r2.js';
+import { BadRequestError, FeatureUnavailableError, NotFoundError } from '../lib/errors.js';
+
+/** V-352b — avatar presigned-GET TTL. 1h is long enough that a single
+ *  dashboard render doesn't churn signed URLs but short enough that
+ *  rotating the bucket secret invalidates outstanding URLs in <1h. */
+const AVATAR_PRESIGN_TTL_SECONDS = 60 * 60;
 
 export interface AccountMeRoutesOptions {
   /** Session count source — same repo SessionsService uses. */
@@ -32,6 +40,9 @@ export interface AccountMeRoutesOptions {
   /** V-352 — invalidated on PATCH /v1/account/me so the next request
    *  picks up the updated row instead of the stale cached AccountContext. */
   authCache?: AuthCache | null;
+  /** V-352b — public-bucket R2 client for avatar upload + presigned GET.
+   *  Null when public bucket is not configured (avatar endpoints return 503). */
+  r2Public?: R2 | null;
 }
 
 /**
@@ -48,6 +59,25 @@ function profileCapFor(tier: AccountTier): number | null {
 export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRoutesOptions): void {
   const { sessionRepo, profilesRepo, authRepo } = opts;
   const authCache = opts.authCache ?? null;
+  const r2Public = opts.r2Public ?? null;
+
+  // V-352b — best-effort presigned GET URL for the avatar. Returns null
+  // when no avatar is set, when the public R2 bucket is not configured,
+  // or when the presign call itself fails (logged + swallowed: a stale
+  // /me read should never 500 just because R2 hiccuped).
+  async function presignAvatar(key: string | null): Promise<string | null> {
+    if (!key) return null;
+    if (!r2Public) return null;
+    try {
+      return await r2Public.presignGet({
+        key,
+        expiresIn: AVATAR_PRESIGN_TTL_SECONDS,
+      });
+    } catch (err) {
+      app.log.warn({ err, key }, 'avatar presign failed');
+      return null;
+    }
+  }
 
   app.get(
     '/v1/account/me',
@@ -59,11 +89,12 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       const accountId = ctx.account.id;
       const tier = ctx.account.tier;
 
-      // Parallel fan-out: counts + tier-derived caps. Tier caps come
-      // from in-memory constants so they cost nothing.
-      const [activeSessions, profileCount] = await Promise.all([
+      // Parallel fan-out: counts + tier-derived caps + avatar presign.
+      // Tier caps come from in-memory constants so they cost nothing.
+      const [activeSessions, profileCount, avatarUrl] = await Promise.all([
         sessionRepo.countActiveSessions(accountId),
         profilesRepo.countByAccount(accountId),
+        presignAvatar(ctx.account.avatarR2Key),
       ]);
 
       return {
@@ -74,6 +105,10 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         status: ctx.account.status,
         // V-352 — IANA timezone (null = UTC fallback for client renders).
         timezone: ctx.account.timezone,
+        // V-352b — presigned R2 GET URL for the customer's uploaded
+        // avatar; null when none uploaded or the public bucket isn't
+        // wired in this deploy. URL is short-lived (1h).
+        avatar_url: avatarUrl,
         concurrent_session_cap: TIER_CONCURRENT_SESSION_LIMITS[tier],
         concurrent_session_active: activeSessions,
         profile_cap: profileCapFor(tier),
@@ -128,6 +163,111 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         status: updated.status,
         timezone: updated.timezone,
       };
+    },
+  );
+
+  // V-352b — upload (or replace) the calling account's avatar. Inline
+  // base64 body, validated for MIME + size, written to R2 public
+  // bucket, then the DB pointer + auth-cache flush. The client gets a
+  // presigned GET URL (same shape as /v1/account/me) so it never has
+  // to handle bucket URLs directly.
+  //
+  // bodyLimit override: Fastify defaults to 1 MiB JSON. A 2 MiB raw
+  // image becomes ~2.8 MiB base64; we cap the route at 3.5 MiB so a
+  // legitimate 2 MiB upload + JSON envelope fits and anything beyond
+  // is short-circuited as 413 by Fastify before our handler runs.
+  app.post(
+    '/v1/account/me/avatar',
+    {
+      preHandler: [app.requireAuth, app.rateLimit('global')],
+      bodyLimit: 3.5 * 1024 * 1024,
+    },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      if (!r2Public) {
+        throw new FeatureUnavailableError('Avatar uploads are not available on this deployment.');
+      }
+      const parsed = UploadAvatarRequestSchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid body.');
+      }
+
+      let bytes: Buffer;
+      try {
+        bytes = Buffer.from(parsed.data.data_base64, 'base64');
+      } catch {
+        throw new BadRequestError('data_base64 is not valid base64.');
+      }
+      if (bytes.length === 0) {
+        throw new BadRequestError('Avatar image is empty.');
+      }
+      if (bytes.length > AVATAR_MAX_BYTES) {
+        throw new BadRequestError(`Avatar image is too large. Max ${AVATAR_MAX_BYTES} bytes.`);
+      }
+
+      const key = avatarKey(ctx.account.id, parsed.data.content_type);
+      try {
+        await r2Public.putObject({
+          key,
+          body: bytes,
+          contentType: parsed.data.content_type,
+        });
+      } catch (err) {
+        app.log.error({ err, key }, 'avatar upload to R2 failed');
+        throw new FeatureUnavailableError('Avatar storage is temporarily unavailable.');
+      }
+
+      const updated = await authRepo.updateAccountBasics(ctx.account.id, {
+        avatarR2Key: key,
+      });
+      if (!updated) throw new NotFoundError('Account not found.');
+
+      if (authCache) {
+        try {
+          await authCache.invalidateAccount(ctx.account.id);
+        } catch {
+          /* swallow */
+        }
+      }
+
+      const url = await presignAvatar(updated.avatarR2Key);
+      reply.code(200);
+      return {
+        avatar_url: url,
+        content_type: parsed.data.content_type,
+        bytes: bytes.length,
+      };
+    },
+  );
+
+  // V-352b — clear the avatar pointer on the account row. The R2
+  // object is intentionally left in place: a future sweeper job
+  // collects orphaned avatar keys (off the hot path; avatars are
+  // already public-readable so leaving stale objects is no worse
+  // than the public bucket already is). Returns 204.
+  app.delete(
+    '/v1/account/me/avatar',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+
+      const updated = await authRepo.updateAccountBasics(ctx.account.id, {
+        avatarR2Key: null,
+      });
+      if (!updated) throw new NotFoundError('Account not found.');
+
+      if (authCache) {
+        try {
+          await authCache.invalidateAccount(ctx.account.id);
+        } catch {
+          /* swallow */
+        }
+      }
+
+      reply.code(204);
+      return null;
     },
   );
 }

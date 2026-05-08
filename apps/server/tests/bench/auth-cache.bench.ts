@@ -22,6 +22,7 @@ function sampleAccount(): AccountRow {
     tier: 'api_builder',
     status: 'active',
     timezone: null,
+    avatarR2Key: null,
     createdAt: new Date('2026-05-04T00:00:00Z'),
     updatedAt: new Date('2026-05-04T00:00:00Z'),
   };

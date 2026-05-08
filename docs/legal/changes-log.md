@@ -23,6 +23,28 @@ references the corresponding rows in this log.
 
 ---
 
+## 2026-05-08 — V-352b (customer-uploaded avatars)
+
+- **Privacy Policy §3.1 (Account data)**: extended the "What" list to
+  include the optional Customer-uploaded profile avatar, with an
+  inline cross-reference to §17 / DPA Annex 3 since the bytes are
+  stored in the existing Cloudflare R2 sub-processor.
+- **DPA Annex 3 / sub-processor register**: Cloudflare R2 row purpose
+  text expanded from "session recordings and screenshots" to also
+  cover "public status-page snapshots, and customer-uploaded profile
+  avatars". The sub-processor itself does not change — the storage
+  vendor, region (EU jurisdiction), and transfer mechanism are
+  identical to the V-054 (recordings) and V-295c2 (status snapshots)
+  scope. Per V-294 methodology this counts as a disclosure-scope
+  update on an already-disclosed sub-processor, not a new sub-
+  processor; no Art 28(2) 30-day notice is triggered.
+- `SUB_PROCESSOR_REGISTER_LAST_UPDATED` bumped to 2026-05-08.
+- **No ToS / AUP / Definitions update**: avatars are an optional
+  Customer Data field with no new retention category (deleted with
+  the account row per existing §6 schedule), no new legal basis, and
+  no new processing purpose beyond rendering the dashboard / GUI
+  identity row.
+
 ## 2026-05-07 — V-295c (status page launch)
 
 - **Privacy Policy §3.9 (new)**: added "Status-page data" subsection

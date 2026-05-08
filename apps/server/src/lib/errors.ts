@@ -252,6 +252,20 @@ export class DriverNotIntegratedError extends ApiError {
   }
 }
 
+// V-352b — 503 when an optional feature is disabled at deploy-time
+// (e.g. avatar upload when the public R2 bucket isn't configured).
+export class FeatureUnavailableError extends ApiError {
+  constructor(detail: string) {
+    super({
+      type: PROBLEM_TYPES.FeatureUnavailable,
+      title: 'Feature unavailable',
+      status: 503,
+      detail,
+    });
+    this.name = 'FeatureUnavailableError';
+  }
+}
+
 // LegalAcceptanceRequiredError — 409 when an operation is gated on
 // the customer accepting one or more legal documents (ToS, Privacy,
 // DPA, AUP). The extension carries `pending_acceptances` so the

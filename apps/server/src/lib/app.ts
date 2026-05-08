@@ -49,6 +49,7 @@ import type { ProfilesRepo } from '../services/profiles.js';
 import { registerAccountMeRoutes } from '../routes/account-me.js';
 import type { ApiKeysRepo } from '../services/api-keys.js';
 import type { Driver } from '../drivers/types.js';
+import type { R2 } from './r2.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -194,6 +195,14 @@ export interface AppDeps {
   /** V-237: profiles repo — feeds /v1/account/me profile counts. */
   profilesRepo?: ProfilesRepo;
   /**
+   * V-352b — public R2 bucket client used by avatar upload + the
+   * presigned-GET URL surfaced on /v1/account/me. When omitted, the
+   * avatar upload endpoint returns 503 FeatureUnavailable and the
+   * read endpoint returns `avatar_url: null`. Tests usually omit it;
+   * production wires the same client used by V-295c2 status snapshots.
+   */
+  r2Public?: R2 | null;
+  /**
    * Readiness checks executed by `/ready`. Each runs with the
    * supplied (or default 1500ms) timeout; aggregate result drives
    * the HTTP status (200 all-ok, 503 any-fail). Empty array =
@@ -333,6 +342,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       profilesRepo: deps.profilesRepo,
       authRepo: deps.authRepo,
       authCache: deps.authCache,
+      r2Public: deps.r2Public ?? null,
     });
   }
   // V-176 — public-facing status endpoint. Reuses the readinessChecks

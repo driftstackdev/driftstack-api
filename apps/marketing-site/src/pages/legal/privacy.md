@@ -66,11 +66,13 @@ for the purposes and on the legal bases set out below.
 
 **What:** legal entity name, billing address, VAT/BTW identification
 number, primary contact name, primary contact email, billing email,
-optional support contacts, time zone.
+optional support contacts, time zone, optional profile avatar
+(Customer-uploaded image, stored in the Cloudflare R2 sub-processor;
+see §17 / DPA Annex 3).
 
 **Why:** to administer the contractual relationship, generate
-VAT-compliant invoices, send service notifications, and provide
-support.
+VAT-compliant invoices, send service notifications, provide
+support, and render the dashboard / GUI Client identity row.
 
 **Legal basis (GDPR Art 6):** Article 6(1)(b) — performance of the
 contract with Customer (where the contact is Customer's principal or

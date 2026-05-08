@@ -18005,3 +18005,101 @@ token/disable/reload flow.
 **Tier**: 1 (documentation).
 
 Per persistent rule #17.
+
+## V-346 — GUI client FleetView replaces last NotYet sidebar placeholder
+
+**Tier**: 1.
+
+Memory rules A–H also locked in this commit cycle (residual framing
+protocol, capture-path fallback ladder, empirical-proof unclosable-
+claims, orchestrator pre-check, agent-self-locks-memory, session-
+start orientation, cross-agent coordination, and the 100% bit-
+identical iPhone 16 Pro / iOS 26.4.1 North Star). Stored under
+`/Users/john/.claude/projects/-Users-john/memory/`.
+
+## V-347 / V-347b — customer-dashboard /webhooks gains create + delete UI
+
+**Tier**: 1.
+
+Closes the dead-anchor "New endpoint" link. V-347 adds a
+POST-/v1/webhooks form (URL + scope picker + secret reveal-once
+field). V-347b adds the delete button on each row, calling DELETE
+/v1/webhooks/:id with confirm() guard.
+
+## V-348 — customer-dashboard /sessions "New session" → docs link
+
+**Tier**: 1.
+
+Sessions are programmatic-only (no UI builder); the dashboard's
+"New session" button now points at docs/quickstart instead of
+opening a half-built form. Honest surface > broken UI.
+
+## V-349 — docs/guides/team-rbac.md tutorial
+
+**Tier**: 1 (Tier-3 tone, post-hoc review per memory).
+
+End-to-end Team RBAC walkthrough: invite → accept → act-as →
+admin-only writes → audit-log review. Companion to docs/api/team.md
+(which is reference-shaped); this one is task-shaped.
+
+## V-350 — docs/sdk/error-handling.md reference
+
+**Tier**: 1 (Tier-3 tone, post-hoc review per memory).
+
+Maps the RFC 7807 problem types (V-094) to SDK error subclasses for
+TypeScript + Python. Closes the gap where SDK consumers had no
+single page to look at for "which error do I catch."
+
+## V-351 / V-351b — PATCH /v1/webhooks/:id
+
+**Tier**: 1.
+
+V-351 adds the partial-update endpoint with V-326e5 admin-only-on-
+team gate, .refine() rejecting empty bodies, and an audit emit on
+success (`webhook_endpoint.updated`). V-351b wires the existing
+edit form on customer-dashboard /webhooks.
+
+## V-352 / V-352c — PATCH /v1/account/me + dashboard wire
+
+**Tier**: 1.
+
+V-352 adds name + timezone partial update with IANA-regex validation
+and auth-cache invalidation on success. V-352c wires the
+customer-dashboard /settings Profile section against it. Stripe
+Customer Portal (V-300) confirmed already shipped (billing.astro).
+
+## V-352b — customer-uploaded avatars on R2
+
+**Tier**: 1 (R2 already disclosed as a sub-processor; reusing for
+avatars is a disclosure-scope update per V-294, not a new sub-
+processor or new retention category).
+
+Schema: `accounts.avatar_r2_key` (nullable text). Migration 0031.
+AccountRow + auth-cache + admin/auth repos extended end-to-end. POST
+/v1/account/me/avatar accepts inline base64 (PNG / JPEG / WebP, ≤2
+MiB raw); routes via the existing public-bucket R2 client (same one
+the V-295c2 status-snapshot writer uses) to key
+`avatars/<account_id>.<ext>`. DELETE clears the pointer (object
+left in place for a future sweeper). GET /v1/account/me surfaces a
+1h presigned `avatar_url` alongside name + timezone.
+
+Bodies over the 3.5 MiB Fastify route limit short-circuit as 413;
+the route's per-byte check returns 400 for ≤3.5 MiB bodies that
+decode to >2 MiB raw. New `FeatureUnavailableError` (problem-type
+URI added to PROBLEM_TYPES) returns 503 when the public R2 bucket
+isn't configured at deploy time.
+
+Disclosure: privacy.md §3.1 expanded to mention the optional avatar
+with cross-reference to §17 / DPA Annex 3; sub-processors.ts
+Cloudflare R2 row purpose extended to cover avatars; changes-log.md
+2026-05-08 V-352b entry. SUB_PROCESSOR_REGISTER_LAST_UPDATED was
+already 2026-05-08; no bump needed.
+
+UI: customer-dashboard /settings Profile section gains an avatar
+preview + Upload-image / Remove buttons; reads `avatar_url` from
+GET /v1/account/me, base64-encodes the file client-side, POSTs to
+the endpoint, updates preview from the response.
+
+Tests: 7 new integration tests on /v1/account/me/avatar (success,
+MIME reject, byte-cap reject, empty reject, bodyLimit reject,
+delete idempotency, 401 unauth). 1012 / 1012 tests pass.

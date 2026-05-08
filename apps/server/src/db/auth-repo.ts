@@ -120,11 +120,16 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
 
   async updateAccountBasics(
     id: string,
-    patch: { name?: string | null; timezone?: string | null },
+    patch: {
+      name?: string | null;
+      timezone?: string | null;
+      avatarR2Key?: string | null;
+    },
   ): Promise<AccountRow | null> {
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (patch.name !== undefined) set.name = patch.name;
     if (patch.timezone !== undefined) set.timezone = patch.timezone;
+    if (patch.avatarR2Key !== undefined) set.avatarR2Key = patch.avatarR2Key;
     const [row] = await this.database.db
       .update(accounts)
       .set(set)
@@ -157,6 +162,7 @@ function toAccountRow(r: typeof accounts.$inferSelect): AccountRow {
     tier: r.tier,
     status: r.status,
     timezone: r.timezone,
+    avatarR2Key: r.avatarR2Key,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };

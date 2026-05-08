@@ -153,3 +153,22 @@ export function r2ReadinessCheck(r2: R2, key: string = R2_SENTINEL_KEY): Readine
 export function recordingKey(accountId: string, sessionId: string): string {
   return `recordings/${accountId}/${sessionId}.ndjson`;
 }
+
+/**
+ * V-352b — avatar object key for a given account on the public-snapshot
+ * bucket. Extension matches the uploaded content-type so the presigned
+ * GET surfaces a sensible Content-Type header.
+ *   avatars/<account_id>.<ext>
+ * Re-uploading replaces the prior object (same key, ext-dependent suffix).
+ */
+export function avatarKey(accountId: string, contentType: string): string {
+  const ext =
+    contentType === 'image/png'
+      ? 'png'
+      : contentType === 'image/jpeg'
+        ? 'jpg'
+        : contentType === 'image/webp'
+          ? 'webp'
+          : 'bin';
+  return `avatars/${accountId}.${ext}`;
+}

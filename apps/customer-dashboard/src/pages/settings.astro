@@ -174,6 +174,47 @@ const EMAIL_EVENTS = [
         render timestamps in your local time.
       </p>
       <form data-form="profile" class="mt-6 space-y-4">
+        <!-- V-352b — avatar upload -->
+        <div class="flex items-center gap-4">
+          <div
+            data-field="avatar-preview"
+            class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100 text-xs text-slate-400"
+          >
+            no avatar
+          </div>
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center gap-2">
+              <label
+                class="btn-secondary inline-flex cursor-pointer text-sm"
+                for="profile-avatar-input"
+              >
+                Upload image
+              </label>
+              <input
+                id="profile-avatar-input"
+                data-field="avatar-input"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                class="hidden"
+              />
+              <button
+                type="button"
+                data-button="avatar-remove"
+                class="btn-secondary text-sm text-red-700"
+                hidden
+              >
+                Remove
+              </button>
+            </div>
+            <p class="text-xs text-slate-500">
+              PNG, JPEG, or WebP. Max 2 MB. Stored on Cloudflare R2 (EU).
+            </p>
+            <p
+              data-field="avatar-error"
+              class="hidden rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700"
+            ></p>
+          </div>
+        </div>
         <div>
           <label class="block text-sm font-medium text-slate-700" for="profile-name">
             Display name
@@ -333,6 +374,55 @@ const EMAIL_EVENTS = [
         profileError.classList.remove('hidden');
       }
 
+      // V-352b — avatar elements + helpers.
+      const avatarPreview = root.querySelector('[data-field="avatar-preview"]');
+      const avatarInput = root.querySelector('[data-field="avatar-input"]');
+      const avatarRemoveBtn = root.querySelector('[data-button="avatar-remove"]');
+      const avatarError = root.querySelector('[data-field="avatar-error"]');
+
+      function showAvatarError(msg) {
+        if (!avatarError) return;
+        avatarError.textContent = msg;
+        avatarError.classList.remove('hidden');
+      }
+      function clearAvatarError() {
+        if (!avatarError) return;
+        avatarError.textContent = '';
+        avatarError.classList.add('hidden');
+      }
+
+      function setAvatarPreview(url) {
+        if (!avatarPreview) return;
+        if (url) {
+          avatarPreview.innerHTML =
+            '<img src="' +
+            escapeHtml(url) +
+            '" alt="avatar" class="h-full w-full object-cover" />';
+          if (avatarRemoveBtn) avatarRemoveBtn.hidden = false;
+        } else {
+          avatarPreview.innerHTML = 'no avatar';
+          if (avatarRemoveBtn) avatarRemoveBtn.hidden = true;
+        }
+      }
+
+      function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result;
+            if (typeof result !== 'string') {
+              reject(new Error('Failed to read file.'));
+              return;
+            }
+            // Strip the data:<mime>;base64, prefix.
+            const idx = result.indexOf(',');
+            resolve(idx >= 0 ? result.slice(idx + 1) : result);
+          };
+          reader.onerror = () => reject(new Error('Failed to read file.'));
+          reader.readAsDataURL(file);
+        });
+      }
+
       // Load current profile values (GET /v1/account/me).
       if (token && profileNameInput && profileTzInput) {
         fetch(apiBaseUrl + '/v1/account/me', {
@@ -343,10 +433,97 @@ const EMAIL_EVENTS = [
             if (!me) return;
             if (me.name) profileNameInput.value = me.name;
             if (me.timezone) profileTzInput.value = me.timezone;
+            // V-352b — initial avatar preview.
+            setAvatarPreview(me.avatar_url || null);
           })
           .catch(() => {
             /* leave inputs blank */
           });
+      }
+
+      // V-352b — avatar upload handler.
+      if (avatarInput) {
+        avatarInput.addEventListener('change', (ev) => {
+          clearAvatarError();
+          const target = ev.target;
+          if (!(target instanceof HTMLInputElement)) return;
+          const file = target.files && target.files[0];
+          if (!file) return;
+          if (!token) {
+            showAvatarError('Sign in to upload an avatar.');
+            target.value = '';
+            return;
+          }
+          if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+            showAvatarError('Only PNG, JPEG, or WebP allowed.');
+            target.value = '';
+            return;
+          }
+          if (file.size > 2 * 1024 * 1024) {
+            showAvatarError('Image is over 2 MB.');
+            target.value = '';
+            return;
+          }
+          fileToBase64(file)
+            .then((b64) =>
+              fetch(apiBaseUrl + '/v1/account/me/avatar', {
+                method: 'POST',
+                headers: {
+                  'content-type': 'application/json',
+                  authorization: 'Bearer ' + token,
+                },
+                body: JSON.stringify({
+                  content_type: file.type,
+                  data_base64: b64,
+                }),
+              }),
+            )
+            .then((r) =>
+              r.ok
+                ? r.json()
+                : r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+            )
+            .then((body) => {
+              setAvatarPreview(body.avatar_url || null);
+            })
+            .catch((err) => {
+              showAvatarError(err && err.message ? err.message : 'Upload failed.');
+            })
+            .finally(() => {
+              target.value = '';
+            });
+        });
+      }
+
+      // V-352b — avatar remove handler.
+      if (avatarRemoveBtn) {
+        avatarRemoveBtn.addEventListener('click', () => {
+          clearAvatarError();
+          if (!token) {
+            showAvatarError('Sign in to remove your avatar.');
+            return;
+          }
+          fetch(apiBaseUrl + '/v1/account/me/avatar', {
+            method: 'DELETE',
+            headers: { authorization: 'Bearer ' + token },
+          })
+            .then((r) => {
+              if (r.status === 204 || r.ok) return null;
+              return r
+                .json()
+                .catch(() => ({}))
+                .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+            })
+            .then(() => {
+              setAvatarPreview(null);
+            })
+            .catch((err) => {
+              showAvatarError(err && err.message ? err.message : 'Remove failed.');
+            });
+        });
       }
 
       if (profileForm) {

@@ -553,6 +553,11 @@ export async function createProductionDeps(
     apiKeysRepo,
     driver,
     profilesRepo,
+    // V-352b — public-bucket R2 client used by avatar upload + the
+    // presigned-GET URL on /v1/account/me. Same client the V-295c2
+    // status-snapshot writer uses; null when R2_BUCKET_PUBLIC isn't
+    // configured (avatar endpoints fall back to 503 / null).
+    r2Public,
     ...(config.stripe?.webhookSecret !== undefined
       ? {
           stripeWebhooksService,

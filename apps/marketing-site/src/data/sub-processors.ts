@@ -43,7 +43,8 @@ export const SUB_PROCESSORS: SubProcessor[] = [
   {
     name: 'Cloudflare R2',
     region: 'EU jurisdiction',
-    purpose: 'Object storage for session recordings and screenshots.',
+    purpose:
+      'Object storage for session recordings and screenshots, public status-page snapshots, and customer-uploaded profile avatars.',
     transferMechanism: 'EU-jurisdiction storage — no transfer required.',
   },
   {
