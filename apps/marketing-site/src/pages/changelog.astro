@@ -17,6 +17,42 @@ interface ChangelogEntry {
 
 const ENTRIES: readonly ChangelogEntry[] = [
   {
+    date: '2026-05-09',
+    category: 'security',
+    title: 'Two-factor authentication (TOTP) is live',
+    body: 'Optional TOTP-based two-factor on every account. Enroll from /settings → Two-factor authentication: scan the QR with any standard authenticator app, confirm the 6-digit code, and store your 10 single-use recovery codes. Sign-in then issues a challenge token instead of a session; the dashboard exchanges it for a session after the second factor lands. Disabling MFA requires a fresh second-factor proof (15-minute step-up window). Recovery codes can be regenerated at any time. Full reference at docs.driftstack.dev/api/mfa.',
+  },
+  {
+    date: '2026-05-09',
+    category: 'security',
+    title: 'Webhook signing-secret rotation with 24-hour grace',
+    body: 'Rotate any webhook endpoint\'s signing secret from /webhooks → Rotate secret. The new plaintext is shown once; the old secret stays valid for 24 hours so you can roll the new value across your verifier infrastructure without dropped deliveries. Driftstack dual-signs every outbound delivery during the grace (x-driftstack-signature + x-driftstack-signature-prev); SDK verifiers in TypeScript, Python, and Go accept either header.',
+  },
+  {
+    date: '2026-05-09',
+    category: 'security',
+    title: 'Active sign-ins list + per-session revoke',
+    body: 'See every browser session currently signed in to your account from /settings → Active sign-ins. Revoke any individual session, or sign out of every other session at once. IPs are intentionally omitted; user-agents are reduced to OS + browser bucket so the dashboard renders signal without surfacing fingerprintable strings.',
+  },
+  {
+    date: '2026-05-09',
+    category: 'launch',
+    title: 'Account avatars + readable account handles',
+    body: 'Upload a 2 MB PNG/JPEG/WebP avatar from /settings (stored on the existing EU-jurisdiction Cloudflare R2 sub-processor; private bucket; presigned read URLs). Set a lowercase a-z + 0-9 + hyphen account "slug" as a stable handle for support tickets, billing references, and audit entries. URL routing using the slug is a future feature — for now it\'s a readable identifier.',
+  },
+  {
+    date: '2026-05-09',
+    category: 'launch',
+    title: 'Webhook test deliveries from the dashboard',
+    body: 'Click "Send test" on any webhook endpoint and Driftstack dispatches a synthetic test.ping event through the same delivery infrastructure as production events: HMAC-signed, retried on failure, audit-logged. Lets you confirm your handler signature-checks correctly before relying on it for real events. test.ping is delivery-side only — you can\'t subscribe to it.',
+  },
+  {
+    date: '2026-05-09',
+    category: 'launch',
+    title: 'Profile cloning + audit-log filtering',
+    body: 'Clone any saved profile into a new copy from /profiles → Clone (server auto-derives "(copy)" / "(copy 2)" / ... naming). Filter the audit log by event type from /audit-log; the page now paginates with Load more across an unlimited backlog.',
+  },
+  {
     date: '2026-05-08',
     category: 'security',
     title: 'Team RBAC end-to-end: members act on owner resources via X-Driftstack-Account',
