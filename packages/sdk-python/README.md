@@ -52,6 +52,7 @@ Every public API endpoint is a typed method on a resource accessor:
 | `client.api_keys` | `create`, `list`, `rotate` (V-296), `revoke`                                                          |
 | `client.usage`    | `current_period`                                                                                      |
 | `client.webhooks` | `create`, `list`, `get`, `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` (V-307) |
+| `client.team`     | `invite`, `list_members`, `list_invites`, `accept_invite`, `remove_member` (V-298)                    |
 
 Inputs accept either a Pydantic model OR a plain `dict` (both serialize identically on the wire). Outputs are typed Pydantic models — IDEs autocomplete every field.
 

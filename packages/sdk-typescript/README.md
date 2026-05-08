@@ -70,6 +70,12 @@ client.webhooks.listDeliveries(id, query?)
 client.webhooks.iterateDeliveries(id, opts?)
 client.webhooks.replayDelivery(id)      // V-307 — re-fire a failed/DLQ delivery
 
+client.team.invite(email, options?)     // V-298 — invite by email
+client.team.listMembers()
+client.team.listInvites()
+client.team.acceptInvite(token)
+client.team.removeMember(membershipId)
+
 client.usage.current()
 ```
 
