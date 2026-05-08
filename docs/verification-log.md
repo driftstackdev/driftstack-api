@@ -18303,3 +18303,77 @@ Claude Haiku|Github Copilot|future-claude|chat-claude" …`: zero
 
 **Cross-agent.** Founder mentioned an equivalent sweep is being sent
 to Agent 1 separately for the webkit-driftstack repo.
+
+## V-353b — MFA TOTP enrollment + verify + recovery codes
+
+**Tier**: 1 (per V-353a verdicts: TOTP-only v1, env-key encryption,
+all tiers, 10 recovery codes, optional enforcement, GUI deferred).
+
+Schema (migration 0033):
+
+- `account_mfa(account_id PK FK accounts, totp_secret_ciphertext,
+totp_secret_iv, totp_secret_tag, enrolled_at, last_used_at,
+created_at, updated_at)` — one row per enrolled-or-pending account.
+- `account_mfa_recovery_codes(id PK, account_id FK, code_hash,
+used_at, created_at)` — 10 single-use codes per enrollment.
+- `web_sessions.mfa_satisfied_at timestamp NULL` — step-up freshness
+  marker (gate lands in V-353e per verdict Q4: 15 min window).
+
+Crypto + verifier (`apps/server/src/lib/mfa-totp.ts`):
+
+- `generateTotpSecret()` → 20 random bytes + base32 encoding.
+- `computeTotpCode(bytes, when)` / `verifyTotpCode(bytes, code, when)`
+  — RFC 6238 SHA-1 / 30s / 6 digits / ±1-window drift tolerance.
+- `otpauthUri({email, secretBase32})` → URI for QR; issuer "Driftstack".
+- `encryptSecret / decryptSecret` — AES-256-GCM, env `MFA_ENCRYPTION_KEY`
+  (32 bytes base64). Validates key length on decode; throws on tag
+  mismatch.
+- `generateRecoveryCodes(10)` — Crockford-base32-shape 5+5
+  hyphenated codes. `normalizeRecoveryCode` accepts pasted-with-or-
+  without-hyphen input.
+
+Service (`apps/server/src/services/mfa.ts`):
+
+- `startEnrollment` — generate + encrypt + upsert pending. 409 on
+  already-enrolled.
+- `completeEnrollment` — verify first 6-digit, set `enrolled_at`,
+  scrypt-hash + insert 10 recovery codes, audit emit
+  `account.mfa_enrolled`. Returns raw codes ONCE.
+- `disable` — drop row + recovery codes. Idempotent. Audit emit
+  `account.mfa_disabled`.
+- `verifyCode` — accepts 6-digit (TOTP) OR 10-char recovery; returns
+  `'totp' | 'recovery' | null`. Recovery success consumes the row.
+  Audit emit `account.recovery_code_used` on recovery.
+- `regenerateRecoveryCodes` — bulk-mark prior unused codes consumed,
+  mint 10 new.
+- `getStatus` — minimal status for dashboard.
+
+Routes (`apps/server/src/routes/account-mfa.ts`):
+
+- GET /v1/account/mfa
+- POST /v1/account/mfa/enroll (200 returns otpauth_uri + secret_base32
+  - algorithm/digits/period; 409 already-enrolled)
+- POST /v1/account/mfa/verify (200 returns recovery_codes; 400 wrong
+  code; 400 malformed)
+- DELETE /v1/account/mfa (body `{confirm: "disable-mfa"}` required
+  as placeholder until V-353e step-up gate; 204; idempotent)
+- POST /v1/account/mfa/recovery-codes/regenerate (200; 404 not
+  enrolled)
+
+Audit enum extended (api-types): `account.mfa_enrolled`,
+`account.mfa_disabled`, `account.recovery_code_used`.
+
+Config: new `mfaEncryptionKey` (env `MFA_ENCRYPTION_KEY`). When
+unset, routes don't register and bootstrap logs a startup warn with
+the keygen command. Tests use a fixed all-zeros 32-byte key for
+determinism. Encryption-key rotation deferred to a runbook —
+changing the key invalidates every existing enrollment.
+
+Tests: 15 new integration tests covering status / enroll / verify /
+disable / regenerate + 401-unauth matrix across all 5 endpoints.
+1040 / 1040 tests pass.
+
+V-353c-V-353h queued: login flow integration (POST /v1/auth/password
+returns `challenge_token` when MFA enrolled; POST /v1/auth/mfa/
+challenge exchanges), step-up gate with 15 min freshness, dashboard
+/settings/security UI, docs/api/mfa.md, audit-email plumbing.

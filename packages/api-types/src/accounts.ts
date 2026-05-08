@@ -119,6 +119,44 @@ export const UploadAvatarRequestSchema = z.object({
 export type UploadAvatarRequest = z.infer<typeof UploadAvatarRequestSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
+// V-353b — MFA (TOTP) enrollment + verify + recovery codes
+// ───────────────────────────────────────────────────────────────────────────
+
+export const MfaStatusResponseSchema = z.object({
+  enrolled: z.boolean(),
+  enrolled_at: Iso8601Schema.nullable(),
+  last_used_at: Iso8601Schema.nullable(),
+  unused_recovery_codes: z.number().int().nonnegative(),
+});
+export type MfaStatusResponse = z.infer<typeof MfaStatusResponseSchema>;
+
+export const StartMfaEnrollmentResponseSchema = z.object({
+  otpauth_uri: z.string().describe('otpauth:// URI; render as a QR code'),
+  secret_base32: z.string().describe('Manual-entry secret for auth apps that do not scan QR'),
+  algorithm: z.literal('SHA1'),
+  digits: z.literal(6),
+  period_seconds: z.literal(30),
+});
+export type StartMfaEnrollmentResponse = z.infer<typeof StartMfaEnrollmentResponseSchema>;
+
+export const CompleteMfaEnrollmentRequestSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, 'Must be a 6-digit code.'),
+});
+export type CompleteMfaEnrollmentRequest = z.infer<typeof CompleteMfaEnrollmentRequestSchema>;
+
+export const CompleteMfaEnrollmentResponseSchema = z.object({
+  recovery_codes: z.array(z.string()).length(10),
+});
+export type CompleteMfaEnrollmentResponse = z.infer<typeof CompleteMfaEnrollmentResponseSchema>;
+
+export const RegenerateMfaRecoveryCodesResponseSchema = z.object({
+  recovery_codes: z.array(z.string()).length(10),
+});
+export type RegenerateMfaRecoveryCodesResponse = z.infer<
+  typeof RegenerateMfaRecoveryCodesResponseSchema
+>;
+
+// ───────────────────────────────────────────────────────────────────────────
 // V-216 — customer-facing audit log
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -151,6 +189,13 @@ export const AccountAuditActionSchema = z.enum([
   'team.member_invited',
   'team.invite_accepted',
   'team.member_removed',
+  // V-353b — MFA lifecycle. mfa_enrolled fires on successful first
+  // verify (not on /enroll, which is reversible). mfa_disabled fires
+  // when the customer explicitly disables. recovery_code_used fires
+  // each time a code is consumed (login or step-up path).
+  'account.mfa_enrolled',
+  'account.mfa_disabled',
+  'account.recovery_code_used',
   // V-281 — admin-recorded notes. Refund recording is audit-only;
   // actual money movement happens via Stripe dashboard manually per
   // the V-280 launch-day runbook. Support notes are free-form

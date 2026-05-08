@@ -50,6 +50,8 @@ import { DrizzleStripeWebhooksRepo } from '../db/stripe-webhooks-repo.js';
 import { DrizzleProfilesRepo } from '../db/profiles-repo.js';
 import { SessionsService } from '../services/sessions.js';
 import { ApiKeysService } from '../services/api-keys.js';
+import { MfaService } from '../services/mfa.js';
+import { DrizzleMfaRepo } from '../db/mfa-repo.js';
 import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
 import { AdminAuditService } from '../services/admin-audit.js';
@@ -404,6 +406,28 @@ export async function createProductionDeps(
     accountAuditService,
   );
 
+  // V-353b — MFA service. Active only when MFA_ENCRYPTION_KEY is
+  // configured (32 random bytes, base64-encoded). When unset, the
+  // /v1/account/mfa/* routes simply don't register and customers
+  // can't enroll. Generate the key with:
+  //   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+  // and set as MFA_ENCRYPTION_KEY in deploy env.
+  const mfaService = config.mfaEncryptionKey
+    ? new MfaService(
+        new DrizzleMfaRepo(dbHandle),
+        { encryptionKey: config.mfaEncryptionKey },
+        accountAuditService,
+      )
+    : null;
+  if (!mfaService) {
+    logger.warn(
+      { component: 'mfa' },
+      'MFA_ENCRYPTION_KEY not set — /v1/account/mfa/* routes disabled. ' +
+        "Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\" " +
+        'and set in deploy env to enable customer MFA enrollment.',
+    );
+  }
+
   // V-079: user-facing auth flows.
   const authFlowsRepo = new DrizzleAuthFlowsRepo(dbHandle);
   const authFlowsService = new AuthFlowsService(
@@ -558,6 +582,10 @@ export async function createProductionDeps(
     // status-snapshot writer uses; null when R2_BUCKET_PUBLIC isn't
     // configured (avatar endpoints fall back to 503 / null).
     r2Public,
+    // V-353b — MFA service; null when MFA_ENCRYPTION_KEY isn't set
+    // (avoids registering enrollment routes that would write to a
+    // table we can't decrypt back from).
+    ...(mfaService !== null ? { mfaService } : {}),
     ...(config.stripe?.webhookSecret !== undefined
       ? {
           stripeWebhooksService,

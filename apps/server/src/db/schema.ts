@@ -427,6 +427,12 @@ export const webSessions = pgTable(
     issuedFromIp: text('issued_from_ip'),
     userAgent: text('user_agent'),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    // V-353b — timestamp of the most recent successful MFA challenge
+    // on this session. Null = never satisfied (or pre-MFA session;
+    // sessions issued before MFA enrollment lazily satisfy on first
+    // post-enrollment request via the auth path). Step-up gates
+    // compare `now - mfa_satisfied_at` against the freshness window.
+    mfaSatisfiedAt: timestamp('mfa_satisfied_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -436,6 +442,55 @@ export const webSessions = pgTable(
     index('web_sessions_account_idx').on(t.accountId),
     index('web_sessions_expires_idx').on(t.expiresAt),
   ],
+);
+
+/**
+ * V-353b — TOTP enrollment per account. Absent row = MFA not enrolled.
+ * Secret is AES-256-GCM-encrypted at rest with the env-supplied
+ * `MFA_ENCRYPTION_KEY` (32 bytes base64). Verifier reads ciphertext +
+ * iv + tag, decrypts in memory only, computes the 30s/SHA-1/6-digit
+ * RFC-6238 windows around `now`, compares constant-time.
+ */
+export const accountMfa = pgTable('account_mfa', {
+  accountId: uuid('account_id')
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: 'cascade' }),
+  totpSecretCiphertext: text('totp_secret_ciphertext').notNull(),
+  totpSecretIv: text('totp_secret_iv').notNull(),
+  totpSecretTag: text('totp_secret_tag').notNull(),
+  enrolledAt: timestamp('enrolled_at', { withTimezone: true }),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+});
+
+/**
+ * V-353b — single-use recovery codes for MFA recovery. 10 issued at
+ * enrollment + on regenerate. `code_hash` = scrypt-kdf of the raw
+ * code (same KDF as API keys; raw code shown ONCE at issuance).
+ * `used_at` non-null = consumed; subsequent attempts on the same
+ * row reject. Regenerate = bulk-mark old rows used + insert 10 new.
+ */
+export const accountMfaRecoveryCodes = pgTable(
+  'account_mfa_recovery_codes',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [index('account_mfa_recovery_codes_account_idx').on(t.accountId)],
 );
 
 export const apiKeys = pgTable(

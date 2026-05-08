@@ -114,6 +114,15 @@ const ConfigSchema = z.object({
    * GUI's deep link points at the right host (dev / staging / prod).
    */
   dashboardOrigin: z.string().url().default('http://localhost:5173'),
+  /**
+   * V-353b — base64-encoded 32-byte AES-256-GCM key used to encrypt
+   * TOTP secrets at rest. When unset, /v1/account/mfa/* routes are
+   * not registered (MFA disabled). Generate with:
+   *   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   * Rotation is a future runbook item — changing the key invalidates
+   * every existing enrollment (customers must re-enroll).
+   */
+  mfaEncryptionKey: z.string().optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -243,5 +252,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       exposeDebugToken: env.AUTH_EXPOSE_DEBUG_TOKEN,
     },
     dashboardOrigin: env.DASHBOARD_ORIGIN,
+    mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,
   });
 }

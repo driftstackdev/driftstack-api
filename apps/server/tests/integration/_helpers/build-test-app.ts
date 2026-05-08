@@ -59,6 +59,8 @@ import { InMemoryAccountsAdminRepo } from './in-memory-admin-accounts-repo.js';
 import { InMemoryRateLimitOverridesRepo } from './in-memory-rate-limit-overrides-repo.js';
 import { InMemoryLegalRepo } from './in-memory-legal-repo.js';
 import { InMemoryAuthFlowsRepo } from './in-memory-auth-flows-repo.js';
+import { InMemoryMfaRepo } from './in-memory-mfa-repo.js';
+import { MfaService } from '../../../src/services/mfa.js';
 import { InMemoryStripeWebhooksRepo } from './in-memory-stripe-webhooks-repo.js';
 import { InMemoryProfilesRepo } from './in-memory-profiles-repo.js';
 import { InMemoryBillingProvider, InMemoryBillingRepo } from './in-memory-billing.js';
@@ -628,6 +630,18 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     dashboardOrigin: 'http://localhost:5173',
   });
 
+  // V-353b — MFA service backed by in-memory repo. Encryption key is
+  // a fixed 32-byte test key so tests are deterministic.
+  const mfaRepo = new InMemoryMfaRepo();
+  const mfaService = new MfaService(
+    mfaRepo,
+    {
+      // 32-byte all-zeros key, base64. Test-only — never use in prod.
+      encryptionKey: Buffer.alloc(32, 0).toString('base64'),
+    },
+    accountAuditService,
+  );
+
   // V-168 — bridge web sessions issued by AuthFlowsService into the auth
   // path so a freshly-signed-up user's web-session bearer can authenticate
   // on routes that use requireAuth (e.g. POST /v1/api-keys). The Drizzle
@@ -770,6 +784,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     scheduledJobsService,
     authFlowsService,
     cliAuthorizeService,
+    mfaService,
     stripeWebhooksService,
     stripeWebhookSigningSecret,
     profilesService,

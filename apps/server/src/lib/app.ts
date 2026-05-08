@@ -48,9 +48,11 @@ import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import { registerAccountMeRoutes } from '../routes/account-me.js';
 import { registerAccountWebSessionsRoutes } from '../routes/account-web-sessions.js';
+import { registerAccountMfaRoutes } from '../routes/account-mfa.js';
 import type { ApiKeysRepo } from '../services/api-keys.js';
 import type { Driver } from '../drivers/types.js';
 import type { R2 } from './r2.js';
+import type { MfaService } from '../services/mfa.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -203,6 +205,13 @@ export interface AppDeps {
    * production wires the same client used by V-295c2 status snapshots.
    */
   r2Public?: R2 | null;
+  /**
+   * V-353b — MFA service. When omitted, /v1/account/mfa/* routes are
+   * not registered. Tests that don't exercise MFA pass null. The
+   * service holds the AES-256-GCM env-key encryption + TOTP verifier;
+   * persistence is via DrizzleMfaRepo (or the in-memory fixture).
+   */
+  mfaService?: MfaService;
   /**
    * Readiness checks executed by `/ready`. Each runs with the
    * supplied (or default 1500ms) timeout; aggregate result drives
@@ -358,6 +367,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // V-355 — customer-facing web-session list + revoke. Lives next to
     // the auth flows since it shares the AuthFlowsService surface.
     registerAccountWebSessionsRoutes(app, { service: deps.authFlowsService });
+  }
+  // V-353b — customer-facing MFA enrollment + verify + disable +
+  // recovery codes. Independent of authFlowsService — the routes are
+  // bearer-auth-gated like everything else, no /v1/auth/* dependency.
+  if (deps.mfaService !== undefined) {
+    registerAccountMfaRoutes(app, { service: deps.mfaService });
   }
   if (deps.cliAuthorizeService !== undefined) {
     registerAuthCliRoutes(app, {
