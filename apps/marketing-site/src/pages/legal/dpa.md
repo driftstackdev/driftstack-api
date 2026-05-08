@@ -507,6 +507,19 @@ The same list as in [Privacy Policy Section 7](privacy-policy.md#7-sub-processor
 The list as published in the Privacy Policy is the authoritative
 list for the avoidance of doubt; this Annex is a convenience copy.
 
+**Region preference vs. region routing.** Customer may state an
+infrastructure region preference (one of `us` / `eu` / `apac`) via
+the dashboard or API. The preference is informational for v1: all
+Customer Data resides on the EU-jurisdiction infrastructure listed
+above regardless of the preference selected. When the multi-region
+rollout ships, Driftstack will give Customer at least 30 days'
+notice under Section 9 (Sub-processor amendment) before any data
+is migrated to a non-EU region, including the right to keep
+Customer's data on EU infrastructure or terminate the affected
+portion of the Subscription. The trust page at
+[`/trust/sub-processors`](/trust/sub-processors) carries the same
+explanation in plain language.
+
 ---
 
 ## Annex 4 — Standard Contractual Clauses

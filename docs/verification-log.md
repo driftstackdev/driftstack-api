@@ -19103,3 +19103,28 @@ entry covering V-312 snapshots + V-313 clone:
 
 All three CHANGELOGs now reflect the V-376/377/378/379 surface so
 the next publish carries useful release notes.
+
+## V-384 — DPA Annex 3 region-preference clarification
+
+**Tier**: 1 (atomic legal-page coverage; closes the V-298b
+disclosure gap on the DPA side).
+
+`apps/marketing-site/src/pages/legal/dpa.md` Annex 3 gains a
+"Region preference vs. region routing" paragraph after the
+sub-processor convenience table:
+
+- Customer-stated us/eu/apac preference is informational for v1.
+- All Customer Data resides on EU-jurisdiction infrastructure
+  regardless of preference selected.
+- When the multi-region rollout ships, customers holding non-EU
+  preferences receive the standard Section 9 (Sub-processor
+  amendment) 30-day notice + opt-out / EU-stay rights before any
+  migration.
+- Cross-link to /trust/sub-processors plain-language explanation.
+
+Atomic legal coverage now: privacy.md §3.1+§9 (V-373) +
+/trust/sub-processors (V-374) + DPA Annex 3 (V-384) all align
+with the same V-298b region-preference semantics.
+
+No version-string bump on the DPA — clarification matching the
+privacy.md non-material classification per privacy §15.
