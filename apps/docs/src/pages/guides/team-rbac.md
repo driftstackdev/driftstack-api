@@ -1,0 +1,233 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: Team RBAC — invite, accept, act-as
+description: End-to-end tutorial for setting up a multi-user team in Driftstack — invite a teammate, accept the invite, act on the owner's resources via X-Driftstack-Account.
+---
+
+# Team RBAC — invite, accept, act-as
+
+This guide walks through the full lifecycle of a Driftstack team:
+the **owner** invites a **member**, the member accepts, and the
+member then runs sessions / manages resources scoped to the owner's
+account.
+
+You'll need:
+
+- An owner account (already paying the subscription).
+- A second teammate's email address.
+- A Driftstack web session (sign in to the dashboard) OR an API key
+  with `account_owner` scope.
+
+For the API reference (every endpoint, every field), see
+[/api/team](/api/team/). This guide focuses on the customer flow.
+
+## Step 1 — Invite a teammate (owner)
+
+From the owner's dashboard, navigate to **Team** in the sidebar +
+click **Invite member**. Fill in:
+
+- **Email**: the teammate's email address. They'll be able to accept
+  only when signed in to a Driftstack account on this address.
+- **Role**:
+  - `member` — read access to the owner's sessions / profiles /
+    audit log / etc. Cannot make changes.
+  - `admin` — full read + write. Can create sessions, mint API
+    keys, manage webhooks on the owner's behalf.
+
+Programmatic equivalent:
+
+```bash
+curl -X POST https://api.driftstack.dev/v1/team/invites \
+  -H "Authorization: Bearer $DRIFTSTACK_OWNER_KEY" \
+  -H "content-type: application/json" \
+  -d '{"email": "alice@example.com", "role": "admin"}'
+```
+
+The teammate receives an email with a 7-day accept link.
+
+## Step 2 — Accept the invite (teammate)
+
+The teammate signs up at <https://app.driftstack.dev/signup> using
+the invitee email address (must match exactly), then clicks the
+accept link from the invite email.
+
+The link takes them to the dashboard's `/team/accept` page; the
+page calls `POST /v1/team/invites/accept` with the token from the
+URL. Server validates that the signed-in account's email matches
+the invitee email + writes the membership row.
+
+If the teammate already has an account (under the same email),
+they can sign in first and then click the accept link.
+
+## Step 3 — See the team you're on (member)
+
+The member's `/v1/account/me` response includes a `teams[]` array
+listing every owner they're a member of. The dashboard sidebar
+displays an **Acting as** picker that:
+
+- Lists the member's own account (default) + each owner team.
+- Persists the selection to `localStorage.ds_act_as_account`.
+- Auto-injects `X-Driftstack-Account: acc_<owner-uuid>` on every
+  subsequent dashboard fetch.
+
+Programmatic equivalent (no dashboard):
+
+```bash
+# member's own profile + team list
+curl -H "Authorization: Bearer $MEMBER_KEY" \
+  https://api.driftstack.dev/v1/account/me
+# returns:
+#   {
+#     "id": "acc_…",
+#     "email": "alice@example.com",
+#     ...
+#     "teams": [
+#       { "owner_account_id": "acc_owner-uuid", "role": "admin",
+#         "membership_id": "mem_…" }
+#     ]
+#   }
+
+# alternative: dedicated read of teams the member is on
+curl -H "Authorization: Bearer $MEMBER_KEY" \
+  https://api.driftstack.dev/v1/team/owners
+```
+
+## Step 4 — Act on the owner's resources (member, admin role)
+
+Once the member has a team, any `/v1/*` request can be scoped to
+the owner by passing `X-Driftstack-Account: acc_<owner-uuid>`:
+
+```bash
+# create a session OWNED by the team owner; counts against the
+# OWNER's concurrent cap; tier-derived caps use the OWNER's tier.
+curl -X POST https://api.driftstack.dev/v1/sessions \
+  -H "Authorization: Bearer $MEMBER_KEY" \
+  -H "X-Driftstack-Account: acc_owner-uuid" \
+  -H "content-type: application/json" \
+  -d '{}'
+```
+
+Role gating:
+
+- **Read endpoints** (GET): both `member` and `admin` allowed.
+- **Write endpoints** (POST / PATCH / DELETE / api-keys rotate):
+  `admin` role only. `member` gets `403`.
+
+Endpoints that honor the header:
+
+| Resource          | Methods                                        |
+| ----------------- | ---------------------------------------------- |
+| Sessions          | GET / POST / DELETE + 5 action endpoints       |
+| Profiles          | GET / POST / PATCH / DELETE                    |
+| API keys          | GET / POST / DELETE + `:id/rotate`             |
+| Webhooks          | GET / POST / DELETE + `:id/deliveries`, replay |
+| Audit log         | GET + `/export`                                |
+| Email preferences | GET / PUT (PUT = admin)                        |
+| Usage             | GET, `/series`                                 |
+
+Endpoints that do NOT honor the header (operate on the caller's
+own account regardless):
+
+- `/v1/team/*` — managing your own team is always per-caller.
+- `/v1/account/me` — always returns the caller's own profile + team
+  list.
+- `/v1/auth/*` — authentication is per-caller.
+
+## Step 5 — Audit the team's actions (owner)
+
+Every action a member takes on the owner's resources writes an
+entry to the OWNER's audit log keyed by:
+
+- `account_id`: the owner.
+- `actor_account_id`: the member who took the action.
+- `actor_key_id`: the member's API key id.
+
+So the owner sees, in their audit log, "Member alice@example.com
+(`acc_…`) created session `ses_…` on this account at 2026-05-08
+14:02 UTC".
+
+Get the log:
+
+```bash
+curl -H "Authorization: Bearer $OWNER_KEY" \
+  https://api.driftstack.dev/v1/account/audit-log?limit=50
+```
+
+Or download it as CSV:
+
+```bash
+curl -H "Authorization: Bearer $OWNER_KEY" \
+  "https://api.driftstack.dev/v1/account/audit-log/export?format=csv" \
+  > team-history.csv
+```
+
+(See [GDPR Article 20 portability](/api/api-keys/#audit-log-export)
+for the export ceiling + cursor pagination beyond 10K rows.)
+
+## Removing a member (owner)
+
+When a teammate leaves:
+
+```bash
+curl -X DELETE https://api.driftstack.dev/v1/team/members/$MEMBERSHIP_ID \
+  -H "Authorization: Bearer $OWNER_KEY"
+```
+
+The membership row is deleted; the member's auth-cache is
+invalidated immediately so their `X-Driftstack-Account` header
+stops working on the next request. Their own account stays — only
+the team relationship is severed.
+
+A `team.member_removed` audit entry lands on the owner's log; the
+member is NOT separately notified by Driftstack (the owner can do
+that via their own channels).
+
+## Common patterns
+
+### Multiple admins on a team
+
+A team can have any number of `admin`-role members. The first admin
+is invited by the original owner; subsequent admins can be invited
+by any existing admin (or the owner). The owner is always
+implicitly "admin" on their own team (no separate membership row).
+
+### Read-only collaborators
+
+Use `role: 'member'` for read-only access. Useful for:
+
+- Auditors / compliance reviewers (read the audit log + usage
+  reports without write capability).
+- Junior teammates being onboarded (read sessions + profiles
+  without risk of accidentally minting a key or destroying a
+  session).
+
+### Graceful key rotation across the team
+
+When the owner rotates an API key (`POST /v1/api-keys/:id/rotate`),
+the new plaintext is shown ONCE on the rotating client. If multiple
+teammates use the same key (e.g. across CI machines), the rotation
+flow is:
+
+1. Owner (or admin member) rotates → new key, 24h grace on the old.
+2. Teammates have 24h to swap deployments to the new key.
+3. After 24h the old key auto-expires server-side.
+
+Teammates calling the rotation endpoint themselves require admin
+role + `X-Driftstack-Account` header pointing at the owner.
+
+## Privacy note
+
+A team member is a separate Data Subject from the owner. Their
+account email is processed under [Privacy §3.1](/legal/privacy/#account-data)
+on the same legal basis as any other Customer contact. Removing the
+member from the team does not delete their Driftstack account; only
+the membership relationship.
+
+## Next steps
+
+- [/api/team/](/api/team/) — full reference for every endpoint +
+  field shape.
+- [/api/api-keys/](/api/api-keys/) — API key minting + rotation
+  flows; both honor `X-Driftstack-Account`.
+- [/webhooks/replay/](/webhooks/replay/) — replay individual
+  deliveries; admin-only on team owners.
