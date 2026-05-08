@@ -288,8 +288,15 @@ function SidebarItem({
 }
 
 function StatusFooter(): JSX.Element {
-  const { settings, client } = useSettings();
+  // V-318 — surface tier + concurrent usage in the footer so the
+  // customer sees "starter · 2 / 4 sessions" at-a-glance, matching the
+  // file-127 enforcement-aware UX intent. accountMe comes from the
+  // SettingsContext (V-239 pre-fetch); when it's null we fall back to
+  // the prior connection-only chrome rather than blocking.
+  const { settings, client, accountMe } = useSettings();
   const connected = client !== null;
+  const atCap =
+    accountMe !== null && accountMe.concurrent_session_active >= accountMe.concurrent_session_cap;
   return (
     <footer
       className="flex h-6 items-center justify-between border-t
@@ -303,6 +310,15 @@ function StatusFooter(): JSX.Element {
           <span className="mono">
             {settings.apiKey.slice(0, 8)}…{settings.apiKey.slice(-4)}
           </span>
+        )}
+        {accountMe !== null && (
+          <>
+            <span className="mono text-ink-muted">·</span>
+            <span className="section-label">{accountMe.tier}</span>
+            <span className={atCap ? 'mono text-status-error' : 'mono'}>
+              {accountMe.concurrent_session_active} / {accountMe.concurrent_session_cap} sessions
+            </span>
+          </>
         )}
       </div>
       <div className="mono">{redactBaseUrl(settings.baseUrl)}</div>
