@@ -58,6 +58,7 @@ export class EmailPreferencesService {
       'trial-pack-purchased',
       'trial-pack-expired',
       'billing-receipt',
+      'billing-renewal-reminder',
     ];
 
     return allEvents.map((eventType) => {

@@ -245,6 +245,17 @@ export class StripeWebhooksService {
           // and either augment or replace based on customer feedback.
           this.logEvent(event, 'invoice');
           return 'handled';
+        case 'invoice.upcoming':
+          // V-304b — Stripe fires `invoice.upcoming` ~7 days before the
+          // invoice is generated. We log + handle but don't yet fan out
+          // the renewal-reminder email; the email template + opt-out
+          // surface are in place (sendBillingRenewalReminder), the
+          // wire-in lands in V-304b-wire once the AccountLifecycleService
+          // gains a handleRenewalReminder dispatch (mirror of the tier-
+          // changed pattern). Tracking as scaffolded-but-not-fired so
+          // tests don't break.
+          this.logEvent(event, 'invoice.upcoming');
+          return 'handled';
         case 'customer.created':
         case 'customer.updated':
         case 'customer.deleted':

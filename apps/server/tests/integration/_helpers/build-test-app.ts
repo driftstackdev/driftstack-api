@@ -104,6 +104,10 @@ function createRecordingEmailService(realService: EmailService): {
       record('billing-failure', args);
       await realService.sendBillingFailure(args);
     },
+    sendBillingRenewalReminder: async (args) => {
+      record('billing-renewal-reminder', args);
+      await realService.sendBillingRenewalReminder(args);
+    },
     sendSubscriptionCancellation: async (args) => {
       record('subscription-cancellation', args);
       await realService.sendSubscriptionCancellation(args);

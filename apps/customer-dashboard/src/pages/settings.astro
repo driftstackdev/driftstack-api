@@ -58,6 +58,12 @@ const EMAIL_EVENTS = [
     label: 'Billing receipts',
     description: 'Per-invoice receipt emails. Stripe receipts continue regardless.',
   },
+  {
+    type: 'billing-renewal-reminder',
+    label: 'Renewal reminder',
+    description:
+      'Heads-up email ~7 days before each subscription renewal so you can update payment method or change tier ahead of time.',
+  },
 ] as const;
 ---
 

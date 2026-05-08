@@ -49,6 +49,15 @@ export interface EmailService {
     retryAt: Date;
     portalUrl: string;
   }): Promise<void>;
+  /** V-304b — fires ~7 days before subscription renewal (driven by
+   *  Stripe `invoice.upcoming` webhook). Once-per-invoice via dedup
+   *  on the calling side. */
+  sendBillingRenewalReminder(args: {
+    to: string;
+    amountFormatted: string;
+    renewalDate: Date;
+    portalUrl: string;
+  }): Promise<void>;
   sendSubscriptionCancellation(args: {
     to: string;
     effectiveAt: Date;
@@ -154,6 +163,15 @@ const TEMPLATES = {
       `We were unable to charge ${v.amountFormatted} on your Driftstack account.\n\nWe'll retry automatically at ${v.retryAt} (UTC). To update payment details before then, visit the billing portal:\n\n${v.portalUrl}\n\n— Driftstack`,
     html: (v) =>
       `<p>We were unable to charge <strong>${v.amountFormatted}</strong> on your Driftstack account.</p><p>We'll retry automatically at <strong>${v.retryAt}</strong> (UTC). To update payment details before then, visit the <a href="${v.portalUrl}">billing portal</a>.</p><p>— Driftstack</p>`,
+  },
+  // V-304b — DRAFT copy. Renewal reminder fires ~7 days before the
+  // upcoming invoice. Tier-3 review-gated tone.
+  'billing-renewal-reminder': {
+    subject: 'Driftstack — your subscription renews in 7 days',
+    text: (v) =>
+      `Heads up — your Driftstack subscription renews on ${v.renewalDate} (UTC) for ${v.amountFormatted}.\n\nNothing to do if your payment method is up to date. To update payment details, change tier, or cancel before renewal, visit the billing portal:\n\n${v.portalUrl}\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Heads up — your Driftstack subscription renews on <strong>${v.renewalDate}</strong> (UTC) for <strong>${v.amountFormatted}</strong>.</p><p>Nothing to do if your payment method is up to date. To update payment details, change tier, or cancel before renewal, visit the <a href="${v.portalUrl}">billing portal</a>.</p><p>— Driftstack</p>`,
   },
   'subscription-cancellation': {
     subject: 'Driftstack — subscription cancelled',
@@ -287,6 +305,7 @@ export function createEmailService({
       sendPasswordReset: async () => {},
       sendBillingReceipt: async () => {},
       sendBillingFailure: async () => {},
+      sendBillingRenewalReminder: async () => {},
       sendSubscriptionCancellation: async () => {},
       sendSupportAck: async () => {},
       sendSignupWelcome: async () => {},
@@ -342,6 +361,12 @@ export function createEmailService({
       send('billing-failure', to, {
         amountFormatted,
         retryAt: retryAt.toISOString(),
+        portalUrl,
+      }),
+    sendBillingRenewalReminder: ({ to, amountFormatted, renewalDate, portalUrl }) =>
+      send('billing-renewal-reminder', to, {
+        amountFormatted,
+        renewalDate: renewalDate.toISOString().slice(0, 10),
         portalUrl,
       }),
     sendSubscriptionCancellation: ({ to, effectiveAt, portalUrl }) =>

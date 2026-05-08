@@ -35,6 +35,9 @@ export const OptOutableEmailEventSchema = z.enum([
   'trial-pack-purchased',
   'trial-pack-expired',
   'billing-receipt',
+  // V-304b — 7-days-before-renewal reminder. Driven by Stripe
+  // invoice.upcoming webhook.
+  'billing-renewal-reminder',
 ]);
 export type OptOutableEmailEvent = z.infer<typeof OptOutableEmailEventSchema>;
 

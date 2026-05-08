@@ -31,11 +31,12 @@ describe('GET /v1/account/email-preferences', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<ListResponse>();
-    expect(body.data.length).toBe(7);
+    expect(body.data.length).toBe(8);
     expect(body.data.every((p) => p.opted_in)).toBe(true);
     const types = body.data.map((p) => p.event_type).sort();
     expect(types).toEqual([
       'billing-receipt',
+      'billing-renewal-reminder',
       'session-failed-first',
       'session-success-first',
       'signup-welcome',
