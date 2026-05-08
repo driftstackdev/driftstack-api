@@ -101,4 +101,4 @@ export const SUB_PROCESSORS: SubProcessor[] = [
   },
 ];
 
-export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-05-03';
+export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-05-08';
