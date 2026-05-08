@@ -371,7 +371,12 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         if (!token) return;
         container.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
         fetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(endpointId) + '/deliveries?limit=20', {
-          headers: { authorization: 'Bearer ' + token },
+          headers: {
+            authorization: 'Bearer ' + token,
+            ...(typeof window.driftstackActAsHeaders === 'function'
+              ? window.driftstackActAsHeaders()
+              : {}),
+          },
         })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((body) => {
@@ -404,6 +409,9 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
               headers: {
                 authorization: 'Bearer ' + token,
                 'content-type': 'application/json',
+                ...(typeof window.driftstackActAsHeaders === 'function'
+                  ? window.driftstackActAsHeaders()
+                  : {}),
               },
               body: '{}',
             })

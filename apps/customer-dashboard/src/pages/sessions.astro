@@ -371,7 +371,12 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
       let currentCap = null;
 
       const sessionsP = fetch(apiBaseUrl + '/v1/sessions', {
-        headers: { authorization: 'Bearer ' + token },
+        headers: {
+          authorization: 'Bearer ' + token,
+          ...(typeof window.driftstackActAsHeaders === 'function'
+            ? window.driftstackActAsHeaders()
+            : {}),
+        },
         credentials: 'include',
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
@@ -400,7 +405,12 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
         });
 
       const usageP = fetch(apiBaseUrl + '/v1/usage', {
-        headers: { authorization: 'Bearer ' + token },
+        headers: {
+          authorization: 'Bearer ' + token,
+          ...(typeof window.driftstackActAsHeaders === 'function'
+            ? window.driftstackActAsHeaders()
+            : {}),
+        },
         credentials: 'include',
       })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))

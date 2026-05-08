@@ -191,6 +191,10 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             ...(init.headers || {}),
             authorization: 'Bearer ' + token,
             'content-type': 'application/json',
+            // V-331b — act-as header for team-scoped requests.
+            ...(typeof window.driftstackActAsHeaders === 'function'
+              ? window.driftstackActAsHeaders()
+              : {}),
           },
           credentials: 'include',
         });

@@ -143,7 +143,12 @@ const ACTION_LABEL: Record<string, string> = {
           return;
         }
         fetch(apiBaseUrl + '/v1/account/audit-log?limit=50', {
-          headers: { authorization: 'Bearer ' + token },
+          headers: {
+            authorization: 'Bearer ' + token,
+            ...(typeof window.driftstackActAsHeaders === 'function'
+              ? window.driftstackActAsHeaders()
+              : {}),
+          },
         })
           .then(function (r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -177,7 +182,12 @@ const ACTION_LABEL: Record<string, string> = {
         // the URL (a window.location.assign would leak the bearer in
         // browser history if any redirect chain were involved).
         fetch(apiBaseUrl + '/v1/account/audit-log/export?format=' + encodeURIComponent(format), {
-          headers: { authorization: 'Bearer ' + token },
+          headers: {
+            authorization: 'Bearer ' + token,
+            ...(typeof window.driftstackActAsHeaders === 'function'
+              ? window.driftstackActAsHeaders()
+              : {}),
+          },
         })
           .then(function (r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);

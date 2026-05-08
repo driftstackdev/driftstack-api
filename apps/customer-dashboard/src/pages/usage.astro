@@ -235,7 +235,13 @@ const SPARK_H = 48;
         return;
       }
 
-      const headers = { authorization: 'Bearer ' + token };
+      const headers = {
+        authorization: 'Bearer ' + token,
+        // V-331b — act-as header for team-scoped reads.
+        ...(typeof window.driftstackActAsHeaders === 'function'
+          ? window.driftstackActAsHeaders()
+          : {}),
+      };
 
       Promise.all([
         fetch(apiBaseUrl + '/v1/usage', { headers, credentials: 'include' }).then((r) =>
