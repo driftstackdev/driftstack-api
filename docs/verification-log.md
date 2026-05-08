@@ -19128,3 +19128,32 @@ with the same V-298b region-preference semantics.
 
 No version-string bump on the DPA — clarification matching the
 privacy.md non-material classification per privacy §15.
+
+## V-385 — apps/docs/api/account.md (new page)
+
+**Tier**: 1 (closes a real customer-facing API doc gap; no
+account.md page existed despite all the V-298a/V-298b/V-352/V-352b
+self-edit work landing).
+
+`apps/docs/src/pages/api/account.md` — new page covering:
+
+- GET /v1/account/me — full response field table including the
+  V-298b region preference + V-298a slug + V-352b avatar_url +
+  V-326c teams array.
+- PATCH /v1/account/me — partial-update semantics; field rules
+  for name / timezone / slug / region; 409 slug uniqueness;
+  null-to-clear behaviour.
+- POST /v1/account/me/avatar — V-352b inline base64 upload;
+  allowed content types + 2 MiB raw size; presigned-URL response.
+- DELETE /v1/account/me/avatar — clears pointer; R2 sweeper
+  collects orphans off the hot path.
+- Why /me ignores X-Driftstack-Account team-RBAC header — edit
+  surprise; future /v1/team/owners/:id/... route is the explicit
+  cross-account path, not a /me opt-in.
+
+API index (apps/docs/src/pages/api/index.astro) gains a top
+"Account" link above "API keys". Astro check clean.
+
+OpenAPI spec registration of /v1/account/me + avatar routes is a
+separate slice (substantial — full Account response Zod schema
+needed) and stays queued as V-386.
