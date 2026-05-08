@@ -400,9 +400,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const teamMembersRepo = new InMemoryTeamMembersRepo();
   // Seed the test account's email so accept-flow tests can match it.
   teamMembersRepo.upsertAccountEmail(accountId, opts.email ?? 'tester@driftstack.local');
-  const teamMembersService = new TeamMembersService(teamMembersRepo, noopEmail, {
-    dashboardBaseUrl: 'https://app.driftstack.test',
-  });
+  const teamMembersService = new TeamMembersService(
+    teamMembersRepo,
+    noopEmail,
+    { dashboardBaseUrl: 'https://app.driftstack.test' },
+    accountAuditService,
+  );
 
   // V-295c3-followup — incident-notification fan-out.
   const incidentNotifications = new IncidentNotificationsService(

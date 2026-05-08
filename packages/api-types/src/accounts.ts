@@ -86,6 +86,10 @@ export const AccountAuditActionSchema = z.enum([
   'webhook_endpoint.deleted',
   // V-307 — customer self-service replay of a webhook delivery.
   'webhook_delivery.replayed',
+  // V-298f — Team RBAC v1 customer audit entries.
+  'team.member_invited',
+  'team.invite_accepted',
+  'team.member_removed',
   // V-281 — admin-recorded notes. Refund recording is audit-only;
   // actual money movement happens via Stripe dashboard manually per
   // the V-280 launch-day runbook. Support notes are free-form

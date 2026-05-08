@@ -25,6 +25,7 @@
 
 import { generateAuthToken, tokenHash } from '../lib/auth-tokens.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
+import type { AccountAuditService } from './account-audit.js';
 import type { EmailService } from './email.js';
 
 export type TeamRole = 'member' | 'admin';
@@ -102,6 +103,10 @@ export class TeamMembersService {
     private readonly repo: TeamMembersRepo,
     private readonly email: EmailService,
     config: TeamMembersServiceConfig,
+    /** V-298f — optional account-audit emitter. When wired, invite /
+     *  accept / remove emit customer-audit-log entries (best-effort;
+     *  failures never break the underlying operation). */
+    private readonly accountAudit: AccountAuditService | null = null,
   ) {
     this.dashboardBaseUrl = config.dashboardBaseUrl.replace(/\/+$/, '');
   }
@@ -143,6 +148,21 @@ export class TeamMembersService {
       expiresAt: inviteExpiresAt,
       role,
     });
+    if (this.accountAudit) {
+      try {
+        await this.accountAudit.record({
+          accountId: input.ownerAccountId,
+          actorType: 'customer',
+          actorAccountId: input.invitedByAccountId,
+          actorKeyId: null,
+          action: 'team.member_invited',
+          targetResourceId: null,
+          payload: { invitee_email: normalized, role },
+        });
+      } catch {
+        /* swallow */
+      }
+    }
     return { accepted: true };
   }
 
@@ -183,6 +203,21 @@ export class TeamMembersService {
       invitedByAccountId: invite.invitedByAccountId,
     });
     await this.repo.markInviteAccepted(invite.id, now);
+    if (this.accountAudit) {
+      try {
+        await this.accountAudit.record({
+          accountId: invite.ownerAccountId,
+          actorType: 'customer',
+          actorAccountId: input.acceptingAccountId,
+          actorKeyId: null,
+          action: 'team.invite_accepted',
+          targetResourceId: `mem_${membership.id}`,
+          payload: { invitee_email: invite.inviteeEmail, role: invite.role },
+        });
+      } catch {
+        /* swallow */
+      }
+    }
     return { membership };
   }
 
@@ -201,6 +236,22 @@ export class TeamMembersService {
   /** Remove a member from the team. Returns true if removed; false if
    *  membership not found or owned by a different account. */
   async removeMember(input: { membershipId: string; ownerAccountId: string }): Promise<boolean> {
-    return this.repo.removeMember(input.membershipId, input.ownerAccountId);
+    const removed = await this.repo.removeMember(input.membershipId, input.ownerAccountId);
+    if (removed && this.accountAudit) {
+      try {
+        await this.accountAudit.record({
+          accountId: input.ownerAccountId,
+          actorType: 'customer',
+          actorAccountId: input.ownerAccountId,
+          actorKeyId: null,
+          action: 'team.member_removed',
+          targetResourceId: `mem_${input.membershipId}`,
+          payload: {},
+        });
+      } catch {
+        /* swallow */
+      }
+    }
+    return removed;
   }
 }

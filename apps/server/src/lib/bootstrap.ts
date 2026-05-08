@@ -281,9 +281,12 @@ export async function createProductionDeps(
   // permissions on the owner's resources until V-298d.
   const dashboardBaseUrl = process.env.PUBLIC_DASHBOARD_URL ?? 'https://app.driftstack.dev';
   const teamMembersRepo = new DrizzleTeamMembersRepo(dbHandle);
-  const teamMembersService = new TeamMembersService(teamMembersRepo, email, {
-    dashboardBaseUrl,
-  });
+  const teamMembersService = new TeamMembersService(
+    teamMembersRepo,
+    email,
+    { dashboardBaseUrl },
+    accountAuditService,
+  );
 
   // V-295c3-followup — incident-notification fan-out. Wired into the
   // IncidentsService lifecycle below so admin-posted AND auto-created
