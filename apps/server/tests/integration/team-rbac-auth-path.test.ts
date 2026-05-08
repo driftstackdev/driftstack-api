@@ -627,6 +627,78 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     ]);
   });
 
+  it('POST /v1/sessions as admin team member creates session on the OWNER account', async () => {
+    fx = await buildTestApp({ tier: 'api_starter' });
+    fx.authRepo.upsertAccount({
+      id: OWNER_ACCOUNT_ID,
+      email: 'owner@example.test',
+      name: null,
+      tier: 'api_scale',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'admin',
+      },
+    ]);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(201);
+    const body = res.json<{ account_id: string }>();
+    expect(body.account_id).toBe(`acc_${OWNER_ACCOUNT_ID}`);
+
+    // Audit row should exist on the OWNER's account (accountId = owner;
+    // actor = caller).
+    const ownerAuditRows = fx.accountAuditRepo
+      .getAll()
+      .filter((r) => r.accountId === OWNER_ACCOUNT_ID && r.action === 'session.created');
+    expect(ownerAuditRows).toHaveLength(1);
+    expect(ownerAuditRows[0]!.actorAccountId).toBe(fx.accountId);
+  });
+
+  it('POST /v1/sessions as MEMBER role gets 403 (admin-only writes per Q1)', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.upsertAccount({
+      id: OWNER_ACCOUNT_ID,
+      email: 'owner@example.test',
+      name: null,
+      tier: 'api_scale',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'member',
+      },
+    ]);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it('GET /v1/sessions returns 403 when X-Driftstack-Account references a non-member owner', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

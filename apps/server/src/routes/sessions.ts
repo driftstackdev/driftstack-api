@@ -23,7 +23,8 @@ import {
 } from '@driftstack/api-types';
 import type { SessionRecord, SessionsService } from '../services/sessions.js';
 import { GUIInputRequestSchema } from '../schemas/gui-input.js';
-import { BadRequestError } from '../lib/errors.js';
+import { BadRequestError, ForbiddenError } from '../lib/errors.js';
+import type { AccountAuthRepo } from '../services/auth.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 
 const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';
@@ -75,6 +76,12 @@ function publicSession(s: SessionRecord): Record<string, unknown> {
 
 export interface SessionRoutesOptions {
   service: SessionsService;
+  /**
+   * V-326e1 — needed to look up the OWNER's account row (for tier
+   * resolution) when a team member creates a session via
+   * X-Driftstack-Account.
+   */
+  authRepo: AccountAuthRepo;
 }
 
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
@@ -86,9 +93,13 @@ function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['accoun
 }
 
 export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesOptions): void {
-  const { service } = opts;
+  const { service, authRepo } = opts;
 
   // ── POST /v1/sessions ──────────────────────────────────────────────────
+  // V-326e1 — when X-Driftstack-Account is set, the new session is
+  // created on the OWNER's account. Caller's role MUST be 'admin' on
+  // that team (Q1 verdict — member is read-only on writes); 'member'
+  // role gets 403. Tier-derived concurrent cap uses the OWNER's tier.
   app.post(
     '/v1/sessions',
     {
@@ -97,6 +108,23 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = requireCtx(request);
       const body = CreateSessionRequestSchema.parse(request.body ?? {});
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      if (effective.kind === 'team') {
+        if (effective.role !== 'admin') {
+          throw new ForbiddenError(
+            'Creating a session on a team owner requires admin role on that team.',
+          );
+        }
+        const owner = await authRepo.getAccount(effective.accountId);
+        if (!owner) {
+          throw new ForbiddenError('Owner account no longer exists.');
+        }
+        const session = await service.create(ctx, body, {
+          effectiveAccountId: owner.id,
+          effectiveTier: owner.tier,
+        });
+        return reply.code(201).send(publicSession(session));
+      }
       const session = await service.create(ctx, body);
       return reply.code(201).send(publicSession(session));
     },

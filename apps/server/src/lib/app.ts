@@ -256,7 +256,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   registerErrorHandler(app);
 
-  registerSessionRoutes(app, { service: deps.sessionsService });
+  registerSessionRoutes(app, { service: deps.sessionsService, authRepo: deps.authRepo });
   registerAdminRoutes(app, {
     apiKeysService: deps.apiKeysService,
     usageService: deps.usageService,

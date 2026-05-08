@@ -180,9 +180,21 @@ export interface SessionsServiceDeps {
 export class SessionsService {
   constructor(private readonly deps: SessionsServiceDeps) {}
 
-  async create(ctx: AccountContext, body: CreateSessionRequest): Promise<SessionRecord> {
-    const limit = concurrentSessionLimitFor(ctx.account.tier);
-    const active = await this.deps.repo.countActiveSessions(ctx.account.id);
+  async create(
+    ctx: AccountContext,
+    body: CreateSessionRequest,
+    opts: { effectiveAccountId?: string; effectiveTier?: AccountTier } = {},
+  ): Promise<SessionRecord> {
+    // V-326e1 — when effectiveAccountId is set (route layer resolved
+    // X-Driftstack-Account + verified the caller has 'admin' role on
+    // the owner's team), the new session is OWNED by the team owner
+    // and counts against the OWNER's concurrent cap. Tier-derived
+    // limits use the owner's tier (route looks it up).
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const tier = opts.effectiveTier ?? ctx.account.tier;
+
+    const limit = concurrentSessionLimitFor(tier);
+    const active = await this.deps.repo.countActiveSessions(accountId);
     if (active >= limit) {
       throw new ConcurrencyLimitError(active, limit);
     }
@@ -196,7 +208,9 @@ export class SessionsService {
     });
 
     const record = await this.deps.repo.insertSession({
-      accountId: ctx.account.id,
+      accountId,
+      // apiKey stays the member's — that's the actor; the owner's
+      // audit log shows which member's key created the session.
       apiKeyId: ctx.apiKey.id,
       driverSessionId: driverResult.driverSessionId,
       archetype,
@@ -214,10 +228,13 @@ export class SessionsService {
     });
 
     // V-216 — customer-facing audit entry.
+    // V-326e1 — audit row goes on the OWNER's audit log (accountId
+    // is the owner) but actor stays the member (so the audit reads
+    // "Member X created session Y on team owner Z").
     if (this.deps.accountAudit) {
       try {
         await this.deps.accountAudit.record({
-          accountId: ctx.account.id,
+          accountId,
           actorType: 'customer',
           actorAccountId: ctx.account.id,
           actorKeyId: ctx.apiKey.id,
