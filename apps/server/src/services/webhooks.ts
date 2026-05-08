@@ -295,6 +295,56 @@ export class WebhooksService {
   }
 
   /**
+   * V-307 — customer self-service replay. Looks up the delivery, then
+   * the owning endpoint (must be the calling account's), then resets
+   * the delivery to pending so the worker re-fires it. Audit emitted
+   * via accountAudit.
+   *
+   * Differs from the admin replayDelivery (line ~351) in that:
+   *   - account_owner scope (not admin)
+   *   - account-scoped lookup (404s if delivery or endpoint isn't owned)
+   *   - emits webhook_delivery.replayed customer audit (not admin audit).
+   */
+  async replayDeliveryAsCustomer(
+    ctx: AccountContext,
+    deliveryId: string,
+  ): Promise<WebhookDeliveryRow> {
+    throwIfMissingScope(ctx, 'account_owner');
+    const delivery = await this.repo.findDeliveryById(deliveryId);
+    if (!delivery) {
+      throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
+    }
+    // Account-scope check: the owning endpoint must belong to the caller.
+    const endpoint = await this.repo.findEndpoint(delivery.webhookId, ctx.account.id);
+    if (!endpoint) {
+      throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
+    }
+    const updated = await this.repo.resetDeliveryToPending(deliveryId, new Date());
+    if (!updated) throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
+
+    // V-216 — record customer audit entry. Best-effort.
+    if (this.accountAudit) {
+      try {
+        await this.accountAudit.record({
+          accountId: ctx.account.id,
+          actorType: 'customer',
+          actorAccountId: ctx.account.id,
+          actorKeyId: ctx.apiKey.id,
+          action: 'webhook_delivery.replayed',
+          targetResourceId: `wdl_${deliveryId}`,
+          payload: {
+            endpoint_id: `whk_${delivery.webhookId}`,
+            event_type: delivery.eventType,
+          },
+        });
+      } catch {
+        /* swallow */
+      }
+    }
+    return updated;
+  }
+
+  /**
    * Fan out a single event into per-endpoint delivery rows. Returns the
    * number of deliveries enqueued (zero if no endpoint subscribes to the
    * event type — useful for caller-side logging).

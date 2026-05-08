@@ -79,6 +79,8 @@ export const AccountAuditActionSchema = z.enum([
   'subscription.tier_changed',
   'webhook_endpoint.created',
   'webhook_endpoint.deleted',
+  // V-307 — customer self-service replay of a webhook delivery.
+  'webhook_delivery.replayed',
   // V-281 — admin-recorded notes. Refund recording is audit-only;
   // actual money movement happens via Stripe dashboard manually per
   // the V-280 launch-day runbook. Support notes are free-form

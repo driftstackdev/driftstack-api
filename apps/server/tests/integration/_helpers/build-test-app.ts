@@ -205,6 +205,9 @@ export interface TestAppFixture {
   apiKeysRepo: InMemoryApiKeysRepo;
   usageRepo: InMemoryUsageRepo;
   webhooksRepo: InMemoryWebhooksRepo;
+  /** V-307 — exposed so tests can enqueue deliveries directly without
+   *  a real session-completion event. */
+  webhooksService: WebhooksService;
   adminAuditRepo: InMemoryAdminAuditLogRepo;
   /** V-281 — exposed so tests can assert customer-audit rows post admin action. */
   accountAuditRepo: InMemoryAccountAuditRepo;
@@ -700,6 +703,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     authCache,
     authCoalescer,
     webhooksRepo,
+    webhooksService,
     adminAuditRepo,
     accountAuditRepo,
     incidentsRepo,

@@ -143,4 +143,20 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
       };
     },
   );
+
+  // V-307 — customer self-service replay. Different from the admin
+  // /v1/admin/webhook-deliveries/:id/replay (which can replay any
+  // account's delivery): this one is account-scoped and 404s if the
+  // delivery isn't owned by the calling account.
+  app.post<{ Params: { deliveryId: string } }>(
+    '/v1/webhook-deliveries/:deliveryId/replay',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const deliveryId = uuidFromPrefixedId(request.params.deliveryId, 'wdl');
+      const updated = await service.replayDeliveryAsCustomer(ctx, deliveryId);
+      return reply.code(200).send(publicDelivery(updated));
+    },
+  );
 }

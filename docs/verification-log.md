@@ -17276,3 +17276,49 @@ V-308b (~3-4h) — NowPayments sandbox webhook handler in apps/server. POST /v1/
 ### Next
 
 V-306b (~4-6h) — WebRTC server signaling endpoint in apps/server: token issuance for LiveKit room admission, room lifecycle, IncidentsService-style lifecycle hooks for connect/disconnect events. Then V-306c (GUI client capture + customer viewer) + V-306d (admin viewer in admin-panel). NEVER STOP autopilot.
+
+## V-307 — Customer self-service webhook delivery replay (engineering data plane)
+
+**Tier**: 1 — Customer self-service ergonomics. Closes the V-294 catalog "webhooks customer-facing delivery: replay" sub-item.
+
+**Why**: V-173 / V-174 shipped the webhook delivery worker (DLQ + admin replay), and V-216 added the customer-facing audit log. The remaining gap was customer-driven replay: when a customer's endpoint goes down for an hour and they fix it, they want to re-fire the failed deliveries themselves. Today they have to email support and wait for an admin replay. V-307 closes that gap with an account-scoped replay endpoint.
+
+**Scope**
+
+- New `WebhooksService.replayDeliveryAsCustomer(ctx, deliveryId)` method:
+  - Validates account_owner scope.
+  - Looks up the delivery — 404 if missing.
+  - Verifies the owning endpoint belongs to the calling account — 404 if not (no information leak about other accounts' deliveries).
+  - Calls existing `repo.resetDeliveryToPending`.
+  - Records `webhook_delivery.replayed` in account_audit_log with `{ endpoint_id, event_type }` payload.
+- New route: `POST /v1/webhook-deliveries/:deliveryId/replay`. account_owner scope, global rate-limited.
+- api-types `AccountAuditActionSchema` extended with `'webhook_delivery.replayed'`.
+- Test fixture exposes `webhooksService` so tests can call `enqueueEvent` directly without a real session-completion event.
+- 4 integration tests covering happy path, audit log entry, 404 for missing delivery, 400 for malformed id.
+
+**Files**
+
+- `packages/api-types/src/accounts.ts` — AccountAuditActionSchema +1.
+- `apps/server/src/services/webhooks.ts` — `replayDeliveryAsCustomer` method.
+- `apps/server/src/routes/webhooks.ts` — `POST /v1/webhook-deliveries/:deliveryId/replay` route.
+- `apps/server/tests/integration/_helpers/build-test-app.ts` — exposes `webhooksService` on TestAppFixture.
+- `apps/server/tests/integration/webhook-replay-customer.test.ts` — new (4 tests).
+
+### Verify
+
+- `npm test`: 914 / 914 across 97 files (was 910 / 96; +4 webhook-replay-customer tests).
+- `npm run lint`: clean. Sub-processor mirror: 12 ↔ 13.
+- `npm run format:check`: clean.
+- Server typecheck: clean.
+
+### Notes — methodology choices
+
+- **404 for non-owned delivery, NOT 403**: revealing existence of a delivery the calling account doesn't own would leak the existence of other accounts' webhook activity. 404 is the correct privacy-preserving response.
+- **Reuse `resetDeliveryToPending` repo method**: the underlying mutation is identical to admin replay. Only the auth / audit / 404-rules differ. Don't duplicate the DB call.
+- **Customer audit, not admin audit**: the customer is acting on their own resource. admin_audit_log is reserved for actions taken by Driftstack-internal admins; account_audit_log captures customer self-service.
+- **No Privacy update needed**: the replay endpoint surfaces deliveries the customer already has read access to via `/v1/webhooks/:id/deliveries` (V-225). Replay is just a state mutation on existing data; no new PII surface.
+- **UI is V-307b (deferred)**: the customer-dashboard `/webhooks` page currently has a "View delivery log →" link that goes to `#deliveries-${id}` (in-page anchor, dead-end). V-307b will add the actual delivery list view with Replay buttons. Out of scope for V-307 per the 2-4h Tier-1 slice cap; the engineering data plane ships now so V-307b is purely a UI slice.
+
+### Next
+
+V-307b (~2-3h) — customer-dashboard webhook delivery list UI with Replay buttons. Either expand-in-place on /webhooks page or new /webhooks/[id] sub-page. Then V-304 (onboarding email orchestration) → V-305 (Tauri deep-link replacement) → V-298+ remaining. NEVER STOP autopilot.
