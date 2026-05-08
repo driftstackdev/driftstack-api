@@ -22,6 +22,8 @@ interface AccountMeResponse {
   tier: string;
   status: string;
   timezone: string | null;
+  /** V-353h — true when the calling account has MFA enrolled. */
+  mfa_enrolled: boolean;
   concurrent_session_cap: number;
   concurrent_session_active: number;
   profile_cap: number | null;
@@ -51,6 +53,8 @@ describe('GET /v1/account/me', () => {
     expect(body.concurrent_session_active).toBe(0);
     expect(typeof body.profile_cap).toBe('number');
     expect(body.profile_count).toBe(0);
+    // V-353h — MFA flag present, false on a fresh account.
+    expect(body.mfa_enrolled).toBe(false);
   });
 
   it('reflects active session count after a session is created', async () => {

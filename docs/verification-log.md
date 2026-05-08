@@ -18487,3 +18487,43 @@ already shipped in V-353b.
 V-353h queued: dashboard /settings → MFA section (enroll flow with
 QR + recovery-code modal + disable button + step-up reauth flow);
 /v1/account/me response gains `mfa_enrolled` flag.
+
+## V-353h — dashboard MFA UI + /v1/account/me mfa_enrolled flag
+
+**Tier**: 1.
+
+API: GET /v1/account/me response gains `mfa_enrolled: boolean`.
+Reads `MfaService.getStatus(accountId)` in the parallel fan-out;
+falls back to `false` when MfaService is not wired.
+
+Dashboard `/settings` gains a "Two-factor authentication" section
+between Security and Active sign-ins:
+
+- Status badge: "loading…" / "not enrolled" / "enrolled" via GET
+  /v1/account/mfa.
+- Enroll flow: button → POST /v1/account/mfa/enroll → renders
+  otpauth URI as a QR via api.qrserver.com + shows manual base32
+  secret. 6-digit confirm → POST /v1/account/mfa/verify → reveals
+  the recovery-codes panel.
+- Recovery codes panel (one-shot): 10 codes in a 2-col grid;
+  Copy-all (clipboard), Download (.txt with date + reminder),
+  "I've saved them" acknowledgement.
+- Enrolled-state controls: enrolled-at + last-used + unused-recovery
+  count; Regenerate + Disable buttons.
+- Step-up reauth panel (inline): single input accepts 6-digit OR
+  recovery code; on success the pending action (disable / regen)
+  re-fires automatically. 403 + `requires_mfa_step_up` from disable
+  opens this panel inline.
+
+Tests: existing 18 account-me integration tests gain
+`expect(body.mfa_enrolled).toBe(false)` assertion on a fresh
+account. UI wiring is exercised end-to-end via V-353b/d/e
+integration tests; Astro check + build covers client-side
+typecheck. 1058 / 1058 tests pass.
+
+**V-353 cycle complete.** a / b / c / d / e / f / g / h all
+shipped (c folded into b at route level; f shipped as the POST-
+alias one-liner in V-353e; g shipped in V-353b). MFA TOTP product
+surface end-to-end customer-facing functional: enroll, verify,
+login challenge, step-up reauth, disable, recovery-code
+regenerate, dashboard UI.

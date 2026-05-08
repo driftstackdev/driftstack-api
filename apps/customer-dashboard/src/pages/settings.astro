@@ -139,6 +139,186 @@ const EMAIL_EVENTS = [
       </div>
     </section>
 
+    <!-- Two-factor authentication (V-353h) -->
+    <section class="dashboard-card mt-6" data-region="mfa">
+      <div class="flex items-start justify-between gap-6">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-900">Two-factor authentication</h2>
+          <p class="mt-2 max-w-prose text-sm text-slate-500">
+            Add a TOTP code from your authenticator app on top of your password.
+            Recovery codes are issued at enrollment — store them somewhere safe;
+            without your authenticator AND your recovery codes, account access
+            requires support intervention.
+          </p>
+        </div>
+        <span
+          data-field="mfa-status-badge"
+          class="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600"
+        >
+          loading…
+        </span>
+      </div>
+
+      <!-- Enroll flow (hidden when already enrolled). -->
+      <div class="mt-6 hidden space-y-4" data-section="mfa-enroll">
+        <p class="text-sm text-slate-700">
+          Click <strong>Set up</strong> to generate a fresh secret. Scan the QR
+          (or paste the manual-entry secret into your authenticator app), then
+          enter the 6-digit code to confirm.
+        </p>
+        <button type="button" data-button="mfa-start" class="btn-primary text-sm">
+          Set up two-factor authentication
+        </button>
+
+        <!-- Hidden until /enroll fires. -->
+        <div class="hidden space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4" data-section="mfa-enroll-step">
+          <p class="text-sm text-slate-700">
+            Open your authenticator app (1Password, Authy, Google Authenticator, etc.)
+            and either scan the QR or paste the manual secret.
+          </p>
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <div
+              class="flex h-44 w-44 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white p-2"
+              data-field="mfa-qr"
+            >
+              <span class="text-xs text-slate-400">QR will render here</span>
+            </div>
+            <div class="min-w-0 flex-1">
+              <label class="block text-xs font-medium uppercase tracking-wide text-slate-500"
+                >Manual secret</label>
+              <code
+                data-field="mfa-secret-base32"
+                class="mt-1 block break-all rounded bg-white px-2 py-1 font-mono text-xs text-slate-900 ring-1 ring-slate-200"
+              >—</code>
+              <p class="mt-2 text-xs text-slate-500">
+                SHA-1 / 30s / 6-digit (RFC 6238 defaults; every authenticator app
+                supports).
+              </p>
+            </div>
+          </div>
+          <div class="border-t border-slate-200 pt-3">
+            <label class="block text-sm font-medium text-slate-700" for="mfa-verify-code">
+              Enter the 6-digit code from your app to confirm
+            </label>
+            <div class="mt-2 flex items-center gap-2">
+              <input
+                id="mfa-verify-code"
+                data-field="mfa-verify-code"
+                type="text"
+                inputmode="numeric"
+                pattern="\d{6}"
+                maxlength="6"
+                placeholder="123456"
+                class="w-32 rounded-md border border-slate-300 px-3 py-2 font-mono text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+              />
+              <button type="button" data-button="mfa-verify" class="btn-primary text-sm">
+                Confirm + finish
+              </button>
+            </div>
+            <p
+              data-field="mfa-error"
+              class="mt-2 hidden rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700"
+            ></p>
+          </div>
+        </div>
+
+        <!-- Hidden until /verify returns 10 recovery codes. -->
+        <div class="hidden rounded-lg border border-amber-200 bg-amber-50 p-4" data-section="mfa-recovery">
+          <p class="text-sm font-medium text-amber-900">
+            Save your recovery codes — these are shown ONCE
+          </p>
+          <p class="mt-1 text-xs text-amber-900">
+            Each code works once. Store them somewhere safe (password manager,
+            printed copy, secure note). Without your authenticator AND these
+            codes, account access requires support intervention.
+          </p>
+          <ul
+            class="mt-3 grid grid-cols-2 gap-2 font-mono text-sm text-amber-900"
+            data-list="mfa-recovery-codes"
+          ></ul>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              data-button="mfa-recovery-copy"
+              class="btn-secondary text-xs"
+            >
+              Copy all
+            </button>
+            <button
+              type="button"
+              data-button="mfa-recovery-download"
+              class="btn-secondary text-xs"
+            >
+              Download .txt
+            </button>
+            <button
+              type="button"
+              data-button="mfa-recovery-acknowledge"
+              class="btn-primary text-xs"
+            >
+              I've saved them
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Enrolled-state controls (hidden when not enrolled). -->
+      <div class="mt-6 hidden space-y-4" data-section="mfa-enrolled">
+        <dl class="grid grid-cols-2 gap-3 text-sm">
+          <dt class="text-slate-500">Enrolled</dt>
+          <dd class="font-mono text-xs text-slate-700" data-field="mfa-enrolled-at">—</dd>
+          <dt class="text-slate-500">Last used</dt>
+          <dd class="font-mono text-xs text-slate-700" data-field="mfa-last-used">—</dd>
+          <dt class="text-slate-500">Recovery codes</dt>
+          <dd class="text-xs text-slate-700">
+            <span data-field="mfa-recovery-remaining">—</span> unused of 10
+          </dd>
+        </dl>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" data-button="mfa-regenerate" class="btn-secondary text-sm">
+            Regenerate recovery codes
+          </button>
+          <button type="button" data-button="mfa-disable" class="btn-secondary text-sm text-red-700">
+            Disable two-factor
+          </button>
+        </div>
+        <p class="text-xs text-slate-500">
+          Disabling clears your TOTP secret + invalidates all recovery codes.
+          Requires a fresh authenticator code (step-up reauth) to confirm.
+        </p>
+      </div>
+
+      <!-- Step-up reauth modal-ish prompt. -->
+      <div class="mt-6 hidden rounded-lg border border-oxblood-200 bg-oxblood-50 p-4" data-section="mfa-step-up">
+        <p class="text-sm font-medium text-oxblood-900">
+          Confirm with your authenticator
+        </p>
+        <p class="mt-1 text-xs text-oxblood-900">
+          Enter a fresh 6-digit code (or a recovery code) to continue.
+        </p>
+        <div class="mt-3 flex items-center gap-2">
+          <input
+            data-field="mfa-step-up-code"
+            type="text"
+            inputmode="numeric"
+            maxlength="11"
+            placeholder="123456 or recovery"
+            class="w-44 rounded-md border border-oxblood-300 px-3 py-2 font-mono text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+          />
+          <button type="button" data-button="mfa-step-up-submit" class="btn-primary text-sm">
+            Confirm
+          </button>
+          <button type="button" data-button="mfa-step-up-cancel" class="btn-secondary text-sm">
+            Cancel
+          </button>
+        </div>
+        <p
+          data-field="mfa-step-up-error"
+          class="mt-2 hidden rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700"
+        ></p>
+      </div>
+    </section>
+
     <!-- Sessions / devices (V-355) -->
     <section class="dashboard-card mt-6" data-region="web-sessions">
       <h2 class="text-lg font-semibold text-slate-900">Active sign-ins</h2>
@@ -890,6 +1070,341 @@ const EMAIL_EVENTS = [
         changePassword();
       });
 
+      // V-353h — MFA section live wire.
+      const mfaStatusBadge = root.querySelector('[data-field="mfa-status-badge"]');
+      const mfaEnrollSection = root.querySelector('[data-section="mfa-enroll"]');
+      const mfaEnrollStep = root.querySelector('[data-section="mfa-enroll-step"]');
+      const mfaRecoverySection = root.querySelector('[data-section="mfa-recovery"]');
+      const mfaEnrolledSection = root.querySelector('[data-section="mfa-enrolled"]');
+      const mfaStepUpSection = root.querySelector('[data-section="mfa-step-up"]');
+      const mfaQrTarget = root.querySelector('[data-field="mfa-qr"]');
+      const mfaSecretEl = root.querySelector('[data-field="mfa-secret-base32"]');
+      const mfaVerifyInput = root.querySelector('[data-field="mfa-verify-code"]');
+      const mfaError = root.querySelector('[data-field="mfa-error"]');
+      const mfaRecoveryList = root.querySelector('[data-list="mfa-recovery-codes"]');
+      const mfaEnrolledAt = root.querySelector('[data-field="mfa-enrolled-at"]');
+      const mfaLastUsed = root.querySelector('[data-field="mfa-last-used"]');
+      const mfaRecoveryRemaining = root.querySelector('[data-field="mfa-recovery-remaining"]');
+      const mfaStepUpInput = root.querySelector('[data-field="mfa-step-up-code"]');
+      const mfaStepUpError = root.querySelector('[data-field="mfa-step-up-error"]');
+
+      let pendingStepUpAction = null; // 'disable' | 'regenerate' | null
+
+      function showHidden(el, hidden) {
+        if (!el) return;
+        if (hidden) el.classList.add('hidden');
+        else el.classList.remove('hidden');
+      }
+      function showMfaError(msg) {
+        if (!mfaError) return;
+        mfaError.textContent = msg;
+        mfaError.classList.remove('hidden');
+      }
+      function clearMfaError() {
+        if (!mfaError) return;
+        mfaError.textContent = '';
+        mfaError.classList.add('hidden');
+      }
+      function showStepUpError(msg) {
+        if (!mfaStepUpError) return;
+        mfaStepUpError.textContent = msg;
+        mfaStepUpError.classList.remove('hidden');
+      }
+      function clearStepUpError() {
+        if (!mfaStepUpError) return;
+        mfaStepUpError.textContent = '';
+        mfaStepUpError.classList.add('hidden');
+      }
+
+      function renderQrFor(otpauthUri) {
+        if (!mfaQrTarget) return;
+        // Use a Google Charts QR fallback for the browser-side render.
+        // Chosen because it's serverless + no extra JS dep + Driftstack
+        // has no need for a custom-stylized QR. The otpauth URI is
+        // not sensitive once shown to the user (the customer is the
+        // adversary here? — no, the BROWSER is rendering for the
+        // legitimate user). Use a non-Google service if Google Charts
+        // ever shuts down.
+        const url =
+          'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' +
+          encodeURIComponent(otpauthUri);
+        mfaQrTarget.innerHTML =
+          '<img src="' + escapeHtml(url) + '" alt="MFA QR code" class="h-full w-full object-contain" />';
+      }
+
+      function setMfaState(status) {
+        if (mfaStatusBadge) {
+          if (status.enrolled) {
+            mfaStatusBadge.textContent = 'enrolled';
+            mfaStatusBadge.classList.remove('bg-slate-100', 'text-slate-600');
+            mfaStatusBadge.classList.add('bg-emerald-50', 'text-emerald-700');
+          } else {
+            mfaStatusBadge.textContent = 'not enrolled';
+            mfaStatusBadge.classList.add('bg-slate-100', 'text-slate-600');
+            mfaStatusBadge.classList.remove('bg-emerald-50', 'text-emerald-700');
+          }
+        }
+        showHidden(mfaEnrollSection, status.enrolled);
+        showHidden(mfaEnrolledSection, !status.enrolled);
+        if (status.enrolled) {
+          if (mfaEnrolledAt)
+            mfaEnrolledAt.textContent = status.enrolled_at
+              ? fmtIso(status.enrolled_at)
+              : '—';
+          if (mfaLastUsed)
+            mfaLastUsed.textContent = status.last_used_at
+              ? fmtIso(status.last_used_at)
+              : 'never';
+          if (mfaRecoveryRemaining)
+            mfaRecoveryRemaining.textContent = String(status.unused_recovery_codes);
+        }
+      }
+
+      function loadMfa() {
+        if (!token) return;
+        authedFetch('/v1/account/mfa', { method: 'GET' })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(setMfaState)
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't load MFA status (" + msg + ').');
+          });
+      }
+
+      function startEnrollment() {
+        clearMfaError();
+        authedFetch('/v1/account/mfa/enroll', { method: 'POST' })
+          .then((r) =>
+            r.ok
+              ? r.json()
+              : r
+                  .json()
+                  .catch(() => ({}))
+                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+          )
+          .then((body) => {
+            renderQrFor(body.otpauth_uri);
+            if (mfaSecretEl) mfaSecretEl.textContent = body.secret_base32;
+            showHidden(mfaEnrollStep, false);
+            if (mfaVerifyInput) mfaVerifyInput.value = '';
+          })
+          .catch((err) => showMfaError(err.message || 'Enroll failed.'));
+      }
+
+      function verifyEnrollment() {
+        clearMfaError();
+        const code = (mfaVerifyInput && mfaVerifyInput.value || '').trim();
+        if (!/^\d{6}$/.test(code)) {
+          showMfaError('Enter a 6-digit code from your authenticator.');
+          return;
+        }
+        authedFetch('/v1/account/mfa/verify', {
+          method: 'POST',
+          body: JSON.stringify({ code }),
+        })
+          .then((r) =>
+            r.ok
+              ? r.json()
+              : r
+                  .json()
+                  .catch(() => ({}))
+                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+          )
+          .then((body) => {
+            // Render recovery codes once.
+            if (mfaRecoveryList) {
+              mfaRecoveryList.innerHTML = (body.recovery_codes || [])
+                .map(
+                  (c) =>
+                    '<li class="rounded bg-white px-2 py-1 ring-1 ring-amber-200">' +
+                    escapeHtml(c) +
+                    '</li>',
+                )
+                .join('');
+            }
+            showHidden(mfaRecoverySection, false);
+            showHidden(mfaEnrollStep, true);
+          })
+          .catch((err) => showMfaError(err.message || 'Verify failed.'));
+      }
+
+      function copyRecoveryCodes() {
+        if (!mfaRecoveryList) return;
+        const codes = Array.from(
+          mfaRecoveryList.querySelectorAll('li'),
+        ).map((li) => li.textContent || '');
+        navigator.clipboard
+          .writeText(codes.join('\n'))
+          .then(() => showBanner('Recovery codes copied to clipboard.'))
+          .catch(() => showBanner("Copy failed. Select + copy manually."));
+      }
+
+      function downloadRecoveryCodes() {
+        if (!mfaRecoveryList) return;
+        const codes = Array.from(
+          mfaRecoveryList.querySelectorAll('li'),
+        ).map((li) => li.textContent || '');
+        const text =
+          'Driftstack — MFA recovery codes\n' +
+          'Generated ' +
+          new Date().toISOString() +
+          '\n\nEach code works once. Store somewhere safe.\n\n' +
+          codes.join('\n') +
+          '\n';
+        const blob = new Blob([text], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'driftstack-recovery-codes.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      function acknowledgeRecoveryCodes() {
+        showHidden(mfaRecoverySection, true);
+        if (mfaRecoveryList) mfaRecoveryList.innerHTML = '';
+        loadMfa();
+      }
+
+      function openStepUp(action) {
+        pendingStepUpAction = action;
+        clearStepUpError();
+        if (mfaStepUpInput) mfaStepUpInput.value = '';
+        showHidden(mfaStepUpSection, false);
+      }
+      function closeStepUp() {
+        pendingStepUpAction = null;
+        clearStepUpError();
+        showHidden(mfaStepUpSection, true);
+      }
+
+      function submitStepUp() {
+        clearStepUpError();
+        const raw = (mfaStepUpInput && mfaStepUpInput.value || '').trim();
+        if (!raw) {
+          showStepUpError('Enter a 6-digit code or recovery code.');
+          return;
+        }
+        const isCode = /^\d{6}$/.test(raw);
+        const body = isCode ? { code: raw } : { recovery_code: raw };
+        authedFetch('/v1/auth/mfa/step-up', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })
+          .then((r) =>
+            r.ok
+              ? r.json()
+              : r
+                  .json()
+                  .catch(() => ({}))
+                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+          )
+          .then(() => {
+            const action = pendingStepUpAction;
+            closeStepUp();
+            if (action === 'disable') performDisable();
+            else if (action === 'regenerate') performRegenerate();
+          })
+          .catch((err) => showStepUpError(err.message || 'Step-up failed.'));
+      }
+
+      function performDisable() {
+        authedFetch('/v1/account/mfa', {
+          method: 'DELETE',
+          body: JSON.stringify({ confirm: 'disable-mfa' }),
+        })
+          .then((r) => {
+            if (r.status === 204 || r.ok) return null;
+            return r
+              .json()
+              .catch(() => ({}))
+              .then((b) => {
+                if (b && b.requires_mfa_step_up) {
+                  openStepUp('disable');
+                  throw new Error('__step_up__');
+                }
+                throw new Error(b.detail || 'HTTP ' + r.status);
+              });
+          })
+          .then(() => {
+            showBanner('Two-factor authentication disabled.');
+            loadMfa();
+          })
+          .catch((err) => {
+            if (err && err.message === '__step_up__') return;
+            showBanner('Disable failed: ' + (err && err.message ? err.message : 'network'));
+          });
+      }
+
+      function performRegenerate() {
+        authedFetch('/v1/account/mfa/recovery-codes/regenerate', { method: 'POST' })
+          .then((r) =>
+            r.ok
+              ? r.json()
+              : r
+                  .json()
+                  .catch(() => ({}))
+                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+          )
+          .then((body) => {
+            if (mfaRecoveryList) {
+              mfaRecoveryList.innerHTML = (body.recovery_codes || [])
+                .map(
+                  (c) =>
+                    '<li class="rounded bg-white px-2 py-1 ring-1 ring-amber-200">' +
+                    escapeHtml(c) +
+                    '</li>',
+                )
+                .join('');
+            }
+            showHidden(mfaRecoverySection, false);
+            loadMfa();
+          })
+          .catch((err) =>
+            showBanner('Regenerate failed: ' + (err && err.message ? err.message : 'network')),
+          );
+      }
+
+      // Wire MFA buttons.
+      const mfaStart = root.querySelector('[data-button="mfa-start"]');
+      if (mfaStart) mfaStart.addEventListener('click', startEnrollment);
+      const mfaVerifyBtn = root.querySelector('[data-button="mfa-verify"]');
+      if (mfaVerifyBtn) mfaVerifyBtn.addEventListener('click', verifyEnrollment);
+      const mfaDisable = root.querySelector('[data-button="mfa-disable"]');
+      if (mfaDisable)
+        mfaDisable.addEventListener('click', () => {
+          if (
+            !window.confirm(
+              'Disable two-factor authentication? You will be asked for a fresh code first.',
+            )
+          )
+            return;
+          performDisable();
+        });
+      const mfaRegen = root.querySelector('[data-button="mfa-regenerate"]');
+      if (mfaRegen)
+        mfaRegen.addEventListener('click', () => {
+          if (
+            !window.confirm(
+              'Regenerate recovery codes? Old codes are invalidated immediately.',
+            )
+          )
+            return;
+          performRegenerate();
+        });
+      const mfaCopy = root.querySelector('[data-button="mfa-recovery-copy"]');
+      if (mfaCopy) mfaCopy.addEventListener('click', copyRecoveryCodes);
+      const mfaDownload = root.querySelector('[data-button="mfa-recovery-download"]');
+      if (mfaDownload) mfaDownload.addEventListener('click', downloadRecoveryCodes);
+      const mfaAck = root.querySelector('[data-button="mfa-recovery-acknowledge"]');
+      if (mfaAck) mfaAck.addEventListener('click', acknowledgeRecoveryCodes);
+      const mfaStepUpSubmit = root.querySelector('[data-button="mfa-step-up-submit"]');
+      if (mfaStepUpSubmit) mfaStepUpSubmit.addEventListener('click', submitStepUp);
+      const mfaStepUpCancel = root.querySelector('[data-button="mfa-step-up-cancel"]');
+      if (mfaStepUpCancel) mfaStepUpCancel.addEventListener('click', closeStepUp);
+
       if (!token) {
         showBanner('Sign in to see live preferences + recent activity.');
         return;
@@ -898,6 +1413,7 @@ const EMAIL_EVENTS = [
       loadEmailPrefs();
       loadAudit();
       loadWebSessions();
+      loadMfa();
     })();
   </script>
 </DashboardLayout>

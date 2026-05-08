@@ -356,6 +356,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       authRepo: deps.authRepo,
       authCache: deps.authCache,
       r2Public: deps.r2Public ?? null,
+      mfaService: deps.mfaService ?? null,
     });
   }
   // V-176 — public-facing status endpoint. Reuses the readinessChecks

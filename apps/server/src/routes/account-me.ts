@@ -22,6 +22,7 @@ import type { AccountAuthRepo } from '../services/auth.js';
 import type { AuthCache } from '../services/auth-cache.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
+import type { MfaService } from '../services/mfa.js';
 import { avatarKey, type R2 } from '../lib/r2.js';
 import { BadRequestError, FeatureUnavailableError, NotFoundError } from '../lib/errors.js';
 
@@ -43,6 +44,11 @@ export interface AccountMeRoutesOptions {
   /** V-352b — public-bucket R2 client for avatar upload + presigned GET.
    *  Null when public bucket is not configured (avatar endpoints return 503). */
   r2Public?: R2 | null;
+  /** V-353h — MFA service. When wired, GET /v1/account/me surfaces
+   *  `mfa_enrolled` so the dashboard can render enrollment status
+   *  without a second roundtrip. Null = MFA not wired (flag always
+   *  false on the response). */
+  mfaService?: MfaService | null;
 }
 
 /**
@@ -60,6 +66,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   const { sessionRepo, profilesRepo, authRepo } = opts;
   const authCache = opts.authCache ?? null;
   const r2Public = opts.r2Public ?? null;
+  const mfaService = opts.mfaService ?? null;
 
   // V-352b — best-effort presigned GET URL for the avatar. Returns null
   // when no avatar is set, when the public R2 bucket is not configured,
@@ -89,12 +96,13 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       const accountId = ctx.account.id;
       const tier = ctx.account.tier;
 
-      // Parallel fan-out: counts + tier-derived caps + avatar presign.
+      // Parallel fan-out: counts + tier-derived caps + avatar presign + MFA.
       // Tier caps come from in-memory constants so they cost nothing.
-      const [activeSessions, profileCount, avatarUrl] = await Promise.all([
+      const [activeSessions, profileCount, avatarUrl, mfaStatus] = await Promise.all([
         sessionRepo.countActiveSessions(accountId),
         profilesRepo.countByAccount(accountId),
         presignAvatar(ctx.account.avatarR2Key),
+        mfaService ? mfaService.getStatus(accountId) : Promise.resolve(null),
       ]);
 
       return {
@@ -109,6 +117,8 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         // avatar; null when none uploaded or the public bucket isn't
         // wired in this deploy. URL is short-lived (1h).
         avatar_url: avatarUrl,
+        // V-353h — MFA enrollment flag for dashboard header / settings.
+        mfa_enrolled: mfaStatus !== null && mfaStatus.enrolled,
         concurrent_session_cap: TIER_CONCURRENT_SESSION_LIMITS[tier],
         concurrent_session_active: activeSessions,
         profile_cap: profileCapFor(tier),
