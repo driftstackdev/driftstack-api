@@ -384,6 +384,145 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // ── Team RBAC (V-298) ──────────────────────────────────────────────────
+  // Auth path integration is V-298d — until then, accepted members can
+  // sign in but the membership grants no implicit permissions on the
+  // owner's resources. Routes work; permissions are next-slice.
+
+  const TeamMemberSchema = z
+    .object({
+      id: z.string().describe('Prefixed membership id (mem_<uuid>)'),
+      owner_account_id: z.string(),
+      member_account_id: z.string(),
+      member_email: z.string(),
+      role: z.enum(['member', 'admin']),
+      invited_at: z.string(),
+      accepted_at: z.string(),
+      invited_by_account_id: z.string().nullable(),
+    })
+    .openapi('TeamMember');
+
+  const TeamInviteSchema = z
+    .object({
+      id: z.string().describe('Prefixed invite id (inv_<uuid>)'),
+      owner_account_id: z.string(),
+      invitee_email: z.string(),
+      role: z.enum(['member', 'admin']),
+      expires_at: z.string(),
+      invited_by_account_id: z.string().nullable(),
+      accepted_at: z.string().nullable(),
+      created_at: z.string(),
+    })
+    .openapi('TeamInvite');
+
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/team/invites',
+    summary: 'Invite an email to join the calling owner’s team',
+    tags: ['Team'],
+    security: auth,
+    request: {
+      body: {
+        content: {
+          'application/json': {
+            schema: z
+              .object({
+                email: z.string().email(),
+                role: z.enum(['member', 'admin']).optional(),
+              })
+              .openapi('TeamInviteRequest'),
+          },
+        },
+      },
+    },
+    responses: {
+      202: {
+        description: 'Invite sent. The invitee can accept via the email link.',
+        content: { 'application/json': { schema: z.object({ message: z.string() }) } },
+      },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/team/invites',
+    summary: 'List pending invites for the calling owner',
+    tags: ['Team'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Pending invites.',
+        content: { 'application/json': { schema: z.object({ data: z.array(TeamInviteSchema) }) } },
+      },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/team/invites/accept',
+    summary: 'Accept a pending team invite',
+    tags: ['Team'],
+    security: auth,
+    request: {
+      body: {
+        content: {
+          'application/json': {
+            schema: z.object({ token: z.string().min(20) }).openapi('TeamAcceptRequest'),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description:
+          'Membership recorded. (Auth-path integration is V-298d; member acts as owner only after that ships.)',
+        content: {
+          'application/json': { schema: z.object({ membership: TeamMemberSchema }) },
+        },
+      },
+      404: { description: 'Invite not found or already used.', content: problemContent },
+      409: {
+        description: 'Accepting account email does not match invite.',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/team/members',
+    summary: 'List confirmed team members for the calling owner',
+    tags: ['Team'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Team members.',
+        content: { 'application/json': { schema: z.object({ data: z.array(TeamMemberSchema) }) } },
+      },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/team/members/{id}',
+    summary: 'Remove a team member',
+    tags: ['Team'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      204: { description: 'Membership removed.' },
+      404: {
+        description: 'Membership not found or owned by a different account.',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
   // ── Health ─────────────────────────────────────────────────────────────
   registerRoute(r, {
     method: 'get',
