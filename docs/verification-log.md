@@ -17527,3 +17527,37 @@ V-309c (Go SDK rotate + replay) — same pattern. Then V-304b billing renewal re
 ### Next
 
 V-309 trio complete (TS / Python / Go). V-298 Team RBAC v1 next (substantial — splits into V-298a/b/c/d). Then V-304b billing renewal reminders. NEVER STOP autopilot.
+
+## V-310 — Documentation for API key rotation + webhook replay
+
+**Tier**: 1 — Customer-facing docs. Closes the discoverability gap on V-296 + V-307 + V-309 trio.
+
+**Why**: Endpoints + SDK methods are live, but customers reading docs.driftstack.dev wouldn't know about them. Two new doc pages with full request/response shapes + SDK examples for all three languages.
+
+**Scope**
+
+- New `apps/docs/src/pages/api/api-keys.md` — covers create / list / rotate (V-296) / revoke + scopes table. SDK examples for TypeScript / Python / Go.
+- New `apps/docs/src/pages/webhooks/replay.md` — covers V-307 customer replay flow with a typical "endpoint went down → fix → replay DLQ" walkthrough. SDK examples for all three languages. Documents 404-not-403 privacy-preserving response.
+
+**Files**
+
+- `apps/docs/src/pages/api/api-keys.md` — new.
+- `apps/docs/src/pages/webhooks/replay.md` — new.
+
+### Verify
+
+- `npm run typecheck --workspace apps/docs`: 0 errors.
+- `npm run format:check`: clean.
+- `npm test`: 922 / 922 (V-293 signup-link parity test auto-picked up the new pages — +2 walkFiles assertions).
+
+### Notes — methodology choices
+
+- **404 not 403 for non-owned deliveries**: documented explicitly. Customers reading the docs see the privacy reasoning ("doesn't leak existence of other accounts' deliveries"), which signals Driftstack-level care for tenant isolation.
+- **SDK examples for all three languages**: no language-favoritism. TS/Python/Go each get the same conceptual example so polyglot teams can copy-paste regardless of stack.
+- **Iterate-paginated example for replay**: the `iterate_deliveries` / `iterateDeliveries` lazy walk is the right pattern for "replay every DLQ entry"; surfacing it in the docs nudges customers toward the better SDK API.
+- **Audit-log query example**: the doc includes the URL to filter audit entries by `webhook_delivery.replayed` action. Closes the loop on the V-216 customer audit + V-307 replay surfaces.
+- **No marketing tone**: docs use plain present-tense factual language. Driftstack-voice consistency.
+
+### Next
+
+V-298 Team RBAC v1 (substantial — splits into V-298a/b/c/d). Or V-304b billing renewal reminders. Or V-311 admin-panel UI improvements. NEVER STOP autopilot.
