@@ -131,3 +131,69 @@ def test_field_order_independent() -> None:
     assert (
         verify_webhook_signature(body=body, header=reverse, secret=secret, now_seconds=now) is True
     )
+
+
+# V-359 — rotation-grace tests for header_prev.
+# When the customer hasn't rolled the new secret to their verifier
+# yet, they pass `header_prev` (read from x-driftstack-signature-prev
+# on the inbound request) and the verifier accepts EITHER header
+# matching the supplied secret.
+
+NEW_SECRET = "whsec_new_rotated"
+OLD_SECRET = "whsec_old_pre_rotation"
+
+
+def _sign_v359(body: bytes, t: int, secret: str) -> str:
+    sig = _hmac.new(secret.encode(), f"{t}.".encode() + body, hashlib.sha256).hexdigest()
+    return f"t={t},v1={sig}"
+
+
+def test_v359_accepts_when_only_prev_matches_old_secret() -> None:
+    body = b'{"event":"x"}'
+    t = int(time.time())
+    ok = verify_webhook_signature(
+        body=body,
+        header=_sign_v359(body, t, NEW_SECRET),
+        header_prev=_sign_v359(body, t, OLD_SECRET),
+        secret=OLD_SECRET,
+        now_seconds=t,
+    )
+    assert ok is True
+
+
+def test_v359_accepts_when_only_current_matches_new_secret() -> None:
+    body = b'{"event":"x"}'
+    t = int(time.time())
+    ok = verify_webhook_signature(
+        body=body,
+        header=_sign_v359(body, t, NEW_SECRET),
+        header_prev=_sign_v359(body, t, OLD_SECRET),
+        secret=NEW_SECRET,
+        now_seconds=t,
+    )
+    assert ok is True
+
+
+def test_v359_rejects_when_neither_header_matches() -> None:
+    body = b"x"
+    t = int(time.time())
+    ok = verify_webhook_signature(
+        body=body,
+        header=_sign_v359(body, t, NEW_SECRET),
+        header_prev=_sign_v359(body, t, OLD_SECRET),
+        secret="whsec_unrelated",
+        now_seconds=t,
+    )
+    assert ok is False
+
+
+def test_v359_header_prev_none_keeps_single_header_behavior() -> None:
+    body = b"x"
+    t = int(time.time())
+    ok = verify_webhook_signature(
+        body=body,
+        header=_sign_v359(body, t, NEW_SECRET),
+        secret=NEW_SECRET,
+        now_seconds=t,
+    )
+    assert ok is True

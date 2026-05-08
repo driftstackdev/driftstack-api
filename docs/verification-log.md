@@ -18599,3 +18599,30 @@ Tests: 4 new integration tests on /v1/webhooks/:id/rotate-secret
 V-359-sdk queued: customer-side verifier helpers (TS / Python / Go)
 to also try `x-driftstack-signature-prev` during grace. Small
 follow-up on each SDK package.
+
+## V-359-sdk — SDK verifier helpers accept prev header during grace
+
+**Tier**: 1.
+
+Closes the V-359 follow-up. All three SDKs gain a way to pass the
+optional second header (`x-driftstack-signature-prev`) into
+`verifyWebhookSignature`; each accepts EITHER header matching the
+configured secret. Pre-existing single-header callers are
+unaffected — the new field is additive + optional.
+
+- **TypeScript** (`@driftstack/sdk` / packages/sdk-typescript):
+  `VerifySignatureInput.headerPrev` field. Implementation refactors
+  to a `verifySingleHeader` helper called twice with short-circuit.
+  4 new unit tests (prev matches old secret, current matches new,
+  neither matches, prev-omitted = single-header back-compat).
+- **Python** (`driftstack`): `verify_webhook_signature(..., header_prev=)`
+  kwarg. Same dual-header semantics; 4 new pytest cases.
+- **Go** (`github.com/driftstackdev/driftstack-api/packages/sdk-go`):
+  `VerifyWebhookOptions.HeaderPrev` field. 4 new tests.
+
+Tests: 4 TS + 4 Python + 4 Go = 12 new SDK tests across the
+language matrix. All pass; full TS suite at 1067 / 1067; Python at
+17/17; Go at 0.012s (passes).
+
+V-359 cycle complete: server-side rotation + dual-sign worker +
+3-language SDK verifier helpers.

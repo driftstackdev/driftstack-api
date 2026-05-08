@@ -34,6 +34,15 @@
 export interface VerifySignatureInput {
   body: string | Uint8Array | ArrayBuffer;
   header: string | string[] | undefined;
+  /**
+   * V-359 — optional second signature header for the rotation grace
+   * window. Read from `x-driftstack-signature-prev` on the inbound
+   * request (Driftstack emits it for 24h after a secret rotation).
+   * The verifier accepts EITHER `header` OR `headerPrev` matching the
+   * `secret`, so customers who haven't yet rolled the new secret to
+   * their verifier still pass during the rotation window.
+   */
+  headerPrev?: string | string[] | undefined;
   secret: string;
   /** Reject signatures with timestamps older than this many seconds. Default 300 (5 min). */
   toleranceSec?: number;
@@ -44,7 +53,22 @@ export interface VerifySignatureInput {
 const DEFAULT_TOLERANCE_SEC = 300;
 
 export async function verifyWebhookSignature(input: VerifySignatureInput): Promise<boolean> {
-  const headerValue = Array.isArray(input.header) ? input.header[0] : input.header;
+  const ok = await verifySingleHeader(input.header, input);
+  if (ok) return true;
+  // V-359 — fall through to the prev header (rotation grace). When
+  // unset this is a no-op; when set the customer accepts either the
+  // new or the old secret's HMAC during the 24h grace window.
+  if (input.headerPrev !== undefined) {
+    return verifySingleHeader(input.headerPrev, input);
+  }
+  return false;
+}
+
+async function verifySingleHeader(
+  rawHeader: string | string[] | undefined,
+  input: VerifySignatureInput,
+): Promise<boolean> {
+  const headerValue = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
   if (!headerValue || typeof headerValue !== 'string') return false;
 
   const parsed = parseSignatureHeader(headerValue);
@@ -63,10 +87,6 @@ export async function verifyWebhookSignature(input: VerifySignatureInput): Promi
   const bodyBytes = toBodyBytes(input.body);
   const payload = concatBytes(enc.encode(`${parsed.timestamp.toString()}.`), bodyBytes);
 
-  // BufferSource accepts an ArrayBuffer (not the union with
-  // SharedArrayBuffer that `.buffer` may resolve to). Copy each input
-  // into a fresh ArrayBuffer-backed Uint8Array so the type aligns and
-  // we don't risk passing a SAB into WebCrypto (which rejects it).
   const key = await subtle.importKey(
     'raw',
     toArrayBuffer(enc.encode(input.secret)),

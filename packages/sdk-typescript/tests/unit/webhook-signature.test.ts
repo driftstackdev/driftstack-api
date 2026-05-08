@@ -102,4 +102,72 @@ describe('verifyWebhookSignature', () => {
     });
     expect(ok).toBe(true);
   });
+
+  // V-359 — rotation grace: when the customer hasn't yet rolled the new
+  // secret across their verifier, they pass `headerPrev` (the prev
+  // signature header from the inbound request); the verifier accepts
+  // EITHER header matching the supplied secret.
+  describe('rotation grace (headerPrev)', () => {
+    const NEW_SECRET = 'whsec_new_rotated';
+    const OLD_SECRET = 'whsec_old_pre_rotation';
+
+    it('accepts when only the prev header matches the (old) secret', async () => {
+      const now = Date.now();
+      const t = Math.floor(now / 1000);
+      const body = '{"event":"x"}';
+      // Server signs with both secrets; customer hasn't yet rolled
+      // forward, so they verify against OLD_SECRET. Prev header
+      // contains the OLD-secret HMAC.
+      const ok = await verifyWebhookSignature({
+        body,
+        header: sign(body, t, NEW_SECRET),
+        headerPrev: sign(body, t, OLD_SECRET),
+        secret: OLD_SECRET,
+        nowMs: now,
+      });
+      expect(ok).toBe(true);
+    });
+
+    it('accepts when only the current header matches the (new) secret', async () => {
+      const now = Date.now();
+      const t = Math.floor(now / 1000);
+      const body = '{"event":"x"}';
+      // Customer has rolled forward to NEW_SECRET.
+      const ok = await verifyWebhookSignature({
+        body,
+        header: sign(body, t, NEW_SECRET),
+        headerPrev: sign(body, t, OLD_SECRET),
+        secret: NEW_SECRET,
+        nowMs: now,
+      });
+      expect(ok).toBe(true);
+    });
+
+    it('rejects when neither header matches the configured secret', async () => {
+      const now = Date.now();
+      const t = Math.floor(now / 1000);
+      const body = 'x';
+      const ok = await verifyWebhookSignature({
+        body,
+        header: sign(body, t, NEW_SECRET),
+        headerPrev: sign(body, t, OLD_SECRET),
+        secret: 'whsec_unrelated',
+        nowMs: now,
+      });
+      expect(ok).toBe(false);
+    });
+
+    it('headerPrev undefined keeps single-header behavior', async () => {
+      const now = Date.now();
+      const t = Math.floor(now / 1000);
+      const body = 'x';
+      const ok = await verifyWebhookSignature({
+        body,
+        header: sign(body, t, NEW_SECRET),
+        secret: NEW_SECRET,
+        nowMs: now,
+      });
+      expect(ok).toBe(true);
+    });
+  });
 });

@@ -61,11 +61,38 @@ def _parse_signature_header(header: str) -> _ParsedSignature | None:
     return _ParsedSignature(timestamp_seconds=timestamp, signature_hex=signature)
 
 
+def _verify_single_header(
+    header: str | None,
+    body_bytes: bytes,
+    secret: str,
+    tolerance_sec: int,
+    now: float,
+) -> bool:
+    if not header or not isinstance(header, str):
+        return False
+
+    parsed = _parse_signature_header(header)
+    if parsed is None:
+        return False
+
+    if abs(now - parsed.timestamp_seconds) > tolerance_sec:
+        return False
+
+    payload = f"{parsed.timestamp_seconds}.".encode() + body_bytes
+    expected = hmac.new(
+        secret.encode("utf-8"),
+        payload,
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, parsed.signature_hex)
+
+
 def verify_webhook_signature(
     *,
     body: bytes | str,
     header: str | None,
     secret: str,
+    header_prev: str | None = None,
     tolerance_sec: int = DEFAULT_TOLERANCE_SEC,
     now_seconds: float | None = None,
 ) -> bool:
@@ -81,26 +108,22 @@ def verify_webhook_signature(
     you'll need to use a raw-body access path (Flask:
     ``request.get_data()``; FastAPI: ``await request.body()``;
     Django: ``request.body``).
+
+    V-359 — ``header_prev`` is the optional second signature header
+    Driftstack emits during the 24h secret-rotation grace window
+    (read from ``x-driftstack-signature-prev`` on the inbound
+    request). When set, the verifier accepts EITHER ``header`` OR
+    ``header_prev`` matching ``secret``, so customers who haven't
+    yet rolled the new secret across their verifier still pass
+    during the rotation window.
     """
-    if not header or not isinstance(header, str):
-        return False
-
-    parsed = _parse_signature_header(header)
-    if parsed is None:
-        return False
-
-    now = now_seconds if now_seconds is not None else time.time()
-    if abs(now - parsed.timestamp_seconds) > tolerance_sec:
-        return False
-
     body_bytes = body.encode("utf-8") if isinstance(body, str) else bytes(body)
-    payload = f"{parsed.timestamp_seconds}.".encode() + body_bytes
+    now = now_seconds if now_seconds is not None else time.time()
 
-    expected = hmac.new(
-        secret.encode("utf-8"),
-        payload,
-        hashlib.sha256,
-    ).hexdigest()
-
-    # ``compare_digest`` is constant-time on equal-length strings.
-    return hmac.compare_digest(expected, parsed.signature_hex)
+    if _verify_single_header(header, body_bytes, secret, tolerance_sec, now):
+        return True
+    if header_prev is not None and _verify_single_header(
+        header_prev, body_bytes, secret, tolerance_sec, now
+    ):
+        return True
+    return False

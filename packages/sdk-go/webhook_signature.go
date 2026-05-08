@@ -20,6 +20,14 @@ type VerifyWebhookOptions struct {
 	Tolerance time.Duration
 	// Now overrides time.Now for tests.
 	Now time.Time
+	// HeaderPrev is the optional second signature header Driftstack
+	// emits during the 24h secret-rotation grace window (read from
+	// X-Driftstack-Signature-Prev on the inbound request). When set,
+	// VerifyWebhookSignature accepts EITHER `header` OR `HeaderPrev`
+	// matching `secret`, so customers who haven't rolled the new
+	// secret across their verifier still pass during the rotation
+	// window. V-359.
+	HeaderPrev string
 }
 
 // VerifyWebhookSignature returns true iff the X-Driftstack-Signature
@@ -34,18 +42,14 @@ type VerifyWebhookOptions struct {
 // router middleware re-encodes JSON before your handler runs, you'll
 // need to use a raw-body access path (e.g. read req.Body once and
 // preserve it).
+//
+// V-359 — when the rotation grace is in flight, callers pass
+// VerifyWebhookOptions.HeaderPrev (the second X-Driftstack-Signature-Prev
+// header). The verifier accepts either header matching `secret`.
 func VerifyWebhookSignature(body []byte, header string, secret string, opts ...VerifyWebhookOptions) bool {
-	if header == "" {
-		return false
-	}
-
-	parsed, ok := parseSignatureHeader(header)
-	if !ok {
-		return false
-	}
-
 	tolerance := DefaultWebhookTolerance
 	now := time.Now()
+	headerPrev := ""
 	if len(opts) > 0 {
 		if opts[0].Tolerance > 0 {
 			tolerance = opts[0].Tolerance
@@ -53,8 +57,26 @@ func VerifyWebhookSignature(body []byte, header string, secret string, opts ...V
 		if !opts[0].Now.IsZero() {
 			now = opts[0].Now
 		}
+		headerPrev = opts[0].HeaderPrev
 	}
 
+	if verifySingleHeader(body, header, secret, tolerance, now) {
+		return true
+	}
+	if headerPrev != "" && verifySingleHeader(body, headerPrev, secret, tolerance, now) {
+		return true
+	}
+	return false
+}
+
+func verifySingleHeader(body []byte, header string, secret string, tolerance time.Duration, now time.Time) bool {
+	if header == "" {
+		return false
+	}
+	parsed, ok := parseSignatureHeader(header)
+	if !ok {
+		return false
+	}
 	signed := time.Unix(parsed.timestampSeconds, 0)
 	delta := now.Sub(signed)
 	if delta < 0 {
@@ -63,18 +85,15 @@ func VerifyWebhookSignature(body []byte, header string, secret string, opts ...V
 	if delta > tolerance {
 		return false
 	}
-
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(strconv.FormatInt(parsed.timestampSeconds, 10)))
 	mac.Write([]byte("."))
 	mac.Write(body)
 	expectedSum := mac.Sum(nil)
-
 	gotSum, err := hex.DecodeString(parsed.signatureHex)
 	if err != nil {
 		return false
 	}
-
 	return hmac.Equal(expectedSum, gotSum)
 }
 

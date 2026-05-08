@@ -124,3 +124,73 @@ func TestVerifyWebhookSignature_CustomTolerance(t *testing.T) {
 		t.Fatal("expected 10min-old signature to pass with 15min tolerance")
 	}
 }
+
+// V-359 — rotation-grace: HeaderPrev allows acceptance during the 24h
+// dual-sign window when the customer hasn't yet rolled the new secret
+// across their verifier.
+func TestVerifyWebhookSignature_V359_AcceptsPrevWhenOldSecret(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"event":"x"}`)
+	now := time.Now()
+	ts := now.Unix()
+	newSecret := "whsec_new_rotated"
+	oldSecret := "whsec_old_pre_rotation"
+	header := sign(body, newSecret, ts)
+	headerPrev := sign(body, oldSecret, ts)
+
+	// Customer hasn't rolled forward — verifier still uses oldSecret.
+	if !VerifyWebhookSignature(body, header, oldSecret, VerifyWebhookOptions{
+		Now:        now,
+		HeaderPrev: headerPrev,
+	}) {
+		t.Fatal("expected oldSecret + headerPrev to pass during grace")
+	}
+}
+
+func TestVerifyWebhookSignature_V359_AcceptsCurrentWhenNewSecret(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"event":"x"}`)
+	now := time.Now()
+	ts := now.Unix()
+	newSecret := "whsec_new_rotated"
+	oldSecret := "whsec_old_pre_rotation"
+	header := sign(body, newSecret, ts)
+	headerPrev := sign(body, oldSecret, ts)
+
+	// Customer rolled forward — verifier uses newSecret.
+	if !VerifyWebhookSignature(body, header, newSecret, VerifyWebhookOptions{
+		Now:        now,
+		HeaderPrev: headerPrev,
+	}) {
+		t.Fatal("expected newSecret + current header to pass during grace")
+	}
+}
+
+func TestVerifyWebhookSignature_V359_RejectsWhenNeitherMatches(t *testing.T) {
+	t.Parallel()
+	body := []byte("x")
+	now := time.Now()
+	ts := now.Unix()
+	header := sign(body, "whsec_new_rotated", ts)
+	headerPrev := sign(body, "whsec_old_pre_rotation", ts)
+
+	if VerifyWebhookSignature(body, header, "whsec_unrelated", VerifyWebhookOptions{
+		Now:        now,
+		HeaderPrev: headerPrev,
+	}) {
+		t.Fatal("expected unrelated secret to reject both headers")
+	}
+}
+
+func TestVerifyWebhookSignature_V359_HeaderPrevEmptyKeepsSingleHeaderBehavior(t *testing.T) {
+	t.Parallel()
+	body := []byte("x")
+	now := time.Now()
+	ts := now.Unix()
+	secret := "whsec_xx"
+	header := sign(body, secret, ts)
+
+	if !VerifyWebhookSignature(body, header, secret, VerifyWebhookOptions{Now: now}) {
+		t.Fatal("expected single-header verify to still work")
+	}
+}
