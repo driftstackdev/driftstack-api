@@ -17609,3 +17609,148 @@ V-295c3-tombstone, V-295d, V-295e, V-296, V-297, V-307, V-307b, V-308a, V-306a, 
 ### Next
 
 V-298d (auth path integration — member acts as owner per role): the substantial remaining piece of Team RBAC v1. Next session opens with that. Then V-304b-wire (renewal email lifecycle dispatch), V-308b/c/d (NowPayments engineering, blocked on founder account), V-306b/c/d (LiveKit engineering, blocked on founder account), V-305 (Tauri deep-link, needs native bundle testing).
+
+## V-326 — Team RBAC auth path integration
+
+**Tier**: 1.
+
+**Why**: V-298a/b/c/e/f shipped Team RBAC v1 backend (schema + service +
+routes + dashboard UI + customer audit) but flagged V-298d as an
+explicit non-goal: "the auth path itself does NOT yet honor team
+membership". V-326 closes that — the AccountContext now carries
+team-membership info, and one flagship route (`/v1/sessions` GET)
+honors `X-Driftstack-Account` for team members acting on owner
+resources. Other routes pick up the same pattern as policy decisions
+land.
+
+**Slices** (4 commits on `main`):
+
+- **V-326a** — Foundation. Added `TeamMembership` interface +
+  `AccountContext.teams: TeamMembership[]` field +
+  `AccountAuthRepo.findTeamMemberships()`. DrizzleAccountAuthRepo
+  queries `team_members` filtered by `member_account_id`. Both
+  `slowPathApiKey` and `slowPathWebSession` Promise.all the rate-
+  limit-override load + the team-membership load. Auth cache
+  serialize/deserialize updated; pre-V-326 cached entries naturally
+  degrade to `teams: []` until they expire on TTL. New
+  `resolveEffectiveAccount(ctx, header)` helper returns
+  `{ kind: 'self' | 'team' }`.
+- **V-326bc** — Cache invalidation + customer-facing endpoints.
+  TeamMembersService gains optional AuthCache constructor parameter;
+  `accept()` invalidates the accepting member's cache,
+  `removeMember()` invalidates the removed member's cache (after
+  changing repo signature: `removeMember` returns the removed
+  account id). `bootstrap.ts` wires the live RedisAuthCache through.
+  `GET /v1/account/me` now includes `teams[]`. New endpoint `GET
+/v1/team/owners` returns the same data for clients that want a
+  dedicated read. OpenAPI spec extended.
+- **V-326d** — End-to-end on `/v1/sessions`. SessionsService.list
+  gains optional `effectiveAccountId`. Route reads
+  `X-Driftstack-Account` header, calls `resolveEffectiveAccount`,
+  passes effective.accountId to the service when the header maps to
+  a team owner. Default behavior (no header / own-account header) is
+  unchanged.
+
+**Verify**:
+
+- `npm test`: 963/963 (V-326a baseline 952 + V-326bc adds 9 + V-326d
+  adds 2 → 963).
+- `npm run typecheck @driftstack/server`: clean.
+- `apps/server/tests/integration/team-rbac-auth-path.test.ts`: 11
+  tests covering the resolver happy paths, cross-account 403,
+  malformed-header rejection, end-to-end `/v1/sessions` with both
+  members and non-members.
+
+**Next**: V-326e+ wires the same effective-account header into write
+routes (POST /v1/sessions, DELETE, navigate, interact, etc.). Each
+sub-slice picks a per-route role policy ('admin' role only? both?)
+when it lands; bundling all routes in one commit conflates plumbing
+with policy. /v1/profiles, /v1/api-keys, /v1/webhooks similarly.
+
+## V-327 — Wire invoice.upcoming → renewal-reminder email
+
+**Tier**: 1 (with privacy disclosure).
+
+**Why**: V-304b shipped the email template + opt-out preference + the
+Stripe handler case stub, but the case stub only logged + returned
+'handled' — the email never actually fired. V-327 wires the dispatch
+end-to-end.
+
+**Implementation**:
+
+- `AccountLifecycleService` gains
+  `'subscription.renewal_reminder'` LifecycleEvent kind +
+  `handleRenewalReminder` private method following the
+  handleTrialPackExpired pattern (no audit row — the upcoming-charge
+  isn't a state change). Honors `billing-renewal-reminder` opt-out.
+- New `formatCents` helper handles USD/EUR/GBP symbol prefix +
+  zero-decimal currencies (JPY/KRW/etc. per Stripe's docs) +
+  generic "X.XX <CODE>" fallback.
+- `StripeWebhooksService.handleInvoiceUpcoming` decodes amount_due /
+  currency / next_payment_attempt / customer / id from the invoice
+  payload, resolves the customer to a local accountId, dispatches.
+  Bails silently (logged warn, returns 'handled') on missing fields
+  or unknown customer.
+
+**Dedup decision**: Stripe redelivers events only on handler failure
+(non-2xx response). Our handler returns 'handled' synchronously after
+the email enqueue; redelivery shouldn't happen. Worst case is one
+duplicate email per redelivered event. Tradeoff vs. building a
+dedup-table for a low-frequency event is acceptable (memory rule:
+don't add infrastructure prematurely).
+
+**Privacy disclosure** (per V-294 methodology):
+
+- `docs/legal/privacy-policy.md` §3.6 (Billing data) extended with
+  "Renewal-reminder emails" paragraph naming the trigger
+  (invoice.upcoming) + cadence (~7 days pre-renewal) + opt-out path.
+- Mirrored to `apps/marketing-site/src/pages/legal/privacy.md`.
+- `docs/legal/changes-log.md` gains a V-327 entry under 2026-05-08.
+
+**Verify**:
+
+- `npm test`: 968/968 (V-326d baseline 963 + 5 new in
+  `apps/server/tests/integration/renewal-reminder-email.test.ts`).
+- USD: $149.00. EUR: €49.99. JPY: 12,000 JPY. Opt-out suppression
+  asserted. Unknown customer silently ignored.
+
+## V-328 — Tauri custom URL scheme deep-link (TS-side wired, native pending)
+
+**Tier**: 1 with explicit founder-validation requirement.
+
+**Why**: Replaces V-268's polling loop with an OS deep-link hand-off
+(driftstack://auth/callback). Customer experience improves from "wait
+up to 2s after browser approval" to "instant".
+
+**What shipped**:
+
+- Cargo.toml + tauri-plugin-deep-link 2.0
+- Rust builder registers `tauri_plugin_deep_link::init()`
+- tauri.conf.json declares `plugins.deep-link.desktop.schemes`
+- TypeScript-side: `browser-sign-in.ts` registers `onOpenUrl`
+  listener BEFORE arming the poll loop (so a fast hand-off is
+  caught). `handleDeepLink` validates state + code match the in-
+  flight authorization (CSRF + cross-tab guard) before exchanging.
+  Both paths converge on the same setState flow.
+- @tauri-apps/plugin-deep-link 2.4.9 installed.
+- 3 new tests covering: fast-path success, mismatched-state silent
+  skip, polling fallback when plugin throws.
+
+**What's NOT in this commit (founder validation)**:
+
+- Native bundle test on macOS / Windows / Linux. Doc:
+  `docs/founder-actions/v328-tauri-deep-link-test.md` has the
+  per-platform recipe.
+- Server-side dashboard `/auth/cli-callback` page emitting the
+  `driftstack://` redirect. Until that lands, the polling fallback
+  is the actual functional path. Tracked as V-328e.
+
+**Hybrid design rationale**: keeping polling as a fallback means a
+broken native bundle (e.g. URL scheme registration didn't take on
+the customer's OS) doesn't break the sign-in flow. Worst case is
+slower hand-off, not failure.
+
+**Verify**:
+
+- `npm test`: 971/971 (V-327 baseline 968 + 3 new).
+- `npm run typecheck @driftstack/gui-client`: clean.
