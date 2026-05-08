@@ -36,6 +36,15 @@ pub fn run() {
         // under `plugins.updater`; the customer's GUI checks the
         // endpoint on startup + offers a signed update download.
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // V-328 — register the `driftstack://` URL scheme so browser
+        // redirects from the customer dashboard's auth-callback page
+        // hand off to this app immediately. The TypeScript side
+        // listens via `@tauri-apps/plugin-deep-link.onOpenUrl`. Per-
+        // OS registration (Info.plist on macOS, registry on Windows,
+        // .desktop on Linux) is declared in tauri.conf.json. The
+        // single-instance behavior keeps a second app launch from a
+        // deep-link from spawning a duplicate window.
+        .plugin(tauri_plugin_deep_link::init())
         .invoke_handler(tauri::generate_handler![
             ping,
             secret_save,

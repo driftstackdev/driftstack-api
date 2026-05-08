@@ -55,6 +55,12 @@
       ],
       "dialog": true,
       "pubkey": "$TAURI_UPDATER_PUBKEY"
+    },
+    "deep-link": {
+      "mobile": [],
+      "desktop": {
+        "schemes": ["driftstack"]
+      }
     }
   }
 }

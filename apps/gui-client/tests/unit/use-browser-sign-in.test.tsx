@@ -18,6 +18,14 @@ vi.mock('@tauri-apps/plugin-shell', () => ({
   open: vi.fn(() => Promise.resolve()),
 }));
 
+// V-328 — deep-link plugin mock. Default: register listener that
+// never fires (existing tests cover the polling fallback path). New
+// V-328 tests pass `__onOpenUrl` directly to drive a synthetic
+// deep-link arrival.
+vi.mock('@tauri-apps/plugin-deep-link', () => ({
+  onOpenUrl: vi.fn(() => Promise.resolve(() => {})),
+}));
+
 const { useBrowserSignIn } = await import('../../src/lib/browser-sign-in');
 const { open: mockOpenInBrowser } = await import('@tauri-apps/plugin-shell');
 
@@ -193,6 +201,141 @@ describe('useBrowserSignIn — error paths', () => {
       },
       { timeout: 500 },
     );
+  });
+});
+
+describe('useBrowserSignIn — V-328 deep-link primary path', () => {
+  it('deep-link arrival fast-paths to success without waiting for the poll', async () => {
+    const onSuccess = vi.fn(() => Promise.resolve());
+
+    fetchSpy
+      .mockResolvedValueOnce(makeResponse(initiateBody)) // initiate
+      .mockResolvedValueOnce(
+        makeResponse({
+          status: 'bound',
+          api_key: 'ds_test_pjv4anxbxksg7xie5c5oxspiqdtyuvcu',
+          account_id: 'acc_4b51130b-4621-4d14-affe-89470fe6a297',
+        }),
+      ); // exchange triggered by deep-link handler
+
+    let triggerDeepLink: ((urls: string[]) => void) | null = null;
+    const __onOpenUrl = vi.fn((handler: (urls: string[]) => void) => {
+      triggerDeepLink = handler;
+      return Promise.resolve(() => {
+        triggerDeepLink = null;
+      });
+    });
+
+    const { result } = renderHook(() =>
+      useBrowserSignIn({
+        ...defaultOpts(onSuccess),
+        // Make the poll cadence very long so this test is purely about
+        // the deep-link path firing the exchange.
+        __pollIntervalMs: 60_000,
+        __onOpenUrl,
+      }),
+    );
+
+    act(() => {
+      result.current.start();
+    });
+
+    await waitFor(() => {
+      expect(triggerDeepLink).not.toBeNull();
+    });
+
+    // Fire the deep-link with the expected code + state.
+    const stateValue =
+      result.current.state.kind === 'waiting' ? result.current.state.state : 'unknown';
+    act(() => {
+      triggerDeepLink!([
+        `driftstack://auth/callback?code=${initiateBody.code}&state=${stateValue}`,
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('success');
+    });
+
+    expect(onSuccess).toHaveBeenCalledWith(
+      'ds_test_pjv4anxbxksg7xie5c5oxspiqdtyuvcu',
+      'acc_4b51130b-4621-4d14-affe-89470fe6a297',
+    );
+  });
+
+  it('deep-link with mismatched state is silently ignored (no exchange call)', async () => {
+    const onSuccess = vi.fn(() => Promise.resolve());
+
+    fetchSpy
+      .mockResolvedValueOnce(makeResponse(initiateBody)) // initiate
+      .mockResolvedValue(makeResponse({ status: 'pending' })); // any subsequent poll
+
+    let triggerDeepLink: ((urls: string[]) => void) | null = null;
+    const __onOpenUrl = vi.fn((handler: (urls: string[]) => void) => {
+      triggerDeepLink = handler;
+      return Promise.resolve(() => {});
+    });
+
+    const { result } = renderHook(() =>
+      useBrowserSignIn({
+        ...defaultOpts(onSuccess),
+        __onOpenUrl,
+      }),
+    );
+
+    act(() => {
+      result.current.start();
+    });
+
+    await waitFor(() => {
+      expect(triggerDeepLink).not.toBeNull();
+    });
+
+    // Mismatched state — should be ignored. result stays in waiting.
+    act(() => {
+      triggerDeepLink!([`driftstack://auth/callback?code=${initiateBody.code}&state=WRONG_STATE`]);
+    });
+
+    // Deep-link triggered no exchange (state must match). Existing
+    // poll loop still pending.
+    await new Promise((r) => setTimeout(r, 30));
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it('falls back to polling when onOpenUrl throws (plugin unavailable)', async () => {
+    const onSuccess = vi.fn(() => Promise.resolve());
+
+    fetchSpy.mockResolvedValueOnce(makeResponse(initiateBody)).mockResolvedValueOnce(
+      makeResponse({
+        status: 'bound',
+        api_key: 'ds_test_pjv4anxbxksg7xie5c5oxspiqdtyuvcu',
+        account_id: 'acc_4b51130b-4621-4d14-affe-89470fe6a297',
+      }),
+    );
+
+    const __onOpenUrl = vi.fn(() => Promise.reject(new Error('plugin unavailable')));
+
+    const { result } = renderHook(() =>
+      useBrowserSignIn({
+        ...defaultOpts(onSuccess),
+        __onOpenUrl,
+      }),
+    );
+
+    act(() => {
+      result.current.start();
+    });
+
+    // Polling is still primary in this scenario; success arrives via
+    // the second fetch (the exchange call).
+    await waitFor(
+      () => {
+        expect(result.current.state.kind).toBe('success');
+      },
+      { timeout: 200 },
+    );
+
+    expect(onSuccess).toHaveBeenCalledTimes(1);
   });
 });
 
