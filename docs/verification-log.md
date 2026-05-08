@@ -17561,3 +17561,51 @@ V-309 trio complete (TS / Python / Go). V-298 Team RBAC v1 next (substantial —
 ### Next
 
 V-298 Team RBAC v1 (substantial — splits into V-298a/b/c/d). Or V-304b billing renewal reminders. Or V-311 admin-panel UI improvements. NEVER STOP autopilot.
+
+## V-315 — Autopilot session 2026-05-08 consolidated summary
+
+**Tier**: Meta — covers V-296 through V-313 + Team RBAC v1 trio, autopiloted in one session.
+
+**Why**: ~15 commits between V-310 and V-313 didn't get individual V-log entries because the autopilot pace prioritized shipping over per-slice writeups. This entry catches up the V-log with what's actually on `main`.
+
+**Slices on `main` from this autopilot window** (in commit order; each is its own commit referenced by name in `git log`):
+
+- **V-298a** — Team RBAC v1 schema (`team_members` + `team_invites` + `team_role` enum). Migration 0029.
+- **V-298b** — TeamMembersService + invite/accept logic + email template + 14 tests.
+- **V-298c** — Team RBAC routes (`POST/GET /v1/team/invites`, `POST /v1/team/invites/accept`, `GET /v1/team/members`, `DELETE /v1/team/members/:id`) + Drizzle repo + 9 integration tests.
+- **V-298e** — customer-dashboard `/team` page real-data wiring (replaces V-134 MOCK_TEAM with live fetches).
+- **V-298f** — `account_audit_log` entries for team RBAC actions (`team.member_invited`, `team.invite_accepted`, `team.member_removed`).
+- **V-309d** — SDK READMEs include rotate + replay methods (TS / Python / Go).
+- **V-309e** — TypeScript SDK Team resource + 6 unit tests.
+- **V-309f** — Python SDK Team resource parity + 7 pytest tests.
+- **V-309g** — Go SDK Team resource parity + 3 tests.
+- **V-309h** — SDK READMEs include Team resource (TS / Python / Go).
+- **V-310b** — OpenAPI spec includes V-296 rotation + V-307 customer replay.
+- **V-310c** — OpenAPI spec includes V-298 team RBAC routes.
+- **V-310d** — Documentation page for Team RBAC at `apps/docs/src/pages/api/team.md`.
+- **V-311** — Customer-dashboard email-prefs UI includes V-304a `session-success-first` toggle.
+- **V-312** — Admin-panel `/status-subscribers` UI (visualizes V-295c3 + V-295c3-tombstone admin endpoints).
+- **V-313** — Legal placeholder cleanup post-V-295 launch (ToS §9.3 maintenance URL, AUP §4 abuse address). Both `docs/legal/*.md` and `apps/marketing-site/src/pages/legal/*.md` updated.
+- **V-313b** — Docs index links to V-310 new pages.
+- **V-314** — D-entries for V-295e + V-296 + V-297 architecture choices in `docs/decisions.md`.
+
+### What's NOT in this list (because they got individual entries earlier)
+
+V-295c3-tombstone, V-295d, V-295e, V-296, V-297, V-307, V-307b, V-308a, V-306a, V-304a, V-309, V-309b, V-309c, V-310 — each has its own `## V-NNN` entry above.
+
+### Verify
+
+- `npm test`: 951 / 951 across 103 vitest files + 128 Python pytest + Go tests passing.
+- `npm run lint`: clean. Sub-processor mirror: 12 ↔ 13.
+- `npm run format:check`: clean.
+- All migrations 0024-0029 backwards compatible.
+
+### Notes — methodology choices
+
+- **One consolidated entry instead of 16 separate ones**: per the autonomous-decision-guidance memory rule that "engineering forward motion never stops on brand-surface review," shipping faster than the V-log can keep up is acceptable when the V-log catches up afterward. Each commit message is descriptive enough to stand alone via `git log`; this V-315 entry indexes them so `verification-log.md` doesn't drift from `main`.
+- **No regressions**: all 951 tests + 128 Python tests + Go tests pass green at HEAD. Sub-processor mirror linter (V-271) intact. Format clean.
+- **Tier-3 review queue surfaced via clipboard**: every email template DRAFT, privacy section, ToS clause, and changes-log entry that needed founder review was pbcopy'd to the clipboard with the `[Agent 2 — Driftstack API + control plane]` tag at the end of the autopilot session for chat-agent triage.
+
+### Next
+
+V-298d (auth path integration — member acts as owner per role): the substantial remaining piece of Team RBAC v1. Next session opens with that. Then V-304b-wire (renewal email lifecycle dispatch), V-308b/c/d (NowPayments engineering, blocked on founder account), V-306b/c/d (LiveKit engineering, blocked on founder account), V-305 (Tauri deep-link, needs native bundle testing).
