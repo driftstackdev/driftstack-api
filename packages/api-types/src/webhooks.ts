@@ -87,6 +87,23 @@ export const CreateWebhookResponseSchema = WebhookEndpointSchema.extend({
   secret: z.string().describe('Plaintext signing secret. Returned ONCE; not retrievable later.'),
 });
 
+// V-359 — POST /v1/webhooks/:id/rotate-secret response. Surfaces the
+// fresh plaintext secret ONCE alongside metadata about the grace
+// window during which both the old + new secrets are accepted by the
+// server's outbound dual-sign.
+export const RotateWebhookSecretResponseSchema = z.object({
+  id: WebhookEndpointIdSchema,
+  secret: z.string().describe('Fresh plaintext signing secret. Returned ONCE.'),
+  secret_prefix: z.string(),
+  prev_secret_prefix: z
+    .string()
+    .describe('First chars of the prior secret, kept active during grace.'),
+  grace_expires_at: Iso8601Schema.describe(
+    'Until this timestamp, every outbound delivery is signed with both the new + old secret so the customer can roll their verifier across infra without dropped deliveries.',
+  ),
+});
+export type RotateWebhookSecretResponse = z.infer<typeof RotateWebhookSecretResponseSchema>;
+
 // ───────────────────────────────────────────────────────────────────────────
 // V-351 — Update
 // ───────────────────────────────────────────────────────────────────────────

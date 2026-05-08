@@ -28,6 +28,15 @@ export function webhookSecretPrefix(plaintext: string): string {
 export interface SignWebhookPayloadOpts {
   body: string;
   secret: string;
+  /**
+   * V-359 — when set, sign with both the current AND the previous
+   * secret and emit two `v1=…` entries comma-separated. Used during
+   * the rotation grace period so the customer's verifier accepts
+   * either while they roll the new secret across their infra. The
+   * SDK verifier iterates over every `v1=…` entry and accepts the
+   * first match.
+   */
+  secretPrev?: string;
   /** Override "now" (test seam). */
   timestampSec?: number;
 }
@@ -35,13 +44,20 @@ export interface SignWebhookPayloadOpts {
 /**
  * Build the signed header value. The signed string is `<timestamp>.<body>`;
  * inverse of `verifyWebhookSignature` in @driftstack/sdk.
+ *
+ * V-359 — when `secretPrev` is set, emits both signatures:
+ *   `t=<ts>,v1=<curr>,v1=<prev>`
  */
 export function signWebhookPayload(opts: SignWebhookPayloadOpts): string {
   const t = opts.timestampSec ?? Math.floor(Date.now() / 1000);
-  const hex = createHmac('sha256', opts.secret)
-    .update(`${t.toString()}.${opts.body}`)
-    .digest('hex');
-  return `t=${t.toString()},v1=${hex}`;
+  const signed = `${t.toString()}.${opts.body}`;
+  const curr = createHmac('sha256', opts.secret).update(signed).digest('hex');
+  const parts = [`t=${t.toString()}`, `v1=${curr}`];
+  if (opts.secretPrev !== undefined && opts.secretPrev !== '') {
+    const prev = createHmac('sha256', opts.secretPrev).update(signed).digest('hex');
+    parts.push(`v1=${prev}`);
+  }
+  return parts.join(',');
 }
 
 function base32Encode(buf: Buffer): string {

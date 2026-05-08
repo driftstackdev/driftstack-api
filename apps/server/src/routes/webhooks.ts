@@ -238,6 +238,36 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
     },
   );
 
+  // V-359 — rotate the signing secret with a 24h grace. New plaintext
+  // returned ONCE; worker dual-signs every outbound delivery with both
+  // the new + old secret while `secret_prev_expires_at > now`.
+  // Admin-only on team-scoped requests (same gate as create / update /
+  // delete / send-test).
+  app.post<{ Params: { id: string } }>(
+    '/v1/webhooks/:id/rotate-secret',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const id = uuidFromPrefixedId(request.params.id, 'whk');
+      const eff = effectiveAccountIdForWrite(request, ctx);
+      const result = await service.rotateSecret(
+        ctx,
+        id,
+        eff !== undefined ? { effectiveAccountId: eff } : {},
+      );
+      return reply.code(200).send({
+        id: `whk_${result.row.id}`,
+        secret: result.plaintextSecret,
+        secret_prefix: result.row.secretPrefix,
+        prev_secret_prefix: result.row.secretPrev ? result.row.secretPrev.slice(0, 12) : '',
+        grace_expires_at: result.row.secretPrevExpiresAt
+          ? result.row.secretPrevExpiresAt.toISOString()
+          : new Date().toISOString(),
+      });
+    },
+  );
+
   // V-356 — send a synthetic test.ping event to the endpoint,
   // bypassing subscription. Lets the customer verify their handler
   // before relying on it for real events. Admin-only when targeting

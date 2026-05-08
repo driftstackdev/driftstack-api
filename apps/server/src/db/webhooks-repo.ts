@@ -130,6 +130,38 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     return row ? toEndpointRow(row) : null;
   }
 
+  async rotateSecret(input: {
+    id: string;
+    accountId: string;
+    newSecret: string;
+    newPrefix: string;
+    graceExpiresAt: Date;
+    now: Date;
+  }): Promise<WebhookEndpointRow | null> {
+    // Single UPDATE: copy current secret/prefix INTO the prev slot,
+    // overwrite current with the new pair, set the grace expiry.
+    // No SELECT-then-UPDATE race — Postgres reads the row's current
+    // values at UPDATE time.
+    const [row] = await this.database.db
+      .update(webhookEndpoints)
+      .set({
+        secret: input.newSecret,
+        secretPrefix: input.newPrefix,
+        secretPrev: sql`${webhookEndpoints.secret}`,
+        secretPrevExpiresAt: input.graceExpiresAt,
+        updatedAt: input.now,
+      })
+      .where(
+        and(
+          eq(webhookEndpoints.id, input.id),
+          eq(webhookEndpoints.accountId, input.accountId),
+          isNull(webhookEndpoints.disabledAt),
+        ),
+      )
+      .returning();
+    return row ? toEndpointRow(row) : null;
+  }
+
   async enqueueDelivery(input: NewWebhookDeliveryInput): Promise<void> {
     await this.database.db.insert(webhookDeliveries).values({
       webhookId: input.webhookId,
@@ -366,6 +398,8 @@ function toEndpointRow(r: typeof webhookEndpoints.$inferSelect): WebhookEndpoint
     url: r.url,
     secret: r.secret,
     secretPrefix: r.secretPrefix,
+    secretPrev: r.secretPrev,
+    secretPrevExpiresAt: r.secretPrevExpiresAt,
     events: r.events,
     description: r.description,
     active: r.active,

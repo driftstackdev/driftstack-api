@@ -25,6 +25,8 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       url: input.url,
       secret: input.secret,
       secretPrefix: input.secretPrefix,
+      secretPrev: null,
+      secretPrevExpiresAt: null,
       events: input.events,
       description: input.description,
       active: true,
@@ -84,6 +86,30 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       this.endpoints.set(id, { ...r, active: false, disabledAt: at, updatedAt: at });
     }
     return Promise.resolve();
+  }
+
+  rotateSecret(input: {
+    id: string;
+    accountId: string;
+    newSecret: string;
+    newPrefix: string;
+    graceExpiresAt: Date;
+    now: Date;
+  }): Promise<WebhookEndpointRow | null> {
+    const r = this.endpoints.get(input.id);
+    if (!r || r.accountId !== input.accountId || r.disabledAt !== null) {
+      return Promise.resolve(null);
+    }
+    const updated: WebhookEndpointRow = {
+      ...r,
+      secret: input.newSecret,
+      secretPrefix: input.newPrefix,
+      secretPrev: r.secret,
+      secretPrevExpiresAt: input.graceExpiresAt,
+      updatedAt: input.now,
+    };
+    this.endpoints.set(input.id, updated);
+    return Promise.resolve(updated);
   }
 
   updateEndpoint(input: {

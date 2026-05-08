@@ -18554,3 +18554,48 @@ were missing from nav too — added now alongside MFA.
 
 V-353 cycle wrap: 8 sub-slices (a-h) + V-358 docs = 9 commits, MFA
 TOTP customer-facing surface complete.
+
+## V-359 — webhook signing-secret rotation with 24h grace
+
+**Tier**: 1.
+
+Mirrors V-296 API key rotation pattern for outbound webhook
+signatures.
+
+Schema (migration 0034): `webhook_endpoints.secret_prev` +
+`secret_prev_expires_at` columns.
+
+Service: `WebhooksService.rotateSecret(ctx, id, opts)` admin-scoped.
+Generates fresh `whsec_<32 base32>`, moves current secret into prev
+slot with 24h expiry, returns `{row, plaintextSecret}`. Plaintext
+shown ONCE.
+
+Worker (`durable-webhook-delivery.ts`) dual-signs outbound
+deliveries while `secret_prev_expires_at > now`: emits both
+`x-driftstack-signature` (current) AND `x-driftstack-signature-prev`
+(grace). Customer SDK verifier accepts EITHER during grace; prev
+drops off automatically once grace lapses.
+
+Route: POST /v1/webhooks/:id/rotate-secret. 200 with
+`{id, secret, secret_prefix, prev_secret_prefix, grace_expires_at}`.
+404 unknown, 409 disabled, 403 admin-missing. Audit emit
+`webhook_endpoint.secret_rotated` with both prefixes + grace
+expiry.
+
+Audit enum (api-types) gains `webhook_endpoint.secret_rotated`.
+`WebhookEndpointRow` gains `secretPrev` + `secretPrevExpiresAt`;
+Drizzle + in-memory repos extended. `signWebhookPayload` envelope
+variant gains optional `secretPrev` (the worker uses bare-hex
+header pair instead — different shape).
+
+UI: customer-dashboard /webhooks Rotate-secret button per row.
+Confirm warns "shown ONCE" + 24h grace; new plaintext surfaces in
+`window.prompt` for copy; page reloads.
+
+Tests: 4 new integration tests on /v1/webhooks/:id/rotate-secret
+(200 + grace metadata + plaintext changes; 403 admin-missing;
+404 unknown; 409 disabled). 1063 / 1063 tests pass.
+
+V-359-sdk queued: customer-side verifier helpers (TS / Python / Go)
+to also try `x-driftstack-signature-prev` during grace. Small
+follow-up on each SDK package.

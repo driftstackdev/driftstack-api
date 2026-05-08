@@ -594,6 +594,9 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           '<button type="button" data-test="' +
           escapeHtml(e.id) +
           '" class="text-sm text-oxblood-700 hover:underline">Send test</button>' +
+          '<button type="button" data-rotate="' +
+          escapeHtml(e.id) +
+          '" class="text-sm text-oxblood-700 hover:underline">Rotate secret</button>' +
           '<button type="button" data-delete="' +
           escapeHtml(e.id) +
           '" class="text-sm text-red-700 hover:underline">Delete</button>' +
@@ -941,6 +944,71 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         });
       }
 
+      // V-359 — wire the per-row "Rotate secret" buttons. Generates
+      // a fresh signing secret with a 24h grace during which both the
+      // old + new secrets are accepted. Plaintext shown ONCE in a
+      // browser prompt (no in-page reveal — secrets are sensitive).
+      function wireRotateButtons() {
+        const buttons = ul.querySelectorAll('[data-rotate]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-rotate');
+            if (!id) return;
+            if (
+              !window.confirm(
+                'Rotate signing secret for ' +
+                  id +
+                  '?\n\nThe new secret is shown ONCE. The old secret stays active for 24h so your verifier can roll forward without dropped deliveries.',
+              )
+            ) {
+              return;
+            }
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = 'Rotating…';
+            fetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id) + '/rotate-secret', {
+              method: 'POST',
+              headers: {
+                authorization: 'Bearer ' + token,
+                ...(typeof window.driftstackActAsHeaders === 'function'
+                  ? window.driftstackActAsHeaders()
+                  : {}),
+              },
+            })
+              .then((r) =>
+                r.ok
+                  ? r.json()
+                  : r
+                      .json()
+                      .catch(() => ({}))
+                      .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+              )
+              .then((body) => {
+                // Show the new plaintext ONCE in a browser prompt so
+                // the customer can copy it. Subsequent reads are
+                // impossible — only the prefix is retrievable.
+                const grace = new Date(body.grace_expires_at).toLocaleString();
+                window.prompt(
+                  'New signing secret (copy now — shown ONCE):\n\nOld secret stays active until ' +
+                    grace +
+                    '. Roll forward your verifier within that window.',
+                  body.secret,
+                );
+                window.location.reload();
+              })
+              .catch((err) => {
+                showBanner(
+                  'Rotate failed: ' + (err && err.message ? err.message : 'network error'),
+                );
+              })
+              .finally(() => {
+                btn.disabled = false;
+                btn.textContent = original;
+              });
+          });
+        });
+      }
+
       // V-356 — wire the per-row "Send test" buttons. POSTs to
       // /v1/webhooks/:id/test which enqueues a synthetic test.ping
       // delivery on the endpoint regardless of subscription.
@@ -1010,6 +1078,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             wireDeleteButtons();
             wireEditButtons();
             wireTestButtons();
+            wireRotateButtons();
           }
           showBanner(
             'Live data loaded. Aggregate delivery counts (delivered/failed/DLQ) not yet exposed via /v1/webhooks — coming soon.',

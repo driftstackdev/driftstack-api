@@ -183,6 +183,9 @@ export const AccountAuditActionSchema = z.enum([
   'webhook_endpoint.created',
   'webhook_endpoint.updated',
   'webhook_endpoint.deleted',
+  // V-359 — signing secret rotation. Payload: new_secret_prefix,
+  // old_secret_prefix, grace_expires_at (24h default).
+  'webhook_endpoint.secret_rotated',
   // V-307 — customer self-service replay of a webhook delivery.
   'webhook_delivery.replayed',
   // V-298f — Team RBAC v1 customer audit entries.

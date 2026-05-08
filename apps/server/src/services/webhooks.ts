@@ -37,6 +37,12 @@ export interface WebhookEndpointRow {
   url: string;
   secret: string; // plaintext (D-023)
   secretPrefix: string;
+  /** V-359 — previous signing secret during the rotation grace
+   *  period. Null when no rotation in flight or grace expired. The
+   *  worker dual-signs every outbound delivery with both `secret`
+   *  and `secretPrev` while `secretPrevExpiresAt > now`. */
+  secretPrev: string | null;
+  secretPrevExpiresAt: Date | null;
   events: WebhookEventType[];
   description: string | null;
   active: boolean;
@@ -122,6 +128,23 @@ export interface WebhooksRepo {
     events?: WebhookEventType[];
     description?: string | null;
     active?: boolean;
+  }): Promise<WebhookEndpointRow | null>;
+
+  /**
+   * V-359 — rotate the signing secret. Sets `secret = newSecret`,
+   * `secret_prefix = newPrefix`, `secret_prev = oldSecret`,
+   * `secret_prev_expires_at = now + graceMs`, `updated_at = now`.
+   * Returns the updated row, or null when the endpoint isn't found
+   * / not owned by the account. Caller is responsible for the
+   * admin-scope gate.
+   */
+  rotateSecret(input: {
+    id: string;
+    accountId: string;
+    newSecret: string;
+    newPrefix: string;
+    graceExpiresAt: Date;
+    now: Date;
   }): Promise<WebhookEndpointRow | null>;
 
   /**
@@ -212,7 +235,11 @@ export class WebhooksService {
 
   private async emitAuditBestEffort(
     ctx: AccountContext,
-    action: 'webhook_endpoint.created' | 'webhook_endpoint.updated' | 'webhook_endpoint.deleted',
+    action:
+      | 'webhook_endpoint.created'
+      | 'webhook_endpoint.updated'
+      | 'webhook_endpoint.deleted'
+      | 'webhook_endpoint.secret_rotated',
     targetResourceId: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
@@ -369,6 +396,63 @@ export class WebhooksService {
     });
 
     return updated;
+  }
+
+  /**
+   * V-359 — rotate the signing secret with a 24h grace. Returns the
+   * fresh plaintext secret ONCE alongside the updated row. Worker
+   * dual-signs every outbound delivery with both `secret` and
+   * `secretPrev` while `secretPrevExpiresAt > now`, so the customer
+   * can roll the new secret across their verifier infra without a
+   * window of dropped deliveries.
+   *
+   * Same admin-only gate as create / update / delete: literal
+   * `admin` scope when self-account; route-side team-admin gate
+   * when targeting a team owner via `effectiveAccountId`.
+   */
+  async rotateSecret(
+    ctx: AccountContext,
+    id: string,
+    opts: { effectiveAccountId?: string; graceMs?: number } = {},
+  ): Promise<{ row: WebhookEndpointRow; plaintextSecret: string }> {
+    if (opts.effectiveAccountId === undefined) {
+      throwIfMissingScope(ctx, 'admin');
+    }
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const before = await this.repo.findEndpoint(id, accountId);
+    if (!before) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
+    if (before.disabledAt !== null) {
+      throw new ConflictError('Cannot rotate the secret on a disabled endpoint.');
+    }
+
+    const newSecret = generateWebhookSecret();
+    const newPrefix = webhookSecretPrefix(newSecret);
+    const now = new Date();
+    const graceMs = opts.graceMs ?? 24 * 60 * 60 * 1000; // 24h default
+    const graceExpiresAt = new Date(now.getTime() + graceMs);
+
+    const row = await this.repo.rotateSecret({
+      id,
+      accountId,
+      newSecret,
+      newPrefix,
+      graceExpiresAt,
+      now,
+    });
+    if (!row) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
+
+    await this.emitAuditBestEffort(
+      ctx,
+      'webhook_endpoint.secret_rotated',
+      `webhook_endpoint_${id}`,
+      {
+        new_secret_prefix: newPrefix,
+        old_secret_prefix: before.secretPrefix,
+        grace_expires_at: graceExpiresAt.toISOString(),
+      },
+    );
+
+    return { row, plaintextSecret: newSecret };
   }
 
   async delete(

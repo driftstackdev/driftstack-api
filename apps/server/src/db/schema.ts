@@ -654,6 +654,17 @@ export const webhookEndpoints = pgTable(
     secret: text('secret').notNull(),
     // First 12 chars of the plaintext, for display in lists / logs.
     secretPrefix: text('secret_prefix').notNull(),
+    // V-359 — rotation grace period. When customer rotates the
+    // signing secret, the OLD secret moves into `secret_prev` and
+    // `secret_prev_expires_at` is set to (now + 24h). During the
+    // grace, every outbound delivery is signed twice (`v1=<curr>,
+    // v1=<prev>`) so the customer's verifier can accept either while
+    // they roll the new secret across their own infra. Worker treats
+    // a non-null `secret_prev` with `secret_prev_expires_at > now`
+    // as "still in grace"; expired-grace rows are eligible for prev
+    // cleanup on the next rotate (lazy expiry — no background sweep).
+    secretPrev: text('secret_prev'),
+    secretPrevExpiresAt: timestamp('secret_prev_expires_at', { withTimezone: true }),
     events: webhookEventType('events').array().notNull(),
     description: text('description'),
     active: boolean('active').notNull().default(true),

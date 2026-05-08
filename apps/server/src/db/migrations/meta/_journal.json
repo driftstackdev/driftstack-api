@@ -239,6 +239,13 @@
       "when": 1778090424000,
       "tag": "0033_v353b_account_mfa",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1778090425000,
+      "tag": "0034_v359_webhook_secret_rotation",
+      "breakpoints": true
     }
   ]
 }

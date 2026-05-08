@@ -473,3 +473,84 @@ describe('POST /v1/webhooks/:id/test (V-356)', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+// ── V-359 — POST /v1/webhooks/:id/rotate-secret ──────────────────
+
+describe('POST /v1/webhooks/:id/rotate-secret (V-359)', () => {
+  it('200 returns fresh plaintext + grace metadata; secret_prev preserved via repo state', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: { url: 'https://x.test/h', events: ['session.completed'] },
+    });
+    const created = create.json<{ id: string; secret: string; secret_prefix: string }>();
+
+    const rotate = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/webhooks/${created.id}/rotate-secret`,
+      headers: auth(fx),
+    });
+    expect(rotate.statusCode).toBe(200);
+    const body = rotate.json<{
+      id: string;
+      secret: string;
+      secret_prefix: string;
+      prev_secret_prefix: string;
+      grace_expires_at: string;
+    }>();
+    expect(body.id).toBe(created.id);
+    expect(body.secret).toMatch(/^whsec_[a-z2-7]{32}$/);
+    expect(body.secret).not.toBe(created.secret);
+    expect(body.secret_prefix).not.toBe(created.secret_prefix);
+    // Prev prefix is the first 12 chars of the OLD plaintext.
+    expect(body.prev_secret_prefix).toBe(created.secret.slice(0, 12));
+    // Grace is in the future, default 24h.
+    const grace = new Date(body.grace_expires_at).getTime();
+    expect(grace).toBeGreaterThan(Date.now());
+    expect(grace).toBeLessThan(Date.now() + 25 * 60 * 60 * 1000);
+  });
+
+  it('403 when admin scope missing on the calling key', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/whk_00000000-0000-4000-8000-000000000abc/rotate-secret',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('404 when endpoint id is unknown', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/whk_00000000-0000-4000-8000-deadbeef0000/rotate-secret',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('409 when targeting a soft-deleted endpoint', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: { url: 'https://x.test/h', events: ['session.completed'] },
+    });
+    const id = create.json<{ id: string }>().id;
+    await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/webhooks/${id}`,
+      headers: auth(fx),
+    });
+    const rotate = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/webhooks/${id}/rotate-secret`,
+      headers: auth(fx),
+    });
+    expect(rotate.statusCode).toBe(409);
+  });
+});

@@ -375,6 +375,18 @@ export class DurableWebhookWorker {
 
     try {
       const signature = signPayload(endpoint.secret, body, emittedAtSec);
+      // V-359 — dual-sign during the rotation grace period. When the
+      // customer's verifier sees both headers, they should accept
+      // EITHER as valid: the current secret post-rotation OR the
+      // previous secret while their infra rolls forward. Header is
+      // omitted entirely when prev is null or its grace has expired.
+      const prevInGrace =
+        endpoint.secretPrev !== null &&
+        endpoint.secretPrevExpiresAt !== null &&
+        endpoint.secretPrevExpiresAt.getTime() > this.now();
+      const signaturePrev = prevInGrace
+        ? signPayload(endpoint.secretPrev as string, body, emittedAtSec)
+        : null;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
       try {
@@ -386,6 +398,7 @@ export class DurableWebhookWorker {
             'x-driftstack-event-type': delivery.eventType,
             'x-driftstack-emitted-at': emittedAtSec.toString(),
             'x-driftstack-signature': signature,
+            ...(signaturePrev !== null ? { 'x-driftstack-signature-prev': signaturePrev } : {}),
           },
           body,
           signal: controller.signal,
