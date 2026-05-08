@@ -156,6 +156,22 @@ type CreateAPIKeyResponse struct {
 	Plaintext string `json:"plaintext"`
 }
 
+// V-296 — RotateAPIKeyRequest is the body for POST /v1/api-keys/:id/rotate.
+type RotateAPIKeyRequest struct {
+	// Optional new name for the rotated key. Empty string defaults to the
+	// old key's name.
+	Name string `json:"name,omitempty"`
+}
+
+// V-296 — RotateAPIKeyResponse extends CreateAPIKeyResponse with the
+// previous-key reference and the timestamp at which the previous key
+// auto-revokes via the existing expires_at-driven auth gate.
+type RotateAPIKeyResponse struct {
+	CreateAPIKeyResponse
+	RotatedFrom       string    `json:"rotated_from"`
+	GracePeriodEndsAt time.Time `json:"grace_period_ends_at"`
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Session
 // ──────────────────────────────────────────────────────────────────
@@ -264,7 +280,7 @@ type InteractResponse struct {
 // WaitCondition is a discriminated-union of wait conditions. Use the
 // constructors (NewSelectorCondition, ...) to build one.
 type WaitCondition struct {
-	Kind     string `json:"kind"`               // selector | selector_hidden | url_matches | time
+	Kind     string `json:"kind"` // selector | selector_hidden | url_matches | time
 	Selector string `json:"selector,omitempty"`
 	Pattern  string `json:"pattern,omitempty"`
 	MS       int    `json:"ms,omitempty"`
@@ -297,11 +313,11 @@ type WaitResponse struct {
 }
 
 type SessionState struct {
-	URL          *string          `json:"url"`
-	Title        *string          `json:"title"`
-	Cookies      []map[string]any `json:"cookies"`
+	URL          *string           `json:"url"`
+	Title        *string           `json:"title"`
+	Cookies      []map[string]any  `json:"cookies"`
 	LocalStorage map[string]string `json:"local_storage"`
-	CapturedAt   time.Time        `json:"captured_at"`
+	CapturedAt   time.Time         `json:"captured_at"`
 }
 
 // CaptureKind enumerates the supported capture outputs.
@@ -502,10 +518,10 @@ type Subscription struct {
 }
 
 type TrialPackState struct {
-	Active                bool       `json:"active"`
-	Redeemed              bool       `json:"redeemed"`
-	CreditCentsRemaining  *int       `json:"credit_cents_remaining"`
-	ExpiresAt             *time.Time `json:"expires_at"`
+	Active               bool       `json:"active"`
+	Redeemed             bool       `json:"redeemed"`
+	CreditCentsRemaining *int       `json:"credit_cents_remaining"`
+	ExpiresAt            *time.Time `json:"expires_at"`
 }
 
 type GetBillingStateResponse struct {
@@ -548,8 +564,8 @@ type SignupRequest struct {
 }
 
 type SignupResponse struct {
-	AccountID    string `json:"account_id"`
-	VerifyEmailSent bool `json:"verify_email_sent"`
+	AccountID       string `json:"account_id"`
+	VerifyEmailSent bool   `json:"verify_email_sent"`
 }
 
 type VerifyEmailRequest struct {
@@ -557,8 +573,8 @@ type VerifyEmailRequest struct {
 }
 
 type VerifyEmailResponse struct {
-	AccountID    string `json:"account_id"`
-	SessionToken string `json:"session_token"`
+	AccountID    string    `json:"account_id"`
+	SessionToken string    `json:"session_token"`
 	ExpiresAt    time.Time `json:"expires_at"`
 }
 

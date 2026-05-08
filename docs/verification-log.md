@@ -17486,3 +17486,44 @@ V-309b (~2-3h) — Python SDK rotate + replay. V-309c — Go SDK rotate + replay
 ### Next
 
 V-309c (Go SDK rotate + replay) — same pattern. Then V-304b billing renewal reminders, V-298 Team RBAC v1 (split into V-298a/b/c/d). NEVER STOP autopilot.
+
+## V-309c — Go SDK rotate + replay parity
+
+**Tier**: 1 — SDK parity. Final SDK in the V-309 trio.
+
+**Why**: Same as V-309b — TypeScript got V-296 + V-307 in V-309, Python in V-309b, Go closes the trio.
+
+**Scope**
+
+- `APIKeysResource.Rotate(ctx, keyID, *RotateAPIKeyRequest)` returns `*RotateAPIKeyResponse`. New `RotateAPIKeyRequest` (optional Name) + `RotateAPIKeyResponse` (embeds `CreateAPIKeyResponse` + adds `RotatedFrom` + `GracePeriodEndsAt time.Time`).
+- `WebhooksResource.ReplayDelivery(ctx, deliveryID)` returns `*WebhookDelivery`.
+- 3 new Go tests: rotate happy-path with name override, rotate with nil body (uses default empty), replay-delivery happy-path.
+- gofmt-clean.
+
+**Files**
+
+- `packages/sdk-go/types.go` — `RotateAPIKeyRequest` + `RotateAPIKeyResponse`.
+- `packages/sdk-go/api_keys.go` — `Rotate` method.
+- `packages/sdk-go/webhooks.go` — `ReplayDelivery` method.
+- `packages/sdk-go/api_keys_test.go` — new (2 tests).
+- `packages/sdk-go/webhooks_test.go` — new (1 test).
+
+### Verify
+
+- `go test ./...` (sdk-go): all pass (+3 new tests).
+- `gofmt -l`: clean on touched files.
+- `npm test`: 920 / 920 unchanged.
+- `npm run lint`: clean. Sub-processor mirror: 12 ↔ 13.
+- `npm run format:check`: clean.
+
+### Notes — methodology choices
+
+- **`*RotateAPIKeyRequest` with nil-default**: idiomatic Go. Caller passes `nil` for "no rename"; explicit `&RotateAPIKeyRequest{Name: "..."}` to rename. Mirrors TS `options.name` + Python keyword-only `name=None`.
+- **`struct{}{}` body for replay**: explicit-empty marker; Go's request-encoder serializes to `{}`.
+- **Embedded `CreateAPIKeyResponse`**: Go's struct-embedding mirrors TS `extends` and Python's class inheritance.
+- **`time.Time` for `GracePeriodEndsAt`**: Go's stdlib time parses RFC 3339 from JSON.
+- **Tests use `newServer` test helper**: existing pattern from `billing_test.go`.
+
+### Next
+
+V-309 trio complete (TS / Python / Go). V-298 Team RBAC v1 next (substantial — splits into V-298a/b/c/d). Then V-304b billing renewal reminders. NEVER STOP autopilot.

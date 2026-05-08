@@ -48,3 +48,27 @@ func (r *APIKeysResource) Revoke(ctx context.Context, keyID string) error {
 		path:   "/v1/api-keys/" + url.PathEscape(keyID),
 	})
 }
+
+// Rotate is V-296 — mints a fresh plaintext + sets the OLD key's
+// expires_at to now + 24h grace. Both keys work concurrently during the
+// grace window; deploy the new key, then the old key auto-revokes at
+// the grace boundary via the existing expires_at-driven auth gate.
+//
+// The new plaintext is in the response — store it now, it cannot be
+// retrieved later. Pass nil for body to use the default (preserve old
+// name); pass *RotateAPIKeyRequest{Name: "..."} to rename in flight.
+func (r *APIKeysResource) Rotate(ctx context.Context, keyID string, body *RotateAPIKeyRequest) (*RotateAPIKeyResponse, error) {
+	if body == nil {
+		body = &RotateAPIKeyRequest{}
+	}
+	var out RotateAPIKeyResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/api-keys/" + url.PathEscape(keyID) + "/rotate",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

@@ -86,3 +86,19 @@ func (r *WebhooksResource) ListDeliveries(ctx context.Context, webhookID string,
 	}
 	return &out, nil
 }
+
+// ReplayDelivery is V-307 — resets a webhook delivery to pending so the
+// worker re-fires it. Account-scoped: the delivery must belong to an
+// endpoint the calling account owns.
+func (r *WebhooksResource) ReplayDelivery(ctx context.Context, deliveryID string) (*WebhookDelivery, error) {
+	var out WebhookDelivery
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/webhook-deliveries/" + url.PathEscape(deliveryID) + "/replay",
+		body:   struct{}{},
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
