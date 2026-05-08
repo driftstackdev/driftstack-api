@@ -331,6 +331,43 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // V-296 — API key rotation. Mints a fresh plaintext + sets the OLD
+  // key's expires_at to now + 24h grace via the existing
+  // expires_at-driven auth gate.
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/api-keys/{id}/rotate',
+    summary: 'Rotate an API key (V-296). 24h grace; new plaintext shown once',
+    tags: ['API keys'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        content: {
+          'application/json': {
+            schema: z.object({ name: z.string().optional() }).openapi('RotateApiKeyRequest'),
+          },
+        },
+      },
+    },
+    responses: {
+      201: {
+        description:
+          'New key created with the same scopes; old key auto-revokes at grace_period_ends_at.',
+        content: {
+          'application/json': {
+            schema: CreateApiKeyResponseSchema.extend({
+              rotated_from: z.string(),
+              grace_period_ends_at: z.string(),
+            }).openapi('RotateApiKeyResponse'),
+          },
+        },
+      },
+      404: { description: 'Key not found.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+
   // ── Usage ──────────────────────────────────────────────────────────────
   registerRoute(r, {
     method: 'get',
@@ -569,6 +606,31 @@ function buildRegistry(): OpenAPIRegistry {
       404: { description: 'Delivery not found.', content: problemContent },
       409: {
         description: 'Delivery is not in DLQ — use /webhook-deliveries/:id/replay instead.',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
+  // V-307 — customer self-service replay. Account-scoped: 404 (not 403)
+  // for non-owned deliveries to avoid leaking the existence of other
+  // accounts' deliveries.
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/webhook-deliveries/{deliveryId}/replay',
+    summary: 'Replay a webhook delivery (V-307; customer self-service)',
+    tags: ['Webhooks'],
+    security: auth,
+    request: {
+      params: z.object({ deliveryId: z.string().describe('Prefixed delivery id (wdl_<uuid>)') }),
+    },
+    responses: {
+      200: {
+        description: 'Delivery reset to pending; the worker re-fires within ~30s.',
+        content: { 'application/json': { schema: WebhookDeliverySchema } },
+      },
+      404: {
+        description: 'Delivery not found or not owned by the calling account.',
         content: problemContent,
       },
       ...errors4xx,

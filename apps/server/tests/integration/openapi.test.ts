@@ -52,6 +52,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/account/rate-limits',
         '/v1/api-keys',
         '/v1/api-keys/{id}',
+        '/v1/api-keys/{id}/rotate',
         '/v1/sessions',
         '/v1/sessions/{id}',
         '/v1/sessions/{id}/capture',
@@ -60,6 +61,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/sessions/{id}/state',
         '/v1/sessions/{id}/wait',
         '/v1/usage',
+        '/v1/webhook-deliveries/{deliveryId}/replay',
       ].sort(),
     );
   });
