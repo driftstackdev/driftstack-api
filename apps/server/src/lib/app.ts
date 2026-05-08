@@ -280,6 +280,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     authRepo: deps.authRepo,
     authCache: deps.authCache,
     authCoalescer: deps.authCoalescer,
+    // V-353e — step-up gate consults MFA enrollment state; null when
+    // MFA is disabled in this deploy (gate becomes a no-op).
+    mfaService: deps.mfaService ?? null,
   });
   await app.register(rateLimitPlugin, { store: deps.rateLimitStore });
 

@@ -104,6 +104,11 @@ interface SerializedContext {
   apiKey: SerializedApiKey;
   rateLimitOverrides: Record<string, SerializedRateLimitOverride>;
   teams?: SerializedTeamMembership[];
+  /** V-353e — populated when the request authed via web session.
+   *  Pre-V-353e cache entries lack this; deserialize defaults to null
+   *  (treated as "not web-session" → step-up gate refuses, but the
+   *  TTL is 30s so fresh entries land within the rollout window). */
+  webSession?: { id: string; mfaSatisfiedAt: string | null } | null;
 }
 
 interface CachedEntry {
@@ -163,6 +168,14 @@ function serialize(ctx: AccountContext): SerializedContext {
       ownerAccountId: t.ownerAccountId,
       role: t.role,
     })),
+    webSession: ctx.webSession
+      ? {
+          id: ctx.webSession.id,
+          mfaSatisfiedAt: ctx.webSession.mfaSatisfiedAt
+            ? ctx.webSession.mfaSatisfiedAt.toISOString()
+            : null,
+        }
+      : null,
   };
 }
 
@@ -210,6 +223,14 @@ function deserialize(s: SerializedContext): AccountContext {
       ownerAccountId: t.ownerAccountId,
       role: t.role,
     })),
+    webSession: s.webSession
+      ? {
+          id: s.webSession.id,
+          mfaSatisfiedAt: s.webSession.mfaSatisfiedAt
+            ? new Date(s.webSession.mfaSatisfiedAt)
+            : null,
+        }
+      : null,
   };
 }
 

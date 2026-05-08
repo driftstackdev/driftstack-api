@@ -65,6 +65,10 @@ export interface WebSessionAuthRow {
   expiresAt: Date;
   revokedAt: Date | null;
   lastUsedAt: Date | null;
+  /** V-353d/e — most recent successful MFA challenge on this session,
+   *  or null if never satisfied. Step-up gates check
+   *  `now - mfaSatisfiedAt < 15min`. */
+  mfaSatisfiedAt: Date | null;
   createdAt: Date;
 }
 
@@ -159,6 +163,14 @@ export interface AccountContext {
    * (never undefined) so call sites can iterate without a null check.
    */
   teams: TeamMembership[];
+  /**
+   * V-353e — populated when the request authenticated via a web
+   * session (dashboard / GUI bearer); null for API-key callers. The
+   * step-up gate (`requireMfaFresh`) reads `mfaSatisfiedAt` against
+   * the 15-min freshness window. API-key callers bypass the gate
+   * (they're machine-to-machine; MFA is a human-factor concept).
+   */
+  webSession: { id: string; mfaSatisfiedAt: Date | null } | null;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -275,7 +287,13 @@ async function slowPathApiKey(
   for (const o of overrideRows) {
     rateLimitOverrides[o.bucketKey] = o;
   }
-  const ctx: AccountContext = { account, apiKey, rateLimitOverrides, teams };
+  const ctx: AccountContext = {
+    account,
+    apiKey,
+    rateLimitOverrides,
+    teams,
+    webSession: null, // API-key auth path; no web session.
+  };
 
   // Cap TTL at expiresAt so the cache entry can never outlive the key.
   if (cache) {
@@ -385,7 +403,13 @@ async function slowPathWebSession(
     createdAt: session.createdAt,
   };
 
-  const ctx: AccountContext = { account, apiKey: syntheticKey, rateLimitOverrides, teams };
+  const ctx: AccountContext = {
+    account,
+    apiKey: syntheticKey,
+    rateLimitOverrides,
+    teams,
+    webSession: { id: session.id, mfaSatisfiedAt: session.mfaSatisfiedAt },
+  };
 
   // Cap TTL at session expiry so the cache entry can never outlive the
   // session token. Same shape as the API key path.

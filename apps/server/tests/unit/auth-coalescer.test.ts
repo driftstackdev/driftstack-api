@@ -33,6 +33,7 @@ function fakeContext(accountId: string): AccountContext {
     },
     rateLimitOverrides: {},
     teams: [],
+    webSession: null,
   };
 }
 

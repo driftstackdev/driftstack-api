@@ -49,6 +49,7 @@ function buildCtx(): AccountContext {
     },
     rateLimitOverrides: {},
     teams: [],
+    webSession: null,
   };
 }
 

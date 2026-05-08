@@ -3,7 +3,7 @@
 // verdict Q3) lands in V-353e; for now, disable is gated only by web-
 // session auth + an explicit confirm body field.
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { CompleteMfaEnrollmentRequestSchema } from '@driftstack/api-types';
 import type { MfaService } from '../services/mfa.js';
 import { BadRequestError } from '../lib/errors.js';
@@ -72,26 +72,47 @@ export function registerAccountMfaRoutes(
     },
   );
 
-  // V-353b — disable. V-353a verdict Q3 marks this as one of the two
-  // step-up-gated ops; V-353e wires the actual gate. For now the
-  // route requires an explicit `confirm: 'disable-mfa'` body field
-  // so a stray client request can't disable accidentally.
+  // V-353b/V-353e — disable. Per V-353a verdict Q3 this is one of
+  // the two step-up-gated ops (account-delete + MFA-disable). The
+  // step-up gate (`requireMfaFresh`) refuses (403 + requires_mfa_step_up
+  // extension) when the caller's session hasn't satisfied MFA in the
+  // last 15 min. Caller refreshes via POST /v1/auth/mfa/step-up
+  // (separate route, also bearer-authed) and retries.
+  //
+  // Body still requires `{ confirm: "disable-mfa" }` as a defensive
+  // check against accidental DELETEs from a stray client.
+  const disableHandler = async (request: FastifyRequest, reply: FastifyReply): Promise<null> => {
+    const ctx = request.account;
+    if (!ctx) throw new Error('account context missing after requireAuth');
+    const body = (request.body ?? {}) as { confirm?: string };
+    if (body.confirm !== 'disable-mfa') {
+      throw new BadRequestError(
+        'Disable requires an explicit confirmation. Pass { "confirm": "disable-mfa" }.',
+      );
+    }
+    await service.disable({ accountId: ctx.account.id });
+    reply.code(204);
+    return null;
+  };
+
+  // DELETE retains the original verb for back-compat with the V-353b
+  // tests + clients.
   app.delete(
     '/v1/account/mfa',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
-    async (request, reply) => {
-      const ctx = request.account;
-      if (!ctx) throw new Error('account context missing after requireAuth');
-      const body = (request.body ?? {}) as { confirm?: string };
-      if (body.confirm !== 'disable-mfa') {
-        throw new BadRequestError(
-          'Disable requires an explicit confirmation. Pass { "confirm": "disable-mfa" }.',
-        );
-      }
-      await service.disable({ accountId: ctx.account.id });
-      reply.code(204);
-      return null;
+    {
+      preHandler: [app.requireAuth, app.requireMfaFresh(), app.rateLimit('global')],
     },
+    disableHandler,
+  );
+
+  // V-353f — POST alias per founder-named canonical shape. Same gate,
+  // same handler. Some clients prefer POST for non-idempotent ops.
+  app.post(
+    '/v1/account/mfa/disable',
+    {
+      preHandler: [app.requireAuth, app.requireMfaFresh(), app.rateLimit('global')],
+    },
+    disableHandler,
   );
 
   app.post(

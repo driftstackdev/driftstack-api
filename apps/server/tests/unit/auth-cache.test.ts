@@ -30,6 +30,7 @@ const CTX: AccountContext = {
   },
   rateLimitOverrides: {},
   teams: [],
+  webSession: null,
 };
 
 const SHA = sha256Hex('ds_live_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');

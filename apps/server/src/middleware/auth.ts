@@ -8,6 +8,8 @@ import type { AccountAuthRepo, AccountContext } from '../services/auth.js';
 import { authenticate, extractBearerToken, requireScope } from '../services/auth.js';
 import type { AuthCache } from '../services/auth-cache.js';
 import type { AuthCoalescer } from '../services/auth-coalescer.js';
+import type { MfaService } from '../services/mfa.js';
+import { MfaStepUpRequiredError } from '../lib/errors.js';
 import type { ApiKeyScope } from '@driftstack/api-types';
 
 declare module 'fastify' {
@@ -19,6 +21,18 @@ declare module 'fastify' {
     requireScope: (
       scope: ApiKeyScope,
     ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    /**
+     * V-353e — step-up MFA gate. Throws MfaStepUpRequiredError (403)
+     * when the calling web session's `mfa_satisfied_at` is null or
+     * older than the freshness window (default 15 min per V-353a Q4).
+     * No-ops when the calling account is NOT MFA-enrolled (gate
+     * empty), or when the caller is API-key-authed (machine path,
+     * MFA is a human-factor concept). Configure the window per-route
+     * if you want shorter (e.g. 5 min for billing-tier change).
+     */
+    requireMfaFresh: (opts?: {
+      freshnessSeconds?: number;
+    }) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 }
 
@@ -26,7 +40,14 @@ export interface AuthPluginOptions {
   authRepo: AccountAuthRepo;
   authCache: AuthCache | null;
   authCoalescer: AuthCoalescer | null;
+  /** V-353e — when set, step-up gate consults this for enrollment
+   *  state. When omitted the gate becomes a no-op (MFA off in this
+   *  deploy / test fixture without it). */
+  mfaService?: MfaService | null;
 }
+
+/** V-353e — default step-up freshness window per V-353a Q4 verdict. */
+export const DEFAULT_MFA_FRESHNESS_SECONDS = 15 * 60;
 
 function authPlugin(
   app: FastifyInstance,
@@ -55,6 +76,35 @@ function authPlugin(
         await requireAuth(request, reply);
       }
       if (request.account) requireScope(request.account, scope);
+    };
+  });
+
+  // V-353e — step-up MFA gate.
+  app.decorate('requireMfaFresh', (gateOpts?: { freshnessSeconds?: number }) => {
+    const window = gateOpts?.freshnessSeconds ?? DEFAULT_MFA_FRESHNESS_SECONDS;
+    return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      if (!request.account) {
+        await requireAuth(request, reply);
+      }
+      const ctx = request.account;
+      if (!ctx) return; // requireAuth would have thrown
+      // API-key callers (no web session) bypass — MFA is a human-
+      // factor gate, not a machine-to-machine concept. Founder may
+      // revisit if api-key auth needs MFA gating; surface as a
+      // separate slice if so.
+      if (ctx.webSession === null) return;
+      // No MfaService wired = MFA disabled in this deploy → no gate.
+      if (!opts.mfaService) return;
+      const status = await opts.mfaService.getStatus(ctx.account.id);
+      if (!status.enrolled) return;
+      const sat = ctx.webSession.mfaSatisfiedAt;
+      if (sat === null) {
+        throw new MfaStepUpRequiredError('never_satisfied');
+      }
+      const ageSec = (Date.now() - sat.getTime()) / 1000;
+      if (ageSec > window) {
+        throw new MfaStepUpRequiredError('expired');
+      }
     };
   });
 

@@ -665,6 +665,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
         expiresAt: row.expiresAt,
         revokedAt: row.revokedAt,
         lastUsedAt: row.lastUsedAt,
+        mfaSatisfiedAt: row.mfaSatisfiedAt,
         createdAt: row.createdAt,
       };
     },

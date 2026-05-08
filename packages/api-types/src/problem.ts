@@ -50,6 +50,11 @@ export const PROBLEM_TYPES = {
   // isn't configured the endpoint returns 503 instead of a misleading
   // 404 / 500).
   FeatureUnavailable: 'https://errors.driftstack.dev/feature-unavailable',
+  // V-353e — step-up MFA challenge required before this op runs.
+  // Returned as 403 with `requires_mfa_step_up: true` extension. Client
+  // collects a fresh 6-digit code, posts to /v1/auth/mfa/step-up, then
+  // retries the original request.
+  MfaStepUpRequired: 'https://errors.driftstack.dev/mfa-step-up-required',
 } as const;
 
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES];

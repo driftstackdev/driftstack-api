@@ -25,6 +25,7 @@ import {
   MagicLinkConsumeRequestSchema,
   MagicLinkRequestSchema,
   MfaChallengeRequestSchema,
+  MfaStepUpRequestSchema,
   PasswordResetConfirmRequestSchema,
   PasswordResetRequestSchema,
   RefreshSessionRequestSchema,
@@ -213,6 +214,39 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
           account_id: `acc_${result.account.id}`,
         },
         via: result.via,
+      };
+    } catch (e) {
+      mapAuthFlowError(e);
+    }
+  });
+
+  // V-353e — step-up reauth on the EXISTING web session. Caller is
+  // bearer-authed; we verify the 6-digit (or recovery) code and stamp
+  // `mfa_satisfied_at` on their session. Step-up-gated routes
+  // (DELETE /v1/account/mfa, future DELETE /v1/account) pass for the
+  // next 15 min.
+  //
+  // 401 if the caller isn't authed; 401 if not a web session
+  // (API-key callers can't step-up since there's no session row to
+  // refresh). Rate-limited via loginGate to slow brute force.
+  app.post('/v1/auth/mfa/step-up', { preHandler: [app.requireAuth, loginGate] }, async (req) => {
+    const ctx = req.account;
+    if (!ctx) throw new Error('account context missing after requireAuth');
+    if (ctx.webSession === null) {
+      throw new ForbiddenError('MFA step-up is only callable from a web session.');
+    }
+    const parsed = MfaStepUpRequestSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+
+    try {
+      const result = await service.stepUpReauth({
+        accountId: ctx.account.id,
+        sessionId: ctx.webSession.id,
+        input: parsed.data.code ?? parsed.data.recovery_code!,
+      });
+      return {
+        via: result.via,
+        mfa_satisfied_at: result.mfaSatisfiedAt.toISOString(),
       };
     } catch (e) {
       mapAuthFlowError(e);

@@ -145,6 +145,28 @@ export const MfaChallengeResponseSchema = z.object({
 });
 export type MfaChallengeResponse = z.infer<typeof MfaChallengeResponseSchema>;
 
+// V-353e — step-up reauth on the existing session. Caller is bearer-
+// authed (web session); posts 6-digit (or recovery) code; server
+// refreshes `mfa_satisfied_at` so step-up-gated routes pass.
+export const MfaStepUpRequestSchema = z
+  .object({
+    code: z
+      .string()
+      .regex(/^\d{6}$/, 'Must be a 6-digit code.')
+      .optional(),
+    recovery_code: z.string().min(1).optional(),
+  })
+  .refine((v) => v.code !== undefined || v.recovery_code !== undefined, {
+    message: 'Either `code` or `recovery_code` must be provided.',
+  });
+export type MfaStepUpRequest = z.infer<typeof MfaStepUpRequestSchema>;
+
+export const MfaStepUpResponseSchema = z.object({
+  via: z.enum(['totp', 'recovery']),
+  mfa_satisfied_at: Iso8601Schema,
+});
+export type MfaStepUpResponse = z.infer<typeof MfaStepUpResponseSchema>;
+
 // ───────────────────────────────────────────────────────────────────────────
 // Magic link
 // ───────────────────────────────────────────────────────────────────────────

@@ -751,6 +751,44 @@ export class AuthFlowsService {
     });
   }
 
+  /**
+   * V-353e — step-up reauth WITHOUT re-logging-in. Caller is already
+   * authenticated via web session; they post the 6-digit (or recovery)
+   * code, we verify against their MFA enrollment, and refresh the
+   * `mfa_satisfied_at` column on the calling session. Distinct from
+   * `completeMfaChallenge` which is the LOGIN-PATH hand-off (no
+   * pre-existing session).
+   */
+  async stepUpReauth(args: {
+    accountId: string;
+    sessionId: string;
+    input: string;
+  }): Promise<{ via: 'totp' | 'recovery'; mfaSatisfiedAt: Date }> {
+    if (!this.mfa) {
+      throw new AuthFlowError('invalid_auth_token', 'MFA step-up not available on this server.');
+    }
+    const result = await this.mfa.verifyCode({
+      accountId: args.accountId,
+      input: args.input,
+    });
+    if (result === null) {
+      throw new AuthFlowError(
+        'invalid_auth_token',
+        'Code is invalid. Try again or use a recovery code.',
+      );
+    }
+    const now = new Date();
+    await this.repo.markWebSessionMfaSatisfied(args.sessionId, now);
+    if (this.authCache) {
+      try {
+        await this.authCache.invalidateAccount(args.accountId);
+      } catch {
+        /* swallow */
+      }
+    }
+    return { via: result, mfaSatisfiedAt: now };
+  }
+
   // ──────────────────── V-355: web-session list / revoke ────────────────────
 
   /**

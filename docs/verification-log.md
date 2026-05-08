@@ -18430,3 +18430,60 @@ token re-use refused). 1048 / 1048 tests pass.
 V-353e queued: step-up gate middleware on the locked Q3 endpoints
 (DELETE /v1/account/mfa, DELETE /v1/account when self-service
 deletion lands).
+
+## V-353e — step-up MFA gate middleware (15 min freshness)
+
+**Tier**: 1 (per V-353a verdict Q3 minimum scope + Q4 freshness window).
+
+`app.requireMfaFresh({freshnessSeconds?})` Fastify decorator gates a
+route on `web_sessions.mfa_satisfied_at` being non-null and within
+the freshness window (default 15 min).
+
+Behavior:
+
+- API-key caller (no web session) → bypass.
+- Account NOT MFA-enrolled → bypass.
+- `mfa_satisfied_at` is null → 403
+  `MfaStepUpRequiredError('never_satisfied')` with
+  `requires_mfa_step_up: true` extension.
+- Older than the window → 403 reason `expired`.
+- Otherwise → passes silently.
+
+`PROBLEM_TYPES.MfaStepUpRequired` + `MfaStepUpRequiredError` added.
+
+`AccountContext` extended with `webSession: {id, mfaSatisfiedAt} |
+null`. Auth path stamps from `WebSessionAuthRow` on the web-session
+slow path; null on the API-key path. `auth-cache` serialize/
+deserialize round-trips it (forward-compat: pre-V-353e cache entries
+deserialize to null).
+
+POST /v1/auth/mfa/step-up: bearer-authed; posts `{code}` or
+`{recovery_code}`; reuses `MfaService.verifyCode`; on success stamps
+`web_sessions.mfa_satisfied_at` via
+`AuthFlowsRepo.markWebSessionMfaSatisfied`. 403 when caller is
+API-key authed (no session row to refresh).
+
+Step-up gate applied to:
+
+- DELETE /v1/account/mfa (existing; preHandler chain extended)
+- POST /v1/account/mfa/disable (V-353f alias; same handler)
+
+Disable still requires `{confirm: "disable-mfa"}` body field
+beneath the gate.
+
+Recovery-code regen (V-353g) confirmed already shipped in V-353b at
+POST /v1/account/mfa/recovery-codes/regenerate; per Q3 minimum it
+stays UNGATED.
+
+Tests: 10 new integration tests (fresh passes, never-satisfied 403
+
+- extension, step-up reauth refreshes + subsequent disable passes,
+  POST alias, API-key bypass, NOT-enrolled bypass, step-up edges).
+  1058 / 1058 tests pass.
+
+V-353f shipped as the POST-alias one-liner in this slice. V-353g
+already shipped in V-353b.
+
+V-353h queued: dashboard /settings → MFA section (enroll flow with
+QR + recovery-code modal + disable button + step-up reauth flow);
+/v1/account/me response gains `mfa_enrolled` flag.

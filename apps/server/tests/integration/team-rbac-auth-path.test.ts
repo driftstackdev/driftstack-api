@@ -125,6 +125,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       },
       rateLimitOverrides: {},
       teams: [],
+      webSession: null,
     };
     const eff = resolveEffectiveAccount(ctx, undefined);
     expect(eff).toEqual({ kind: 'self', accountId: 'self-acc' });
@@ -164,6 +165,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
           role: 'admin' as const,
         },
       ],
+      webSession: null,
     };
     const eff = resolveEffectiveAccount(ctx, 'acc_owner-acc');
     expect(eff.kind).toBe('team');
@@ -201,6 +203,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       },
       rateLimitOverrides: {},
       teams: [],
+      webSession: null,
     };
     expect(() => resolveEffectiveAccount(ctx, 'acc_some-other')).toThrow(/not a member of/);
   });
@@ -233,6 +236,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       },
       rateLimitOverrides: {},
       teams: [],
+      webSession: null,
     };
     expect(() => resolveEffectiveAccount(ctx, 'malformed-no-prefix')).toThrow(/Invalid/);
   });
@@ -1170,6 +1174,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       },
       rateLimitOverrides: {},
       teams: [],
+      webSession: null,
     };
     const eff = resolveEffectiveAccount(ctx, 'acc_self-acc');
     expect(eff).toEqual({ kind: 'self', accountId: 'self-acc' });

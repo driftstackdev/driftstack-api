@@ -266,6 +266,27 @@ export class FeatureUnavailableError extends ApiError {
   }
 }
 
+// V-353e — step-up MFA challenge required to run the requested op.
+// Status is 403 (the caller is authenticated; they just need to prove
+// MFA again within the 15-min freshness window). The
+// `requires_mfa_step_up: true` extension lets clients branch on this
+// without parsing the problem-type URI.
+export class MfaStepUpRequiredError extends ApiError {
+  constructor(reason: 'never_satisfied' | 'expired') {
+    super({
+      type: PROBLEM_TYPES.MfaStepUpRequired,
+      title: 'MFA step-up required',
+      status: 403,
+      detail:
+        reason === 'never_satisfied'
+          ? 'This action requires a fresh MFA challenge. Sign in again with your authenticator code.'
+          : 'Your MFA proof has expired. Re-enter your authenticator code to continue.',
+      extensions: { requires_mfa_step_up: true, reason },
+    });
+    this.name = 'MfaStepUpRequiredError';
+  }
+}
+
 // LegalAcceptanceRequiredError — 409 when an operation is gated on
 // the customer accepting one or more legal documents (ToS, Privacy,
 // DPA, AUP). The extension carries `pending_acceptances` so the

@@ -91,6 +91,7 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
       expiresAt: row.expiresAt,
       revokedAt: row.revokedAt,
       lastUsedAt: row.lastUsedAt,
+      mfaSatisfiedAt: row.mfaSatisfiedAt,
       createdAt: row.createdAt,
     };
   }
