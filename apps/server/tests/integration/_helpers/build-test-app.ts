@@ -26,6 +26,8 @@ import { IncidentBroadcastService } from '../../../src/services/incident-broadca
 import { IncidentEventBus } from '../../../src/services/incident-event-bus.js';
 import { SlaReportingService } from '../../../src/services/sla-reporting.js';
 import { InMemoryProbesRepo } from './in-memory-probes-repo.js';
+import { TeamMembersService } from '../../../src/services/team-members.js';
+import { InMemoryTeamMembersRepo } from './in-memory-team-members-repo.js';
 import type { EmailService } from '../../../src/services/email.js';
 import { RateLimitOverridesService } from '../../../src/services/rate-limit-overrides.js';
 import { LegalService } from '../../../src/services/legal.js';
@@ -235,6 +237,10 @@ export interface TestAppFixture {
   incidentEventBus: IncidentEventBus;
   /** V-295e — exposed so tests can seed probe history before calling SLA. */
   probesRepo: InMemoryProbesRepo;
+  /** V-298c — exposed so tests can seed account-email mappings (for accept flow). */
+  teamMembersRepo: InMemoryTeamMembersRepo;
+  /** V-298c — exposed for direct service tests beyond the route layer. */
+  teamMembersService: TeamMembersService;
   /** V-295c3 — recording email service: tests can read .sends to assert
    *  exactly which template fired with what variables. */
   emailSends: ReadonlyArray<EmailSendRecord>;
@@ -388,6 +394,14 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const statusSubscribersRepo = new InMemoryStatusSubscribersRepo();
   const statusSubscribersService = new StatusSubscribersService(statusSubscribersRepo, noopEmail, {
     statusPageBaseUrl: 'https://status.driftstack.test',
+  });
+
+  // V-298b/c — Team RBAC v1.
+  const teamMembersRepo = new InMemoryTeamMembersRepo();
+  // Seed the test account's email so accept-flow tests can match it.
+  teamMembersRepo.upsertAccountEmail(accountId, opts.email ?? 'tester@driftstack.local');
+  const teamMembersService = new TeamMembersService(teamMembersRepo, noopEmail, {
+    dashboardBaseUrl: 'https://app.driftstack.test',
   });
 
   // V-295c3-followup — incident-notification fan-out.
@@ -689,6 +703,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     statusSubscribersService,
     incidentEventBus,
     slaReportingService,
+    teamMembersService,
     rateLimitOverridesService,
     legalService,
     emailPreferencesService,
@@ -724,6 +739,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     broadcastFetchCalls,
     incidentEventBus,
     probesRepo,
+    teamMembersRepo,
+    teamMembersService,
     emailSends,
     rateLimitOverridesRepo,
     sessionsRepo,

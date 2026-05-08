@@ -61,6 +61,8 @@ import { DrizzleProbesRepo } from '../db/health-probes-repo.js';
 import { StatusSnapshotService } from '../services/status-snapshot.js';
 import { StatusSubscribersService } from '../services/status-subscribers.js';
 import { DrizzleStatusSubscribersRepo } from '../db/status-subscribers-repo.js';
+import { TeamMembersService } from '../services/team-members.js';
+import { DrizzleTeamMembersRepo } from '../db/team-members-repo.js';
 import { IncidentNotificationsService } from '../services/incident-notifications.js';
 import { IncidentBroadcastService } from '../services/incident-broadcast.js';
 import { IncidentEventBus } from '../services/incident-event-bus.js';
@@ -271,6 +273,16 @@ export async function createProductionDeps(
   const statusSubscribersRepo = new DrizzleStatusSubscribersRepo(dbHandle);
   const statusSubscribersService = new StatusSubscribersService(statusSubscribersRepo, email, {
     statusPageBaseUrl,
+  });
+
+  // V-298b/c — Team RBAC v1 service. Routes wired in app.ts. The auth
+  // path itself does NOT yet honor team membership (V-298d) — invites
+  // can be sent + accepted, but membership grants no implicit
+  // permissions on the owner's resources until V-298d.
+  const dashboardBaseUrl = process.env.PUBLIC_DASHBOARD_URL ?? 'https://app.driftstack.dev';
+  const teamMembersRepo = new DrizzleTeamMembersRepo(dbHandle);
+  const teamMembersService = new TeamMembersService(teamMembersRepo, email, {
+    dashboardBaseUrl,
   });
 
   // V-295c3-followup — incident-notification fan-out. Wired into the
@@ -520,6 +532,7 @@ export async function createProductionDeps(
     statusSubscribersService,
     incidentEventBus,
     slaReportingService,
+    teamMembersService,
     rateLimitOverridesService,
     legalService,
     emailPreferencesService,

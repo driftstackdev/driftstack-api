@@ -1,0 +1,154 @@
+// V-298c — Team RBAC v1 routes.
+//
+//   POST   /v1/team/invites              — owner invites email (account_owner)
+//   GET    /v1/team/invites              — list pending (account_owner)
+//   POST   /v1/team/invites/accept       — invitee accepts (any auth)
+//   GET    /v1/team/members              — list confirmed (account_owner)
+//   DELETE /v1/team/members/:id          — remove member (account_owner)
+//
+// V-298c is route-only; the auth path itself doesn't yet honor team
+// membership (V-298d). Members can be invited + accept, but the
+// resulting membership doesn't grant them any permissions on the
+// owner's resources until V-298d wires it.
+
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { ValidationError } from '../lib/errors.js';
+import type { TeamInviteRow, TeamMemberRow, TeamMembersService } from '../services/team-members.js';
+
+const InviteBodySchema = z.object({
+  email: z.string().trim().email('Must be a valid email.'),
+  role: z.enum(['member', 'admin']).optional(),
+});
+
+const AcceptBodySchema = z.object({
+  token: z.string().min(20, 'Missing or malformed token.'),
+});
+
+const MEMBER_ID_RE = /^mem_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+function uuidFromMemberId(value: string): string {
+  const match = MEMBER_ID_RE.exec(value);
+  if (!match || !match[1]) {
+    throw new ValidationError({
+      formErrors: ['Invalid id format. Expected "mem_<uuid>".'],
+      fieldErrors: {},
+    });
+  }
+  return match[1];
+}
+
+function publicMember(row: TeamMemberRow): Record<string, unknown> {
+  return {
+    id: `mem_${row.id}`,
+    owner_account_id: `acc_${row.ownerAccountId}`,
+    member_account_id: `acc_${row.memberAccountId}`,
+    member_email: row.memberEmail,
+    role: row.role,
+    invited_at: row.invitedAt.toISOString(),
+    accepted_at: row.acceptedAt.toISOString(),
+    invited_by_account_id: row.invitedByAccountId ? `acc_${row.invitedByAccountId}` : null,
+  };
+}
+
+function publicInvite(row: TeamInviteRow): Record<string, unknown> {
+  return {
+    id: `inv_${row.id}`,
+    owner_account_id: `acc_${row.ownerAccountId}`,
+    invitee_email: row.inviteeEmail,
+    role: row.role,
+    expires_at: row.inviteExpiresAt.toISOString(),
+    invited_by_account_id: row.invitedByAccountId ? `acc_${row.invitedByAccountId}` : null,
+    accepted_at: row.acceptedAt ? row.acceptedAt.toISOString() : null,
+    created_at: row.createdAt.toISOString(),
+  };
+}
+
+export interface TeamRoutesOptions {
+  service: TeamMembersService;
+}
+
+export function registerTeamRoutes(app: FastifyInstance, opts: TeamRoutesOptions): void {
+  const { service } = opts;
+
+  app.post(
+    '/v1/team/invites',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const parsed = InviteBodySchema.safeParse(request.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      await service.invite({
+        ownerAccountId: ctx.account.id,
+        invitedByAccountId: ctx.account.id,
+        inviteeEmail: parsed.data.email,
+        ...(parsed.data.role !== undefined ? { role: parsed.data.role } : {}),
+      });
+      return reply
+        .code(202)
+        .send({ message: 'Invite sent. The invitee can accept via the email link.' });
+    },
+  );
+
+  app.get(
+    '/v1/team/invites',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const rows = await service.listPendingInvites(ctx.account.id);
+      return { data: rows.map(publicInvite) };
+    },
+  );
+
+  app.post(
+    '/v1/team/invites/accept',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const parsed = AcceptBodySchema.safeParse(request.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      const result = await service.accept({
+        plaintextToken: parsed.data.token,
+        acceptingAccountId: ctx.account.id,
+      });
+      return reply.code(200).send({ membership: publicMember(result.membership) });
+    },
+  );
+
+  app.get(
+    '/v1/team/members',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const rows = await service.listMembers(ctx.account.id);
+      return { data: rows.map(publicMember) };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/v1/team/members/:id',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const id = uuidFromMemberId(request.params.id);
+      const removed = await service.removeMember({
+        membershipId: id,
+        ownerAccountId: ctx.account.id,
+      });
+      if (!removed) {
+        return reply.code(404).send({
+          type: 'about:blank',
+          title: 'Not Found',
+          status: 404,
+          detail: `Membership ${request.params.id} not found.`,
+        });
+      }
+      return reply.code(204).send();
+    },
+  );
+}

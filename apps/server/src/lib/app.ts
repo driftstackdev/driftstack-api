@@ -26,6 +26,8 @@ import { registerAdminStatusSubscribersRoutes } from '../routes/admin-status-sub
 import type { IncidentEventBus } from '../services/incident-event-bus.js';
 import type { SlaReportingService } from '../services/sla-reporting.js';
 import { registerStatusStreamRoutes } from '../routes/status-stream.js';
+import type { TeamMembersService } from '../services/team-members.js';
+import { registerTeamRoutes } from '../routes/team.js';
 import type { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import type { LegalService } from '../services/legal.js';
 import type { EmailPreferencesService } from '../services/email-preferences.js';
@@ -126,6 +128,11 @@ export interface AppDeps {
   incidentEventBus?: IncidentEventBus;
   /** V-295e — rolling 30d SLA reporter for /v1/status/sla. */
   slaReportingService?: SlaReportingService;
+  /** V-298b/c — Team RBAC v1. When omitted, /v1/team/* routes are not
+   *  registered. Auth path integration (member acts as owner per role)
+   *  is V-298d; until then the routes function but the membership grants
+   *  no implicit permissions on the owner's resources. */
+  teamMembersService?: TeamMembersService;
   rateLimitOverridesService: RateLimitOverridesService;
   legalService: LegalService;
   /** V-204: customer email notification preferences. */
@@ -283,6 +290,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       bus: deps.incidentEventBus,
       sla: deps.slaReportingService,
     });
+  }
+  if (deps.teamMembersService !== undefined) {
+    registerTeamRoutes(app, { service: deps.teamMembersService });
   }
   registerAdminWebhookRoutes(app, {
     webhooksAdmin: deps.webhooksAdminService,
