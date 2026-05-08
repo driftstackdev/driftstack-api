@@ -7,6 +7,22 @@ export interface ApiKeyList {
   data: ApiKey[];
 }
 
+/**
+ * V-296 — response shape for POST /v1/api-keys/:id/rotate. Includes the
+ * new key's plaintext (shown ONCE), the previous key's id, and the
+ * timestamp at which the previous key auto-revokes via the existing
+ * expires_at-driven auth gate.
+ */
+export interface RotateApiKeyResponse extends CreateApiKeyResponse {
+  rotated_from: string;
+  grace_period_ends_at: string;
+}
+
+export interface RotateApiKeyOptions {
+  /** Optional new name for the rotated key. Defaults to the old name. */
+  name?: string;
+}
+
 export class ApiKeysResource {
   constructor(private readonly http: HttpClient) {}
 
@@ -33,6 +49,22 @@ export class ApiKeysResource {
     return this.http.request<void>({
       method: 'DELETE',
       path: `/v1/api-keys/${encodeURIComponent(keyId)}`,
+    });
+  }
+
+  /**
+   * V-296 — rotate an API key. Mints a fresh plaintext + sets the OLD key's
+   * expires_at to now + 24h grace. Both keys work concurrently during the
+   * grace window; deploy the new key, then the old key auto-revokes at the
+   * grace boundary via the existing expires_at-driven auth gate.
+   *
+   * The new plaintext is returned ONCE in the response — store it now.
+   */
+  rotate(keyId: string, options: RotateApiKeyOptions = {}): Promise<RotateApiKeyResponse> {
+    return this.http.request<RotateApiKeyResponse>({
+      method: 'POST',
+      path: `/v1/api-keys/${encodeURIComponent(keyId)}/rotate`,
+      body: options,
     });
   }
 }

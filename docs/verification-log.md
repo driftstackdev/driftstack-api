@@ -17410,3 +17410,42 @@ V-304 (~4-6h) — onboarding email orchestration. Welcome email post-signup + fi
 ### Next
 
 V-304b (~3-4h) — billing renewal reminders (7d + 1d before subscription renewal). Stripe webhook upcoming.invoice → schedule 2 jobs via V-202d scheduled-jobs → handler sends email. Then V-304c if needed (welcome email enhancements). Then V-309+ V-294 catalog. NEVER STOP autopilot.
+
+## V-309 — TypeScript SDK additions for V-296 rotate + V-307 replay
+
+**Tier**: 1 — SDK / customer-trust ergonomics. Closes the gap where new V-296 + V-307 server endpoints existed but the SDK didn't expose them.
+
+**Why**: Power users hitting the API directly via curl or Postman could already use the V-296 + V-307 endpoints, but typed SDK consumers couldn't. SDK additions are tightly bounded — single method per endpoint, mirror the wire shape, no surprises.
+
+**Scope**
+
+- `ApiKeysResource.rotate(keyId, options?)` — POSTs `/v1/api-keys/:id/rotate`. Returns the new `RotateApiKeyResponse` (extends `CreateApiKeyResponse` with `rotated_from` + `grace_period_ends_at`). Optional `name` rename via options.
+- `WebhooksResource.replayDelivery(deliveryId)` — POSTs `/v1/webhook-deliveries/:id/replay`. Returns the updated `WebhookDelivery` (status reset to `pending`).
+- Two unit tests covering wire-shape (path / method / body / response):
+  - `tests/unit/api-keys-rotate.test.ts` (2 tests).
+  - `tests/unit/webhooks-replay.test.ts` (1 test).
+
+**Files**
+
+- `packages/sdk-typescript/src/resources/api-keys.ts` — `rotate` method + `RotateApiKeyResponse` + `RotateApiKeyOptions`.
+- `packages/sdk-typescript/src/resources/webhooks.ts` — `replayDelivery` method.
+- `packages/sdk-typescript/tests/unit/api-keys-rotate.test.ts` — new.
+- `packages/sdk-typescript/tests/unit/webhooks-replay.test.ts` — new.
+
+### Verify
+
+- `npm test`: 920 / 920 across 100 files (was 917 / 98; +3 SDK tests, +2 files).
+- `npm run lint`: clean.
+- `npm run format:check`: clean.
+
+### Notes — methodology choices
+
+- **Mirror the wire shape, no client-side transformation**: SDK methods pass-through path / method / body / response. No remapping of field names. Customers using the SDK + reading the API reference see the same names on both sides.
+- **`RotateApiKeyResponse extends CreateApiKeyResponse`**: rotation is structurally a "create new key" operation that ALSO surfaces the old-key reference + grace-period timestamp. Inheritance models this cleanly without duplicating fields.
+- **Empty `body: {}` for replay** rather than no body: Fastify is content-type-strict; sending no body when the route declares POST works in practice but `{}` is the explicit-default.
+- **No new SDK error types**: rotation can throw 404 (key not found) or 400 (key revoked); replay can throw 404 (not owned) or 400 (malformed id). Existing `DriftstackError` machinery handles both with the standard error contract — no new error subclasses needed.
+- **Python + Go SDK parity is V-309b/c**: Python and Go SDK packages also need rotate + replay. Bundled into this V-log entry as a future follow-up; the TypeScript SDK is the reference + most-used path. Founder ack to roll Python + Go into V-309b/c slices.
+
+### Next
+
+V-309b (~2-3h) — Python SDK rotate + replay. V-309c — Go SDK rotate + replay. Then V-304b (billing renewal reminders), V-298 Team RBAC v1 (substantial — splits into V-298a/b/c/d sub-slices), V-309+ V-294 catalog. NEVER STOP autopilot.
