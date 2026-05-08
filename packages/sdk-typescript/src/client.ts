@@ -11,6 +11,7 @@ import { ProfilesResource } from './resources/profiles.js';
 import { BillingResource } from './resources/billing.js';
 import { AuthResource } from './resources/auth.js';
 import { AccountResource } from './resources/account.js';
+import { TeamResource } from './resources/team.js';
 import type { RetryConfig } from './retry.js';
 
 export interface DriftstackOptions {
@@ -37,6 +38,8 @@ export class Driftstack {
   readonly billing: BillingResource;
   readonly auth: AuthResource;
   readonly account: AccountResource;
+  /** V-298c — Team RBAC. Auth path integration is V-298d. */
+  readonly team: TeamResource;
 
   private readonly http: HttpClient;
 
@@ -62,5 +65,6 @@ export class Driftstack {
     this.billing = new BillingResource(this.http);
     this.auth = new AuthResource(this.http);
     this.account = new AccountResource(this.http);
+    this.team = new TeamResource(this.http);
   }
 }
