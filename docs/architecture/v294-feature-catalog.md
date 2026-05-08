@@ -429,17 +429,17 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 
 ### Surface 10 — AI agent layer (planning file 06)
 
-| Feature                                   | Status                | Slice          | Tier-1h | Legal updates                           |
-| ----------------------------------------- | --------------------- | -------------- | ------- | --------------------------------------- |
-| Agent execution service shell             | DEFERRED              | V-361          | 16      | privacy + DPA Annex 3 (Anthropic) + ToS |
-| Natural language task input               | DEFERRED              | V-361          | 4       | —                                       |
-| Perception-reason-action loop             | UNDISCOVERED          | V-NNN+         | 24      | —                                       |
-| LLM integration (Claude Opus primary)     | DEFERRED              | V-361          | 8       | DPA Annex 3 (already present)           |
-| Page representation (visual + structured) | UNDISCOVERED          | V-NNN+         | 16      | —                                       |
-| Streaming agent thoughts (SSE)            | UNDISCOVERED          | V-NNN+         | 8       | —                                       |
-| BYOK + bundled billing models             | SHIPPED (markup-only) | tier3_explicit | —       | —                                       |
-| Agent UI in dashboard                     | UNDISCOVERED          | V-NNN+         | 16      | —                                       |
-| Agent safety guardrails                   | UNDISCOVERED          | V-NNN+         | 16      | ToS                                     |
+| Feature                                   | Status                | Slice          | Tier-1h | Legal updates                 |
+| ----------------------------------------- | --------------------- | -------------- | ------- | ----------------------------- |
+| Agent execution service shell             | DEFERRED              | V-361          | 16      | privacy + DPA Annex 3 + ToS   |
+| Natural language task input               | DEFERRED              | V-361          | 4       | —                             |
+| Perception-reason-action loop             | UNDISCOVERED          | V-NNN+         | 24      | —                             |
+| LLM integration (bundled-LLM provider)    | DEFERRED              | V-361          | 8       | DPA Annex 3 (already present) |
+| Page representation (visual + structured) | UNDISCOVERED          | V-NNN+         | 16      | —                             |
+| Streaming agent thoughts (SSE)            | UNDISCOVERED          | V-NNN+         | 8       | —                             |
+| BYOK + bundled billing models             | SHIPPED (markup-only) | tier3_explicit | —       | —                             |
+| Agent UI in dashboard                     | UNDISCOVERED          | V-NNN+         | 16      | —                             |
+| Agent safety guardrails                   | UNDISCOVERED          | V-NNN+         | 16      | ToS                           |
 
 (Note: full agent loop is post-v1 per planning file 00. V-361 ships the shell + scaffolding only. Most agent-loop features are OUT-OF-SCOPE for v1.)
 

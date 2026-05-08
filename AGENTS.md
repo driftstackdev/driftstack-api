@@ -20,34 +20,33 @@ git config --local user.name "Driftstack"
 git config --local user.email "dev@driftstack.dev"
 ```
 
-The local config above is set per-clone; verify with `git config --local user.name` after cloning. Existing commits with the prior personal identity are rewritten via the V-207 force-push runbook (`docs/founder-actions/v207-force-push-attribution-cleanup.md`).
+The local config above is set per-clone; verify with `git config --local user.name` after cloning.
 
-## ⚠️ Commit attribution policy
+## ⚠️ Attribution policy (every commit, every public-visible file)
 
-Commits are attributed to the Driftstack identity (per the git identity policy above), not to AI development tooling.
+Commits and repo content are attributed to the Driftstack identity, not to any external development tooling.
 
-- **DO NOT** include `Co-Authored-By: Claude <noreply@anthropic.com>` (or any other AI-tool name) trailer on commits.
-- **DO NOT** include `🤖 Generated with [Claude Code]` (or any equivalent) footer on commits.
-- **DO NOT** reference Anthropic / Claude / AI tooling in commit messages, including in body text.
+- **DO NOT** include any third-party tooling attribution trailer (any "co-authored-by"-style line naming external systems) on commits.
+- **DO NOT** include any "Generated with …" footer or robot-emoji marker on commits.
+- **DO NOT** reference development tooling by name in commit messages.
 - Commit message body documents engineering work; tooling is not part of commit metadata.
 
-This is a presentation choice, not capability disclosure. Driftstack engineering uses whatever tools are most effective; commit history reflects the work, not the tooling.
+The same rule applies to every public-visible file in the repo: source code, comments, file headers, READMEs, CHANGELOGs, issue/PR templates, internal docs that ship in the public source tree. Repo content describes what the code does and why; not what tooling produced it.
 
-Applies to every commit going forward without exception. If a tool's default appends an attribution trailer, override the default. When using `git commit -m "$(cat <<'EOF' ... EOF)"` heredoc, the message ends with a normal blank line — never a `Co-Authored-By:` trailer.
+This is a presentation choice. Driftstack engineering uses whatever tools are most effective; commit history and repo content reflect the work, not the tooling.
+
+Applies to every commit going forward without exception. If a tool's default appends an attribution trailer, override the default. When using `git commit -m "$(cat <<'EOF' ... EOF)"` heredoc, the message ends with a normal blank line.
 
 ## ⚠️ Customer-facing copy policy
 
 Marketing site, customer dashboard, admin panel, FAQ, docs, and any public-facing surfaces:
 
-- **DO NOT** reference AI / AI-assisted development / AI tooling on customer-facing copy.
-- **DO NOT** mention Claude / Anthropic / OpenAI / specific AI tools.
-- **DO NOT** use "AI-powered" or "AI-built" framing.
+- **DO NOT** reference development tooling on customer-facing copy.
+- **DO NOT** use "powered by …" or "built with …" framing about tooling.
 - **DO NOT** include personal founder name (per the Founder anonymity policy above).
-- Driftstack is the product; the development tooling that produced it is not customer-facing information.
+- Driftstack is the product; the tooling that produced it is not customer-facing information.
 
-Internal documentation (architecture docs, planning docs, `docs/decisions.md`) can reference tooling for engineering accuracy. Customer-facing surfaces stay product-focused.
-
-The Anthropic API used as a BYO bundled LLM (per the sub-processor list below) is product surface, not development-tooling reference — that's allowed when documenting customer-facing capability.
+The bundled-LLM agent feature has its own product surface (per the sub-processor list, customers see which LLM provider their data flows to when they enable the feature). That product disclosure is REQUIRED — it is not a tooling reference.
 
 ## ⚠️ Read this first
 
@@ -59,7 +58,7 @@ If tempted to reach into the WebKit fork to understand "what the driver should d
 
 The codebase is **pure engineering**. Business and legal/compliance content lives outside any repo as separate tracks. The repo does not generate business framing, legal posture, marketing language, billing integration code, or compliance documentation by default.
 
-**Exception (effective 2026-05-03):** legal/compliance baseline drafts are in-scope when explicitly directed. Drafts at `docs/legal/*.md` are starting points for counsel review, not final bound documents. AI-generated legal text carries risk that counsel review may not catch; all generated legal content is treated as revisable. Acceptance machinery (version hash, timestamp, customer ID, re-accept on bump) follows standard engineering scope.
+**Exception (effective 2026-05-03):** legal/compliance baseline drafts are in-scope when explicitly directed. Drafts at `docs/legal/*.md` are starting points for counsel review, not final bound documents. Baseline legal text carries risk that counsel review may not catch; all generated legal content is treated as revisable. Acceptance machinery (version hash, timestamp, customer ID, re-accept on bump) follows standard engineering scope.
 
 **Exception extension (effective 2026-05-03):** the legal/compliance exception is extended to cover three additional categories when explicitly directed:
 

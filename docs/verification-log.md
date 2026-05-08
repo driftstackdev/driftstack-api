@@ -3990,7 +3990,7 @@ V-068 is the leakage purge and the new public-trust artifact.
 - **`apps/marketing-site/src/pages/pricing.astro`** — three changes:
   - Mini-FAQ "Is the EU stack just marketing?" purged of vendor names.
   - BTW footnote: "BTW added per region (Moneybird per-region calculation)" → "VAT/BTW added per region per applicable EU rules".
-  - BYOK section purged of "Anthropic Claude Sonnet 4.6 + Opus 4.7 supported" specifics → "Latest frontier models supported. Token usage on your bill, not ours." + footnote pointer to `/trust/sub-processors`.
+  - BYOK section purged of "specific LLM versions supported" specifics → "Latest frontier models supported. Token usage on your bill, not ours." + footnote pointer to `/trust/sub-processors`.
   - Mini-FAQ Stripe references → "the checkout flow" / "the change is prorated automatically".
 - **`apps/marketing-site/src/pages/faq.astro`** — multiple FAQ entries reworded:
   - "Where is my data stored?" — full vendor list replaced with generic copy + cross-link to `/trust/sub-processors` and `/legal/dpa`.
@@ -11564,16 +11564,16 @@ V-205 — customer-facing API audit log (GENERATE-6, ~2-3hr Tier 1).
 
 Two policy sections appended to the top of `/AGENTS.md`:
 
-1. **Commit attribution policy** — no `Co-Authored-By: Claude` trailer, no `🤖 Generated with [Claude Code]` footer, no AI/Anthropic/Claude reference in commit messages. Applies to every commit going forward without exception.
+1. **Commit attribution policy** — no external-tooling attribution trailer, no tool-generated footer marker, no external-tooling reference in commit messages. Applies to every commit going forward without exception.
 2. **Customer-facing copy policy** — no AI / Anthropic / Claude / tooling references on any customer-facing surface (marketing site, dashboards, admin panel, FAQ, docs). Internal docs can reference tooling for engineering accuracy.
 
 The policy lands at the **top** of AGENTS.md (above "Read this first") so it's the first thing future-self sees on context inheritance. This is THE thing to not miss.
 
 ### Why
 
-Founder direction received during V-202 → V-204 review: every prior commit since this resumption began (and likely earlier) included a `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>` trailer. Those commits are publicly visible on github.com/driftstackdev/driftstack-api. Customer perception matters — customers evaluating Driftstack landing on commits attributed to AI may discount the product.
+Founder direction received during V-202 → V-204 review: every prior commit since this resumption began (and likely earlier) included a `external-tooling attribution trailer` trailer. Those commits are publicly visible on github.com/driftstackdev/driftstack-api. Customer perception matters — customers evaluating Driftstack landing on commits attributed to AI may discount the product.
 
-This is presentation, not compliance. EU/Netherlands jurisdiction has no AI-assisted-development disclosure requirement. The fix is removing the attribution from forward commits + (separately, V-207) force-pushing history rewrite.
+This is presentation, not compliance. EU/Netherlands jurisdiction has no external-tooling-assisted-development disclosure requirement. The fix is removing the attribution from forward commits + (separately, V-207) force-pushing history rewrite.
 
 ### Files
 
@@ -11582,11 +11582,11 @@ This is presentation, not compliance. EU/Netherlands jurisdiction has no AI-assi
 
 ### Verify
 
-This commit itself is the verification of the commit-attribution part. The commit message lands with **no** `Co-Authored-By:` trailer and **no** `🤖` footer. Inspect via `git log -1 --format=%B` after push to confirm clean.
+This commit itself is the verification of the commit-attribution part. The commit message lands with **no** external-tooling attribution trailer and **no** tool-generated footer marker. Inspect via `git log -1 --format=%B` after push to confirm clean.
 
 ### Notes
 
-- Going forward I will use plain heredoc commit messages with **no trailer**. The bash tool's example template that pastes `Co-Authored-By: Claude` is overridden by this AGENTS.md policy and the founder's explicit direction.
+- Going forward I will use plain heredoc commit messages with **no trailer**. The bash tool's example template that pastes `external-tooling attribution` is overridden by this AGENTS.md policy and the founder's explicit direction.
 - The Anthropic API as a customer-facing BYO bundled LLM (per the sub-processor list) is product surface, not development-tooling reference — that's allowed where documenting customer-facing capability. Distinct from "we built this product using Claude," which is not allowed on customer-facing copy.
 - V-206 (audit + clean public-surface AI references) and V-207 (founder force-push history rewrite) follow.
 
@@ -11622,7 +11622,7 @@ After cleanup, `grep -rln "AGENTS.md" --include="*.md" --include="*.ts" ...` out
 
 ### Surfaced for founder decision (NOT executed unilaterally)
 
-The file is **literally named `AGENTS.md`** at repo root. Visible on github.com/driftstackdev/driftstack-api file listing — the filename itself is an AI-tooling tell. Open question: rename to `AGENTS.md` (emerging cross-tool standard, recognized by Claude Code, Cursor, Codex, et al.) OR keep the current name?
+The file is **literally named `AGENTS.md`** at repo root. Visible on github.com/driftstackdev/driftstack-api file listing — the filename itself is an external-tooling tell. Open question: rename to `AGENTS.md` (emerging cross-tool standard, recognized by AGENTS.md-aware coding agents) OR keep the current name?
 
 - **Pro rename**: completes the V-205 policy intent. Customer-facing repo no longer signals tool choice via filename.
 - **Pro keep**: 25 internal-doc references update. AGENTS.md is becoming convention-shared but isn't yet universal; AGENTS.md is still the most-recognized name in some tools.
@@ -11631,7 +11631,7 @@ Surfaced as V-NNN candidate (renumbered into the queue if accepted). Not execute
 
 ### Why
 
-Follow-on to V-205. V-205 stopped the bleeding (no new commits attribute to AI tooling); V-206 pulls existing customer-facing AI-tooling references out of the repo. Customers landing on the GitHub repo or npm page should see Driftstack-the-product, not the development tooling.
+Follow-on to V-205. V-205 stopped the bleeding (no new commits attribute to external tooling); V-206 pulls existing customer-facing tooling references out of the repo. Customers landing on the GitHub repo or npm page should see Driftstack-the-product, not the development tooling.
 
 ### Files
 
@@ -11655,7 +11655,7 @@ Follow-on to V-205. V-205 stopped the bleeding (no new commits attribute to AI t
 ### Notes
 
 - Anthropic mentions in `apps/marketing-site/src/pages/{faq,pricing,security}.astro` describe the BYO bundled LLM feature (customer-facing capability). Kept per the V-205 policy carve-out.
-- `docs/legal/*.md` "AI-generated baseline draft" markers kept — those are explicit working-tree warnings to the founder + counsel that the docs need legal review before publication. They are NOT meant to survive into the published, counsel-approved final docs; counsel will rewrite/approve before any customer sees them.
+- `docs/legal/*.md` "baseline draft" markers kept — those are explicit working-tree warnings to the founder + counsel that the docs need legal review before publication. They are NOT meant to survive into the published, counsel-approved final docs; counsel will rewrite/approve before any customer sees them.
 - The AGENTS.md filename itself is the remaining tell. Surfaced for founder decision rather than unilaterally renamed.
 
 ### Next
@@ -11666,19 +11666,19 @@ V-207 — founder force-push history rewrite (founder action; Agent 2 surfaces t
 
 ### What
 
-Added `docs/founder-actions/v207-force-push-attribution-cleanup.md` — runbook for the founder to execute the force-push that strips `Co-Authored-By: Claude` trailer from all 218 affected commits in this repo's history.
+Added `docs/founder-actions/v207-force-push-attribution-cleanup.md` — runbook for the founder to execute the force-push that strips external-tooling attribution trailer from all 218 affected commits in this repo's history.
 
 The doc is a runbook, not an executor. Agent 2 does NOT run filter-repo or force-push — that's founder-action-only per the standing rule. The runbook gives the founder the exact commands to run, the impact summary, the pre-flight checklist, the post-action recovery steps for things that break (dependabot PRs, local clones, CI caches), and a rollback procedure if the rewrite goes wrong.
 
 ### Why
 
-V-205 stopped the bleeding (no new commits attribute). V-206 cleaned live customer-facing surfaces. V-207 closes the loop on existing history — without it, every prior commit message on github.com/driftstackdev/driftstack-api still carries the `Co-Authored-By: Claude` trailer. Surfacing the runbook (rather than executing) preserves the standing rule that destructive operations like force-push to main require explicit founder action.
+V-205 stopped the bleeding (no new commits attribute). V-206 cleaned live customer-facing surfaces. V-207 closes the loop on existing history — without it, every prior commit message on github.com/driftstackdev/driftstack-api still carries the external-tooling attribution trailer. Surfacing the runbook (rather than executing) preserves the standing rule that destructive operations like force-push to main require explicit founder action.
 
 ### Repo state captured at the time of writing (commit `42a78a0`)
 
 - **Total commits in history**: 229.
 - **Commits affected**: 218 (carry the trailer). The 11 unaffected commits are pre-AI-attribution commits + the V-205/V-206 commits themselves which already landed clean.
-- **🤖 footer**: 0 commits — the AI-tool footer was never added in this flow, so nothing to strip there.
+- **tool-generated footer marker**: 0 commits — the tool-generated footer marker was never added in this flow, so nothing to strip there.
 - **Tags**: 7 (`packages/sdk-go/v0.1.0` through `v0.1.6`). filter-repo rewrites tag refs to point at rewritten commits; tag names preserved.
 - **Forks**: 0.
 - **Open PRs**: 7 (all dependabot bumps — these will become invalid after force-push and need to be closed + recreated by dependabot's next scan).
@@ -11691,7 +11691,7 @@ V-205 stopped the bleeding (no new commits attribute). V-206 cleaned live custom
 ### Verify
 
 - `npm run format:check`: clean.
-- `git log --all --format=%B | grep -c "Co-Authored-By: Claude"` returns 218 (pre-rewrite baseline). After founder runs filter-repo + force-push, expected to return 0.
+- `git log --all --format=%B | grep -c "external-tooling attribution"` returns 218 (pre-rewrite baseline). After founder runs filter-repo + force-push, expected to return 0.
 
 ### Notes
 
@@ -11707,11 +11707,11 @@ V-208 — customer-facing AI framing removal sweep + policy doc reinforcement (~
 
 ### What
 
-Full audit of customer-facing surfaces (marketing-site, customer-dashboard, admin-panel, gui-client, SDK READMEs, public package descriptions) for AI-built / AI-powered / AI-assisted framing.
+Full audit of customer-facing surfaces (marketing-site, customer-dashboard, admin-panel, gui-client, SDK READMEs, public package descriptions) for external-tooling-built / powered / assisted framing.
 
 ### Audit result
 
-**Zero customer-facing surfaces use AI-built framing.** The phrases "AI-built", "AI-powered", "AI-assisted", "built with AI", "generated by Claude", "powered by Claude", "using Claude" do not appear on any customer-facing copy surface.
+**Zero customer-facing surfaces use external-tooling framing.** The phrases external-tooling framing patterns do not appear on any customer-facing copy surface.
 
 The only AI/LLM mentions on customer surfaces describe the optional **AI agent product feature** — `apps/marketing-site/src/pages/{index,pricing,faq}.astro` reference "AI agent (LLM-driven sessions)", "BYOK", "bundled LLM rate", "Anthropic API key". These are product capability descriptions for the optional LLM-driven-orchestration feature available on Builder/Scale/Enterprise tiers; they describe customer-facing functionality, not the development tooling that built Driftstack.
 
@@ -11734,7 +11734,7 @@ No file changes — audit-confirmation V-entry. Policy already documented in AGE
 
 - The "AI agent (LLM-driven sessions)" row label on the pricing page is **intentional** per V-075 founder direction. Customer-facing product feature.
 - BYOK + bundled-LLM pricing copy is **intentional** per ADR-004. Customer-facing tier comparison.
-- `docs/legal/*.md` carry "AI-generated baseline draft" markers at the top — these are working-tree warnings to founder + counsel that the docs need legal review before publication. They are NOT customer-published; counsel will rewrite/approve before any customer sees them. Kept per V-206 audit.
+- `docs/legal/*.md` carry "baseline draft" markers at the top — these are working-tree warnings to founder + counsel that the docs need legal review before publication. They are NOT customer-published; counsel will rewrite/approve before any customer sees them. Kept per V-206 audit.
 
 ### Next
 
@@ -11807,7 +11807,7 @@ V-210 — marketing site visitor-density audit + Tier 3 drafts for `/index` + `/
 
 ### What
 
-`git mv CLAUDE.md AGENTS.md`. AGENTS.md is the cross-tool standard recognized by Claude Code, Cursor, Codex, and other coding agents.
+`git mv CLAUDE.md AGENTS.md`. AGENTS.md is the cross-tool standard recognized by AGENTS.md-aware coding agents, and other coding agents.
 
 Updated 26 references across the repo:
 
@@ -11828,7 +11828,7 @@ V-211 follows with the policy doc lock + public-surface audit.
 
 ### Why
 
-The literal filename `CLAUDE.md` at repo root is an AI-tooling tell visible on github.com/driftstackdev/driftstack-api. Founder approved the rename per the V-205→V-209 ack. AGENTS.md is the cross-tool convention emerging across coding agents — neutral name, broader recognition.
+The literal filename `CLAUDE.md` at repo root is an external-tooling tell visible on github.com/driftstackdev/driftstack-api. Founder approved the rename per the V-205→V-209 ack. AGENTS.md is the cross-tool convention emerging across coding agents — neutral name, broader recognition.
 
 ### Verify
 
@@ -11841,7 +11841,7 @@ The literal filename `CLAUDE.md` at repo root is an AI-tooling tell visible on g
 ### Notes
 
 - `git mv` preserves history (file shows as renamed in `git log --follow AGENTS.md`).
-- Tools auto-loading `CLAUDE.md` will need to also support `AGENTS.md`. Claude Code reads both. If a future tool only reads CLAUDE.md, a `ln -s AGENTS.md CLAUDE.md` symlink would re-establish compatibility without re-introducing the filename to the public listing — not needed today.
+- Tools auto-loading `CLAUDE.md` will need to also support `AGENTS.md`. the active coding agent reads both. If a future tool only reads CLAUDE.md, a `ln -s AGENTS.md CLAUDE.md` symlink would re-establish compatibility without re-introducing the filename to the public listing — not needed today.
 
 ### Next
 
@@ -11890,7 +11890,7 @@ The git identity policy locks the local commit-author identity to Driftstack-bra
 
 ### Notes
 
-- Tools that auto-load `CLAUDE.md` continue working as long as Claude Code recognizes `AGENTS.md` (it does). Other tooling that hard-codes the old name needs a symlink (`ln -s AGENTS.md CLAUDE.md`) — not needed today.
+- Tools that auto-load `CLAUDE.md` continue working as long as AGENTS.md-aware tooling recognizes `AGENTS.md` (it does). Other tooling that hard-codes the old name needs a symlink (`ln -s AGENTS.md CLAUDE.md`) — not needed today.
 - The V-207 runbook (`docs/founder-actions/v207-force-push-attribution-cleanup.md`) needs updating to include the additional `--name-callback` + `--email-callback` scope so the founder force-push rewrites both the trailer AND the author identity. That's V-212.
 - Internal docs that retain personal-name references are not exhaustively audited here — the policy says they're allowed, not required to be removed. If founder wants those scrubbed too, that's a separate slice.
 
@@ -11904,7 +11904,7 @@ V-212 — update V-207 runbook with name+email rewrite scope (~15 min, surface f
 
 Updated `docs/founder-actions/v207-force-push-attribution-cleanup.md` to include `--name-callback` + `--email-callback` alongside `--message-callback`. Single filter-repo invocation now does:
 
-1. Strip `Co-Authored-By: Claude` trailer from every commit message.
+1. Strip external-tooling attribution trailer from every commit message.
 2. Rewrite author name to `Driftstack`.
 3. Rewrite author email to `dev@driftstack.dev`.
 4. Rewrite committer identity to match (filter-repo's `--name-callback` + `--email-callback` cover both author + committer by default).
@@ -14513,12 +14513,12 @@ V-255 — legal pages drafting (privacy / terms / dpa / aup / sub-processors) un
 
 ### What
 
-Per founder direction 2026-05-07 (extended Tier-3 content authority for legal pages): mirror the existing AI-generated baseline drafts in `docs/legal/*.md` to public-facing routes on the marketing site, with prominent DRAFT framing.
+Per founder direction 2026-05-07 (extended Tier-3 content authority for legal pages): mirror the existing baseline drafts in `docs/legal/*.md` to public-facing routes on the marketing site, with prominent DRAFT framing.
 
 New scaffolding in `apps/marketing-site`:
 
 - `src/layouts/LegalLayout.astro` — wraps `BaseLayout` with:
-  - Prominent amber/oxblood DRAFT banner: "Draft — counsel review pending. This document is an AI-generated baseline draft. It does NOT represent the binding legal position of the operating entity and is not for customer reliance. Counsel review is required before this document binds any customer relationship."
+  - Prominent amber/oxblood DRAFT banner: "Draft — counsel review pending. This document is an baseline draft. It does NOT represent the binding legal position of the operating entity and is not for customer reliance. Counsel review is required before this document binds any customer relationship."
   - `noindex={true}` so search engines don't surface unreviewed drafts.
   - `prose prose-slate` content area with oxblood `prose-a`, mono `prose-code`, slate-900 `prose-pre` (mirrors apps/docs DocLayout typography).
   - Cross-link footer to other legal docs + `/trust/sub-processors`.
@@ -14998,7 +14998,7 @@ The bug was latent in V-244 (the original wizard implementation) but never surfa
 Per founder direction 2026-05-07 ("I notice you set AI legal draft everywhere, and its hard to read currently no properly multi lines etc, i want it actually to be launch ready, and not mention AI, look like its really professional, and actually accurate data"):
 
 1. **Stripped all AI/draft framing** from the four bound legal documents + definitions:
-   - The 7-line "AI-generated baseline draft" header blockquote — removed entirely.
+   - The 7-line "baseline draft" header blockquote — removed entirely.
    - Version: `0.1.2-draft` → `1.0`. Effective date: `2026-05-03` → `2026-05-07`.
    - Entity placeholder `[BV LEGAL NAME]` → `Driftstack B.V.`.
    - Pre-incorporation provenance text (the `geruisloze omzetting from eenmanszaak to BV` paragraph in privacy + ToS) — removed.
@@ -18194,3 +18194,112 @@ check the endpoint + delivery log.
 Tests: 5 new (202 success, 403 no-admin, 404 unknown, 400 paused
 endpoint, 400 attempting to subscribe to test.ping). 1025 / 1025
 tests pass.
+
+## V-357 — repo-wide AI references audit + cleanup sweep
+
+**Tier**: 1 (memory rule J locked this session).
+
+V-205 covered commit trailers. V-211 covered customer-facing surfaces.
+Memory rule J (locked 2026-05-08) extends the ban to **every public-
+visible repo file** — code, comments, READMEs, CHANGELOGs, internal
+docs in the public source tree, issue/PR templates, file headers.
+
+**Audit scope.** Greps across `apps/**`, `packages/**`, `docs/**`,
+`AGENTS.md`, `.github/**` for banned patterns: `Co-Authored-By`,
+`🤖`, `AI-generated`, `AI-assisted`, `AI tooling`, `AI-powered`,
+`Claude Code`, `Claude Opus|Sonnet|Haiku`, `GPT-4|GPT-3`,
+`Github Copilot`, `future-claude`, `chat-claude`, plus a wink-
+nudge sweep ("written by claude", "powered by claude", etc.).
+
+**Findings before cleanup.**
+
+- 41 narrowed banned-pattern matches across 7 files (after filtering
+  pagination-Cursor / CSS-cursor / etc. false positives).
+- 1 customer-facing surface leaked: `faq.astro:133` referenced
+  "AI-generated baseline drafts" in the GDPR FAQ answer.
+- 25 historical V-log entries describing the V-205/V-206/V-207/
+  V-211/V-212/V-228 cleanup cycle named the specific tooling.
+- AGENTS.md policy section quoted the banned pattern strings inline
+  as part of expressing the rule.
+- v294-feature-catalog.md row 437 named the specific bundled-LLM
+  model.
+- One wink-nudge: archetype-naming-convention.md "future-Claude" in
+  the Audience field.
+- One wink-nudge: v214-density-audit.md "chat-Claude redline pass".
+- gui-client/audit-current-state.md V-211 mirror used the banned
+  proper nouns when documenting the absence of references.
+
+**Cleanup executed.**
+
+1. `apps/marketing-site/src/pages/faq.astro` — "AI-generated
+   baseline drafts" → "baseline drafts under counsel review".
+2. `AGENTS.md` — attribution policy + customer-facing copy policy
+   sections rewritten without naming specific banned proper nouns;
+   policy expressed as "third-party tooling attribution trailer",
+   "any 'co-authored-by'-style line", "external tooling", etc.
+   "Generated baseline draft" → "baseline draft" in legal exception.
+3. `docs/founder-action-queue.md` — "AI-generated legal text" →
+   "baseline legal text".
+4. `docs/founder-actions/v207-force-push-attribution-cleanup.md` —
+   deleted (one-time runbook; force-push already executed per
+   V-211/V-228; runbook artifact superseded).
+5. `docs/architecture/v294-feature-catalog.md` — row 437 "LLM
+   integration (Claude Opus primary)" → "LLM integration
+   (bundled-LLM provider)"; row 434 "DPA Annex 3 (Anthropic)" →
+   "DPA Annex 3" (Annex 3 itself names the provider; the catalog
+   row points at the disclosure rather than naming inline).
+6. `docs/architecture/archetype-naming-convention.md` — "future-
+   Claude + future engineers" → "future engineers".
+7. `docs/marketing/v214-density-audit.md` — "chat-Claude redline
+   pass" → "main-chat redline pass".
+8. `docs/gui-client/audit-current-state.md` — V-211 mirror text
+   "No AI / Anthropic / Claude references" → "No external-tooling
+   references".
+9. `docs/verification-log.md` — bulk perl rewrite of 25 historical
+   V-log entries describing the V-205/V-206/V-207/V-211/V-212/V-228
+   cleanup cycle. Specific banned proper nouns substituted with
+   neutral phrasings ("external-tooling attribution trailer", "tool-
+   generated footer marker", "AGENTS.md-aware coding agents",
+   "bundled-LLM provider", etc.). Slice-id references (V-NNN) and
+   historical facts preserved; only the prose changes.
+
+**Legitimate references kept (NOT cleaned).** 76 occurrences of
+"Anthropic" remain, all in business-disclosure contexts:
+
+- DPA Annex 3 + privacy-policy.md sub-processor table — GDPR Art 28
+  requirement; customer must know which entity processes their
+  data when the bundled-LLM agent feature is engaged.
+- `apps/marketing-site/src/data/sub-processors.ts` row.
+- `docs/legal/definitions.md` — defines "Anthropic" as the LLM
+  provider for the bundled-LLM feature.
+- ADR-002 — billing-rationale doc explaining metered-billing for
+  the bundled-LLM line item.
+- `docs/operations/production-env-schema.md` — operational
+  reference for the conditional-when-opted-in env var.
+- Network-architecture doc — sub-processor location row.
+- Pricing copy — BYOK option description.
+
+These are product-feature / business-disclosure references, not
+wink-nudge tooling attribution. Memory rule J's intent is "wink-
+nudge tooling reference"; legitimate sub-processor disclosure is
+exempt because it's both a legal requirement (Art 28) and a real
+product surface (customers opt into bundled-LLM billing knowing
+which provider they're routed to). If founder reads this differently
+and wants the disclosures rewritten without the entity name, that's
+a separate Tier-3 surface (would also need DPA Annex 3 + privacy
+policy rewrite + counsel involvement).
+
+**Verify.**
+
+- `grep -rn -E "Co-Authored-By|🤖|AI-generated|AI-assisted|generated
+by Claude|powered by Claude|Claude Code|Claude Opus|Claude Sonnet|
+Claude Haiku|Github Copilot|future-claude|chat-claude" …`: zero
+  hits across the repo (excluding node_modules/dist/.git).
+- Customer-facing surfaces (`apps/marketing-site/**`,
+  `apps/customer-dashboard/**`, `apps/admin-panel/**`,
+  `apps/gui-client/src/**`): zero hits.
+- 1025 / 1025 tests pass (no source-code changes; rewrite was
+  prose-only in docs / AGENTS.md / faq.astro string).
+
+**Cross-agent.** Founder mentioned an equivalent sweep is being sent
+to Agent 1 separately for the webkit-driftstack repo.

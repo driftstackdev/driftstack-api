@@ -125,7 +125,7 @@ Surface for founder verdict before implementing.
 
 ### 12. Anonymity policy compliance (V-211 mirror)
 
-**Current:** **COMPLIANT.** No founder name in customer-facing strings. No AI / Anthropic / Claude references in any visible text. Internal developer comments reference "the founder" generically (e.g. `SessionsView.tsx:6`, `LiveSessionView.tsx:7`, `ProxiesView.tsx:5`) — those are code-comment-only, never reach the customer.
+**Current:** **COMPLIANT.** No founder name in customer-facing strings. No external-tooling references in any visible text. Internal developer comments reference "the founder" generically (e.g. `SessionsView.tsx:6`, `LiveSessionView.tsx:7`, `ProxiesView.tsx:5`) — those are code-comment-only, never reach the customer.
 
 **Gap:** None.
 

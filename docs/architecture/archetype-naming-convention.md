@@ -2,7 +2,7 @@
 
 **Status:** locked as of V-136 (2026-05-05).
 **Owner:** Driftstack engineering.
-**Audience:** future-Claude + future engineers cycling archetype identifiers
+**Audience:** future engineers cycling archetype identifiers
 on iOS major bumps.
 
 ## Identifier shape

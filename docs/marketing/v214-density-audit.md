@@ -55,7 +55,7 @@ redline pass.
 
 1. ✅ Audit findings (this doc) — engineering scaffolding, commits.
 2. 🔄 Working-tree drafts in `apps/marketing-site/src/pages/{index,pricing,faq}.astro` — Tier 3, NOT committed.
-3. ⏳ Surface drafts for founder + chat-Claude redline pass.
+3. ⏳ Surface drafts for founder + main-chat redline pass.
 4. ⏳ Apply redlines + commit on approval.
 5. ⏳ Repeat per page if additional surfaces need same treatment.
 

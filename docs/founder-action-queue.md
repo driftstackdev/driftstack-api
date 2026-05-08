@@ -204,7 +204,7 @@ the founder needs to do.
 
 - **Status:** DRAFT (counsel review pending)
 - **Reference:** `docs/legal/*.md` per the V-052 exception extension.
-  All AI-generated legal text is revisable; counsel review carries
+  All baseline legal text is revisable; counsel review carries
   final authority.
 
 ---
