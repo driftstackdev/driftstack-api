@@ -18719,3 +18719,16 @@ tests pass.
 V-312 profile snapshots stays queued — needs founder verdict on
 state-pointer semantics (R2 key vs JSON blob vs reference to a
 session id). V-314 profile state cleanup also queued.
+
+## V-360 — /api-keys dashboard surfaces V-296 rotation grace expiry
+
+**Tier**: 1 (UI polish on an already-shipped backend).
+
+V-296 rotation sets `expires_at` on the OLD key to `now + 24h`
+during grace; the field already lands in the GET /v1/api-keys
+response. The dashboard's per-row "Created … · last used …" line
+now appends `· grace ends <fmtIso>` (amber) when `expires_at` is
+set. Lets customers see at a glance which keys are mid-rotation and
+how much time is left before the old key stops working.
+
+No backend or schema change; pure UI surface. Astro build clean.

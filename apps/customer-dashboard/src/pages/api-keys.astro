@@ -331,6 +331,11 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           escapeHtml(fmtIso(k.created_at)) +
           ' · last used ' +
           escapeHtml(fmtIso(k.last_used_at)) +
+          (k.expires_at
+            ? ' · <span class="text-amber-700">grace ends ' +
+              escapeHtml(fmtIso(k.expires_at)) +
+              '</span>'
+            : '') +
           '</p></div>' +
           '<div class="flex shrink-0 flex-col items-end gap-3">' +
           '<div class="flex flex-wrap gap-1">' +
