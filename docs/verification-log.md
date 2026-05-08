@@ -18801,3 +18801,33 @@ Tests: 9 new integration tests. 1111 / 1111 pass.
 
 V-314 (profile state cleanup) stays queued — depends on driver
 integration landing the state-blob write path.
+
+## V-372 — OpenAPI surfaces V-312 snapshot routes
+
+**Tier**: 1 (docs/spec follow-through on already-shipped V-312).
+
+Six V-312 endpoints registered in `apps/server/src/lib/openapi.ts`
+with `SnapshotResponseOpenApi` + `ListSnapshotsResponseOpenApi` +
+`CaptureSnapshotRequestOpenApi` + `RestoreSnapshotRequestOpenApi`
+schemas:
+
+- POST /v1/profiles/{id}/snapshots
+- GET /v1/profiles/{id}/snapshots
+- GET /v1/profile-snapshots
+- GET /v1/profile-snapshots/{id}
+- POST /v1/profile-snapshots/{id}/restore
+- DELETE /v1/profile-snapshots/{id}
+
+`openapi.test.ts` registered-paths fixture extended. Generated
+spec serves cleanly through Scalar at /docs; downstream SDK
+generators see the routes in the next regen.
+
+Marketing changelog (apps/marketing-site/src/pages/changelog.astro)
+gains 2026-05-09 entries for V-312 snapshots + V-298b region.
+
+API docs (apps/docs/src/pages/api/profiles.md) gains a
+"Snapshots (V-312)" section covering capture / list / get /
+restore / delete with the parent-survives-delete behavior
+documented.
+
+855 server tests + monorepo typecheck clean.

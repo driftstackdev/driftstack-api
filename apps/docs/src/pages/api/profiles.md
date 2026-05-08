@@ -156,6 +156,61 @@ Errors mirror create: 429 if the cap would be exceeded by the
 clone, 409 on explicit-name collision, 404 if the source isn't
 found / not owned by the caller.
 
+## Snapshots (V-312)
+
+Snapshots are immutable point-in-time copies of a profile. The
+parent profile keeps evolving — its archetype, name, description,
+and underlying browser state mutate as you use it. The snapshot is
+frozen the moment you capture it.
+
+**Capture**
+
+`POST /v1/profiles/:id/snapshots`
+
+```json
+{ "label": "before-iOS-26-rollout", "description": "optional, max 2048 chars" }
+```
+
+The response carries the snapshot's `id` (prefix `psnap_`),
+`parent_profile_id`, `parent_archetype`, `parent_name` (frozen at
+capture time), and `captured_at`.
+
+**List**
+
+`GET /v1/profiles/:id/snapshots` — newest-first, paginated.
+`GET /v1/profile-snapshots` — every snapshot owned by the calling
+account, across all profiles. Same pagination shape.
+
+**Get one**
+
+`GET /v1/profile-snapshots/:id`
+
+**Restore**
+
+`POST /v1/profile-snapshots/:id/restore`
+
+```json
+{ "name": "restored-from-baseline" }
+```
+
+Creates a NEW profile carrying the snapshot's `parent_archetype` +
+`description`. The original parent profile is NOT modified — even
+if it has been renamed, edited, or deleted in the meantime. The
+new profile counts against your tier cap (429 if it would exceed)
+and 409s on name collision. The `audit_log` entry for
+`profile.created` carries `payload.restored_from_snapshot:
+psnap_<id>`.
+
+**Delete**
+
+`DELETE /v1/profile-snapshots/:id` → `204 No Content`.
+
+Snapshots have no automatic lifecycle. Capture as many as you want;
+they sit until you delete them. Deleting the parent profile sets
+the snapshot's `parent_profile_id` to `null` but does NOT delete
+the snapshot — the captured `parent_archetype` + `parent_name` +
+state remain restorable.
+
 ## Delete
 
 `DELETE /v1/profiles/:id`

@@ -67,6 +67,11 @@ describe('OpenAPI spec generation', () => {
         '/v1/auth/mfa/step-up',
         // V-313 profile clone
         '/v1/profiles/{id}/clone',
+        // V-312 profile snapshots
+        '/v1/profiles/{id}/snapshots',
+        '/v1/profile-snapshots',
+        '/v1/profile-snapshots/{id}',
+        '/v1/profile-snapshots/{id}/restore',
         '/v1/sessions',
         '/v1/sessions/{id}',
         '/v1/sessions/{id}/capture',

@@ -18,6 +18,18 @@ interface ChangelogEntry {
 const ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-09',
+    category: 'launch',
+    title: 'Profile snapshots: immutable point-in-time copies',
+    body: 'Capture a snapshot of any saved profile from /profiles → Snapshot. Snapshots are frozen — the source profile keeps evolving but the snapshot does not. List snapshots per-profile or across the whole account, restore any snapshot into a new profile (tier cap and name uniqueness checked the same way as profile creation), or delete one when you no longer need it. Full reference at docs.driftstack.dev/api/profiles.',
+  },
+  {
+    date: '2026-05-09',
+    category: 'launch',
+    title: 'Account region preference (US / EU / APAC)',
+    body: 'Set a stated infrastructure region preference from /settings → Region. The selector is informational for v1 — Driftstack runs on EU-jurisdiction infrastructure for every account today (full sub-processor list at /trust/sub-processors). Recording your preference now lets us route accounts to the matching region automatically once the multi-region rollout lands; nothing about your data location changes when you set it.',
+  },
+  {
+    date: '2026-05-09',
     category: 'security',
     title: 'Two-factor authentication (TOTP) is live',
     body: 'Optional TOTP-based two-factor on every account. Enroll from /settings → Two-factor authentication: scan the QR with any standard authenticator app, confirm the 6-digit code, and store your 10 single-use recovery codes. Sign-in then issues a challenge token instead of a session; the dashboard exchanges it for a session after the second factor lands. Disabling MFA requires a fresh second-factor proof (15-minute step-up window). Recovery codes can be regenerated at any time. Full reference at docs.driftstack.dev/api/mfa.',

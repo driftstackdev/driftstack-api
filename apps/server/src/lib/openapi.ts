@@ -1471,6 +1471,126 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // ── V-312 profile snapshots ────────────────────────────────────────────
+  const SnapshotResponseOpenApi = z.object({
+    id: z.string(),
+    parent_profile_id: z.string().nullable(),
+    label: z.string(),
+    description: z.string().nullable(),
+    parent_archetype: z.string(),
+    parent_name: z.string(),
+    captured_at: z.string(),
+    created_at: z.string(),
+  });
+  const ListSnapshotsResponseOpenApi = z.object({
+    data: z.array(SnapshotResponseOpenApi),
+    has_more: z.boolean(),
+    next_cursor: z.string().nullable(),
+  });
+  const CaptureSnapshotRequestOpenApi = z.object({
+    label: z.string().min(1).max(120),
+    description: z.string().max(2048).optional(),
+  });
+  const RestoreSnapshotRequestOpenApi = z.object({
+    name: z.string(),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/profiles/{id}/snapshots',
+    summary: 'Capture an immutable point-in-time snapshot of the profile',
+    tags: ['profiles', 'snapshots'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: { content: { 'application/json': { schema: CaptureSnapshotRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'Snapshot captured.',
+        content: { 'application/json': { schema: SnapshotResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/profiles/{id}/snapshots',
+    summary: "List a profile's snapshots, newest-first",
+    tags: ['profiles', 'snapshots'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      query: PaginationQuerySchema,
+    },
+    responses: {
+      200: {
+        description: 'Snapshots for this profile.',
+        content: { 'application/json': { schema: ListSnapshotsResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/profile-snapshots',
+    summary: 'List every snapshot owned by the calling account (cross-profile)',
+    tags: ['snapshots'],
+    security: auth,
+    request: { query: PaginationQuerySchema },
+    responses: {
+      200: {
+        description: 'Snapshots across all profiles.',
+        content: { 'application/json': { schema: ListSnapshotsResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/profile-snapshots/{id}',
+    summary: 'Single snapshot by id',
+    tags: ['snapshots'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description: 'Snapshot.',
+        content: { 'application/json': { schema: SnapshotResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/profile-snapshots/{id}/restore',
+    summary: 'Create a new profile from a snapshot (tier-cap + name-conflict checked)',
+    tags: ['snapshots', 'profiles'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: { content: { 'application/json': { schema: RestoreSnapshotRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'New profile created from snapshot.',
+        content: { 'application/json': { schema: ProfileResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/profile-snapshots/{id}',
+    summary: 'Hard-delete a snapshot',
+    tags: ['snapshots'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      204: { description: 'Snapshot deleted.' },
+      ...errors4xx,
+    },
+  });
+
   return r;
 }
 
