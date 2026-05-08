@@ -18,6 +18,18 @@ interface ChangelogEntry {
 const ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-08',
+    category: 'security',
+    title: 'Team RBAC end-to-end: members act on owner resources via X-Driftstack-Account',
+    body: 'A member of a team can scope any /v1/* request to the owner\'s resources by passing the X-Driftstack-Account header. Read endpoints accept both member and admin roles; write endpoints (POST/PATCH/DELETE/api-keys rotate) require admin role. Customer dashboard adds an "Acting as" picker in the sidebar; the active selection injects the header into every request automatically. Full reference at docs.driftstack.dev/api/team.',
+  },
+  {
+    date: '2026-05-08',
+    category: 'sdk',
+    title: 'PlaywrightDriver added for self-hosted local development',
+    body: 'Set DRIVER=playwright + PLAYWRIGHT_BROWSER=webkit|chromium|firefox to run end-to-end smoke tests against a real browser without waiting for the WebKit fork to integrate. Dev/E2E only — production stays on DRIVER=webkit (the modified WebKit fork). Self-hosted Mac runbook at docs/runbooks/self-hosted-mac-local.md walks through the entire local-stack setup; npm run dev:all starts every surface concurrently.',
+  },
+  {
+    date: '2026-05-08',
     category: 'sdk',
     title: 'Team RBAC, API key rotation, and webhook replay land in all three SDKs',
     body: 'TypeScript, Python, and Go SDKs gain client.team.{invite,listMembers,listInvites,acceptInvite,removeMember}, client.apiKeys.rotate (24-hour grace on the prior key), and client.webhooks.replayDelivery (one delivery, fresh attempt, same idempotency key). Documentation at docs.driftstack.dev/api/team, /api/api-keys, /webhooks/replay.',
