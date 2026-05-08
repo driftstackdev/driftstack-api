@@ -396,14 +396,22 @@ export class SessionsService {
     return result;
   }
 
-  async destroy(ctx: AccountContext, sessionId: string): Promise<void> {
+  async destroy(
+    ctx: AccountContext,
+    sessionId: string,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<void> {
     // V-167 — true idempotent destroy. Pre-V-167 this called requireOwned()
     // which threw SessionDestroyedError (HTTP 410) on already-destroyed
     // sessions before the early-return short-circuit could run. The
     // result was DELETE returning 410 on a destroyed session, which
     // breaks REST idempotency conventions + contradicted the comment
     // claim. Now: lookup directly + short-circuit on terminal status.
-    const session = await this.deps.repo.findSession(sessionId, ctx.account.id);
+    // V-326e2 — when effectiveAccountId is set, the destroy targets
+    // a session owned by the team OWNER. Route layer enforces
+    // 'admin' role per Q1 before reaching here.
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const session = await this.deps.repo.findSession(sessionId, accountId);
     if (!session) throw new NotFoundError(`Session "${sessionId}" not found.`);
     // Terminal-status no-ops. 'destroyed' is the obvious one; 'errored'
     // also short-circuits per V-090 (a failed session has nothing
@@ -421,10 +429,12 @@ export class SessionsService {
 
     // Emit session.completed webhook event (best-effort; failures here
     // never affect destroy correctness).
+    // V-326e2 — webhook fan-out goes to the OWNER (so the owner's
+    // configured webhooks receive the completion event).
     const durationMs = destroyedAt.getTime() - session.createdAt.getTime();
     if (this.deps.webhooks) {
       try {
-        await this.deps.webhooks.enqueueEvent(ctx.account.id, 'session.completed', {
+        await this.deps.webhooks.enqueueEvent(accountId, 'session.completed', {
           session_id: `ses_${session.id}`,
           duration_ms: durationMs,
         });
@@ -436,9 +446,11 @@ export class SessionsService {
     // V-304a — first-success activation email. Internal dedup via
     // first_success_email_sent_at column (lifecycle service races to
     // set; loser skips the email). Best-effort.
+    // V-326e2 — first-success email goes to the OWNER's email since
+    // it's the OWNER's first successful session that's milestoning.
     if (this.deps.accountLifecycle) {
       try {
-        await this.deps.accountLifecycle.emit(ctx.account.id, {
+        await this.deps.accountLifecycle.emit(accountId, {
           kind: 'session.success.first',
           sessionId: `ses_${session.id}`,
         });
@@ -448,10 +460,12 @@ export class SessionsService {
     }
 
     // V-216 — customer-facing audit entry.
+    // V-326e2 — audit on the OWNER's log; actor stays the calling
+    // member.
     if (this.deps.accountAudit) {
       try {
         await this.deps.accountAudit.record({
-          accountId: ctx.account.id,
+          accountId,
           actorType: 'customer',
           actorAccountId: ctx.account.id,
           actorKeyId: ctx.apiKey.id,

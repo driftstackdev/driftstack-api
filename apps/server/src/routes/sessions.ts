@@ -268,6 +268,8 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   );
 
   // ── DELETE /v1/sessions/:id ────────────────────────────────────────────
+  // V-326e2 — admin-only when targeting an owner via X-Driftstack-
+  // Account; member role gets 403. Self-account behavior unchanged.
   app.delete<{ Params: { id: string } }>(
     '/v1/sessions/:id',
     {
@@ -276,7 +278,17 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request, reply) => {
       const ctx = requireCtx(request);
       const id = uuidFromPrefixedId(request.params.id, 'ses');
-      await service.destroy(ctx, id);
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      if (effective.kind === 'team' && effective.role !== 'admin') {
+        throw new ForbiddenError(
+          'Destroying a session on a team owner requires admin role on that team.',
+        );
+      }
+      await service.destroy(
+        ctx,
+        id,
+        effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {},
+      );
       return reply.code(204).send();
     },
   );

@@ -699,6 +699,95 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     expect(res.statusCode).toBe(403);
   });
 
+  it('DELETE /v1/sessions/:id as admin team member destroys an owner session', async () => {
+    fx = await buildTestApp({ tier: 'api_starter' });
+    fx.authRepo.upsertAccount({
+      id: OWNER_ACCOUNT_ID,
+      email: 'owner@example.test',
+      name: null,
+      tier: 'api_scale',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'admin',
+      },
+    ]);
+    // Create a session via the admin POST path so it's owned by OWNER.
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+      payload: {},
+    });
+    expect(created.statusCode).toBe(201);
+    const sessionId = created.json<{ id: string }>().id;
+
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/sessions/${sessionId}`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    expect(del.statusCode).toBe(204);
+
+    // Audit row on the OWNER's log; actor = caller.
+    const ownerDestroyAudits = fx.accountAuditRepo
+      .getAll()
+      .filter((r) => r.accountId === OWNER_ACCOUNT_ID && r.action === 'session.destroyed');
+    expect(ownerDestroyAudits).toHaveLength(1);
+    expect(ownerDestroyAudits[0]!.actorAccountId).toBe(fx.accountId);
+  });
+
+  it('DELETE /v1/sessions/:id as MEMBER role gets 403 (admin-only writes)', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.upsertAccount({
+      id: OWNER_ACCOUNT_ID,
+      email: 'owner@example.test',
+      name: null,
+      tier: 'api_scale',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'member',
+      },
+    ]);
+    // Seed an owner session directly.
+    const owner = await fx.sessionsRepo.insertSession({
+      accountId: OWNER_ACCOUNT_ID,
+      apiKeyId: '00000000-0000-4000-8000-000000000bff',
+      driverSessionId: 'drv_owner',
+      archetype: 'iphone-16-pro-ios-26-4-1',
+      purpose: 'production_customer',
+      label: null,
+      metadata: null,
+    });
+    const res = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/sessions/ses_${owner.id}`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it('GET /v1/sessions returns 403 when X-Driftstack-Account references a non-member owner', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
