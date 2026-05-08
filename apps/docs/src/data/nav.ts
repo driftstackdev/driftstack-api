@@ -60,6 +60,10 @@ export const DOC_NAV: DocNavSection[] = [
   },
   {
     label: 'Webhooks',
-    items: [{ href: '/webhooks/events/', label: 'Event catalog' }],
+    items: [
+      { href: '/webhooks/endpoints/', label: 'Endpoints (CRUD + rotate + test)' },
+      { href: '/webhooks/events/', label: 'Event catalog' },
+      { href: '/webhooks/replay/', label: 'Replay deliveries' },
+    ],
   },
 ];
