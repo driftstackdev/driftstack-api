@@ -6,6 +6,23 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`client.profileSnapshots`** — V-312 immutable point-in-time
+  profile copies. Methods: `capture(profileId, body)`,
+  `listForProfile(profileId, query?)`, `list(query?)` (cross-account),
+  `iterate(opts?)`, `get(id)`, `restore(id, body)`, `delete(id)`.
+  `restore` creates a NEW profile (the parent is never modified) and
+  is checked against the same tier-cap and name-conflict rules as
+  `client.profiles.create`. New types re-exported:
+  `ProfileSnapshot`, `CaptureSnapshotRequest`, `RestoreSnapshotRequest`,
+  `ProfileSnapshotsListPage`.
+- **`client.profiles.clone(id, body?)`** — V-313 profile clone.
+  Empty body lets the server auto-derive a `(copy)` / `(copy 2)` /
+  ... name; explicit `{ name }` is forwarded verbatim. Tier-cap +
+  name-conflict apply identically to `create`. New type re-exported:
+  `CloneProfileRequest`.
+
 ### Pre-1.0 stability policy
 
 The SDK is at **0.1.x**; the public surface is stable enough to

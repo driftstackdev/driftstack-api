@@ -19087,3 +19087,19 @@ Cross-link to Python + Go SDK equivalents
 (`client.profile_snapshots.*`, `client.ProfileSnapshots.*`).
 
 Astro check clean (0 errors).
+
+## V-383 — three-SDK CHANGELOG entries for V-312 + V-313
+
+**Tier**: 1 (release-notes follow-through; ensures the next
+version bump publishes informative changelog).
+
+`Unreleased` section of each SDK CHANGELOG.md gains an `### Added`
+entry covering V-312 snapshots + V-313 clone:
+
+- TypeScript: `client.profileSnapshots.*` + `client.profiles.clone`.
+- Python: `client.profile_snapshots.*` + async mirror, plus
+  `profiles.clone` sync + async.
+- Go: `client.ProfileSnapshots.*` + `client.Profiles.Clone`.
+
+All three CHANGELOGs now reflect the V-376/377/378/379 surface so
+the next publish carries useful release notes.

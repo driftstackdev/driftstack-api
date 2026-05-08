@@ -6,6 +6,23 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`client.ProfileSnapshots`** — V-312 immutable point-in-time
+  profile copies. Methods: `Capture(ctx, profileID, *CaptureSnapshotRequest)`,
+  `ListForProfile(ctx, profileID, *ListProfileSnapshotsQuery)`,
+  `List(ctx, *ListProfileSnapshotsQuery)` (cross-account),
+  `Iterate(ctx, query, fn)`, `Get(ctx, snapshotID)`,
+  `Restore(ctx, snapshotID, *RestoreSnapshotRequest)`,
+  `Delete(ctx, snapshotID)`. New types: `ProfileSnapshot`,
+  `CaptureSnapshotRequest`, `RestoreSnapshotRequest`,
+  `ProfileSnapshotsListPage`, `ListProfileSnapshotsQuery`. `Restore`
+  creates a NEW profile; the parent is never modified.
+- **`client.Profiles.Clone(ctx, profileID, *CloneProfileRequest)`** —
+  V-313 profile clone. Pass `nil` to let the server auto-derive
+  `(copy)` / `(copy 2)` / ... naming; pass `&CloneProfileRequest{Name: …}`
+  for an explicit name. New type: `CloneProfileRequest`.
+
 ### Notes
 
 - `0.1.0` is the inaugural alpha release. Tagged in the monorepo as

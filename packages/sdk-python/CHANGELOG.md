@@ -6,6 +6,18 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`client.profile_snapshots`** + **`async_client.profile_snapshots`** —
+  V-312 immutable point-in-time profile copies. Methods: `capture`,
+  `list_for_profile`, `list` (cross-account), `iterate`, `get`,
+  `restore`, `delete`. `restore` creates a NEW profile; the original
+  is never modified.
+- **`client.profiles.clone(profile_id, body=None)`** + async mirror —
+  V-313 profile clone. `None` / empty dict lets the server auto-derive
+  a "(copy)" / "(copy 2)" / ... name; explicit `{"name": ...}` is
+  forwarded verbatim.
+
 ### Notes
 
 - `0.0.1` is the inaugural alpha. Versioning will move to SemVer
