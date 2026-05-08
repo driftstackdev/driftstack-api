@@ -54,9 +54,9 @@ Every public API endpoint is a typed method on a resource accessor. All take `co
 | Accessor          | Methods                                                                                   |
 | ----------------- | ----------------------------------------------------------------------------------------- |
 | `client.Sessions` | `Create`, `List`, `Get`, `Navigate`, `Interact`, `Wait`, `GetState`, `Capture`, `Destroy` |
-| `client.APIKeys`  | `Create`, `List`, `Revoke`                                                                |
+| `client.APIKeys`  | `Create`, `List`, `Rotate` (V-296), `Revoke`                                              |
 | `client.Usage`    | `CurrentPeriod`                                                                           |
-| `client.Webhooks` | `Create`, `List`, `Get`, `Delete`, `ListDeliveries`                                       |
+| `client.Webhooks` | `Create`, `List`, `Get`, `Delete`, `ListDeliveries`, `ReplayDelivery` (V-307)             |
 
 Discriminated-union builders (`NewTapAction`, `NewSelectorCondition`, etc.) live in `types.go` for `Interact` and `Wait` requests.
 

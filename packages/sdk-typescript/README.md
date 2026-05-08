@@ -57,9 +57,18 @@ client.sessions.getState(id)
 client.sessions.capture(id, body)
 client.sessions.destroy(id)
 
-client.apiKeys.create(body)   // requires admin scope
+client.apiKeys.create(body)             // requires admin scope
 client.apiKeys.list()
-client.apiKeys.revoke(id)     // requires admin scope
+client.apiKeys.rotate(id, options?)     // V-296 — 24h grace, plaintext shown once
+client.apiKeys.revoke(id)               // requires admin scope
+
+client.webhooks.create(body)            // requires admin scope
+client.webhooks.list()
+client.webhooks.get(id)
+client.webhooks.delete(id)
+client.webhooks.listDeliveries(id, query?)
+client.webhooks.iterateDeliveries(id, opts?)
+client.webhooks.replayDelivery(id)      // V-307 — re-fire a failed/DLQ delivery
 
 client.usage.current()
 ```
