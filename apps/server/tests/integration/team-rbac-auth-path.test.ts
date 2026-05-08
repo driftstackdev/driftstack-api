@@ -568,6 +568,65 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     expect(own.json<{ tier: string }>().tier).toBe('api_starter');
   });
 
+  it('GET /v1/webhooks returns OWNER endpoints when caller is a team member + sets X-Driftstack-Account', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'member',
+      },
+    ]);
+    await fx.webhooksRepo.insertEndpoint({
+      accountId: fx.accountId,
+      url: 'https://self.example.test/hook',
+      secret: 'whsec_self_secret_padded_to_32+chars',
+      secretPrefix: 'whsec_self',
+      events: ['session.completed'],
+      description: 'self-hook',
+    });
+    await fx.webhooksRepo.insertEndpoint({
+      accountId: OWNER_ACCOUNT_ID,
+      url: 'https://owner.example.test/hook-1',
+      secret: 'whsec_owner1_secret_padded_to_32+chars',
+      secretPrefix: 'whsec_o1',
+      events: ['session.completed'],
+      description: 'owner-hook-1',
+    });
+    await fx.webhooksRepo.insertEndpoint({
+      accountId: OWNER_ACCOUNT_ID,
+      url: 'https://owner.example.test/hook-2',
+      secret: 'whsec_owner2_secret_padded_to_32+chars',
+      secretPrefix: 'whsec_o2',
+      events: ['session.completed'],
+      description: 'owner-hook-2',
+    });
+
+    // No header → caller's own.
+    const own = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/webhooks',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const ownBody = own.json<{ data: { url: string }[] }>();
+    expect(ownBody.data.map((d) => d.url)).toEqual(['https://self.example.test/hook']);
+
+    // With header → owner's.
+    const owner = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/webhooks',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    const ownerBody = owner.json<{ data: { url: string }[] }>();
+    expect(ownerBody.data.map((d) => d.url).sort()).toEqual([
+      'https://owner.example.test/hook-1',
+      'https://owner.example.test/hook-2',
+    ]);
+  });
+
   it('GET /v1/sessions returns 403 when X-Driftstack-Account references a non-member owner', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

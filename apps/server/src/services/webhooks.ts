@@ -258,10 +258,14 @@ export class WebhooksService {
    */
   async listWithCounts(
     ctx: AccountContext,
+    opts: { effectiveAccountId?: string } = {},
   ): Promise<Array<{ endpoint: WebhookEndpointRow; counts: EndpointDeliveryCounts }>> {
+    // V-330f — when effectiveAccountId is set, lists the OWNER's
+    // endpoints. Read-only; both 'member' and 'admin' roles allowed.
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const [endpoints, countsMap] = await Promise.all([
-      this.repo.listEndpoints(ctx.account.id),
-      this.repo.deliveryCountsByEndpoint(ctx.account.id),
+      this.repo.listEndpoints(accountId),
+      this.repo.deliveryCountsByEndpoint(accountId),
     ]);
     return endpoints.map((endpoint) => ({
       endpoint,
@@ -269,8 +273,13 @@ export class WebhooksService {
     }));
   }
 
-  async get(ctx: AccountContext, id: string): Promise<WebhookEndpointRow> {
-    const row = await this.repo.findEndpoint(id, ctx.account.id);
+  async get(
+    ctx: AccountContext,
+    id: string,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<WebhookEndpointRow> {
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const row = await this.repo.findEndpoint(id, accountId);
     if (!row) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
     return row;
   }
@@ -289,9 +298,15 @@ export class WebhooksService {
   listDeliveries(
     ctx: AccountContext,
     endpointId: string,
-    opts: { limit: number; cursor?: string; status?: WebhookDeliveryStatus },
+    opts: {
+      limit: number;
+      cursor?: string;
+      status?: WebhookDeliveryStatus;
+      effectiveAccountId?: string;
+    },
   ): Promise<ListDeliveriesPage> {
-    return this.repo.listDeliveriesForEndpoint(endpointId, ctx.account.id, opts);
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    return this.repo.listDeliveriesForEndpoint(endpointId, accountId, opts);
   }
 
   /**

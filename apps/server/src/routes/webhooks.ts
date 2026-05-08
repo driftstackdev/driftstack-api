@@ -1,7 +1,7 @@
 // Webhook subscription routes — POST/GET/DELETE /v1/webhooks
 // + GET /v1/webhooks/:id/deliveries.
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { CreateWebhookRequestSchema, ListDeliveriesQuerySchema } from '@driftstack/api-types';
 import { BadRequestError } from '../lib/errors.js';
 import type {
@@ -9,6 +9,15 @@ import type {
   WebhookEndpointRow,
   WebhooksService,
 } from '../services/webhooks.js';
+import { resolveEffectiveAccount } from '../services/auth.js';
+
+const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';
+
+function readEffectiveAccountHeader(request: FastifyRequest): string | undefined {
+  const raw = request.headers[EFFECTIVE_ACCOUNT_HEADER];
+  if (Array.isArray(raw)) return raw[0];
+  return raw;
+}
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
@@ -88,13 +97,21 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
     },
   );
 
+  // V-330f — read endpoints + per-endpoint counts, scoped to the
+  // OWNER when X-Driftstack-Account is set. Read-only; both roles
+  // allowed. POST/DELETE on webhooks remain self-only until the
+  // V-326e write-side cycle picks them up (admin-only per Q1).
   app.get(
     '/v1/webhooks',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
-      const rowsWithCounts = await service.listWithCounts(ctx);
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      const rowsWithCounts = await service.listWithCounts(
+        ctx,
+        effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {},
+      );
       return { data: rowsWithCounts.map((r) => publicEndpoint(r.endpoint, r.counts)) };
     },
   );
@@ -105,8 +122,13 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
       const id = uuidFromPrefixedId(request.params.id, 'whk');
-      const row = await service.get(ctx, id);
+      const row = await service.get(
+        ctx,
+        id,
+        effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {},
+      );
       return publicEndpoint(row);
     },
   );
@@ -131,10 +153,12 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
       if (!ctx) throw new Error('account context missing after requireAuth');
       const id = uuidFromPrefixedId(request.params.id, 'whk');
       const query = ListDeliveriesQuerySchema.parse(request.query ?? {});
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
       const page = await service.listDeliveries(ctx, id, {
         limit: query.limit,
         ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
         ...(query.status !== undefined ? { status: query.status } : {}),
+        ...(effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {}),
       });
       return {
         data: page.items.map(publicDelivery),
