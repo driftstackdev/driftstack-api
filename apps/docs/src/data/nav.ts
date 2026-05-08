@@ -55,6 +55,7 @@ export const DOC_NAV: DocNavSection[] = [
       { href: '/api/mfa/', label: 'Two-factor auth (MFA)' },
       { href: '/api/usage/', label: 'Usage + quotas' },
       { href: '/api/audit-log/', label: 'Audit log' },
+      { href: '/api/profiles/', label: 'Profiles' },
     ],
   },
   {
