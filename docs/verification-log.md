@@ -18991,3 +18991,32 @@ restore returns Profile, delete 204. `go test ./...` clean.
 Three-SDK parity for V-312 now locked: TypeScript (V-376), Python
 (V-377), Go (V-378). Customers on any client version with the next
 release pull get snapshot methods natively.
+
+## V-379 — Three-SDK V-313 clone catch-up
+
+**Tier**: 1 (V-313 SDK gap closure across TS / Python / Go).
+
+V-313 (profile clone) shipped server-side + dashboard but not in
+any SDK. This slice closes that.
+
+**TypeScript** (`packages/sdk-typescript/src/resources/profiles.ts`):
+
+- `clone(id, body?)` returns `Profile`. Default body `{}` lets the
+  server auto-derive "(copy)" / "(copy 2)" / ... naming. Explicit
+  name forwarded verbatim.
+- Re-exported `CloneProfileRequest` from api-types via index.
+
+**Python** (`packages/sdk-python/src/driftstack/resources/profiles.py`):
+
+- `ProfilesResource.clone(profile_id, body=None)` + async mirror.
+  None or empty dict → server auto-name.
+
+**Go** (`packages/sdk-go/profiles.go`):
+
+- `ProfilesResource.Clone(ctx, profileID, *CloneProfileRequest)`.
+  Nil body initialised to empty struct; explicit `Name` is
+  forwarded.
+- `CloneProfileRequest` type added with `omitempty` Name.
+
+Tests: 2 TS + 2 Python + 2 Go. All pass; full pre-push gate green.
+Three-SDK V-313 parity now matches three-SDK V-312 parity.

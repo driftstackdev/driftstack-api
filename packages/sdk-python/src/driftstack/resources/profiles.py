@@ -65,6 +65,16 @@ class ProfilesResource:
     def delete(self, profile_id: str) -> None:
         self._http.request("DELETE", f"/v1/profiles/{quote(profile_id, safe='')}")
 
+    def clone(self, profile_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        """V-313 — duplicate a profile. Server auto-derives "(copy)" / "(copy 2)" /
+        ... name when ``body["name"]`` is omitted. Tier-cap + name-conflict
+        checked the same as ``create``."""
+        return self._http.request(
+            "POST",
+            f"/v1/profiles/{quote(profile_id, safe='')}/clone",
+            json_body=coerce_body(body or {}),
+        )
+
 
 class AsyncProfilesResource:
     """Async profiles resource."""
@@ -100,3 +110,10 @@ class AsyncProfilesResource:
 
     async def delete(self, profile_id: str) -> None:
         await self._http.request("DELETE", f"/v1/profiles/{quote(profile_id, safe='')}")
+
+    async def clone(self, profile_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        return await self._http.request(
+            "POST",
+            f"/v1/profiles/{quote(profile_id, safe='')}/clone",
+            json_body=coerce_body(body or {}),
+        )

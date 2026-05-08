@@ -145,4 +145,52 @@ func TestProfiles_Delete_Idempotent(t *testing.T) {
 	}
 }
 
+func TestProfiles_Clone_DefaultBodyEmpty(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/profiles/prof_src/clone" || r.Method != "POST" {
+			t.Errorf("unexpected: %s %s", r.Method, r.URL.Path)
+		}
+		var body CloneProfileRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Name != "" {
+			t.Errorf("default name should be empty, got %q", body.Name)
+		}
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(profileFixture("prof_copy"))
+	})
+	got, err := client.Profiles.Clone(context.Background(), "prof_src", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "prof_copy" {
+		t.Errorf("id=%q", got.ID)
+	}
+}
+
+func TestProfiles_Clone_ExplicitName(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var body CloneProfileRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Name != "my-explicit-clone" {
+			t.Errorf("name=%q", body.Name)
+		}
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(profileFixture("prof_x"))
+	})
+	_, err := client.Profiles.Clone(
+		context.Background(),
+		"prof_src",
+		&CloneProfileRequest{Name: "my-explicit-clone"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func stringPtr(s string) *string { return &s }

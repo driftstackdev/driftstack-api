@@ -169,6 +169,26 @@ async def test_async_profiles_iterate_walks_pages() -> None:
     assert ids == ["prof_x"]
 
 
+# ── profile clone (V-313) ─────────────────────────────────────────────
+
+
+def test_profiles_clone_default_body_empty() -> None:
+    http = FakeSyncHttp([{"id": "prof_copy"}])
+    profiles = ProfilesResource(http)  # type: ignore[arg-type]
+    out = profiles.clone("prof_src")
+    assert out["id"] == "prof_copy"
+    assert http.calls[0]["method"] == "POST"
+    assert http.calls[0]["path"] == "/v1/profiles/prof_src/clone"
+    assert http.calls[0]["json_body"] == {}
+
+
+def test_profiles_clone_passes_explicit_name() -> None:
+    http = FakeSyncHttp([{"id": "prof_x"}])
+    profiles = ProfilesResource(http)  # type: ignore[arg-type]
+    profiles.clone("prof_src", {"name": "my-explicit-clone"})
+    assert http.calls[0]["json_body"] == {"name": "my-explicit-clone"}
+
+
 # ── profile snapshots (V-312, dict-shaped pages) ──────────────────────
 
 

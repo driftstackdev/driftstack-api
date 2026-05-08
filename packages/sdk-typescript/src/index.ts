@@ -111,6 +111,8 @@ export type {
   ProfileId,
   CreateProfileRequest,
   UpdateProfileRequest,
+  // V-313 profile clone
+  CloneProfileRequest,
   // V-312 profile snapshots
   ProfileSnapshot,
   CaptureSnapshotRequest,

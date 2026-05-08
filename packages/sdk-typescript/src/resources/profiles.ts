@@ -1,6 +1,7 @@
 // ProfilesResource — typed methods for /v1/profiles (V-081).
 
 import type {
+  CloneProfileRequest,
   CreateProfileRequest,
   PaginationQueryInput,
   Profile,
@@ -74,6 +75,19 @@ export class ProfilesResource {
     return this.http.request<void>({
       method: 'DELETE',
       path: `/v1/profiles/${encodeURIComponent(id)}`,
+    });
+  }
+
+  /**
+   * V-313 — duplicate a profile. Server auto-derives a "(copy)" /
+   * "(copy 2)" / ... name when `body.name` is omitted. Tier-cap +
+   * name-conflict checked the same as create.
+   */
+  clone(id: string, body: CloneProfileRequest = {}): Promise<Profile> {
+    return this.http.request<Profile>({
+      method: 'POST',
+      path: `/v1/profiles/${encodeURIComponent(id)}/clone`,
+      body,
     });
   }
 }

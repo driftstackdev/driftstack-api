@@ -117,3 +117,31 @@ func (r *ProfilesResource) Delete(ctx context.Context, profileID string) error {
 		path:   "/v1/profiles/" + url.PathEscape(profileID),
 	})
 }
+
+// CloneProfileRequest — V-313. Pass an empty struct to let the server
+// auto-derive a "(copy)" / "(copy 2)" / ... name.
+type CloneProfileRequest struct {
+	Name string `json:"name,omitempty"`
+}
+
+// Clone duplicates a profile. Tier-cap + name-conflict are checked
+// the same way as Create.
+func (r *ProfilesResource) Clone(
+	ctx context.Context,
+	profileID string,
+	body *CloneProfileRequest,
+) (*Profile, error) {
+	if body == nil {
+		body = &CloneProfileRequest{}
+	}
+	var out Profile
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/profiles/" + url.PathEscape(profileID) + "/clone",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
