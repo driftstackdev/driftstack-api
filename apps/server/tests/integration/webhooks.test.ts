@@ -389,3 +389,87 @@ describe('PATCH /v1/webhooks/:id (V-351)', () => {
     expect(patch.statusCode).toBe(404);
   });
 });
+
+// ── V-356 — POST /v1/webhooks/:id/test ───────────────────────────
+
+describe('POST /v1/webhooks/:id/test (V-356)', () => {
+  it('202 enqueues a test.ping delivery for an active endpoint', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: { url: 'https://x.test/h', events: ['session.completed'] },
+    });
+    const created = create.json<{ id: string }>();
+
+    const test = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/webhooks/${created.id}/test`,
+      headers: auth(fx),
+    });
+    expect(test.statusCode).toBe(202);
+    const body = test.json<{ event_type: string; delivery_id: string; event_id: string }>();
+    expect(body.event_type).toBe('test.ping');
+    expect(body.delivery_id).toMatch(/^wdl_/);
+    expect(body.event_id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('403 when admin scope missing on the calling key', async () => {
+    // Same admin-only gate as POST/DELETE /v1/webhooks. The scope
+    // check fires before the endpoint lookup so a non-existent id is
+    // fine here — we only need to confirm the gate, not the lookup.
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    const test = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/whk_00000000-0000-4000-8000-000000000abc/test',
+      headers: auth(fx),
+    });
+    expect(test.statusCode).toBe(403);
+  });
+
+  it('404 when endpoint id is unknown', async () => {
+    fx = await buildTestApp();
+    const test = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/whk_00000000-0000-4000-8000-deadbeef0000/test',
+      headers: auth(fx),
+    });
+    expect(test.statusCode).toBe(404);
+  });
+
+  it('400 when endpoint is paused (auto-disabled or active=false)', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: { url: 'https://x.test/h', events: ['session.completed'] },
+    });
+    const id = create.json<{ id: string }>().id;
+    // Pause it via PATCH active=false.
+    await fx.app.inject({
+      method: 'PATCH',
+      url: `/v1/webhooks/${id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { active: false },
+    });
+    const test = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/webhooks/${id}/test`,
+      headers: auth(fx),
+    });
+    expect(test.statusCode).toBe(400);
+  });
+
+  it('400 if customer tries to subscribe to test.ping on create', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: { url: 'https://x.test/h', events: ['test.ping'] },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

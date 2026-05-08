@@ -18158,3 +18158,39 @@ Tests: 8 new integration tests (list w/ multiple UAs, current
 marker, 401 unauth, single revoke, malformed id 400, cross-account
 404, bulk revoke 200 + verifies other tokens 401, missing-confirm
 400, API-key-caller 400). 1020 / 1020 tests pass.
+
+## V-356 — webhook test-delivery endpoint
+
+**Tier**: 1.
+
+POST /v1/webhooks/:id/test enqueues a synthetic `test.ping`
+delivery to the endpoint regardless of subscription, so customers
+can verify their handler is reachable + signature-verifies before
+relying on it for real events.
+
+Schema: `webhook_event_type` postgres enum extended with `test.ping`
+(migration 0032 — `ALTER TYPE … ADD VALUE IF NOT EXISTS`). The
+api-types `WebhookEventTypeSchema` gains `test.ping`; a new
+`SubscribableWebhookEventTypeSchema` (omits test.ping) is what
+`CreateWebhookRequestSchema` and `UpdateWebhookRequestSchema` accept,
+so customers can't subscribe to test.ping (no semantic — the test
+endpoint dispatches regardless).
+
+Service: `WebhooksService.sendTestEvent(ctx, endpointId, opts)` —
+admin-only on team-scoped requests (same gate as create/update/
+delete). Refuses (400) on paused endpoints. Reuses
+`webhook_delivery.replayed` audit action with `via: 'send_test_event'`
+in the payload — semantically the same operator-triggered delivery
+on an existing endpoint.
+
+Route returns 202 with { delivery_id, event_id, event_type:
+'test.ping' }; the worker picks up the queued row and delivers on
+the next tick.
+
+UI: customer-dashboard /webhooks "Send test" button per row,
+between Edit and Delete. Banner-confirms queueing with a hint to
+check the endpoint + delivery log.
+
+Tests: 5 new (202 success, 403 no-admin, 404 unknown, 400 paused
+endpoint, 400 attempting to subscribe to test.ping). 1025 / 1025
+tests pass.

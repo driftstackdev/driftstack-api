@@ -84,6 +84,12 @@ export const webhookEventType = pgEnum('webhook_event_type', [
   'quota.warning_80pct',
   'quota.exceeded',
   'api_key.revoked',
+  // V-356 — synthetic event sent only via POST /v1/webhooks/:id/test.
+  // Emitted regardless of subscription so the customer can verify
+  // their handler is reachable + signature-verifies before relying on
+  // it for real events. Migration 0032 adds the value to the
+  // existing postgres enum.
+  'test.ping',
 ]);
 
 export const webhookDeliveryStatus = pgEnum('webhook_delivery_status', [

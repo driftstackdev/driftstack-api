@@ -12,8 +12,29 @@ export const WebhookEventTypeSchema = z.enum([
   'quota.warning_80pct',
   'quota.exceeded',
   'api_key.revoked',
+  // V-356 — synthetic test event, sent only via POST
+  // /v1/webhooks/:id/test. Customers cannot subscribe to it
+  // (UpdateSubscriptionsSchema rejects it) — the endpoint dispatches
+  // a one-off delivery regardless of subscription, so the customer
+  // can verify their handler before relying on it for real events.
+  'test.ping',
 ]);
 export type WebhookEventType = z.infer<typeof WebhookEventTypeSchema>;
+
+/**
+ * V-356 — events the customer is allowed to subscribe to. Excludes
+ * `test.ping`, which is only ever emitted via the explicit test
+ * endpoint (subscribing to it would be meaningless — the test
+ * endpoint dispatches regardless of subscription).
+ */
+export const SubscribableWebhookEventTypeSchema = z.enum([
+  'session.completed',
+  'session.failed',
+  'quota.warning_80pct',
+  'quota.exceeded',
+  'api_key.revoked',
+]);
+export type SubscribableWebhookEventType = z.infer<typeof SubscribableWebhookEventTypeSchema>;
 
 export const WebhookDeliveryStatusSchema = z.enum([
   'pending',
@@ -54,7 +75,10 @@ export const CreateWebhookRequestSchema = z.object({
     .refine((u) => u.startsWith('https://'), {
       message: 'Webhook URL must use https://',
     }),
-  events: z.array(WebhookEventTypeSchema).min(1).max(10),
+  // V-356 — only subscribable event types accepted on create. Customers
+  // can't subscribe to `test.ping`; that event is only emitted via the
+  // POST /v1/webhooks/:id/test endpoint, regardless of subscription.
+  events: z.array(SubscribableWebhookEventTypeSchema).min(1).max(10),
   description: z.string().max(200).optional(),
 });
 export type CreateWebhookRequest = z.infer<typeof CreateWebhookRequestSchema>;
@@ -76,7 +100,7 @@ export const UpdateWebhookRequestSchema = z
         message: 'Webhook URL must use https://',
       })
       .optional(),
-    events: z.array(WebhookEventTypeSchema).min(1).max(10).optional(),
+    events: z.array(SubscribableWebhookEventTypeSchema).min(1).max(10).optional(),
     description: z.string().max(200).nullable().optional(),
     active: z.boolean().optional(),
   })

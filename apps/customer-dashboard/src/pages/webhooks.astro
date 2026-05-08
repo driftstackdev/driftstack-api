@@ -591,6 +591,9 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           '<button type="button" data-edit="' +
           escapeHtml(e.id) +
           '" class="text-sm text-oxblood-700 hover:underline">Edit</button>' +
+          '<button type="button" data-test="' +
+          escapeHtml(e.id) +
+          '" class="text-sm text-oxblood-700 hover:underline">Send test</button>' +
           '<button type="button" data-delete="' +
           escapeHtml(e.id) +
           '" class="text-sm text-red-700 hover:underline">Delete</button>' +
@@ -938,6 +941,52 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         });
       }
 
+      // V-356 — wire the per-row "Send test" buttons. POSTs to
+      // /v1/webhooks/:id/test which enqueues a synthetic test.ping
+      // delivery on the endpoint regardless of subscription.
+      function wireTestButtons() {
+        const buttons = ul.querySelectorAll('[data-test]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-test');
+            if (!id) return;
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = 'Sending…';
+            fetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(id) + '/test', {
+              method: 'POST',
+              headers: {
+                authorization: 'Bearer ' + token,
+                ...(typeof window.driftstackActAsHeaders === 'function'
+                  ? window.driftstackActAsHeaders()
+                  : {}),
+              },
+            })
+              .then((r) => {
+                if (!r.ok && r.status !== 202) {
+                  return r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+                }
+                showBanner(
+                  'Test event queued. Check your endpoint and the delivery log to confirm receipt.',
+                );
+              })
+              .catch((err) => {
+                showBanner(
+                  'Test send failed: ' +
+                    (err && err.message ? err.message : 'network error'),
+                );
+              })
+              .finally(() => {
+                btn.disabled = false;
+                btn.textContent = original;
+              });
+          });
+        });
+      }
+
       if (!token) {
         showBanner('Sign in to see live webhook endpoints. Showing preview data below.');
         return;
@@ -960,6 +1009,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             wireDeliveryToggles();
             wireDeleteButtons();
             wireEditButtons();
+            wireTestButtons();
           }
           showBanner(
             'Live data loaded. Aggregate delivery counts (delivered/failed/DLQ) not yet exposed via /v1/webhooks — coming soon.',

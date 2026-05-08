@@ -237,4 +237,29 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
       return reply.code(200).send(publicDelivery(updated));
     },
   );
+
+  // V-356 — send a synthetic test.ping event to the endpoint,
+  // bypassing subscription. Lets the customer verify their handler
+  // before relying on it for real events. Admin-only when targeting
+  // a team owner (same gate as create / update / delete).
+  app.post<{ Params: { id: string } }>(
+    '/v1/webhooks/:id/test',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const id = uuidFromPrefixedId(request.params.id, 'whk');
+      const eff = effectiveAccountIdForWrite(request, ctx);
+      const result = await service.sendTestEvent(
+        ctx,
+        id,
+        eff !== undefined ? { effectiveAccountId: eff } : {},
+      );
+      return reply.code(202).send({
+        delivery_id: `wdl_${result.deliveryId}`,
+        event_id: result.eventId,
+        event_type: 'test.ping',
+      });
+    },
+  );
 }

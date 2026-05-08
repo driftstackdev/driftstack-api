@@ -8,7 +8,7 @@
 // per subscribed endpoint.
 
 import { randomUUID } from 'node:crypto';
-import { ConflictError, NotFoundError } from '../lib/errors.js';
+import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import { requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
 import { generateWebhookSecret, webhookSecretPrefix } from '../lib/webhook-signing.js';
 import type { AccountContext } from './auth.js';
@@ -23,7 +23,11 @@ export type WebhookEventType =
   | 'session.failed'
   | 'quota.warning_80pct'
   | 'quota.exceeded'
-  | 'api_key.revoked';
+  | 'api_key.revoked'
+  // V-356 — synthetic event sent only via POST /v1/webhooks/:id/test.
+  // Customers cannot subscribe to it (Zod schemas reject it) — the
+  // test endpoint dispatches regardless of subscription.
+  | 'test.ping';
 
 export type WebhookDeliveryStatus = 'pending' | 'in_flight' | 'delivered' | 'failed' | 'dlq';
 
@@ -450,6 +454,85 @@ export class WebhooksService {
       }
     }
     return updated;
+  }
+
+  /**
+   * V-356 — enqueue a one-off `test.ping` delivery to a single
+   * endpoint, regardless of subscription. Used by POST
+   * /v1/webhooks/:id/test so the customer can confirm their handler
+   * is reachable + signature-verifies before relying on it for real
+   * events.
+   *
+   * Disabled endpoints (active=false OR disabled_at!=null) are
+   * rejected with a BadRequestError — testing against an endpoint
+   * that's been auto-paused for failures would just look broken.
+   */
+  async sendTestEvent(
+    ctx: AccountContext,
+    endpointId: string,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<{ deliveryId: string; eventId: string }> {
+    // Admin scope or team-admin gate — same posture as create/update,
+    // since "send test event" can be used to fish for endpoint-state.
+    if (opts.effectiveAccountId === undefined) {
+      throwIfMissingScope(ctx, 'admin');
+    }
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const row = await this.repo.findEndpoint(endpointId, accountId);
+    if (!row) {
+      throw new NotFoundError(`Webhook endpoint "${endpointId}" not found.`);
+    }
+    if (!row.active || row.disabledAt !== null) {
+      throw new BadRequestError(
+        'This endpoint is paused. Re-enable it before sending a test event.',
+      );
+    }
+
+    const eventId = randomUUID();
+    const createdAt = new Date().toISOString();
+    const payload = {
+      id: eventId,
+      type: 'test.ping' as WebhookEventType,
+      created_at: createdAt,
+      data: {
+        message: 'Test event from the Driftstack dashboard.',
+        endpoint_id: `whk_${endpointId}`,
+        triggered_by_account_id: `acc_${ctx.account.id}`,
+      },
+    };
+
+    await this.repo.enqueueDelivery({
+      webhookId: endpointId,
+      eventId,
+      eventType: 'test.ping',
+      payload,
+    });
+
+    // Best-effort audit emit so the customer's audit log shows the
+    // operator who fired the test event. Reuse the
+    // webhook_delivery.replayed action — the semantics are the same
+    // (operator-triggered delivery on an existing endpoint).
+    if (this.accountAudit) {
+      try {
+        await this.accountAudit.record({
+          accountId: ctx.account.id,
+          actorType: 'customer',
+          actorAccountId: ctx.account.id,
+          actorKeyId: ctx.apiKey.id,
+          action: 'webhook_delivery.replayed',
+          targetResourceId: `webhook_endpoint_${endpointId}`,
+          payload: {
+            endpoint_id: `whk_${endpointId}`,
+            event_type: 'test.ping',
+            via: 'send_test_event',
+          },
+        });
+      } catch {
+        /* swallow */
+      }
+    }
+
+    return { deliveryId: eventId, eventId };
   }
 
   /**
