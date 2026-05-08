@@ -19278,3 +19278,15 @@ Mypy clean.
 Go example for the profile surface doesn't exist yet (Go has
 quickstart / pagination / billing-flow / etc but no
 profile-management) — V-392 queued to scaffold one if useful.
+
+## V-392 — Go SDK profile-management example
+
+**Tier**: 1 (Go example parity with V-390 TS + V-391 Python).
+
+`packages/sdk-go/examples/profile_management/main.go` — new example.
+Walks the full surface end-to-end: create / iterate / get /
+update / Clone (V-313) / ProfileSnapshots.Capture (V-312) /
+Restore / cleanup. `go build` + `go vet` clean.
+
+Three-SDK profile-management example parity now matches three-SDK
+V-312/V-313 surface parity (V-376/377/378/379).
