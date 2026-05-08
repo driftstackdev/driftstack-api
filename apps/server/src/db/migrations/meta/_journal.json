@@ -204,6 +204,13 @@
       "when": 1778090419000,
       "tag": "0028_v304a_first_success_email",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1778090420000,
+      "tag": "0029_v298a_team_members",
+      "breakpoints": true
     }
   ]
 }
