@@ -448,6 +448,26 @@ const EMAIL_EVENTS = [
             entries. Leave blank to keep using the account UUID.
           </p>
         </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700" for="profile-region">
+            Data-residency region (preference)
+          </label>
+          <select
+            id="profile-region"
+            data-field="profile-region"
+            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+          >
+            <option value="">— no preference —</option>
+            <option value="us">us — Americas</option>
+            <option value="eu">eu — Europe</option>
+            <option value="apac">apac — Asia-Pacific</option>
+          </select>
+          <p class="mt-1 text-xs text-slate-500">
+            Customer-stated preference. Currently informational; physical
+            region routing of compute and storage is governed by the
+            sub-processor list (see <a href="/trust/sub-processors" class="text-oxblood-700 underline">/trust/sub-processors</a>).
+          </p>
+        </div>
         <p
           data-field="profile-error"
           class="hidden rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
@@ -570,6 +590,7 @@ const EMAIL_EVENTS = [
       const profileNameInput = root.querySelector('[data-field="profile-name"]');
       const profileTzInput = root.querySelector('[data-field="profile-timezone"]');
       const profileSlugInput = root.querySelector('[data-field="profile-slug"]');
+      const profileRegionInput = root.querySelector('[data-field="profile-region"]');
       const profileError = root.querySelector('[data-field="profile-error"]');
       const profileStatus = root.querySelector('[data-field="profile-status"]');
       const profileSaveBtn = root.querySelector('[data-button="profile-save"]');
@@ -640,6 +661,7 @@ const EMAIL_EVENTS = [
             if (me.name) profileNameInput.value = me.name;
             if (me.timezone) profileTzInput.value = me.timezone;
             if (profileSlugInput && me.slug) profileSlugInput.value = me.slug;
+            if (profileRegionInput && me.region) profileRegionInput.value = me.region;
             // V-352b — initial avatar preview.
             setAvatarPreview(me.avatar_url || null);
           })
@@ -759,6 +781,11 @@ const EMAIL_EVENTS = [
           // refines reject of "no fields" still allows name/timezone-only.
           if (profileSlugInput) {
             body.slug = slug.length > 0 ? slug : null;
+          }
+          // V-298b — region from select; '' = no preference (null).
+          if (profileRegionInput) {
+            const region = profileRegionInput.value || '';
+            body.region = region.length > 0 ? region : null;
           }
           fetch(apiBaseUrl + '/v1/account/me', {
             method: 'PATCH',

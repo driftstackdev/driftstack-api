@@ -31,6 +31,14 @@ export const accountTier = pgEnum('account_tier', [
 
 export const accountStatus = pgEnum('account_status', ['active', 'suspended', 'deleted']);
 
+// V-298b — Stripe-style region codes per founder Tier-2 verdict
+// 2026-05-09. Captures a customer-stated data-residency preference
+// for future workload routing. Currently informational; the actual
+// physical-region routing of compute / storage is governed by the
+// sub-processor list (Hetzner DE, Neon Frankfurt, etc.). Customer
+// sets via PATCH /v1/account/me; null when unset.
+export const accountRegion = pgEnum('account_region', ['us', 'eu', 'apac']);
+
 export const apiKeyScope = pgEnum('api_key_scope', [
   'read',
   'write',
@@ -188,6 +196,10 @@ export const accounts = pgTable(
     // dashboard.driftstack.dev/<slug>) is a future slice — founder
     // decides whether slugs become public URL components.
     slug: text('slug'),
+    // V-298b — Stripe-style data-residency region preference. Customer
+    // sets via PATCH /v1/account/me; null = unset (no preference,
+    // workload routes through default infra). Currently informational.
+    region: accountRegion('region'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

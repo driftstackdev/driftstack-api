@@ -69,6 +69,7 @@ async function seed(repo: CountingAuthRepo): Promise<{ plaintext: string; accoun
     timezone: null,
     avatarR2Key: null,
     slug: null,
+    region: null,
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
   });
@@ -157,6 +158,7 @@ describe('coalescer integrated with authenticate()', () => {
         timezone: null,
         avatarR2Key: null,
         slug: null,
+        region: null,
         createdAt: new Date('2026-01-01T00:00:00Z'),
         updatedAt: new Date('2026-01-01T00:00:00Z'),
       });

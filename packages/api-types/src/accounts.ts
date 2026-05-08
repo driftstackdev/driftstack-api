@@ -89,6 +89,15 @@ export const AccountSlugSchema = z
   });
 export type AccountSlug = z.infer<typeof AccountSlugSchema>;
 
+/**
+ * V-298b — Stripe-style data-residency region preference. 'us' /
+ * 'eu' / 'apac'. Customer-stated; informational. Actual physical
+ * region routing of compute / storage is governed by the DPA Annex 3
+ * sub-processor list, not this field.
+ */
+export const AccountRegionSchema = z.enum(['us', 'eu', 'apac']);
+export type AccountRegion = z.infer<typeof AccountRegionSchema>;
+
 export const UpdateAccountMeRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(120).nullable().optional(),
@@ -107,10 +116,19 @@ export const UpdateAccountMeRequestSchema = z
     // valid slug to set. Unique-when-set; the server returns 409 if
     // another account already owns the value.
     slug: AccountSlugSchema.nullable().optional(),
+    // V-298b — data-residency region preference. Null clears.
+    region: AccountRegionSchema.nullable().optional(),
   })
-  .refine((v) => v.name !== undefined || v.timezone !== undefined || v.slug !== undefined, {
-    message: 'At least one field (name, timezone, or slug) must be provided.',
-  });
+  .refine(
+    (v) =>
+      v.name !== undefined ||
+      v.timezone !== undefined ||
+      v.slug !== undefined ||
+      v.region !== undefined,
+    {
+      message: 'At least one field (name, timezone, slug, or region) must be provided.',
+    },
+  );
 export type UpdateAccountMeRequest = z.infer<typeof UpdateAccountMeRequestSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────

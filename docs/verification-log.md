@@ -18732,3 +18732,35 @@ set. Lets customers see at a glance which keys are mid-rotation and
 how much time is left before the old key stops working.
 
 No backend or schema change; pure UI surface. Astro build clean.
+
+## V-298b — accounts.region enum (us/eu/apac)
+
+**Tier**: 1 (founder Tier-2 verdict 2026-05-09: Stripe-style codes).
+
+Schema (migration 0036): `accounts.region` `account_region` enum
+('us'|'eu'|'apac') nullable. Customer-stated data-residency
+preference. Currently informational; physical region routing of
+compute / storage governed by DPA Annex 3 sub-processor list.
+
+api-types: `AccountRegionSchema`. `UpdateAccountMeRequestSchema`
+gains optional `region` field; refine clause widened to allow
+region-only updates.
+
+AccountRow gains `region: 'us'|'eu'|'apac'|null`. Drizzle + admin
+
+- in-memory repos extended; auth-cache serialize/deserialize round-
+  trips with forward-compat null default for pre-V-298b entries.
+
+Routes:
+
+- GET /v1/account/me — `region` field in response
+- PATCH /v1/account/me — accepts region; null clears
+
+UI: customer-dashboard /settings Profile section gains a region
+select (us/eu/apac/no-preference) below the slug input, with a
+note that the field is informational + cross-link to
+/trust/sub-processors for the authoritative region routing.
+
+Tests: 13 new integration tests (set + GET, clear, all 3 valid
+regions, 6 invalid shapes 400). Bulk-perl extended fixtures with
+`region: null`. 1102 / 1102 tests pass.

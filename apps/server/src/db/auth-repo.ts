@@ -126,6 +126,7 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
       timezone?: string | null;
       avatarR2Key?: string | null;
       slug?: string | null;
+      region?: 'us' | 'eu' | 'apac' | null;
     },
   ): Promise<AccountRow | null> {
     const set: Record<string, unknown> = { updatedAt: new Date() };
@@ -133,6 +134,7 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
     if (patch.timezone !== undefined) set.timezone = patch.timezone;
     if (patch.avatarR2Key !== undefined) set.avatarR2Key = patch.avatarR2Key;
     if (patch.slug !== undefined) set.slug = patch.slug;
+    if (patch.region !== undefined) set.region = patch.region;
     try {
       const [row] = await this.database.db
         .update(accounts)
@@ -181,6 +183,7 @@ function toAccountRow(r: typeof accounts.$inferSelect): AccountRow {
     timezone: r.timezone,
     avatarR2Key: r.avatarR2Key,
     slug: r.slug,
+    region: r.region,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };

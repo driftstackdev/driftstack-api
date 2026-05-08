@@ -120,6 +120,8 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         timezone: ctx.account.timezone,
         // V-298a — readable account handle (null when unset).
         slug: ctx.account.slug,
+        // V-298b — data-residency region preference (null when unset).
+        region: ctx.account.region,
         // V-352b — presigned R2 GET URL for the customer's uploaded
         // avatar; null when none uploaded or the public bucket isn't
         // wired in this deploy. URL is short-lived (1h).
@@ -190,6 +192,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         status: updated.status,
         timezone: updated.timezone,
         slug: updated.slug,
+        region: updated.region,
       };
     },
   );

@@ -109,6 +109,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
         timezone: null,
         avatarR2Key: null,
         slug: null,
+        region: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -144,6 +145,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
         timezone: null,
         avatarR2Key: null,
         slug: null,
+        region: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -189,6 +191,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
         timezone: null,
         avatarR2Key: null,
         slug: null,
+        region: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -223,6 +226,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
         timezone: null,
         avatarR2Key: null,
         slug: null,
+        region: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -556,6 +560,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       timezone: null,
       avatarR2Key: null,
       slug: null,
+      region: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -657,6 +662,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       timezone: null,
       avatarR2Key: null,
       slug: null,
+      region: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -701,6 +707,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       timezone: null,
       avatarR2Key: null,
       slug: null,
+      region: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -735,6 +742,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       timezone: null,
       avatarR2Key: null,
       slug: null,
+      region: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -788,6 +796,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       timezone: null,
       avatarR2Key: null,
       slug: null,
+      region: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -830,6 +839,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       timezone: null,
       avatarR2Key: null,
       slug: null,
+      region: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -873,6 +883,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       timezone: null,
       avatarR2Key: null,
       slug: null,
+      region: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -918,6 +929,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       timezone: null,
       avatarR2Key: null,
       slug: null,
+      region: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -959,6 +971,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       timezone: null,
       avatarR2Key: null,
       slug: null,
+      region: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -993,6 +1006,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       timezone: null,
       avatarR2Key: null,
       slug: null,
+      region: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -1035,6 +1049,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       timezone: null,
       avatarR2Key: null,
       slug: null,
+      region: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -1072,6 +1087,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       timezone: null,
       avatarR2Key: null,
       slug: null,
+      region: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -1127,6 +1143,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
       timezone: null,
       avatarR2Key: null,
       slug: null,
+      region: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -1175,6 +1192,7 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
         timezone: null,
         avatarR2Key: null,
         slug: null,
+        region: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       },

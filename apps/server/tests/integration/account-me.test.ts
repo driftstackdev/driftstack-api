@@ -434,3 +434,70 @@ describe('DELETE /v1/account/me/avatar (V-352b)', () => {
     expect(res.statusCode).toBe(401);
   });
 });
+
+// ── V-298b — account region ──────────────────────────────────────────
+
+describe('PATCH /v1/account/me — region (V-298b)', () => {
+  it('200 sets a valid region + GET surfaces it', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { region: 'eu' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ region: string }>().region).toBe('eu');
+
+    const me = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me',
+      headers: auth(fx),
+    });
+    expect(me.json<AccountMeResponse & { region: string | null }>().region).toBe('eu');
+  });
+
+  it('200 clears region to null', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { region: 'us' },
+    });
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { region: null },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ region: string | null }>().region).toBeNull();
+  });
+
+  it.each(['us', 'eu', 'apac'] as const)('accepts region %s', async (region) => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { region },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ region: string }>().region).toBe(region);
+  });
+
+  it.each(['EU', 'us-east', 'unknown', 'global', '', 'eu1'])(
+    '400 rejects invalid region %p',
+    async (region) => {
+      fx = await buildTestApp();
+      const res = await fx.app.inject({
+        method: 'PATCH',
+        url: '/v1/account/me',
+        headers: { ...auth(fx), 'content-type': 'application/json' },
+        payload: { region },
+      });
+      expect(res.statusCode).toBe(400);
+    },
+  );
+});

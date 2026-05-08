@@ -42,6 +42,10 @@ export interface AccountRow {
    *  the slug is a future slice — for now it's a stable identifier
    *  for support / billing / audit references. */
   slug: string | null;
+  /** V-298b — Stripe-style data-residency region preference: 'us',
+   *  'eu', or 'apac'. null = unset (default infra routing). Customer
+   *  sets via PATCH /v1/account/me. Currently informational. */
+  region: 'us' | 'eu' | 'apac' | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -130,6 +134,8 @@ export interface AccountAuthRepo {
        *  null if a unique-constraint conflict fires (e.g. another
        *  account already owns the slug). */
       slug?: string | null;
+      /** V-298b — region enum 'us'|'eu'|'apac' or null to clear. */
+      region?: 'us' | 'eu' | 'apac' | null;
     },
   ): Promise<AccountRow | null>;
 }
