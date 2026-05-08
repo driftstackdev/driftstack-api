@@ -8,7 +8,9 @@ Roll-up of every item between current state and "first paying customer can sign 
 - Per-runbook detail lives in `docs/founder-actions/v*.md` + `docs/deployment/*.md` + `docs/operations/*.md`.
 - Per-V-NNN history lives in `docs/verification-log.md`.
 
-**Last roll-up:** 2026-05-07 (V-279), refreshed 2026-05-07 (V-287).
+**Last roll-up:** 2026-05-07 (V-279), refreshed 2026-05-07 (V-287),
+2026-05-09 (V-361 — V-353 cycle / V-359 / V-298a / V-313 / V-360 +
+SDK + audit cleanup absorbed).
 
 ---
 
@@ -24,7 +26,14 @@ Roll-up of every item between current state and "first paying customer can sign 
 | Profiles (V-081)                           | READY           | eng     | yes (READY)    | create / list / get / delete; tier profile-cap enforced                                                                                              |
 | Webhooks (V-074 + V-091)                   | READY           | eng     | yes (READY)    | endpoints CRUD + delivery introspection + retry queue                                                                                                |
 | Admin force-actions (V-100)                | READY           | eng     | yes (READY)    | session destroy / API key revoke / account suspend                                                                                                   |
-| Customer audit log (V-216)                 | READY           | eng     | yes (READY)    | `GET /v1/account/audit-log`                                                                                                                          |
+| Customer audit log (V-216 + V-354)         | READY           | eng     | yes (READY)    | `GET /v1/account/audit-log` with filter dropdown + load-more pagination on /audit-log dashboard page                                                 |
+| MFA (V-353 cycle: a-h + V-358)             | READY           | eng     | yes (READY)    | TOTP enrollment / verify / login challenge / step-up reauth / disable / recovery codes / dashboard UI / API docs. Optional per V-353a verdict        |
+| Web-session list + revoke (V-355)          | READY           | eng     | yes (READY)    | GET /v1/account/web-sessions + DELETE per-id + bulk-revoke-except-current. Wired in /settings Active sign-ins                                        |
+| Webhook secret rotation (V-359)            | READY           | eng     | yes (READY)    | POST /v1/webhooks/:id/rotate-secret with 24h grace; worker dual-signs; SDK verifiers (TS/Py/Go) accept either header during grace                    |
+| Webhook test-delivery (V-356)              | READY           | eng     | yes (READY)    | POST /v1/webhooks/:id/test enqueues synthetic test.ping; UI button per row                                                                           |
+| Account avatar (V-352b)                    | READY           | eng     | yes (READY)    | POST/DELETE /v1/account/me/avatar; presigned R2 GET; 2 MiB cap; PNG/JPEG/WebP                                                                        |
+| Account slug (V-298a)                      | READY           | eng     | n/a            | accounts.slug column + PATCH /v1/account/me + /settings UI. URL routing semantics deferred to founder design                                         |
+| Profile cloning (V-313)                    | READY           | eng     | n/a            | POST /v1/profiles/:id/clone with auto-derived "${source} (copy)" naming                                                                              |
 | Stripe Checkout (V-082) + webhooks (V-080) | READY           | eng     | yes (READY)    | subscription + trial-pack flows; webhook signature verify                                                                                            |
 | BillingService production wiring           | PENDING FOUNDER | founder | yes            | needs STRIPE_SECRET_KEY (live) + 19 price IDs per ADR-004 + STRIPE_WEBHOOK_SECRET. Live keys go via SSH-write only                                   |
 | Trial-pack mechanics (ADR-003)             | READY           | eng     | yes (READY)    | $2.99 / 14-day / once-per-account / $0.18/hr decrement                                                                                               |
@@ -32,16 +41,16 @@ Roll-up of every item between current state and "first paying customer can sign 
 | Driver: mock                               | READY           | eng     | n/a            | dev/test only                                                                                                                                        |
 | Driver: webkit                             | PENDING ENG     | Agent 1 | yes            | cross-repo dep on Agent 1's V-203 Phase 2A + V-372–V-378 readback-path remediation. Agent 2 ValidationHarnessRecaptureBridge stays mocked until then |
 | OpenAPI 3.1 spec emit                      | READY           | eng     | yes (READY)    | `/openapi.json` + Scalar UI at `/docs/`                                                                                                              |
-| Test coverage                              | READY           | eng     | n/a            | 751 / 78 files; coverage thresholds enforced in CI per V-107                                                                                         |
+| Test coverage                              | READY           | eng     | n/a            | 1086 / 109 files server + 17 / Python SDK + Go SDK pass; coverage thresholds enforced in CI per V-107                                                |
 
 ## 2. SDKs
 
-| Item                               | Status          | Owner | Blocks launch?       | Notes                                                                                           |
-| ---------------------------------- | --------------- | ----- | -------------------- | ----------------------------------------------------------------------------------------------- |
-| TypeScript SDK (`@driftstack/sdk`) | READY           | eng   | yes (READY)          | published on npm; pre-1.0; full resource surface                                                |
-| Python SDK (`driftstack-sdk`)      | PENDING ENG     | eng   | no (alpha is enough) | wheel-buildable; first PyPI tag pending. Founder direction: launch can ship without Python live |
-| Go SDK                             | PENDING ENG     | eng   | no (alpha is enough) | examples compile; first git tag pending                                                         |
-| Webhook signature verifier         | READY (TS + Py) | eng   | yes (READY)          | `verifyWebhookSignature` in TS; `verify_webhook_signature` in Python                            |
+| Item                               | Status               | Owner | Blocks launch?       | Notes                                                                                                                                                                   |
+| ---------------------------------- | -------------------- | ----- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TypeScript SDK (`@driftstack/sdk`) | READY                | eng   | yes (READY)          | published on npm; pre-1.0; full resource surface                                                                                                                        |
+| Python SDK (`driftstack-sdk`)      | PENDING ENG          | eng   | no (alpha is enough) | wheel-buildable; first PyPI tag pending. Founder direction: launch can ship without Python live                                                                         |
+| Go SDK                             | PENDING ENG          | eng   | no (alpha is enough) | examples compile; first git tag pending                                                                                                                                 |
+| Webhook signature verifier         | READY (TS + Py + Go) | eng   | yes (READY)          | `verifyWebhookSignature` in TS; `verify_webhook_signature` in Python; `VerifyWebhookSignature` in Go. V-359-sdk extended all three with `headerPrev` for rotation grace |
 
 ## 3. GUI client (apps/gui-client)
 
