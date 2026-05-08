@@ -19157,3 +19157,30 @@ API index (apps/docs/src/pages/api/index.astro) gains a top
 OpenAPI spec registration of /v1/account/me + avatar routes is a
 separate slice (substantial — full Account response Zod schema
 needed) and stays queued as V-386.
+
+## V-386 — /v1/account/me OpenAPI registration
+
+**Tier**: 1 (V-385 deferred follow-through; closes the spec gap so
+Scalar UI + downstream SDK regen pick up the route).
+
+`apps/server/src/lib/openapi.ts`:
+
+- Imports `AccountTierSchema`, `AccountStatusSchema`,
+  `AccountRegionSchema`, `UpdateAccountMeRequestSchema` from
+  api-types.
+- Defines `AccountMeResponseSchema` inline — the 15-field rich
+  response shape (id / email / name / tier / status / timezone /
+  slug / region / avatar*url / mfa_enrolled / concurrent_session*\_
+  / profile\_\_ / teams[]). Lives inline rather than in api-types
+  because SDK consumers read the lean `AccountSchema`; the rich
+  /me response is a dashboard-only consumer surface.
+- Registers `AccountMeResponse` + `UpdateAccountMeRequest` as
+  named components.schemas.
+- Registers GET /v1/account/me (200 + standard 4xx) and PATCH
+  /v1/account/me (200 + 409 slug-conflict + standard 4xx).
+
+`openapi.test.ts` registered-paths fixture extended.
+
+Avatar routes (POST/DELETE /v1/account/me/avatar) are deferred to
+V-387 — UploadAvatarRequestSchema + presigned-URL response shape
+need a small additional schema definition pass.

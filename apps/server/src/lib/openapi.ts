@@ -25,8 +25,12 @@ import { z } from 'zod';
 // Augment z with .openapi() — must run before any registry.register call.
 extendZodWithOpenApi(z);
 import {
+  AccountRegionSchema,
   AccountSchema,
+  AccountStatusSchema,
+  AccountTierSchema,
   AdminAccountResponseSchema,
+  UpdateAccountMeRequestSchema,
   AdminAuditLogEntrySchema,
   ApiKeySchema,
   CaptureRequestSchema,
@@ -70,6 +74,34 @@ const PaginatedApiKeysSchema = z.object({
   data: z.array(ApiKeySchema),
 });
 
+// V-386 — full /v1/account/me response shape. Defined here rather than
+// in api-types because the SDKs read AccountSchema (the lean shared
+// type) and the rich /me response is only ever consumed by the
+// dashboard via the route directly.
+const AccountMeResponseSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  name: z.string().nullable(),
+  tier: AccountTierSchema,
+  status: AccountStatusSchema,
+  timezone: z.string().nullable(),
+  slug: z.string().nullable(),
+  region: AccountRegionSchema.nullable(),
+  avatar_url: z.string().nullable(),
+  mfa_enrolled: z.boolean(),
+  concurrent_session_cap: z.number().int().nonnegative(),
+  concurrent_session_active: z.number().int().nonnegative(),
+  profile_cap: z.number().int().nonnegative().nullable(),
+  profile_count: z.number().int().nonnegative(),
+  teams: z.array(
+    z.object({
+      owner_account_id: z.string(),
+      role: z.enum(['admin', 'member']),
+      membership_id: z.string(),
+    }),
+  ),
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // Build the registry
 // ───────────────────────────────────────────────────────────────────────────
@@ -89,6 +121,8 @@ function buildRegistry(): OpenAPIRegistry {
   // inline anonymous shapes. Anything referenced from a route's
   // request/response is registered here.
   r.register('Account', AccountSchema);
+  r.register('AccountMeResponse', AccountMeResponseSchema);
+  r.register('UpdateAccountMeRequest', UpdateAccountMeRequestSchema);
   r.register('ApiKey', ApiKeySchema);
   r.register('Session', SessionSchema);
   r.register('SessionState', SessionStateSchema);
@@ -928,6 +962,43 @@ function buildRegistry(): OpenAPIRegistry {
   });
 
   // V-219 — customer-facing rate-limit view.
+  // ── V-386 — /v1/account/me ────────────────────────────────────────────
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/me',
+    summary: 'Read the calling account (full self-visible state)',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      200: {
+        description: "Calling account's full state including tier caps + team memberships.",
+        content: { 'application/json': { schema: AccountMeResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'patch',
+    path: '/v1/account/me',
+    summary: 'Partial update of name / timezone / slug / region',
+    tags: ['account'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: UpdateAccountMeRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Updated account state.',
+        content: { 'application/json': { schema: AccountMeResponseSchema } },
+      },
+      ...errors4xx,
+      409: {
+        description: 'Slug already in use by another account.',
+        content: problemContent,
+      },
+    },
+  });
+
   const RateLimitBucketOpenApi = z.object({
     bucket_key: z.enum(['global', 'sessions:create']),
     capacity: z.number().int().positive(),
