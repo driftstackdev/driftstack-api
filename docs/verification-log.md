@@ -19044,3 +19044,22 @@ Index now enumerates every API doc page in the section:
 
 astro check clean (0 errors). No content change to existing pages;
 pure cross-link discovery fix.
+
+## V-381 — audit-log filter dropdown adds Profiles created/deleted
+
+**Tier**: 1 (V-354 follow-through; was a discoverability gap).
+
+`apps/customer-dashboard/src/pages/audit-log.astro` filter
+dropdown previously omitted profile lifecycle events even though
+they're in the action-label map (and the backend honours them on
+`?action=`).
+
+Adds two presets after the session entries:
+
+- "Profiles created (incl. clones / snapshot restores)" maps to
+  `profile.created` — same audit action emitted by direct creates,
+  V-313 clone, and V-312 snapshot restore (the differentiation
+  lives in `payload.cloned_from` / `payload.restored_from_snapshot`).
+- "Profiles deleted" maps to `profile.deleted`.
+
+Astro check clean. No backend or schema change.

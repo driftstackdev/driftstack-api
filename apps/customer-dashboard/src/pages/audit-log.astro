@@ -47,6 +47,11 @@ const FILTER_OPTIONS = [
   { value: 'api_key.revoked', label: 'API key revoked' },
   { value: 'session.created', label: 'Sessions created' },
   { value: 'session.destroyed', label: 'Sessions destroyed' },
+  // V-381 — V-313 clone + V-312 snapshot.restore both emit
+  // profile.created with a payload tag (cloned_from / restored_from_snapshot);
+  // the filter is shared.
+  { value: 'profile.created', label: 'Profiles created (incl. clones / snapshot restores)' },
+  { value: 'profile.deleted', label: 'Profiles deleted' },
   { value: 'subscription.tier_changed', label: 'Subscription changes' },
   { value: 'webhook_endpoint.created', label: 'Webhooks created' },
   { value: 'webhook_endpoint.updated', label: 'Webhooks updated' },
