@@ -173,6 +173,64 @@ type RotateAPIKeyResponse struct {
 }
 
 // ──────────────────────────────────────────────────────────────────
+// V-298c / V-309g — Team RBAC v1.
+// ──────────────────────────────────────────────────────────────────
+
+type TeamRole string
+
+const (
+	TeamRoleMember TeamRole = "member"
+	TeamRoleAdmin  TeamRole = "admin"
+)
+
+type TeamMember struct {
+	ID                 string    `json:"id"`
+	OwnerAccountID     string    `json:"owner_account_id"`
+	MemberAccountID    string    `json:"member_account_id"`
+	MemberEmail        string    `json:"member_email"`
+	Role               TeamRole  `json:"role"`
+	InvitedAt          time.Time `json:"invited_at"`
+	AcceptedAt         time.Time `json:"accepted_at"`
+	InvitedByAccountID *string   `json:"invited_by_account_id"`
+}
+
+type TeamInvite struct {
+	ID                 string     `json:"id"`
+	OwnerAccountID     string     `json:"owner_account_id"`
+	InviteeEmail       string     `json:"invitee_email"`
+	Role               TeamRole   `json:"role"`
+	ExpiresAt          time.Time  `json:"expires_at"`
+	InvitedByAccountID *string    `json:"invited_by_account_id"`
+	AcceptedAt         *time.Time `json:"accepted_at"`
+	CreatedAt          time.Time  `json:"created_at"`
+}
+
+type TeamMembersList struct {
+	Data []TeamMember `json:"data"`
+}
+
+type TeamInvitesList struct {
+	Data []TeamInvite `json:"data"`
+}
+
+type TeamInviteRequest struct {
+	Email string   `json:"email"`
+	Role  TeamRole `json:"role,omitempty"`
+}
+
+type TeamAcceptRequest struct {
+	Token string `json:"token"`
+}
+
+type TeamAcceptResponse struct {
+	Membership TeamMember `json:"membership"`
+}
+
+type TeamInviteResponse struct {
+	Message string `json:"message"`
+}
+
+// ──────────────────────────────────────────────────────────────────
 // Session
 // ──────────────────────────────────────────────────────────────────
 

@@ -39,6 +39,8 @@ type Client struct {
 	Profiles *ProfilesResource
 	Billing  *BillingResource
 	Auth     *AuthResource
+	// V-298c — Team RBAC. Auth path integration is V-298d.
+	Team *TeamResource
 }
 
 // Option is the functional-options shape for [New].
@@ -94,6 +96,7 @@ func New(apiKey string, opts ...Option) *Client {
 	c.Profiles = &ProfilesResource{client: c}
 	c.Billing = &BillingResource{client: c}
 	c.Auth = &AuthResource{client: c}
+	c.Team = &TeamResource{client: c}
 	return c
 }
 
