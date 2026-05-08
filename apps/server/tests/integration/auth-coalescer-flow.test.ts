@@ -47,6 +47,10 @@ class CountingAuthRepo implements AccountAuthRepo {
   touchWebSessionLastUsed(): Promise<void> {
     return Promise.resolve();
   }
+  // V-326 — team memberships stubbed; not exercised by coalescer tests.
+  findTeamMemberships(): Promise<never[]> {
+    return Promise.resolve([]);
+  }
 }
 
 async function seed(repo: CountingAuthRepo): Promise<{ plaintext: string; accountId: string }> {

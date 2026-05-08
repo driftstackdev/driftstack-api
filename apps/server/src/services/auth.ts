@@ -82,6 +82,15 @@ export interface AccountAuthRepo {
   findActiveWebSession(args: { tokenHash: string; now: Date }): Promise<WebSessionAuthRow | null>;
   /** V-168 — touch the web session's last_used_at on auth success. */
   touchWebSessionLastUsed(id: string, at: Date): Promise<void>;
+  /**
+   * V-326 — load team memberships where this account is a MEMBER
+   * (not the owner). Each row exposes the owner's account id + the
+   * member's role. Returns an empty array when the account is on no
+   * teams. Cached inside AccountContext.teams across the auth-cache
+   * TTL; cache-invalidated on membership changes via the team-members
+   * service's accept / removeMember paths.
+   */
+  findTeamMemberships(memberAccountId: string): Promise<TeamMembership[]>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -95,6 +104,20 @@ export interface RateLimitOverride {
   expiresAt: Date;
 }
 
+/**
+ * V-326 — team membership the authenticated account belongs to as a
+ * MEMBER (not as the owner). Loaded alongside rate-limit overrides on
+ * auth-cache miss; cache-invalidated whenever the membership row
+ * changes (accept / remove). Used by the effective-account resolver
+ * (`resolveEffectiveAccount` below) so a member can act on the
+ * owner's resources by passing `X-Driftstack-Account: acc_<owner>`.
+ */
+export interface TeamMembership {
+  membershipId: string;
+  ownerAccountId: string;
+  role: 'member' | 'admin';
+}
+
 export interface AccountContext {
   account: AccountRow;
   apiKey: ApiKeyRow;
@@ -105,6 +128,12 @@ export interface AccountContext {
    * through to the tier default (lazy expiry — no background sweep).
    */
   rateLimitOverrides: Record<string, RateLimitOverride>;
+  /**
+   * V-326 — owner accounts this account is a member of, with role.
+   * Empty array for accounts that aren't on any team. Always present
+   * (never undefined) so call sites can iterate without a null check.
+   */
+  teams: TeamMembership[];
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -213,12 +242,15 @@ async function slowPathApiKey(
 
   await repo.touchApiKeyLastUsed(apiKey.id, now);
 
-  const overrideRows = await repo.findActiveRateLimitOverrides(account.id, now);
+  const [overrideRows, teams] = await Promise.all([
+    repo.findActiveRateLimitOverrides(account.id, now),
+    repo.findTeamMemberships(account.id),
+  ]);
   const rateLimitOverrides: Record<string, RateLimitOverride> = {};
   for (const o of overrideRows) {
     rateLimitOverrides[o.bucketKey] = o;
   }
-  const ctx: AccountContext = { account, apiKey, rateLimitOverrides };
+  const ctx: AccountContext = { account, apiKey, rateLimitOverrides, teams };
 
   // Cap TTL at expiresAt so the cache entry can never outlive the key.
   if (cache) {
@@ -295,7 +327,10 @@ async function slowPathWebSession(
 
   await repo.touchWebSessionLastUsed(session.id, now);
 
-  const overrideRows = await repo.findActiveRateLimitOverrides(account.id, now);
+  const [overrideRows, teams] = await Promise.all([
+    repo.findActiveRateLimitOverrides(account.id, now),
+    repo.findTeamMemberships(account.id),
+  ]);
   const rateLimitOverrides: Record<string, RateLimitOverride> = {};
   for (const o of overrideRows) {
     rateLimitOverrides[o.bucketKey] = o;
@@ -325,7 +360,7 @@ async function slowPathWebSession(
     createdAt: session.createdAt,
   };
 
-  const ctx: AccountContext = { account, apiKey: syntheticKey, rateLimitOverrides };
+  const ctx: AccountContext = { account, apiKey: syntheticKey, rateLimitOverrides, teams };
 
   // Cap TTL at session expiry so the cache entry can never outlive the
   // session token. Same shape as the API key path.
@@ -364,4 +399,72 @@ export function requireScope(ctx: AccountContext, required: ApiKeyScope): void {
     return;
   }
   throw new ForbiddenError(`This action requires the "${required}" scope.`);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// V-326 — effective-account resolver for Team RBAC
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Result of resolving a request's "effective account" — the account
+ * whose resources the request acts on. For a non-team-member request,
+ * effective = ctx.account (the calling account itself); for a team
+ * member acting on the owner's behalf, effective = the owner account
+ * + the membership row that grants access.
+ *
+ * Routes that participate in team RBAC call `resolveEffectiveAccount`
+ * once and use `effective.accountId` everywhere they previously used
+ * `ctx.account.id`. Membership.role lets the route enforce role-based
+ * restrictions (e.g. only `admin` members can rotate keys).
+ */
+export type EffectiveAccount =
+  | { kind: 'self'; accountId: string }
+  | {
+      kind: 'team';
+      accountId: string;
+      role: 'member' | 'admin';
+      membership: TeamMembership;
+    };
+
+/**
+ * Resolve the effective account for a request. The caller passes the
+ * (optional) `X-Driftstack-Account` header value (a public account id
+ * like `acc_<uuid>`); when present + valid, the resolver looks up the
+ * matching team membership and returns the owner-account scope.
+ *
+ * Forbidden cases:
+ *   - Header references an account the caller is neither owner of nor
+ *     member on → 403.
+ *   - Header references the caller's own account → equivalent to no
+ *     header (kind: 'self'). Documented for clarity, not error.
+ *
+ * Header shape is `acc_<uuid>` exactly; case-sensitive prefix match.
+ */
+export function resolveEffectiveAccount(
+  ctx: AccountContext,
+  requestedAccountIdHeader: string | undefined,
+): EffectiveAccount {
+  if (!requestedAccountIdHeader || requestedAccountIdHeader.length === 0) {
+    return { kind: 'self', accountId: ctx.account.id };
+  }
+  const PREFIX = 'acc_';
+  if (!requestedAccountIdHeader.startsWith(PREFIX)) {
+    throw new ForbiddenError(
+      'Invalid X-Driftstack-Account header. Expected an account id of shape "acc_<uuid>".',
+    );
+  }
+  const requestedUuid = requestedAccountIdHeader.slice(PREFIX.length);
+  if (requestedUuid === ctx.account.id) {
+    return { kind: 'self', accountId: ctx.account.id };
+  }
+  const membership = ctx.teams.find((t) => t.ownerAccountId === requestedUuid);
+  if (!membership) {
+    throw new ForbiddenError('X-Driftstack-Account references an account you are not a member of.');
+  }
+  return {
+    kind: 'team',
+    accountId: membership.ownerAccountId,
+    role: membership.role,
+    membership,
+  };
 }

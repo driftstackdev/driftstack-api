@@ -86,10 +86,20 @@ interface SerializedRateLimitOverride {
   expiresAt: string;
 }
 
+// V-326 — team membership entries serialized as plain JSON. Older
+// pre-V-326 cache entries lack this field; deserialize() treats
+// absence as an empty array (safe default — no implicit team grants).
+interface SerializedTeamMembership {
+  membershipId: string;
+  ownerAccountId: string;
+  role: 'member' | 'admin';
+}
+
 interface SerializedContext {
   account: SerializedAccount;
   apiKey: SerializedApiKey;
   rateLimitOverrides: Record<string, SerializedRateLimitOverride>;
+  teams?: SerializedTeamMembership[];
 }
 
 interface CachedEntry {
@@ -142,6 +152,11 @@ function serialize(ctx: AccountContext): SerializedContext {
       createdAt: ctx.apiKey.createdAt.toISOString(),
     },
     rateLimitOverrides: overrides,
+    teams: ctx.teams.map((t) => ({
+      membershipId: t.membershipId,
+      ownerAccountId: t.ownerAccountId,
+      role: t.role,
+    })),
   };
 }
 
@@ -182,6 +197,11 @@ function deserialize(s: SerializedContext): AccountContext {
       createdAt: new Date(s.apiKey.createdAt),
     },
     rateLimitOverrides: overrides,
+    teams: (s.teams ?? []).map((t) => ({
+      membershipId: t.membershipId,
+      ownerAccountId: t.ownerAccountId,
+      role: t.role,
+    })),
   };
 }
 

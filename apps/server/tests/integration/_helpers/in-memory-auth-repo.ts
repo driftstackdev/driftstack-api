@@ -7,6 +7,7 @@ import type {
   AccountRow,
   ApiKeyRow,
   RateLimitOverride,
+  TeamMembership,
   WebSessionAuthRow,
 } from '../../../src/services/auth.js';
 
@@ -27,6 +28,8 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
   private readonly keysById = new Map<string, ApiKeyRow>();
   private readonly keysByPrefix = new Map<string, ApiKeyRow>();
   private readonly overrides = new Map<string, Map<string, RateLimitOverride>>();
+  // V-326 — test seam for team memberships indexed by member account id.
+  private readonly teamMemberships = new Map<string, TeamMembership[]>();
   // V-168 — web session lookup. Local map for direct test seeding; if a
   // webSessionFinder is wired (production-shaped fixture: buildTestApp
   // passes the auth-flows-repo so web sessions issued by AuthFlowsService
@@ -126,6 +129,16 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
       }
     }
     return Promise.resolve();
+  }
+
+  // ── V-326 team memberships ────────────────────────────────────────
+  findTeamMemberships(memberAccountId: string): Promise<TeamMembership[]> {
+    return Promise.resolve(this.teamMemberships.get(memberAccountId) ?? []);
+  }
+
+  /** Test helper: seed team memberships for a member account. */
+  setTeamMemberships(memberAccountId: string, rows: TeamMembership[]): void {
+    this.teamMemberships.set(memberAccountId, rows);
   }
 
   /** V-168 test helper: revoke a web session by id. */

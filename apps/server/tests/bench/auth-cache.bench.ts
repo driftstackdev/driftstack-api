@@ -46,6 +46,7 @@ function sampleContext(): AccountContext {
     account: sampleAccount(),
     apiKey: sampleApiKey(),
     rateLimitOverrides: {},
+    teams: [],
   };
 }
 

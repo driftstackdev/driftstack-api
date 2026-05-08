@@ -6,10 +6,11 @@ import type {
   AccountRow,
   ApiKeyRow,
   RateLimitOverride,
+  TeamMembership,
   WebSessionAuthRow,
 } from '../services/auth.js';
 import type { Database } from './client.js';
-import { accounts, apiKeys, rateLimitOverrides, webSessions } from './schema.js';
+import { accounts, apiKeys, rateLimitOverrides, teamMembers, webSessions } from './schema.js';
 
 export class DrizzleAccountAuthRepo implements AccountAuthRepo {
   constructor(private readonly database: Database) {}
@@ -99,6 +100,22 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
       .update(webSessions)
       .set({ lastUsedAt: at })
       .where(eq(webSessions.id, id));
+  }
+
+  async findTeamMemberships(memberAccountId: string): Promise<TeamMembership[]> {
+    const rows = await this.database.db
+      .select({
+        id: teamMembers.id,
+        ownerAccountId: teamMembers.ownerAccountId,
+        role: teamMembers.role,
+      })
+      .from(teamMembers)
+      .where(eq(teamMembers.memberAccountId, memberAccountId));
+    return rows.map((r) => ({
+      membershipId: r.id,
+      ownerAccountId: r.ownerAccountId,
+      role: r.role,
+    }));
   }
 }
 
