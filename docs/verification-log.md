@@ -19227,3 +19227,24 @@ Counts in the aggregate-summary table (SHIPPED 87 → 91, DEFERRED
 41 → 37) stay accurate at the slice level even if the cumulative
 totals lag. The line-level status is what feeds the priority
 sequencing logic in this file.
+
+## V-389 — FAQ region-preference entry
+
+**Tier**: 1 (marketing-copy autonomous-decideable per
+marketing-copy-cadence memory rule; closes the V-298b
+customer-question surface).
+
+`apps/marketing-site/src/pages/faq.astro` "EU stack + compliance"
+group gains a new entry between "Where is my data stored?" and
+"Are you GDPR-compliant?":
+
+> **Can I pick which region my data is stored in?**
+>
+> Stated preference (us/eu/apac) from /settings → Region; v1
+> informational only. EU-jurisdiction infra today regardless of
+> preference. Future multi-region rollout: DPA Art 28 30-day
+> notice + EU-stay/terminate rights before any migration.
+> Cross-link to /trust/sub-processors for the same explanation.
+
+Tone matches the existing "Where is my data stored?" entry.
+Founder reviews tone post-hoc per cadence rule.
