@@ -155,6 +155,10 @@ function createRecordingEmailService(realService: EmailService): {
       );
       await realService.sendStatusIncidentNotification(args);
     },
+    sendTeamInvite: async (args) => {
+      record('team-invite', args);
+      await realService.sendTeamInvite(args);
+    },
   };
   return { service, sends };
 }

@@ -112,6 +112,13 @@ export interface EmailService {
     statusPageUrl: string;
     unsubscribeLink: string;
   }): Promise<void>;
+  /** V-298b — team invite email. acceptLink contains the token. */
+  sendTeamInvite(args: {
+    to: string;
+    acceptLink: string;
+    expiresAt: Date;
+    role: 'member' | 'admin';
+  }): Promise<void>;
   /** V-295c3-followup — fires when a public incident is posted or resolved. */
   sendStatusIncidentNotification(args: {
     to: string;
@@ -247,6 +254,14 @@ const TEMPLATES = {
     html: (v) =>
       `<p>You're now subscribed to Driftstack service-status updates. We'll email you when an incident is posted and again when it's resolved — nothing else.</p><p>Live status: <a href="${v.statusPageUrl}">${v.statusPageUrl}</a><br />Unsubscribe (one click): <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
   },
+  // V-298b — DRAFT copy. Team invite email.
+  'team-invite': {
+    subject: 'You’re invited to join a Driftstack team',
+    text: (v) =>
+      `You've been invited to join a Driftstack team as a ${v.role}.\n\nAccept the invite by clicking the link below. It expires at ${v.expiresAt} (UTC) and works once.\n\n${v.acceptLink}\n\nIf you don't have a Driftstack account yet, you'll be prompted to sign up first. The invite must be accepted by the same email address it was sent to.\n\n— Driftstack`,
+    html: (v) =>
+      `<p>You've been invited to join a Driftstack team as a <strong>${v.role}</strong>.</p><p>Accept the invite by clicking the link below. It expires at <strong>${v.expiresAt}</strong> (UTC) and works once.</p><p><a href="${v.acceptLink}">${v.acceptLink}</a></p><p>If you don't have a Driftstack account yet, you'll be prompted to sign up first. The invite must be accepted by the same email address it was sent to.</p><p>— Driftstack</p>`,
+  },
   // V-295c3-followup — DRAFT copy. Two templates so the subject can vary
   // (a "resolved" email shouldn't read like a fresh outage).
   'status-incident-created': {
@@ -317,6 +332,7 @@ export function createEmailService({
       sendStatusSubscriptionConfirmation: async () => {},
       sendStatusSubscriptionWelcome: async () => {},
       sendStatusIncidentNotification: async () => {},
+      sendTeamInvite: async () => {},
     };
   }
 
@@ -420,6 +436,12 @@ export function createEmailService({
         incidentTime: incidentTime.toISOString(),
         statusPageUrl,
         unsubscribeLink,
+      }),
+    sendTeamInvite: ({ to, acceptLink, expiresAt, role }) =>
+      send('team-invite', to, {
+        acceptLink,
+        expiresAt: expiresAt.toISOString(),
+        role,
       }),
   };
 }
