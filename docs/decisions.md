@@ -387,3 +387,51 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 - **Tier:** 3 (compliance + customer-trust posture — autonomously decided per founder direction 2026-05-07 extended Tier-3 content authority for legal pages).
 - **V-log:** V-255.
 - **Revert path:** if founder judges the DRAFT banner insufficient, one revert: `git revert <V-255-sha>` restores the four routes to 404s; the canonical drafts in `docs/legal/*.md` are unaffected. Counsel review proceeds on its own timeline; banner removal is a separate V-NNN that wires `POST /v1/legal/accept` to the counsel-reviewed content.
+
+---
+
+## D-2026-05-08-01 — Status-page arc (V-295) ships with in-process event bus, not Redis Pub/Sub
+
+- **Decision:** The V-295e SSE on /v1/status/stream uses an in-process `IncidentEventBus` for fan-out to connected clients. Redis Pub/Sub bridging is NOT shipped at launch.
+
+- **Reasoning:**
+  - Driftstack ships a single API instance at launch. There is exactly one process for SSE clients to connect to; the bus has zero cross-instance routing concerns.
+  - SSE clients hold open connections — any future multi-instance setup needs sticky-session routing (or a dedicated SSE relay tier) regardless of pub/sub mechanism. Adding Redis Pub/Sub now without sticky-session routing would NOT enable multi-instance.
+  - In-process emit is sync + zero-latency. Putting the emit OUTSIDE the `Promise.all` of email + outbound-webhook fan-out keeps SSE notification latency at ~0ms even when other channels are slow.
+  - The migration path is documented inline in `incident-event-bus.ts`: when scale demands it, the right answer is sticky-session routing OR a dedicated SSE relay process — not Redis Pub/Sub bridging that breaks deterministic at-most-once semantics.
+
+- **Tier:** 1 (architecture decision within standard ecosystem; auto-decide per founder direction 2026-05-08 autonomous-decision-guidance).
+- **V-log:** V-295e.
+- **Revert path:** if a multi-instance deploy demands cross-process pub/sub, swap `IncidentEventBus` for a Redis-backed implementation. The interface (`subscribe(listener) → unsubscribe`) is stable. The lifecycle dispatch in bootstrap doesn't need to change.
+
+---
+
+## D-2026-05-08-02 — API key rotation uses `expires_at`-driven grace, not a separate revocation column
+
+- **Decision:** V-296 rotation sets the OLD key's `expires_at = max(existing, now + 24h)` rather than introducing a new `rotated_to_id` column or "rotation state" enum. The auth path's existing `expires_at`-driven gate handles auto-revocation at the grace boundary.
+
+- **Reasoning:**
+  - The V-049 auth path already short-circuits keys past `expires_at`. Reusing this means rotation needs zero new auth-path code.
+  - A `rotated_to_id` column would require a new join in the auth hot path (twice on every authenticated request) — unnecessary cost for a feature that fires rarely.
+  - The `max(existing, now + 24h)` invariant prevents accidentally extending an already-expiring key's life. Customer intent ("this key expires next Tuesday") is preserved.
+  - Simpler model: a key has an expires_at. When you rotate, that timestamp shifts forward by 24h (or stays at the prior shorter date). When the timestamp passes, the key stops working. No state machine, no enum, no separate revocation table.
+
+- **Tier:** 1 (architecture decision within standard ecosystem; auto-decide per founder direction 2026-05-08 autonomous-decision-guidance).
+- **V-log:** V-296.
+- **Revert path:** if customers complain about the 24h grace being too long/short, the constant in `apps/server/src/services/api-keys.ts:rotate()` is one number to change. If they complain about not being able to revoke immediately during grace, V-049's existing DELETE /v1/api-keys/:id endpoint already handles that — rotation does NOT prevent immediate revoke.
+
+---
+
+## D-2026-05-08-03 — Customer audit-log export cap at 10,000 rows per request
+
+- **Decision:** V-297 `GET /v1/account/audit-log/export?format=csv|json` walks paginated reads up to a 10,000-row server-side ceiling. Older entries remain accessible via `GET /v1/account/audit-log?cursor=...` (unbounded; cursor-paginated).
+
+- **Reasoning:**
+  - GDPR Article 20 requires "structured, commonly used, machine-readable format" — the cap doesn't affect compliance because customers can fetch beyond 10k via the read endpoint they already have.
+  - 10k is generous: a year+ of typical activity for a small-team account fits comfortably. Pathological cases (millions of rows on an enterprise account) would otherwise OOM the export response.
+  - The `X-Driftstack-Export-Truncated: true|false` header signals when the cap was hit so power users know to fetch more via cursor pagination.
+  - Per-export ceiling is preferable to streaming because the JSON envelope shape (`{generated_at, account_id, row_count, truncated, data}`) requires `row_count` + `truncated` to be set before the body streams. Streaming would force a different envelope shape.
+
+- **Tier:** 1 (architecture decision within standard ecosystem; auto-decide per founder direction 2026-05-08 autonomous-decision-guidance).
+- **V-log:** V-297.
+- **Revert path:** if customers exceed the cap regularly, change `EXPORT_MAX_ROWS` in `apps/server/src/routes/account-audit.ts` (one constant). Or implement true streaming JSON via a different envelope. Both reversible at any pre-customer-volume point.
