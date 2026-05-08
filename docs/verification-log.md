@@ -18962,3 +18962,32 @@ Type-strictness on bodies remains `dict[str, Any]` matching
 profiles.py — Pydantic models land on next `scripts/generate.sh`
 regen pass; no-any-return baseline matches the rest of the
 hand-written resources.
+
+## V-378 — Go SDK profile-snapshots resource
+
+**Tier**: 1 (V-376/377 Go mirror; closes the three-SDK V-312 parity gap).
+
+`packages/sdk-go/profile_snapshots.go` adds `ProfileSnapshotsResource`
+with parity surface to TS + Python:
+
+- `Capture(ctx, profileID, *CaptureSnapshotRequest)`
+- `ListForProfile(ctx, profileID, *ListProfileSnapshotsQuery)`
+- `List(ctx, *ListProfileSnapshotsQuery)` — cross-account
+- `Iterate(ctx, query, fn)` — callback-style cursor walk consistent
+  with `ProfilesResource.Iterate`
+- `Get(ctx, snapshotID)`
+- `Restore(ctx, snapshotID, *RestoreSnapshotRequest)`
+- `Delete(ctx, snapshotID)`
+
+New types: `ProfileSnapshot`, `CaptureSnapshotRequest`,
+`RestoreSnapshotRequest`, `ProfileSnapshotsListPage`,
+`ListProfileSnapshotsQuery`. Wired into `Client` as
+`client.ProfileSnapshots`.
+
+6 table-driven tests (`profile_snapshots_test.go`): capture body
+shape, list-for-profile, list cross-account, multi-page iterate,
+restore returns Profile, delete 204. `go test ./...` clean.
+
+Three-SDK parity for V-312 now locked: TypeScript (V-376), Python
+(V-377), Go (V-378). Customers on any client version with the next
+release pull get snapshot methods natively.

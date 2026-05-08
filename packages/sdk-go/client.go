@@ -36,8 +36,9 @@ type Client struct {
 	APIKeys  *APIKeysResource
 	Usage    *UsageResource
 	Webhooks *WebhooksResource
-	Profiles *ProfilesResource
-	Billing  *BillingResource
+	Profiles         *ProfilesResource
+	ProfileSnapshots *ProfileSnapshotsResource
+	Billing          *BillingResource
 	Auth     *AuthResource
 	// V-298c — Team RBAC. Auth path integration is V-298d.
 	Team *TeamResource
@@ -94,6 +95,7 @@ func New(apiKey string, opts ...Option) *Client {
 	c.Usage = &UsageResource{client: c}
 	c.Webhooks = &WebhooksResource{client: c}
 	c.Profiles = &ProfilesResource{client: c}
+	c.ProfileSnapshots = &ProfileSnapshotsResource{client: c}
 	c.Billing = &BillingResource{client: c}
 	c.Auth = &AuthResource{client: c}
 	c.Team = &TeamResource{client: c}
