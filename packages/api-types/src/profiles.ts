@@ -51,6 +51,14 @@ export const UpdateProfileRequestSchema = z.object({
 });
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequestSchema>;
 
+// V-313 — POST /v1/profiles/:id/clone request body. Both fields
+// optional: when `name` is omitted the server auto-derives a non-
+// conflicting `${source} (copy)` / `(copy 2)` / ... name.
+export const CloneProfileRequestSchema = z.object({
+  name: ProfileNameSchema.optional(),
+});
+export type CloneProfileRequest = z.infer<typeof CloneProfileRequestSchema>;
+
 export const ListProfilesResponseSchema = z.object({
   data: z.array(ProfileSchema),
   has_more: z.boolean(),

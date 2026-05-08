@@ -195,4 +195,88 @@ export class ProfilesService {
   async touch(args: { id: string; accountId: string; at: Date }): Promise<void> {
     return this.repo.touch(args);
   }
+
+  /**
+   * V-313 — clone an existing profile's metadata. Reads the source row,
+   * derives a non-conflicting name (`${source.name} (copy)`, `(copy 2)`,
+   * `(copy 3)`, ... incrementing until unused), and inserts a new
+   * profile with the same archetype + description. Same tier-cap +
+   * unique-name semantics as `create`.
+   *
+   * Source row is found scoped to `accountId` so the cloner can't
+   * duplicate another account's profile by id (404 instead).
+   */
+  async clone(args: {
+    id: string;
+    accountId: string;
+    tier: AccountTier;
+    /** Override the auto-derived name. Same shape constraints as create. */
+    name?: string;
+  }): Promise<ProfileRecord> {
+    const source = await this.repo.findById({ id: args.id, accountId: args.accountId });
+    if (source === null) throw new NotFoundError('Profile not found.');
+
+    // Tier cap is shared with create — same enforcement path.
+    const limit = profileLimitFor(args.tier);
+    if (limit !== null) {
+      const current = await this.repo.countByAccount(args.accountId);
+      if (current >= limit) {
+        throw new TierLimitError(
+          `Tier "${args.tier}" permits at most ${limit.toString()} profiles; you have ${current.toString()}.`,
+          { limit, current, resource: 'profile', tier: args.tier },
+        );
+      }
+    }
+
+    let cloneName: string;
+    if (args.name !== undefined) {
+      const conflict = await this.repo.findByAccountAndName({
+        accountId: args.accountId,
+        name: args.name,
+      });
+      if (conflict !== null) {
+        throw new ConflictError(`Profile name "${args.name}" already exists in this account.`, {
+          resource: 'profile',
+          field: 'name',
+        });
+      }
+      cloneName = args.name;
+    } else {
+      cloneName = await this.deriveNonConflictingCopyName(args.accountId, source.name);
+    }
+
+    const row = await this.repo.insert({
+      accountId: args.accountId,
+      name: cloneName,
+      archetype: source.archetype,
+      description: source.description,
+    });
+    await this.emitAuditBestEffort(args.accountId, 'profile.created', `profile_${row.id}`, {
+      name: row.name,
+      archetype: row.archetype,
+      cloned_from: `profile_${source.id}`,
+    });
+    return row;
+  }
+
+  /** V-313 — find an unused name in `${source} (copy)`, `(copy 2)`,
+   *  `(copy 3)`, ... iteration. Caps at 99 to avoid runaway loops. */
+  private async deriveNonConflictingCopyName(
+    accountId: string,
+    sourceName: string,
+  ): Promise<string> {
+    for (let n = 1; n <= 99; n++) {
+      const candidate = n === 1 ? `${sourceName} (copy)` : `${sourceName} (copy ${n})`;
+
+      const exists = await this.repo.findByAccountAndName({
+        accountId,
+        name: candidate,
+      });
+      if (exists === null) return candidate;
+    }
+    throw new ConflictError(
+      'Too many copies of this profile already exist. Pick a fresh name explicitly.',
+      { resource: 'profile', field: 'name' },
+    );
+  }
 }

@@ -18677,3 +18677,45 @@ fixtures with `slug: null` after `avatarR2Key: null,` lines.
 V-298b queued: account.region (data-residency hint) — separate
 slice; needs founder verdict on the region enum (eu / us /
 auto-pick / etc.) before schema lands.
+
+## V-313 — profile cloning (POST /v1/profiles/:id/clone)
+
+**Tier**: 1.
+
+Customer-facing endpoint to duplicate an existing profile's metadata
+with a new name. Reuses the V-081 ProfilesService surface; no new
+schema (profile state pointers / snapshots stay deferred to V-312).
+
+Service: `ProfilesService.clone({id, accountId, tier, name?})`.
+Tier-cap shared with `create` (TierLimitError 402 when the cap is
+already at limit). Source row found scoped to `accountId` so cloners
+can't duplicate another account's profile (404 instead). Auto-
+derives `${source.name} (copy)` / `(copy 2)` / `(copy 3)` … up to
+99 by linear scan; explicit `name` override accepted (409 on
+collision). New row inherits source's `archetype` + `description`.
+
+Audit emit: `profile.created` with extra `cloned_from:
+profile_<source-id>` payload field — the audit log shows the
+provenance.
+
+Route: POST /v1/profiles/:id/clone. Body `{ name? }`. Returns the
+new public profile shape (status 200 to match existing
+ProfilesService.create response semantics — Fastify default,
+existing test pattern).
+
+api-types: `CloneProfileRequestSchema`.
+
+UI: customer-dashboard /profiles "Clone" button per row, between
+the existing single Delete action. confirm() guard; PATCH-equivalent
+pattern (banner-confirms success + refresh()).
+
+Tests: 5 new integration tests (auto-derived "(copy)", suffix
+increment, explicit name override, 409 on collision, 404 unknown
+source). One pre-existing create-test status assertion fixed in
+the same file (was `toBe(201)` — Fastify defaults POST to 200 on
+this surface; the V-313 tests caught the inconsistency). 1086 / 1086
+tests pass.
+
+V-312 profile snapshots stays queued — needs founder verdict on
+state-pointer semantics (R2 key vs JSON blob vs reference to a
+session id). V-314 profile state cleanup also queued.

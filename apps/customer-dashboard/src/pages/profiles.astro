@@ -280,6 +280,11 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           escapeHtml(fmtIso(p.last_used_at)) +
           '</p></div>' +
           '<div class="flex shrink-0 flex-col items-end gap-2">' +
+          '<button type="button" data-clone="' +
+          escapeHtml(p.id) +
+          '" data-clone-name="' +
+          escapeHtml(p.name) +
+          '" class="text-sm text-oxblood-700 hover:underline">Clone</button>' +
           '<button type="button" data-delete="' +
           escapeHtml(p.id) +
           '" data-delete-name="' +
@@ -337,6 +342,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           list.classList.remove('hidden');
           list.innerHTML = profiles.map(profileLi).join('');
           wireDeleteButtons();
+          wireCloneButtons();
         }
       }
 
@@ -360,6 +366,43 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             usageLine.appendChild(span);
           }
         }
+      }
+
+      // V-313 — clone-button wiring. POSTs /v1/profiles/:id/clone with
+      // an empty body; server auto-derives "${source} (copy)" / (copy 2)
+      // / ... naming.
+      function wireCloneButtons() {
+        const buttons = list.querySelectorAll('[data-clone]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-clone');
+            const name = btn.getAttribute('data-clone-name') || '(unnamed)';
+            if (!window.confirm('Clone profile "' + name + '"?')) return;
+            btn.disabled = true;
+            btn.textContent = 'Cloning…';
+            authedFetch('/v1/profiles/' + encodeURIComponent(id) + '/clone', {
+              method: 'POST',
+              body: JSON.stringify({}),
+            })
+              .then((r) =>
+                r.ok
+                  ? r.json()
+                  : r
+                      .json()
+                      .catch(() => ({}))
+                      .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+              )
+              .then((body) => {
+                showBanner('Cloned to "' + (body.name || 'new profile') + '".');
+                return refresh();
+              })
+              .catch((err) => {
+                showBanner('Clone failed: ' + (err && err.message ? err.message : 'network'));
+                btn.disabled = false;
+                btn.textContent = 'Clone';
+              });
+          });
+        });
       }
 
       function wireDeleteButtons() {

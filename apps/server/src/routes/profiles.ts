@@ -12,6 +12,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
+  CloneProfileRequestSchema,
   CreateProfileRequestSchema,
   PaginationQuerySchema,
   UpdateProfileRequestSchema,
@@ -195,6 +196,40 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       const accountId = eff ?? ctx.account.id;
       await service.delete({ id, accountId });
       return reply.code(204).send();
+    },
+  );
+
+  // ── POST /v1/profiles/:id/clone (V-313) ──────────────────────────────
+  // Same admin-only-on-team gate as create. Tier cap is checked
+  // server-side (matches the create path); 402 / TierLimit on
+  // exceeded. Body `name` optional — server auto-derives a non-
+  // conflicting `${source} (copy)` if omitted.
+  app.post<{ Params: { id: string } }>(
+    '/v1/profiles/:id/clone',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const id = uuidFromProfileId(req.params.id);
+      const parsed = CloneProfileRequestSchema.safeParse(req.body ?? {});
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+
+      const eff = effectiveAccountIdForWrite(req, ctx);
+      let accountId = ctx.account.id;
+      let tier = ctx.account.tier;
+      if (eff !== undefined) {
+        const owner = await authRepo.getAccount(eff);
+        if (!owner) throw new ForbiddenError('Owner account no longer exists.');
+        accountId = owner.id;
+        tier = owner.tier;
+      }
+
+      const cloned = await service.clone({
+        id,
+        accountId,
+        tier,
+        ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+      });
+      return publicProfile(cloned);
     },
   );
 }

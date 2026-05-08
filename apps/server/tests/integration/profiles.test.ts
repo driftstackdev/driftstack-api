@@ -324,3 +324,124 @@ describe('DELETE /v1/profiles/:id', () => {
     expect(res.statusCode).toBe(404);
   });
 });
+
+// ── V-313 — POST /v1/profiles/:id/clone ─────────────────────────────────
+
+describe('POST /v1/profiles/:id/clone (V-313)', () => {
+  let fx: TestAppFixture;
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('201 clones a profile with auto-derived "(copy)" name', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: {
+        name: 'production',
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+        description: 'prod profile',
+      },
+    });
+    expect(create.statusCode).toBe(200);
+    const created = create.json<{ id: string }>();
+
+    const clone = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${created.id}/clone`,
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: {},
+    });
+    expect(clone.statusCode).toBe(200);
+    const body = clone.json<{
+      id: string;
+      name: string;
+      archetype: string;
+      description: string | null;
+    }>();
+    expect(body.id).not.toBe(created.id);
+    expect(body.name).toBe('production (copy)');
+    expect(body.archetype).toBe('iphone16pro_ios18_7_safari26_4');
+    expect(body.description).toBe('prod profile');
+  });
+
+  it('201 increments the suffix when "(copy)" already exists', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { name: 'beta' },
+    });
+    const created = create.json<{ id: string }>();
+    // First clone takes "(copy)".
+    const c1 = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${created.id}/clone`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(c1.json<{ name: string }>().name).toBe('beta (copy)');
+    // Second clone increments to "(copy 2)".
+    const c2 = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${created.id}/clone`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(c2.json<{ name: string }>().name).toBe('beta (copy 2)');
+  });
+
+  it('201 accepts an explicit name override', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { name: 'src' },
+    });
+    const created = create.json<{ id: string }>();
+    const clone = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${created.id}/clone`,
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { name: 'fork-staging' },
+    });
+    expect(clone.statusCode).toBe(200);
+    expect(clone.json<{ name: string }>().name).toBe('fork-staging');
+  });
+
+  it('409 when the explicit name conflicts with an existing profile', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { name: 'taken-already' },
+    });
+    const src = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { name: 'src' },
+    });
+    const srcId = src.json<{ id: string }>().id;
+    const clone = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${srcId}/clone`,
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { name: 'taken-already' },
+    });
+    expect(clone.statusCode).toBe(409);
+  });
+
+  it('404 when source id is unknown', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles/prof_00000000-0000-4000-8000-deadbeef0001/clone',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+});
