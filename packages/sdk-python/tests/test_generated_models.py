@@ -20,13 +20,13 @@ def test_account_validates_a_well_formed_payload() -> None:
         "id": "acc_00000000-0000-4000-8000-000000000001",
         "email": "tester@driftstack.dev",
         "name": "Tester",
-        "tier": "builder",
+        "tier": "api_builder",
         "status": "active",
         "created_at": "2026-01-01T00:00:00Z",
         "updated_at": "2026-01-01T00:00:00Z",
     }
     account = models.Account.model_validate(payload)
-    assert account.tier == "builder"
+    assert account.tier == "api_builder"
     assert account.status == "active"
     assert account.created_at == datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -55,7 +55,7 @@ def test_account_rejects_malformed_id() -> None:
         "id": "not-a-prefixed-id",
         "email": "x@example.com",
         "name": None,
-        "tier": "builder",
+        "tier": "api_builder",
         "status": "active",
         "created_at": "2026-01-01T00:00:00Z",
         "updated_at": "2026-01-01T00:00:00Z",

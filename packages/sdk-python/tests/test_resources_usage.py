@@ -15,7 +15,7 @@ BASE = "https://api.test"
 USAGE: dict = {
     "period_start": "2026-05-01T00:00:00Z",
     "period_end": "2026-06-01T00:00:00Z",
-    "tier": "builder",
+    "tier": "api_builder",
     "totals": {
         "session_minute": 0,
         "navigate": 0,
@@ -41,7 +41,7 @@ def test_sync_current_period() -> None:
         with Driftstack(api_key=API_KEY, base_url=BASE) as client:
             result = client.usage.current_period()
         assert isinstance(result, UsagePeriodSummary)
-        assert result.tier == "builder"
+        assert result.tier == "api_builder"
 
 
 @pytest.mark.asyncio

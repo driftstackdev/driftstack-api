@@ -21,6 +21,9 @@ ENDPOINT: dict = {
     "id": "whk_00000000-0000-4000-8000-000000000001",
     "url": "https://customer.test/hook",
     "secret_prefix": "whsec_aaaaaa",
+    # V-359 — rotation grace state. Both null when no rotation in flight.
+    "prev_secret_prefix": None,
+    "rotation_grace_expires_at": None,
     "events": ["session.completed"],
     "description": None,
     "active": True,
@@ -28,6 +31,8 @@ ENDPOINT: dict = {
     "last_success_at": None,
     "last_failure_at": None,
     "disabled_at": None,
+    # V-185 — aggregate delivery counts.
+    "delivery_counts": {"delivered": 0, "failed": 0, "dlq": 0},
     "created_at": "2026-05-02T10:00:00Z",
 }
 

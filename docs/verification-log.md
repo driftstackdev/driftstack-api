@@ -20267,3 +20267,46 @@ it).
 
 Astro check clean. Guide tone now matches the empirical state
 of the SDK + V-430 sessions.md callout.
+
+## V-432 — Python SDK regen + test-fixture updates for V-148/V-298b/V-352b/V-353h/V-185/V-359
+
+**Tier**: 1 (catches up Python `_generated/models.py` to current
+api-types schemas; closes the long-pending regen gap noted in
+V-396/V-417/V-419).
+
+`packages/sdk-python/openapi.json` regenerated via
+`npm run sdk:python:dump-spec` (writes the live OpenAPI spec).
+`packages/sdk-python/src/driftstack/_generated/models.py`
+regenerated via `bash scripts/generate.sh` (datamodel-codegen).
+
+The regen surfaces every schema change since the last pass:
+
+- **V-148 tier rename:** Account.tier was `Literal["free",
+"starter", "solo", "builder", "scale", "enterprise"]`. Now
+  `Literal["trial_pack", "solo_manual", "team_manual",
+"agency_manual", "api_starter", "api_builder", "api_scale",
+"enterprise"]`.
+- **V-298b region** + **V-352b avatar** + **V-353h MFA** +
+  **V-326c teams** — these aren't exposed via the lean
+  AccountSchema (they live on the rich /me response which the
+  SDK reads as dict[str, Any]) so the generated Account is
+  unchanged in structure, just the tier enum.
+- **V-185 + V-359 webhook fields:** WebhookEndpoint now requires
+  `prev_secret_prefix`, `rotation_grace_expires_at`, `delivery_counts`.
+- **V-169 session purpose:** Session now requires `purpose` field.
+
+Test fixture updates (no functional change in tested behavior):
+
+- `tests/test_resources_webhooks.py` ENDPOINT fixture +3 fields.
+- `tests/test_resources_sessions.py` SESSION_FIXTURE +purpose.
+- `tests/test_resources_iterate.py` \_session_dict +purpose.
+- `tests/test_integration_workflow.py` session fixture +purpose.
+- `tests/test_resources_usage.py` tier "builder" → "api_builder".
+- `tests/test_generated_models.py` tier "builder" → "api_builder"
+  (sed -i across 3 references).
+
+137/137 Python tests pass. Mypy `no-any-return` baseline unchanged
+from V-396; pre-push gate doesn't run mypy.
+
+This regen completes the "Python Pydantic models land on next
+regen pass" follow-through queued back in V-417 + V-419 commits.

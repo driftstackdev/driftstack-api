@@ -35,6 +35,7 @@ def _session_fixture(session_id: str = "ses_00000000-0000-4000-8000-000000000001
         "api_key_id": "key_00000000-0000-4000-8000-000000000001",
         "status": "ready",
         "archetype": "iphone16pro_ios18_7_safari26_4",
+        "purpose": "production_customer",
         "label": "ci",
         "metadata": None,
         "created_at": "2026-05-02T10:00:00Z",
