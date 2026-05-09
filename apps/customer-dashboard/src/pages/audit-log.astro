@@ -12,6 +12,10 @@ const ACTION_LABEL: Record<string, string> = {
   'account.login': 'Login',
   'account.logout': 'Logout',
   'account.password_changed': 'Password changed',
+  // V-398 — V-353b MFA lifecycle.
+  'account.mfa_enrolled': 'MFA enrolled',
+  'account.mfa_disabled': 'MFA disabled',
+  'account.recovery_code_used': 'MFA recovery code used',
   'api_key.minted': 'API key created',
   'api_key.revoked': 'API key revoked',
   'api_key.rotated': 'API key rotated',
@@ -23,6 +27,8 @@ const ACTION_LABEL: Record<string, string> = {
   'webhook_endpoint.created': 'Webhook created',
   'webhook_endpoint.updated': 'Webhook updated',
   'webhook_endpoint.deleted': 'Webhook deleted',
+  // V-398 — V-359 webhook signing-secret rotation.
+  'webhook_endpoint.secret_rotated': 'Webhook secret rotated',
   'webhook_delivery.replayed': 'Webhook delivery replayed',
   'team.member_invited': 'Team member invited',
   'team.invite_accepted': 'Team invite accepted',
@@ -40,8 +46,14 @@ const ACTION_LABEL: Record<string, string> = {
 // backend change; this UI-only slice keeps backend untouched).
 const FILTER_OPTIONS = [
   { value: '', label: 'All events' },
+  { value: 'account.email_verified', label: 'Email verified' },
   { value: 'account.login', label: 'Logins' },
+  { value: 'account.logout', label: 'Logouts' },
   { value: 'account.password_changed', label: 'Password changes' },
+  // V-398 — V-353b MFA lifecycle (enroll / disable / recovery use).
+  { value: 'account.mfa_enrolled', label: 'MFA enrolled' },
+  { value: 'account.mfa_disabled', label: 'MFA disabled' },
+  { value: 'account.recovery_code_used', label: 'MFA recovery code used' },
   { value: 'api_key.minted', label: 'API key created' },
   { value: 'api_key.rotated', label: 'API key rotated' },
   { value: 'api_key.revoked', label: 'API key revoked' },
@@ -56,10 +68,15 @@ const FILTER_OPTIONS = [
   { value: 'webhook_endpoint.created', label: 'Webhooks created' },
   { value: 'webhook_endpoint.updated', label: 'Webhooks updated' },
   { value: 'webhook_endpoint.deleted', label: 'Webhooks deleted' },
+  // V-398 — V-359 webhook signing-secret rotation.
+  { value: 'webhook_endpoint.secret_rotated', label: 'Webhook secret rotated' },
   { value: 'webhook_delivery.replayed', label: 'Webhook replays' },
   { value: 'team.member_invited', label: 'Team invites sent' },
   { value: 'team.invite_accepted', label: 'Team invites accepted' },
   { value: 'team.member_removed', label: 'Team members removed' },
+  // V-398 — staff-touched events surfaced for transparency.
+  { value: 'admin.refund_recorded', label: 'Refund recorded by support' },
+  { value: 'admin.support_note', label: 'Support note added' },
 ] as const;
 ---
 

@@ -19447,3 +19447,26 @@ The current production grace-rotation path is correct as-is; this
 slice just empirically pinned both forms in unit-tests.
 
 15/15 webhook-signing tests pass.
+
+## V-398 — audit-log filter coverage extends across MFA + secret-rotation + staff events
+
+**Tier**: 1 (V-381 follow-through; closes the discoverability
+gap on the dropdown).
+
+`apps/customer-dashboard/src/pages/audit-log.astro` filter
+dropdown was missing MFA lifecycle, webhook secret rotation, and
+staff-touched events even though ACTION_LABEL already mapped
+several of them and the backend honours the filter on `?action=`.
+
+Adds presets:
+
+- account.email_verified — Email verified.
+- account.logout — Logouts.
+- account.mfa_enrolled / mfa_disabled / recovery_code_used (V-353b).
+- webhook_endpoint.secret_rotated (V-359).
+- admin.refund_recorded / admin.support_note (staff transparency).
+
+ACTION_LABEL also gains the three MFA entries + the webhook
+secret_rotated entry so the rendering label resolves cleanly.
+
+Astro check clean. Pure UI surface; no backend or schema change.
