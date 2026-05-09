@@ -19822,3 +19822,22 @@ Not fixed in this slice because:
 Queued as TD-audit-payload-scrub for a future slice. Doc surfaces
 the empirical reality so customers + team members are aware
 until the scrub lands.
+
+## V-414 — audit-log doc clarifies actor_account_id vs account_id under team-RBAC
+
+**Tier**: 1 (V-326c team-RBAC + V-216 audit-log doc precision).
+
+`apps/docs/src/pages/api/audit-log.md` `actor_type` paragraph
+extends to clarify the relationship between `account_id` (audit
+row owner) and `actor_account_id` (calling account):
+
+- Direct self-action: `actor_account_id == account_id`.
+- Team-RBAC: row lands on the OWNER's log
+  (`account_id = acc_<owner>`) but `actor_account_id` records
+  the calling MEMBER (`acc_<member>`).
+
+Owners reading their audit log can see "who on my team did what"
+without separate correlation between identity systems.
+
+This was already true in the implementation (V-326c V-330b) but
+not surfaced in the doc. Astro check clean.

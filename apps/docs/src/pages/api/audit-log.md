@@ -57,7 +57,17 @@ The `actor_type` enum:
 - `staff` — a Driftstack support-team action against the account
   (rare; recorded for transparency).
 
-`actor_account_id` is the calling account for `customer` actions.
+`actor_account_id` is the **calling** account for `customer` actions
+— which is NOT necessarily the same as the row's `account_id`.
+When a team member acts on the owner's account via the
+`X-Driftstack-Account` header (V-326c), the entry lands on the
+**owner's** audit log (`account_id = acc_<owner>`) but
+`actor_account_id` records the **member** who performed the
+action (`acc_<member>`). Owners reading their audit log can
+therefore see "who on my team did what" without separate
+correlation. Self-action audit entries have
+`actor_account_id == account_id`.
+
 `actor_key_id` is the synthetic `wsk_<session-uuid>` for web-session
 calls and `key_<key-uuid>` for API-key calls. Both are `null` for
 `system` and `staff` events.
