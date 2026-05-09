@@ -19929,3 +19929,27 @@ api-types schemas reused via direct import (no inline duplication).
 `openapi.test.ts` registered-paths fixture extended.
 
 855 server tests + monorepo typecheck clean.
+
+## V-421 — apps/docs/api/billing.md (new page)
+
+**Tier**: 1 (paired with V-420 OpenAPI registration; same pattern
+as V-385 account.md / V-408 auth.md).
+
+`apps/docs/src/pages/api/billing.md` — new page covering:
+
+- GET /v1/billing — subscription + trial-pack state shape with
+  null-when-never-subscribed semantics.
+- POST /billing/checkout-session — body shape, success/cancel
+  URL allowlist (V-248), checkout_url redirect flow.
+- POST /billing/trial-pack — $2.99 one-time, 299¢ credit, ~16h
+  at API Starter overage rate, once-per-account.
+- POST /billing/portal-session — short-lived single-use URL into
+  Stripe Customer Portal; cache discouraged.
+- Webhook events from Stripe → Driftstack → Customer flow:
+  subscription.tier_changed audit row is today's source of
+  truth; subscription.changed/cancelled webhooks PLANNED.
+- Auth + scoping note: /v1/billing/\* never honors team-RBAC
+  X-Driftstack-Account header (per-account, not per-team).
+
+API index links it between Audit log and Team RBAC. Astro check
+clean.
