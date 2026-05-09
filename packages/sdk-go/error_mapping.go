@@ -33,6 +33,10 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	"https://errors.driftstack.dev/invalid-credentials":      buildInvalidCredentials,
 	"https://errors.driftstack.dev/invalid-auth-token":       buildInvalidAuthToken,
 	"https://errors.driftstack.dev/email-not-verified":       buildEmailNotVerified,
+	// V-438 — remaining problem types.
+	"https://errors.driftstack.dev/feature-unavailable":  buildFeatureUnavailable,
+	"https://errors.driftstack.dev/mfa-step-up-required": buildMfaStepUpRequired,
+	"https://errors.driftstack.dev/internal":             buildInternal,
 }
 
 // errorFromResponse parses an HTTP response body as RFC 7807
@@ -235,6 +239,18 @@ func buildEmailNotVerified(base apiError, _ map[string]any, _ string) error {
 	return &EmailNotVerifiedError{apiError: base}
 }
 
+func buildFeatureUnavailable(base apiError, _ map[string]any, _ string) error {
+	return &FeatureUnavailableError{apiError: base}
+}
+
+func buildMfaStepUpRequired(base apiError, _ map[string]any, _ string) error {
+	return &MfaStepUpRequiredError{apiError: base}
+}
+
+func buildInternal(base apiError, _ map[string]any, _ string) error {
+	return &InternalError{apiError: base}
+}
+
 // Compile-time sanity that the error types implement error.
 var (
 	_ error = (*apiError)(nil)
@@ -243,6 +259,9 @@ var (
 	_ error = (*InvalidCredentialsError)(nil)
 	_ error = (*InvalidAuthTokenError)(nil)
 	_ error = (*EmailNotVerifiedError)(nil)
+	_ error = (*FeatureUnavailableError)(nil)
+	_ error = (*MfaStepUpRequiredError)(nil)
+	_ error = (*InternalError)(nil)
 	_ error = (*RateLimitError)(nil)
 	_ error = (*ConcurrencyLimitError)(nil)
 	_ error = (*QuotaExceededError)(nil)

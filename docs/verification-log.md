@@ -20460,3 +20460,31 @@ fall-through to UnknownError that lost the type info.
 Remaining problem types not yet typed in Go SDK:
 `feature-unavailable`, `mfa-step-up-required`, `internal`. Queued
 for follow-up.
+
+## V-438 — Go SDK final 3 typed errors complete the problem-type map
+
+**Tier**: 1 (V-437 follow-through; closes the remaining
+problem-type gap in Go SDK).
+
+`packages/sdk-go/errors.go` adds the final 3 typed error structs +
+sentinel `var Err…`:
+
+- `FeatureUnavailableError` / `ErrFeatureUnavailable` — 503 from
+  endpoints requiring infra not configured (e.g. avatar upload
+  when R2 isn't wired).
+- `MfaStepUpRequiredError` / `ErrMfaStepUpRequired` — operation
+  requires fresh MFA proof (V-353e step-up gate, 15-minute
+  window). Customer should call `/v1/auth/mfa/step-up` and retry.
+- `InternalError` / `ErrInternal` — unhandled server error.
+
+`error_mapping.go` extends `problemTypeToFactory` + factory
+functions + compile-time error-interface assertions.
+
+`errors_test.go` table extended; type-switch arms added.
+
+20/20 problem-type cases pass (was 16 before V-437; +4 in V-437;
++3 in V-438 = 20 total typed problem types in Go SDK now).
+
+Three-SDK problem-type parity now matches: TS had 20+ typed,
+Python uses dict-based problem reading, Go now has 20 typed
+covering every URI the server emits.

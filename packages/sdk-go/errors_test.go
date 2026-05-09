@@ -30,6 +30,10 @@ func TestErrorFromResponseMapsProblemTypes(t *testing.T) {
 		{"https://errors.driftstack.dev/invalid-credentials", &InvalidCredentialsError{}, ErrInvalidCredentials},
 		{"https://errors.driftstack.dev/invalid-auth-token", &InvalidAuthTokenError{}, ErrInvalidAuthToken},
 		{"https://errors.driftstack.dev/email-not-verified", &EmailNotVerifiedError{}, ErrEmailNotVerified},
+		// V-438 — remaining problem types.
+		{"https://errors.driftstack.dev/feature-unavailable", &FeatureUnavailableError{}, ErrFeatureUnavailable},
+		{"https://errors.driftstack.dev/mfa-step-up-required", &MfaStepUpRequiredError{}, ErrMfaStepUpRequired},
+		{"https://errors.driftstack.dev/internal", &InternalError{}, ErrInternal},
 	}
 	for _, tc := range cases {
 		t.Run(tc.problemType, func(t *testing.T) {
@@ -122,6 +126,21 @@ func TestErrorFromResponseMapsProblemTypes(t *testing.T) {
 				}
 			case *EmailNotVerifiedError:
 				var c *EmailNotVerifiedError
+				if !errors.As(err, &c) {
+					t.Fatalf("errors.As %T failed", tc.want)
+				}
+			case *FeatureUnavailableError:
+				var c *FeatureUnavailableError
+				if !errors.As(err, &c) {
+					t.Fatalf("errors.As %T failed", tc.want)
+				}
+			case *MfaStepUpRequiredError:
+				var c *MfaStepUpRequiredError
+				if !errors.As(err, &c) {
+					t.Fatalf("errors.As %T failed", tc.want)
+				}
+			case *InternalError:
+				var c *InternalError
 				if !errors.As(err, &c) {
 					t.Fatalf("errors.As %T failed", tc.want)
 				}

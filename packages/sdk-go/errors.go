@@ -66,6 +66,10 @@ var (
 	ErrInvalidCredentials     = errors.New("invalid credentials")
 	ErrInvalidAuthToken       = errors.New("invalid auth token")
 	ErrEmailNotVerified       = errors.New("email not verified")
+	// V-438 — remaining problem types.
+	ErrFeatureUnavailable = errors.New("feature unavailable")
+	ErrMfaStepUpRequired  = errors.New("mfa step-up required")
+	ErrInternal           = errors.New("internal error")
 )
 
 // AuthError covers any of the auth-related problem types. Use the
@@ -230,3 +234,28 @@ func (e *InvalidAuthTokenError) Is(target error) bool { return target == ErrInva
 type EmailNotVerifiedError struct{ apiError }
 
 func (e *EmailNotVerifiedError) Is(target error) bool { return target == ErrEmailNotVerified }
+
+// V-438 — additional typed errors closing the remaining
+// problem-type gap.
+
+// FeatureUnavailableError — an endpoint requires infrastructure not
+// configured in this deployment (e.g. avatar uploads when R2 isn't
+// wired). HTTP 503.
+type FeatureUnavailableError struct{ apiError }
+
+func (e *FeatureUnavailableError) Is(target error) bool { return target == ErrFeatureUnavailable }
+
+// MfaStepUpRequiredError — the requested operation requires a fresh
+// MFA proof (V-353e step-up gate, 15-minute freshness window).
+// Customer should call POST /v1/auth/mfa/step-up with a TOTP code
+// and retry the original request.
+type MfaStepUpRequiredError struct{ apiError }
+
+func (e *MfaStepUpRequiredError) Is(target error) bool { return target == ErrMfaStepUpRequired }
+
+// InternalError — unhandled server-side error. The detail message
+// may be sanitized; check Driftstack status / contact support if
+// this persists.
+type InternalError struct{ apiError }
+
+func (e *InternalError) Is(target error) bool { return target == ErrInternal }
