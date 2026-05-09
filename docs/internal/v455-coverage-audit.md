@@ -163,15 +163,22 @@ grep -roE "\"/v[0-9][^\"]+\"" packages/sdk-go
 
 ### Status (`/v1/status`)
 
-| Route                                 | OpenAPI | TS  | Py  | Go  | Notes                          |
-| ------------------------------------- | ------- | --- | --- | --- | ------------------------------ |
-| GET /v1/status                        | ❌      | ❌  | ❌  | ❌  | **GAP** — public status        |
-| GET /v1/status/incidents              | ❌      | ❌  | ❌  | ❌  | **GAP**                        |
-| GET /v1/status/sla                    | ❌      | ❌  | ❌  | ❌  | **GAP**                        |
-| GET /v1/status/stream                 | 🚫      | 🚫  | 🚫  | 🚫  | SSE stream — typed differently |
-| POST /v1/status/subscribe             | ❌      | ❌  | ❌  | ❌  | **GAP**                        |
-| POST /v1/status/subscribe/confirm     | ❌      | ❌  | ❌  | ❌  | **GAP**                        |
-| POST /v1/status/subscribe/unsubscribe | ❌      | ❌  | ❌  | ❌  | **GAP**                        |
+| Route                                 | OpenAPI  | TS  | Py  | Go  | Notes                                                      |
+| ------------------------------------- | -------- | --- | --- | --- | ---------------------------------------------------------- |
+| GET /v1/status                        | ✅ V-459 | 🚫  | 🚫  | 🚫  | Public status; SDK exposure intentionally omitted (V-459). |
+| GET /v1/status/incidents              | ✅ V-459 | 🚫  | 🚫  | 🚫  | Public; SDK 🚫 by design.                                  |
+| GET /v1/status/sla                    | ✅ V-459 | 🚫  | 🚫  | 🚫  | Public; SDK 🚫 by design.                                  |
+| GET /v1/status/stream                 | 🚫       | 🚫  | 🚫  | 🚫  | SSE stream — typed differently.                            |
+| POST /v1/status/subscribe             | ✅ V-459 | 🚫  | 🚫  | 🚫  | Public double-opt-in subscribe; SDK 🚫.                    |
+| POST /v1/status/subscribe/confirm     | ✅ V-459 | 🚫  | 🚫  | 🚫  | Public; SDK 🚫.                                            |
+| POST /v1/status/subscribe/unsubscribe | ✅ V-459 | 🚫  | 🚫  | 🚫  | Public; SDK 🚫.                                            |
+
+**SDK exposure decision** — `/v1/status/*` is a public, no-auth surface
+consumed by the marketing-site status indicator and external uptime
+monitors. Customers monitor vendor status from outside their integration
+code (status pages, third-party probes); embedding it in `client.status.*`
+would invite anti-patterns where customer code branches on the vendor
+status response. Reclassified 🚫 (intentional non-exposure).
 
 ## Admin / staff surfaces (intentionally NOT in customer SDKs)
 
@@ -211,23 +218,23 @@ These routes power the admin panel; they're 🚫 for customer SDKs by design but
 
 ## Aggregate gap counts
 
-| Surface category | Total routes | OpenAPI gaps                       | SDK gaps (TS / Py / Go) |
-| ---------------- | ------------ | ---------------------------------- | ----------------------- |
-| Auth             | 14           | 3 (cli-authorize × 3)              | 3 (cli-authorize × 3)   |
-| Account          | 18           | 0 (only audit-log/export partial)  | 1 (audit-log/export)    |
-| Sessions         | 10           | 1 (gui-input)                      | 1 (gui-input)           |
-| Profiles         | 12           | 5 (base CRUD)                      | 0                       |
-| API keys         | 4            | 0                                  | 0                       |
-| Webhooks         | 10           | 6 (base CRUD + deliveries + PATCH) | 2 (PATCH + test)        |
-| Billing          | 4            | 0                                  | 0                       |
-| Team             | 6            | 0                                  | 0                       |
-| Usage            | 2            | 0                                  | 0                       |
-| Legal            | 3            | 3                                  | 3                       |
-| Status (public)  | 7            | 6 (1 SSE intentional)              | 6 (intentional)         |
-| Admin            | 27           | 11                                 | 🚫 (admin-only)         |
+| Surface category | Total routes | OpenAPI gaps                        | SDK gaps (TS / Py / Go) |
+| ---------------- | ------------ | ----------------------------------- | ----------------------- |
+| Auth             | 14           | 3 (cli-authorize × 3)               | 3 (cli-authorize × 3)   |
+| Account          | 18           | 0 (only audit-log/export partial)   | 1 (audit-log/export)    |
+| Sessions         | 10           | 1 (gui-input)                       | 1 (gui-input)           |
+| Profiles         | 12           | 5 (base CRUD)                       | 0                       |
+| API keys         | 4            | 0                                   | 0                       |
+| Webhooks         | 10           | 6 (base CRUD + deliveries + PATCH)  | 2 (PATCH + test)        |
+| Billing          | 4            | 0                                   | 0                       |
+| Team             | 6            | 0                                   | 0                       |
+| Usage            | 2            | 0                                   | 0                       |
+| Legal            | 3            | 3                                   | 3                       |
+| Status (public)  | 7            | 0 (V-459 closed; 1 SSE intentional) | 6 (intentional)         |
+| Admin            | 27           | 11                                  | 🚫 (admin-only)         |
 
-**Customer-facing OpenAPI gaps:** 24 routes.
-**Customer-facing SDK gaps:** 16 routes (TS / Py / Go each).
+**Customer-facing OpenAPI gaps after V-459:** 4 routes (gui-input + cli-authorize 3-route block).
+**Customer-facing SDK gaps after V-459:** 13 routes (TS / Py / Go each).
 **Admin OpenAPI gaps:** 11 routes (Tier-2 follow-up).
 
 ## Per-gap closure slices (priority order)
@@ -237,7 +244,7 @@ Tier 1 (customer-facing OpenAPI parity — most impactful):
 - **V-456** — register `/v1/profiles` base CRUD in OpenAPI (5 routes; SDKs already cover).
 - **V-457** — register `/v1/webhooks` base CRUD + deliveries + PATCH in OpenAPI (6 routes).
 - **V-458** — register `/v1/legal/*` (3 routes) + add SDK methods.
-- **V-459** — register `/v1/status/*` (6 routes) + add SDK methods.
+- **V-459** — register `/v1/status/*` (6 routes) in OpenAPI; SDK exposure intentionally 🚫 (status is monitoring data — out-of-band by design). ✅ shipped.
 - **V-460** — register `/v1/auth/cli-authorize/*` + add SDK methods (CLI flow).
 - **V-461** — register `/v1/sessions/:id/gui-input` + add SDK method.
 - **V-462** — register `/v1/account/audit-log/export` properly + add SDK method.

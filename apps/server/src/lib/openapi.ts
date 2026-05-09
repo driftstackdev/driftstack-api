@@ -1779,6 +1779,122 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // ── V-459 — /v1/status/* — public status page surface ─────────────────
+  // No-auth public endpoints; the marketing-site status indicator
+  // and external uptime monitors consume them. Not exposed in
+  // customer SDKs (intentional — customers monitor via status page).
+  const StatusComponentResultOpenApi = z.object({
+    name: z.string(),
+    status: z.enum(['operational', 'degraded', 'major_outage']),
+    last_checked_at: z.string(),
+  });
+  const StatusResponseOpenApi = z.object({
+    overall_status: z.enum(['operational', 'degraded', 'major_outage']),
+    components: z.array(StatusComponentResultOpenApi),
+    recent_incidents: z.array(z.unknown()),
+  });
+  const StatusIncidentsResponseOpenApi = z.object({
+    data: z.array(z.unknown()),
+  });
+  const StatusSlaResponseOpenApi = z.object({
+    window_days: z.number().int().nonnegative(),
+    uptime_percent: z.number(),
+    target_percent: z.number(),
+  });
+  const StatusSubscribeRequestOpenApi = z.object({
+    email: z.string().email(),
+  });
+  const StatusSubscribeResponseOpenApi = z.object({
+    ok: z.boolean(),
+  });
+  const StatusUnsubscribeRequestOpenApi = z.object({
+    token: z.string(),
+  });
+  const StatusConfirmRequestOpenApi = z.object({
+    token: z.string(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/status',
+    summary: 'Public service status (overall + per-component); 30s cache',
+    tags: ['status'],
+    responses: {
+      200: {
+        description: 'Status snapshot with components + recent incidents.',
+        content: { 'application/json': { schema: StatusResponseOpenApi } },
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/status/incidents',
+    summary: 'Public incidents log',
+    tags: ['status'],
+    responses: {
+      200: {
+        description: 'Incidents (most recent first).',
+        content: { 'application/json': { schema: StatusIncidentsResponseOpenApi } },
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/status/sla',
+    summary: 'Rolling-window uptime percentage vs SLA target',
+    tags: ['status'],
+    responses: {
+      200: {
+        description: 'Rolling window + uptime + target.',
+        content: { 'application/json': { schema: StatusSlaResponseOpenApi } },
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/status/subscribe',
+    summary: 'Subscribe an email to status notifications (double-opt-in)',
+    tags: ['status'],
+    request: {
+      body: { content: { 'application/json': { schema: StatusSubscribeRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'Confirmation email sent (always 200 — no enumeration signal).',
+        content: { 'application/json': { schema: StatusSubscribeResponseOpenApi } },
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/status/subscribe/confirm',
+    summary: 'Confirm a status-subscription email via token',
+    tags: ['status'],
+    request: {
+      body: { content: { 'application/json': { schema: StatusConfirmRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'Subscription confirmed.',
+        content: { 'application/json': { schema: StatusSubscribeResponseOpenApi } },
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/status/subscribe/unsubscribe',
+    summary: 'Unsubscribe an email from status notifications via token',
+    tags: ['status'],
+    request: {
+      body: { content: { 'application/json': { schema: StatusUnsubscribeRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'Unsubscribed.',
+        content: { 'application/json': { schema: StatusSubscribeResponseOpenApi } },
+      },
+    },
+  });
+
   // ── V-458 — /v1/legal/* — acceptance machinery ─────────────────────────
   const LegalDocumentEntryOpenApi = z.object({
     document_key: z.string(),

@@ -21066,3 +21066,44 @@ go test + Python pytest 137 + monorepo typecheck clean.
 
 V-455 customer-facing OpenAPI gap count: 13 → 10. Customer-
 facing SDK gap count: 16 → 13.
+
+## V-459 — register /v1/status/\* in OpenAPI; SDK exposure 🚫 by design
+
+**Tier**: 1 (V-455 audit gap closure — public status surface had
+zero OpenAPI presence and the audit table had it as a 6-route SDK
+gap that, on review, is better classified as intentional 🚫).
+
+**OpenAPI** (`apps/server/src/lib/openapi.ts`):
+
+- GET /v1/status — overall + per-component snapshot + recent_incidents.
+- GET /v1/status/incidents — public incident log.
+- GET /v1/status/sla — rolling-window uptime vs target.
+- POST /v1/status/subscribe — double-opt-in email subscribe.
+- POST /v1/status/subscribe/confirm — confirm via token.
+- POST /v1/status/subscribe/unsubscribe — unsubscribe via token.
+
+Inline schema helpers (StatusComponentResult, StatusResponse,
+StatusIncidentsResponse, StatusSlaResponse, StatusSubscribe / Confirm /
+Unsubscribe Request, StatusSubscribeResponse). All routes are
+public (no security stanza, mirrors /v1/auth/\* pattern). SSE route
+GET /v1/status/stream remains 🚫 in OpenAPI (server-sent-events
+streams aren't well-modelled in 3.1; documented separately).
+
+**Test fixtures** — openapi.test.ts:
+
+- registered-paths fixture extended with the 6 new entries.
+- BearerAuth-required test extended to skip `/v1/status*`
+  alongside `/v1/auth/*` (both are public-by-design).
+
+**SDK exposure decision** — reclassified all 6 routes from ❌ to 🚫
+in the V-455 audit. Customer SDKs intentionally do NOT expose
+`client.status.*`; status is monitoring data consumed externally
+(status pages, third-party uptime probes), not from inside customer
+integration code. Embedding it would invite anti-patterns where
+customer code branches on vendor-status response.
+
+OpenAPI test 8/8 pass; spec generates with 6 new public paths.
+
+V-455 customer-facing OpenAPI gap count: 10 → 4 (cli-authorize
+3-route block + gui-input remain). Customer-facing SDK gap count:
+13 → 13 (status reclassified 🚫, not closed via SDK addition).

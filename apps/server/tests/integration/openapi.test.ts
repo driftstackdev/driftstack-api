@@ -101,6 +101,13 @@ describe('OpenAPI spec generation', () => {
         '/v1/sessions/{id}/navigate',
         '/v1/sessions/{id}/state',
         '/v1/sessions/{id}/wait',
+        // V-459 public status surface
+        '/v1/status',
+        '/v1/status/incidents',
+        '/v1/status/sla',
+        '/v1/status/subscribe',
+        '/v1/status/subscribe/confirm',
+        '/v1/status/subscribe/unsubscribe',
         '/v1/team/invites',
         '/v1/team/invites/accept',
         '/v1/team/members',
@@ -154,6 +161,9 @@ describe('OpenAPI spec generation', () => {
       // /v1/auth/* and intentionally don't carry a BearerAuth
       // security requirement.
       if (path.startsWith('/v1/auth/')) continue;
+      // V-459 — /v1/status/* is also public-by-design (status pages
+      // and uptime monitors must work without an API key).
+      if (path.startsWith('/v1/status')) continue;
       const ops = methods as Record<string, { security?: unknown[] }>;
       for (const [method, op] of Object.entries(ops)) {
         if (!['get', 'post', 'delete', 'put', 'patch'].includes(method)) continue;
