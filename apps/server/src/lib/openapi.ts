@@ -1374,6 +1374,272 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // ── V-465 — admin OpenAPI gap closure ──────────────────────────────────
+  // 12 admin routes that exist server-side but were never registered in
+  // the OpenAPI spec. All require the `driftstack_internal_admin` scope
+  // (gated by `app.requireScope` in the route handler). Schemas are
+  // deliberately permissive (admin-internal; the staff panel binds to
+  // them directly rather than against generated types).
+  const AdminListAccountsResponseOpenApi = z.object({
+    data: z.array(AdminAccountResponseSchema),
+    has_more: z.boolean(),
+    next_cursor: z.string().nullable(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/accounts',
+    summary: 'List accounts with optional filters (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      query: z.object({
+        limit: z.number().int().min(1).max(200).optional(),
+        cursor: z.string().optional(),
+        status: z.enum(['active', 'suspended', 'deleted']).optional(),
+        tier: z.string().optional(),
+        email_contains: z.string().optional(),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'Cursor-paginated account rows.',
+        content: { 'application/json': { schema: AdminListAccountsResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/accounts/{id}',
+    summary: 'Get a single account (admin)',
+    tags: ['admin'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Account row.',
+        content: { 'application/json': { schema: AdminAccountResponseSchema } },
+      },
+      ...errors4xx,
+      404: { description: 'Account not found.', content: problemContent },
+    },
+  });
+  const AdminAuditNoteRequestOpenApi = z.object({
+    note: z.string().min(1).max(2000),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/accounts/{id}/audit-note',
+    summary: 'Record a free-form support note on an account (admin; V-281)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: AdminAuditNoteRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'Note recorded.',
+        content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+      },
+      ...errors4xx,
+    },
+  });
+  const AdminRefundRecordRequestOpenApi = z.object({
+    amount_cents: z.number().int().positive(),
+    currency: z.string().length(3),
+    reason: z.string().min(1).max(2000),
+    stripe_refund_id: z.string().optional(),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/accounts/{id}/refund-record',
+    summary: 'Record a refund issued out-of-band against the account (admin; V-281)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: AdminRefundRecordRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description:
+          'Refund recorded for audit. Money movement happens via Stripe dashboard manually per V-280 launch-day runbook.',
+        content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/api-keys/{id}/revoke',
+    summary: 'Force-revoke an API key (admin)',
+    tags: ['admin'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Key revoked. Idempotent.',
+        content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+      },
+      ...errors4xx,
+      404: { description: 'API key not found.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/sessions/{id}/destroy',
+    summary: 'Force-destroy an in-flight session (admin)',
+    tags: ['admin'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Session destroyed. Idempotent against already-destroyed sessions.',
+        content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+      },
+      ...errors4xx,
+      404: { description: 'Session not found.', content: problemContent },
+    },
+  });
+  // ── Incidents (V-295) ───────────────────────────────────────────────────
+  const AdminIncidentResponseOpenApi = z.object({
+    id: z.string(),
+    title: z.string(),
+    body: z.string(),
+    severity: z.enum(['minor', 'major', 'critical']),
+    status: z.enum(['investigating', 'identified', 'monitoring', 'resolved']),
+    started_at: z.string(),
+    resolved_at: z.string().nullable(),
+    components_affected: z.array(z.string()),
+    public: z.boolean(),
+  });
+  const AdminIncidentCreateRequestOpenApi = z.object({
+    title: z.string().min(1).max(200),
+    body: z.string().min(1).max(10_000),
+    severity: z.enum(['minor', 'major', 'critical']),
+    status: z.enum(['investigating', 'identified', 'monitoring', 'resolved']).optional(),
+    started_at: z.string().optional(),
+    components_affected: z.array(z.string()).optional(),
+    public: z.boolean().optional(),
+  });
+  const AdminIncidentUpdateRequestOpenApi = z.object({
+    body: z.string().min(1).max(10_000),
+    status: z.enum(['investigating', 'identified', 'monitoring', 'resolved']).optional(),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/incidents',
+    summary: 'Create an incident (admin; V-295)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: AdminIncidentCreateRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'Incident created.',
+        content: { 'application/json': { schema: AdminIncidentResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/incidents/{id}',
+    summary: 'Get a single incident with its update timeline (admin; V-295)',
+    tags: ['admin'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Incident detail (incl. updates timeline).',
+        content: { 'application/json': { schema: AdminIncidentResponseOpenApi } },
+      },
+      ...errors4xx,
+      404: { description: 'Incident not found.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/incidents/{id}/updates',
+    summary: 'Append an update to an incident (admin; V-295)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: AdminIncidentUpdateRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'Update appended; incident timeline reflects the new entry.',
+        content: { 'application/json': { schema: AdminIncidentResponseOpenApi } },
+      },
+      ...errors4xx,
+      404: { description: 'Incident not found.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/incidents/{id}/resolve',
+    summary: 'Mark an incident resolved (admin; V-295)',
+    tags: ['admin'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Incident transitioned to status=resolved + resolved_at set.',
+        content: { 'application/json': { schema: AdminIncidentResponseOpenApi } },
+      },
+      ...errors4xx,
+      404: { description: 'Incident not found.', content: problemContent },
+    },
+  });
+  // ── Status subscribers (V-176) ──────────────────────────────────────────
+  const AdminStatusSubscriberOpenApi = z.object({
+    id: z.string(),
+    email: z.string(),
+    confirmed: z.boolean(),
+    created_at: z.string(),
+    confirmed_at: z.string().nullable(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/status-subscribers',
+    summary: 'List status-page subscribers (admin)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      query: z.object({
+        limit: z.number().int().min(1).max(200).optional(),
+        cursor: z.string().optional(),
+        confirmed: z.boolean().optional(),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'Paginated subscribers.',
+        content: {
+          'application/json': {
+            schema: z.object({
+              data: z.array(AdminStatusSubscriberOpenApi),
+              has_more: z.boolean(),
+              next_cursor: z.string().nullable(),
+            }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/status-subscribers/{id}/force-unsubscribe',
+    summary: 'Force-unsubscribe a status subscriber (admin; abuse / GDPR)',
+    tags: ['admin'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Subscriber removed. Idempotent against already-removed entries.',
+        content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+      },
+      ...errors4xx,
+      404: { description: 'Subscriber not found.', content: problemContent },
+    },
+  });
+
   // ── V-353 MFA (TOTP) ───────────────────────────────────────────────────
   const MfaStatusResponseOpenApi = z.object({
     enrolled: z.boolean(),

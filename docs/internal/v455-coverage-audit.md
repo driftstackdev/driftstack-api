@@ -184,37 +184,37 @@ status response. Reclassified 🚫 (intentional non-exposure).
 
 These routes power the admin panel; they're 🚫 for customer SDKs by design but should still be in OpenAPI for the admin-internal SDK surface.
 
-| Route                                                   | OpenAPI | Notes           |
-| ------------------------------------------------------- | ------- | --------------- |
-| GET /v1/admin/overview                                  | ✅      |                 |
-| GET /v1/admin/accounts                                  | ❌      | **OpenAPI GAP** |
-| GET /v1/admin/accounts/:id                              | ❌      | **OpenAPI GAP** |
-| POST /v1/admin/accounts/:id/audit-note                  | ❌      | **OpenAPI GAP** |
-| POST /v1/admin/accounts/:id/quota-override              | ✅      |                 |
-| POST /v1/admin/accounts/:id/refund-record               | ❌      | **OpenAPI GAP** |
-| POST /v1/admin/accounts/:id/suspend                     | ✅      |                 |
-| POST /v1/admin/accounts/:id/tier                        | ✅      |                 |
-| POST /v1/admin/accounts/:id/unsuspend                   | ✅      |                 |
-| GET /v1/admin/accounts/:id/usage                        | ✅      |                 |
-| GET /v1/admin/api-keys                                  | ✅      |                 |
-| POST /v1/admin/api-keys/:id/revoke                      | ❌      | **OpenAPI GAP** |
-| GET /v1/admin/audit-log                                 | ✅      |                 |
-| POST /v1/admin/incidents                                | ❌      | **OpenAPI GAP** |
-| GET /v1/admin/incidents/:id                             | ❌      | **OpenAPI GAP** |
-| POST /v1/admin/incidents/:id/resolve                    | ❌      | **OpenAPI GAP** |
-| POST /v1/admin/incidents/:id/updates                    | ❌      | **OpenAPI GAP** |
-| GET /v1/admin/rate-limit-overrides                      | ✅      |                 |
-| GET /v1/admin/sessions                                  | ✅      |                 |
-| POST /v1/admin/sessions/:id/destroy                     | ❌      | **OpenAPI GAP** |
-| GET /v1/admin/status-subscribers                        | ❌      | **OpenAPI GAP** |
-| POST /v1/admin/status-subscribers/:id/force-unsubscribe | ❌      | **OpenAPI GAP** |
-| GET /v1/admin/validation-schedules                      | ✅      |                 |
-| POST /v1/admin/validation-schedules/:archetype          | ✅      |                 |
-| POST /v1/admin/validation-schedules/:archetype/trigger  | ✅      |                 |
-| GET /v1/admin/webhook-deliveries/:id                    | ✅      |                 |
-| POST /v1/admin/webhook-deliveries/:id/replay            | ✅      |                 |
-| GET /v1/admin/webhook-dlq                               | ✅      |                 |
-| POST /v1/admin/webhook-dlq/:id/requeue                  | ✅      |                 |
+| Route                                                   | OpenAPI | Notes |
+| ------------------------------------------------------- | ------- | ----- |
+| GET /v1/admin/overview                                  | ✅      |       |
+| GET /v1/admin/accounts                                  | ✅      | V-465 |
+| GET /v1/admin/accounts/:id                              | ✅      | V-465 |
+| POST /v1/admin/accounts/:id/audit-note                  | ✅      | V-465 |
+| POST /v1/admin/accounts/:id/quota-override              | ✅      |       |
+| POST /v1/admin/accounts/:id/refund-record               | ✅      | V-465 |
+| POST /v1/admin/accounts/:id/suspend                     | ✅      |       |
+| POST /v1/admin/accounts/:id/tier                        | ✅      |       |
+| POST /v1/admin/accounts/:id/unsuspend                   | ✅      |       |
+| GET /v1/admin/accounts/:id/usage                        | ✅      |       |
+| GET /v1/admin/api-keys                                  | ✅      |       |
+| POST /v1/admin/api-keys/:id/revoke                      | ✅      | V-465 |
+| GET /v1/admin/audit-log                                 | ✅      |       |
+| POST /v1/admin/incidents                                | ✅      | V-465 |
+| GET /v1/admin/incidents/:id                             | ✅      | V-465 |
+| POST /v1/admin/incidents/:id/resolve                    | ✅      | V-465 |
+| POST /v1/admin/incidents/:id/updates                    | ✅      | V-465 |
+| GET /v1/admin/rate-limit-overrides                      | ✅      |       |
+| GET /v1/admin/sessions                                  | ✅      |       |
+| POST /v1/admin/sessions/:id/destroy                     | ✅      | V-465 |
+| GET /v1/admin/status-subscribers                        | ✅      | V-465 |
+| POST /v1/admin/status-subscribers/:id/force-unsubscribe | ✅      | V-465 |
+| GET /v1/admin/validation-schedules                      | ✅      |       |
+| POST /v1/admin/validation-schedules/:archetype          | ✅      |       |
+| POST /v1/admin/validation-schedules/:archetype/trigger  | ✅      |       |
+| GET /v1/admin/webhook-deliveries/:id                    | ✅      |       |
+| POST /v1/admin/webhook-deliveries/:id/replay            | ✅      |       |
+| GET /v1/admin/webhook-dlq                               | ✅      |       |
+| POST /v1/admin/webhook-dlq/:id/requeue                  | ✅      |       |
 
 ## Aggregate gap counts
 
@@ -231,12 +231,12 @@ These routes power the admin panel; they're 🚫 for customer SDKs by design but
 | Usage            | 2            | 0                                   | 0                       |
 | Legal            | 3            | 3                                   | 3                       |
 | Status (public)  | 7            | 0 (V-459 closed; 1 SSE intentional) | 6 (intentional)         |
-| Admin            | 27           | 11                                  | 🚫 (admin-only)         |
+| Admin            | 27           | 0 (V-465 closed)                    | 🚫 (admin-only)         |
 
 **Customer-facing OpenAPI gaps after V-464:** 0. 🎉
 **Customer-facing SDK gaps after V-464:** 0 actionable. 🎉🎉
 Plus 7 intentional 🚫 (6 status + gui-input).
-**Admin OpenAPI gaps:** 11 routes (Tier-2 follow-up; not customer-impacting).
+**Admin OpenAPI gaps after V-465:** 0. 🎉 (Spec is now 100% complete across customer + admin surfaces.)
 
 ## Per-gap closure slices (priority order)
 
@@ -257,7 +257,7 @@ Tier 1 (customer-facing OpenAPI parity — most impactful):
 
 Tier 2 (admin OpenAPI parity):
 
-- **V-465** — register 11 missing /v1/admin/\* routes in OpenAPI.
+- **V-465** — register 12 missing /v1/admin/\* routes in OpenAPI. ✅ shipped.
 
 Each slice ships per V-NNN convention with closure verification:
 spec test paths fixture extended, three-SDK build/test green.

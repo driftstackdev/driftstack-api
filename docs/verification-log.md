@@ -21416,3 +21416,49 @@ admin panel; not customer-impacting.
 
 OpenAPI test 8/8 pass; Go build/test green; TS typecheck clean;
 Python pytest 137/137 pass.
+
+## V-465 — admin OpenAPI gap closure (12 routes)
+
+**Tier**: 2 (V-455 audit follow-up — admin/staff surface; not
+customer-impacting; spec completeness for admin-internal SDK
+generation + admin-panel UX confidence).
+
+Registers 12 admin routes that existed server-side but had no OpenAPI
+presence. All gated by the `driftstack_internal_admin` scope at the
+route handler; OpenAPI declares `security: auth` for the spec
+admin-tag filter.
+
+Routes:
+
+- `GET /v1/admin/accounts` — list with status / tier / email_contains
+  filters; cursor-paginated.
+- `GET /v1/admin/accounts/{id}` — single-account detail.
+- `POST /v1/admin/accounts/{id}/audit-note` — V-281 free-form
+  support note.
+- `POST /v1/admin/accounts/{id}/refund-record` — V-281 refund record
+  (audit only; money movement happens via Stripe dashboard).
+- `POST /v1/admin/api-keys/{id}/revoke` — force-revoke a key.
+- `POST /v1/admin/sessions/{id}/destroy` — force-destroy an in-flight
+  session.
+- `POST /v1/admin/incidents` — V-295 incident create.
+- `GET /v1/admin/incidents/{id}` — incident detail with timeline.
+- `POST /v1/admin/incidents/{id}/updates` — append timeline update.
+- `POST /v1/admin/incidents/{id}/resolve` — transition to resolved.
+- `GET /v1/admin/status-subscribers` — list status-page subscribers
+  (paginated; confirmed filter).
+- `POST /v1/admin/status-subscribers/{id}/force-unsubscribe` —
+  abuse / GDPR removal path.
+
+Schemas are deliberately permissive for the admin-internal surface:
+inline Zod-to-OpenAPI synthesis rather than re-using the lean
+api-types schemas (which are customer-targeted). The staff admin
+panel binds to these directly rather than against generated client
+types. If a downstream wants strong types, the audit closure entries
+above point to the source-of-truth route handlers.
+
+OpenAPI test 8/8 pass; the registered-paths fixture extended with all
+12 new entries.
+
+**V-455 audit total closure**: customer-facing OpenAPI 100%, customer-
+facing SDKs 100% (modulo 7 intentional 🚫), admin OpenAPI 100%. The
+audit's purpose — surfacing every gap and closing each — is achieved.
