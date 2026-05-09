@@ -22,6 +22,12 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
   ... name; explicit `{ name }` is forwarded verbatim. Tier-cap +
   name-conflict apply identically to `create`. New type re-exported:
   `CloneProfileRequest`.
+- **`client.webhooks.rotateSecret(id)`** — V-359 webhook signing-
+  secret rotation. Returns the fresh plaintext (shown ONCE) plus
+  grace metadata. The previous secret stays active for 24h
+  (`grace_expires_at`); during that window Driftstack dual-signs
+  every outbound delivery with both new + old secrets. New type
+  re-exported: `RotateWebhookSecretResponse`.
 
 ### Pre-1.0 stability policy
 

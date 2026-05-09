@@ -19897,3 +19897,12 @@ typecheck clean.
 Three-SDK V-359 surface parity now matches three-SDK V-312/V-313
 parity. SDK consumers can rotate webhook signing secrets
 programmatically without dropping into raw HTTP calls.
+
+## V-419 — three-SDK CHANGELOG entries for V-359 secret rotation
+
+**Tier**: 1 (V-416-418 release-notes follow-through).
+
+Each SDK CHANGELOG.md `Unreleased` section gains an `### Added`
+entry for `rotateSecret` / `rotate_secret` / `RotateSecret`
+methods. Matches the V-383 pattern for V-312/V-313 surface
+additions.

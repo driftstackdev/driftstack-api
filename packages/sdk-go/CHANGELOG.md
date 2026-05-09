@@ -22,6 +22,11 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
   V-313 profile clone. Pass `nil` to let the server auto-derive
   `(copy)` / `(copy 2)` / ... naming; pass `&CloneProfileRequest{Name: …}`
   for an explicit name. New type: `CloneProfileRequest`.
+- **`client.Webhooks.RotateSecret(ctx, webhookID)`** — V-359 webhook
+  signing-secret rotation. Returns `*RotateWebhookSecretResponse` (ID
+  - Secret + SecretPrefix + PrevSecretPrefix + GraceExpiresAt). Fresh
+    plaintext shown ONCE; previous secret active for 24h. New type:
+    `RotateWebhookSecretResponse`.
 
 ### Notes
 

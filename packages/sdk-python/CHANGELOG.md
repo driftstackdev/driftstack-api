@@ -17,6 +17,10 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
   V-313 profile clone. `None` / empty dict lets the server auto-derive
   a "(copy)" / "(copy 2)" / ... name; explicit `{"name": ...}` is
   forwarded verbatim.
+- **`client.webhooks.rotate_secret(webhook_id)`** + async mirror —
+  V-359 webhook signing-secret rotation. Returns dict with the fresh
+  plaintext (shown ONCE), prefixes, and `grace_expires_at`. Previous
+  secret stays active for 24h.
 
 ### Notes
 
