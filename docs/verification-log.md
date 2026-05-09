@@ -19695,3 +19695,32 @@ filter as the workaround until the meta-webhook lands).
   `?action=webhook_endpoint.<name>` until the meta-webhook lands.
 
 Astro check clean.
+
+## V-408 — apps/docs/api/auth.md (new page)
+
+**Tier**: 1 (paired with V-401 + V-402 OpenAPI registration; the
+11 auth routes were registered in spec but had no human-friendly
+markdown reference).
+
+`apps/docs/src/pages/api/auth.md` — new page covering:
+
+- Two-auth-modes context (API-key bearer for SDK consumers vs
+  web-session for dashboard).
+- Sign up / verify email walkthrough with field shapes + 409
+  email-already-registered.
+- Login discriminated-union response (no-MFA path vs
+  mfa_required + challenge_token path).
+- MFA challenge (V-353d) with TOTP + recovery_code branches +
+  via discriminator + audit-log payload.remaining note.
+- MFA step-up (V-353e) — refreshes mfa_satisfied_at; no new
+  session issued.
+- Magic-link request + consume (no-enumeration always-200
+  semantics).
+- Password reset request + confirm (no-enumeration; confirm
+  invalidates all prior sessions per V-303).
+- Refresh + logout endpoint shapes.
+- Cross-link to Account + Team docs for follow-on flows.
+- Note: /v1/auth/\* never honors X-Driftstack-Account team header.
+
+API index (apps/docs/api/index.astro) link added above Account.
+Astro check clean.
