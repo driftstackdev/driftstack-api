@@ -21257,3 +21257,64 @@ PATCH + webhook /test) + 7 intentional 🚫.
 founder verdict — not addressed here. The export endpoint inherits
 the same payload shape via `publicEntry`; closure must happen in one
 place once V-413 verdict lands.)
+
+## V-278.A — bootstrap script + nginx vhosts + systemd unit + env templates
+
+**Tier**: 1 (deployment cycle architectural deliverable per founder
+brief). Code-only; not yet executed against live servers because:
+
+**BLOCKER #1 — SSH access**: agent's local `~/.ssh/id_ed25519` isn't
+authorized on either Hetzner server (only `driftstack-deploy` is, per
+the founder brief). Surfaced via clipboard tag with two unblock
+options: (a) authorize agent's pubkey via Hetzner cloud panel, or
+(b) drop the `driftstack-deploy` private key + passphrase into
+`~/.ssh/`.
+
+**BLOCKER #2 — Cloudflare API token**: `cfat_x8zHc…` returns
+`{success:false, code:1000, "Invalid API Token"}` against
+`api.cloudflare.com/client/v4/user/tokens/verify`. Same with the
+`cfat_` prefix stripped. Token is malformed/typo-d/revoked. Need a
+fresh token with `Zone.DNS:Edit` on driftstack.dev + `Account.R2:Edit`
+on account 7260371ac…
+
+**Green credentials probed**: Neon ✅ (PostgreSQL 17.8 over TLS),
+Upstash REST ✅ (PING/PONG), Postmark ✅ (test email accepted),
+Stripe TEST keys ✅ (sk_test balance call), Sentry DSN ingest ✅
+(no API token needed). Sentry org auth token ⚠ insufficient scope to
+list projects via API; defer V-278.J-2/3 project creation.
+
+**Architectural deliverables shipped (commit-able now):**
+
+- `infra/bootstrap/bootstrap.sh` — idempotent Ubuntu 24.04 bootstrap.
+  Installs Node 22 LTS via NodeSource, nginx, UFW (deny in / allow
+  out / open 22+80+443), fail2ban (default sshd profile),
+  postgresql-client, unattended-upgrades (security only, no
+  auto-reboot). Creates `driftstack` system user + `/opt/driftstack/
+{api,web}` tree. Removes default nginx site.
+- `infra/systemd/driftstack-api.service` — systemd unit for the
+  Fastify control plane. Runs as `driftstack` user; sandbox-hardened
+  (NoNewPrivileges, ProtectSystem=strict, MemoryDenyWriteExecute,
+  RestrictSUIDSGID); crash-loop guard at 5 restarts in 60s.
+- `infra/nginx/api.driftstack.dev.conf` — production vhost on port 80.
+  Cloudflare-proxied (CF-Connecting-IP → real_ip); reverse-proxies to
+  127.0.0.1:7780; `/nginx-health` served directly for cheap liveness.
+- `infra/nginx/staging.driftstack.dev.conf` — staging mirror.
+- `infra/env-templates/{production,staging}.env.template` — REDACTED
+  shape of the deploy `.env`. Staging uses Postgres
+  `search_path=staging,public` + Redis `stg:` prefix until V-278.K.
+- `infra/README.md` — V-278 slice index + TLS strategy + sub-processor
+  map + credential-handling notes.
+
+**Architecture decision** — supersedes the legacy
+`infra/hetzner/docker-compose.yml` (Docker-image deploy model). V-278
+goes systemd-direct: bare Node 22 + nginx + ufw + fail2ban, no Docker
+on the host. Founder explicitly specified `Node 22 LTS via NodeSource`
+and `systemd-managed services with restart=always`.
+
+**Next slices (paused on blockers):**
+
+- V-278.A-2 — execute `bootstrap.sh production` over SSH against
+  128.140.37.74; same against 116.203.22.197 staging.
+- V-278.B — deploy API service.
+- V-278.G — run migrations against Neon (unblocked; runs from local).
+- V-278.H — DNS records via Cloudflare API (blocked on token).

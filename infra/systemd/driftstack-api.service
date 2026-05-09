@@ -1,0 +1,47 @@
+# V-278.A — systemd unit for the Driftstack control-plane API.
+#
+# Lands at /etc/systemd/system/driftstack-api.service via the deploy
+# step. The deploy step also writes /opt/driftstack/api/.env from the
+# DEPLOY_DOTENV_BASE64 secret before `systemctl restart driftstack-api`.
+
+[Unit]
+Description=Driftstack API (Fastify control plane)
+Documentation=https://github.com/driftstackdev/driftstack-api
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=driftstack
+Group=driftstack
+WorkingDirectory=/opt/driftstack/api
+EnvironmentFile=/opt/driftstack/api/.env
+Environment=NODE_ENV=production
+Environment=NODE_OPTIONS=--enable-source-maps
+ExecStart=/usr/bin/node apps/server/dist/index.js
+Restart=always
+RestartSec=2
+TimeoutStartSec=30
+TimeoutStopSec=20
+
+# Sandboxing — the API needs network + the .env file but nothing else.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/driftstack/api/var
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+
+# Crash-loop guard: more than 5 restarts in 60s flips us to failed.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target
