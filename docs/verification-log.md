@@ -19500,3 +19500,33 @@ The audit-log surface now matches what the doc catalog (V-393)
 already promises consumers — payload tags are visible to the
 human reading the dashboard, not just SDK consumers parsing the
 JSON.
+
+## V-400 — audit-log doc adds payload reference section
+
+**Tier**: 1 (V-399 doc-side mirror; consumers parsing audit JSON
+get the same payload-shape clarity that dashboard renders inline).
+
+`apps/docs/src/pages/api/audit-log.md` gains a "Payload reference
+(V-399)" section between the action catalog filter examples and
+the Export section. Documents the typed payload shapes for:
+
+- account.login (method enum: password / magic_link /
+  password_reset / mfa_totp / mfa_recovery).
+- account.recovery_code_used (remaining: 0-9).
+- profile.created — three creation-path variants (direct create
+  / V-313 cloned_from / V-312 restored_from_snapshot).
+- webhook_endpoint.secret_rotated (new_prefix + old_prefix +
+  grace_expires_at).
+- team.member_invited (email + role).
+- subscription.tier_changed (from + to tier slugs).
+- api_key.minted (name + scopes).
+
+Notes that other actions carry minimal/empty payloads and that
+consumers should default-handle unknown shapes gracefully (new
+fields are additive — not breaking).
+
+V-399 dashboard rendering and V-400 doc reference now match
+empirically; SDK consumers parsing audit-log JSON have an
+authoritative shape per action type.
+
+Astro check clean.

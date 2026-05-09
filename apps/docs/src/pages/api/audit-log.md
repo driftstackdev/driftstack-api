@@ -130,6 +130,46 @@ while (true) {
 }
 ```
 
+## Payload reference (V-399)
+
+Several action types carry typed `payload` fields the customer
+dashboard renders inline. Consumers parsing the JSON should expect
+the following shapes:
+
+```json
+// account.login
+{ "method": "password" | "magic_link" | "password_reset" | "mfa_totp" | "mfa_recovery" }
+
+// account.recovery_code_used
+{ "remaining": <integer 0-9> }
+
+// profile.created — three creation paths
+{ "name": "<profile-name>", "archetype": "<archetype-slug>" }                          // direct create
+{ "name": "...", "archetype": "...", "cloned_from": "profile_<uuid>" }                 // V-313 clone
+{ "name": "...", "archetype": "...", "restored_from_snapshot": "psnap_<uuid>" }        // V-312 restore
+
+// webhook_endpoint.secret_rotated (V-359)
+{
+  "new_prefix": "whsec_<first-12>",
+  "old_prefix": "whsec_<first-12>",
+  "grace_expires_at": "2026-05-10T00:00:00.000Z"
+}
+
+// team.member_invited
+{ "email": "<invited-address>", "role": "admin" | "member" }
+
+// subscription.tier_changed
+{ "from": "<tier-slug>", "to": "<tier-slug>" }
+
+// api_key.minted
+{ "name": "<key-name>", "scopes": ["read", "write"] }
+```
+
+Other action types carry minimal payloads (often `{}` or a single
+contextual field — e.g. `account.password_changed` is empty).
+Consumers should default-handle unknown payload shapes gracefully;
+new fields are additive.
+
 ## Export
 
 `GET /v1/account/audit-log/export?format=csv` (or `format=json`)
