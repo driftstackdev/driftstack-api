@@ -90,6 +90,46 @@ Branch on the `mfa_required` literal. When it's present + true, do
 not store anything — wait for the customer to enter their TOTP
 code and call the challenge endpoint below.
 
+**SDK usage** (V-423/V-441 type narrowing):
+
+```ts
+// TypeScript — discriminated-union return type narrows automatically.
+const out = await client.auth.login({ email, password });
+if ('mfa_required' in out && out.mfa_required) {
+  // out: LoginMfaRequiredResponse — challenge_token + challenge_expires_at typed.
+  const session = await client.auth.exchangeMfaChallenge({
+    challenge_token: out.challenge_token,
+    code: userTotpCode,
+  });
+} else {
+  // out: LoginResponse — out.session is the real session.
+  store(out.session.token);
+}
+```
+
+```python
+# Python — dict-shape, branch on the same key.
+out = client.auth.login({"email": ..., "password": ...})
+if out.get("mfa_required"):
+    session = client.auth.mfa_challenge({
+        "challenge_token": out["challenge_token"],
+        "code": user_totp_code,
+    })["session"]
+else:
+    session = out["session"]
+```
+
+```go
+// Go — LoginResponse carries both branches; check MfaRequired.
+out, err := client.Auth.Login(ctx, &driftstack.LoginRequest{Email: e, Password: p})
+if err != nil { return err }
+if out.MfaRequired {
+    // out.ChallengeToken / out.ChallengeExpiresAt populated.
+} else {
+    // out.Session.Token is the real session.
+}
+```
+
 ## MFA challenge (V-353d)
 
 `POST /v1/auth/mfa/challenge`

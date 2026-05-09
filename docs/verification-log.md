@@ -20607,3 +20607,23 @@ Astro check clean.
 V-294 catalog row "/webhooks delivery history" already SHIPPED
 status (V-307b); V-443 adds the pagination layer that V-403
 filter-status laid the groundwork for.
+
+## V-444 — auth.md SDK code examples for V-353d login union type narrowing
+
+**Tier**: 1 (V-423/V-441 doc-side complement; customers reading
+the auth flow doc see how each SDK handles the discriminated
+response shape).
+
+`apps/docs/src/pages/api/auth.md` "Log in" section gains an "SDK
+usage" code block showing all three SDKs:
+
+- TS: `'mfa_required' in out && out.mfa_required` discriminated-
+  union narrowing (V-423 LoginResponseUnion return type).
+- Python: dict-shape `out.get("mfa_required")` branch.
+- Go: `out.MfaRequired` field check on the unified LoginResponse
+  struct (V-425 LoginResponse + V-353d MFA branch).
+
+Reinforces the V-441 typed-error story: customers can branch on
+type-safe shapes regardless of which SDK they use.
+
+Astro check clean.
