@@ -84,6 +84,9 @@ describe('OpenAPI spec generation', () => {
         '/v1/auth/magic-link/request',
         '/v1/auth/password-reset/confirm',
         '/v1/auth/password-reset/request',
+        // V-456 profile base CRUD
+        '/v1/profiles',
+        '/v1/profiles/{id}',
         // V-313 profile clone
         '/v1/profiles/{id}/clone',
         // V-312 profile snapshots

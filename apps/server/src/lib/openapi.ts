@@ -30,6 +30,10 @@ import {
   AccountStatusSchema,
   AccountTierSchema,
   AdminAccountResponseSchema,
+  CreateProfileRequestSchema,
+  ListProfilesResponseSchema,
+  ProfileSchema,
+  UpdateProfileRequestSchema,
   CreateCheckoutSessionRequestSchema,
   CreateCheckoutSessionResponseSchema,
   CreatePortalSessionResponseSchema,
@@ -1821,6 +1825,88 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Endpoint is disabled; cannot rotate.',
         content: problemContent,
       },
+      ...errors4xx,
+    },
+  });
+
+  // ── V-456 — /v1/profiles base CRUD (V-081) ─────────────────────────────
+  // Customer-facing profile CRUD; was previously SDK-exposed but
+  // missing from spec. Now registered so Scalar UI + downstream SDK
+  // regenerators see the canonical shapes.
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/profiles',
+    summary: 'Create a profile',
+    tags: ['profiles'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: CreateProfileRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Created profile.',
+        content: { 'application/json': { schema: ProfileSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/profiles',
+    summary: 'List profiles for the calling account',
+    tags: ['profiles'],
+    security: auth,
+    request: { query: PaginationQuerySchema },
+    responses: {
+      200: {
+        description: 'Paginated profile list.',
+        content: { 'application/json': { schema: ListProfilesResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/profiles/{id}',
+    summary: 'Get a single profile',
+    tags: ['profiles'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description: 'Profile.',
+        content: { 'application/json': { schema: ProfileSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'patch',
+    path: '/v1/profiles/{id}',
+    summary: 'Partial update of a profile (name / description)',
+    tags: ['profiles'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: { content: { 'application/json': { schema: UpdateProfileRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Updated profile.',
+        content: { 'application/json': { schema: ProfileSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/profiles/{id}',
+    summary: 'Delete a profile (storage state wiped; idempotent)',
+    tags: ['profiles'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      204: { description: 'Profile deleted.' },
       ...errors4xx,
     },
   });

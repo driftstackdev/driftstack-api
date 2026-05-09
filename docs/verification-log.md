@@ -20974,3 +20974,27 @@ later wave.
 
 This audit is the per-launch Rule L deliverable: enumerates
 empirical gaps so customers don't discover them mid-integration.
+
+## V-456 — register /v1/profiles base CRUD in OpenAPI
+
+**Tier**: 1 (V-455 audit highest-impact gap closure — 5 routes
+were SDK-exposed but missing from spec entirely).
+
+`apps/server/src/lib/openapi.ts` registers the 5 base profile
+routes that V-455 flagged as the biggest customer-facing
+OpenAPI gap:
+
+- POST /v1/profiles — CreateProfileRequestSchema → ProfileSchema.
+- GET /v1/profiles — paginated list → ListProfilesResponseSchema.
+- GET /v1/profiles/{id} — single → ProfileSchema.
+- PATCH /v1/profiles/{id} — UpdateProfileRequestSchema partial →
+  ProfileSchema.
+- DELETE /v1/profiles/{id} — 204.
+
+api-types schemas reused via direct import (no inline duplication).
+`openapi.test.ts` paths fixture extended with `/v1/profiles` +
+`/v1/profiles/{id}`. 8/8 openapi tests pass.
+
+V-455 audit: customer-facing OpenAPI gap count drops 24 → 19.
+Profiles surface now fully in spec; Scalar UI + downstream
+regen pass picks up the canonical CRUD shapes.
