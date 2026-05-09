@@ -20427,3 +20427,36 @@ Tests run via `go test ./...`; 6/6 pass. These complement the
 fixture-based tests (`auth_test.go`, `profiles_test.go`) which
 round-trip the SDK's own struct through a fake server (which can't
 catch regressions in the struct-shape itself).
+
+## V-437 — Go SDK 4 missing typed auth-flow errors
+
+**Tier**: 1 (rule L empirical-diff bar — Go SDK error_mapping.go
+covered 16 of ~21 server problem types; auth-flow problem types
+fell through to UnknownError. TS SDK already had these typed.).
+
+`packages/sdk-go/errors.go` adds 4 typed error structs + sentinel
+`var Err…`:
+
+- `EmailAlreadyRegisteredError` / `ErrEmailAlreadyRegistered`
+- `InvalidCredentialsError` / `ErrInvalidCredentials`
+- `InvalidAuthTokenError` / `ErrInvalidAuthToken`
+- `EmailNotVerifiedError` / `ErrEmailNotVerified`
+
+`error_mapping.go` extends `problemTypeToFactory` with the 4
+URI → builder mappings + new `buildEmailAlreadyRegistered` /
+`buildInvalidCredentials` / `buildInvalidAuthToken` /
+`buildEmailNotVerified` factory functions. Compile-time
+`var _ error = (*XError)(nil)` block extended.
+
+`errors_test.go` `TestErrorFromResponseMapsProblemTypes` adds 4
+new cases to its table-driven suite + the matching errors.As
+type-switch arms. 17/17 problem-type cases pass.
+
+Customer Go code can now `errors.As(err, &EmailAlreadyRegisteredError{})`
+on signup or `errors.As(err, &InvalidCredentialsError{})` on
+login to branch on the typed shape, instead of the previous
+fall-through to UnknownError that lost the type info.
+
+Remaining problem types not yet typed in Go SDK:
+`feature-unavailable`, `mfa-step-up-required`, `internal`. Queued
+for follow-up.

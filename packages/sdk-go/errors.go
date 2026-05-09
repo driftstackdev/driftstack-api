@@ -61,6 +61,11 @@ var (
 	ErrLegalAcceptanceRequired  = errors.New("legal acceptance required")
 	ErrDriverError      = errors.New("driver error")
 	ErrTransport        = errors.New("transport-level failure")
+	// V-437 — auth-flow problem types.
+	ErrEmailAlreadyRegistered = errors.New("email already registered")
+	ErrInvalidCredentials     = errors.New("invalid credentials")
+	ErrInvalidAuthToken       = errors.New("invalid auth token")
+	ErrEmailNotVerified       = errors.New("email not verified")
 )
 
 // AuthError covers any of the auth-related problem types. Use the
@@ -192,3 +197,36 @@ func (e *TransportError) Is(target error) bool { return target == ErrTransport }
 // types surface here until the SDK is updated; callers can still read
 // the .Message and .Problem map.
 type UnknownError struct{ apiError }
+
+// V-437 — typed auth-flow errors. Added to match the TS SDK's typed
+// error coverage; previously these types fell through to UnknownError.
+
+// EmailAlreadyRegisteredError — POST /v1/auth/signup returned 409 because
+// the email is already registered. Customer should log in instead, or
+// trigger password reset.
+type EmailAlreadyRegisteredError struct{ apiError }
+
+func (e *EmailAlreadyRegisteredError) Is(target error) bool {
+	return target == ErrEmailAlreadyRegistered
+}
+
+// InvalidCredentialsError — POST /v1/auth/login returned 401 because
+// the email/password combination doesn't match. Distinguished from
+// AuthError so callers can show "wrong password" vs "session expired"
+// UX without scraping the message.
+type InvalidCredentialsError struct{ apiError }
+
+func (e *InvalidCredentialsError) Is(target error) bool { return target == ErrInvalidCredentials }
+
+// InvalidAuthTokenError — V-079 magic-link / password-reset / verify-
+// email token is malformed, already-consumed, or expired.
+type InvalidAuthTokenError struct{ apiError }
+
+func (e *InvalidAuthTokenError) Is(target error) bool { return target == ErrInvalidAuthToken }
+
+// EmailNotVerifiedError — login is gated on email verification and
+// the calling account hasn't completed it yet. Customer needs to
+// click the verify-email link from their inbox first.
+type EmailNotVerifiedError struct{ apiError }
+
+func (e *EmailNotVerifiedError) Is(target error) bool { return target == ErrEmailNotVerified }

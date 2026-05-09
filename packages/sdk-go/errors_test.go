@@ -25,6 +25,11 @@ func TestErrorFromResponseMapsProblemTypes(t *testing.T) {
 		{"https://errors.driftstack.dev/validation-failed", &ValidationError{}, ErrValidation},
 		{"https://errors.driftstack.dev/session-destroyed", &SessionDestroyedError{}, ErrSessionDestroyed},
 		{"https://errors.driftstack.dev/driver-error", &DriverError{}, ErrDriverError},
+		// V-437 — auth-flow problem types.
+		{"https://errors.driftstack.dev/email-already-registered", &EmailAlreadyRegisteredError{}, ErrEmailAlreadyRegistered},
+		{"https://errors.driftstack.dev/invalid-credentials", &InvalidCredentialsError{}, ErrInvalidCredentials},
+		{"https://errors.driftstack.dev/invalid-auth-token", &InvalidAuthTokenError{}, ErrInvalidAuthToken},
+		{"https://errors.driftstack.dev/email-not-verified", &EmailNotVerifiedError{}, ErrEmailNotVerified},
 	}
 	for _, tc := range cases {
 		t.Run(tc.problemType, func(t *testing.T) {
@@ -97,6 +102,26 @@ func TestErrorFromResponseMapsProblemTypes(t *testing.T) {
 				}
 			case *DriverError:
 				var c *DriverError
+				if !errors.As(err, &c) {
+					t.Fatalf("errors.As %T failed", tc.want)
+				}
+			case *EmailAlreadyRegisteredError:
+				var c *EmailAlreadyRegisteredError
+				if !errors.As(err, &c) {
+					t.Fatalf("errors.As %T failed", tc.want)
+				}
+			case *InvalidCredentialsError:
+				var c *InvalidCredentialsError
+				if !errors.As(err, &c) {
+					t.Fatalf("errors.As %T failed", tc.want)
+				}
+			case *InvalidAuthTokenError:
+				var c *InvalidAuthTokenError
+				if !errors.As(err, &c) {
+					t.Fatalf("errors.As %T failed", tc.want)
+				}
+			case *EmailNotVerifiedError:
+				var c *EmailNotVerifiedError
 				if !errors.As(err, &c) {
 					t.Fatalf("errors.As %T failed", tc.want)
 				}

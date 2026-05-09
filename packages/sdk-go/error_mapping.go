@@ -28,6 +28,11 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	"https://errors.driftstack.dev/driver-error":          buildDriverError,
 	"https://errors.driftstack.dev/driver-not-integrated": buildDriverError,
 	"https://errors.driftstack.dev/validation-failed":     buildValidation,
+	// V-437 — auth-flow problem types.
+	"https://errors.driftstack.dev/email-already-registered": buildEmailAlreadyRegistered,
+	"https://errors.driftstack.dev/invalid-credentials":      buildInvalidCredentials,
+	"https://errors.driftstack.dev/invalid-auth-token":       buildInvalidAuthToken,
+	"https://errors.driftstack.dev/email-not-verified":       buildEmailNotVerified,
 }
 
 // errorFromResponse parses an HTTP response body as RFC 7807
@@ -214,10 +219,30 @@ func transportErrorFromHTTP(message string, cause error) error {
 	}}
 }
 
+func buildEmailAlreadyRegistered(base apiError, _ map[string]any, _ string) error {
+	return &EmailAlreadyRegisteredError{apiError: base}
+}
+
+func buildInvalidCredentials(base apiError, _ map[string]any, _ string) error {
+	return &InvalidCredentialsError{apiError: base}
+}
+
+func buildInvalidAuthToken(base apiError, _ map[string]any, _ string) error {
+	return &InvalidAuthTokenError{apiError: base}
+}
+
+func buildEmailNotVerified(base apiError, _ map[string]any, _ string) error {
+	return &EmailNotVerifiedError{apiError: base}
+}
+
 // Compile-time sanity that the error types implement error.
 var (
 	_ error = (*apiError)(nil)
 	_ error = (*AuthError)(nil)
+	_ error = (*EmailAlreadyRegisteredError)(nil)
+	_ error = (*InvalidCredentialsError)(nil)
+	_ error = (*InvalidAuthTokenError)(nil)
+	_ error = (*EmailNotVerifiedError)(nil)
 	_ error = (*RateLimitError)(nil)
 	_ error = (*ConcurrencyLimitError)(nil)
 	_ error = (*QuotaExceededError)(nil)
