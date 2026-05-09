@@ -245,12 +245,20 @@ Trial-pack-specific lifecycle events. `purchased` fires on the Stripe
 checkout completion event; `expired` fires from the trial-pack
 expiry job (which doesn't yet exist — see V-202 notes).
 
-### `webhook_endpoint.created` / `webhook_endpoint.deleted` [PLANNED]
+### `webhook_endpoint.created` / `webhook_endpoint.deleted` / `webhook_endpoint.secret_rotated` [PLANNED]
 
 Self-meta events: a webhook fires when a webhook endpoint is
-registered or deleted. Useful for change-tracking systems. Recursion
-risk is low (the endpoint that fires the event is one of multiple
-endpoints, not the one being created/deleted).
+registered, deleted, or its signing secret rotated (V-359).
+Useful for change-tracking systems. Recursion risk is low (the
+endpoint that fires the event is one of multiple endpoints, not
+the one being created/deleted/rotated).
+
+For now these events land in the audit log
+(`webhook_endpoint.created` / `.deleted` / `.updated` /
+`.secret_rotated`) but are not delivered as webhooks. If you want
+to react programmatically to webhook config changes today, poll
+the `GET /v1/account/audit-log?action=webhook_endpoint.created`
+filter.
 
 ## Subscribing to events
 

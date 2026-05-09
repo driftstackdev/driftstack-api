@@ -19678,3 +19678,20 @@ tests pin the wire behavior so a future schema or repo change
 surfaces here.
 
 6/6 tests in webhook-replay-customer.test.ts pass.
+
+## V-407 — webhooks events doc adds secret_rotated to PLANNED list
+
+**Tier**: 1 (V-359 audit-log event surfaced; doc now points
+customers wanting programmatic visibility to the audit-log
+filter as the workaround until the meta-webhook lands).
+
+`apps/docs/src/pages/webhooks/events.md` "Planned events" section:
+
+- `webhook_endpoint.created / deleted / secret_rotated` now
+  grouped together (was just created/deleted).
+- Adds an explanatory paragraph: these events land in the audit
+  log today (V-216 / V-359) but aren't delivered as webhooks.
+  Customers wanting programmatic reaction can poll
+  `?action=webhook_endpoint.<name>` until the meta-webhook lands.
+
+Astro check clean.
