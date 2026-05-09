@@ -21520,3 +21520,81 @@ docs.driftstack.dev pages didn't reference them. Closing.
   truncated / data) + per-SDK examples.
 
 Astro docs build clean (27 pages).
+
+## V-278.A-2 / B / C-E / F / H / I — V-278 deployment cycle live execution
+
+**Tier**: 1 (deployment cycle execution; founder unblocked SSH +
+Cloudflare token).
+
+**V-278.A-2** — bootstrap.sh executed against both Hetzner servers
+via SSH. Output: Node 22.22.2 + nginx 1.24.0 + UFW (deny in / open
+22+80+443) + fail2ban (sshd jail; 2 IPs already auto-banned) on
+both. Production = `driftstack-production` / Ubuntu 24.04.4 LTS;
+staging = `driftstack-staging` / 24.04.3 LTS.
+
+**V-278.B** — production API deployed via deploy-api.sh. Three live
+fixes shipped during initial deploy attempt (committed 9ed4cba):
+
+1. drivers/index.ts — Playwright driver dynamically imported so prod
+   builds don't require @playwright/test (devDep). createDriver now
+   async; bootstrap.ts awaits.
+2. systemd unit — removed `MemoryDenyWriteExecute=true` (V8 JIT
+   incompatible) + `ReadWritePaths=/opt/driftstack/api/var` (path
+   doesn't exist).
+3. deploy-api.sh — rsync filter extended for `docs/legal/*.md` (legal
+   catalog reads them at boot); `npm ci --ignore-scripts` (root
+   prepare runs husky, devDep).
+
+Live boot logs: postgres connected, redis connected, sentry
+initialized (env=production, release=85aee83), bootstrap complete.
+Server listening at 127.0.0.1:7780 + 128.140.37.74:7780. /health 200
+on origin.
+
+**V-278.C/D/E** — Cloudflare Pages projects created
+(driftstack-marketing / -docs / -customer-dashboard) and deployed
+via wrangler:
+
+- driftstack.dev / www.driftstack.dev → driftstack-marketing.
+- docs.driftstack.dev → driftstack-docs.
+- app.driftstack.dev → driftstack-customer-dashboard.
+
+Custom domains attached via Pages API; DNS records updated to
+CNAME → <project>.pages.dev (proxied=true).
+
+**V-278.F** — staging API deployed; same boot sequence + green
+/health on origin.
+
+**V-278.H** — DNS records via Cloudflare API (token has
+Zone:DNS:Edit + Account:Pages:Edit + Account:R2:Edit):
+
+- A api.driftstack.dev → 128.140.37.74 (proxied)
+- CNAME app.driftstack.dev → driftstack-customer-dashboard.pages.dev (proxied)
+- CNAME docs.driftstack.dev → driftstack-docs.pages.dev (proxied)
+- CNAME driftstack.dev → driftstack-marketing.pages.dev (proxied; CF flattens at apex)
+- CNAME www.driftstack.dev → driftstack.dev (proxied)
+- A staging.driftstack.dev → 116.203.22.197 (proxied)
+
+**V-278.I** — public-URL smoke results:
+
+| URL                                | HTTP    | Notes                                  |
+| ---------------------------------- | ------- | -------------------------------------- |
+| https://driftstack.dev/            | **200** | Apex (CF flattening)                   |
+| https://www.driftstack.dev/        | **200** |                                        |
+| https://docs.driftstack.dev/       | **200** |                                        |
+| https://app.driftstack.dev/        | **200** |                                        |
+| https://api.driftstack.dev/health  | 521     | **BLOCKED** on Cloudflare SSL/TLS mode |
+| https://staging.driftstack.dev/... | 521     | Same SSL/TLS root cause                |
+
+**1 founder action needed** — Cloudflare zone SSL/TLS encryption mode
+defaults to 'Full', causing 521 (origin nginx is HTTP-only on port 80
+per the brief's 'Cloudflare proxied + Universal SSL' approach). Need
+to flip to 'Flexible' in the dashboard (5-second action). The API
+token issued lacks `Zone:Zone Settings:Edit` scope so the agent can't
+flip it programmatically. Direct probe confirms origin healthy:
+`curl -H 'Host: api.driftstack.dev' http://128.140.37.74/health` → 200. Once flipped, V-278.I final smoke turns api + staging green.
+
+**V-278.J** — production driftstack-api Sentry DSN wired (boot logs
+show 'Sentry initialized' with environment=production and
+release=85aee83). Per-service projects (driftstack-dashboard +
+driftstack-marketing via Sentry org auth token API) deferred to
+V-278.J-2 — auth token has insufficient scope to list/create projects.
