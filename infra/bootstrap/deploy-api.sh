@@ -93,8 +93,17 @@ ssh "root@$HOST" 'cd /opt/driftstack/api && npm ci --omit=dev --ignore-scripts -
 
 echo "→ remote: write .env"
 scp -q "$ENV_FILE_LOCAL" "root@$HOST:/opt/driftstack/api/.env"
-ssh "root@$HOST" \
-  'chown driftstack:driftstack /opt/driftstack/api/.env && chmod 600 /opt/driftstack/api/.env'
+GIT_SHA=$(git rev-parse --short HEAD)
+ssh "root@$HOST" "
+  # Inject the actual deploy-time SHA over any PLACEHOLDER_GIT_SHA.
+  if grep -q '^GIT_SHA=' /opt/driftstack/api/.env; then
+    sed -i 's|^GIT_SHA=.*|GIT_SHA=$GIT_SHA|' /opt/driftstack/api/.env
+  else
+    echo 'GIT_SHA=$GIT_SHA' >> /opt/driftstack/api/.env
+  fi
+  chown driftstack:driftstack /opt/driftstack/api/.env
+  chmod 600 /opt/driftstack/api/.env
+"
 
 echo "→ remote: install systemd unit + nginx vhost"
 scp -q infra/systemd/driftstack-api.service \
