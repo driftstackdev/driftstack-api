@@ -19782,3 +19782,43 @@ accessors with Go's PascalCase names: `client.Profiles`,
 Method names verified to match the actual TS / Python / Go
 resource source. Three-SDK README parity now matches three-SDK
 surface parity (V-376/377/378/379).
+
+## V-413 — surfaced V-211 audit payload IP/UA leak in auth-flow events
+
+**Tier**: 1 (Memory rule L empirical-diff bar — surface
+architectural ground truth that contradicts documented intent).
+
+While reviewing audit-log doc payload coverage I noticed
+`auth-flows.ts` emits `account.email_verified` / `account.login`
+/ `account.logout` / `account.password_changed` audit events
+with `issued_from_ip` + `user_agent` stored inside the `payload`
+jsonb. This contradicts the V-211 anonymity intent at the
+row-level columns (`row.ipAddress` + `row.userAgent` stay null;
+they were never set by the emit paths).
+
+Customer impact:
+
+- **Self-read:** customer reading their OWN audit log sees their
+  own IP/UA. Acceptable under GDPR Article 15 right of access.
+- **Team-RBAC read:** when a team member uses the
+  X-Driftstack-Account header (V-326c) to read the owner's
+  account audit log, they see the OWNER's IP/UA captured at
+  signup, login, logout, password-change. Privacy concern —
+  the V-211 design intent was that ip/ua are not exposed via
+  the customer API.
+
+Doc updated (`apps/docs/src/pages/api/audit-log.md`) to call out
+the caveat explicitly + document the team-RBAC exposure path.
+Not fixed in this slice because:
+
+- Fix touches both new emit paths (auth-flows.ts:432 +
+  498 + 585 + 707 + 749 + 829 + 856) AND historical row
+  backfill (existing rows in production already have payload
+  IP/UA stored).
+- Backfill is a Class B migration that needs founder verdict
+  on the scrub strategy (delete payload fields vs. null them
+  out vs. add a customer-facing redaction layer).
+
+Queued as TD-audit-payload-scrub for a future slice. Doc surfaces
+the empirical reality so customers + team members are aware
+until the scrub lands.

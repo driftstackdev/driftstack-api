@@ -62,10 +62,25 @@ The `actor_type` enum:
 calls and `key_<key-uuid>` for API-key calls. Both are `null` for
 `system` and `staff` events.
 
-`ip_address` and `user_agent` are surfaced in the schema but
-deliberately omitted in production responses for privacy (per
-V-211): the dashboard rendering doesn't display them, and the
-admin tooling reads them out of a separate internal store.
+`ip_address` and `user_agent` (top-level fields on the entry) are
+surfaced in the schema but deliberately null in production
+customer-facing responses for privacy (per V-211): the dashboard
+rendering doesn't display them, and the admin tooling reads them
+out of a separate internal store.
+
+**Caveat (V-413):** the auth-flow audit events
+(`account.email_verified`, `account.login`, `account.logout`,
+`account.password_changed`) currently store `issued_from_ip` +
+`user_agent` inside `payload` — contrary to the V-211 intent at
+the row-level columns. The fields appear in the customer's own
+audit log (acceptable under GDPR Article 15 right of access to
+own data) AND in a team member's view of the owner's audit log
+when the member uses the X-Driftstack-Account header (V-326c)
+to read the owner's account. Team owners aware of this caveat
+can mitigate by limiting team-member access to admins-only or by
+filing a privacy request; a server-side payload scrub is queued
+as a separate slice (TD-audit-payload-scrub) since it touches
+both new emit paths AND historical row backfill.
 
 ## Action catalog
 
