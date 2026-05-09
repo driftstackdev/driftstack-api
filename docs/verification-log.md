@@ -19608,3 +19608,34 @@ Backward compatible — existing single-arg `loadDeliveries(id,
 container)` still works (status undefined → full load).
 
 Astro check clean (0 errors).
+
+## V-404 — V-294 catalog status refresh (multi-feature batch)
+
+**Tier**: 1 (catalog hygiene; flips DEFERRED → SHIPPED for
+features verified shipped in the verification log).
+
+`docs/architecture/v294-feature-catalog.md` table updates:
+
+- Webhook delivery tracking + retries: IN-FLIGHT → SHIPPED
+  (V-282 + V-307).
+- Webhook test delivery: DEFERRED → SHIPPED (V-356).
+- Webhook signing-secret rotation: NEW row → SHIPPED (V-359).
+- Key rotation flow: DEFERRED → SHIPPED (V-296).
+- /webhooks list + status: IN-FLIGHT → SHIPPED (V-282 + V-307b).
+- /webhooks delivery history: DEFERRED → SHIPPED (V-307b +
+  V-403 status filter).
+- /settings personal profile (avatar / timezone): DEFERRED →
+  SHIPPED (V-352 + V-352b).
+- /settings security (password / MFA): DEFERRED → SHIPPED
+  (V-353a-h); legal §3.2 noted.
+- /settings active sessions list + revoke: DEFERRED → SHIPPED
+  (V-355).
+- /settings security audit log: DEFERRED → SHIPPED (V-216 +
+  V-381 + V-398 + V-399 — backend exists since V-216, UI
+  filters + payload context land V-381/398/399).
+- /settings notification preferences: DEFERRED → SHIPPED (V-204).
+
+10 catalog rows flipped. Aggregate counts at lines 26-31 are now
+significantly out of date — flipping them is a separate catalog
+maintenance pass since the source-of-truth is the line-level
+status not the rollup.

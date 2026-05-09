@@ -184,13 +184,14 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 
 **Webhooks** (planning file 37 + 48):
 
-| Feature                                  | Status    | Slice | Tier-1h | Legal updates |
-| ---------------------------------------- | --------- | ----- | ------- | ------------- |
-| Webhook subscriptions CRUD               | SHIPPED   | V-074 | —       | —             |
-| Webhook delivery tracking + retries      | IN-FLIGHT | V-310 | 4       | —             |
-| Webhook event filtering per endpoint     | DEFERRED  | V-310 | 3       | —             |
-| Webhook test delivery (admin + customer) | DEFERRED  | V-311 | 3       | —             |
-| Webhook event replay                     | SHIPPED   | V-091 | —       | —             |
+| Feature                                  | Status   | Slice         | Tier-1h | Legal updates |
+| ---------------------------------------- | -------- | ------------- | ------- | ------------- |
+| Webhook subscriptions CRUD               | SHIPPED  | V-074         | —       | —             |
+| Webhook delivery tracking + retries      | SHIPPED  | V-282 + V-307 | —       | —             |
+| Webhook event filtering per endpoint     | DEFERRED | V-310         | 3       | —             |
+| Webhook test delivery (admin + customer) | SHIPPED  | V-356         | —       | —             |
+| Webhook signing-secret rotation          | SHIPPED  | V-359         | —       | —             |
+| Webhook event replay                     | SHIPPED  | V-091         | —       | —             |
 
 **API auth + rate limiting** (planning file 37):
 
@@ -199,7 +200,7 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 | API key CRUD                 | SHIPPED  | V-049 | —       | —             |
 | Bearer token auth            | SHIPPED  | V-049 | —       | —             |
 | Scope-based permissions      | SHIPPED  | V-174 | —       | —             |
-| Key rotation flow            | DEFERRED | V-296 | 5       | —             |
+| Key rotation flow            | SHIPPED  | V-296 | —       | —             |
 | Rate limiting per key        | SHIPPED  | V-251 | —       | —             |
 | Idempotency keys (24h dedup) | DEFERRED | V-339 | 4       | —             |
 
@@ -265,24 +266,24 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 
 **API keys / webhooks / billing / usage / team / settings UI** (planning file 47):
 
-| Feature                                     | Status       | Slice           | Tier-1h | Legal updates                                  |
-| ------------------------------------------- | ------------ | --------------- | ------- | ---------------------------------------------- |
-| /api-keys CRUD                              | SHIPPED      | V-270           | —       | —                                              |
-| /webhooks list + status                     | IN-FLIGHT    | V-310           | 3       | —                                              |
-| /webhooks delivery history                  | DEFERRED     | V-311           | 4       | —                                              |
-| /usage summary + visualization              | IN-FLIGHT    | V-299           | 4       | —                                              |
-| /usage historical trends + cost projections | DEFERRED     | V-299           | 6       | —                                              |
-| /billing plan picker + payment methods      | IN-FLIGHT    | V-300           | 4       | —                                              |
-| /billing portal redirect                    | DEFERRED     | V-300           | 3       | —                                              |
-| /billing invoice history + PDF download     | DEFERRED     | V-300           | 4       | privacy                                        |
-| /team member list + invitation              | UNDISCOVERED | V-NNN+          | 8       | privacy + ToS                                  |
-| /team RBAC                                  | UNDISCOVERED | V-NNN+          | 6       | ToS                                            |
-| /settings account + slug + region           | SHIPPED      | V-298a + V-298b | —       | privacy §3.1 + DPA Annex 3 (V-373/V-374/V-384) |
-| /settings personal profile                  | DEFERRED     | V-302           | 4       | privacy                                        |
-| /settings security (password / MFA)         | DEFERRED     | V-301           | 8       | privacy                                        |
-| /settings active sessions list + revoke     | DEFERRED     | V-303           | 4       | —                                              |
-| /settings security audit log                | DEFERRED     | V-303           | 3       | —                                              |
-| /settings notification preferences          | DEFERRED     | V-309           | 4       | privacy                                        |
+| Feature                                     | Status       | Slice                         | Tier-1h | Legal updates                                  |
+| ------------------------------------------- | ------------ | ----------------------------- | ------- | ---------------------------------------------- |
+| /api-keys CRUD                              | SHIPPED      | V-270                         | —       | —                                              |
+| /webhooks list + status                     | SHIPPED      | V-282 + V-307b                | —       | —                                              |
+| /webhooks delivery history                  | SHIPPED      | V-307b + V-403                | —       | —                                              |
+| /usage summary + visualization              | IN-FLIGHT    | V-299                         | 4       | —                                              |
+| /usage historical trends + cost projections | DEFERRED     | V-299                         | 6       | —                                              |
+| /billing plan picker + payment methods      | IN-FLIGHT    | V-300                         | 4       | —                                              |
+| /billing portal redirect                    | DEFERRED     | V-300                         | 3       | —                                              |
+| /billing invoice history + PDF download     | DEFERRED     | V-300                         | 4       | privacy                                        |
+| /team member list + invitation              | UNDISCOVERED | V-NNN+                        | 8       | privacy + ToS                                  |
+| /team RBAC                                  | UNDISCOVERED | V-NNN+                        | 6       | ToS                                            |
+| /settings account + slug + region           | SHIPPED      | V-298a + V-298b               | —       | privacy §3.1 + DPA Annex 3 (V-373/V-374/V-384) |
+| /settings personal profile                  | SHIPPED      | V-352 + V-352b                | —       | —                                              |
+| /settings security (password / MFA)         | SHIPPED      | V-353a-h                      | —       | privacy §3.2 (V-353)                           |
+| /settings active sessions list + revoke     | SHIPPED      | V-355                         | —       | —                                              |
+| /settings security audit log                | SHIPPED      | V-216 + V-381 + V-398 + V-399 | —       | —                                              |
+| /settings notification preferences          | SHIPPED      | V-204                         | —       | privacy                                        |
 
 **Onboarding flow** (planning file 12):
 
