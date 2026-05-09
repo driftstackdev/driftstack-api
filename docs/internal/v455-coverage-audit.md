@@ -72,18 +72,18 @@ grep -roE "\"/v[0-9][^\"]+\"" packages/sdk-go
 
 ### Sessions (`/v1/sessions`)
 
-| Route                           | OpenAPI | TS  | Py  | Go  | Notes               |
-| ------------------------------- | ------- | --- | --- | --- | ------------------- |
-| POST /v1/sessions               | ✅      | ✅  | ✅  | ✅  |                     |
-| GET /v1/sessions                | ✅      | ✅  | ✅  | ✅  |                     |
-| GET /v1/sessions/:id            | ✅      | ✅  | ✅  | ✅  |                     |
-| DELETE /v1/sessions/:id         | ✅      | ✅  | ✅  | ✅  | (destroy)           |
-| POST /v1/sessions/:id/navigate  | ✅      | ✅  | ✅  | ✅  |                     |
-| POST /v1/sessions/:id/interact  | ✅      | ✅  | ✅  | ✅  |                     |
-| POST /v1/sessions/:id/wait      | ✅      | ✅  | ✅  | ✅  |                     |
-| POST /v1/sessions/:id/capture   | ✅      | ✅  | ✅  | ✅  |                     |
-| GET /v1/sessions/:id/state      | ✅      | ✅  | ✅  | ✅  |                     |
-| POST /v1/sessions/:id/gui-input | ❌      | ❌  | ❌  | ❌  | **GAP** — GUI input |
+| Route                           | OpenAPI | TS  | Py  | Go  | Notes                                                                                                                                                                                                                                                                          |
+| ------------------------------- | ------- | --- | --- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| POST /v1/sessions               | ✅      | ✅  | ✅  | ✅  |                                                                                                                                                                                                                                                                                |
+| GET /v1/sessions                | ✅      | ✅  | ✅  | ✅  |                                                                                                                                                                                                                                                                                |
+| GET /v1/sessions/:id            | ✅      | ✅  | ✅  | ✅  |                                                                                                                                                                                                                                                                                |
+| DELETE /v1/sessions/:id         | ✅      | ✅  | ✅  | ✅  | (destroy)                                                                                                                                                                                                                                                                      |
+| POST /v1/sessions/:id/navigate  | ✅      | ✅  | ✅  | ✅  |                                                                                                                                                                                                                                                                                |
+| POST /v1/sessions/:id/interact  | ✅      | ✅  | ✅  | ✅  |                                                                                                                                                                                                                                                                                |
+| POST /v1/sessions/:id/wait      | ✅      | ✅  | ✅  | ✅  |                                                                                                                                                                                                                                                                                |
+| POST /v1/sessions/:id/capture   | ✅      | ✅  | ✅  | ✅  |                                                                                                                                                                                                                                                                                |
+| GET /v1/sessions/:id/state      | ✅      | ✅  | ✅  | ✅  |                                                                                                                                                                                                                                                                                |
+| POST /v1/sessions/:id/gui-input | 🚫      | 🚫  | 🚫  | 🚫  | L-001 gui-control plane — coordinate primitives bypass behavioural simulation. Server gates behind `gui_control` scope (only enterprise self-hosted GUI keys carry it; customer keys never do). Intentionally NOT in customer-facing OpenAPI or SDKs (V-461 reclassification). |
 
 ### Profiles (`/v1/profiles`)
 
@@ -222,7 +222,7 @@ These routes power the admin panel; they're 🚫 for customer SDKs by design but
 | ---------------- | ------------ | ----------------------------------- | ----------------------- |
 | Auth             | 14           | 0 (V-460 closed)                    | 0 (V-460 closed)        |
 | Account          | 18           | 0 (only audit-log/export partial)   | 1 (audit-log/export)    |
-| Sessions         | 10           | 1 (gui-input)                       | 1 (gui-input)           |
+| Sessions         | 10           | 0 (V-461: gui-input 🚫 by L-001)    | 0 (V-461: gui-input 🚫) |
 | Profiles         | 12           | 5 (base CRUD)                       | 0                       |
 | API keys         | 4            | 0                                   | 0                       |
 | Webhooks         | 10           | 6 (base CRUD + deliveries + PATCH)  | 2 (PATCH + test)        |
@@ -233,8 +233,9 @@ These routes power the admin panel; they're 🚫 for customer SDKs by design but
 | Status (public)  | 7            | 0 (V-459 closed; 1 SSE intentional) | 6 (intentional)         |
 | Admin            | 27           | 11                                  | 🚫 (admin-only)         |
 
-**Customer-facing OpenAPI gaps after V-460:** 1 route (gui-input).
-**Customer-facing SDK gaps after V-460:** 10 routes (TS / Py / Go each).
+**Customer-facing OpenAPI gaps after V-461:** 0 (every customer-facing route is registered or intentionally 🚫). 🎉
+**Customer-facing SDK gaps after V-461:** 3 actionable (audit-log/export + webhook PATCH +
+webhook /test). Plus 7 intentional 🚫 (6 status + gui-input).
 **Admin OpenAPI gaps:** 11 routes (Tier-2 follow-up).
 
 ## Per-gap closure slices (priority order)
@@ -246,7 +247,10 @@ Tier 1 (customer-facing OpenAPI parity — most impactful):
 - **V-458** — register `/v1/legal/*` (3 routes) + add SDK methods.
 - **V-459** — register `/v1/status/*` (6 routes) in OpenAPI; SDK exposure intentionally 🚫 (status is monitoring data — out-of-band by design). ✅ shipped.
 - **V-460** — register `/v1/auth/cli-authorize/*` (3 routes) + add three-SDK methods. ✅ shipped.
-- **V-461** — register `/v1/sessions/:id/gui-input` + add SDK method.
+- **V-461** — `/v1/sessions/:id/gui-input` reclassified to 🚫 (L-001 gui-control plane;
+  coordinate primitives bypass behavioural simulation; server gates behind `gui_control`
+  scope which only enterprise self-hosted GUI keys carry, never customer keys). No OpenAPI
+  registration; no SDK methods. ✅ shipped (doc-only).
 - **V-462** — register `/v1/account/audit-log/export` properly + add SDK method.
 - **V-463** — `/v1/webhooks/:id/test` SDK methods (V-356 send-test wrapper).
 - **V-464** — `/v1/webhooks/:id` PATCH SDK method (update events / description).

@@ -21165,3 +21165,45 @@ OpenAPI test 8/8 pass; spec generates with the 3 new paths. Go build
 
 V-455 customer-facing OpenAPI gap count: 4 → 1 (gui-input only).
 Customer-facing SDK gap count: 13 → 10.
+
+## V-461 — /v1/sessions/:id/gui-input reclassified 🚫 by L-001
+
+**Tier**: 1 (V-455 audit gap classification correction; doc-only).
+
+**No code changes.** The V-455 audit had `/v1/sessions/:id/gui-input`
+flagged ❌ in both OpenAPI and three customer SDKs. On review against
+`docs/locked-decisions.md` L-001 + the route handler comment in
+`apps/server/src/routes/sessions.ts:232-236`:
+
+> GUI-control plane (L-001). Coordinate-level primitives that bypass
+> the behavioral simulation layer. Gated behind `gui_control` scope —
+> customer keys never carry this; only enterprise self-hosted GUI
+> keys do.
+
+Customer keys never carry the `gui_control` scope. Coordinate-level
+input primitives on the customer surface erode the behavioural-
+simulation moat — the same L-001 vector that drove the removal of
+`tap.offset` (sdk-typescript 0.1.4 / V-042). Adding it to the
+customer-facing OpenAPI spec or SDKs would invite exactly the misuse
+L-001 prohibits.
+
+Reclassified 🚫 in V-455 audit:
+
+- OpenAPI: 🚫 (intentionally NOT in the customer-facing spec; the
+  enterprise self-hosted GUI integrates against the route directly,
+  not through the public OpenAPI surface).
+- TS / Python / Go SDKs: 🚫 (would require coordinate-level request
+  types that customer code shouldn't have access to).
+
+V-455 closure status:
+
+- Customer-facing OpenAPI gaps: 1 → 0. Every customer-facing route is
+  registered or intentionally 🚫.
+- Customer-facing SDK gaps: 10 → 3 actionable (audit-log/export +
+  webhook PATCH + webhook /test). Plus 7 intentional 🚫 (6 status +
+  gui-input).
+
+Next slices V-462 (audit-log/export SDK), V-463 (webhook /test SDK),
+V-464 (webhook PATCH SDK) close the remaining three. After those, the
+customer-facing SDK surface reaches full parity with the OpenAPI spec
+for everything not intentionally 🚫.
