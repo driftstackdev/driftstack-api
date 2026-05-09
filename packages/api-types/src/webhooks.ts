@@ -53,6 +53,12 @@ export const WebhookEndpointSchema = z.object({
   id: WebhookEndpointIdSchema,
   url: z.string().url(),
   secret_prefix: z.string(),
+  /** V-359 — populated only during the 24h rotation grace period.
+   *  Null when no rotation in flight. */
+  prev_secret_prefix: z.string().nullable(),
+  /** V-359 — when prev_secret is active, this is the timestamp at
+   *  which dual-signing stops. Null when no rotation in flight. */
+  rotation_grace_expires_at: Iso8601Schema.nullable(),
   events: z.array(WebhookEventTypeSchema),
   description: z.string().nullable(),
   active: z.boolean(),
@@ -60,6 +66,12 @@ export const WebhookEndpointSchema = z.object({
   last_success_at: Iso8601Schema.nullable(),
   last_failure_at: Iso8601Schema.nullable(),
   disabled_at: Iso8601Schema.nullable(),
+  /** V-185 — aggregate per-endpoint delivery counts. */
+  delivery_counts: z.object({
+    delivered: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    dlq: z.number().int().nonnegative(),
+  }),
   created_at: Iso8601Schema,
 });
 export type WebhookEndpoint = z.infer<typeof WebhookEndpointSchema>;

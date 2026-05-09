@@ -421,18 +421,30 @@ type UsagePeriodSummary struct {
 // Webhooks
 // ──────────────────────────────────────────────────────────────────
 
+// WebhookEndpointDeliveryCounts — V-185 aggregate per-endpoint delivery
+// counts surfaced on every WebhookEndpoint response.
+type WebhookEndpointDeliveryCounts struct {
+	Delivered int `json:"delivered"`
+	Failed    int `json:"failed"`
+	DLQ       int `json:"dlq"`
+}
+
 type WebhookEndpoint struct {
-	ID                  string             `json:"id"`
-	URL                 string             `json:"url"`
-	SecretPrefix        string             `json:"secret_prefix"`
-	Events              []WebhookEventType `json:"events"`
-	Description         *string            `json:"description"`
-	Active              bool               `json:"active"`
-	ConsecutiveFailures int                `json:"consecutive_failures"`
-	LastSuccessAt       *time.Time         `json:"last_success_at"`
-	LastFailureAt       *time.Time         `json:"last_failure_at"`
-	DisabledAt          *time.Time         `json:"disabled_at"`
-	CreatedAt           time.Time          `json:"created_at"`
+	ID           string `json:"id"`
+	URL          string `json:"url"`
+	SecretPrefix string `json:"secret_prefix"`
+	// V-359 — rotation grace state. Both null when no rotation in flight.
+	PrevSecretPrefix       *string                       `json:"prev_secret_prefix"`
+	RotationGraceExpiresAt *time.Time                    `json:"rotation_grace_expires_at"`
+	Events                 []WebhookEventType            `json:"events"`
+	Description            *string                       `json:"description"`
+	Active                 bool                          `json:"active"`
+	ConsecutiveFailures    int                           `json:"consecutive_failures"`
+	LastSuccessAt          *time.Time                    `json:"last_success_at"`
+	LastFailureAt          *time.Time                    `json:"last_failure_at"`
+	DisabledAt             *time.Time                    `json:"disabled_at"`
+	DeliveryCounts         WebhookEndpointDeliveryCounts `json:"delivery_counts"`
+	CreatedAt              time.Time                     `json:"created_at"`
 }
 
 type WebhookEndpointList struct {

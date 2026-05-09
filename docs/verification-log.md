@@ -20115,3 +20115,38 @@ remain (matches server).
 This is V-425's sibling: Go SDK customers using `client.Profiles`
 against a real Driftstack server now get the correct shape on
 both sides of the wire.
+
+## V-427 — WebhookEndpointSchema + Go SDK match real server (V-185 + V-359)
+
+**Tier**: 1 (Memory rule L empirical-diff bar — same class as
+V-425/V-426; api-types `WebhookEndpointSchema` and Go SDK
+`WebhookEndpoint` were both missing 3 fields the server actually
+returns).
+
+Server `publicEndpoint(row, counts)` at routes/webhooks.ts:54
+returns 14 fields:
+
+- 11 in api-types schema (id, url, secret_prefix, events,
+  description, active, consecutive_failures, last_success_at,
+  last_failure_at, disabled_at, created_at).
+- 3 missing: `prev_secret_prefix` (V-359), `rotation_grace_expires_at`
+  (V-359), `delivery_counts` (V-185).
+
+The dashboard UI renders all 14 fields fine because it reads
+straight off the JSON. SDK consumers using typed schemas got 11
+typed fields + 3 silently-stripped fields when round-tripping.
+
+Fix:
+
+- `packages/api-types/src/webhooks.ts` `WebhookEndpointSchema`
+  gains `prev_secret_prefix` (nullable string), `rotation_grace_expires_at`
+  (nullable Iso8601), `delivery_counts` (object with delivered /
+  failed / dlq integers).
+- `packages/sdk-go/types.go` `WebhookEndpoint` struct gains the
+  same three fields. New `WebhookEndpointDeliveryCounts` helper
+  struct.
+
+TS SDK auto-flows since it reads from api-types. Python generated
+models will pick this up on next regen.
+
+`go test ./...` clean. Monorepo typecheck + 1158/1158 vitest pass.
