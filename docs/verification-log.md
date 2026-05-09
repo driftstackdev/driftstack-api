@@ -19981,3 +19981,30 @@ in Python. Mypy clean.
 Three-SDK billing-example parity now matches three-SDK
 billing-resource parity. Customers see the recommended
 self-serve billing flow in the language of their choice.
+
+## V-423 — TS SDK login() returns discriminated-union (V-353d propagation)
+
+**Tier**: 1 (Memory rule L empirical-diff bar — V-353d server-side
+discriminated-union response wasn't propagated to the TS SDK
+return type).
+
+`packages/sdk-typescript/src/resources/auth.ts` `login()` was
+typed `Promise<LoginResponse>` (the simple session shape). The
+server actually returns `LoginResponseUnion` — either a session
+or `{ mfa_required: true, challenge_token, challenge_expires_at }`
+per V-353d. TypeScript customers hitting the MFA branch got a
+type-mismatch.
+
+Fix: return type changed to `Promise<LoginResponseUnion>`. Re-
+exported `LoginMfaRequiredResponse` + `LoginResponseUnion` from
+the SDK index. Added a JSDoc with branch-on-`mfa_required`
+example.
+
+Customers branching on `'mfa_required' in out && out.mfa_required`
+now get type-narrowing via TypeScript's discriminated-union
+inference. No test breakage — typecheck clean.
+
+Python + Go SDKs both return `dict[str, Any]` / interface{}-
+adjacent shapes that already accommodate the union; their fix is
+documentation rather than type. README V-410 already noted the
+union semantics in a comment beside `client.auth.login`.

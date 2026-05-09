@@ -8,7 +8,7 @@
 
 import type {
   LoginRequest,
-  LoginResponse,
+  LoginResponseUnion,
   LogoutRequest,
   LogoutResponse,
   MagicLinkConsumeRequest,
@@ -47,8 +47,21 @@ export class AuthResource {
     });
   }
 
-  login(body: LoginRequest): Promise<LoginResponse> {
-    return this.http.request<LoginResponse>({
+  /**
+   * V-353d — discriminated-union response. When the account has MFA
+   * enrolled, the server returns `{ mfa_required: true, challenge_token,
+   * challenge_expires_at }` instead of a session. Branch on the
+   * `mfa_required` literal:
+   *
+   *   const out = await client.auth.login({ email, password });
+   *   if ('mfa_required' in out && out.mfa_required) {
+   *     // exchange out.challenge_token via /v1/auth/mfa/challenge
+   *   } else {
+   *     // out.session is the real session
+   *   }
+   */
+  login(body: LoginRequest): Promise<LoginResponseUnion> {
+    return this.http.request<LoginResponseUnion>({
       method: 'POST',
       path: '/v1/auth/login',
       body,

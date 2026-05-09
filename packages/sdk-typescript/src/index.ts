@@ -90,6 +90,9 @@ export type {
   // V-079 auth flow
   LoginRequest,
   LoginResponse,
+  // V-353d login MFA challenge — discriminated-union response shape
+  LoginMfaRequiredResponse,
+  LoginResponseUnion,
   LogoutRequest,
   LogoutResponse,
   MagicLinkRequest,
