@@ -19906,3 +19906,26 @@ Each SDK CHANGELOG.md `Unreleased` section gains an `### Added`
 entry for `rotateSecret` / `rotate_secret` / `RotateSecret`
 methods. Matches the V-383 pattern for V-312/V-313 surface
 additions.
+
+## V-420 — /v1/billing/\* OpenAPI registration
+
+**Tier**: 1 (V-082 billing routes shipped server-side but
+weren't in spec; Scalar UI + SDK regen now pick them up).
+
+`apps/server/src/lib/openapi.ts` registers 4 billing routes:
+
+- POST /v1/billing/checkout-session — CreateCheckoutSessionRequest
+  → CreateCheckoutSessionResponse. Stripe Checkout for a tier
+  subscription.
+- POST /v1/billing/trial-pack — StartTrialPackRequest →
+  StartTrialPackResponse. One-time $2.99 trial pack.
+- POST /v1/billing/portal-session — no body → CreatePortalSessionResponse.
+  Stripe Customer Portal one-time URL.
+- GET /v1/billing — no query → GetBillingStateResponse.
+  Subscription + trial pack state.
+
+api-types schemas reused via direct import (no inline duplication).
+
+`openapi.test.ts` registered-paths fixture extended.
+
+855 server tests + monorepo typecheck clean.

@@ -30,6 +30,10 @@ import {
   AccountStatusSchema,
   AccountTierSchema,
   AdminAccountResponseSchema,
+  CreateCheckoutSessionRequestSchema,
+  CreateCheckoutSessionResponseSchema,
+  CreatePortalSessionResponseSchema,
+  GetBillingStateResponseSchema,
   LoginRequestSchema,
   LoginResponseUnionSchema,
   LogoutRequestSchema,
@@ -45,6 +49,8 @@ import {
   RefreshSessionResponseSchema,
   SignupRequestSchema,
   SignupResponseSchema,
+  StartTrialPackRequestSchema,
+  StartTrialPackResponseSchema,
   UpdateAccountMeRequestSchema,
   UploadAvatarRequestSchema,
   VerifyEmailRequestSchema,
@@ -1539,6 +1545,70 @@ function buildRegistry(): OpenAPIRegistry {
     },
     responses: {
       204: { description: 'Session revoked.' },
+      ...errors4xx,
+    },
+  });
+
+  // ── V-420 — billing surface ────────────────────────────────────────────
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/billing/checkout-session',
+    summary: 'Start a Stripe Checkout session for a tier subscription',
+    tags: ['billing'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: CreateCheckoutSessionRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Checkout URL + session id; redirect the customer to checkout_url.',
+        content: { 'application/json': { schema: CreateCheckoutSessionResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/billing/trial-pack',
+    summary: 'Start a Stripe Checkout session for the one-time $2.99 trial pack',
+    tags: ['billing'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: StartTrialPackRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Checkout URL + session id.',
+        content: { 'application/json': { schema: StartTrialPackResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/billing/portal-session',
+    summary: 'Mint a Stripe Customer Portal one-time URL for subscription self-service',
+    tags: ['billing'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Portal URL; short-lived; redirect immediately.',
+        content: { 'application/json': { schema: CreatePortalSessionResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/billing',
+    summary: 'Read the calling account billing state (subscription + trial pack)',
+    tags: ['billing'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Subscription row + trial-pack credit/expiry/redemption state.',
+        content: { 'application/json': { schema: GetBillingStateResponseSchema } },
+      },
       ...errors4xx,
     },
   });

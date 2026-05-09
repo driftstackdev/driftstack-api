@@ -68,6 +68,11 @@ describe('OpenAPI spec generation', () => {
         // V-353d/e auth MFA flows (public — no BearerAuth required)
         '/v1/auth/mfa/challenge',
         '/v1/auth/mfa/step-up',
+        // V-420 — billing surface
+        '/v1/billing',
+        '/v1/billing/checkout-session',
+        '/v1/billing/portal-session',
+        '/v1/billing/trial-pack',
         // V-401 — core auth surface
         '/v1/auth/login',
         '/v1/auth/logout',
