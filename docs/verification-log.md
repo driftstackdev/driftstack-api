@@ -20671,3 +20671,19 @@ go test + Python pytest 137 + monorepo typecheck clean. The
 MfaStepUpRequiredError typed errors (V-441) now have a typed
 recovery path: customers catch the error, call
 `client.auth.mfaStepUp({ code })`, retry the original request.
+
+## V-446 — Go SDK MFA wire-shape regression tests
+
+**Tier**: 1 (V-445 follow-through).
+
+`packages/sdk-go/wire_shape_test.go` gains 2 tests:
+
+- `TestWireShape_MfaChallengeResponse` deserializes the
+  `{ session: { token, expires_at, account_id }, via: "totp" }`
+  shape; verifies session populates + via discriminator.
+- `TestWireShape_MfaStepUpResponse` deserializes
+  `{ via: "recovery", mfa_satisfied_at: "..." }` shape; verifies
+  via populates + mfa_satisfied_at parses to time.Time.
+
+Both 2/2 pass. Pinning ensures future struct-shape regression
+surfaces here.

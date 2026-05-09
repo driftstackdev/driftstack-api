@@ -165,6 +165,48 @@ func TestWireShape_Subscription_Full(t *testing.T) {
 	}
 }
 
+// V-445 — MFA challenge response carries session + via discriminator.
+func TestWireShape_MfaChallengeResponse(t *testing.T) {
+	t.Parallel()
+	raw := `{
+		"session": {
+			"token": "ds_web_post_mfa_token",
+			"expires_at": "2026-05-23T22:00:00.000Z",
+			"account_id": "acc_00000000-0000-4000-8000-000000000001"
+		},
+		"via": "totp"
+	}`
+	var got MfaChallengeResponse
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Session.Token != "ds_web_post_mfa_token" {
+		t.Errorf("session.token=%q", got.Session.Token)
+	}
+	if got.Via != "totp" {
+		t.Errorf("via=%q (expected totp)", got.Via)
+	}
+}
+
+// V-445 — MFA step-up response: no session; advances mfa_satisfied_at.
+func TestWireShape_MfaStepUpResponse(t *testing.T) {
+	t.Parallel()
+	raw := `{
+		"via": "recovery",
+		"mfa_satisfied_at": "2026-05-09T22:30:00.000Z"
+	}`
+	var got MfaStepUpResponse
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Via != "recovery" {
+		t.Errorf("via=%q (expected recovery)", got.Via)
+	}
+	if got.MfaSatisfiedAt.Year() != 2026 {
+		t.Errorf("mfa_satisfied_at should be populated; got %v", got.MfaSatisfiedAt)
+	}
+}
+
 // V-433 — SessionPurpose enum constants must match server values.
 // Sanity check against the canonical set.
 func TestWireShape_SessionPurpose_CanonicalValues(t *testing.T) {
