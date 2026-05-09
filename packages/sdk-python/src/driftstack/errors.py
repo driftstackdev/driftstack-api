@@ -232,6 +232,25 @@ class EmailNotVerifiedError(ForbiddenError):
     """Login attempted before email verification step completed."""
 
 
+# V-439 — additional typed problem types matching Go SDK V-438 coverage.
+
+
+class FeatureUnavailableError(DriftstackError):
+    """Endpoint requires infrastructure not configured in this deployment
+    (e.g. avatar uploads when R2 isn't wired). HTTP 503."""
+
+
+class MfaStepUpRequiredError(DriftstackError):
+    """V-353e — operation requires a fresh MFA proof (15-minute step-up
+    freshness window). Customer should call POST /v1/auth/mfa/step-up
+    with a TOTP code and retry the original request."""
+
+
+class InternalError(DriftstackError):
+    """Unhandled server-side error. Detail message may be sanitized;
+    check Driftstack status / contact support if this persists."""
+
+
 # ── Mapping problem-type URI → subclass ──────────────────────────────────
 
 # Keep the mapping in one place for ease of audit + extension. The HTTP
@@ -261,4 +280,8 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/invalid-credentials": InvalidCredentialsError,
     "https://errors.driftstack.dev/invalid-auth-token": InvalidAuthTokenError,
     "https://errors.driftstack.dev/email-not-verified": EmailNotVerifiedError,
+    # V-439: ops-flow problem types.
+    "https://errors.driftstack.dev/feature-unavailable": FeatureUnavailableError,
+    "https://errors.driftstack.dev/mfa-step-up-required": MfaStepUpRequiredError,
+    "https://errors.driftstack.dev/internal": InternalError,
 }

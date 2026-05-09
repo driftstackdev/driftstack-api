@@ -20488,3 +20488,29 @@ functions + compile-time error-interface assertions.
 Three-SDK problem-type parity now matches: TS had 20+ typed,
 Python uses dict-based problem reading, Go now has 20 typed
 covering every URI the server emits.
+
+## V-439 — Python SDK 3 missing typed errors complete problem-type map
+
+**Tier**: 1 (V-438 mirror; closes Python SDK problem-type gap).
+
+`packages/sdk-python/src/driftstack/errors.py`:
+
+- 3 new typed exception classes: `FeatureUnavailableError`,
+  `MfaStepUpRequiredError`, `InternalError`.
+- `PROBLEM_TYPE_TO_ERROR` mapping table extended with 3 new
+  entries.
+
+`packages/sdk-python/src/driftstack/__init__.py` re-exports the
+3 new exception classes alongside the existing public-surface
+typed errors.
+
+137/137 Python tests pass.
+
+Three-SDK problem-type parity now complete:
+
+- TS: 20+ typed.
+- Python: 24 typed via PROBLEM_TYPE_TO_ERROR.
+- Go: 20 typed via problemTypeToFactory.
+
+Customers across all three SDKs can now branch on typed shape
+for every server-emitted problem URI.
