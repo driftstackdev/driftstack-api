@@ -20897,3 +20897,29 @@ go test + Python pytest 137 + monorepo typecheck clean.
 The V-220 daily time-series API now has full OpenAPI + three-SDK
 coverage. Customers building usage-trend charts can pull the
 data programmatically without screen-scraping the dashboard.
+
+## V-453 — account.md doc adds V-450/V-449/V-448 SDK usage sections
+
+**Tier**: 1 (V-448-V-450 doc-side complement; customers have
+typed SDK methods but no walkthrough in /docs/api).
+
+`apps/docs/src/pages/api/account.md` gains 5 new sections after
+the avatar section, before the team-RBAC explainer:
+
+- **Active sign-ins (V-355)** — three-SDK code examples for
+  `listWebSessions / list_web_sessions / ListWebSessions`,
+  semantics of the `current: true` entry, V-211 IP/UA-omission
+  reminder, revoke single + revoke-all-other.
+- **Effective rate limits (V-258)** — `rateLimits()` SDK example
+  with `source` semantics (tier_default vs override).
+- **Email preferences (V-204)** — `emailPreferences.list` +
+  `optOut` quick example; critical-email exclusion note.
+- **Audit log** — cross-link to /api/audit-log; references
+  `client.auditLog.list / iterate` for V-216 ledger access.
+- **MFA enrollment + step-up** — short pointer to
+  `client.mfa.*` (enrollment) + `client.auth.mfa{Challenge,StepUp}`
+  (login-time + step-up gate); cross-link to /api/auth.
+
+Astro check clean. Customers reading account.md now see the full
+account-management surface that V-441/V-445/V-448/V-449/V-450
+made SDK-accessible.

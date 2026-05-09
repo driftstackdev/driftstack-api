@@ -87,6 +87,83 @@ Field shape:
 object is left in place (a sweeper job collects orphaned keys
 off the hot path).
 
+## Active sign-ins (V-355)
+
+The dashboard's "active sign-ins" panel and SDK `client.account`
+resource expose the calling account's web-session list:
+
+```ts
+const { data } = await client.account.listWebSessions();
+for (const session of data) {
+  console.log(session.os, session.browser, session.last_used_at, session.current);
+}
+```
+
+```python
+sessions = client.account.list_web_sessions()
+for s in sessions["data"]:
+    print(s["os"], s["browser"], s["last_used_at"], s["current"])
+```
+
+```go
+list, _ := client.Account.ListWebSessions(ctx)
+for _, s := range list.Data {
+    fmt.Println(s.OS, s.Browser, s.LastUsedAt, s.Current)
+}
+```
+
+The entry with `current: true` is the calling session itself.
+IP addresses are deliberately omitted; user-agents are reduced to
+OS + browser bucket per V-211 anonymity. Revoke individual
+sessions with `revokeWebSession(id)` / `revoke_web_session(id)` /
+`RevokeWebSession(ctx, id)`. Revoke every other session in one
+call with `revokeAllOtherWebSessions()` / equivalent.
+
+## Effective rate limits (V-258)
+
+Read the calling account's effective per-bucket rate-limit config
+including any active overrides:
+
+```ts
+const cfg = await client.account.rateLimits();
+for (const bucket of cfg.buckets) {
+  console.log(bucket.bucket_key, bucket.capacity, bucket.refill_per_second, bucket.source);
+}
+```
+
+`source` is `tier_default` for unbounded tier-derived caps or
+`override` when staff has applied a per-account adjustment;
+`override_expires_at` is non-null in the override case.
+
+## Email preferences (V-204)
+
+Per-event opt-out toggles for non-critical customer emails:
+
+```ts
+const prefs = await client.emailPreferences.list();
+await client.emailPreferences.optOut('billing-renewal-reminder');
+```
+
+Critical emails (verification, password-reset, billing-failure,
+subscription-cancellation, support-ack) are not opt-outable —
+they're absent from the `OptOutableEmailEvent` enum on purpose.
+
+## Audit log
+
+Programmatic access to the customer audit log lives at
+[`/api/audit-log`](/api/audit-log/) — `client.auditLog.list()` /
+`client.auditLog.iterate()` walk the same V-216 ledger the
+dashboard renders. Pair with the V-216 export endpoint for GDPR
+Article 20 portability bulk-pulls.
+
+## MFA enrollment + step-up
+
+MFA management is on `client.mfa.*` (V-353b) — `status`,
+`enroll`, `verify`, `disable`, `regenerateRecoveryCodes`. The
+login-time MFA exchange + step-up are on `client.auth.*` —
+`mfaChallenge` (V-353d) + `mfaStepUp` (V-353e). Full walkthrough
+at [`/api/auth#mfa-challenge-v-353d`](/api/auth/#mfa-challenge-v-353d).
+
 ## Why `/me` ignores team-RBAC
 
 The `X-Driftstack-Account` header (V-326e) routes most `/v1/*`
