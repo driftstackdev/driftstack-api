@@ -10,6 +10,13 @@ export type { WebhookEndpointList, WebhookDeliveryListPage } from './resources/w
 export type { ProfilesListPage } from './resources/profiles.js';
 export type { ProfileSnapshotsListPage } from './resources/profile-snapshots.js';
 export type { AccountSelfProfile } from './resources/account.js';
+export type {
+  MfaStatusResponse,
+  MfaEnrollResponse,
+  MfaVerifyRequest,
+  MfaVerifyResponse,
+  MfaDisableRequest,
+} from './resources/mfa.js';
 
 // Errors
 export {

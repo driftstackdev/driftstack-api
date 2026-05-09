@@ -17,6 +17,7 @@ import httpx
 
 from driftstack.http import AsyncHttpClient, HttpClient
 from driftstack.resources.account import AccountResource, AsyncAccountResource
+from driftstack.resources.mfa import AsyncMfaResource, MfaResource
 from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
 from driftstack.resources.auth import AsyncAuthResource, AuthResource
 from driftstack.resources.billing import AsyncBillingResource, BillingResource
@@ -85,6 +86,8 @@ class Driftstack:
         self.auth = AuthResource(self._http)
         # V-385 / V-434 — /v1/account/me rich-shape read.
         self.account = AccountResource(self._http)
+        # V-353b / V-448 — MFA enrollment management.
+        self.mfa = MfaResource(self._http)
         # V-298c — Team RBAC. Auth path integration is V-298d.
         self.team = TeamResource(self._http)
 
@@ -134,6 +137,8 @@ class AsyncDriftstack:
         self.auth = AsyncAuthResource(self._http)
         # V-385 / V-434 — /v1/account/me rich-shape read.
         self.account = AsyncAccountResource(self._http)
+        # V-353b / V-448 — MFA enrollment management.
+        self.mfa = AsyncMfaResource(self._http)
         # V-298c — Team RBAC. Auth path integration is V-298d.
         self.team = AsyncTeamResource(self._http)
 

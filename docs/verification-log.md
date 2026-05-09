@@ -20705,3 +20705,48 @@ subsection covering:
   `errors.As(err, &MfaStepUpRequiredError{})` recovery flow.
 
 Three-SDK MFA exchange parity surfaced in release notes.
+
+## V-448 — three-SDK MFA enrollment surface (V-353b /v1/account/mfa)
+
+**Tier**: 1 (rule L empirical-diff sweep continues — same gap
+class as V-445; /v1/account/mfa/\* endpoints registered in
+OpenAPI per V-353b but no SDK exposed enroll / verify /
+disable / regenerate-recovery-codes / status).
+
+Customers running on the SDKs couldn't enroll in MFA
+programmatically — the dashboard /settings page was the only
+path. Now exposed across all three SDKs:
+
+**TS** (`packages/sdk-typescript/src/resources/mfa.ts`):
+
+- New `MfaResource` with `status / enroll / verify / disable /
+regenerateRecoveryCodes`.
+- Wired as `client.mfa`. Re-exported types: `MfaStatusResponse`,
+  `MfaEnrollResponse`, `MfaVerifyRequest / Response`,
+  `MfaDisableRequest`.
+
+**Python** (`packages/sdk-python/src/driftstack/resources/mfa.py`):
+
+- `MfaResource` (sync) + `AsyncMfaResource` (async) with same
+  five methods.
+- Wired as `client.mfa` + `async_client.mfa`.
+
+**Go** (`packages/sdk-go/mfa.go`):
+
+- `MfaResource` with `Status / Enroll / Verify / Disable /
+RegenerateRecoveryCodes`.
+- Typed `MfaStatus`, `MfaEnrollResponse`, `MfaVerifyRequest /
+Response`, `MfaDisableRequest` structs.
+- Wired as `client.Mfa`.
+
+go test + Python pytest 137 + monorepo typecheck clean.
+
+Three-SDK MFA parity now covers BOTH:
+
+- Login MFA exchange (V-445 — `client.auth.mfaChallenge` +
+  `mfaStepUp`).
+- Enrollment management (V-448 — `client.mfa.*`).
+
+Plus the typed `MfaStepUpRequiredError` recovery flow (V-441/V-445).
+Customers can build full MFA-aware integrations using only the
+SDK; no raw HTTP needed.

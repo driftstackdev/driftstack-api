@@ -41,6 +41,8 @@ type Client struct {
 	Billing          *BillingResource
 	Auth             *AuthResource
 	Account          *AccountResource
+	// V-353b / V-448 — MFA enrollment management.
+	Mfa *MfaResource
 	// V-298c — Team RBAC. Auth path integration is V-298d.
 	Team *TeamResource
 }
@@ -100,6 +102,7 @@ func New(apiKey string, opts ...Option) *Client {
 	c.Billing = &BillingResource{client: c}
 	c.Auth = &AuthResource{client: c}
 	c.Account = &AccountResource{client: c}
+	c.Mfa = &MfaResource{client: c}
 	c.Team = &TeamResource{client: c}
 	return c
 }
