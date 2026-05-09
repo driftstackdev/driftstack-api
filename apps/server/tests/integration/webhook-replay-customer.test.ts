@@ -96,3 +96,53 @@ describe('POST /v1/webhook-deliveries/:deliveryId/replay', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+// V-406 — ?status= filter coverage on the delivery-list endpoint.
+// V-403 dashboard surfaced this filter; backend was already capable
+// per ListDeliveriesQuerySchema. These tests pin the wire behavior.
+describe('GET /v1/webhooks/:id/deliveries — status filter (V-403)', () => {
+  it('returns matching status when filter is set; empty list when no rows match', async () => {
+    fx = await buildTestApp();
+    const endpointId = await createEndpoint(fx);
+    await fx.webhooksService.enqueueEvent(fx.accountId, 'session.completed', {
+      id: 'ses_a',
+      status: 'completed',
+    });
+
+    const pending = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/webhooks/whk_${endpointId}/deliveries?status=pending`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(pending.statusCode).toBe(200);
+    const pendingBody = pending.json<{
+      data: Array<{ id: string; status: string }>;
+      has_more: boolean;
+    }>();
+    expect(pendingBody.data.length).toBeGreaterThan(0);
+    for (const d of pendingBody.data) {
+      expect(d.status).toBe('pending');
+    }
+
+    // Delivered scope should be empty — nothing has been
+    // successfully dispatched in the test fixture.
+    const delivered = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/webhooks/whk_${endpointId}/deliveries?status=delivered`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(delivered.statusCode).toBe(200);
+    expect(delivered.json<{ data: unknown[] }>().data).toHaveLength(0);
+  });
+
+  it('400 on a status value outside the enum', async () => {
+    fx = await buildTestApp();
+    const endpointId = await createEndpoint(fx);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/webhooks/whk_${endpointId}/deliveries?status=not-a-status`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

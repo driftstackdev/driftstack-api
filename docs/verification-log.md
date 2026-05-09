@@ -19659,3 +19659,22 @@ Astro check clean.
 
 V-294 catalog "Webhook event filtering per endpoint" item moves
 DEFERRED → SHIPPED; row update is a separate trivial commit.
+
+## V-406 — webhook delivery ?status= filter integration tests
+
+**Tier**: 1 (V-403 dashboard test parity).
+
+`apps/server/tests/integration/webhook-replay-customer.test.ts`
+gains 2 tests for the `?status=` filter on
+`GET /v1/webhooks/:id/deliveries`:
+
+- Filter narrows result to the requested status; empty list when
+  no rows match (e.g. `?status=delivered` on a fixture with only
+  pending rows returns []).
+- Out-of-enum status returns 400 (server-side Zod validation).
+
+Backend was already capable per ListDeliveriesQuerySchema; these
+tests pin the wire behavior so a future schema or repo change
+surfaces here.
+
+6/6 tests in webhook-replay-customer.test.ts pass.
