@@ -20397,3 +20397,33 @@ Three-SDK release notes now describe the customer-impact reality
 of the wire-correctness sweep so customers consuming next-version
 release notes understand both what was added AND what was
 silently broken before.
+
+## V-436 — Go SDK wire-shape regression tests pin V-425/V-426/V-427/V-429/V-433
+
+**Tier**: 1 (rule L empirical-diff bar — pin the wire-correctness
+sweep findings against future regressions).
+
+`packages/sdk-go/wire_shape_test.go` — new file. 6 tests
+deserialize hand-crafted JSON that mirrors the actual server
+`publicX()` serializer outputs into Go SDK structs:
+
+- **VerifyEmailResponse_Nested** (V-425) — pins
+  `{ session: { token, expires_at, account_id } }` decoding.
+  Catches a regression to the flat shape.
+- **LoginResponse_MfaBranch** (V-425) — pins V-353d MFA-required
+  fields populating + Session.Token staying empty.
+- **Profile_RealServerShape** (V-426) — pins archetype field
+  populating from the actual 7-field server shape (catches
+  regression to the stale 11-field shape with persona/notes/etc).
+- **WebhookEndpoint_RotationGraceState** (V-427) — pins V-359
+  prev_secret_prefix + rotation_grace_expires_at + V-185
+  delivery_counts populating.
+- **Subscription_Full** (V-429) — pins canceled_at + created_at +
+  updated_at populating (was missing in old struct).
+- **SessionPurpose_CanonicalValues** (V-433) — sanity-check that
+  the 3 Go enum constants match the 3 server enum values.
+
+Tests run via `go test ./...`; 6/6 pass. These complement the
+fixture-based tests (`auth_test.go`, `profiles_test.go`) which
+round-trip the SDK's own struct through a fake server (which can't
+catch regressions in the struct-shape itself).
