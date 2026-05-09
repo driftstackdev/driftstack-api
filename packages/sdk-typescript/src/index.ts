@@ -9,7 +9,14 @@ export type { ApiKeyList } from './resources/api-keys.js';
 export type { WebhookEndpointList, WebhookDeliveryListPage } from './resources/webhooks.js';
 export type { ProfilesListPage } from './resources/profiles.js';
 export type { ProfileSnapshotsListPage } from './resources/profile-snapshots.js';
-export type { AccountSelfProfile } from './resources/account.js';
+export type {
+  AccountSelfProfile,
+  WebSessionEntry,
+  ListWebSessionsResponse,
+  UploadAvatarResponse,
+  RateLimitBucket,
+  GetAccountRateLimitsResponse,
+} from './resources/account.js';
 export type {
   MfaStatusResponse,
   MfaEnrollResponse,
@@ -141,6 +148,9 @@ export type {
   ListEmailPreferencesResponse,
   OptOutableEmailEvent,
   SetEmailPreferenceRequest,
+  // V-352 / V-352b account self-edit + avatar upload
+  UpdateAccountMeRequest,
+  UploadAvatarRequest,
   // V-082 billing
   BillingPeriod,
   CreateCheckoutSessionRequest,

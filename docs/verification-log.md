@@ -20798,3 +20798,48 @@ Three-SDK Account-surface coverage now: V-385/V-428/V-434 me read,
 V-441/V-445 MFA exchange, V-448 MFA enrollment, V-449 audit-log +
 email-preferences. Remaining gaps: web-sessions list+revoke,
 avatar upload+clear, rate-limits read.
+
+## V-450 — three-SDK Account-resource gap closure (web-sessions + avatar + rate-limits + update-me)
+
+**Tier**: 1 (rule L empirical-diff sweep continues — completes the
+Account-surface coverage; remaining /v1/account/\* endpoints not
+yet exposed in any SDK).
+
+**TS** (`packages/sdk-typescript/src/resources/account.ts`):
+
+- `client.account.updateMe(body)` — V-352 PATCH /me.
+- `client.account.uploadAvatar(body)` + `clearAvatar()` — V-352b.
+- `client.account.listWebSessions()` + `revokeWebSession(id)` +
+  `revokeAllOtherWebSessions()` — V-355.
+- `client.account.rateLimits()` — V-258 effective config read.
+- New types: `WebSessionEntry`, `ListWebSessionsResponse`,
+  `UploadAvatarResponse`, `RateLimitBucket`,
+  `GetAccountRateLimitsResponse`. `UpdateAccountMeRequest` +
+  `UploadAvatarRequest` re-exported from api-types.
+
+**Python** (extends `account.py`):
+
+- `client.account.update_me(body)` + `upload_avatar(body)` +
+  `clear_avatar()` + `list_web_sessions()` +
+  `revoke_web_session(id)` + `revoke_all_other_web_sessions()` +
+  `rate_limits()`. Sync + async mirrors.
+
+**Go** (extends `account.go`):
+
+- `UpdateMe(ctx, *UpdateMeRequest)` + `UploadAvatar(ctx,
+*UploadAvatarRequest)` + `ClearAvatar(ctx)` +
+  `ListWebSessions(ctx)` + `RevokeWebSession(ctx, sessionID)` +
+  `RevokeAllOtherWebSessions(ctx)` + `RateLimits(ctx)`.
+- New struct types: `UpdateMeRequest`, `UploadAvatarRequest /
+Response`, `WebSessionEntry`, `ListWebSessionsResponse`,
+  `RateLimitBucket`, `GetAccountRateLimitsResponse`.
+- `net/url` import added.
+
+go test + Python pytest 137 + monorepo typecheck clean.
+
+**THREE-SDK ACCOUNT SURFACE PARITY COMPLETE**: every
+`/v1/account/*` endpoint registered in OpenAPI is now exposed
+across all three SDKs. Combined with V-441 typed errors + V-445
+MFA exchange + V-448 MFA enrollment + V-449 audit-log + email-
+preferences, customers can build full account-management
+integrations using only the SDKs — no raw HTTP needed.

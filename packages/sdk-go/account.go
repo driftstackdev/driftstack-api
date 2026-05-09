@@ -2,6 +2,7 @@ package driftstack
 
 import (
 	"context"
+	"net/url"
 	"time"
 )
 
@@ -64,5 +65,134 @@ func (r *AccountResource) Me(ctx context.Context) (*AccountSelfProfile, error) {
 	return &out, nil
 }
 
-// avoid unused-import flag while keeping this file self-contained.
-var _ = time.Time{}
+// V-450 — extend AccountResource with update / avatar / web-sessions /
+// rate-limits methods.
+
+// UpdateMeRequest — partial update body. At least one field must be
+// non-nil. Use a *string with empty string to clear (the server's
+// PATCH schema accepts JSON null to clear; nil-pointer omits the
+// field entirely).
+type UpdateMeRequest struct {
+	Name     *string `json:"name,omitempty"`
+	Timezone *string `json:"timezone,omitempty"`
+	Slug     *string `json:"slug,omitempty"`
+	Region   *string `json:"region,omitempty"` // "us" | "eu" | "apac"
+}
+
+// UpdateMe — V-352 partial update of the calling account.
+func (r *AccountResource) UpdateMe(ctx context.Context, body *UpdateMeRequest) (*AccountSelfProfile, error) {
+	var out AccountSelfProfile
+	if err := r.client.do(ctx, requestOptions{
+		method: "PATCH",
+		path:   "/v1/account/me",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// UploadAvatarRequest — V-352b. Inline base64 body; max 2 MiB raw.
+type UploadAvatarRequest struct {
+	DataBase64  string `json:"data_base64"`
+	ContentType string `json:"content_type"` // "image/png" | "image/jpeg" | "image/webp"
+}
+
+type UploadAvatarResponse struct {
+	AvatarURL   *string `json:"avatar_url"`
+	ContentType string  `json:"content_type"`
+	Bytes       int     `json:"bytes"`
+}
+
+// UploadAvatar — V-352b upload (or replace) the calling account avatar.
+func (r *AccountResource) UploadAvatar(ctx context.Context, body *UploadAvatarRequest) (*UploadAvatarResponse, error) {
+	var out UploadAvatarResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/account/me/avatar",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ClearAvatar — V-352b clear the avatar pointer.
+func (r *AccountResource) ClearAvatar(ctx context.Context) error {
+	return r.client.do(ctx, requestOptions{
+		method: "DELETE",
+		path:   "/v1/account/me/avatar",
+	})
+}
+
+// WebSessionEntry — V-355 active dashboard sign-in.
+type WebSessionEntry struct {
+	ID         string    `json:"id"`
+	OS         string    `json:"os"`
+	Browser    string    `json:"browser"`
+	LastUsedAt time.Time `json:"last_used_at"`
+	ExpiresAt  time.Time `json:"expires_at"`
+	Current    bool      `json:"current"`
+}
+
+type ListWebSessionsResponse struct {
+	Data []WebSessionEntry `json:"data"`
+}
+
+// ListWebSessions — V-355 active dashboard sign-ins.
+func (r *AccountResource) ListWebSessions(ctx context.Context) (*ListWebSessionsResponse, error) {
+	var out ListWebSessionsResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/account/web-sessions",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RevokeWebSession — V-355 revoke a single web session by id. Idempotent.
+func (r *AccountResource) RevokeWebSession(ctx context.Context, sessionID string) error {
+	return r.client.do(ctx, requestOptions{
+		method: "DELETE",
+		path:   "/v1/account/web-sessions/" + url.PathEscape(sessionID),
+	})
+}
+
+// RevokeAllOtherWebSessions — V-355 revoke every session except the calling one.
+func (r *AccountResource) RevokeAllOtherWebSessions(ctx context.Context) error {
+	return r.client.do(ctx, requestOptions{
+		method: "DELETE",
+		path:   "/v1/account/web-sessions",
+	})
+}
+
+// RateLimitBucket — V-258 per-bucket effective rate-limit config.
+type RateLimitBucket struct {
+	BucketKey         string  `json:"bucket_key"` // "global" | "sessions:create"
+	Capacity          int     `json:"capacity"`
+	RefillPerSecond   float64 `json:"refill_per_second"`
+	Source            string  `json:"source"` // "tier_default" | "override"
+	OverrideExpiresAt *string `json:"override_expires_at"`
+}
+
+type GetAccountRateLimitsResponse struct {
+	Tier    string            `json:"tier"`
+	Buckets []RateLimitBucket `json:"buckets"`
+}
+
+// RateLimits — V-258 read effective rate-limit config.
+func (r *AccountResource) RateLimits(ctx context.Context) (*GetAccountRateLimitsResponse, error) {
+	var out GetAccountRateLimitsResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/account/rate-limits",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
