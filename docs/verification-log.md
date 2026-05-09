@@ -21316,5 +21316,58 @@ and `systemd-managed services with restart=always`.
 - V-278.A-2 — execute `bootstrap.sh production` over SSH against
   128.140.37.74; same against 116.203.22.197 staging.
 - V-278.B — deploy API service.
-- V-278.G — run migrations against Neon (unblocked; runs from local).
+- V-278.G — ✅ executed (see next entry).
 - V-278.H — DNS records via Cloudflare API (blocked on token).
+
+## V-278.G — Apply Drizzle migrations to Neon Postgres
+
+**Tier**: 1 (deployment cycle execution; migration bug fix uncovered).
+
+**Applied**: 38 migrations against
+`postgresql://neondb_owner:…@ep-aged-pond-al77cutb.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require`.
+Result: 33 tables created in `public` schema (`accounts`, `sessions`,
+`profiles`, `webhook_endpoints`, `webhook_deliveries`, full audit-log
+
+- rate-limit + scheduled-jobs + status-subscriber surface, etc.).
+  `drizzle.__drizzle_migrations` shows 38 rows applied.
+
+**Bug found + fixed (in-place)**: Migration `0028_v304a_first_success_email.sql`
+referenced a non-existent `account_lifecycle` table — typo at V-304a
+write-time. The schema.ts column `firstSuccessEmailSentAt` correctly
+lives on the `accounts` table; the migration's ALTER target was wrong.
+Caught on first attempt to run migrations against Neon (which is the
+first time migrations have been run against any persistent database
+— local dev uses `drizzle-kit push` against the docker-compose
+Postgres, which infers schema rather than replaying migrations).
+
+In-place correction is safe because no production database has applied
+the migration yet. The fix changed `ALTER TABLE "account_lifecycle"`
+to `ALTER TABLE accounts` and added a comment documenting the V-278.G
+catch. The journal entry `0028_v304a_first_success_email` is unchanged
+(no hash field; safe to re-run).
+
+**Verification** (Rule L empirical):
+
+```
+$ npx tsx src/db/migrate.ts
+{"msg":"applying migrations","migrationsFolder":"…/migrations"}
+{"msg":"migrations applied"}
+
+$ select count(*)::int from drizzle.__drizzle_migrations
+=> 38
+
+$ select schemaname, tablename from pg_tables where schemaname='public'
+=> 33 tables, including accounts (with first_success_email_sent_at column)
+```
+
+**Decision** — staging schema strategy: shared `public` schema with
+prod until V-278.K post-launch split. Founder brief allowed "separate
+schema OR `staging_` table prefix" for pre-launch. Picked shared-public
+(simpler) over separate-schema (would require re-running 38 migrations
+against a `staging` schema; fragile). Acceptable risk since staging
+traffic pre-launch is synthetic-only. `staging.env.template` updated
+to drop the `search_path=staging,public` URL parameter.
+
+**Next** unblocks: V-278.B Astro/Fastify deploy + V-278.F staging
+mirror are still SSH-blocked. V-278.H DNS records still Cloudflare-
+token-blocked.
