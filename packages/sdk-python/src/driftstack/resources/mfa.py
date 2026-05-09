@@ -45,9 +45,7 @@ class MfaResource:
 
     def regenerate_recovery_codes(self) -> dict[str, Any]:
         """Mint 10 fresh recovery codes. Old codes invalidated."""
-        return self._http.request(
-            "POST", "/v1/account/mfa/recovery-codes/regenerate", json_body={}
-        )
+        return self._http.request("POST", "/v1/account/mfa/recovery-codes/regenerate", json_body={})
 
 
 class AsyncMfaResource:

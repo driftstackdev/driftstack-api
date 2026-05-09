@@ -17,16 +17,16 @@ import httpx
 
 from driftstack.http import AsyncHttpClient, HttpClient
 from driftstack.resources.account import AccountResource, AsyncAccountResource
+from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
 from driftstack.resources.audit_log import AsyncAuditLogResource, AuditLogResource
+from driftstack.resources.auth import AsyncAuthResource, AuthResource
+from driftstack.resources.billing import AsyncBillingResource, BillingResource
 from driftstack.resources.email_preferences import (
     AsyncEmailPreferencesResource,
     EmailPreferencesResource,
 )
 from driftstack.resources.legal import AsyncLegalResource, LegalResource
 from driftstack.resources.mfa import AsyncMfaResource, MfaResource
-from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
-from driftstack.resources.auth import AsyncAuthResource, AuthResource
-from driftstack.resources.billing import AsyncBillingResource, BillingResource
 from driftstack.resources.profile_snapshots import (
     AsyncProfileSnapshotsResource,
     ProfileSnapshotsResource,

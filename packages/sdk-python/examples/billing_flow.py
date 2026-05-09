@@ -46,10 +46,7 @@ def main() -> int:
     # Has a subscription — open the customer portal so they can manage it.
     portal = client.billing.create_portal_session()
     sub = state["subscription"]
-    print(
-        f"Subscribed to {sub['tier']} (status={sub['status']})\n"
-        f"Portal: {portal['portal_url']}"
-    )
+    print(f"Subscribed to {sub['tier']} (status={sub['status']})\nPortal: {portal['portal_url']}")
 
     tp = state.get("trial_pack") or {}
     if tp.get("active") and tp.get("credit_cents_remaining") is not None:

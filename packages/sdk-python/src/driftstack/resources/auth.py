@@ -155,9 +155,7 @@ class AsyncAuthResource:
         )
 
     async def mfa_step_up(self, body: dict[str, Any]) -> dict[str, Any]:
-        return await self._http.request(
-            "POST", "/v1/auth/mfa/step-up", json_body=coerce_body(body)
-        )
+        return await self._http.request("POST", "/v1/auth/mfa/step-up", json_body=coerce_body(body))
 
     async def cli_authorize_initiate(self, body: dict[str, Any]) -> dict[str, Any]:
         return await self._http.request(

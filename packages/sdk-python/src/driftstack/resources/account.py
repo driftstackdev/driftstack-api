@@ -49,9 +49,7 @@ class AccountResource:
         Body: ``{"data_base64": "...", "content_type": "image/png|jpeg|webp"}``.
         Returns ``{"avatar_url": ..., "content_type": ..., "bytes": ...}``.
         """
-        return self._http.request(
-            "POST", "/v1/account/me/avatar", json_body=coerce_body(body)
-        )
+        return self._http.request("POST", "/v1/account/me/avatar", json_body=coerce_body(body))
 
     def clear_avatar(self) -> None:
         """V-352b — clear the avatar pointer."""
@@ -99,9 +97,7 @@ class AsyncAccountResource:
         return await self._http.request("GET", "/v1/account/web-sessions")
 
     async def revoke_web_session(self, session_id: str) -> None:
-        await self._http.request(
-            "DELETE", f"/v1/account/web-sessions/{quote(session_id, safe='')}"
-        )
+        await self._http.request("DELETE", f"/v1/account/web-sessions/{quote(session_id, safe='')}")
 
     async def revoke_all_other_web_sessions(self) -> None:
         await self._http.request("DELETE", "/v1/account/web-sessions")

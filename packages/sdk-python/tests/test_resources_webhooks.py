@@ -154,3 +154,70 @@ async def test_async_replay_delivery() -> None:
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
             result = await client.webhooks.replay_delivery("wdl_xx")
         assert result.status == "pending"
+
+
+# V-463 — webhooks.send_test test ping.
+
+
+def test_sync_send_test() -> None:
+    receipt = {
+        "delivery_id": "wdl_test1",
+        "event_id": "evt_test1",
+        "event_type": "test.ping",
+    }
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/webhooks/whk_xx/test").mock(
+            return_value=httpx.Response(200, json=receipt),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.webhooks.send_test("whk_xx")
+        assert route.called
+        assert result["event_type"] == "test.ping"
+        assert result["delivery_id"] == "wdl_test1"
+
+
+@pytest.mark.asyncio
+async def test_async_send_test() -> None:
+    receipt = {
+        "delivery_id": "wdl_test2",
+        "event_id": "evt_test2",
+        "event_type": "test.ping",
+    }
+    with respx.mock(base_url=BASE) as mock:
+        mock.post("/v1/webhooks/whk_xx/test").mock(
+            return_value=httpx.Response(200, json=receipt),
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = await client.webhooks.send_test("whk_xx")
+        assert result["event_type"] == "test.ping"
+
+
+# V-464 — webhooks.update partial-update.
+
+
+def test_sync_update_partial() -> None:
+    updated = {**ENDPOINT, "description": "after-update", "active": False}
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.patch("/v1/webhooks/whk_xx").mock(
+            return_value=httpx.Response(200, json=updated),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = client.webhooks.update(
+                "whk_xx", {"description": "after-update", "active": False}
+            )
+        assert route.called
+        assert isinstance(result, WebhookEndpoint)
+        assert result.description == "after-update"
+        assert result.active is False
+
+
+@pytest.mark.asyncio
+async def test_async_update_partial() -> None:
+    updated = {**ENDPOINT, "description": "from-async-test"}
+    with respx.mock(base_url=BASE) as mock:
+        mock.patch("/v1/webhooks/whk_xx").mock(
+            return_value=httpx.Response(200, json=updated),
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            result = await client.webhooks.update("whk_xx", {"description": "from-async-test"})
+        assert result.description == "from-async-test"
