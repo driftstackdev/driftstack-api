@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 // WebhooksResource handles /v1/webhooks.
@@ -95,6 +96,36 @@ func (r *WebhooksResource) ReplayDelivery(ctx context.Context, deliveryID string
 	if err := r.client.do(ctx, requestOptions{
 		method: "POST",
 		path:   "/v1/webhook-deliveries/" + url.PathEscape(deliveryID) + "/replay",
+		body:   struct{}{},
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// RotateWebhookSecretResponse — V-359 secret rotation result. The
+// fresh plaintext is in Secret (returned ONCE); during the
+// GraceExpiresAt window Driftstack dual-signs every outbound delivery
+// with both the new + previous secret.
+type RotateWebhookSecretResponse struct {
+	ID               string    `json:"id"`
+	Secret           string    `json:"secret"`
+	SecretPrefix     string    `json:"secret_prefix"`
+	PrevSecretPrefix string    `json:"prev_secret_prefix"`
+	GraceExpiresAt   time.Time `json:"grace_expires_at"`
+}
+
+// RotateSecret is V-359 — rotate the webhook signing secret. The fresh
+// plaintext is returned ONCE. The previous secret stays active for 24h
+// (GraceExpiresAt) during which Driftstack dual-signs every outbound
+// delivery. Roll the new secret across your verifier infra inside that
+// window. Requires the admin scope on the calling key.
+func (r *WebhooksResource) RotateSecret(ctx context.Context, webhookID string) (*RotateWebhookSecretResponse, error) {
+	var out RotateWebhookSecretResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/webhooks/" + url.PathEscape(webhookID) + "/rotate-secret",
 		body:   struct{}{},
 		out:    &out,
 	}); err != nil {

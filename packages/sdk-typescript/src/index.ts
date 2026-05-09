@@ -86,6 +86,7 @@ export type {
   WebhookEndpoint,
   WebhookEndpointId,
   WebhookEventType,
+  RotateWebhookSecretResponse,
   // V-079 auth flow
   LoginRequest,
   LoginResponse,

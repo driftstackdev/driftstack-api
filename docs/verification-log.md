@@ -19863,3 +19863,37 @@ account?" entry between region-preference and GDPR entries:
 
 Marketing-copy autonomous-decideable per cadence rule. Tone
 matches existing EU-stack entries; founder reviews tone post-hoc.
+
+## V-416 + V-417 + V-418 — three-SDK V-359 secret rotation
+
+**Tier**: 1 (V-359 SDK gap closure; backend endpoint shipped per
+V-359 but no SDK could call it programmatically).
+
+**TypeScript** (`packages/sdk-typescript/src/resources/webhooks.ts`):
+
+- `client.webhooks.rotateSecret(id)` — POST
+  /v1/webhooks/:id/rotate-secret. Returns
+  `RotateWebhookSecretResponse` (id + secret + secret_prefix +
+  prev_secret_prefix + grace_expires_at).
+- Re-export `RotateWebhookSecretResponse` from index.ts.
+
+**Python** (`packages/sdk-python/src/driftstack/resources/webhooks.py`):
+
+- `client.webhooks.rotate_secret(webhook_id)` (sync) +
+  `async_client.webhooks.rotate_secret(webhook_id)` (async).
+- Returns `dict[str, Any]` until next `scripts/generate.sh` regen
+  picks up the Pydantic model from the OpenAPI spec.
+
+**Go** (`packages/sdk-go/webhooks.go`):
+
+- `client.Webhooks.RotateSecret(ctx, webhookID)` — POST same path.
+- New `RotateWebhookSecretResponse` struct (ID + Secret +
+  SecretPrefix + PrevSecretPrefix + GraceExpiresAt time.Time).
+- `time` import added.
+
+go build + go vet clean. Python pytest 137/137. Monorepo
+typecheck clean.
+
+Three-SDK V-359 surface parity now matches three-SDK V-312/V-313
+parity. SDK consumers can rotate webhook signing secrets
+programmatically without dropping into raw HTTP calls.

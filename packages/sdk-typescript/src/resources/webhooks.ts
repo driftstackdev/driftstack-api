@@ -4,6 +4,7 @@ import type {
   CreateWebhookRequest,
   CreateWebhookResponse,
   ListDeliveriesQueryInput,
+  RotateWebhookSecretResponse,
   WebhookDelivery,
   WebhookDeliveryStatus,
   WebhookEndpoint,
@@ -105,6 +106,22 @@ export class WebhooksResource {
     return this.http.request<WebhookDelivery>({
       method: 'POST',
       path: `/v1/webhook-deliveries/${encodeURIComponent(deliveryId)}/replay`,
+      body: {},
+    });
+  }
+
+  /**
+   * V-359 — rotate the webhook signing secret. The fresh plaintext is
+   * returned ONCE. The previous secret stays active for 24h
+   * (`grace_expires_at`) during which Driftstack dual-signs every
+   * outbound delivery (both the new + old HMAC). Roll the new secret
+   * across your verifier infra inside that window. Requires the
+   * `admin` scope on the calling key.
+   */
+  rotateSecret(id: string): Promise<RotateWebhookSecretResponse> {
+    return this.http.request<RotateWebhookSecretResponse>({
+      method: 'POST',
+      path: `/v1/webhooks/${encodeURIComponent(id)}/rotate-secret`,
       body: {},
     });
   }

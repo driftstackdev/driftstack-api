@@ -116,6 +116,17 @@ class WebhooksResource:
         )
         return WebhookDelivery.model_validate(data)
 
+    def rotate_secret(self, webhook_id: str) -> dict[str, Any]:
+        """V-359 — rotate the webhook signing secret.
+
+        Returns the fresh plaintext (shown ONCE) plus grace metadata:
+        the previous secret stays active for 24h
+        (``grace_expires_at``) during which Driftstack dual-signs
+        every outbound delivery (both new + old HMAC). Roll the new
+        secret across your verifier infra inside that window.
+        """
+        return self._http.request("POST", _webhook_path(webhook_id, "/rotate-secret"), json_body={})
+
 
 class AsyncWebhooksResource:
     """Async webhooks resource."""
@@ -179,3 +190,9 @@ class AsyncWebhooksResource:
             json_body={},
         )
         return WebhookDelivery.model_validate(data)
+
+    async def rotate_secret(self, webhook_id: str) -> dict[str, Any]:
+        """V-359 — async secret rotation. See :meth:`WebhooksResource.rotate_secret`."""
+        return await self._http.request(
+            "POST", _webhook_path(webhook_id, "/rotate-secret"), json_body={}
+        )
