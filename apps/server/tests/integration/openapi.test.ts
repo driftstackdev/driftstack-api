@@ -108,6 +108,10 @@ describe('OpenAPI spec generation', () => {
         '/v1/team/owners',
         '/v1/usage',
         '/v1/usage/series',
+        // V-458 legal acceptance machinery
+        '/v1/legal/accept',
+        '/v1/legal/documents',
+        '/v1/legal/required',
         '/v1/webhook-deliveries/{deliveryId}/replay',
         // V-457 webhook base CRUD + deliveries
         '/v1/webhooks',

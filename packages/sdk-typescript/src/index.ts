@@ -25,6 +25,12 @@ export type {
   MfaDisableRequest,
 } from './resources/mfa.js';
 export type { AuditLogEntry, AuditLogListPage, AuditLogQuery } from './resources/audit-log.js';
+export type {
+  LegalDocumentEntry,
+  LegalRequiredEntry,
+  AcceptLegalDocumentRequest,
+  AcceptLegalDocumentResponse,
+} from './resources/legal.js';
 
 // Errors
 export {

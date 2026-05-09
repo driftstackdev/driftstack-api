@@ -14,6 +14,7 @@ import { AuthResource } from './resources/auth.js';
 import { AccountResource } from './resources/account.js';
 import { AuditLogResource } from './resources/audit-log.js';
 import { EmailPreferencesResource } from './resources/email-preferences.js';
+import { LegalResource } from './resources/legal.js';
 import { MfaResource } from './resources/mfa.js';
 import { TeamResource } from './resources/team.js';
 import type { RetryConfig } from './retry.js';
@@ -50,6 +51,8 @@ export class Driftstack {
   readonly auditLog: AuditLogResource;
   /** V-204 — non-critical email opt-in/opt-out preferences. */
   readonly emailPreferences: EmailPreferencesResource;
+  /** V-049 — legal-document acceptance machinery. */
+  readonly legal: LegalResource;
   /** V-298c — Team RBAC. Auth path integration is V-298d. */
   readonly team: TeamResource;
 
@@ -81,6 +84,7 @@ export class Driftstack {
     this.mfa = new MfaResource(this.http);
     this.auditLog = new AuditLogResource(this.http);
     this.emailPreferences = new EmailPreferencesResource(this.http);
+    this.legal = new LegalResource(this.http);
     this.team = new TeamResource(this.http);
   }
 }

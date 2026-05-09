@@ -1779,6 +1779,92 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // ── V-458 — /v1/legal/* — acceptance machinery ─────────────────────────
+  const LegalDocumentEntryOpenApi = z.object({
+    document_key: z.string(),
+    title: z.string(),
+    version: z.string(),
+    effective_date: z.string(),
+    content_hash: z.string(),
+    source_path: z.string(),
+    byte_size: z.number().int().nonnegative(),
+  });
+  const ListLegalDocumentsResponseOpenApi = z.object({
+    data: z.array(LegalDocumentEntryOpenApi),
+  });
+  const LegalRequiredEntryOpenApi = z.object({
+    document_key: z.string(),
+    current_version: z.string(),
+    content_hash: z.string(),
+    reason: z.string(),
+    last_accepted_version: z.string().nullable(),
+  });
+  const ListLegalRequiredResponseOpenApi = z.object({
+    data: z.array(LegalRequiredEntryOpenApi),
+  });
+  const AcceptLegalDocumentRequestOpenApi = z.object({
+    document_key: z.string().min(1).max(64),
+    version: z.string().min(1).max(64),
+    content_hash: z.string().regex(/^[0-9a-f]{64}$/i),
+  });
+  const AcceptLegalDocumentResponseOpenApi = z.object({
+    id: z.string(),
+    account_id: z.string(),
+    document_key: z.string(),
+    version: z.string(),
+    content_hash: z.string(),
+    accepted_at: z.string(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/legal/documents',
+    summary: 'List the legal-document catalog (versions + content_hash)',
+    tags: ['legal'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Catalog entries (no document body — body served on the marketing site).',
+        content: { 'application/json': { schema: ListLegalDocumentsResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/legal/required',
+    summary: 'List documents the calling account must accept (or re-accept)',
+    tags: ['legal'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Required acceptances; each entry includes reason + last accepted version.',
+        content: { 'application/json': { schema: ListLegalRequiredResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/legal/accept',
+    summary: 'Record acceptance of a (document, version, content_hash) tuple',
+    tags: ['legal'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: AcceptLegalDocumentRequestOpenApi } } },
+    },
+    responses: {
+      201: {
+        description: 'Acceptance recorded.',
+        content: { 'application/json': { schema: AcceptLegalDocumentResponseOpenApi } },
+      },
+      409: {
+        description: 'Document version changed since fetch — re-fetch + retry.',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
   // ── V-457 — /v1/webhooks base CRUD + deliveries + PATCH ────────────────
   // Customer-facing webhook CRUD; was previously SDK-exposed but
   // missing from spec (only test + rotate-secret were registered).

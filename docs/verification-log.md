@@ -21024,3 +21024,45 @@ helpers inline.
 `openapi.test.ts` paths fixture extended.
 
 V-455 customer-facing OpenAPI gap count: 19 → 13.
+
+## V-458 — register /v1/legal/\* in OpenAPI + add three-SDK methods
+
+**Tier**: 1 (V-455 audit gap closure — V-049 legal acceptance
+machinery had server routes but no OpenAPI registration and no
+SDK methods).
+
+**OpenAPI** (`apps/server/src/lib/openapi.ts`):
+
+- GET /v1/legal/documents — catalog list with version + content_hash.
+- GET /v1/legal/required — documents the calling account must
+  accept (incl. reason + last_accepted_version).
+- POST /v1/legal/accept — record acceptance; 409 on stale version
+  with current_version + current_content_hash in problem extension.
+
+Inline schema helpers (LegalDocumentEntry, LegalRequiredEntry,
+AcceptLegal\*Response).
+
+**TS** (`packages/sdk-typescript/src/resources/legal.ts`):
+
+- `client.legal.documents()` / `required()` / `accept(body)`.
+- Re-exported `LegalDocumentEntry`, `LegalRequiredEntry`,
+  `AcceptLegalDocumentRequest / Response` types.
+
+**Python** (`packages/sdk-python/src/driftstack/resources/legal.py`):
+
+- `LegalResource.documents / required / accept` (sync) +
+  `AsyncLegalResource` mirror.
+- Wired as `client.legal` + `async_client.legal`.
+
+**Go** (`packages/sdk-go/legal.go`):
+
+- `LegalResource.Documents(ctx) / Required(ctx) / Accept(ctx, *AcceptLegalDocumentRequest)`.
+- New struct types: `LegalDocumentEntry`, `LegalRequiredEntry`,
+  `ListLegalDocumentsResponse`, `ListLegalRequiredResponse`,
+  `AcceptLegalDocumentRequest / Response`.
+- Wired as `client.Legal`.
+
+go test + Python pytest 137 + monorepo typecheck clean.
+
+V-455 customer-facing OpenAPI gap count: 13 → 10. Customer-
+facing SDK gap count: 16 → 13.

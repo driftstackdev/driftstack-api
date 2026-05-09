@@ -22,6 +22,7 @@ from driftstack.resources.email_preferences import (
     AsyncEmailPreferencesResource,
     EmailPreferencesResource,
 )
+from driftstack.resources.legal import AsyncLegalResource, LegalResource
 from driftstack.resources.mfa import AsyncMfaResource, MfaResource
 from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
 from driftstack.resources.auth import AsyncAuthResource, AuthResource
@@ -97,6 +98,8 @@ class Driftstack:
         self.audit_log = AuditLogResource(self._http)
         # V-204 / V-449 — email preferences.
         self.email_preferences = EmailPreferencesResource(self._http)
+        # V-049 / V-458 — legal acceptance.
+        self.legal = LegalResource(self._http)
         # V-298c — Team RBAC. Auth path integration is V-298d.
         self.team = TeamResource(self._http)
 
@@ -152,6 +155,8 @@ class AsyncDriftstack:
         self.audit_log = AsyncAuditLogResource(self._http)
         # V-204 / V-449 — email preferences.
         self.email_preferences = AsyncEmailPreferencesResource(self._http)
+        # V-049 / V-458 — legal acceptance.
+        self.legal = AsyncLegalResource(self._http)
         # V-298c — Team RBAC. Auth path integration is V-298d.
         self.team = AsyncTeamResource(self._http)
 
