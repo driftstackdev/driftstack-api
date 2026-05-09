@@ -51,13 +51,17 @@ func main() {
 
 Every public API endpoint is a typed method on a resource accessor. All take `context.Context` first.
 
-| Accessor          | Methods                                                                                   |
-| ----------------- | ----------------------------------------------------------------------------------------- |
-| `client.Sessions` | `Create`, `List`, `Get`, `Navigate`, `Interact`, `Wait`, `GetState`, `Capture`, `Destroy` |
-| `client.APIKeys`  | `Create`, `List`, `Rotate` (V-296), `Revoke`                                              |
-| `client.Usage`    | `CurrentPeriod`                                                                           |
-| `client.Webhooks` | `Create`, `List`, `Get`, `Delete`, `ListDeliveries`, `ReplayDelivery` (V-307)             |
-| `client.Team`     | `Invite`, `ListMembers`, `ListInvites`, `AcceptInvite`, `RemoveMember` (V-298)            |
+| Accessor                  | Methods                                                                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client.Sessions`         | `Create`, `List`, `Get`, `Navigate`, `Interact`, `Wait`, `GetState`, `Capture`, `Destroy`                                                     |
+| `client.Profiles`         | `Create`, `List`, `Iterate`, `Get`, `Update`, `Delete`, `Clone` (V-313)                                                                       |
+| `client.ProfileSnapshots` | `Capture`, `ListForProfile`, `List`, `Iterate`, `Get`, `Restore`, `Delete` (V-312)                                                            |
+| `client.APIKeys`          | `Create`, `List`, `Rotate` (V-296), `Revoke`                                                                                                  |
+| `client.Usage`            | `CurrentPeriod`                                                                                                                               |
+| `client.Webhooks`         | `Create`, `List`, `Get`, `Delete`, `ListDeliveries`, `ReplayDelivery` (V-307)                                                                 |
+| `client.Team`             | `Invite`, `ListMembers`, `ListInvites`, `AcceptInvite`, `RemoveMember` (V-298)                                                                |
+| `client.Billing`          | `GetState`, `StartCheckout`, `StartTrialPack`, `StartPortalSession`                                                                           |
+| `client.Auth`             | `Signup`, `VerifyEmail`, `Login`, `Refresh`, `Logout`, `RequestMagicLink`, `ConsumeMagicLink`, `RequestPasswordReset`, `ConfirmPasswordReset` |
 
 Discriminated-union builders (`NewTapAction`, `NewSelectorCondition`, etc.) live in `types.go` for `Interact` and `Wait` requests.
 

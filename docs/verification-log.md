@@ -19764,3 +19764,21 @@ hood. Method signatures match the actual TS resource classes
 (verified via grep against the source).
 
 Python + Go SDK README equivalents queued (V-411 / V-412).
+
+## V-411 + V-412 — Python + Go SDK README full-surface enumeration
+
+**Tier**: 1 (V-410 mirror; three-SDK README parity).
+
+`packages/sdk-python/README.md` Resources table gains:
+
+- `client.profiles` (with `clone` V-313).
+- `client.profile_snapshots` (V-312).
+- `client.billing` + `client.auth` (4 + 9 methods).
+
+`packages/sdk-go/README.md` Resources table gains the same
+accessors with Go's PascalCase names: `client.Profiles`,
+`client.ProfileSnapshots`, `client.Billing`, `client.Auth`.
+
+Method names verified to match the actual TS / Python / Go
+resource source. Three-SDK README parity now matches three-SDK
+surface parity (V-376/377/378/379).

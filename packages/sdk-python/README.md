@@ -46,13 +46,17 @@ asyncio.run(main())
 
 Every public API endpoint is a typed method on a resource accessor:
 
-| Accessor          | Methods                                                                                               |
-| ----------------- | ----------------------------------------------------------------------------------------------------- |
-| `client.sessions` | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `destroy`            |
-| `client.api_keys` | `create`, `list`, `rotate` (V-296), `revoke`                                                          |
-| `client.usage`    | `current_period`                                                                                      |
-| `client.webhooks` | `create`, `list`, `get`, `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` (V-307) |
-| `client.team`     | `invite`, `list_members`, `list_invites`, `accept_invite`, `remove_member` (V-298)                    |
+| Accessor                   | Methods                                                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `client.sessions`          | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `destroy`                                                             |
+| `client.profiles`          | `create`, `list`, `iterate`, `get`, `update`, `delete`, `clone` (V-313)                                                                                |
+| `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete` (V-312 — immutable point-in-time copies)                                  |
+| `client.api_keys`          | `create`, `list`, `rotate` (V-296), `revoke`                                                                                                           |
+| `client.usage`             | `current_period`                                                                                                                                       |
+| `client.webhooks`          | `create`, `list`, `get`, `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` (V-307)                                                  |
+| `client.team`              | `invite`, `list_members`, `list_invites`, `accept_invite`, `remove_member` (V-298)                                                                     |
+| `client.billing`           | `get_state`, `start_checkout`, `start_trial_pack`, `start_portal_session`                                                                              |
+| `client.auth`              | `signup`, `verify_email`, `login`, `refresh`, `logout`, `request_magic_link`, `consume_magic_link`, `request_password_reset`, `confirm_password_reset` |
 
 Inputs accept either a Pydantic model OR a plain `dict` (both serialize identically on the wire). Outputs are typed Pydantic models — IDEs autocomplete every field.
 
