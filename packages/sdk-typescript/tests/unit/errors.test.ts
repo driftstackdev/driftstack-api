@@ -8,9 +8,11 @@ import {
   EmailAlreadyRegisteredError,
   EmailNotVerifiedError,
   errorFromProblem,
+  FeatureUnavailableError,
   InvalidAuthTokenError,
   InvalidCredentialsError,
   InvalidKeyError,
+  MfaStepUpRequiredError,
   NotFoundError,
   RateLimitError,
   TransportError,
@@ -198,5 +200,37 @@ describe('errorFromProblem — auth-flow problem types (V-114)', () => {
       null,
     );
     expect(e.type).toBe('https://errors.driftstack.dev/email-not-verified');
+  });
+});
+
+// V-441 — additional typed errors closing three-SDK problem-type parity.
+describe('errorFromProblem — V-441 ops-flow problem types', () => {
+  it('maps feature-unavailable → FeatureUnavailableError (status 503)', () => {
+    const e = errorFromProblem(
+      {
+        type: PROBLEM_TYPES.FeatureUnavailable,
+        title: 'Feature unavailable',
+        status: 503,
+      },
+      null,
+    );
+    expect(e).toBeInstanceOf(FeatureUnavailableError);
+    expect(e).toBeInstanceOf(DriftstackError);
+    expect(e.kind).toBe('feature_unavailable');
+    expect(e.status).toBe(503);
+  });
+
+  it('maps mfa-step-up-required → MfaStepUpRequiredError (status 403)', () => {
+    const e = errorFromProblem(
+      {
+        type: PROBLEM_TYPES.MfaStepUpRequired,
+        title: 'MFA step-up required',
+        status: 403,
+      },
+      null,
+    );
+    expect(e).toBeInstanceOf(MfaStepUpRequiredError);
+    expect(e.kind).toBe('mfa_step_up_required');
+    expect(e.status).toBe(403);
   });
 });

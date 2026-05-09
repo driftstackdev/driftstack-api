@@ -20560,3 +20560,19 @@ Monorepo typecheck clean.
 Customers across all three SDKs can now branch on typed shape
 for every server-emitted problem URI without falling through to
 generic UnknownError / DriftstackError / dict reads.
+
+## V-442 — TS SDK error tests pin V-441 typed-error mappings
+
+**Tier**: 1 (V-441 follow-through; pin the new mappings against
+future regressions).
+
+`packages/sdk-typescript/tests/unit/errors.test.ts` gains a new
+describe block "V-441 ops-flow problem types" with 2 tests:
+
+- `feature-unavailable` URI → `FeatureUnavailableError` instance,
+  `kind: 'feature_unavailable'`, status 503.
+- `mfa-step-up-required` URI → `MfaStepUpRequiredError` instance,
+  `kind: 'mfa_step_up_required'`, status 403.
+
+18/18 tests pass. Pinning ensures a future regression to the
+mapping table or DriftstackErrorKind enum surfaces here.
