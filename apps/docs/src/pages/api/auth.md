@@ -229,6 +229,108 @@ the `/v1/account/web-sessions` endpoints — they let customers see
 every device currently signed in and revoke any individual session
 or every-other.
 
+## CLI / GUI activation flow (V-460)
+
+Browser-OAuth-style activation lets CLI and GUI tools obtain an API
+key without asking the user to copy/paste from the dashboard.
+
+### Three steps
+
+1. **Initiate** — the CLI/GUI generates a CSRF nonce + optional
+   client label, calls `POST /v1/auth/cli-authorize/initiate`, and
+   gets back a one-shot `code` + a `browser_url` that opens the
+   dashboard's Authorize page.
+2. **Bind** — the user signs in to the dashboard (if not already),
+   sees a confirmation screen ("Driftstack desktop on John's
+   MacBook"), and clicks Authorize. The dashboard hits
+   `POST /v1/auth/cli-authorize/bind` with the user's web-session
+   bearer; the server mints a scoped API key on the calling account
+   and stores the plaintext keyed by `code` (Redis, 5-minute TTL).
+3. **Exchange** — the CLI/GUI polls
+   `POST /v1/auth/cli-authorize/exchange` until the response
+   transitions from `{ status: "pending" }` to
+   `{ status: "bound", api_key, account_id }`. Bound is one-shot;
+   subsequent calls 404. If the user takes too long the response
+   flips to `{ status: "expired" }` and the CLI/GUI restarts the
+   flow.
+
+### CSRF state
+
+The `state` parameter is a client-supplied 16-128 character random
+nonce. The dashboard echoes it back; the server verifies it matches
+on `bind` — defends against the dashboard being tricked into binding
+a code that wasn't issued in the same session.
+
+### SDK example
+
+```ts
+const { code, browser_url } = await client.auth.cliAuthorizeInitiate({
+  state: crypto.randomUUID(),
+  client_label: 'My CLI on darwin-arm64',
+});
+open(browser_url); // open in system browser
+
+for (;;) {
+  const out = await client.auth.cliAuthorizeExchange({ code, state });
+  if (out.status === 'bound') {
+    saveApiKey(out.api_key);
+    break;
+  }
+  if (out.status === 'expired') throw new Error('User took too long');
+  await sleep(2000);
+}
+```
+
+```python
+out = client.auth.cli_authorize_initiate({
+    "state": secrets.token_urlsafe(24),
+    "client_label": "My CLI",
+})
+webbrowser.open(out["browser_url"])
+
+while True:
+    poll = client.auth.cli_authorize_exchange({
+        "code": out["code"],
+        "state": state,
+    })
+    if poll["status"] == "bound":
+        save_api_key(poll["api_key"])
+        break
+    if poll["status"] == "expired":
+        raise RuntimeError("expired")
+    time.sleep(2)
+```
+
+```go
+init, _ := client.Auth.CliAuthorizeInitiate(ctx, &driftstack.CliAuthorizeInitiateRequest{
+    State:       state,
+    ClientLabel: "My Go CLI",
+})
+exec.Command("open", init.BrowserURL).Run()
+
+for {
+    poll, _ := client.Auth.CliAuthorizeExchange(ctx, &driftstack.CliAuthorizeExchangeRequest{
+        Code:  init.Code,
+        State: state,
+    })
+    if poll.Status == "bound" {
+        saveAPIKey(poll.APIKey)
+        break
+    }
+    if poll.Status == "expired" {
+        return errors.New("expired")
+    }
+    time.Sleep(2 * time.Second)
+}
+```
+
+### Default scopes
+
+The minted key carries `["account_owner"]` scope by default. CLI tools
+that only need read access should pass `scopes: ["read"]` on the
+`bind` call to follow least-privilege; GUI clients that drive sessions
+end-to-end keep the default.
+
 ## Auth + scoping
 
 None of `/v1/auth/*` honors the team-RBAC

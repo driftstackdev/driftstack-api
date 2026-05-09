@@ -217,6 +217,54 @@ CSV columns: `id`, `timestamp`, `action`, `actor_type`,
 `payload_json`. The `payload_json` column is the JSON-encoded
 `payload` field (stringified + escaped per CSV rules).
 
+JSON envelope:
+
+```json
+{
+  "generated_at": "2026-05-09T18:00:00Z",
+  "account_id": "acc_abc",
+  "row_count": 142,
+  "truncated": false,
+  "data": [
+    /* up to 10,000 audit-log entries — same shape as the read endpoint */
+  ]
+}
+```
+
+The `truncated` flag is `true` when the row count hit the 10,000-row
+ceiling and older entries weren't included. Customers needing the
+full history should narrow the date window or paginate via the
+read endpoint above.
+
+### SDK examples (V-462; JSON branch only)
+
+The SDKs expose the JSON branch only — CSV download is browser-driven
+and not useful through a typed SDK call. Customers wanting CSV hit
+the URL directly with their bearer.
+
+```ts
+const dump = await client.auditLog.export();
+console.log(dump.row_count, dump.truncated);
+for (const entry of dump.data) {
+  console.log(entry.timestamp, entry.action, entry.target_resource_id);
+}
+```
+
+```python
+dump = client.audit_log.export()
+print(dump["row_count"], dump["truncated"])
+for entry in dump["data"]:
+    print(entry["timestamp"], entry["action"])
+```
+
+```go
+dump, _ := client.AuditLog.Export(ctx)
+fmt.Println(dump.RowCount, dump.Truncated)
+for _, entry := range dump.Data {
+    fmt.Println(entry.Timestamp, entry.Action)
+}
+```
+
 ## Auth + scoping
 
 Both endpoints accept a customer bearer (API key OR web session)
