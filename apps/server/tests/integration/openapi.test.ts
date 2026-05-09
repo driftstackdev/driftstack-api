@@ -68,6 +68,12 @@ describe('OpenAPI spec generation', () => {
         // V-353d/e auth MFA flows (public — no BearerAuth required)
         '/v1/auth/mfa/challenge',
         '/v1/auth/mfa/step-up',
+        // V-401 — core auth surface
+        '/v1/auth/login',
+        '/v1/auth/logout',
+        '/v1/auth/refresh',
+        '/v1/auth/signup',
+        '/v1/auth/verify-email',
         // V-313 profile clone
         '/v1/profiles/{id}/clone',
         // V-312 profile snapshots

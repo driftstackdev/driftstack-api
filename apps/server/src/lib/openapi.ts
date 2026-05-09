@@ -30,8 +30,17 @@ import {
   AccountStatusSchema,
   AccountTierSchema,
   AdminAccountResponseSchema,
+  LoginRequestSchema,
+  LoginResponseUnionSchema,
+  LogoutRequestSchema,
+  RefreshSessionRequestSchema,
+  RefreshSessionResponseSchema,
+  SignupRequestSchema,
+  SignupResponseSchema,
   UpdateAccountMeRequestSchema,
   UploadAvatarRequestSchema,
+  VerifyEmailRequestSchema,
+  VerifyEmailResponseSchema,
   AdminAuditLogEntrySchema,
   ApiKeySchema,
   CaptureRequestSchema,
@@ -1437,6 +1446,91 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'mfa_satisfied_at advanced to now.',
         content: { 'application/json': { schema: MfaStepUpResponseOpenApi } },
       },
+      ...errors4xx,
+    },
+  });
+
+  // ── V-401 — core auth surface (signup / verify-email / login / refresh / logout) ──
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/signup',
+    summary: 'Sign up a new account; emits a verification email',
+    tags: ['auth'],
+    request: {
+      body: { content: { 'application/json': { schema: SignupRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Verification email sent; account is unverified until /v1/auth/verify-email.',
+        content: { 'application/json': { schema: SignupResponseSchema } },
+      },
+      ...errors4xx,
+      409: {
+        description: 'Email is already registered.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/verify-email',
+    summary: 'Consume the email-verification token; issues a web session',
+    tags: ['auth'],
+    request: {
+      body: { content: { 'application/json': { schema: VerifyEmailRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Email verified; web session issued.',
+        content: { 'application/json': { schema: VerifyEmailResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/login',
+    summary:
+      'Authenticate with email + password; issues a session OR returns an MFA challenge token',
+    tags: ['auth'],
+    request: {
+      body: { content: { 'application/json': { schema: LoginRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description:
+          "Discriminated-union: session row when MFA isn't enrolled OR { mfa_required: true, challenge_token, challenge_expires_at } when MFA is. Clients branch on the `mfa_required` literal.",
+        content: { 'application/json': { schema: LoginResponseUnionSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/refresh',
+    summary: 'Exchange a refresh token for a fresh web-session token',
+    tags: ['auth'],
+    request: {
+      body: { content: { 'application/json': { schema: RefreshSessionRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Fresh session issued.',
+        content: { 'application/json': { schema: RefreshSessionResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/logout',
+    summary: 'Revoke a web-session token',
+    tags: ['auth'],
+    request: {
+      body: { content: { 'application/json': { schema: LogoutRequestSchema } } },
+    },
+    responses: {
+      204: { description: 'Session revoked.' },
       ...errors4xx,
     },
   });

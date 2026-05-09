@@ -19530,3 +19530,35 @@ empirically; SDK consumers parsing audit-log JSON have an
 authoritative shape per action type.
 
 Astro check clean.
+
+## V-401 — core auth surface OpenAPI registration
+
+**Tier**: 1 (closes the spec gap on the customer-facing auth
+flow; Scalar UI + downstream SDK regen pick up the routes).
+
+`apps/server/src/lib/openapi.ts` registers the 5 core auth
+routes that were absent from spec despite shipping:
+
+- POST /v1/auth/signup — SignupRequest → SignupResponse + 409
+  email-already-registered.
+- POST /v1/auth/verify-email — VerifyEmailRequest →
+  VerifyEmailResponse (issues a web session).
+- POST /v1/auth/login — LoginRequest → LoginResponseUnion
+  (discriminated union: real session OR { mfa_required,
+  challenge_token, challenge_expires_at } per V-353d).
+- POST /v1/auth/refresh — RefreshSessionRequest →
+  RefreshSessionResponse.
+- POST /v1/auth/logout — LogoutRequest → 204 No Content.
+
+api-types schemas reused via direct import (no inline duplication
+of shapes).
+
+`openapi.test.ts` registered-paths fixture extended with the 5
+new entries.
+
+Magic-link / password-reset routes (4 more) deferred to a future
+slice; this slice covers the most-hit auth surface (signup +
+login + verify + refresh + logout) which is what dashboards and
+SDKs touch first.
+
+855 server tests + monorepo typecheck clean.
