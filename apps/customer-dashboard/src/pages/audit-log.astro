@@ -203,6 +203,39 @@ const FILTER_OPTIONS = [
         return d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
       }
 
+      // V-399 — render the payload context inline for actions where
+      // a payload tag carries customer-meaningful info. Falls back
+      // silently when the payload doesn't carry a known tag.
+      function payloadHint(entry) {
+        const p = entry.payload;
+        if (p == null || typeof p !== 'object') return '';
+        switch (entry.action) {
+          case 'account.login':
+            return p.method ? ' · via ' + escapeHtml(String(p.method)) : '';
+          case 'account.recovery_code_used':
+            return p.remaining !== undefined
+              ? ' · ' + escapeHtml(String(p.remaining)) + ' codes remaining'
+              : '';
+          case 'profile.created':
+            if (p.cloned_from) return ' · cloned from ' + escapeHtml(String(p.cloned_from));
+            if (p.restored_from_snapshot)
+              return ' · restored from ' + escapeHtml(String(p.restored_from_snapshot));
+            return '';
+          case 'webhook_endpoint.secret_rotated':
+            return p.grace_expires_at
+              ? ' · grace ends ' + escapeHtml(String(p.grace_expires_at).slice(0, 19) + ' UTC')
+              : '';
+          case 'team.member_invited':
+            return p.email ? ' · ' + escapeHtml(String(p.email)) : '';
+          case 'subscription.tier_changed':
+            return p.from && p.to
+              ? ' · ' + escapeHtml(String(p.from)) + ' → ' + escapeHtml(String(p.to))
+              : '';
+          default:
+            return '';
+        }
+      }
+
       function entryLi(entry) {
         const label = ACTION_LABEL[entry.action] || entry.action;
         return (
@@ -211,12 +244,11 @@ const FILTER_OPTIONS = [
           '<div class="min-w-0">' +
           '<p class="text-sm font-medium text-slate-900">' +
           escapeHtml(label) +
+          payloadHint(entry) +
           '</p>' +
           '<p class="mt-1 font-mono text-xs text-slate-500">' +
           escapeHtml(entry.action) +
-          (entry.target_resource_id
-            ? ' · ' + escapeHtml(entry.target_resource_id)
-            : '') +
+          (entry.target_resource_id ? ' · ' + escapeHtml(entry.target_resource_id) : '') +
           '</p></div>' +
           '<span class="shrink-0 text-xs text-slate-500">' +
           escapeHtml(fmtTs(entry.timestamp)) +

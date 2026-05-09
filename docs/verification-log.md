@@ -19470,3 +19470,33 @@ ACTION_LABEL also gains the three MFA entries + the webhook
 secret_rotated entry so the rendering label resolves cleanly.
 
 Astro check clean. Pure UI surface; no backend or schema change.
+
+## V-399 — audit-log entry rendering surfaces payload context inline
+
+**Tier**: 1 (UX depth; previously the dashboard rendered only the
+label + action + target_resource_id + timestamp, hiding the
+payload tags that carry customer-meaningful context).
+
+`apps/customer-dashboard/src/pages/audit-log.astro` `entryLi` now
+calls a new `payloadHint(entry)` helper that renders inline
+context for action types where the payload carries useful info:
+
+- `account.login` → " · via password" / " · via mfa_totp" /
+  " · via mfa_recovery" / " · via magic_link" / " · via
+  password_reset" (V-353d/e).
+- `account.recovery_code_used` → " · 7 codes remaining"
+  (V-353b).
+- `profile.created` → " · cloned from prof*<id>" (V-313) or
+  " · restored from psnap*<id>" (V-312).
+- `webhook_endpoint.secret_rotated` → " · grace ends YYYY-MM-DD
+  HH:MM:SS UTC" (V-359).
+- `team.member_invited` → " · <email>" (V-326).
+- `subscription.tier_changed` → " · <from> → <to>".
+
+Falls back silently when the payload doesn't carry a known tag.
+HTML-escaped throughout. Astro check clean.
+
+The audit-log surface now matches what the doc catalog (V-393)
+already promises consumers — payload tags are visible to the
+human reading the dashboard, not just SDK consumers parsing the
+JSON.
