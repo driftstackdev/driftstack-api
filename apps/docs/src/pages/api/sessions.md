@@ -40,14 +40,16 @@ their tier-default idle timeout (driver-managed).
 {
   "id": "ses_<uuid>",
   "account_id": "acc_<uuid>",
-  "profile_id": "prof_<uuid>",
-  "archetype": "iphone16pro_ios18_7_safari26_4",
+  "api_key_id": "key_<uuid>",
   "status": "ready",
+  "archetype": "iphone16pro_ios18_7_safari26_4",
   "purpose": "production_customer",
-  "current_url": "https://example.com/",
+  "label": "login flow",
+  "metadata": null,
   "created_at": "2026-05-09T22:00:00.000Z",
-  "destroyed_at": null,
-  "last_navigation_at": "2026-05-09T22:00:30.000Z"
+  "updated_at": "2026-05-09T22:00:30.000Z",
+  "last_state_at": "2026-05-09T22:00:30.000Z",
+  "destroyed_at": null
 }
 ```
 
@@ -57,8 +59,19 @@ intermediate `creating` state isn't directly observable.
 
 `purpose` selects the WebKit driver harness configuration (V-169).
 `production_customer` is the default; the other values
-(`cumulative_rig_validation`, `test_domain_probe`) are reserved
-for Driftstack-internal ops.
+(`cumulative_rig_validation`, `test_domain_probe`,
+`fingerprint_probe`, `behavioural_capture`) are reserved for
+Driftstack-internal ops.
+
+`label` is a free-form short string (max 120 chars) for the
+customer's own identification — surfaced in dashboards + the
+audit log. `metadata` is an arbitrary JSON object for the
+customer's own bookkeeping.
+
+`last_state_at` is the most recent `getState` / `capture` /
+`navigate` / `interact` / `wait` ack timestamp. `updated_at`
+reflects any server-side state mutation (status changes,
+metadata writes).
 
 ## Create
 
@@ -66,27 +79,32 @@ for Driftstack-internal ops.
 
 ```json
 {
-  "profile_id": "prof_<uuid>",
   "archetype": "iphone16pro_ios18_7_safari26_4",
-  "purpose": "production_customer"
+  "purpose": "production_customer",
+  "label": "login flow",
+  "metadata": { "ticket": "SUP-42" }
 }
 ```
 
-`profile_id` optional — when omitted, an ephemeral profile is
-created for this session and discarded on destroy. `archetype`
-optional; defaults to the locked archetype + must match the
-profile's archetype if `profile_id` is set.
+All fields optional. `archetype` defaults to the locked iPhone-16
+Pro / iOS / Safari archetype when omitted (V-136 LOCKED_ARCHETYPE_ID).
+`purpose` defaults to `production_customer`.
 
-Returns the created session (201).
+Returns the created session (200).
 
 Errors:
 
 - `429 ConcurrencyLimit` — concurrent-session cap hit.
-- `429 TierLimit` — profile cap reached and `profile_id` would
-  trigger an auto-create.
-- `404 NotFound` — `profile_id` doesn't exist or isn't owned.
-- `409 Conflict` — `archetype` mismatches the profile's pinned
-  archetype.
+
+> **Profile binding is planned (V-294 catalog), not yet wired.** A
+> future addition lets `POST /v1/sessions` accept `profile_id` to
+> bind the session to a persistent profile (V-081), with the
+> profile's `last_used_at` updated on session destroy + the
+> profile's underlying browser state restored on session start.
+> Today's API surface is profile-less; the binding lives in the
+> driver layer for the dashboard's GUI client only. Customers
+> using profiles via the SDK currently can't bind a session to a
+> profile programmatically.
 
 ## List
 

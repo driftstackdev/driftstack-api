@@ -20204,3 +20204,43 @@ billing_test.go fixture + billing_flow example updated to match
 the value-type TrialPack.
 
 `go build` + `go test ./...` clean.
+
+## V-430 — sessions.md doc resource shape matches actual SessionSchema
+
+**Tier**: 1 (rule L empirical-diff bar — sessions.md doc had ~5
+fictional fields and was missing 3 real ones; profile_id binding
+documented as if shipped but server doesn't accept it).
+
+`apps/docs/src/pages/api/sessions.md` resource shape was 10
+fields: 6 real (id/account_id/archetype/status/purpose/created_at/
+destroyed_at) + 4 fictional (profile_id, current_url,
+last_navigation_at, missing api_key_id/label/metadata/updated_at/
+last_state_at).
+
+Server `SessionSchema` actually returns 12 fields. Doc now lists
+all 12 correctly: id, account_id, api_key_id, status, archetype,
+purpose, label, metadata, created_at, updated_at, last_state_at,
+destroyed_at.
+
+`purpose` enum was incomplete — added `fingerprint_probe` +
+`behavioural_capture` to match V-169 schema.
+
+Create section was wildly wrong: claimed `profile_id` is accepted
+
+- "ephemeral profile created when omitted" + 404 on missing
+  profile_id + 409 archetype-mismatch. Server `CreateSessionRequestSchema`
+  has only `{ archetype?, purpose?, label?, metadata? }` — no
+  profile_id. Now corrected with a callout block:
+
+> **Profile binding is planned (V-294 catalog), not yet wired.**
+
+The callout explains today's API surface is profile-less; profile
+binding via SDK is queued. Customers who'd been writing code
+expecting POST /v1/sessions { profile_id } now know it 404s
+silently because the field is unknown.
+
+This matches what TS / Python / Go SDK CreateSessionRequest types
+have always required (no profile_id field). Doc was the lone
+fiction.
+
+Astro check clean.
