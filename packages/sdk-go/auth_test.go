@@ -129,3 +129,100 @@ func TestAuth_Logout(t *testing.T) {
 		t.Errorf("err=%v got=%+v", err, got)
 	}
 }
+
+// V-460 — CLI/GUI activation flow.
+func TestAuth_CliAuthorizeInitiate(t *testing.T) {
+	t.Parallel()
+	expiresAt := time.Now().Add(5 * time.Minute).UTC().Truncate(time.Second)
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/auth/cli-authorize/initiate" || r.Method != "POST" {
+			t.Errorf("unexpected: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(CliAuthorizeInitiateResponse{
+			Code:       "cliauth_abc",
+			BrowserURL: "https://app.driftstack.dev/cli/authorize?code=cliauth_abc",
+			ExpiresAt:  expiresAt,
+		})
+	})
+	out, err := client.Auth.CliAuthorizeInitiate(context.Background(), &CliAuthorizeInitiateRequest{
+		State:       "csrfnonce-1234567890abcdef",
+		ClientLabel: "CLI test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Code != "cliauth_abc" {
+		t.Errorf("code=%q", out.Code)
+	}
+}
+
+func TestAuth_CliAuthorizeExchange_PendingBranch(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(CliAuthorizeExchangeResponse{Status: "pending"})
+	})
+	out, err := client.Auth.CliAuthorizeExchange(context.Background(), &CliAuthorizeExchangeRequest{
+		Code:  "cliauth_abc",
+		State: "csrfnonce-1234567890abcdef",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Status != "pending" {
+		t.Errorf("status=%q", out.Status)
+	}
+	if out.APIKey != "" || out.AccountID != "" {
+		t.Errorf("pending branch shouldn't carry api_key/account_id; got %+v", out)
+	}
+}
+
+func TestAuth_CliAuthorizeExchange_BoundBranch(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(CliAuthorizeExchangeResponse{
+			Status:    "bound",
+			APIKey:    "sk_test_REDACTED",
+			AccountID: "acc_abc",
+		})
+	})
+	out, err := client.Auth.CliAuthorizeExchange(context.Background(), &CliAuthorizeExchangeRequest{
+		Code:  "cliauth_abc",
+		State: "csrfnonce-1234567890abcdef",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Status != "bound" || out.APIKey != "sk_test_REDACTED" || out.AccountID != "acc_abc" {
+		t.Errorf("bound branch missing fields: %+v", out)
+	}
+}
+
+func TestAuth_CliAuthorizeBind(t *testing.T) {
+	t.Parallel()
+	expiresAt := time.Now().Add(5 * time.Minute).UTC().Truncate(time.Second)
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/auth/cli-authorize/bind" || r.Method != "POST" {
+			t.Errorf("unexpected: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(CliAuthorizeBindResponse{
+			OK:        true,
+			AccountID: "acc_abc",
+			ExpiresAt: expiresAt,
+		})
+	})
+	out, err := client.Auth.CliAuthorizeBind(context.Background(), &CliAuthorizeBindRequest{
+		Code:   "cliauth_abc",
+		State:  "csrfnonce-1234567890abcdef",
+		Scopes: []string{"account_owner"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.OK || out.AccountID != "acc_abc" {
+		t.Errorf("bind response: %+v", out)
+	}
+}
