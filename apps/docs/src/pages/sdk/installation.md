@@ -65,8 +65,34 @@ client.apiKeys.revoke(id); // requires admin scope
 
 client.webhooks.create(body);
 client.webhooks.list();
+client.webhooks.get(id);
+client.webhooks.update(id, body); // V-464 partial update
+client.webhooks.delete(id);
 client.webhooks.listDeliveries(webhookId, query?);
+client.webhooks.iterateDeliveries(webhookId, opts?);
 client.webhooks.replayDelivery(deliveryId); // V-307
+client.webhooks.rotateSecret(id); // V-359 24h grace dual-sign
+client.webhooks.sendTest(id); // V-356 synthetic test.ping
+
+client.auth.cliAuthorizeInitiate(body); // V-460 CLI/GUI activation
+client.auth.cliAuthorizeBind(body);
+client.auth.cliAuthorizeExchange(body);
+client.auth.mfaChallenge(body); // V-353d login MFA exchange
+client.auth.mfaStepUp(body); // V-353e step-up freshness
+
+client.auditLog.list(query?);
+client.auditLog.iterate(opts?);
+client.auditLog.export(); // V-462 GDPR Article 20 JSON
+
+client.legal.documents();
+client.legal.required();
+client.legal.accept(body);
+
+client.mfa.status();
+client.mfa.enroll();
+client.mfa.verify(body);
+client.mfa.disable();
+client.mfa.regenerateRecoveryCodes();
 
 client.team.invite(email, opts?); // V-298
 client.team.listMembers();
@@ -122,15 +148,21 @@ asyncio.run(main())
 
 **Resources:**
 
-| Accessor          | Methods                                                                                               |
-| ----------------- | ----------------------------------------------------------------------------------------------------- |
-| `client.sessions` | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `destroy`            |
-| `client.profiles` | `create`, `list`, `get`, `delete`                                                                     |
-| `client.api_keys` | `create`, `list`, `rotate` (V-296), `revoke`                                                          |
-| `client.usage`    | `current_period`                                                                                      |
-| `client.webhooks` | `create`, `list`, `get`, `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` (V-307) |
-| `client.team`     | `invite`, `list_members`, `list_invites`, `accept_invite`, `remove_member` (V-298)                    |
-| `client.account`  | `me`                                                                                                  |
+| Accessor                   | Methods                                                                                                                                                               |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client.sessions`          | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `destroy`                                                                            |
+| `client.profiles`          | `create`, `list`, `get`, `delete`                                                                                                                                     |
+| `client.api_keys`          | `create`, `list`, `rotate` (V-296), `revoke`                                                                                                                          |
+| `client.usage`             | `current_period`                                                                                                                                                      |
+| `client.webhooks`          | `create`, `list`, `get`, `update` (V-464), `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` (V-307), `rotate_secret` (V-359), `send_test` (V-463) |
+| `client.team`              | `invite`, `list_members`, `list_invites`, `accept_invite`, `remove_member` (V-298)                                                                                    |
+| `client.account`           | `me`, `update_me`, `upload_avatar`, `clear_avatar`, `list_web_sessions`, `revoke_web_session`, `revoke_all_other_web_sessions`, `rate_limits`                         |
+| `client.auth`              | `cli_authorize_initiate / bind / exchange` (V-460), `mfa_challenge` (V-353d), `mfa_step_up` (V-353e), plus signup / login / logout / refresh / magic-link / reset     |
+| `client.audit_log`         | `list`, `iterate`, `export` (V-462)                                                                                                                                   |
+| `client.mfa`               | `status`, `enroll`, `verify`, `disable`, `regenerate_recovery_codes` (V-353b)                                                                                         |
+| `client.email_preferences` | `list`, `set`, `opt_in`, `opt_out` (V-204)                                                                                                                            |
+| `client.legal`             | `documents`, `required`, `accept` (V-049 / V-458)                                                                                                                     |
+| `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete` (V-312)                                                                                  |
 
 Inputs accept either a Pydantic model OR a plain `dict`. Outputs are typed Pydantic models.
 
