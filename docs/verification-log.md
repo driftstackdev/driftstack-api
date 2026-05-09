@@ -19366,3 +19366,35 @@ Format-asymmetry root cause noted but NOT fixed: `cloned_from`
 emit at `services/profiles.ts:257` uses the internal `profile_`
 prefix; consistency fix would be a backwards-incompatible audit-
 payload change so it stays as-is, documented.
+
+## V-396 — V-353b TOTP + recovery-code unit-test coverage
+
+**Tier**: 1 (algorithm-level depth; integration tests can't pin
+RFC 6238 behavior without time travel).
+
+`apps/server/tests/unit/mfa-totp.test.ts` — new file. 19 tests
+covering:
+
+- **RFC 6238 known vector** — computeTotpCode with the canonical
+  20-byte ASCII secret + T=59 + T=1111111109 produces 287082 + 081804. Empirical lock-in against the spec.
+- **Drift window (±1)** — current step accepted; -1 step (clock-
+  ahead client) accepted; +1 step (clock-behind client) accepted;
+  -2 step rejected; +2 step rejected.
+- **Constants pin** — TOTP_PERIOD_SECONDS=30, TOTP_DIGITS=6,
+  TOTP_DRIFT_WINDOWS=1 (founder verdict V-353a).
+- **Malformed input rejection** — empty / 5-digit / 7-digit /
+  alpha / spaced strings all return false.
+- **Cross-secret rejection** — code computed against secret A
+  rejected by secret B.
+- **AES-256-GCM round-trip** — encrypt → decrypt yields the
+  original; fresh IV every call (no nonce reuse); tampered
+  ciphertext throws; tampered auth tag throws; wrong-length key
+  throws "must decode to 32 bytes".
+- **Recovery codes** — 10 codes default; Crockford base32 with no
+  0/1/I/O/L; hyphenated 5+5 format; unique within a single batch.
+- **normalizeRecoveryCode** — handles "abcde-fghjk", whitespace,
+  uppercase, mixed.
+
+19 / 19 pass. The mfa-totp.ts library was previously only
+exercised through integration tests; this slice adds direct
+algorithm-level coverage so a regression surfaces at unit time.
