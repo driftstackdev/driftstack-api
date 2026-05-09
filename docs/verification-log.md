@@ -21598,3 +21598,48 @@ show 'Sentry initialized' with environment=production and
 release=85aee83). Per-service projects (driftstack-dashboard +
 driftstack-marketing via Sentry org auth token API) deferred to
 V-278.J-2 — auth token has insufficient scope to list/create projects.
+
+## V-278.I closure — 6/6 public URLs green
+
+After founder flipped Cloudflare zone SSL/TLS mode to 'Flexible':
+
+| URL                                   | HTTP    |
+| ------------------------------------- | ------- |
+| https://driftstack.dev/               | **200** |
+| https://www.driftstack.dev/           | **200** |
+| https://docs.driftstack.dev/          | **200** |
+| https://app.driftstack.dev/           | **200** |
+| https://api.driftstack.dev/health     | **200** |
+| https://staging.driftstack.dev/health | **200** |
+
+V-278 deployment cycle landing complete. Driftstack is reachable on
+its production URLs.
+
+## V-278.M (in-flight) — Full (strict) upgrade with Origin Certificates
+
+**Tier**: 1 (long-term TLS posture).
+
+Step 1 (POST `/v4/certificates`) hit the same scope limitation as the
+already-known step 5 surface — token `cfut_BcuqA…` lacks both:
+
+- `Account:SSL and Certificates:Edit` (needed for Origin Cert
+  generation; API returned `code 1016 User is not authorized to
+perform this action`).
+- `Zone:Zone Settings:Edit` (needed for PATCH
+  `/v4/zones/<id>/settings/ssl`; founder pre-direction anticipated
+  this).
+
+Both surfaced to founder in one ask (re-issue same token with the two
+added scopes). When done, agent fires steps 1-7 end-to-end:
+
+1. Generate Origin Cert (15y ECC P-256; SANs `*.driftstack.dev` +
+   `driftstack.dev`).
+2. SCP cert + key to `/etc/ssl/cloudflare/origin.{crt,key}` on prod +
+   staging (mode 0600 root:root).
+3. Update `infra/nginx/{api,staging}.driftstack.dev.conf` to listen
+   `443 ssl` with cert/key paths + 80→443 redirect.
+4. systemctl reload nginx; verify `ss -tlnp | grep :443`.
+5. PATCH zone SSL/TLS to `strict`.
+6. Verify `curl -v https://api.driftstack.dev/health` → 200 with
+   Cloudflare Origin CA chain at origin.
+7. Empirical proof captured in V-log.
