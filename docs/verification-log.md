@@ -20075,3 +20075,43 @@ calling `client.Auth.Login(...)` against `api.driftstack.dev`
 would have gotten a `Session.Token = ""` empty struct (since the
 JSON root has no `session_token` field — it's nested under
 `session`). Now correctly decodes.
+
+## V-426 — Go SDK Profile / CreateProfileRequest / UpdateProfileRequest match server
+
+**Tier**: 1 (Memory rule L empirical-diff bar — same class as
+V-425; Go SDK Profile struct had stale fields that weren't on
+the server response, AND was missing the `archetype` field that
+server actually returns).
+
+**Profile struct.** Was: `{ ID, AccountID, Name, Description,
+Persona, StorageState, Notes, CreatedAt, UpdatedAt, LastUsedAt,
+LastSessionID }` (11 fields). Server returns 7: `{ id, name,
+archetype, description, last_used_at, created_at, updated_at }`.
+
+The Go struct picked up no `archetype` (silent zero), and
+populated 5 fields the server never sent (silent zero again).
+Customers reading `profile.Archetype` got `""`. Customers reading
+`profile.Persona` / `profile.StorageState` / `profile.Notes` got
+`nil` always — the server doesn't expose per-profile browser state
+through the customer API (it lives in the WebKit driver layer).
+
+**CreateProfileRequest.** Was: `{ Name, Description, Persona,
+StorageState, Notes }`. Server schema is `{ name, archetype?,
+description? }`. Customers passing Persona/StorageState/Notes had
+their fields dropped server-side via Zod's strict mode. Customers
+couldn't pin a non-default archetype (server defaults to locked
+iPhone archetype if omitted, but the Go SDK gave them no way to
+override).
+
+**UpdateProfileRequest.** Same staleness — `Persona`,
+`StorageState`, `Notes` removed; only `Name` + `Description`
+remain (matches server).
+
+`profile_fixture` updated to populate `Archetype` instead of
+`AccountID` to match the new struct shape.
+
+`go build` + `go test ./...` clean.
+
+This is V-425's sibling: Go SDK customers using `client.Profiles`
+against a real Driftstack server now get the correct shape on
+both sides of the wire.

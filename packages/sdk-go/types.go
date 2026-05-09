@@ -508,35 +508,37 @@ type APIKeyRevokedData struct {
 // Profiles (V-081)
 // ──────────────────────────────────────────────────────────────────
 
-// Profile mirrors packages/api-types Profile.
+// Profile — V-426. Matches the public ProfileSchema returned by
+// /v1/profiles. Per-profile browser state (persona / storage_state /
+// notes) lives in the WebKit driver layer, not the control plane;
+// the customer API surfaces only the metadata below. `Description`
+// is `*string` to capture explicit-null vs. unset.
 type Profile struct {
-	ID            string         `json:"id"`
-	AccountID     string         `json:"account_id"`
-	Name          string         `json:"name"`
-	Description   *string        `json:"description"`
-	Persona       map[string]any `json:"persona"`
-	StorageState  map[string]any `json:"storage_state"`
-	Notes         *string        `json:"notes"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
-	LastUsedAt    *time.Time     `json:"last_used_at"`
-	LastSessionID *string        `json:"last_session_id"`
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Archetype   string     `json:"archetype"`
+	Description *string    `json:"description"`
+	LastUsedAt  *time.Time `json:"last_used_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
+// CreateProfileRequest — V-426. Server's CreateProfileRequestSchema
+// is `{ name, archetype?, description? }`. `Archetype` defaults
+// server-side to the locked iPhone-16-Pro / iOS / Safari archetype
+// when omitted (V-136 LOCKED_ARCHETYPE_ID).
 type CreateProfileRequest struct {
-	Name         string         `json:"name"`
-	Description  string         `json:"description,omitempty"`
-	Persona      map[string]any `json:"persona,omitempty"`
-	StorageState map[string]any `json:"storage_state,omitempty"`
-	Notes        string         `json:"notes,omitempty"`
+	Name        string `json:"name"`
+	Archetype   string `json:"archetype,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
+// UpdateProfileRequest — V-426. Server's UpdateProfileRequestSchema
+// is `{ name?, description? }`. Both optional; at least one must
+// be provided.
 type UpdateProfileRequest struct {
-	Name         *string        `json:"name,omitempty"`
-	Description  *string        `json:"description,omitempty"`
-	Persona      map[string]any `json:"persona,omitempty"`
-	StorageState map[string]any `json:"storage_state,omitempty"`
-	Notes        *string        `json:"notes,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
 }
 
 type ProfilesListPage struct {

@@ -10,8 +10,8 @@ import (
 func profileFixture(id string) Profile {
 	return Profile{
 		ID:        id,
-		AccountID: "acc_00000000-0000-4000-8000-000000000001",
 		Name:      "test profile " + id,
+		Archetype: "iphone16pro_ios18_7_safari26_4",
 	}
 }
 
