@@ -3340,6 +3340,109 @@
         }
       }
     },
+    "/v1/usage/series": {
+      "get": {
+        "summary": "Daily-bucketed usage time series for the calling account",
+        "tags": ["Usage"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 90
+            },
+            "required": false,
+            "name": "days",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per-day totals over the trailing window (default 30 days, max 90).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "from_date": {
+                      "type": "string"
+                    },
+                    "to_date": {
+                      "type": "string"
+                    },
+                    "buckets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "string"
+                          },
+                          "totals": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          }
+                        },
+                        "required": ["date", "totals"]
+                      }
+                    }
+                  },
+                  "required": ["from_date", "to_date", "buckets"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/team/invites": {
       "post": {
         "summary": "Invite an email to join the calling owner’s team",
@@ -6894,6 +6997,158 @@
         }
       }
     },
+    "/v1/account/audit-log/export": {
+      "get": {
+        "summary": "Bulk-export the calling account's audit log (GDPR Article 20)",
+        "tags": ["account"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["csv", "json"]
+            },
+            "required": false,
+            "name": "format",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON envelope when format=json (or omitted); text/csv attachment when format=csv. The `x-driftstack-export-truncated` response header signals when the 10,000-row ceiling was hit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "generated_at": {
+                      "type": "string"
+                    },
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "row_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "account_id": {
+                            "type": "string"
+                          },
+                          "actor_type": {
+                            "type": "string",
+                            "enum": ["customer", "system", "staff"]
+                          },
+                          "actor_account_id": {
+                            "type": ["string", "null"]
+                          },
+                          "actor_key_id": {
+                            "type": ["string", "null"]
+                          },
+                          "action": {
+                            "type": "string"
+                          },
+                          "target_resource_id": {
+                            "type": ["string", "null"]
+                          },
+                          "payload": {
+                            "type": ["object", "null"],
+                            "additionalProperties": {}
+                          },
+                          "ip_address": {
+                            "type": ["string", "null"]
+                          },
+                          "user_agent": {
+                            "type": ["string", "null"]
+                          },
+                          "timestamp": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "account_id",
+                          "actor_type",
+                          "actor_account_id",
+                          "actor_key_id",
+                          "action",
+                          "target_resource_id",
+                          "payload",
+                          "ip_address",
+                          "user_agent",
+                          "timestamp"
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["generated_at", "account_id", "row_count", "truncated", "data"]
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/account/email-preferences": {
       "get": {
         "summary": "List email notification preferences",
@@ -7639,6 +7894,1367 @@
           },
           "403": {
             "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/accounts": {
+      "get": {
+        "summary": "List accounts with optional filters (admin)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["active", "suspended", "deleted"]
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "tier",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "email_contains",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cursor-paginated account rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          },
+                          "email": {
+                            "type": "string",
+                            "format": "email"
+                          },
+                          "name": {
+                            "type": ["string", "null"]
+                          },
+                          "tier": {
+                            "type": "string",
+                            "enum": [
+                              "trial_pack",
+                              "solo_manual",
+                              "team_manual",
+                              "agency_manual",
+                              "api_starter",
+                              "api_builder",
+                              "api_scale",
+                              "enterprise"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["active", "suspended", "deleted"]
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "email",
+                          "name",
+                          "tier",
+                          "status",
+                          "created_at",
+                          "updated_at"
+                        ]
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["data", "has_more", "next_cursor"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/accounts/{id}": {
+      "get": {
+        "summary": "Get a single account (admin)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account row.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "email": {
+                      "type": "string",
+                      "format": "email"
+                    },
+                    "name": {
+                      "type": ["string", "null"]
+                    },
+                    "tier": {
+                      "type": "string",
+                      "enum": [
+                        "trial_pack",
+                        "solo_manual",
+                        "team_manual",
+                        "agency_manual",
+                        "api_starter",
+                        "api_builder",
+                        "api_scale",
+                        "enterprise"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["active", "suspended", "deleted"]
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    }
+                  },
+                  "required": ["id", "email", "name", "tier", "status", "created_at", "updated_at"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Account not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/accounts/{id}/audit-note": {
+      "post": {
+        "summary": "Record a free-form support note on an account (admin; V-281)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": ["note"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Note recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/accounts/{id}/refund-record": {
+      "post": {
+        "summary": "Record a refund issued out-of-band against the account (admin; V-281)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount_cents": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "currency": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 3
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "stripe_refund_id": {
+                    "type": "string"
+                  }
+                },
+                "required": ["amount_cents", "currency", "reason"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Refund recorded for audit. Money movement happens via Stripe dashboard manually per V-280 launch-day runbook.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/api-keys/{id}/revoke": {
+      "post": {
+        "summary": "Force-revoke an API key (admin)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Key revoked. Idempotent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "API key not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/sessions/{id}/destroy": {
+      "post": {
+        "summary": "Force-destroy an in-flight session (admin)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session destroyed. Idempotent against already-destroyed sessions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/incidents": {
+      "post": {
+        "summary": "Create an incident (admin; V-295)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 10000
+                  },
+                  "severity": {
+                    "type": "string",
+                    "enum": ["minor", "major", "critical"]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["investigating", "identified", "monitoring", "resolved"]
+                  },
+                  "started_at": {
+                    "type": "string"
+                  },
+                  "components_affected": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "public": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["title", "body", "severity"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Incident created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": ["minor", "major", "critical"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["investigating", "identified", "monitoring", "resolved"]
+                    },
+                    "started_at": {
+                      "type": "string"
+                    },
+                    "resolved_at": {
+                      "type": ["string", "null"]
+                    },
+                    "components_affected": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "public": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "body",
+                    "severity",
+                    "status",
+                    "started_at",
+                    "resolved_at",
+                    "components_affected",
+                    "public"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/incidents/{id}": {
+      "get": {
+        "summary": "Get a single incident with its update timeline (admin; V-295)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Incident detail (incl. updates timeline).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": ["minor", "major", "critical"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["investigating", "identified", "monitoring", "resolved"]
+                    },
+                    "started_at": {
+                      "type": "string"
+                    },
+                    "resolved_at": {
+                      "type": ["string", "null"]
+                    },
+                    "components_affected": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "public": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "body",
+                    "severity",
+                    "status",
+                    "started_at",
+                    "resolved_at",
+                    "components_affected",
+                    "public"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Incident not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/incidents/{id}/updates": {
+      "post": {
+        "summary": "Append an update to an incident (admin; V-295)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 10000
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["investigating", "identified", "monitoring", "resolved"]
+                  }
+                },
+                "required": ["body"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Update appended; incident timeline reflects the new entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": ["minor", "major", "critical"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["investigating", "identified", "monitoring", "resolved"]
+                    },
+                    "started_at": {
+                      "type": "string"
+                    },
+                    "resolved_at": {
+                      "type": ["string", "null"]
+                    },
+                    "components_affected": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "public": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "body",
+                    "severity",
+                    "status",
+                    "started_at",
+                    "resolved_at",
+                    "components_affected",
+                    "public"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Incident not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/incidents/{id}/resolve": {
+      "post": {
+        "summary": "Mark an incident resolved (admin; V-295)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Incident transitioned to status=resolved + resolved_at set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": ["minor", "major", "critical"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["investigating", "identified", "monitoring", "resolved"]
+                    },
+                    "started_at": {
+                      "type": "string"
+                    },
+                    "resolved_at": {
+                      "type": ["string", "null"]
+                    },
+                    "components_affected": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "public": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "body",
+                    "severity",
+                    "status",
+                    "started_at",
+                    "resolved_at",
+                    "components_affected",
+                    "public"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Incident not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/status-subscribers": {
+      "get": {
+        "summary": "List status-page subscribers (admin)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "required": false,
+            "name": "confirmed",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated subscribers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "confirmed": {
+                            "type": "boolean"
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "confirmed_at": {
+                            "type": ["string", "null"]
+                          }
+                        },
+                        "required": ["id", "email", "confirmed", "created_at", "confirmed_at"]
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["data", "has_more", "next_cursor"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/status-subscribers/{id}/force-unsubscribe": {
+      "post": {
+        "summary": "Force-unsubscribe a status subscriber (admin; abuse / GDPR)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscriber removed. Idempotent against already-removed entries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Subscriber not found.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9634,6 +11250,353 @@
         }
       }
     },
+    "/v1/auth/cli-authorize/initiate": {
+      "post": {
+        "summary": "Start the CLI/GUI activation flow; returns a code + browser URL",
+        "tags": ["auth"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 128
+                  },
+                  "client_label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  }
+                },
+                "required": ["state"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Activation code + browser URL the CLI/GUI opens. Code expires after ~5min.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "browser_url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    }
+                  },
+                  "required": ["code", "browser_url", "expires_at"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/cli-authorize/bind": {
+      "post": {
+        "summary": "Web-session-authed: bind the CLI/GUI's code to the calling account; mints an API key",
+        "tags": ["auth"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 128
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 128
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "read",
+                        "write",
+                        "admin",
+                        "account_owner",
+                        "driftstack_internal_admin",
+                        "gui_control"
+                      ]
+                    },
+                    "minItems": 1
+                  }
+                },
+                "required": ["code", "state"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Code bound; CLI/GUI can now poll exchange for the plaintext key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [true]
+                    },
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    }
+                  },
+                  "required": ["ok", "account_id", "expires_at"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Code not found or expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/cli-authorize/exchange": {
+      "post": {
+        "summary": "Poll for the bound API key plaintext (one-shot delivery)",
+        "tags": ["auth"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 128
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 128
+                  }
+                },
+                "required": ["code", "state"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Discriminated-union: { status: pending } / { status: bound, api_key, account_id } / { status: expired }. The bound branch is one-shot — subsequent calls 404.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["pending"]
+                        }
+                      },
+                      "required": ["status"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["bound"]
+                        },
+                        "api_key": {
+                          "type": "string"
+                        },
+                        "account_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["status", "api_key", "account_id"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": ["expired"]
+                        }
+                      },
+                      "required": ["status"]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Code not found or already consumed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/account/web-sessions": {
       "get": {
         "summary": "Active dashboard sign-ins for the calling account",
@@ -9872,6 +11835,1556 @@
         }
       }
     },
+    "/v1/status": {
+      "get": {
+        "summary": "Public service status (overall + per-component); 30s cache",
+        "tags": ["status"],
+        "responses": {
+          "200": {
+            "description": "Status snapshot with components + recent incidents.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "overall_status": {
+                      "type": "string",
+                      "enum": ["operational", "degraded", "major_outage"]
+                    },
+                    "components": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["operational", "degraded", "major_outage"]
+                          },
+                          "last_checked_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["name", "status", "last_checked_at"]
+                      }
+                    },
+                    "recent_incidents": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": ["overall_status", "components", "recent_incidents"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/status/incidents": {
+      "get": {
+        "summary": "Public incidents log",
+        "tags": ["status"],
+        "responses": {
+          "200": {
+            "description": "Incidents (most recent first).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/status/sla": {
+      "get": {
+        "summary": "Rolling-window uptime percentage vs SLA target",
+        "tags": ["status"],
+        "responses": {
+          "200": {
+            "description": "Rolling window + uptime + target.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "window_days": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "uptime_percent": {
+                      "type": "number"
+                    },
+                    "target_percent": {
+                      "type": "number"
+                    }
+                  },
+                  "required": ["window_days", "uptime_percent", "target_percent"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/status/subscribe": {
+      "post": {
+        "summary": "Subscribe an email to status notifications (double-opt-in)",
+        "tags": ["status"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                },
+                "required": ["email"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Confirmation email sent (always 200 — no enumeration signal).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/status/subscribe/confirm": {
+      "post": {
+        "summary": "Confirm a status-subscription email via token",
+        "tags": ["status"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                },
+                "required": ["token"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Subscription confirmed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/status/subscribe/unsubscribe": {
+      "post": {
+        "summary": "Unsubscribe an email from status notifications via token",
+        "tags": ["status"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                },
+                "required": ["token"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unsubscribed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/legal/documents": {
+      "get": {
+        "summary": "List the legal-document catalog (versions + content_hash)",
+        "tags": ["legal"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Catalog entries (no document body — body served on the marketing site).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "document_key": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "effective_date": {
+                            "type": "string"
+                          },
+                          "content_hash": {
+                            "type": "string"
+                          },
+                          "source_path": {
+                            "type": "string"
+                          },
+                          "byte_size": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "document_key",
+                          "title",
+                          "version",
+                          "effective_date",
+                          "content_hash",
+                          "source_path",
+                          "byte_size"
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/legal/required": {
+      "get": {
+        "summary": "List documents the calling account must accept (or re-accept)",
+        "tags": ["legal"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Required acceptances; each entry includes reason + last accepted version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "document_key": {
+                            "type": "string"
+                          },
+                          "current_version": {
+                            "type": "string"
+                          },
+                          "content_hash": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "last_accepted_version": {
+                            "type": ["string", "null"]
+                          }
+                        },
+                        "required": [
+                          "document_key",
+                          "current_version",
+                          "content_hash",
+                          "reason",
+                          "last_accepted_version"
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/legal/accept": {
+      "post": {
+        "summary": "Record acceptance of a (document, version, content_hash) tuple",
+        "tags": ["legal"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "document_key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "content_hash": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                },
+                "required": ["document_key", "version", "content_hash"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Acceptance recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "document_key": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "content_hash": {
+                      "type": "string"
+                    },
+                    "accepted_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "account_id",
+                    "document_key",
+                    "version",
+                    "content_hash",
+                    "accepted_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Document version changed since fetch — re-fetch + retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhooks": {
+      "post": {
+        "summary": "Create a webhook endpoint",
+        "tags": ["webhooks"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "session.completed",
+                        "session.failed",
+                        "quota.warning_80pct",
+                        "quota.exceeded",
+                        "api_key.revoked"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 10
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "required": ["url", "events"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created endpoint; plaintext signing secret returned ONCE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "secret_prefix": {
+                      "type": "string"
+                    },
+                    "prev_secret_prefix": {
+                      "type": ["string", "null"]
+                    },
+                    "rotation_grace_expires_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "session.completed",
+                          "session.failed",
+                          "quota.warning_80pct",
+                          "quota.exceeded",
+                          "api_key.revoked",
+                          "test.ping"
+                        ]
+                      }
+                    },
+                    "description": {
+                      "type": ["string", "null"]
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "consecutive_failures": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "last_success_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "last_failure_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "disabled_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "delivery_counts": {
+                      "type": "object",
+                      "properties": {
+                        "delivered": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "failed": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "dlq": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["delivered", "failed", "dlq"]
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "secret": {
+                      "type": "string",
+                      "description": "Plaintext signing secret. Returned ONCE; not retrievable later."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "url",
+                    "secret_prefix",
+                    "prev_secret_prefix",
+                    "rotation_grace_expires_at",
+                    "events",
+                    "description",
+                    "active",
+                    "consecutive_failures",
+                    "last_success_at",
+                    "last_failure_at",
+                    "disabled_at",
+                    "delivery_counts",
+                    "created_at",
+                    "secret"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List webhook endpoints for the calling account",
+        "tags": ["webhooks"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Endpoint list (no plaintext).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          },
+                          "url": {
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "secret_prefix": {
+                            "type": "string"
+                          },
+                          "prev_secret_prefix": {
+                            "type": ["string", "null"]
+                          },
+                          "rotation_grace_expires_at": {
+                            "type": ["string", "null"],
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "events": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "session.completed",
+                                "session.failed",
+                                "quota.warning_80pct",
+                                "quota.exceeded",
+                                "api_key.revoked",
+                                "test.ping"
+                              ]
+                            }
+                          },
+                          "description": {
+                            "type": ["string", "null"]
+                          },
+                          "active": {
+                            "type": "boolean"
+                          },
+                          "consecutive_failures": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "last_success_at": {
+                            "type": ["string", "null"],
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "last_failure_at": {
+                            "type": ["string", "null"],
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "disabled_at": {
+                            "type": ["string", "null"],
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "delivery_counts": {
+                            "type": "object",
+                            "properties": {
+                              "delivered": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "failed": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "dlq": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": ["delivered", "failed", "dlq"]
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "url",
+                          "secret_prefix",
+                          "prev_secret_prefix",
+                          "rotation_grace_expires_at",
+                          "events",
+                          "description",
+                          "active",
+                          "consecutive_failures",
+                          "last_success_at",
+                          "last_failure_at",
+                          "disabled_at",
+                          "delivery_counts",
+                          "created_at"
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhooks/{id}": {
+      "get": {
+        "summary": "Get a single webhook endpoint",
+        "tags": ["webhooks"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "secret_prefix": {
+                      "type": "string"
+                    },
+                    "prev_secret_prefix": {
+                      "type": ["string", "null"]
+                    },
+                    "rotation_grace_expires_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "session.completed",
+                          "session.failed",
+                          "quota.warning_80pct",
+                          "quota.exceeded",
+                          "api_key.revoked",
+                          "test.ping"
+                        ]
+                      }
+                    },
+                    "description": {
+                      "type": ["string", "null"]
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "consecutive_failures": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "last_success_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "last_failure_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "disabled_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "delivery_counts": {
+                      "type": "object",
+                      "properties": {
+                        "delivered": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "failed": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "dlq": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["delivered", "failed", "dlq"]
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "url",
+                    "secret_prefix",
+                    "prev_secret_prefix",
+                    "rotation_grace_expires_at",
+                    "events",
+                    "description",
+                    "active",
+                    "consecutive_failures",
+                    "last_success_at",
+                    "last_failure_at",
+                    "disabled_at",
+                    "delivery_counts",
+                    "created_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Partial update of a webhook endpoint (url / events / description / active)",
+        "tags": ["webhooks"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "session.completed",
+                        "session.failed",
+                        "quota.warning_80pct",
+                        "quota.exceeded",
+                        "api_key.revoked"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 10
+                  },
+                  "description": {
+                    "type": ["string", "null"],
+                    "maxLength": 200
+                  },
+                  "active": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "secret_prefix": {
+                      "type": "string"
+                    },
+                    "prev_secret_prefix": {
+                      "type": ["string", "null"]
+                    },
+                    "rotation_grace_expires_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "session.completed",
+                          "session.failed",
+                          "quota.warning_80pct",
+                          "quota.exceeded",
+                          "api_key.revoked",
+                          "test.ping"
+                        ]
+                      }
+                    },
+                    "description": {
+                      "type": ["string", "null"]
+                    },
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "consecutive_failures": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "last_success_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "last_failure_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "disabled_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "delivery_counts": {
+                      "type": "object",
+                      "properties": {
+                        "delivered": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "failed": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "dlq": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["delivered", "failed", "dlq"]
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "url",
+                    "secret_prefix",
+                    "prev_secret_prefix",
+                    "rotation_grace_expires_at",
+                    "events",
+                    "description",
+                    "active",
+                    "consecutive_failures",
+                    "last_success_at",
+                    "last_failure_at",
+                    "disabled_at",
+                    "delivery_counts",
+                    "created_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Disable (soft-delete) a webhook endpoint. Idempotent.",
+        "tags": ["webhooks"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Endpoint disabled."
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/webhooks/{id}/deliveries": {
+      "get": {
+        "summary": "List delivery attempts for a webhook endpoint",
+        "tags": ["webhooks"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["pending", "in_flight", "delivered", "failed", "dlq"]
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated delivery list with optional ?status= filter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^wdl_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          },
+                          "webhook_id": {
+                            "type": "string",
+                            "pattern": "^whk_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          },
+                          "event_id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "event_type": {
+                            "type": "string",
+                            "enum": [
+                              "session.completed",
+                              "session.failed",
+                              "quota.warning_80pct",
+                              "quota.exceeded",
+                              "api_key.revoked",
+                              "test.ping"
+                            ]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["pending", "in_flight", "delivered", "failed", "dlq"]
+                          },
+                          "attempts": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "next_attempt_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "last_response_status": {
+                            "type": ["integer", "null"]
+                          },
+                          "last_response_excerpt": {
+                            "type": ["string", "null"]
+                          },
+                          "last_error": {
+                            "type": ["string", "null"]
+                          },
+                          "delivered_at": {
+                            "type": ["string", "null"],
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "webhook_id",
+                          "event_id",
+                          "event_type",
+                          "status",
+                          "attempts",
+                          "next_attempt_at",
+                          "last_response_status",
+                          "last_response_excerpt",
+                          "last_error",
+                          "delivered_at",
+                          "created_at"
+                        ]
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["data", "has_more", "next_cursor"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/webhooks/{id}/test": {
       "post": {
         "summary": "Enqueue a synthetic test.ping delivery (bypass subscription)",
@@ -10044,6 +13557,578 @@
           },
           "409": {
             "description": "Endpoint is disabled; cannot rotate.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles": {
+      "post": {
+        "summary": "Create a profile",
+        "tags": ["profiles"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9 _.-]{0,118}[a-zA-Z0-9]$|^[a-zA-Z0-9]$"
+                  },
+                  "archetype": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 2048
+                  }
+                },
+                "required": ["name"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "archetype": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": ["string", "null"]
+                    },
+                    "last_used_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "archetype",
+                    "description",
+                    "last_used_at",
+                    "created_at",
+                    "updated_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List profiles for the calling account",
+        "tags": ["profiles"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated profile list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archetype": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": ["string", "null"]
+                          },
+                          "last_used_at": {
+                            "type": ["string", "null"],
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "archetype",
+                          "description",
+                          "last_used_at",
+                          "created_at",
+                          "updated_at"
+                        ]
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["data", "has_more", "next_cursor"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{id}": {
+      "get": {
+        "summary": "Get a single profile",
+        "tags": ["profiles"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "archetype": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": ["string", "null"]
+                    },
+                    "last_used_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "archetype",
+                    "description",
+                    "last_used_at",
+                    "created_at",
+                    "updated_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Partial update of a profile (name / description)",
+        "tags": ["profiles"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9 _.-]{0,118}[a-zA-Z0-9]$|^[a-zA-Z0-9]$"
+                  },
+                  "description": {
+                    "type": ["string", "null"],
+                    "maxLength": 2048
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated profile.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "archetype": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": ["string", "null"]
+                    },
+                    "last_used_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "archetype",
+                    "description",
+                    "last_used_at",
+                    "created_at",
+                    "updated_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a profile (storage state wiped; idempotent)",
+        "tags": ["profiles"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Profile deleted."
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
             "content": {
               "application/problem+json": {
                 "schema": {
