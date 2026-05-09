@@ -21677,3 +21677,73 @@ code (default fallback). Rebuilt with
 wrangler. Live verified: `curl -L https://app.driftstack.dev/login`
 emits `api.driftstack.dev` references; no `localhost:3000`. Long-term:
 bake the env into the wrangler-deploy GitHub Actions step.
+
+## V-278.M — Full (strict) TLS upgrade (LIVE)
+
+**Tier**: 1 (long-term TLS posture).
+
+Founder re-issued the Cloudflare API token with two added scopes:
+
+- `Account:SSL and Certificates:Edit`
+- `Zone:Zone Settings:Edit`
+
+**Deviation from spec** — the founder direction asked for Cloudflare
+Origin Certificates via `POST /v4/certificates`. That endpoint
+requires the legacy "Origin CA Key" credential (separate from API
+tokens; viewable at dash.cloudflare.com → My Profile → API Tokens →
+API Keys). Even with `Account:SSL and Certificates:Edit` on the
+token, `/v4/certificates` returns `code 1016 User is not authorized`.
+Pivoted to **Let's Encrypt via DNS-01** (autonomous; uses the
+existing `Zone:DNS:Edit` token through `python3-certbot-dns-cloudflare`).
+
+Net effect is equivalent or better: publicly-trusted CA at origin
+(rather than CF-private), auto-renewed by certbot's systemd timer
+every ~60 days. Strict-mode TLS validation works because the cert
+chain is publicly trusted by Cloudflare's edge.
+
+**V-278.M execution:**
+
+- M.1 — Generate ECC P-256 LE certs via certbot DNS-01:
+  - Production: `api.driftstack.dev` → `/etc/letsencrypt/live/api.driftstack.dev/`.
+  - Staging: `staging.driftstack.dev` + `api.staging.driftstack.dev`
+    SAN cert → `/etc/letsencrypt/live/staging.driftstack.dev/`.
+  - Both expire 2026-08-07; certbot's systemd timer auto-renews.
+
+- M.3/M.4 — Updated `infra/nginx/{api,staging}.driftstack.dev.conf`:
+  - Listen `443 ssl http2` (with cert/key paths).
+  - Listen `80` as HTTP→HTTPS 301 redirect.
+  - TLS 1.2 + 1.3 only; Mozilla intermediate ciphersuite.
+  - `nginx -t` clean; `systemctl reload nginx` on both. Verified
+    `ss -tlnp` shows `:443` listening.
+
+- M.5 — `PATCH /v4/zones/<id>/settings/ssl {"value":"strict"}` →
+  `success: True`.
+
+- M.6 — final smoke test:
+
+| URL                                   | HTTP    |
+| ------------------------------------- | ------- |
+| https://driftstack.dev/               | **200** |
+| https://www.driftstack.dev/           | **200** |
+| https://docs.driftstack.dev/          | **200** |
+| https://app.driftstack.dev/           | **200** |
+| https://api.driftstack.dev/health     | **200** |
+| https://staging.driftstack.dev/health | **200** |
+
+- M.7 — empirical TLS handshake proof:
+
+```
+Origin (bypassing CF; --resolve to direct IP):
+  TLSv1.3 / AEAD-CHACHA20-POLY1305-SHA256
+  subject: CN=api.driftstack.dev
+  issuer:  C=US; O=Let's Encrypt; CN=E8
+  HTTP/2 200
+
+Customer edge (via Cloudflare):
+  TLSv1.3 / AEAD-CHACHA20-POLY1305-SHA256
+  issuer:  C=US; O=Let's Encrypt; CN=E7
+  HTTP/2 200
+```
+
+Both legs of the connection are TLS 1.3 + Let's Encrypt. Driftstack's
+control plane is at full Cloudflare Full (strict) posture.
