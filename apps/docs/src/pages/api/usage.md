@@ -86,26 +86,52 @@ Response (200):
   "buckets": [
     {
       "date": "2026-04-09",
-      "session_minutes": 42,
-      "navigates": 1200,
-      "interacts": 350,
-      "waits": 75,
-      "state_captures": 8,
-      "screenshot_captures": 3
-    },
-    ...
+      "totals": {
+        "session_minute": 42,
+        "navigate": 1200,
+        "interact": 350,
+        "wait": 75,
+        "state_capture": 8,
+        "screenshot_capture": 3
+      }
+    }
   ]
 }
 ```
 
-`days` parameter: 1-90, default 30. The series is right-aligned on
-"yesterday" (the most-recent fully-closed UTC day); today's partial
-bucket is intentionally not surfaced — the dashboard's sparkline
-renders cleaner without a half-empty trailing bucket.
+`totals` is a record keyed by record type (singular form, matching
+the `UsageRecordType` enum + the field names on the
+`current_period` `totals`). `days` parameter: 1-90, default 30.
+The series is right-aligned on "yesterday" (the most-recent
+fully-closed UTC day); today's partial bucket is intentionally
+not surfaced — the dashboard's sparkline renders cleaner without
+a half-empty trailing bucket.
 
 Empty days return zeros for every counter (not omitted from the
 response) so the dashboard can render an empty-state without
 client-side date-fill logic.
+
+**SDK usage** (V-452):
+
+```ts
+const series = await client.usage.series({ days: 30 });
+for (const b of series.buckets) {
+  console.log(b.date, b.totals.session_minute, b.totals.navigate);
+}
+```
+
+```python
+series = client.usage.series(days=30)
+for b in series["buckets"]:
+    print(b["date"], b["totals"].get("session_minute", 0))
+```
+
+```go
+series, _ := client.Usage.Series(ctx, 30)
+for _, b := range series.Buckets {
+    fmt.Println(b.Date, b.Totals["session_minute"], b.Totals["navigate"])
+}
+```
 
 ## Quota / tier caps
 

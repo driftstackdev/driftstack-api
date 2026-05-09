@@ -20923,3 +20923,25 @@ the avatar section, before the team-RBAC explainer:
 Astro check clean. Customers reading account.md now see the full
 account-management surface that V-441/V-445/V-448/V-449/V-450
 made SDK-accessible.
+
+## V-454 — usage.md doc bucket shape matches actual UsageDailyBucketSchema
+
+**Tier**: 1 (rule L empirical-diff bar — usage.md "Daily series"
+section showed flat `{ session_minutes, navigates, ... }` shape;
+server's `UsageDailyBucketSchema` is `{ date, totals: { record_type:
+count } }`).
+
+`apps/docs/src/pages/api/usage.md` "Daily series" section:
+
+- JSON example corrected from flat fields to nested
+  `totals: { record_type: count }`. Field names corrected to
+  singular `session_minute / navigate / interact / wait /
+state_capture / screenshot_capture` (the canonical
+  UsageRecordType enum) instead of plural `session_minutes /
+navigates / etc`.
+- Adds three-SDK code examples (V-452 `client.usage.series` /
+  `series` / `Series` accessor) showing how to iterate buckets +
+  read counters.
+
+Customers reading usage.md now see the correct wire shape AND
+the SDK pattern to consume it. Astro check clean.
