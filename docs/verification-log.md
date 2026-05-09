@@ -20945,3 +20945,32 @@ navigates / etc`.
 
 Customers reading usage.md now see the correct wire shape AND
 the SDK pattern to consume it. Astro check clean.
+
+## V-455 — comprehensive OpenAPI + SDK coverage audit
+
+**Tier**: 1 (founder-directed Rule L systematic; extends the
+V-441/V-445/V-452 individual-finding pattern into a complete
+audit table).
+
+`docs/internal/v455-coverage-audit.md` — new audit table mapping
+every server route under `apps/server/src/routes/` to its
+coverage status across OpenAPI + TS / Python / Go SDKs.
+
+Per-surface breakdown with ✅ / ❌ / 🚫 (intentional) / 〰
+(partial) markers. Aggregate gap counts:
+
+- **Customer-facing OpenAPI gaps**: 24 routes (notably the
+  /v1/profiles base CRUD — 5 routes — and /v1/webhooks base
+  CRUD — 6 routes — are missing from spec despite the SDKs
+  exposing them).
+- **Customer-facing SDK gaps**: 16 routes (cli-authorize × 3,
+  legal × 3, status × 6, gui-input, audit-log/export, webhooks
+  test + PATCH).
+- **Admin OpenAPI gaps**: 11 routes (Tier-2 follow-up).
+
+Per-gap V-NNN closure slices queued (V-456 → V-465). Tier 1
+closures fire next per Rule L systematic; Tier 2 admin in a
+later wave.
+
+This audit is the per-launch Rule L deliverable: enumerates
+empirical gaps so customers don't discover them mid-integration.
