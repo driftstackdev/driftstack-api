@@ -17,6 +17,11 @@ import httpx
 
 from driftstack.http import AsyncHttpClient, HttpClient
 from driftstack.resources.account import AccountResource, AsyncAccountResource
+from driftstack.resources.audit_log import AsyncAuditLogResource, AuditLogResource
+from driftstack.resources.email_preferences import (
+    AsyncEmailPreferencesResource,
+    EmailPreferencesResource,
+)
 from driftstack.resources.mfa import AsyncMfaResource, MfaResource
 from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
 from driftstack.resources.auth import AsyncAuthResource, AuthResource
@@ -88,6 +93,10 @@ class Driftstack:
         self.account = AccountResource(self._http)
         # V-353b / V-448 — MFA enrollment management.
         self.mfa = MfaResource(self._http)
+        # V-216 / V-449 — audit-log read + iterate.
+        self.audit_log = AuditLogResource(self._http)
+        # V-204 / V-449 — email preferences.
+        self.email_preferences = EmailPreferencesResource(self._http)
         # V-298c — Team RBAC. Auth path integration is V-298d.
         self.team = TeamResource(self._http)
 
@@ -139,6 +148,10 @@ class AsyncDriftstack:
         self.account = AsyncAccountResource(self._http)
         # V-353b / V-448 — MFA enrollment management.
         self.mfa = AsyncMfaResource(self._http)
+        # V-216 / V-449 — audit-log read + iterate.
+        self.audit_log = AsyncAuditLogResource(self._http)
+        # V-204 / V-449 — email preferences.
+        self.email_preferences = AsyncEmailPreferencesResource(self._http)
         # V-298c — Team RBAC. Auth path integration is V-298d.
         self.team = AsyncTeamResource(self._http)
 

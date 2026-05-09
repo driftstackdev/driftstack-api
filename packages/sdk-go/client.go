@@ -43,6 +43,10 @@ type Client struct {
 	Account          *AccountResource
 	// V-353b / V-448 — MFA enrollment management.
 	Mfa *MfaResource
+	// V-216 / V-449 — append-only customer audit log.
+	AuditLog *AuditLogResource
+	// V-204 / V-449 — email opt-in/opt-out preferences.
+	EmailPreferences *EmailPreferencesResource
 	// V-298c — Team RBAC. Auth path integration is V-298d.
 	Team *TeamResource
 }
@@ -103,6 +107,8 @@ func New(apiKey string, opts ...Option) *Client {
 	c.Auth = &AuthResource{client: c}
 	c.Account = &AccountResource{client: c}
 	c.Mfa = &MfaResource{client: c}
+	c.AuditLog = &AuditLogResource{client: c}
+	c.EmailPreferences = &EmailPreferencesResource{client: c}
 	c.Team = &TeamResource{client: c}
 	return c
 }

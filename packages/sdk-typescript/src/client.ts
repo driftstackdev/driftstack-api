@@ -12,6 +12,8 @@ import { ProfileSnapshotsResource } from './resources/profile-snapshots.js';
 import { BillingResource } from './resources/billing.js';
 import { AuthResource } from './resources/auth.js';
 import { AccountResource } from './resources/account.js';
+import { AuditLogResource } from './resources/audit-log.js';
+import { EmailPreferencesResource } from './resources/email-preferences.js';
 import { MfaResource } from './resources/mfa.js';
 import { TeamResource } from './resources/team.js';
 import type { RetryConfig } from './retry.js';
@@ -44,6 +46,10 @@ export class Driftstack {
   readonly account: AccountResource;
   /** V-353b — MFA enrollment management. Pairs with `auth.mfaChallenge` + `auth.mfaStepUp`. */
   readonly mfa: MfaResource;
+  /** V-216 — append-only customer audit log read + iterate. */
+  readonly auditLog: AuditLogResource;
+  /** V-204 — non-critical email opt-in/opt-out preferences. */
+  readonly emailPreferences: EmailPreferencesResource;
   /** V-298c — Team RBAC. Auth path integration is V-298d. */
   readonly team: TeamResource;
 
@@ -73,6 +79,8 @@ export class Driftstack {
     this.auth = new AuthResource(this.http);
     this.account = new AccountResource(this.http);
     this.mfa = new MfaResource(this.http);
+    this.auditLog = new AuditLogResource(this.http);
+    this.emailPreferences = new EmailPreferencesResource(this.http);
     this.team = new TeamResource(this.http);
   }
 }

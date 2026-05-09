@@ -17,6 +17,7 @@ export type {
   MfaVerifyResponse,
   MfaDisableRequest,
 } from './resources/mfa.js';
+export type { AuditLogEntry, AuditLogListPage, AuditLogQuery } from './resources/audit-log.js';
 
 // Errors
 export {
@@ -135,6 +136,11 @@ export type {
   ProfileSnapshot,
   CaptureSnapshotRequest,
   RestoreSnapshotRequest,
+  // V-204 email preferences
+  EmailPreference,
+  ListEmailPreferencesResponse,
+  OptOutableEmailEvent,
+  SetEmailPreferenceRequest,
   // V-082 billing
   BillingPeriod,
   CreateCheckoutSessionRequest,

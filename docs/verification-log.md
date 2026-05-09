@@ -20750,3 +20750,51 @@ Three-SDK MFA parity now covers BOTH:
 Plus the typed `MfaStepUpRequiredError` recovery flow (V-441/V-445).
 Customers can build full MFA-aware integrations using only the
 SDK; no raw HTTP needed.
+
+## V-449 — three-SDK audit-log + email-preferences resources
+
+**Tier**: 1 (rule L empirical-diff sweep continues — same gap class
+as V-445/V-448; /v1/account/audit-log + /v1/account/email-preferences
+were registered in OpenAPI but no SDK exposed them).
+
+Customers using the SDKs couldn't programmatically:
+
+- Pull their audit log for compliance / monitoring (V-216 surface).
+- Read or set email opt-out preferences (V-204 surface).
+
+**TS** (`packages/sdk-typescript/src/resources/`):
+
+- `audit-log.ts`: `AuditLogResource` with `list(query?)` +
+  `iterate(opts?)` cursor-walking generator. New `AuditLogEntry` /
+  `AuditLogListPage` / `AuditLogQuery` types.
+- `email-preferences.ts`: `EmailPreferencesResource` with `list()`,
+  `set(body)`, plus convenience `optIn(eventType)` / `optOut(eventType)`.
+- Wired as `client.auditLog` + `client.emailPreferences`.
+
+**Python** (`packages/sdk-python/src/driftstack/resources/`):
+
+- `audit_log.py`: `AuditLogResource` + `AsyncAuditLogResource` with
+  `list(*, limit, cursor, action)` + `iterate(*, limit, action)`.
+- `email_preferences.py`: `EmailPreferencesResource` +
+  `AsyncEmailPreferencesResource` with `list / set / opt_in /
+opt_out`.
+- Wired as `client.audit_log` / `client.email_preferences` (sync +
+  async).
+
+**Go** (`packages/sdk-go/`):
+
+- `audit_log.go`: `AuditLogResource` with `List(ctx, *ListAuditLogQuery)`
+  - `Iterate(ctx, query, fn)` callback walker. New `AuditLogEntry` /
+    `AuditLogListPage` / `ListAuditLogQuery` types.
+- `email_preferences.go`: `EmailPreferencesResource` with `List(ctx)`
+  - `Set(ctx, *SetEmailPreferenceRequest)` + `OptIn(ctx, eventType)`
+  - `OptOut(ctx, eventType)`. New `EmailPreference`,
+    `ListEmailPreferencesResponse`, `SetEmailPreferenceRequest` types.
+- Wired as `client.AuditLog` + `client.EmailPreferences`.
+
+go test + Python pytest 137 + monorepo typecheck clean.
+
+Three-SDK Account-surface coverage now: V-385/V-428/V-434 me read,
+V-441/V-445 MFA exchange, V-448 MFA enrollment, V-449 audit-log +
+email-preferences. Remaining gaps: web-sessions list+revoke,
+avatar upload+clear, rate-limits read.
