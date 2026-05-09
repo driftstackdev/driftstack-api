@@ -83,6 +83,7 @@ export type {
   CreateSessionResponse,
   CreateWebhookRequest,
   CreateWebhookResponse,
+  UpdateWebhookRequest,
   InteractAction,
   InteractRequest,
   InteractResponse,

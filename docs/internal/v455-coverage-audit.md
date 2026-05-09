@@ -115,14 +115,14 @@ grep -roE "\"/v[0-9][^\"]+\"" packages/sdk-go
 
 | Route                                          | OpenAPI | TS  | Py  | Go  | Notes                          |
 | ---------------------------------------------- | ------- | --- | --- | --- | ------------------------------ |
-| POST /v1/webhooks                              | ❌      | ✅  | ✅  | ✅  | **OpenAPI GAP** — create       |
-| GET /v1/webhooks                               | ❌      | ✅  | ✅  | ✅  | **OpenAPI GAP** — list         |
-| GET /v1/webhooks/:id                           | ❌      | ✅  | ✅  | ✅  | **OpenAPI GAP**                |
-| PATCH /v1/webhooks/:id                         | ❌      | ❌  | ❌  | ❌  | **GAP** — update events/desc   |
-| DELETE /v1/webhooks/:id                        | ❌      | ✅  | ✅  | ✅  | **OpenAPI GAP**                |
-| GET /v1/webhooks/:id/deliveries                | ❌      | ✅  | ✅  | ✅  | **OpenAPI GAP**                |
-| POST /v1/webhooks/:id/rotate-secret            | ✅      | ✅  | ✅  | ✅  | V-359/V-416-418                |
-| POST /v1/webhooks/:id/test                     | ✅      | ❌  | ❌  | ❌  | **SDK GAP** — V-356 test ping  |
+| POST /v1/webhooks                              | ✅      | ✅  | ✅  | ✅  | V-457                          |
+| GET /v1/webhooks                               | ✅      | ✅  | ✅  | ✅  | V-457                          |
+| GET /v1/webhooks/:id                           | ✅      | ✅  | ✅  | ✅  | V-457                          |
+| PATCH /v1/webhooks/:id                         | ✅      | ✅  | ✅  | ✅  | V-457 spec / V-464 SDKs        |
+| DELETE /v1/webhooks/:id                        | ✅      | ✅  | ✅  | ✅  | V-457                          |
+| GET /v1/webhooks/:id/deliveries                | ✅      | ✅  | ✅  | ✅  | V-457                          |
+| POST /v1/webhooks/:id/rotate-secret            | ✅      | ✅  | ✅  | ✅  | V-359 / V-416-418              |
+| POST /v1/webhooks/:id/test                     | ✅      | ✅  | ✅  | ✅  | V-356 spec / V-463 SDKs        |
 | POST /v1/webhook-deliveries/:deliveryId/replay | ✅      | ✅  | ✅  | ✅  | V-307                          |
 | POST /v1/webhooks/stripe                       | 🚫      | 🚫  | 🚫  | 🚫  | Stripe-hosted webhook receiver |
 
@@ -225,7 +225,7 @@ These routes power the admin panel; they're 🚫 for customer SDKs by design but
 | Sessions         | 10           | 0 (V-461: gui-input 🚫 by L-001)    | 0 (V-461: gui-input 🚫) |
 | Profiles         | 12           | 5 (base CRUD)                       | 0                       |
 | API keys         | 4            | 0                                   | 0                       |
-| Webhooks         | 10           | 6 (base CRUD + deliveries + PATCH)  | 2 (PATCH + test)        |
+| Webhooks         | 10           | 0 (V-457 closed)                    | 0 (V-463/V-464 closed)  |
 | Billing          | 4            | 0                                   | 0                       |
 | Team             | 6            | 0                                   | 0                       |
 | Usage            | 2            | 0                                   | 0                       |
@@ -233,10 +233,10 @@ These routes power the admin panel; they're 🚫 for customer SDKs by design but
 | Status (public)  | 7            | 0 (V-459 closed; 1 SSE intentional) | 6 (intentional)         |
 | Admin            | 27           | 11                                  | 🚫 (admin-only)         |
 
-**Customer-facing OpenAPI gaps after V-462:** 0 (every customer-facing route is registered or intentionally 🚫). 🎉
-**Customer-facing SDK gaps after V-462:** 2 actionable (webhook PATCH + webhook /test).
+**Customer-facing OpenAPI gaps after V-464:** 0. 🎉
+**Customer-facing SDK gaps after V-464:** 0 actionable. 🎉🎉
 Plus 7 intentional 🚫 (6 status + gui-input).
-**Admin OpenAPI gaps:** 11 routes (Tier-2 follow-up).
+**Admin OpenAPI gaps:** 11 routes (Tier-2 follow-up; not customer-impacting).
 
 ## Per-gap closure slices (priority order)
 
@@ -252,8 +252,8 @@ Tier 1 (customer-facing OpenAPI parity — most impactful):
   scope which only enterprise self-hosted GUI keys carry, never customer keys). No OpenAPI
   registration; no SDK methods. ✅ shipped (doc-only).
 - **V-462** — register `/v1/account/audit-log/export` properly + add SDK method.
-- **V-463** — `/v1/webhooks/:id/test` SDK methods (V-356 send-test wrapper).
-- **V-464** — `/v1/webhooks/:id` PATCH SDK method (update events / description).
+- **V-463** — `/v1/webhooks/:id/test` SDK methods (V-356 send-test wrapper). ✅ shipped.
+- **V-464** — `/v1/webhooks/:id` PATCH SDK method (update events / description). ✅ shipped.
 
 Tier 2 (admin OpenAPI parity):
 

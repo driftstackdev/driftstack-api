@@ -8,6 +8,16 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.webhooks.sendTest(id)`** (V-463 / V-356) — send a
+  synthetic `test.ping` delivery to a webhook endpoint, bypassing
+  subscription. Lets customers verify their handler is reachable +
+  signature-valid before depending on it for real events. Returns
+  `{ delivery_id, event_id, event_type: 'test.ping' }`.
+- **`client.webhooks.update(id, body)`** (V-464 / V-351) — partial-
+  update a webhook endpoint (`url` / `events` / `description` /
+  `active`; at least one required). Signing secret is NOT rotated by
+  update — use `rotateSecret` for that. Disabled endpoints cannot be
+  updated (409). Re-exported type: `UpdateWebhookRequest`.
 - **`client.auditLog.export()`** (V-462 / V-297) — single-call JSON
   bulk-export of the calling account's audit log; designed for GDPR
   Article 20 data-portability requests. Up to 10,000 rows per call;

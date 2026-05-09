@@ -21371,3 +21371,48 @@ to drop the `search_path=staging,public` URL parameter.
 **Next** unblocks: V-278.B Astro/Fastify deploy + V-278.F staging
 mirror are still SSH-blocked. V-278.H DNS records still Cloudflare-
 token-blocked.
+
+## V-463 — webhooks `/test` SDK methods (V-356 send-test wrapper)
+
+**Tier**: 1 (V-455 audit gap closure).
+
+Adds `client.webhooks.sendTest(id)` (TS), `webhooks.send_test`
+(Python sync + async), and `Webhooks.SendTest(ctx, webhookID)` (Go).
+Wraps the existing V-356 server endpoint that emits a synthetic
+`test.ping` delivery to the configured URL, bypassing subscription.
+Customers verify their handler is reachable + signature-valid before
+depending on it for real events.
+
+Returns `{ delivery_id, event_id, event_type: 'test.ping' }` (TS), the
+dict equivalent (Python), or `*SendTestWebhookResponse` (Go). Requires
+the `admin` scope on the calling key. OpenAPI was already registered
+(V-457); this slice is SDK-only.
+
+## V-464 — webhooks `PATCH /v1/webhooks/:id` SDK methods (V-351 update)
+
+**Tier**: 1 (V-455 audit gap closure — last actionable customer-facing
+SDK gap).
+
+Adds `client.webhooks.update(id, body)` (TS), `webhooks.update(id,
+body)` (Python sync + async), and `Webhooks.Update(ctx, webhookID,
+*UpdateWebhookRequest)` (Go). Partial update; at least one of `url` /
+`events` / `description` / `active` must be present (server returns
+400 otherwise). Disabled endpoints cannot be updated (server returns
+409). Signing secret is NOT rotated by update — `rotateSecret` /
+`rotate_secret` / `RotateSecret` is the dedicated path.
+
+Re-exported types: `UpdateWebhookRequest` (TS re-export from api-types;
+Go as a new struct with pointer fields for partial-update semantics).
+
+**V-455 closure** — every customer-facing surface now has full parity:
+
+- OpenAPI: 100% of customer-facing routes registered or intentionally
+  🚫 (V-457 + V-458 + V-459 + V-460 + V-461 + V-462 closed all gaps).
+- TS / Python / Go SDKs: 0 actionable gaps. 7 routes intentionally 🚫
+  (6 status + gui-input).
+
+Admin OpenAPI gaps (11 routes) remain as Tier-2 follow-up — staff
+admin panel; not customer-impacting.
+
+OpenAPI test 8/8 pass; Go build/test green; TS typecheck clean;
+Python pytest 137/137 pass.

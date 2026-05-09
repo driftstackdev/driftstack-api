@@ -5,6 +5,7 @@ import type {
   CreateWebhookResponse,
   ListDeliveriesQueryInput,
   RotateWebhookSecretResponse,
+  UpdateWebhookRequest,
   WebhookDelivery,
   WebhookDeliveryStatus,
   WebhookEndpoint,
@@ -59,6 +60,21 @@ export class WebhooksResource {
     return this.http.request<void>({
       method: 'DELETE',
       path: `/v1/webhooks/${encodeURIComponent(id)}`,
+    });
+  }
+
+  /**
+   * V-351 — partial-update a webhook endpoint. At least one of `url`,
+   * `events`, `description`, or `active` must be present. The
+   * signing secret is NOT rotated by update; use `rotateSecret` for
+   * that. Disabled endpoints cannot be updated (returns 409).
+   * Requires the `admin` scope on the calling key.
+   */
+  update(id: string, body: UpdateWebhookRequest): Promise<WebhookEndpoint> {
+    return this.http.request<WebhookEndpoint>({
+      method: 'PATCH',
+      path: `/v1/webhooks/${encodeURIComponent(id)}`,
+      body,
     });
   }
 
@@ -122,6 +138,30 @@ export class WebhooksResource {
     return this.http.request<RotateWebhookSecretResponse>({
       method: 'POST',
       path: `/v1/webhooks/${encodeURIComponent(id)}/rotate-secret`,
+      body: {},
+    });
+  }
+
+  /**
+   * V-356 — send a synthetic `test.ping` event to the endpoint.
+   * Bypasses subscription (the endpoint receives it regardless of
+   * which event types it's subscribed to), so customers can verify
+   * their handler is reachable + signature-valid before depending on
+   * it for real events. Returns 202 + the synthetic delivery id.
+   * Requires the `admin` scope on the calling key.
+   */
+  sendTest(id: string): Promise<{
+    delivery_id: string;
+    event_id: string;
+    event_type: 'test.ping';
+  }> {
+    return this.http.request<{
+      delivery_id: string;
+      event_id: string;
+      event_type: 'test.ping';
+    }>({
+      method: 'POST',
+      path: `/v1/webhooks/${encodeURIComponent(id)}/test`,
       body: {},
     });
   }

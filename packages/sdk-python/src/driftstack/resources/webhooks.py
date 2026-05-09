@@ -127,6 +127,26 @@ class WebhooksResource:
         """
         return self._http.request("POST", _webhook_path(webhook_id, "/rotate-secret"), json_body={})
 
+    def send_test(self, webhook_id: str) -> dict[str, Any]:
+        """V-356 — send a synthetic ``test.ping`` event to the endpoint.
+
+        Bypasses subscription so customers can verify their handler
+        is reachable + signature-valid before depending on it for
+        real events. Returns ``{delivery_id, event_id, event_type}``.
+        """
+        return self._http.request("POST", _webhook_path(webhook_id, "/test"), json_body={})
+
+    def update(self, webhook_id: str, body: dict[str, Any]) -> WebhookEndpoint:
+        """V-351 — partial-update a webhook endpoint.
+
+        At least one of ``url``, ``events``, ``description``, or
+        ``active`` must be present. The signing secret is NOT rotated
+        by update; use :meth:`rotate_secret` for that. Disabled
+        endpoints cannot be updated (returns 409).
+        """
+        data = self._http.request("PATCH", _webhook_path(webhook_id), json_body=coerce_body(body))
+        return WebhookEndpoint.model_validate(data)
+
 
 class AsyncWebhooksResource:
     """Async webhooks resource."""
@@ -196,3 +216,14 @@ class AsyncWebhooksResource:
         return await self._http.request(
             "POST", _webhook_path(webhook_id, "/rotate-secret"), json_body={}
         )
+
+    async def send_test(self, webhook_id: str) -> dict[str, Any]:
+        """V-356 — async test ping. See :meth:`WebhooksResource.send_test`."""
+        return await self._http.request("POST", _webhook_path(webhook_id, "/test"), json_body={})
+
+    async def update(self, webhook_id: str, body: dict[str, Any]) -> WebhookEndpoint:
+        """V-351 — async partial-update. See :meth:`WebhooksResource.update`."""
+        data = await self._http.request(
+            "PATCH", _webhook_path(webhook_id), json_body=coerce_body(body)
+        )
+        return WebhookEndpoint.model_validate(data)

@@ -133,3 +133,48 @@ func (r *WebhooksResource) RotateSecret(ctx context.Context, webhookID string) (
 	}
 	return &out, nil
 }
+
+// SendTestWebhookResponse — V-356 synthetic test.ping delivery
+// receipt. The endpoint receives the event regardless of which event
+// types it's subscribed to.
+type SendTestWebhookResponse struct {
+	DeliveryID string `json:"delivery_id"`
+	EventID    string `json:"event_id"`
+	EventType  string `json:"event_type"` // always "test.ping"
+}
+
+// Update is V-351 — partial-update a webhook endpoint. At least one
+// of URL / Events / Description / Active must be non-nil; otherwise
+// the server returns 400. The signing secret is NOT rotated by
+// Update; use RotateSecret for that. Disabled endpoints can't be
+// updated (returns 409). Requires the admin scope on the calling key.
+func (r *WebhooksResource) Update(ctx context.Context, webhookID string, body *UpdateWebhookRequest) (*WebhookEndpoint, error) {
+	var out WebhookEndpoint
+	if err := r.client.do(ctx, requestOptions{
+		method: "PATCH",
+		path:   "/v1/webhooks/" + url.PathEscape(webhookID),
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// SendTest is V-356 — send a synthetic test.ping event to the
+// endpoint. Bypasses subscription so customers can verify their
+// handler is reachable + signature-valid before depending on it for
+// real events. Returns 202 + the synthetic delivery id. Requires
+// the admin scope on the calling key.
+func (r *WebhooksResource) SendTest(ctx context.Context, webhookID string) (*SendTestWebhookResponse, error) {
+	var out SendTestWebhookResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/webhooks/" + url.PathEscape(webhookID) + "/test",
+		body:   struct{}{},
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

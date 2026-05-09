@@ -472,6 +472,17 @@ type CreateWebhookResponse struct {
 	Secret string `json:"secret"`
 }
 
+// UpdateWebhookRequest — V-351 partial update. Pointer fields so
+// callers can distinguish "leave as-is" (nil) from "set explicitly"
+// (non-nil). At least one field must be non-nil; the server returns
+// 400 otherwise.
+type UpdateWebhookRequest struct {
+	URL         *string             `json:"url,omitempty"`
+	Events      *[]WebhookEventType `json:"events,omitempty"`
+	Description *string             `json:"description,omitempty"`
+	Active      *bool               `json:"active,omitempty"`
+}
+
 type WebhookDelivery struct {
 	ID                  string                `json:"id"`
 	WebhookID           string                `json:"webhook_id"`

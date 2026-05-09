@@ -8,6 +8,15 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.Webhooks.SendTest(ctx, webhookID)`** (V-463 / V-356) —
+  send a synthetic `test.ping` delivery; bypasses subscription. Returns
+  `*SendTestWebhookResponse` with the synthetic delivery id.
+- **`client.Webhooks.Update(ctx, webhookID, *UpdateWebhookRequest)`**
+  (V-464 / V-351) — partial-update a webhook endpoint. Pointer fields
+  on the request struct distinguish "leave as-is" from "set"; at least
+  one must be non-nil. Signing secret is NOT rotated by Update — use
+  RotateSecret for that. Disabled endpoints can't be updated (409).
+  New types: `UpdateWebhookRequest`, `SendTestWebhookResponse`.
 - **`client.AuditLog.Export(ctx)`** (V-462 / V-297) — single-call JSON
   bulk-export of the calling account's audit log. Designed for GDPR
   Article 20 data-portability requests; up to 10,000 rows per call;

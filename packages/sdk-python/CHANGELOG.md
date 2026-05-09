@@ -8,6 +8,14 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.webhooks.send_test(webhook_id)`** + async mirror
+  (V-463 / V-356) — synthetic `test.ping` delivery; bypasses
+  subscription. Returns `{delivery_id, event_id, event_type}`.
+- **`client.webhooks.update(webhook_id, body)`** + async mirror
+  (V-464 / V-351) — partial-update a webhook endpoint
+  (`url`/`events`/`description`/`active`; at least one required).
+  Signing secret is NOT rotated by update — use `rotate_secret`.
+  Disabled endpoints cannot be updated (409).
 - **`client.audit_log.export()`** + async mirror (V-462 / V-297) —
   single-call JSON bulk-export of the calling account's audit log.
   Designed for GDPR Article 20 data-portability requests; up to 10,000
