@@ -20687,3 +20687,21 @@ recovery path: customers catch the error, call
 
 Both 2/2 pass. Pinning ensures future struct-shape regression
 surfaces here.
+
+## V-447 — three-SDK CHANGELOG entries for V-445 MFA challenge + step-up
+
+**Tier**: 1 (V-445 release-notes follow-through).
+
+Each SDK CHANGELOG.md Unreleased section gains an Added (V-445)
+subsection covering:
+
+- TS: `client.auth.mfaChallenge(body)` + `mfaStepUp(body)` with
+  `MfaChallengeRequest / Response` + `MfaStepUpRequest / Response`
+  types re-exported. Pairs with `MfaStepUpRequiredError` recovery.
+- Python: `client.auth.mfa_challenge(body)` + `mfa_step_up(body)`
+  sync + async mirror.
+- Go: `client.Auth.MfaChallenge(ctx, *MfaChallengeRequest)` +
+  `MfaStepUp(ctx, *MfaStepUpRequest)`. Pair with
+  `errors.As(err, &MfaStepUpRequiredError{})` recovery flow.
+
+Three-SDK MFA exchange parity surfaced in release notes.

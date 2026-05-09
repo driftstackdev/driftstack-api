@@ -88,6 +88,18 @@ DebugToken? }` matching server.
   step-up-gated operations instead of falling through to
   `UnknownError`.
 
+### Added (V-445)
+
+- **`client.Auth.MfaChallenge(ctx, *MfaChallengeRequest)`** — V-353d
+  exchange of login challenge_token for a session via TOTP or
+  recovery code. Response carries `Via = "totp" | "recovery"`.
+- **`client.Auth.MfaStepUp(ctx, *MfaStepUpRequest)`** — V-353e
+  refresh of `MfaSatisfiedAt` (15-minute freshness window). No new
+  session issued. Pair with `MfaStepUpRequiredError` recovery:
+  `errors.As(err, &MfaStepUpRequiredError{})` → call `MfaStepUp` →
+  retry. New types: `MfaChallengeRequest / Response`,
+  `MfaStepUpRequest / Response`.
+
 ### Notes
 
 - `0.1.0` is the inaugural alpha release. Tagged in the monorepo as

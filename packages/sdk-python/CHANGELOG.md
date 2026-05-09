@@ -46,6 +46,16 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 `PROBLEM_TYPE_TO_ERROR` now covers 24 typed problem URIs.
 
+### Added (V-445)
+
+- **`client.auth.mfa_challenge(body)`** + async mirror — V-353d
+  exchange of login challenge_token for a session via TOTP or
+  recovery code. Response includes `via: "totp" | "recovery"`.
+- **`client.auth.mfa_step_up(body)`** + async mirror — V-353e
+  refresh of `mfa_satisfied_at` (15-minute freshness window). No
+  new session issued. Pair with `MfaStepUpRequiredError` recovery:
+  catch → `mfa_step_up` → retry.
+
 ### Notes
 
 - `0.0.1` is the inaugural alpha. Versioning will move to SemVer

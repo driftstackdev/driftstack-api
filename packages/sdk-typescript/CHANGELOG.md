@@ -41,6 +41,20 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
   `slug` (V-298a), `region` (V-298b), `avatar_url` (V-352b),
   `mfa_enrolled` (V-353h), `teams` (V-326c).
 
+### Added (V-441 / V-445)
+
+- **`FeatureUnavailableError`** + **`MfaStepUpRequiredError`** typed
+  errors mapping `feature-unavailable` / `mfa-step-up-required`
+  problem URIs (V-441). Customers can `instanceof MfaStepUpRequiredError`
+  on the catch path.
+- **`client.auth.mfaChallenge(body)`** + **`mfaStepUp(body)`** —
+  V-353d/e MFA exchange. `mfaChallenge` exchanges the login
+  challenge_token for a session via TOTP or recovery code;
+  `mfaStepUp` refreshes `mfa_satisfied_at` for the V-353e step-up
+  gate. Pair `mfaStepUp` with the `MfaStepUpRequiredError` recovery
+  path: catch → `mfaStepUp` → retry. New types re-exported:
+  `MfaChallengeRequest / Response`, `MfaStepUpRequest / Response`.
+
 ### Pre-1.0 stability policy
 
 The SDK is at **0.1.x**; the public surface is stable enough to
