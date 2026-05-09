@@ -59,9 +59,8 @@ intermediate `creating` state isn't directly observable.
 
 `purpose` selects the WebKit driver harness configuration (V-169).
 `production_customer` is the default; the other values
-(`cumulative_rig_validation`, `test_domain_probe`,
-`fingerprint_probe`, `behavioural_capture`) are reserved for
-Driftstack-internal ops.
+(`cumulative_rig_validation`, `test_domain_probe`) are reserved
+for Driftstack-internal ops.
 
 `label` is a free-form short string (max 120 chars) for the
 customer's own identification — surfaced in dashboards + the

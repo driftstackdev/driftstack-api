@@ -72,11 +72,15 @@ const (
 // SessionPurpose drives WebKit driver harness selection (V-169).
 type SessionPurpose string
 
+// V-433 — these are the only values the server's
+// SessionPurposeSchema accepts. The previous Go SDK enum
+// (`recapture_run` / `fingerprint_probe` / `behavioural_capture`)
+// matched no server enum value and would 400 if a customer used
+// them.
 const (
-	PurposeProductionCustomer SessionPurpose = "production_customer"
-	PurposeRecaptureRun       SessionPurpose = "recapture_run"
-	PurposeFingerprintProbe   SessionPurpose = "fingerprint_probe"
-	PurposeBehaviouralCapture SessionPurpose = "behavioural_capture"
+	PurposeProductionCustomer    SessionPurpose = "production_customer"
+	PurposeCumulativeRigValidation SessionPurpose = "cumulative_rig_validation"
+	PurposeTestDomainProbe       SessionPurpose = "test_domain_probe"
 )
 
 // DefaultSessionPurpose matches packages/api-types DEFAULT_SESSION_PURPOSE.
@@ -91,6 +95,12 @@ const (
 	EventQuotaWarning80Pct WebhookEventType = "quota.warning_80pct"
 	EventQuotaExceeded     WebhookEventType = "quota.exceeded"
 	EventAPIKeyRevoked     WebhookEventType = "api_key.revoked"
+	// V-356 — synthetic test event sent only via
+	// POST /v1/webhooks/:id/test. Customers cannot subscribe to it
+	// (the create / update Zod schemas reject it); it's dispatched
+	// regardless of subscription so customers can verify their
+	// handler signature-checks correctly before relying on real events.
+	EventTestPing WebhookEventType = "test.ping"
 )
 
 // WebhookDeliveryStatus.

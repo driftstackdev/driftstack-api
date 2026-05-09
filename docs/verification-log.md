@@ -20310,3 +20310,36 @@ from V-396; pre-push gate doesn't run mypy.
 
 This regen completes the "Python Pydantic models land on next
 regen pass" follow-through queued back in V-417 + V-419 commits.
+
+## V-433 — Go SDK SessionPurpose enum + WebhookEventType + sessions.md fix
+
+**Tier**: 1 (rule L empirical-diff sweep continues — Go SDK
+SessionPurpose constants match NO server-accepted enum value;
+WebhookEventType missing test.ping V-356; sessions.md V-430 had
+two invalid purpose values listed).
+
+**Go SessionPurpose:** Was
+`production_customer / recapture_run / fingerprint_probe /
+behavioural_capture`. Server's `SessionPurposeSchema` is
+`production_customer / cumulative_rig_validation / test_domain_probe`.
+Three of the four Go constants matched no server value;
+customer code passing `PurposeRecaptureRun` etc. would 400.
+Fixed: now `PurposeProductionCustomer / PurposeCumulativeRigValidation /
+PurposeTestDomainProbe`.
+
+**Go WebhookEventType:** Missing `EventTestPing = "test.ping"`
+(V-356). Added.
+
+**sessions.md:** V-430 incorrectly listed `fingerprint_probe`
+
+- `behavioural_capture` (pulled from the broken Go enum). Now
+  matches server: `cumulative_rig_validation` + `test_domain_probe`
+  only.
+
+`go build` + `go test ./...` clean.
+
+V-433 closes the SessionPurpose mismatch — the LAST publicly-
+discoverable enum gap in the Go SDK that I've found via this
+sweep. Customer Go code calling .Create with non-default
+purposes was previously broken at the wire layer; now correctly
+typed.
