@@ -618,22 +618,36 @@ type CreatePortalSessionResponse struct {
 
 type SignupRequest struct {
 	Email    string `json:"email"`
-	Password string `json:"password,omitempty"`
+	Password string `json:"password"`
+	Name     string `json:"name,omitempty"`
 }
 
+// SignupResponse — V-425. Matches the server's actual response shape
+// (was previously typed as { account_id, verify_email_sent } which the
+// server never returns). `DebugToken` is populated only when the
+// server runs with `EMAIL_DELIVERY_MODE=stub`; production responses
+// omit it.
 type SignupResponse struct {
-	AccountID       string `json:"account_id"`
-	VerifyEmailSent bool   `json:"verify_email_sent"`
+	VerificationEmailExpiresAt time.Time `json:"verification_email_expires_at"`
+	DebugToken                 string    `json:"debug_token,omitempty"`
 }
 
 type VerifyEmailRequest struct {
 	Token string `json:"token"`
 }
 
+// WebSession — V-425. Matches the server's `WebSessionSchema`
+// returned nested under `session` on every web-auth flow response
+// (verify-email, login non-MFA branch, magic-link consume, password-
+// reset confirm, refresh).
+type WebSession struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+	AccountID string    `json:"account_id"`
+}
+
 type VerifyEmailResponse struct {
-	AccountID    string    `json:"account_id"`
-	SessionToken string    `json:"session_token"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	Session WebSession `json:"session"`
 }
 
 type LoginRequest struct {
@@ -641,10 +655,30 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// LoginResponse — V-425 + V-353d. The server returns one of two
+// shapes:
+//
+//   - Non-MFA: `{ "session": { ... } }` — `Session` is populated;
+//     `MfaRequired` is false / zero.
+//   - MFA-required: `{ "mfa_required": true, "challenge_token": "...",
+//     "challenge_expires_at": "..." }` — `MfaRequired` is true;
+//     `Session.Token` is empty.
+//
+// Customer code branches on `MfaRequired`:
+//
+//	resp, err := client.Auth.Login(ctx, &LoginRequest{...})
+//	if resp.MfaRequired {
+//	    // exchange resp.ChallengeToken via the /v1/auth/mfa/challenge endpoint
+//	} else {
+//	    // resp.Session is the real session
+//	}
 type LoginResponse struct {
-	AccountID    string    `json:"account_id"`
-	SessionToken string    `json:"session_token"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	// Populated on the non-MFA branch.
+	Session WebSession `json:"session,omitempty"`
+	// Populated on the MFA-required branch (V-353d).
+	MfaRequired        bool   `json:"mfa_required,omitempty"`
+	ChallengeToken     string `json:"challenge_token,omitempty"`
+	ChallengeExpiresAt string `json:"challenge_expires_at,omitempty"`
 }
 
 type MagicLinkRequest struct {
@@ -660,9 +694,7 @@ type MagicLinkConsumeRequest struct {
 }
 
 type MagicLinkConsumeResponse struct {
-	AccountID    string    `json:"account_id"`
-	SessionToken string    `json:"session_token"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	Session WebSession `json:"session"`
 }
 
 type PasswordResetRequest struct {
@@ -679,21 +711,23 @@ type PasswordResetConfirmRequest struct {
 }
 
 type PasswordResetConfirmResponse struct {
-	AccountID string `json:"account_id"`
-	OK        bool   `json:"ok"`
+	Session WebSession `json:"session"`
 }
 
+// RefreshSessionRequest — V-425. Server expects `{ "token": "..." }`,
+// not `{ "session_token": "..." }` as the Go SDK previously sent.
 type RefreshSessionRequest struct {
-	SessionToken string `json:"session_token"`
+	Token string `json:"token"`
 }
 
 type RefreshSessionResponse struct {
-	SessionToken string    `json:"session_token"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	Session WebSession `json:"session"`
 }
 
+// LogoutRequest — V-425. Server expects `{ "token": "..." }`, not
+// `{ "session_token": "..." }`.
 type LogoutRequest struct {
-	SessionToken string `json:"session_token"`
+	Token string `json:"token"`
 }
 
 type LogoutResponse struct {

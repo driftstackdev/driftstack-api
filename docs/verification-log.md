@@ -20032,3 +20032,46 @@ return-type regression would surface as either the satisfies
 check failing OR the discriminator narrowing breaking.
 
 2/2 pass.
+
+## V-425 — Go SDK auth response/request shapes match real server (V-353d / V-079)
+
+**Tier**: 1 (Memory rule L empirical-diff bar — five Go SDK auth
+response shapes were flat and didn't match the actual nested
+`{ session: WebSession }` server returns; two request shapes
+used wrong field names. Customers calling Go SDK auth endpoints
+against a real Driftstack server got JSON-decode mismatches).
+
+`packages/sdk-go/types.go` corrections:
+
+- New `WebSession` struct (`Token / ExpiresAt / AccountID`) — mirrors
+  server's `WebSessionSchema`.
+- `VerifyEmailResponse` was `{ AccountID, SessionToken, ExpiresAt }`
+  (flat) → now `{ Session WebSession }`.
+- `LoginResponse` was the same flat shape → now carries BOTH the
+  non-MFA `Session WebSession` AND the V-353d MFA-required branch
+  (`MfaRequired`, `ChallengeToken`, `ChallengeExpiresAt`). Customer
+  code branches on `MfaRequired`.
+- `MagicLinkConsumeResponse` flat → `{ Session WebSession }`.
+- `PasswordResetConfirmResponse` was `{ AccountID, OK }` (server
+  never returned that shape) → now `{ Session WebSession }`.
+- `RefreshSessionResponse` flat → `{ Session WebSession }`.
+- `RefreshSessionRequest` was `{ SessionToken }` (json tag
+  `session_token`) → now `{ Token }` matching server's expected
+  field name.
+- `LogoutRequest` same fix: `{ SessionToken }` → `{ Token }`.
+- `SignupRequest` was `password,omitempty` (incorrectly optional);
+  added required `Name` field. Now matches server.
+- `SignupResponse` was `{ AccountID, VerifyEmailSent }` (server
+  never returned that shape either) → now
+  `{ VerificationEmailExpiresAt, DebugToken? }`.
+
+`auth_test.go` fixtures updated to the new shapes. `TestAuth_Login`
+split into `TestAuth_Login_NonMfa` + `TestAuth_Login_MfaRequired`
+to pin both V-353d branches. 4/4 auth tests pass; full
+`go test ./...` clean.
+
+These were live-customer-facing wire mismatches: a Go SDK customer
+calling `client.Auth.Login(...)` against `api.driftstack.dev`
+would have gotten a `Session.Token = ""` empty struct (since the
+JSON root has no `session_token` field — it's nested under
+`session`). Now correctly decodes.

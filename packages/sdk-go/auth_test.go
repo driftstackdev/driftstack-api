@@ -10,14 +10,15 @@ import (
 
 func TestAuth_Signup(t *testing.T) {
 	t.Parallel()
+	verifyExpiresAt := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
 	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/auth/signup" || r.Method != "POST" {
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
 		w.Header().Set("content-type", "application/json")
 		_ = json.NewEncoder(w).Encode(SignupResponse{
-			AccountID:       "acc_00000000-0000-4000-8000-000000000001",
-			VerifyEmailSent: true,
+			VerificationEmailExpiresAt: verifyExpiresAt,
+			DebugToken:                 "stub-token-abc",
 		})
 	})
 	got, err := client.Auth.Signup(context.Background(), &SignupRequest{
@@ -27,12 +28,12 @@ func TestAuth_Signup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !got.VerifyEmailSent || got.AccountID == "" {
-		t.Errorf("unexpected response: %+v", got)
+	if !got.VerificationEmailExpiresAt.Equal(verifyExpiresAt) {
+		t.Errorf("verification_email_expires_at=%v want %v", got.VerificationEmailExpiresAt, verifyExpiresAt)
 	}
 }
 
-func TestAuth_Login(t *testing.T) {
+func TestAuth_Login_NonMfa(t *testing.T) {
 	t.Parallel()
 	expiresAt := time.Now().Add(7 * 24 * time.Hour).UTC().Truncate(time.Second)
 	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -41,9 +42,11 @@ func TestAuth_Login(t *testing.T) {
 		}
 		w.Header().Set("content-type", "application/json")
 		_ = json.NewEncoder(w).Encode(LoginResponse{
-			AccountID:    "acc_00000000-0000-4000-8000-000000000001",
-			SessionToken: "ds_web_abc123",
-			ExpiresAt:    expiresAt,
+			Session: WebSession{
+				Token:     "ds_web_abc123",
+				ExpiresAt: expiresAt,
+				AccountID: "acc_00000000-0000-4000-8000-000000000001",
+			},
 		})
 	})
 	got, err := client.Auth.Login(context.Background(), &LoginRequest{
@@ -53,11 +56,47 @@ func TestAuth_Login(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.SessionToken != "ds_web_abc123" {
-		t.Errorf("session_token=%q", got.SessionToken)
+	if got.MfaRequired {
+		t.Errorf("expected non-MFA branch")
 	}
-	if !got.ExpiresAt.Equal(expiresAt) {
-		t.Errorf("expires_at=%v", got.ExpiresAt)
+	if got.Session.Token != "ds_web_abc123" {
+		t.Errorf("session.token=%q", got.Session.Token)
+	}
+	if !got.Session.ExpiresAt.Equal(expiresAt) {
+		t.Errorf("session.expires_at=%v", got.Session.ExpiresAt)
+	}
+}
+
+// V-353d — login MFA-required branch. Server returns the discriminated
+// shape `{ mfa_required: true, challenge_token, challenge_expires_at }`
+// when the account has MFA enrolled. Customer code branches on
+// `MfaRequired` and exchanges the challenge_token via the
+// /v1/auth/mfa/challenge endpoint.
+func TestAuth_Login_MfaRequired(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"mfa_required":         true,
+			"challenge_token":      "one-time-token",
+			"challenge_expires_at": "2026-05-09T00:05:00Z",
+		})
+	})
+	got, err := client.Auth.Login(context.Background(), &LoginRequest{
+		Email:    "tester@driftstack.local",
+		Password: "supersecret",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.MfaRequired {
+		t.Errorf("expected MFA-required branch")
+	}
+	if got.ChallengeToken != "one-time-token" {
+		t.Errorf("challenge_token=%q", got.ChallengeToken)
+	}
+	if got.Session.Token != "" {
+		t.Errorf("session.token should be empty on MFA branch, got %q", got.Session.Token)
 	}
 }
 
@@ -85,7 +124,7 @@ func TestAuth_Logout(t *testing.T) {
 		w.Header().Set("content-type", "application/json")
 		_ = json.NewEncoder(w).Encode(LogoutResponse{OK: true})
 	})
-	got, err := client.Auth.Logout(context.Background(), &LogoutRequest{SessionToken: "ds_web_abc"})
+	got, err := client.Auth.Logout(context.Background(), &LogoutRequest{Token: "ds_web_abc"})
 	if err != nil || !got.OK {
 		t.Errorf("err=%v got=%+v", err, got)
 	}
