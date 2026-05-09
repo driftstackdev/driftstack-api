@@ -27,6 +27,57 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
   with fields `ID`, `Secret`, `SecretPrefix`, `PrevSecretPrefix`,
   `GraceExpiresAt`. Fresh plaintext shown ONCE; previous secret
   active for 24h. New type: `RotateWebhookSecretResponse`.
+- **`client.Account.Me(ctx)`** (V-428) — V-385 full
+  `/v1/account/me` rich-shape read. New `*AccountSelfProfile` carries
+  15+ fields incl. `Slug`, `Region`, `AvatarURL`, `MfaEnrolled`,
+  `Teams[]AccountTeamMembership`.
+
+### Fixed (V-425 / V-426 / V-427 / V-429 / V-433)
+
+Wire-shape correctness sweep against the live server. The Go SDK
+had several response/request shapes that didn't match what the
+server returns or accepts; customers calling these endpoints would
+have hit JSON decode failures or 400s.
+
+- **Auth flow responses** (V-425): `LoginResponse`,
+  `VerifyEmailResponse`, `MagicLinkConsumeResponse`,
+  `PasswordResetConfirmResponse`, `RefreshSessionResponse` — all
+  were flat `{ AccountID, SessionToken, ExpiresAt }`; server returns
+  nested `{ session: WebSession }`. Now correctly nested. New
+  `WebSession` struct.
+- **`LoginResponse` MFA branch** (V-425): now carries `MfaRequired`,
+  `ChallengeToken`, `ChallengeExpiresAt` for V-353d's discriminated
+  response. Customer code branches on `MfaRequired`.
+- **Auth flow request fields** (V-425): `RefreshSessionRequest` and
+  `LogoutRequest` had `SessionToken` (json `session_token`); server
+  expects `Token` (json `token`). Renamed.
+- **`SignupResponse`** (V-425): was `{ AccountID, VerifyEmailSent }`
+  (server never returned that); now `{ VerificationEmailExpiresAt,
+DebugToken? }` matching server.
+- **`Profile`** (V-426): had stale `Persona`, `StorageState`, `Notes`,
+  `AccountID`, `LastSessionID` fields not in server response; was
+  missing `Archetype`. Now matches server's 7-field shape.
+- **`CreateProfileRequest`/`UpdateProfileRequest`** (V-426): same
+  staleness; `Persona`, `StorageState`, `Notes` removed (server's
+  Zod parse silently dropped them); `Archetype` added to Create so
+  customers can pin a non-default archetype.
+- **`WebhookEndpoint`** (V-427): missing `PrevSecretPrefix`,
+  `RotationGraceExpiresAt` (V-359), `DeliveryCounts` (V-185). Added.
+  New helper `WebhookEndpointDeliveryCounts`.
+- **`Subscription`** (V-429): was 5 fields; server returns 8.
+  Missing `CanceledAt`, `CreatedAt`, `UpdatedAt`. Plus
+  `StripeSubscriptionID` was `*string` (nullable); server requires
+  it always-present (now `string`).
+- **`GetBillingStateResponse.TrialPack`** (V-429): was
+  `*TrialPackState`; server schema is non-nullable. Now value type.
+- **`SessionPurpose` enum** (V-433): constants were
+  `production_customer`/`recapture_run`/`fingerprint_probe`/
+  `behavioural_capture`; server enum is `production_customer`/
+  `cumulative_rig_validation`/`test_domain_probe`. Three of four
+  values were broken; customer code passing
+  `PurposeRecaptureRun` etc. would 400. Fixed.
+- **`WebhookEventType`** (V-433): missing `EventTestPing` (V-356).
+  Added.
 
 ### Notes
 

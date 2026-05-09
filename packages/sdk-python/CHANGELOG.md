@@ -21,6 +21,20 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
   V-359 webhook signing-secret rotation. Returns dict with the fresh
   plaintext (shown ONCE), prefixes, and `grace_expires_at`. Previous
   secret stays active for 24h.
+- **`client.account.me()`** + async mirror (V-434) — V-385 full
+  `/v1/account/me` rich-shape read (15+ fields incl. slug, region,
+  avatar_url, mfa_enrolled, teams). Returns `dict[str, Any]` until
+  the next `scripts/generate.sh` regen pass adds a Pydantic model.
+
+### Regenerated (V-432)
+
+- `_generated/models.py` refreshed against the live OpenAPI spec.
+  Picks up V-148 tier rename (`free`/`starter`/`solo`/`builder`/
+  `scale` → `trial_pack`/`solo_manual`/`team_manual`/`agency_manual`/
+  `api_starter`/`api_builder`/`api_scale`), V-185 + V-359 webhook
+  fields (`prev_secret_prefix`, `rotation_grace_expires_at`,
+  `delivery_counts`), V-169 session purpose field, V-174 expanded
+  scope enum, etc.
 
 ### Notes
 

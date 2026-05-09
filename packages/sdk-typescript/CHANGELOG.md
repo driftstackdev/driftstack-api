@@ -29,6 +29,18 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
   every outbound delivery with both new + old secrets. New type
   re-exported: `RotateWebhookSecretResponse`.
 
+### Fixed (V-423 / V-428)
+
+- **`client.auth.login()`** now returns `Promise<LoginResponseUnion>`
+  (previously typed as `Promise<LoginResponse>`, which silently
+  type-mismatched on the V-353d MFA-required branch). Branch on the
+  `'mfa_required' in out` discriminator for type-narrowed access.
+  New types re-exported: `LoginResponseUnion`, `LoginMfaRequiredResponse`.
+- **`AccountSelfProfile`** now matches the full server `/me` response
+  (was 9 fields; server returns 15). Added: `timezone` (V-352),
+  `slug` (V-298a), `region` (V-298b), `avatar_url` (V-352b),
+  `mfa_enrolled` (V-353h), `teams` (V-326c).
+
 ### Pre-1.0 stability policy
 
 The SDK is at **0.1.x**; the public surface is stable enough to

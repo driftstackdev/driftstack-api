@@ -20365,3 +20365,35 @@ Wired into `Driftstack` + `AsyncDriftstack` as `client.account`
 Three-SDK Account parity now actually true: TS V-385/V-428, Go
 V-428, Python V-434. The V-428 commit message overclaimed
 Python coverage; this slice closes that gap.
+
+## V-435 — three-SDK CHANGELOG entries reflect the wire-correctness sweep + Python README
+
+**Tier**: 1 (V-422-434 release-notes follow-through; ensures the
+next publish carries informative changelog entries for the
+empirical-diff sweep).
+
+`packages/sdk-typescript/CHANGELOG.md` — adds Fixed (V-423/V-428)
+section with login union return-type fix + AccountSelfProfile
+rich-shape note.
+
+`packages/sdk-python/CHANGELOG.md` — adds rotate_secret +
+account.me Added entries; new Regenerated section (V-432) noting
+the V-148 tier rename + V-185/V-359 webhook fields + V-169
+session purpose + V-174 scope enum picked up via regen.
+
+`packages/sdk-go/CHANGELOG.md` — adds Fixed (V-425/V-426/V-427/
+V-429/V-433) section enumerating every wire-shape correction:
+auth nested-session shapes + V-353d MFA branch on LoginResponse
+
+- Profile archetype + WebhookEndpoint V-185/V-359 fields +
+  Subscription canceled_at/created_at/updated_at + SessionPurpose
+  canonical enum + WebhookEventType test.ping.
+
+Plus `packages/sdk-python/README.md` Resources table gains
+`client.account` row (Python README hadn't been updated when V-434
+shipped).
+
+Three-SDK release notes now describe the customer-impact reality
+of the wire-correctness sweep so customers consuming next-version
+release notes understand both what was added AND what was
+silently broken before.
