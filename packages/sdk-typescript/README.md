@@ -57,6 +57,22 @@ client.sessions.getState(id)
 client.sessions.capture(id, body)
 client.sessions.destroy(id)
 
+client.profiles.create(body)
+client.profiles.list(query?)
+client.profiles.iterate(opts?)
+client.profiles.get(id)
+client.profiles.update(id, body)
+client.profiles.delete(id)
+client.profiles.clone(id, body?)        // V-313 — auto-derives "(copy)" name when omitted
+
+client.profileSnapshots.capture(profileId, body)            // V-312 — immutable point-in-time copy
+client.profileSnapshots.listForProfile(profileId, query?)
+client.profileSnapshots.list(query?)                        // cross-account
+client.profileSnapshots.iterate(opts?)
+client.profileSnapshots.get(id)
+client.profileSnapshots.restore(id, body)                   // creates a NEW profile
+client.profileSnapshots.delete(id)
+
 client.apiKeys.create(body)             // requires admin scope
 client.apiKeys.list()
 client.apiKeys.rotate(id, options?)     // V-296 — 24h grace, plaintext shown once
@@ -75,6 +91,23 @@ client.team.listMembers()
 client.team.listInvites()
 client.team.acceptInvite(token)
 client.team.removeMember(membershipId)
+
+client.account.me()                     // calling account's full state
+
+client.billing.getState()
+client.billing.startCheckout(body)
+client.billing.startTrialPack(body)
+client.billing.startPortalSession()
+
+client.auth.signup(body)
+client.auth.verifyEmail(body)
+client.auth.login(body)                 // V-353d — returns LoginResponse OR LoginMfaRequiredResponse
+client.auth.refresh(body)
+client.auth.logout(body)
+client.auth.requestMagicLink(body)
+client.auth.consumeMagicLink(body)
+client.auth.requestPasswordReset(body)
+client.auth.confirmPasswordReset(body)
 
 client.usage.current()
 ```

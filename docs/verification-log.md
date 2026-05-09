@@ -19744,3 +19744,23 @@ documented in V-395 + V-400; this slice closes the third doc
 mentioning it.
 
 Astro check clean.
+
+## V-410 — TS SDK README Resources section enumerates full surface
+
+**Tier**: 1 (V-385/V-401/V-402/V-376/V-379 README catch-up;
+README listed 5 of the 9 resource accessors).
+
+`packages/sdk-typescript/README.md` Resources section gains:
+
+- `client.profiles.*` (7 methods incl. V-313 clone).
+- `client.profileSnapshots.*` (7 methods, V-312).
+- `client.account.me()` (V-385).
+- `client.billing.*` (4 methods).
+- `client.auth.*` (9 methods incl. V-353d login union via comment).
+
+Customers reading the README see the complete public surface
+matching what V-376/377/378/379/385/401/402 added under the
+hood. Method signatures match the actual TS resource classes
+(verified via grep against the source).
+
+Python + Go SDK README equivalents queued (V-411 / V-412).
