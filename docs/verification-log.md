@@ -20150,3 +20150,35 @@ TS SDK auto-flows since it reads from api-types. Python generated
 models will pick this up on next regen.
 
 `go test ./...` clean. Monorepo typecheck + 1158/1158 vitest pass.
+
+## V-428 — Go SDK AccountResource + TS AccountSelfProfile rich-shape match
+
+**Tier**: 1 (closes the cross-SDK Account gap; rule L empirical-
+diff bar — TS AccountSelfProfile was incomplete vs server, Go
+SDK had no Account resource at all).
+
+**TS** (`packages/sdk-typescript/src/resources/account.ts`):
+`AccountSelfProfile` was 9 fields (id/email/name/tier/status +
+4 caps); server returns 15 (incl. timezone / slug / region /
+avatar_url / mfa_enrolled / teams). Customers calling
+`client.account.me()` got the full JSON but TS only typed the
+first 9. Now matches server fully with V-298a/V-298b/V-352b/
+V-353h/V-326c fields documented.
+
+**Go** (`packages/sdk-go/account.go` + client.go wiring):
+
+- New `AccountResource` with `Me(ctx)` returning rich
+  `*AccountSelfProfile`.
+- New `AccountTeamMembership` helper type.
+- Client struct + `New()` constructor wire `client.Account`.
+
+`account_test.go` adds 2 tests:
+
+- All-fields-populated path (slug, region, avatar, MFA, teams).
+- All-nullables-null path (e.g. trial_pack tier with no slug).
+
+`go test ./...` clean. Monorepo typecheck clean. README updated.
+
+Three-SDK Account parity: TS (V-385/V-428), Python
+(`client.account.me()` was already there returning `dict[str, Any]`),
+Go (V-428).

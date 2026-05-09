@@ -62,6 +62,7 @@ Every public API endpoint is a typed method on a resource accessor. All take `co
 | `client.Team`             | `Invite`, `ListMembers`, `ListInvites`, `AcceptInvite`, `RemoveMember` (V-298)                                                                |
 | `client.Billing`          | `GetState`, `CreateCheckoutSession`, `StartTrialPack`, `CreatePortalSession`                                                                  |
 | `client.Auth`             | `Signup`, `VerifyEmail`, `Login`, `Refresh`, `Logout`, `RequestMagicLink`, `ConsumeMagicLink`, `RequestPasswordReset`, `ConfirmPasswordReset` |
+| `client.Account`          | `Me` (V-385 — full /v1/account/me with slug / region / avatar / mfa / teams)                                                                  |
 
 Discriminated-union builders (`NewTapAction`, `NewSelectorCondition`, etc.) live in `types.go` for `Interact` and `Wait` requests.
 
