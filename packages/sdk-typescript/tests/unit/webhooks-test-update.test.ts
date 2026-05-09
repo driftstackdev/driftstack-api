@@ -20,9 +20,12 @@ const fakeEndpoint = (): WebhookEndpoint => ({
   secret_prefix: 'whsec_aA',
   prev_secret_prefix: null,
   rotation_grace_expires_at: null,
-  delivery_counts: { delivered: 0, dlq: 0, failed: 0 },
+  consecutive_failures: 0,
+  last_success_at: null,
+  last_failure_at: null,
+  disabled_at: null,
+  delivery_counts: { delivered: 0, failed: 0, dlq: 0 },
   created_at: '2026-05-09T18:00:00Z',
-  updated_at: '2026-05-09T18:00:00Z',
 });
 
 describe('WebhooksResource.sendTest (V-463)', () => {
