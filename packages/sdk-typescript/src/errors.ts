@@ -26,6 +26,8 @@
 //   https://errors.driftstack.dev/invalid-credentials  → InvalidCredentialsError
 //   https://errors.driftstack.dev/invalid-auth-token   → InvalidAuthTokenError
 //   https://errors.driftstack.dev/email-not-verified   → EmailNotVerifiedError
+//   https://errors.driftstack.dev/feature-unavailable  → FeatureUnavailableError
+//   https://errors.driftstack.dev/mfa-step-up-required → MfaStepUpRequiredError
 //
 // Anything else (network failure, parse error, etc.) surfaces as a
 // `DriftstackError` with `kind: 'transport'` set on the instance.
@@ -55,6 +57,9 @@ export type DriftstackErrorKind =
   | 'invalid_credentials'
   | 'invalid_auth_token'
   | 'email_not_verified'
+  // V-441 — closing problem-type parity with Go + Python.
+  | 'feature_unavailable'
+  | 'mfa_step_up_required'
   | 'transport';
 
 export class DriftstackError extends Error {
@@ -286,6 +291,26 @@ export class EmailNotVerifiedError extends DriftstackError {
   }
 }
 
+// V-441 — typed errors closing TS SDK problem-type parity with Go + Python.
+
+/** V-353e — operation requires fresh MFA proof (15-minute step-up window).
+ *  Customer should call `client.auth.mfaStepUp({ code })` and retry. */
+export class MfaStepUpRequiredError extends DriftstackError {
+  constructor(p: Problem) {
+    super(toOpts('mfa_step_up_required', p));
+    this.name = 'MfaStepUpRequiredError';
+  }
+}
+
+/** Endpoint requires infrastructure not configured in this deployment
+ *  (e.g. avatar uploads when R2 isn't wired). HTTP 503. */
+export class FeatureUnavailableError extends DriftstackError {
+  constructor(p: Problem) {
+    super(toOpts('feature_unavailable', p));
+    this.name = 'FeatureUnavailableError';
+  }
+}
+
 /** Network / parse / non-Problem failure — server didn't return a structured error. */
 export class TransportError extends DriftstackError {
   constructor(message: string, status = 0, cause?: unknown) {
@@ -329,6 +354,9 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
   'https://errors.driftstack.dev/invalid-credentials': (p) => new InvalidCredentialsError(p),
   'https://errors.driftstack.dev/invalid-auth-token': (p) => new InvalidAuthTokenError(p),
   'https://errors.driftstack.dev/email-not-verified': (p) => new EmailNotVerifiedError(p),
+  // V-441 — closing problem-type parity with Go + Python.
+  'https://errors.driftstack.dev/feature-unavailable': (p) => new FeatureUnavailableError(p),
+  'https://errors.driftstack.dev/mfa-step-up-required': (p) => new MfaStepUpRequiredError(p),
 };
 
 /**

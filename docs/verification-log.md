@@ -20526,3 +20526,37 @@ usage example via errors.As.
 `packages/sdk-python/CHANGELOG.md` Unreleased section gains an
 "Added typed errors (V-439)" subsection with the 3 new exception
 classes + step-up retry guidance + 24-URI coverage note.
+
+## V-441 — TS SDK final 2 typed errors complete three-SDK problem-type parity
+
+**Tier**: 1 (V-438/V-439 mirror; closes the remaining gap so all
+three SDKs cover every server-emitted problem URI).
+
+`packages/sdk-typescript/src/errors.ts`:
+
+- 2 new typed exception classes:
+  `MfaStepUpRequiredError` (V-353e step-up gate; customer should
+  call `client.auth.mfaStepUp({ code })` and retry) +
+  `FeatureUnavailableError` (HTTP 503 when an endpoint requires
+  infrastructure not configured in this deployment).
+- `DriftstackErrorKind` enum extended with `'feature_unavailable'`
+  - `'mfa_step_up_required'`.
+- `errorFromProblem` mapping table extended with the 2 new URI →
+  factory entries.
+- Comment header listing problem types updated.
+
+`packages/sdk-typescript/src/index.ts` re-exports
+`MfaStepUpRequiredError` + `FeatureUnavailableError`.
+
+Monorepo typecheck clean.
+
+**Three-SDK problem-type parity COMPLETE:**
+
+- TS: 22 typed errors (V-441 closes feature-unavailable +
+  mfa-step-up-required gap).
+- Python: 24 typed via PROBLEM_TYPE_TO_ERROR (V-439 added 3).
+- Go: 20 typed via problemTypeToFactory (V-437/V-438 added 7).
+
+Customers across all three SDKs can now branch on typed shape
+for every server-emitted problem URI without falling through to
+generic UnknownError / DriftstackError / dict reads.
