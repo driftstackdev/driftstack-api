@@ -100,6 +100,31 @@ DebugToken? }` matching server.
   retry. New types: `MfaChallengeRequest / Response`,
   `MfaStepUpRequest / Response`.
 
+### Added (V-448 / V-449 / V-450) — Account-surface parity
+
+- **`client.Mfa`** — V-353b MFA enrollment management
+  (`Status / Enroll / Verify / Disable / RegenerateRecoveryCodes`).
+  New types: `MfaStatus`, `MfaEnrollResponse`, `MfaVerifyRequest /
+Response`, `MfaDisableRequest`.
+- **`client.AuditLog`** — V-216 audit-log read (`List / Iterate`).
+  New types: `AuditLogEntry`, `AuditLogListPage`,
+  `ListAuditLogQuery`.
+- **`client.EmailPreferences`** — V-204 opt-in/opt-out toggles
+  (`List / Set / OptIn / OptOut`). New types: `EmailPreference`,
+  `ListEmailPreferencesResponse`, `SetEmailPreferenceRequest`.
+- **`client.Account.UpdateMe(ctx, *UpdateMeRequest)`** — V-352
+  partial PATCH /me.
+- **`client.Account.UploadAvatar(ctx, *UploadAvatarRequest)`** +
+  **`ClearAvatar(ctx)`** — V-352b.
+- **`client.Account.ListWebSessions(ctx)`** +
+  **`RevokeWebSession(ctx, sessionID)`** +
+  **`RevokeAllOtherWebSessions(ctx)`** — V-355.
+- **`client.Account.RateLimits(ctx)`** — V-258 effective rate-
+  limit config.
+
+Three-SDK Account-surface parity complete: every `/v1/account/*`
+endpoint registered server-side is now exposed in all three SDKs.
+
 ### Notes
 
 - `0.1.0` is the inaugural alpha release. Tagged in the monorepo as

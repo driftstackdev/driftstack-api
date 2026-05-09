@@ -20843,3 +20843,18 @@ across all three SDKs. Combined with V-441 typed errors + V-445
 MFA exchange + V-448 MFA enrollment + V-449 audit-log + email-
 preferences, customers can build full account-management
 integrations using only the SDKs — no raw HTTP needed.
+
+## V-451 — three-SDK CHANGELOG entries for V-448/V-449/V-450
+
+**Tier**: 1 (V-448-V-450 release-notes follow-through).
+
+Each SDK CHANGELOG.md Unreleased section gains a "Added (V-448 /
+V-449 / V-450) — Account-surface parity" subsection enumerating
+every new method + new type, with a closing line summarizing the
+three-SDK parity outcome.
+
+Customers reading next release notes see the full Account-
+management surface that's now SDK-accessible — MFA enroll/verify
+/disable/regenerate, audit-log read+iterate, email-pref opt-in/
+out, /me update, avatar upload/clear, web-sessions list/revoke,
+rate-limits read.

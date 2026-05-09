@@ -56,6 +56,25 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
   new session issued. Pair with `MfaStepUpRequiredError` recovery:
   catch → `mfa_step_up` → retry.
 
+### Added (V-448 / V-449 / V-450) — Account-surface parity
+
+- **`client.mfa`** + async mirror — V-353b MFA enrollment
+  (`status / enroll / verify / disable / regenerate_recovery_codes`).
+- **`client.audit_log`** + async mirror — V-216 audit-log
+  (`list / iterate`).
+- **`client.email_preferences`** + async mirror — V-204 opt-in/
+  opt-out (`list / set / opt_in / opt_out`).
+- **`client.account.update_me(body)`** — V-352 PATCH /me.
+- **`client.account.upload_avatar(body)`** + **`clear_avatar()`** —
+  V-352b.
+- **`client.account.list_web_sessions()`** +
+  **`revoke_web_session(id)`** + **`revoke_all_other_web_sessions()`** —
+  V-355.
+- **`client.account.rate_limits()`** — V-258.
+
+Three-SDK Account-surface parity complete: every `/v1/account/*`
+endpoint registered server-side is now exposed in all three SDKs.
+
 ### Notes
 
 - `0.0.1` is the inaugural alpha. Versioning will move to SemVer

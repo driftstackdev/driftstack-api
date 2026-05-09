@@ -55,6 +55,25 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
   path: catch → `mfaStepUp` → retry. New types re-exported:
   `MfaChallengeRequest / Response`, `MfaStepUpRequest / Response`.
 
+### Added (V-448 / V-449 / V-450) — Account-surface parity
+
+- **`client.mfa`** — V-353b MFA enrollment management
+  (`status / enroll / verify / disable / regenerateRecoveryCodes`).
+- **`client.auditLog`** — V-216 audit-log read (`list / iterate`).
+- **`client.emailPreferences`** — V-204 opt-in/opt-out toggles
+  (`list / set / optIn / optOut`).
+- **`client.account.updateMe(body)`** — V-352 PATCH /me.
+- **`client.account.uploadAvatar(body)`** + **`clearAvatar()`** —
+  V-352b avatar upload + clear.
+- **`client.account.listWebSessions()`** +
+  **`revokeWebSession(id)`** + **`revokeAllOtherWebSessions()`** —
+  V-355 active-sign-ins management.
+- **`client.account.rateLimits()`** — V-258 effective rate-limit
+  config read.
+
+Three-SDK Account-surface parity complete: every `/v1/account/*`
+endpoint registered server-side is now exposed in all three SDKs.
+
 ### Pre-1.0 stability policy
 
 The SDK is at **0.1.x**; the public surface is stable enough to
