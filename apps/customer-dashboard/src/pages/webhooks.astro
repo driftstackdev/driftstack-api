@@ -716,15 +716,17 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         );
       }
 
-      // V-403 — delivery-log status filter. Backend already accepts
-      // ?status= on /v1/webhooks/:id/deliveries; this UI surfaces a
-      // dropdown so customers can narrow to a single status without
-      // pagination through 20+ entries.
-      function loadDeliveries(endpointId, container, status) {
-        if (!token) return;
-        const queryParts = ['limit=20'];
-        if (status) queryParts.push('status=' + encodeURIComponent(status));
-        container.innerHTML =
+      // V-403 + V-443 — delivery-log status filter + cursor pagination.
+      // Backend accepts ?status= + ?cursor= on /v1/webhooks/:id/deliveries.
+      // V-443 stores a `cursor` per endpoint in a closure-scoped Map so
+      // the Load-more button can append the next page without re-fetching
+      // the whole list. Filter changes reset the cursor + clear append
+      // state.
+      const deliveriesPager = new Map();
+      // Map<endpointId, { items: [], cursor: string|null, status: string }>
+
+      function buildFilterBar(endpointId, status) {
+        return (
           '<div class="mb-3 flex items-center gap-2 text-xs text-slate-500">' +
           '<label for="status-' +
           escapeHtml(endpointId) +
@@ -741,13 +743,60 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
               return '<option value="' + escapeHtml(s) + '"' + sel + '>' + escapeHtml(label) + '</option>';
             })
             .join('') +
-          '</select></div>' +
-          '<p class="text-sm text-slate-500">Loading…</p>';
-        // Re-wire the filter handler each load (innerHTML reset).
-        const select = container.querySelector('[data-deliveries-filter]');
-        if (select) {
-          select.addEventListener('change', () => {
-            loadDeliveries(endpointId, container, select.value);
+          '</select></div>'
+        );
+      }
+
+      function renderDeliveries(container, endpointId, state) {
+        const filterBar = buildFilterBar(endpointId, state.status);
+        let body;
+        if (state.items.length === 0) {
+          body =
+            '<p class="text-sm text-slate-500">No deliveries' +
+            (state.status ? ' with status "' + escapeHtml(state.status) + '"' : '') +
+            '.</p>';
+        } else {
+          const list =
+            '<ul class="divide-y divide-slate-100">' +
+            state.items.map(deliveryRow).join('') +
+            '</ul>';
+          const moreBtn = state.cursor
+            ? '<button type="button" data-load-more-deliveries="' +
+              escapeHtml(endpointId) +
+              '" class="mt-3 text-sm text-oxblood-700 hover:underline">Load more</button>'
+            : '';
+          body = list + moreBtn;
+        }
+        container.innerHTML = filterBar + body;
+        // Re-wire filter + load-more (innerHTML reset wipes listeners).
+        const sel = container.querySelector('[data-deliveries-filter]');
+        if (sel) {
+          sel.addEventListener('change', () => {
+            // Filter change resets pager state + re-fetches first page.
+            deliveriesPager.delete(endpointId);
+            loadDeliveries(endpointId, container, sel.value);
+          });
+        }
+        const loadMore = container.querySelector('[data-load-more-deliveries]');
+        if (loadMore) {
+          loadMore.addEventListener('click', () => {
+            loadMoreDeliveries(endpointId, container);
+          });
+        }
+        wireReplayButtons(container);
+      }
+
+      function loadDeliveries(endpointId, container, status) {
+        if (!token) return;
+        const queryParts = ['limit=20'];
+        if (status) queryParts.push('status=' + encodeURIComponent(status));
+        container.innerHTML =
+          buildFilterBar(endpointId, status) + '<p class="text-sm text-slate-500">Loading…</p>';
+        const sel = container.querySelector('[data-deliveries-filter]');
+        if (sel) {
+          sel.addEventListener('change', () => {
+            deliveriesPager.delete(endpointId);
+            loadDeliveries(endpointId, container, sel.value);
           });
         }
         fetch(
@@ -767,31 +816,72 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         )
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((body) => {
-            const filterDiv = container.querySelector('div');
-            const deliveries = body.data || [];
-            const listHtml =
-              deliveries.length === 0
-                ? '<p class="text-sm text-slate-500">No deliveries' +
-                  (status ? ' with status "' + escapeHtml(status) + '"' : '') +
-                  '.</p>'
-                : '<ul class="divide-y divide-slate-100">' +
-                  deliveries.map(deliveryRow).join('') +
-                  '</ul>';
-            container.innerHTML = (filterDiv ? filterDiv.outerHTML : '') + listHtml;
-            // Re-wire the filter (innerHTML reset wipes listeners).
-            const sel2 = container.querySelector('[data-deliveries-filter]');
-            if (sel2) {
-              sel2.addEventListener('change', () => {
-                loadDeliveries(endpointId, container, sel2.value);
-              });
-            }
-            wireReplayButtons(container);
+            const state = {
+              items: body.data || [],
+              cursor: body.has_more ? body.next_cursor : null,
+              status: status || '',
+            };
+            deliveriesPager.set(endpointId, state);
+            renderDeliveries(container, endpointId, state);
           })
           .catch((err) => {
             container.innerHTML =
               '<p class="text-sm text-red-700">Failed to load deliveries: ' +
               escapeHtml(err && err.message ? err.message : 'network error') +
               '</p>';
+          });
+      }
+
+      function loadMoreDeliveries(endpointId, container) {
+        if (!token) return;
+        const state = deliveriesPager.get(endpointId);
+        if (!state || !state.cursor) return;
+        const queryParts = ['limit=20', 'cursor=' + encodeURIComponent(state.cursor)];
+        if (state.status) queryParts.push('status=' + encodeURIComponent(state.status));
+        // Optimistic UI: dim the Load-more button while fetching.
+        const btn = container.querySelector('[data-load-more-deliveries]');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Loading…';
+        }
+        fetch(
+          apiBaseUrl +
+            '/v1/webhooks/' +
+            encodeURIComponent(endpointId) +
+            '/deliveries?' +
+            queryParts.join('&'),
+          {
+            headers: {
+              authorization: 'Bearer ' + token,
+              ...(typeof window.driftstackActAsHeaders === 'function'
+                ? window.driftstackActAsHeaders()
+                : {}),
+            },
+          },
+        )
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => {
+            const next = {
+              items: state.items.concat(body.data || []),
+              cursor: body.has_more ? body.next_cursor : null,
+              status: state.status,
+            };
+            deliveriesPager.set(endpointId, next);
+            renderDeliveries(container, endpointId, next);
+          })
+          .catch((err) => {
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = 'Load more';
+            }
+            // Surface error in the banner; preserve the existing list.
+            const banner = root.querySelector('[data-banner]');
+            if (banner) {
+              banner.textContent =
+                'Failed to load more deliveries: ' +
+                (err && err.message ? err.message : 'network error');
+              banner.classList.remove('hidden');
+            }
           });
       }
 

@@ -20576,3 +20576,34 @@ describe block "V-441 ops-flow problem types" with 2 tests:
 
 18/18 tests pass. Pinning ensures a future regression to the
 mapping table or DriftstackErrorKind enum surfaces here.
+
+## V-443 — webhooks dashboard: delivery-log Load-more pagination
+
+**Tier**: 1 (V-403 follow-through; closes the V-294 catalog
+"Webhooks UI delivery history filters + retry policies" item).
+
+`apps/customer-dashboard/src/pages/webhooks.astro` `loadDeliveries`
+gains cursor pagination via a Load-more button.
+
+State management: closure-scoped `deliveriesPager` Map keyed by
+endpoint id, holding `{ items, cursor, status }`. Filter change
+deletes the entry + re-fetches first page; Load-more reads the
+state, fetches `?cursor=…`, appends to `items`, and re-renders.
+
+UX:
+
+- Initial open: page-1 fetch limited to 20.
+- "Load more" button appears below the list when `has_more` true.
+- Optimistic disabling on click ("Loading…" placeholder); re-
+  enables on error, surfaces error in the dashboard banner
+  rather than tearing down the existing list.
+- Filter change resets pager state cleanly.
+
+Backend pagination already supported via `?cursor=` per
+ListDeliveriesQuerySchema; this slice surfaces it in the UI.
+
+Astro check clean.
+
+V-294 catalog row "/webhooks delivery history" already SHIPPED
+status (V-307b); V-443 adds the pagination layer that V-403
+filter-status laid the groundwork for.
