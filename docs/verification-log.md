@@ -19841,3 +19841,25 @@ without separate correlation between identity systems.
 
 This was already true in the implementation (V-326c V-330b) but
 not surfaced in the doc. Astro check clean.
+
+## V-415 — FAQ entry for team-member visibility into account
+
+**Tier**: 1 (V-413 + V-414 follow-through; surfaces team-RBAC
+audit visibility in customer-facing copy so account owners don't
+accidentally over-share by adding loose team members).
+
+`apps/marketing-site/src/pages/faq.astro` "EU stack + compliance"
+group gains a "What does my team see when I add them to my
+account?" entry between region-preference and GDPR entries:
+
+- Member role: read-only sessions/profiles/api-keys/webhooks/
+  audit-log/usage. Admin role: also write.
+- What's NOT visible: billing, password, MFA recovery codes.
+- Audit log records both the action + actor_account_id (calling
+  member id) for "who did what" without identity correlation.
+- IP/UA context is visible to team members reading the owner's
+  audit log (V-413 caveat) — explicit caution to add only
+  members the owner is comfortable sharing this level with.
+
+Marketing-copy autonomous-decideable per cadence rule. Tone
+matches existing EU-stack entries; founder reviews tone post-hoc.
