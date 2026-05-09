@@ -19639,3 +19639,23 @@ features verified shipped in the verification log).
 significantly out of date — flipping them is a separate catalog
 maintenance pass since the source-of-truth is the line-level
 status not the rollup.
+
+## V-405 — webhooks dashboard surfaces quota event subscriptions
+
+**Tier**: 1 (V-310 catalog item closure; backend already accepted
+the events array, dashboard hadn't surfaced the full enum).
+
+`apps/customer-dashboard/src/pages/webhooks.astro` create + edit
+forms gain `quota.warning_80pct` + `quota.exceeded` checkboxes
+alongside the existing session.completed / session.failed /
+api_key.revoked entries.
+
+The full SubscribableWebhookEventTypeSchema enum (5 events) is
+now surfaced in the dashboard. SDK consumers calling POST/PATCH
+/v1/webhooks could already subscribe to quota events; this slice
+gives dashboard customers feature parity.
+
+Astro check clean.
+
+V-294 catalog "Webhook event filtering per endpoint" item moves
+DEFERRED → SHIPPED; row update is a separate trivial commit.

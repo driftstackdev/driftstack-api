@@ -184,14 +184,14 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 
 **Webhooks** (planning file 37 + 48):
 
-| Feature                                  | Status   | Slice         | Tier-1h | Legal updates |
-| ---------------------------------------- | -------- | ------------- | ------- | ------------- |
-| Webhook subscriptions CRUD               | SHIPPED  | V-074         | —       | —             |
-| Webhook delivery tracking + retries      | SHIPPED  | V-282 + V-307 | —       | —             |
-| Webhook event filtering per endpoint     | DEFERRED | V-310         | 3       | —             |
-| Webhook test delivery (admin + customer) | SHIPPED  | V-356         | —       | —             |
-| Webhook signing-secret rotation          | SHIPPED  | V-359         | —       | —             |
-| Webhook event replay                     | SHIPPED  | V-091         | —       | —             |
+| Feature                                  | Status  | Slice         | Tier-1h | Legal updates |
+| ---------------------------------------- | ------- | ------------- | ------- | ------------- |
+| Webhook subscriptions CRUD               | SHIPPED | V-074         | —       | —             |
+| Webhook delivery tracking + retries      | SHIPPED | V-282 + V-307 | —       | —             |
+| Webhook event filtering per endpoint     | SHIPPED | V-405         | —       | —             |
+| Webhook test delivery (admin + customer) | SHIPPED | V-356         | —       | —             |
+| Webhook signing-secret rotation          | SHIPPED | V-359         | —       | —             |
+| Webhook event replay                     | SHIPPED | V-091         | —       | —             |
 
 **API auth + rate limiting** (planning file 37):
 
