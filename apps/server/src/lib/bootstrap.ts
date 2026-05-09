@@ -613,6 +613,10 @@ export async function createProductionDeps(
     ...(billingService !== undefined ? { billingService } : {}),
     readinessChecks,
     permissiveCors: false,
+    corsAllowedOrigins: (process.env.CORS_ALLOWED_ORIGINS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
     // V-117: pass through to buildApp so it installs the Sentry
     // error-capture + breadcrumb hooks. Both are no-ops when
     // sentry.isInitialized is false (i.e. SENTRY_DSN unset).

@@ -229,6 +229,14 @@ export interface AppDeps {
   /** When true, register a permissive CORS policy. Production locks this down. */
   permissiveCors?: boolean;
   /**
+   * V-278.B follow-up — explicit allow-list of origins for production
+   * CORS. Set via env `CORS_ALLOWED_ORIGINS=https://app.driftstack.dev,https://staging.driftstack.dev`.
+   * When set + `permissiveCors=false`, the app accepts requests from
+   * exactly these origins (in addition to the localhost regex pattern
+   * for ad-hoc dev probing). Empty / undefined = localhost-only (dev).
+   */
+  corsAllowedOrigins?: string[];
+  /**
    * V-117: optional Sentry client. When provided, the app installs:
    *   - `wireSentryErrorHandler` (V-094) — onError hook captures
    *     exceptions with request context.
@@ -268,7 +276,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     contentSecurityPolicy: false, // API only — no HTML to protect
   });
   await app.register(cors, {
-    origin: deps.permissiveCors === true ? true : [/^https?:\/\/localhost(:\d+)?$/],
+    origin:
+      deps.permissiveCors === true
+        ? true
+        : [/^https?:\/\/localhost(:\d+)?$/, ...(deps.corsAllowedOrigins ?? [])],
     credentials: true,
     exposedHeaders: ['x-request-id', 'x-ratelimit-remaining', 'retry-after'],
   });
