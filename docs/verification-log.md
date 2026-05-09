@@ -20343,3 +20343,25 @@ discoverable enum gap in the Go SDK that I've found via this
 sweep. Customer Go code calling .Create with non-default
 purposes was previously broken at the wire layer; now correctly
 typed.
+
+## V-434 — Python SDK AccountResource (V-428 sibling)
+
+**Tier**: 1 (rule L empirical-diff bar — V-428 commit message
+falsely claimed Python SDK already had `client.account.me()`;
+it did not. This slice adds it for real).
+
+`packages/sdk-python/src/driftstack/resources/account.py` — new
+file. `AccountResource.me()` (sync) + `AsyncAccountResource.me()`
+(async) hit `GET /v1/account/me` and return `dict[str, Any]`
+(typing waits on Pydantic-model regen of the rich /me response).
+
+Wired into `Driftstack` + `AsyncDriftstack` as `client.account`
+
+- `async_client.account`. Sits alongside V-376/377 profile
+  snapshots, V-379 clone, V-417 SDK pattern.
+
+137/137 Python tests pass.
+
+Three-SDK Account parity now actually true: TS V-385/V-428, Go
+V-428, Python V-434. The V-428 commit message overclaimed
+Python coverage; this slice closes that gap.

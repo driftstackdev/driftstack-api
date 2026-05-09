@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 
 from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.resources.account import AccountResource, AsyncAccountResource
 from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
 from driftstack.resources.auth import AsyncAuthResource, AuthResource
 from driftstack.resources.billing import AsyncBillingResource, BillingResource
@@ -82,6 +83,8 @@ class Driftstack:
         self.profile_snapshots = ProfileSnapshotsResource(self._http)
         self.billing = BillingResource(self._http)
         self.auth = AuthResource(self._http)
+        # V-385 / V-434 — /v1/account/me rich-shape read.
+        self.account = AccountResource(self._http)
         # V-298c — Team RBAC. Auth path integration is V-298d.
         self.team = TeamResource(self._http)
 
@@ -129,6 +132,8 @@ class AsyncDriftstack:
         self.profile_snapshots = AsyncProfileSnapshotsResource(self._http)
         self.billing = AsyncBillingResource(self._http)
         self.auth = AsyncAuthResource(self._http)
+        # V-385 / V-434 — /v1/account/me rich-shape read.
+        self.account = AsyncAccountResource(self._http)
         # V-298c — Team RBAC. Auth path integration is V-298d.
         self.team = AsyncTeamResource(self._http)
 
