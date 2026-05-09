@@ -21462,3 +21462,27 @@ OpenAPI test 8/8 pass; the registered-paths fixture extended with all
 **V-455 audit total closure**: customer-facing OpenAPI 100%, customer-
 facing SDKs 100% (modulo 7 intentional 🚫), admin OpenAPI 100%. The
 audit's purpose — surfacing every gap and closing each — is achieved.
+
+## V-466 — wire-shape regression tests for V-460 / V-462 / V-463 / V-464 SDK methods
+
+**Tier**: 1 (test coverage; locks the wire shape of new TS SDK methods
+against future Drizzle-of-the-month-style breakage).
+
+Three new test files in `packages/sdk-typescript/tests/unit/`:
+
+- `cli-authorize.test.ts` (V-460) — 4 tests covering
+  `cliAuthorizeInitiate`, `cliAuthorizeBind`, and the discriminated-
+  union response on `cliAuthorizeExchange` (`pending` /
+  `bound[+api_key+account_id]` / implicit `expired`). Locks the
+  CSRF-state forwarding + the one-shot delivery semantics.
+- `audit-log-export.test.ts` (V-462) — 2 tests asserting the GET
+  is fired with `?format=json`, the response envelope shape matches
+  `AuditLogExportResponse`, and the `truncated` flag at the 10k-row
+  ceiling round-trips correctly.
+- `webhooks-test-update.test.ts` (V-463 + V-464) — 3 tests:
+  `sendTest` POSTs an empty body and returns `event_type: 'test.ping'`;
+  `update` PATCHes the partial body and forwards `active: false` for
+  soft-disable.
+
+9 new tests, 100% pass. No other test changes; pre-push gate
+unaffected (1160 → 1169 expected after this lands).
