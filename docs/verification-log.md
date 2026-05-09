@@ -19562,3 +19562,27 @@ login + verify + refresh + logout) which is what dashboards and
 SDKs touch first.
 
 855 server tests + monorepo typecheck clean.
+
+## V-402 — magic-link + password-reset OpenAPI registration
+
+**Tier**: 1 (V-401 follow-through; closes the auth surface in spec).
+
+`apps/server/src/lib/openapi.ts` registers the 4 remaining auth
+routes:
+
+- POST /v1/auth/magic-link/request — MagicLinkRequest →
+  MagicLinkRequestResponse. Always 200 (no account-enumeration
+  signal).
+- POST /v1/auth/magic-link/consume — MagicLinkConsumeRequest →
+  MagicLinkConsumeResponse (issues web session).
+- POST /v1/auth/password-reset/request — PasswordResetRequest →
+  PasswordResetRequestResponse. Always 200 (no enumeration).
+- POST /v1/auth/password-reset/confirm — PasswordResetConfirmRequest
+  → PasswordResetConfirmResponse (issues web session).
+
+`openapi.test.ts` paths fixture extended with the 4 new entries.
+
+The /v1/auth/\* surface is now fully registered: signup,
+verify-email, login (discriminated union), MFA challenge,
+MFA step-up, refresh, logout, magic-link request + consume,
+password-reset request + confirm. 11 routes total in the auth tag.

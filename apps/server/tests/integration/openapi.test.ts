@@ -74,6 +74,11 @@ describe('OpenAPI spec generation', () => {
         '/v1/auth/refresh',
         '/v1/auth/signup',
         '/v1/auth/verify-email',
+        // V-402 — magic-link + password-reset
+        '/v1/auth/magic-link/consume',
+        '/v1/auth/magic-link/request',
+        '/v1/auth/password-reset/confirm',
+        '/v1/auth/password-reset/request',
         // V-313 profile clone
         '/v1/profiles/{id}/clone',
         // V-312 profile snapshots

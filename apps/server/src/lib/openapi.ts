@@ -33,6 +33,14 @@ import {
   LoginRequestSchema,
   LoginResponseUnionSchema,
   LogoutRequestSchema,
+  MagicLinkConsumeRequestSchema,
+  MagicLinkConsumeResponseSchema,
+  MagicLinkRequestSchema,
+  MagicLinkRequestResponseSchema,
+  PasswordResetConfirmRequestSchema,
+  PasswordResetConfirmResponseSchema,
+  PasswordResetRequestSchema,
+  PasswordResetRequestResponseSchema,
   RefreshSessionRequestSchema,
   RefreshSessionResponseSchema,
   SignupRequestSchema,
@@ -1531,6 +1539,74 @@ function buildRegistry(): OpenAPIRegistry {
     },
     responses: {
       204: { description: 'Session revoked.' },
+      ...errors4xx,
+    },
+  });
+
+  // ── V-402 — magic-link + password-reset auth surface ──────────────────
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/magic-link/request',
+    summary: 'Request a magic-link email; always 200 to avoid account enumeration',
+    tags: ['auth'],
+    request: {
+      body: { content: { 'application/json': { schema: MagicLinkRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description:
+          'Email accepted; if the address matches an account, a magic-link email is delivered. Response shape never confirms account existence.',
+        content: { 'application/json': { schema: MagicLinkRequestResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/magic-link/consume',
+    summary: 'Exchange a magic-link token for a fresh web session',
+    tags: ['auth'],
+    request: {
+      body: { content: { 'application/json': { schema: MagicLinkConsumeRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Session issued.',
+        content: { 'application/json': { schema: MagicLinkConsumeResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/password-reset/request',
+    summary: 'Request a password-reset email; always 200 to avoid account enumeration',
+    tags: ['auth'],
+    request: {
+      body: { content: { 'application/json': { schema: PasswordResetRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description:
+          'Email accepted; if the address matches an account, a reset email is delivered.',
+        content: { 'application/json': { schema: PasswordResetRequestResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/password-reset/confirm',
+    summary: 'Consume a password-reset token + set a new password; issues a fresh session',
+    tags: ['auth'],
+    request: {
+      body: { content: { 'application/json': { schema: PasswordResetConfirmRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Password updated; web session issued.',
+        content: { 'application/json': { schema: PasswordResetConfirmResponseSchema } },
+      },
       ...errors4xx,
     },
   });
