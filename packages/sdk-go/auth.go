@@ -146,3 +146,35 @@ func (r *AuthResource) Logout(ctx context.Context, body *LogoutRequest) (*Logout
 	}
 	return &out, nil
 }
+
+// MfaChallenge — V-445. Exchange the V-353d login challenge_token
+// for a session via TOTP code or recovery code. Distinguished
+// response carries Via = "totp" | "recovery".
+func (r *AuthResource) MfaChallenge(ctx context.Context, body *MfaChallengeRequest) (*MfaChallengeResponse, error) {
+	var out MfaChallengeResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/mfa/challenge",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// MfaStepUp — V-445. Refresh mfa_satisfied_at on the calling web
+// session (V-353e step-up gate; 15-minute freshness window). No new
+// session issued; returns the new mfa_satisfied_at timestamp.
+func (r *AuthResource) MfaStepUp(ctx context.Context, body *MfaStepUpRequest) (*MfaStepUpResponse, error) {
+	var out MfaStepUpResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/mfa/step-up",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

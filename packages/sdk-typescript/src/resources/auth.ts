@@ -9,6 +9,10 @@
 import type {
   LoginRequest,
   LoginResponseUnion,
+  MfaChallengeRequest,
+  MfaChallengeResponse,
+  MfaStepUpRequest,
+  MfaStepUpResponse,
   LogoutRequest,
   LogoutResponse,
   MagicLinkConsumeRequest,
@@ -112,6 +116,33 @@ export class AuthResource {
     return this.http.request<LogoutResponse>({
       method: 'POST',
       path: '/v1/auth/logout',
+      body,
+    });
+  }
+
+  /**
+   * V-445 — exchange a login challenge_token (returned on the
+   * MFA-required branch) for a real session via TOTP code or recovery
+   * code. Distinguished response carries `via: 'totp' | 'recovery'`.
+   */
+  mfaChallenge(body: MfaChallengeRequest): Promise<MfaChallengeResponse> {
+    return this.http.request<MfaChallengeResponse>({
+      method: 'POST',
+      path: '/v1/auth/mfa/challenge',
+      body,
+    });
+  }
+
+  /**
+   * V-445 — refresh `mfa_satisfied_at` on the calling web session
+   * (V-353e step-up gate; 15-minute freshness window). No new session
+   * issued; the existing session row's mfa timestamp advances. Pair
+   * with `MfaStepUpRequiredError` recovery flows.
+   */
+  mfaStepUp(body: MfaStepUpRequest): Promise<MfaStepUpResponse> {
+    return this.http.request<MfaStepUpResponse>({
+      method: 'POST',
+      path: '/v1/auth/mfa/step-up',
       body,
     });
   }

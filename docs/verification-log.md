@@ -20627,3 +20627,47 @@ Reinforces the V-441 typed-error story: customers can branch on
 type-safe shapes regardless of which SDK they use.
 
 Astro check clean.
+
+## V-445 — three-SDK MFA challenge + step-up methods
+
+**Tier**: 1 (SDK gap closure — V-353d/e endpoints registered in
+OpenAPI per V-401/V-402 but no SDK exposed them; V-444 doc
+example referenced non-existent `client.auth.exchangeMfaChallenge`
+/ `client.auth.mfa_challenge` method names. This slice adds them
+for real and corrects the doc).
+
+**TS** (`packages/sdk-typescript/src/resources/auth.ts`):
+
+- `client.auth.mfaChallenge(body)` returns `MfaChallengeResponse`
+  (session + via discriminator).
+- `client.auth.mfaStepUp(body)` returns `MfaStepUpResponse` (via +
+  mfa_satisfied_at; no new session).
+- New types re-exported: `MfaChallengeRequest`,
+  `MfaChallengeResponse`, `MfaStepUpRequest`, `MfaStepUpResponse`.
+
+**Python** (`packages/sdk-python/src/driftstack/resources/auth.py`):
+
+- `client.auth.mfa_challenge(body)` (sync) +
+  `async_client.auth.mfa_challenge(body)` (async).
+- `client.auth.mfa_step_up(body)` (sync) +
+  `async_client.auth.mfa_step_up(body)` (async).
+
+**Go** (`packages/sdk-go/auth.go` + `types.go`):
+
+- `client.Auth.MfaChallenge(ctx, *MfaChallengeRequest)` returns
+  `*MfaChallengeResponse`.
+- `client.Auth.MfaStepUp(ctx, *MfaStepUpRequest)` returns
+  `*MfaStepUpResponse`.
+- New types: `MfaChallengeRequest / Response`,
+  `MfaStepUpRequest / Response`. `MfaStepUpResponse` carries
+  `MfaSatisfiedAt time.Time`.
+
+`apps/docs/src/pages/api/auth.md` V-444 SDK usage block updated
+to use the actual method names (was referencing a non-existent
+`exchangeMfaChallenge` placeholder; now correctly shows
+`mfaChallenge` / `mfa_challenge` / `MfaChallenge`).
+
+go test + Python pytest 137 + monorepo typecheck clean. The
+MfaStepUpRequiredError typed errors (V-441) now have a typed
+recovery path: customers catch the error, call
+`client.auth.mfaStepUp({ code })`, retry the original request.

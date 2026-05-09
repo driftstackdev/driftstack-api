@@ -97,6 +97,11 @@ export type {
   LoginResponseUnion,
   LogoutRequest,
   LogoutResponse,
+  // V-353d/e MFA challenge + step-up
+  MfaChallengeRequest,
+  MfaChallengeResponse,
+  MfaStepUpRequest,
+  MfaStepUpResponse,
   MagicLinkRequest,
   MagicLinkRequestResponse,
   MagicLinkConsumeRequest,

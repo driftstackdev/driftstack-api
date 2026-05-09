@@ -767,3 +767,36 @@ type LogoutRequest struct {
 type LogoutResponse struct {
 	OK bool `json:"ok"`
 }
+
+// V-445 — MFA challenge + step-up shapes.
+
+// MfaChallengeRequest — exchange the V-353d login challenge_token
+// for a session via TOTP code or recovery code. Supply exactly one
+// of `Code` (6-digit TOTP) OR `RecoveryCode` (single-use recovery
+// code).
+type MfaChallengeRequest struct {
+	ChallengeToken string `json:"challenge_token"`
+	Code           string `json:"code,omitempty"`
+	RecoveryCode   string `json:"recovery_code,omitempty"`
+}
+
+// MfaChallengeResponse — issued session + which factor was used.
+type MfaChallengeResponse struct {
+	Session WebSession `json:"session"`
+	Via     string     `json:"via"` // "totp" | "recovery"
+}
+
+// MfaStepUpRequest — refresh `mfa_satisfied_at` on the calling web
+// session (V-353e step-up gate; 15-minute freshness window). Same
+// one-of code-vs-recovery_code constraint as challenge.
+type MfaStepUpRequest struct {
+	Code         string `json:"code,omitempty"`
+	RecoveryCode string `json:"recovery_code,omitempty"`
+}
+
+// MfaStepUpResponse — no new session issued; the existing session
+// row's mfa_satisfied_at advances to the returned timestamp.
+type MfaStepUpResponse struct {
+	Via             string    `json:"via"` // "totp" | "recovery"
+	MfaSatisfiedAt  time.Time `json:"mfa_satisfied_at"`
+}

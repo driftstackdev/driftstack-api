@@ -90,17 +90,18 @@ Branch on the `mfa_required` literal. When it's present + true, do
 not store anything — wait for the customer to enter their TOTP
 code and call the challenge endpoint below.
 
-**SDK usage** (V-423/V-441 type narrowing):
+**SDK usage** (V-423/V-441/V-445 type narrowing + MFA exchange):
 
 ```ts
 // TypeScript — discriminated-union return type narrows automatically.
 const out = await client.auth.login({ email, password });
 if ('mfa_required' in out && out.mfa_required) {
   // out: LoginMfaRequiredResponse — challenge_token + challenge_expires_at typed.
-  const session = await client.auth.exchangeMfaChallenge({
+  const exchange = await client.auth.mfaChallenge({
     challenge_token: out.challenge_token,
     code: userTotpCode,
   });
+  store(exchange.session.token);
 } else {
   // out: LoginResponse — out.session is the real session.
   store(out.session.token);
@@ -111,10 +112,11 @@ if ('mfa_required' in out && out.mfa_required) {
 # Python — dict-shape, branch on the same key.
 out = client.auth.login({"email": ..., "password": ...})
 if out.get("mfa_required"):
-    session = client.auth.mfa_challenge({
+    exchange = client.auth.mfa_challenge({
         "challenge_token": out["challenge_token"],
         "code": user_totp_code,
-    })["session"]
+    })
+    session = exchange["session"]
 else:
     session = out["session"]
 ```
@@ -124,7 +126,12 @@ else:
 out, err := client.Auth.Login(ctx, &driftstack.LoginRequest{Email: e, Password: p})
 if err != nil { return err }
 if out.MfaRequired {
-    // out.ChallengeToken / out.ChallengeExpiresAt populated.
+    exchange, err := client.Auth.MfaChallenge(ctx, &driftstack.MfaChallengeRequest{
+        ChallengeToken: out.ChallengeToken,
+        Code:           userTotpCode,
+    })
+    if err != nil { return err }
+    // exchange.Session.Token is the real session.
 } else {
     // out.Session.Token is the real session.
 }

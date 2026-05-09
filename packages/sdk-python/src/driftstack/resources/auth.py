@@ -57,6 +57,20 @@ class AuthResource:
     def logout(self, body: dict[str, Any]) -> dict[str, Any]:
         return self._http.request("POST", "/v1/auth/logout", json_body=coerce_body(body))
 
+    def mfa_challenge(self, body: dict[str, Any]) -> dict[str, Any]:
+        """V-445 — exchange login challenge_token for a session via TOTP
+        code or recovery code. Response carries ``via: "totp" | "recovery"``
+        indicating which factor was used.
+        """
+        return self._http.request("POST", "/v1/auth/mfa/challenge", json_body=coerce_body(body))
+
+    def mfa_step_up(self, body: dict[str, Any]) -> dict[str, Any]:
+        """V-445 — refresh ``mfa_satisfied_at`` on the calling web session
+        (V-353e step-up gate; 15-minute freshness window). No new session
+        issued; the existing session's mfa timestamp advances.
+        """
+        return self._http.request("POST", "/v1/auth/mfa/step-up", json_body=coerce_body(body))
+
 
 class AsyncAuthResource:
     """Async auth-flow resource."""
@@ -100,3 +114,13 @@ class AsyncAuthResource:
 
     async def logout(self, body: dict[str, Any]) -> dict[str, Any]:
         return await self._http.request("POST", "/v1/auth/logout", json_body=coerce_body(body))
+
+    async def mfa_challenge(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._http.request(
+            "POST", "/v1/auth/mfa/challenge", json_body=coerce_body(body)
+        )
+
+    async def mfa_step_up(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._http.request(
+            "POST", "/v1/auth/mfa/step-up", json_body=coerce_body(body)
+        )
