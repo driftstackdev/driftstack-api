@@ -19586,3 +19586,25 @@ The /v1/auth/\* surface is now fully registered: signup,
 verify-email, login (discriminated union), MFA challenge,
 MFA step-up, refresh, logout, magic-link request + consume,
 password-reset request + confirm. 11 routes total in the auth tag.
+
+## V-403 — webhooks dashboard: delivery-log status filter
+
+**Tier**: 1 (UX depth on V-282/V-307; backend already supported
+?status= on the deliveries endpoint, dashboard hadn't surfaced
+the filter UI).
+
+`apps/customer-dashboard/src/pages/webhooks.astro` `loadDeliveries`
+now renders a status filter dropdown (All statuses / pending /
+in_flight / delivered / failed / dlq) above the deliveries list.
+Re-fetches scoped via `?status=` when the user changes selection.
+
+The filter persists across the same delivery-log open session
+(re-rendered after every fetch) but resets when the log is closed
+
+- re-opened (consistent with the 20-row default, which is also
+  per-open).
+
+Backward compatible — existing single-arg `loadDeliveries(id,
+container)` still works (status undefined → full load).
+
+Astro check clean (0 errors).

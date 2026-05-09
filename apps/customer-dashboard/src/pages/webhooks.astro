@@ -692,26 +692,75 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         );
       }
 
-      function loadDeliveries(endpointId, container) {
+      // V-403 — delivery-log status filter. Backend already accepts
+      // ?status= on /v1/webhooks/:id/deliveries; this UI surfaces a
+      // dropdown so customers can narrow to a single status without
+      // pagination through 20+ entries.
+      function loadDeliveries(endpointId, container, status) {
         if (!token) return;
-        container.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
-        fetch(apiBaseUrl + '/v1/webhooks/' + encodeURIComponent(endpointId) + '/deliveries?limit=20', {
-          headers: {
-            authorization: 'Bearer ' + token,
-            ...(typeof window.driftstackActAsHeaders === 'function'
-              ? window.driftstackActAsHeaders()
-              : {}),
+        const queryParts = ['limit=20'];
+        if (status) queryParts.push('status=' + encodeURIComponent(status));
+        container.innerHTML =
+          '<div class="mb-3 flex items-center gap-2 text-xs text-slate-500">' +
+          '<label for="status-' +
+          escapeHtml(endpointId) +
+          '">Filter:</label>' +
+          '<select id="status-' +
+          escapeHtml(endpointId) +
+          '" data-deliveries-filter="' +
+          escapeHtml(endpointId) +
+          '" class="rounded-md border border-slate-300 px-2 py-1 text-xs">' +
+          ['', 'pending', 'in_flight', 'delivered', 'failed', 'dlq']
+            .map((s) => {
+              const sel = s === (status || '') ? ' selected' : '';
+              const label = s === '' ? 'All statuses' : s;
+              return '<option value="' + escapeHtml(s) + '"' + sel + '>' + escapeHtml(label) + '</option>';
+            })
+            .join('') +
+          '</select></div>' +
+          '<p class="text-sm text-slate-500">Loading…</p>';
+        // Re-wire the filter handler each load (innerHTML reset).
+        const select = container.querySelector('[data-deliveries-filter]');
+        if (select) {
+          select.addEventListener('change', () => {
+            loadDeliveries(endpointId, container, select.value);
+          });
+        }
+        fetch(
+          apiBaseUrl +
+            '/v1/webhooks/' +
+            encodeURIComponent(endpointId) +
+            '/deliveries?' +
+            queryParts.join('&'),
+          {
+            headers: {
+              authorization: 'Bearer ' + token,
+              ...(typeof window.driftstackActAsHeaders === 'function'
+                ? window.driftstackActAsHeaders()
+                : {}),
+            },
           },
-        })
+        )
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((body) => {
+            const filterDiv = container.querySelector('div');
             const deliveries = body.data || [];
-            if (deliveries.length === 0) {
-              container.innerHTML = '<p class="text-sm text-slate-500">No deliveries recorded yet for this endpoint.</p>';
-              return;
+            const listHtml =
+              deliveries.length === 0
+                ? '<p class="text-sm text-slate-500">No deliveries' +
+                  (status ? ' with status "' + escapeHtml(status) + '"' : '') +
+                  '.</p>'
+                : '<ul class="divide-y divide-slate-100">' +
+                  deliveries.map(deliveryRow).join('') +
+                  '</ul>';
+            container.innerHTML = (filterDiv ? filterDiv.outerHTML : '') + listHtml;
+            // Re-wire the filter (innerHTML reset wipes listeners).
+            const sel2 = container.querySelector('[data-deliveries-filter]');
+            if (sel2) {
+              sel2.addEventListener('change', () => {
+                loadDeliveries(endpointId, container, sel2.value);
+              });
             }
-            container.innerHTML =
-              '<ul class="divide-y divide-slate-100">' + deliveries.map(deliveryRow).join('') + '</ul>';
             wireReplayButtons(container);
           })
           .catch((err) => {
