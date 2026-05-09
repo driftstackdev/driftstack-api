@@ -20008,3 +20008,27 @@ Python + Go SDKs both return `dict[str, Any]` / interface{}-
 adjacent shapes that already accommodate the union; their fix is
 documentation rather than type. README V-410 already noted the
 union semantics in a comment beside `client.auth.login`.
+
+## V-424 — TS SDK login-union test coverage
+
+**Tier**: 1 (V-423 follow-through; pins discriminated-union
+behavior so a future regression to `Promise<LoginResponse>` simple
+type surfaces in tests).
+
+`packages/sdk-typescript/tests/unit/auth-login-union.test.ts` —
+new file. 2 tests:
+
+- Non-MFA branch: server returns `{ session }`; consumer's
+  `'mfa_required' in out && out.mfa_required` check is false;
+  `out.session.token` resolves.
+- MFA-required branch: server returns `{ mfa_required: true,
+challenge_token, challenge_expires_at }`; consumer's discriminator
+  check is true; `out.challenge_token` resolves; `'session' in out`
+  is false.
+
+Both tests use `satisfies LoginResponseUnion` to lock the
+returned object against the API-types union schema. A future
+return-type regression would surface as either the satisfies
+check failing OR the discriminator narrowing breaking.
+
+2/2 pass.
