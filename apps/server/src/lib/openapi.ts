@@ -89,6 +89,7 @@ import {
   WaitResponseSchema,
   WebhookDeliverySchema,
   WebhookEndpointSchema,
+  UpdateWebhookRequestSchema,
   SessionStateSchema,
 } from '@driftstack/api-types';
 
@@ -1773,6 +1774,117 @@ function buildRegistry(): OpenAPIRegistry {
             schema: z.object({ revoked: z.number().int().nonnegative() }),
           },
         },
+      },
+      ...errors4xx,
+    },
+  });
+
+  // ── V-457 — /v1/webhooks base CRUD + deliveries + PATCH ────────────────
+  // Customer-facing webhook CRUD; was previously SDK-exposed but
+  // missing from spec (only test + rotate-secret were registered).
+  const ListWebhookEndpointsResponseOpenApi = z.object({
+    data: z.array(WebhookEndpointSchema),
+  });
+  const ListDeliveriesQueryOpenApi = z.object({
+    limit: z.number().int().min(1).max(100).optional(),
+    cursor: z.string().optional(),
+    status: z.enum(['pending', 'in_flight', 'delivered', 'failed', 'dlq']).optional(),
+  });
+  const PaginatedDeliveriesOpenApi = z.object({
+    data: z.array(WebhookDeliverySchema),
+    has_more: z.boolean(),
+    next_cursor: z.string().nullable(),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/webhooks',
+    summary: 'Create a webhook endpoint',
+    tags: ['webhooks'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: CreateWebhookRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Created endpoint; plaintext signing secret returned ONCE.',
+        content: { 'application/json': { schema: CreateWebhookResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/webhooks',
+    summary: 'List webhook endpoints for the calling account',
+    tags: ['webhooks'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Endpoint list (no plaintext).',
+        content: { 'application/json': { schema: ListWebhookEndpointsResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/webhooks/{id}',
+    summary: 'Get a single webhook endpoint',
+    tags: ['webhooks'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description: 'Endpoint.',
+        content: { 'application/json': { schema: WebhookEndpointSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'patch',
+    path: '/v1/webhooks/{id}',
+    summary: 'Partial update of a webhook endpoint (url / events / description / active)',
+    tags: ['webhooks'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: { content: { 'application/json': { schema: UpdateWebhookRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Updated endpoint.',
+        content: { 'application/json': { schema: WebhookEndpointSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/webhooks/{id}',
+    summary: 'Disable (soft-delete) a webhook endpoint. Idempotent.',
+    tags: ['webhooks'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      204: { description: 'Endpoint disabled.' },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/webhooks/{id}/deliveries',
+    summary: 'List delivery attempts for a webhook endpoint',
+    tags: ['webhooks'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      query: ListDeliveriesQueryOpenApi,
+    },
+    responses: {
+      200: {
+        description: 'Paginated delivery list with optional ?status= filter.',
+        content: { 'application/json': { schema: PaginatedDeliveriesOpenApi } },
       },
       ...errors4xx,
     },

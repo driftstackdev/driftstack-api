@@ -20998,3 +20998,29 @@ api-types schemas reused via direct import (no inline duplication).
 V-455 audit: customer-facing OpenAPI gap count drops 24 → 19.
 Profiles surface now fully in spec; Scalar UI + downstream
 regen pass picks up the canonical CRUD shapes.
+
+## V-457 — register /v1/webhooks base CRUD + deliveries + PATCH in OpenAPI
+
+**Tier**: 1 (V-455 audit second-highest gap closure — 6 routes
+SDK-exposed but missing from spec).
+
+`apps/server/src/lib/openapi.ts` registers the missing webhook
+routes that V-455 flagged:
+
+- POST /v1/webhooks (CreateWebhookRequest → CreateWebhookResponse;
+  plaintext signing secret returned ONCE).
+- GET /v1/webhooks (ListWebhookEndpointsResponse; no plaintext).
+- GET /v1/webhooks/{id} (single endpoint).
+- PATCH /v1/webhooks/{id} (UpdateWebhookRequest — partial update
+  of url/events/description/active).
+- DELETE /v1/webhooks/{id} (204 soft-delete).
+- GET /v1/webhooks/{id}/deliveries (paginated; ?status= filter).
+
+api-types schemas reused via `UpdateWebhookRequestSchema` import.
+New `ListWebhookEndpointsResponseOpenApi` +
+`ListDeliveriesQueryOpenApi` + `PaginatedDeliveriesOpenApi` schema
+helpers inline.
+
+`openapi.test.ts` paths fixture extended.
+
+V-455 customer-facing OpenAPI gap count: 19 → 13.

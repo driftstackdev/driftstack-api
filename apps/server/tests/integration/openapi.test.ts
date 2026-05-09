@@ -109,6 +109,10 @@ describe('OpenAPI spec generation', () => {
         '/v1/usage',
         '/v1/usage/series',
         '/v1/webhook-deliveries/{deliveryId}/replay',
+        // V-457 webhook base CRUD + deliveries
+        '/v1/webhooks',
+        '/v1/webhooks/{id}',
+        '/v1/webhooks/{id}/deliveries',
         // V-356 + V-359 webhook test + rotate
         '/v1/webhooks/{id}/rotate-secret',
         '/v1/webhooks/{id}/test',
