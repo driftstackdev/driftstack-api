@@ -25,10 +25,11 @@ TimeoutStartSec=30
 TimeoutStopSec=20
 
 # Sandboxing — the API needs network + the .env file but nothing else.
+# Logs go to journald via stdout/stderr; multipart temp files land in
+# the unit's PrivateTmp /tmp, so no host-writable path required.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/opt/driftstack/api/var
 ProtectHome=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
@@ -36,7 +37,9 @@ ProtectControlGroups=true
 RestrictSUIDSGID=true
 RestrictRealtime=true
 LockPersonality=true
-MemoryDenyWriteExecute=true
+# MemoryDenyWriteExecute is incompatible with Node's V8 JIT (V8 maps
+# code pages with PROT_EXEC then PROT_WRITE for baseline-tier
+# compilation; the directive causes SIGTRAP at startup).
 SystemCallArchitectures=native
 
 # Crash-loop guard: more than 5 restarts in 60s flips us to failed.

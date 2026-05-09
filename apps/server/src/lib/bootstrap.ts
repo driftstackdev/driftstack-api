@@ -197,8 +197,9 @@ export async function createProductionDeps(
   // Rate limit store.
   const rateLimitStore = new RedisRateLimitStore(redis);
 
-  // Driver — mock or real WebKit per config.
-  const driver = createDriver(config);
+  // Driver — mock or real WebKit per config. The Playwright dev
+  // driver is dynamically imported, so this is async.
+  const driver = await createDriver(config);
 
   // V-216 — customer-facing audit log; constructed early so all
   // emit-on-event services downstream (webhooks, sessions, api-keys,

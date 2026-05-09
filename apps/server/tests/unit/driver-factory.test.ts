@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  createDriver,
-  MockDriver,
-  PlaywrightDriver,
-  WebKitDriver,
-} from '../../src/drivers/index.js';
+import { createDriver, MockDriver, WebKitDriver } from '../../src/drivers/index.js';
+import { PlaywrightDriver } from '../../src/drivers/playwright.js';
 import { DriverNotIntegratedError } from '../../src/lib/errors.js';
 
 const baseConfig = {
@@ -15,18 +11,18 @@ const baseConfig = {
 };
 
 describe('createDriver factory', () => {
-  it('returns a MockDriver when driver=mock', () => {
-    const d = createDriver({ ...baseConfig, driver: 'mock' });
+  it('returns a MockDriver when driver=mock', async () => {
+    const d = await createDriver({ ...baseConfig, driver: 'mock' });
     expect(d).toBeInstanceOf(MockDriver);
   });
 
-  it('returns a WebKitDriver stub when driver=webkit', () => {
-    const d = createDriver({ ...baseConfig, driver: 'webkit' });
+  it('returns a WebKitDriver stub when driver=webkit', async () => {
+    const d = await createDriver({ ...baseConfig, driver: 'webkit' });
     expect(d).toBeInstanceOf(WebKitDriver);
   });
 
-  it('returns a PlaywrightDriver when driver=playwright', () => {
-    const d = createDriver({ ...baseConfig, driver: 'playwright' });
+  it('returns a PlaywrightDriver when driver=playwright', async () => {
+    const d = await createDriver({ ...baseConfig, driver: 'playwright' });
     expect(d).toBeInstanceOf(PlaywrightDriver);
   });
 });

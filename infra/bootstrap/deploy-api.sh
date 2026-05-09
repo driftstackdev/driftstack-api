@@ -67,23 +67,29 @@ npm run build --workspace @driftstack/server --if-present
 npm run build --workspace @driftstack/api-types --if-present
 
 # 3. Rsync. Preserve permissions; delete files removed locally.
-#    Exclude tests, sourcemaps optional, node_modules (re-installed on host).
+#    Sends every workspace's package.json (npm needs all of them to
+#    resolve the workspace graph) but only apps/server + packages/api-
+#    types dist trees (the only runtime artefacts the API needs).
 echo "→ rsync to $HOST:/opt/driftstack/api/"
-rsync -azP --delete \
-  --exclude 'node_modules' \
-  --exclude '.git' \
-  --exclude '*.test.ts' --exclude '*.test.js' \
-  --exclude '*.spec.ts' --exclude '*.spec.js' \
-  --include 'apps/' --include 'apps/server/' --include 'apps/server/dist/***' \
-  --include 'packages/' --include 'packages/api-types/' --include 'packages/api-types/dist/***' \
+rsync -az --delete \
   --include 'package.json' --include 'package-lock.json' \
-  --include 'apps/server/package.json' --include 'packages/api-types/package.json' \
+  --include 'apps/' --include 'apps/*/' \
+  --include 'apps/*/package.json' \
+  --include 'apps/server/dist/***' \
+  --include 'packages/' --include 'packages/*/' \
+  --include 'packages/*/package.json' \
+  --include 'packages/api-types/dist/***' \
+  --include 'docs/' --include 'docs/legal/' --include 'docs/legal/*.md' \
   --exclude '*' \
   ./ "root@$HOST:/opt/driftstack/api/"
 
 # 4. Install runtime deps + write .env + install unit/vhost.
 echo "→ remote: npm ci --omit=dev"
-ssh "root@$HOST" 'cd /opt/driftstack/api && npm ci --omit=dev --no-audit --no-fund'
+# --ignore-scripts: the root prepare hook calls husky (dev-only); we
+# don't want it on the host. Workspace lifecycle scripts are skipped
+# too, but apps/server has no install/postinstall — only its build
+# step (which we ran locally before rsync).
+ssh "root@$HOST" 'cd /opt/driftstack/api && npm ci --omit=dev --ignore-scripts --no-audit --no-fund'
 
 echo "→ remote: write .env"
 scp -q "$ENV_FILE_LOCAL" "root@$HOST:/opt/driftstack/api/.env"
