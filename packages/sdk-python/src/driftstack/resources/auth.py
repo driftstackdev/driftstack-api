@@ -71,6 +71,40 @@ class AuthResource:
         """
         return self._http.request("POST", "/v1/auth/mfa/step-up", json_body=coerce_body(body))
 
+    def cli_authorize_initiate(self, body: dict[str, Any]) -> dict[str, Any]:
+        """V-460 / V-266 CLI/GUI activation flow: initiate.
+
+        Returns a one-shot ``code`` + ``browser_url``; the CLI/GUI opens
+        the URL, the user signs in to the dashboard and confirms the
+        activation, after which ``cli_authorize_exchange`` returns the
+        plaintext API key.
+        """
+        return self._http.request(
+            "POST", "/v1/auth/cli-authorize/initiate", json_body=coerce_body(body)
+        )
+
+    def cli_authorize_bind(self, body: dict[str, Any]) -> dict[str, Any]:
+        """V-460 / V-266 CLI/GUI activation flow: bind.
+
+        Web-session-authenticated. Called by the dashboard's confirm page
+        after the user clicks Authorize: mints a scoped API key on the
+        calling account and stages it for delivery via exchange.
+        """
+        return self._http.request(
+            "POST", "/v1/auth/cli-authorize/bind", json_body=coerce_body(body)
+        )
+
+    def cli_authorize_exchange(self, body: dict[str, Any]) -> dict[str, Any]:
+        """V-460 / V-266 CLI/GUI activation flow: exchange.
+
+        Polled by the CLI/GUI. Discriminated-union response on
+        ``status``: ``pending`` (keep polling) / ``bound`` (one-shot
+        delivery; ``api_key`` + ``account_id`` in body) / ``expired``.
+        """
+        return self._http.request(
+            "POST", "/v1/auth/cli-authorize/exchange", json_body=coerce_body(body)
+        )
+
 
 class AsyncAuthResource:
     """Async auth-flow resource."""
@@ -123,4 +157,19 @@ class AsyncAuthResource:
     async def mfa_step_up(self, body: dict[str, Any]) -> dict[str, Any]:
         return await self._http.request(
             "POST", "/v1/auth/mfa/step-up", json_body=coerce_body(body)
+        )
+
+    async def cli_authorize_initiate(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._http.request(
+            "POST", "/v1/auth/cli-authorize/initiate", json_body=coerce_body(body)
+        )
+
+    async def cli_authorize_bind(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._http.request(
+            "POST", "/v1/auth/cli-authorize/bind", json_body=coerce_body(body)
+        )
+
+    async def cli_authorize_exchange(self, body: dict[str, Any]) -> dict[str, Any]:
+        return await self._http.request(
+            "POST", "/v1/auth/cli-authorize/exchange", json_body=coerce_body(body)
         )

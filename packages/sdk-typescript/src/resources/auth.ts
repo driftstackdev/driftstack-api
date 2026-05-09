@@ -7,6 +7,12 @@
 // here for ergonomics + type safety, not for API-key-driven auth.
 
 import type {
+  CliAuthorizeBindRequest,
+  CliAuthorizeBindResponse,
+  CliAuthorizeExchangeRequest,
+  CliAuthorizeExchangeResponse,
+  CliAuthorizeInitiateRequest,
+  CliAuthorizeInitiateResponse,
   LoginRequest,
   LoginResponseUnion,
   MfaChallengeRequest,
@@ -143,6 +149,56 @@ export class AuthResource {
     return this.http.request<MfaStepUpResponse>({
       method: 'POST',
       path: '/v1/auth/mfa/step-up',
+      body,
+    });
+  }
+
+  /**
+   * V-460 — V-266 CLI/GUI activation flow: initiate.
+   *
+   * The CLI/GUI calls this with a CSRF nonce + optional client label.
+   * Returns a one-shot code + browser URL the CLI/GUI opens; the user
+   * signs in to the dashboard and confirms the activation, after which
+   * the CLI/GUI polls `cliAuthorizeExchange` to receive the API key.
+   */
+  cliAuthorizeInitiate(body: CliAuthorizeInitiateRequest): Promise<CliAuthorizeInitiateResponse> {
+    return this.http.request<CliAuthorizeInitiateResponse>({
+      method: 'POST',
+      path: '/v1/auth/cli-authorize/initiate',
+      body,
+    });
+  }
+
+  /**
+   * V-460 — V-266 CLI/GUI activation flow: bind.
+   *
+   * Web-session-authenticated. Called by the dashboard's
+   * /cli/authorize confirmation page after the user clicks Authorize:
+   * mints an API key on the calling account and stages it for delivery
+   * to the CLI/GUI through the exchange endpoint. Default scopes are
+   * `["account_owner"]` server-side.
+   */
+  cliAuthorizeBind(body: CliAuthorizeBindRequest): Promise<CliAuthorizeBindResponse> {
+    return this.http.request<CliAuthorizeBindResponse>({
+      method: 'POST',
+      path: '/v1/auth/cli-authorize/bind',
+      body,
+    });
+  }
+
+  /**
+   * V-460 — V-266 CLI/GUI activation flow: exchange.
+   *
+   * Polled by the CLI/GUI. Returns one of three branches:
+   * - `{ status: 'pending' }` — keep polling.
+   * - `{ status: 'bound', api_key, account_id }` — one-shot delivery
+   *   of the plaintext API key. Subsequent calls 404.
+   * - `{ status: 'expired' }` — user took too long; restart the flow.
+   */
+  cliAuthorizeExchange(body: CliAuthorizeExchangeRequest): Promise<CliAuthorizeExchangeResponse> {
+    return this.http.request<CliAuthorizeExchangeResponse>({
+      method: 'POST',
+      path: '/v1/auth/cli-authorize/exchange',
       body,
     });
   }

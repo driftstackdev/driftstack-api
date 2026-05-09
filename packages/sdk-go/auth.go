@@ -178,3 +178,54 @@ func (r *AuthResource) MfaStepUp(ctx context.Context, body *MfaStepUpRequest) (*
 	}
 	return &out, nil
 }
+
+// CliAuthorizeInitiate — V-460 / V-266. Start the CLI/GUI activation
+// flow. Returns a one-shot code + browser_url; the CLI/GUI opens the
+// URL, the user signs in to the dashboard and confirms, after which
+// CliAuthorizeExchange returns the plaintext API key.
+func (r *AuthResource) CliAuthorizeInitiate(ctx context.Context, body *CliAuthorizeInitiateRequest) (*CliAuthorizeInitiateResponse, error) {
+	var out CliAuthorizeInitiateResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/cli-authorize/initiate",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CliAuthorizeBind — V-460 / V-266. Web-session-authenticated. Called
+// by the dashboard's confirm page after the user clicks Authorize:
+// mints a scoped API key on the calling account and stages it for
+// delivery via CliAuthorizeExchange.
+func (r *AuthResource) CliAuthorizeBind(ctx context.Context, body *CliAuthorizeBindRequest) (*CliAuthorizeBindResponse, error) {
+	var out CliAuthorizeBindResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/cli-authorize/bind",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CliAuthorizeExchange — V-460 / V-266. Polled by the CLI/GUI.
+// Status discriminator: "pending" (keep polling), "bound" (one-shot
+// delivery; APIKey + AccountID populated), or "expired" (restart
+// the flow).
+func (r *AuthResource) CliAuthorizeExchange(ctx context.Context, body *CliAuthorizeExchangeRequest) (*CliAuthorizeExchangeResponse, error) {
+	var out CliAuthorizeExchangeResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/auth/cli-authorize/exchange",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

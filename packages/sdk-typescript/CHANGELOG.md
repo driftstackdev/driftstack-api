@@ -8,6 +8,17 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **CLI/GUI activation flow** (V-460 / V-266) — three new methods on
+  `client.auth`: `cliAuthorizeInitiate`, `cliAuthorizeBind`, and
+  `cliAuthorizeExchange`. CLI/GUI tools no longer need to ask users to
+  paste an API key from the dashboard; instead they call
+  `cliAuthorizeInitiate` for a `code` + `browser_url`, open the URL,
+  the user signs in to the dashboard and clicks Authorize, and the
+  CLI/GUI polls `cliAuthorizeExchange` for one-shot delivery of the
+  plaintext API key. Re-exported types: `CliAuthorizeInitiateRequest /
+Response`, `CliAuthorizeBindRequest / Response`,
+  `CliAuthorizeExchangeRequest / Response`,
+  `CliAuthorizeExchangeStatus`.
 - **`client.profileSnapshots`** — V-312 immutable point-in-time
   profile copies. Methods: `capture(profileId, body)`,
   `listForProfile(profileId, query?)`, `list(query?)` (cross-account),

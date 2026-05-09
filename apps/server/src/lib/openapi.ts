@@ -62,6 +62,12 @@ import {
   AdminAuditLogEntrySchema,
   ApiKeySchema,
   CaptureRequestSchema,
+  CliAuthorizeBindRequestSchema,
+  CliAuthorizeBindResponseSchema,
+  CliAuthorizeExchangeRequestSchema,
+  CliAuthorizeExchangeResponseSchema,
+  CliAuthorizeInitiateRequestSchema,
+  CliAuthorizeInitiateResponseSchema,
   CaptureResponseSchema,
   ChangeTierRequestSchema,
   CreateApiKeyRequestSchema,
@@ -1714,6 +1720,70 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: PasswordResetConfirmResponseSchema } },
       },
       ...errors4xx,
+    },
+  });
+
+  // ── V-460 — V-266 browser-OAuth-style CLI/GUI activation flow ──────────
+  // Three routes: initiate (public) / bind (web-session auth required) /
+  // exchange (public). The CLI/GUI never sees a user password — the
+  // dashboard mints a scoped API key and hands the plaintext to the
+  // CLI/GUI through `exchange`.
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/cli-authorize/initiate',
+    summary: 'Start the CLI/GUI activation flow; returns a code + browser URL',
+    tags: ['auth'],
+    request: {
+      body: { content: { 'application/json': { schema: CliAuthorizeInitiateRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Activation code + browser URL the CLI/GUI opens. Code expires after ~5min.',
+        content: { 'application/json': { schema: CliAuthorizeInitiateResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/cli-authorize/bind',
+    summary: "Web-session-authed: bind the CLI/GUI's code to the calling account; mints an API key",
+    tags: ['auth'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: CliAuthorizeBindRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Code bound; CLI/GUI can now poll exchange for the plaintext key.',
+        content: { 'application/json': { schema: CliAuthorizeBindResponseSchema } },
+      },
+      ...errors4xx,
+      404: {
+        description: 'Code not found or expired.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/cli-authorize/exchange',
+    summary: 'Poll for the bound API key plaintext (one-shot delivery)',
+    tags: ['auth'],
+    request: {
+      body: { content: { 'application/json': { schema: CliAuthorizeExchangeRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description:
+          'Discriminated-union: { status: pending } / { status: bound, api_key, account_id } / { status: expired }. The bound branch is one-shot — subsequent calls 404.',
+        content: { 'application/json': { schema: CliAuthorizeExchangeResponseSchema } },
+      },
+      ...errors4xx,
+      404: {
+        description: 'Code not found or already consumed.',
+        content: problemContent,
+      },
     },
   });
 

@@ -800,3 +800,57 @@ type MfaStepUpResponse struct {
 	Via             string    `json:"via"` // "totp" | "recovery"
 	MfaSatisfiedAt  time.Time `json:"mfa_satisfied_at"`
 }
+
+// V-460 / V-266 CLI/GUI activation flow (browser-OAuth-style).
+
+// CliAuthorizeInitiateRequest — the CLI/GUI starts the flow with a
+// CSRF nonce + optional human-friendly client label that appears on
+// the dashboard's confirmation screen.
+type CliAuthorizeInitiateRequest struct {
+	State       string `json:"state"`
+	ClientLabel string `json:"client_label,omitempty"`
+}
+
+// CliAuthorizeInitiateResponse — one-shot code + browser URL the
+// CLI/GUI opens. The code is opaque and never displayed to the user;
+// the CLI/GUI polls /exchange with it.
+type CliAuthorizeInitiateResponse struct {
+	Code       string    `json:"code"`
+	BrowserURL string    `json:"browser_url"`
+	ExpiresAt  time.Time `json:"expires_at"`
+}
+
+// CliAuthorizeBindRequest — web-session-authenticated. Scopes default
+// to ["account_owner"] server-side when omitted.
+type CliAuthorizeBindRequest struct {
+	Code   string   `json:"code"`
+	State  string   `json:"state"`
+	Scopes []string `json:"scopes,omitempty"`
+}
+
+// CliAuthorizeBindResponse — the dashboard's confirmation UI gets
+// AccountID echoed back. The plaintext API key NEVER returns through
+// this endpoint — only the CLI/GUI receives it via /exchange.
+type CliAuthorizeBindResponse struct {
+	OK        bool      `json:"ok"`
+	AccountID string    `json:"account_id"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// CliAuthorizeExchangeRequest — polled by the CLI/GUI after opening
+// the browser_url returned by /initiate.
+type CliAuthorizeExchangeRequest struct {
+	Code  string `json:"code"`
+	State string `json:"state"`
+}
+
+// CliAuthorizeExchangeResponse — discriminated on Status:
+//   - "pending" — keep polling.
+//   - "bound"   — one-shot delivery; APIKey + AccountID populated.
+//     Subsequent calls return 404.
+//   - "expired" — user took too long; restart the flow.
+type CliAuthorizeExchangeResponse struct {
+	Status    string `json:"status"`
+	APIKey    string `json:"api_key,omitempty"`
+	AccountID string `json:"account_id,omitempty"`
+}

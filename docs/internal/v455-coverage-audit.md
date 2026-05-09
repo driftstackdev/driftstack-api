@@ -43,9 +43,9 @@ grep -roE "\"/v[0-9][^\"]+\"" packages/sdk-go
 | POST /v1/auth/password-reset/confirm | ✅      | ✅  | ✅  | ✅  | V-402                     |
 | POST /v1/auth/mfa/challenge          | ✅      | ✅  | ✅  | ✅  | V-401, V-445 SDK methods  |
 | POST /v1/auth/mfa/step-up            | ✅      | ✅  | ✅  | ✅  | V-401, V-445 SDK methods  |
-| POST /v1/auth/cli-authorize/initiate | ❌      | ❌  | ❌  | ❌  | **GAP** — CLI auth flow   |
-| POST /v1/auth/cli-authorize/exchange | ❌      | ❌  | ❌  | ❌  | **GAP** — CLI auth flow   |
-| POST /v1/auth/cli-authorize/bind     | ❌      | ❌  | ❌  | ❌  | **GAP** — CLI auth flow   |
+| POST /v1/auth/cli-authorize/initiate | ✅      | ✅  | ✅  | ✅  | V-460                     |
+| POST /v1/auth/cli-authorize/exchange | ✅      | ✅  | ✅  | ✅  | V-460                     |
+| POST /v1/auth/cli-authorize/bind     | ✅      | ✅  | ✅  | ✅  | V-460                     |
 
 ### Account self-service (`/v1/account/*`)
 
@@ -220,7 +220,7 @@ These routes power the admin panel; they're 🚫 for customer SDKs by design but
 
 | Surface category | Total routes | OpenAPI gaps                        | SDK gaps (TS / Py / Go) |
 | ---------------- | ------------ | ----------------------------------- | ----------------------- |
-| Auth             | 14           | 3 (cli-authorize × 3)               | 3 (cli-authorize × 3)   |
+| Auth             | 14           | 0 (V-460 closed)                    | 0 (V-460 closed)        |
 | Account          | 18           | 0 (only audit-log/export partial)   | 1 (audit-log/export)    |
 | Sessions         | 10           | 1 (gui-input)                       | 1 (gui-input)           |
 | Profiles         | 12           | 5 (base CRUD)                       | 0                       |
@@ -233,8 +233,8 @@ These routes power the admin panel; they're 🚫 for customer SDKs by design but
 | Status (public)  | 7            | 0 (V-459 closed; 1 SSE intentional) | 6 (intentional)         |
 | Admin            | 27           | 11                                  | 🚫 (admin-only)         |
 
-**Customer-facing OpenAPI gaps after V-459:** 4 routes (gui-input + cli-authorize 3-route block).
-**Customer-facing SDK gaps after V-459:** 13 routes (TS / Py / Go each).
+**Customer-facing OpenAPI gaps after V-460:** 1 route (gui-input).
+**Customer-facing SDK gaps after V-460:** 10 routes (TS / Py / Go each).
 **Admin OpenAPI gaps:** 11 routes (Tier-2 follow-up).
 
 ## Per-gap closure slices (priority order)
@@ -245,7 +245,7 @@ Tier 1 (customer-facing OpenAPI parity — most impactful):
 - **V-457** — register `/v1/webhooks` base CRUD + deliveries + PATCH in OpenAPI (6 routes).
 - **V-458** — register `/v1/legal/*` (3 routes) + add SDK methods.
 - **V-459** — register `/v1/status/*` (6 routes) in OpenAPI; SDK exposure intentionally 🚫 (status is monitoring data — out-of-band by design). ✅ shipped.
-- **V-460** — register `/v1/auth/cli-authorize/*` + add SDK methods (CLI flow).
+- **V-460** — register `/v1/auth/cli-authorize/*` (3 routes) + add three-SDK methods. ✅ shipped.
 - **V-461** — register `/v1/sessions/:id/gui-input` + add SDK method.
 - **V-462** — register `/v1/account/audit-log/export` properly + add SDK method.
 - **V-463** — `/v1/webhooks/:id/test` SDK methods (V-356 send-test wrapper).

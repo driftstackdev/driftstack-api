@@ -112,6 +112,14 @@ export type {
   WebhookEndpointId,
   WebhookEventType,
   RotateWebhookSecretResponse,
+  // V-460 / V-266 CLI/GUI activation flow
+  CliAuthorizeBindRequest,
+  CliAuthorizeBindResponse,
+  CliAuthorizeExchangeRequest,
+  CliAuthorizeExchangeResponse,
+  CliAuthorizeExchangeStatus,
+  CliAuthorizeInitiateRequest,
+  CliAuthorizeInitiateResponse,
   // V-079 auth flow
   LoginRequest,
   LoginResponse,

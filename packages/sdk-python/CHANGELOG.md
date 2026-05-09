@@ -8,6 +8,14 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **CLI/GUI activation flow** (V-460 / V-266) — three new methods on
+  `client.auth` plus async mirrors: `cli_authorize_initiate`,
+  `cli_authorize_bind`, and `cli_authorize_exchange`. CLI/GUI tools
+  call `cli_authorize_initiate` for a `code` + `browser_url`, open the
+  URL, the user signs in + confirms, and the CLI/GUI polls
+  `cli_authorize_exchange` for one-shot delivery of the plaintext API
+  key. Status discriminator on the exchange response: `pending` /
+  `bound` (with `api_key` + `account_id`) / `expired`.
 - **`client.profile_snapshots`** + **`async_client.profile_snapshots`** —
   V-312 immutable point-in-time profile copies. Methods: `capture`,
   `list_for_profile`, `list` (cross-account), `iterate`, `get`,

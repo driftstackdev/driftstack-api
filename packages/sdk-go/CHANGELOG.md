@@ -8,6 +8,18 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **CLI/GUI activation flow** (V-460 / V-266) — three new methods on
+  `client.Auth`: `CliAuthorizeInitiate`, `CliAuthorizeBind`, and
+  `CliAuthorizeExchange`. Tools call `CliAuthorizeInitiate` for a
+  `Code` + `BrowserURL`, open the URL, the user signs in + clicks
+  Authorize, and the CLI/GUI polls `CliAuthorizeExchange` for one-shot
+  delivery of the plaintext API key. Status discriminator on
+  `CliAuthorizeExchangeResponse`: "pending" (keep polling) / "bound"
+  (APIKey + AccountID populated; one-shot — subsequent calls 404) /
+  "expired" (restart the flow). New types:
+  `CliAuthorizeInitiateRequest` / `Response`,
+  `CliAuthorizeBindRequest` / `Response`,
+  `CliAuthorizeExchangeRequest` / `Response`.
 - **`client.ProfileSnapshots`** — V-312 immutable point-in-time
   profile copies. Methods: `Capture(ctx, profileID, *CaptureSnapshotRequest)`,
   `ListForProfile(ctx, profileID, *ListProfileSnapshotsQuery)`,

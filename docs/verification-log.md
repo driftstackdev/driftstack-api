@@ -21107,3 +21107,61 @@ OpenAPI test 8/8 pass; spec generates with 6 new public paths.
 V-455 customer-facing OpenAPI gap count: 10 → 4 (cli-authorize
 3-route block + gui-input remain). Customer-facing SDK gap count:
 13 → 13 (status reclassified 🚫, not closed via SDK addition).
+
+## V-460 — register /v1/auth/cli-authorize/\* in OpenAPI + add three-SDK methods
+
+**Tier**: 1 (V-455 audit gap closure — V-266 browser-OAuth-style
+activation flow had server routes + Zod schemas in api-types but no
+OpenAPI registration and no SDK methods, leaving CLI/GUI integrators
+with raw HTTP).
+
+**OpenAPI** (`apps/server/src/lib/openapi.ts`):
+
+- POST /v1/auth/cli-authorize/initiate — public; CLI/GUI starts the
+  flow with a CSRF nonce + optional client_label. Returns the one-shot
+  code + browser_url + expires_at (5-minute TTL).
+- POST /v1/auth/cli-authorize/bind — web-session-authed (security:
+  auth). Dashboard's confirm page mints a scoped API key on the
+  calling account and stages the plaintext for delivery via
+  /exchange. Default scopes: `["account_owner"]`.
+- POST /v1/auth/cli-authorize/exchange — public; polled by the
+  CLI/GUI. Discriminated-union: `{status: pending}` / `{status:
+bound, api_key, account_id}` / `{status: expired}`. Bound branch is
+  one-shot; subsequent calls 404.
+
+Schemas sourced from `@driftstack/api-types` (CliAuthorize\* — already
+shared with the route handlers, now registered in OpenAPI).
+
+**TS** (`packages/sdk-typescript/src/resources/auth.ts`):
+
+- `client.auth.cliAuthorizeInitiate / cliAuthorizeBind /
+cliAuthorizeExchange`. Returns the discriminated-union types for the
+  exchange poll loop. Re-exported types in
+  `packages/sdk-typescript/src/index.ts`:
+  `CliAuthorizeInitiateRequest / Response`,
+  `CliAuthorizeBindRequest / Response`,
+  `CliAuthorizeExchangeRequest / Response`,
+  `CliAuthorizeExchangeStatus`.
+
+**Python** (`packages/sdk-python/src/driftstack/resources/auth.py`):
+
+- `AuthResource.cli_authorize_initiate / _bind / _exchange` (sync) +
+  `AsyncAuthResource` mirror. `dict[str, Any]` typing pending the next
+  regen pass — same convention as the rest of the auth resource.
+
+**Go** (`packages/sdk-go/auth.go`):
+
+- `AuthResource.CliAuthorizeInitiate(ctx, *CliAuthorizeInitiateRequest)`,
+  `CliAuthorizeBind(ctx, *CliAuthorizeBindRequest)`,
+  `CliAuthorizeExchange(ctx, *CliAuthorizeExchangeRequest)`.
+- New struct types in `types.go`: `CliAuthorizeInitiateRequest /
+Response`, `CliAuthorizeBindRequest / Response`,
+  `CliAuthorizeExchangeRequest / Response` (Status discriminator;
+  APIKey + AccountID populated only on the `bound` branch).
+
+OpenAPI test 8/8 pass; spec generates with the 3 new paths. Go build
+
+- Go test green; TS typecheck clean; Python pytest 137/137 pass.
+
+V-455 customer-facing OpenAPI gap count: 4 → 1 (gui-input only).
+Customer-facing SDK gap count: 13 → 10.
