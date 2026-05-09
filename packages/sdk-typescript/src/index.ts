@@ -95,6 +95,8 @@ export type {
   SessionState,
   SessionStatus,
   UsagePeriodSummary,
+  UsageDailyBucket,
+  UsageSeriesResponse,
   WaitCondition,
   WaitRequest,
   WaitResponse,

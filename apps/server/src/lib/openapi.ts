@@ -442,6 +442,37 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // V-452 — daily-bucketed time series. Honors X-Driftstack-Account
+  // team-RBAC header.
+  const UsageDailyBucketOpenApi = z.object({
+    date: z.string(),
+    totals: z.record(z.number().int().nonnegative()),
+  });
+  const UsageSeriesResponseOpenApi = z.object({
+    from_date: z.string(),
+    to_date: z.string(),
+    buckets: z.array(UsageDailyBucketOpenApi),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/usage/series',
+    summary: 'Daily-bucketed usage time series for the calling account',
+    tags: ['Usage'],
+    security: auth,
+    request: {
+      query: z.object({
+        days: z.coerce.number().int().min(1).max(90).optional(),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'Per-day totals over the trailing window (default 30 days, max 90).',
+        content: { 'application/json': { schema: UsageSeriesResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+
   // ── Team RBAC (V-298) ──────────────────────────────────────────────────
   // Auth path integration is V-298d — until then, accepted members can
   // sign in but the membership grants no implicit permissions on the

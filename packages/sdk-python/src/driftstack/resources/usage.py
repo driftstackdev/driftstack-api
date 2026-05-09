@@ -1,6 +1,9 @@
-"""Usage resource — /v1/usage."""
+"""Usage resource — /v1/usage + /v1/usage/series."""
 
 from __future__ import annotations
+
+from typing import Any
+from urllib.parse import urlencode
 
 from driftstack._generated.models import UsagePeriodSummary
 from driftstack.http import AsyncHttpClient, HttpClient
@@ -17,6 +20,15 @@ class UsageResource:
         data = self._http.request("GET", "/v1/usage")
         return UsagePeriodSummary.model_validate(data)
 
+    def series(self, *, days: int | None = None) -> dict[str, Any]:
+        """V-452 — daily-bucketed usage time series. ``days`` is 1-90;
+        default 30. Returns ``{"from_date", "to_date", "buckets"}``.
+        """
+        path = "/v1/usage/series"
+        if days is not None:
+            path = f"{path}?{urlencode({'days': days})}"
+        return self._http.request("GET", path)
+
 
 class AsyncUsageResource:
     """Async usage resource."""
@@ -27,3 +39,9 @@ class AsyncUsageResource:
     async def current_period(self) -> UsagePeriodSummary:
         data = await self._http.request("GET", "/v1/usage")
         return UsagePeriodSummary.model_validate(data)
+
+    async def series(self, *, days: int | None = None) -> dict[str, Any]:
+        path = "/v1/usage/series"
+        if days is not None:
+            path = f"{path}?{urlencode({'days': days})}"
+        return await self._http.request("GET", path)

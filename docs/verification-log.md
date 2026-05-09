@@ -20858,3 +20858,42 @@ management surface that's now SDK-accessible — MFA enroll/verify
 /disable/regenerate, audit-log read+iterate, email-pref opt-in/
 out, /me update, avatar upload/clear, web-sessions list/revoke,
 rate-limits read.
+
+## V-452 — three-SDK usage time-series (V-220) + OpenAPI registration
+
+**Tier**: 1 (rule L empirical-diff sweep continues — found two
+real gaps: /v1/usage/series existed server-side per V-220 but was
+NOT registered in OpenAPI, and no SDK exposed it).
+
+`apps/server/src/lib/openapi.ts`:
+
+- New `UsageDailyBucketOpenApi` + `UsageSeriesResponseOpenApi`
+  schemas (inline; mirrors api-types).
+- `GET /v1/usage/series` registered with `days` query param
+  (1-90; default 30 server-side).
+
+`openapi.test.ts` registered-paths fixture extended.
+
+**TS** (`packages/sdk-typescript/src/resources/usage.ts`):
+
+- `client.usage.series({ days? })` returns `UsageSeriesResponse`.
+- Re-exported `UsageDailyBucket` + `UsageSeriesResponse` types.
+
+**Python** (`packages/sdk-python/src/driftstack/resources/usage.py`):
+
+- `client.usage.series(*, days)` (sync) +
+  `async_client.usage.series(*, days)` (async). Returns
+  `dict[str, Any]` (Pydantic model lands on next regen).
+
+**Go** (`packages/sdk-go/usage.go`):
+
+- `client.Usage.Series(ctx, days int)` returns
+  `*UsageSeriesResponse`. New `UsageDailyBucket` +
+  `UsageSeriesResponse` structs. `days = 0` lets server default
+  to 30.
+
+go test + Python pytest 137 + monorepo typecheck clean.
+
+The V-220 daily time-series API now has full OpenAPI + three-SDK
+coverage. Customers building usage-trend charts can pull the
+data programmatically without screen-scraping the dashboard.
