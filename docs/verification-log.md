@@ -21643,3 +21643,37 @@ added scopes). When done, agent fires steps 1-7 end-to-end:
 6. Verify `curl -v https://api.driftstack.dev/health` → 200 with
    Cloudflare Origin CA chain at origin.
 7. Empirical proof captured in V-log.
+
+## V-278.B/F follow-ups — GIT_SHA + CORS allow-list + dashboard API URL
+
+Three production-readiness tweaks caught by smoke testing the live API.
+
+### GIT_SHA injection on `/version`
+
+`/version` initially returned `git_sha: "unknown"`. Fix:
+`infra/env-templates/*.env.template` adds the `GIT_SHA` field with a
+`PLACEHOLDER_GIT_SHA` value; `deploy-api.sh` sed-replaces it with
+`git rev-parse --short HEAD` post-scp. Live verified: `curl https://api.driftstack.dev/version`
+→ `{... "git_sha": "5c38553" ...}`.
+
+### CORS allow-list
+
+Production CORS only allowed localhost. New `corsAllowedOrigins` prop
+on AppDeps; bootstrap reads `CORS_ALLOWED_ORIGINS` (comma-separated)
+from env. Templates populate with the dashboard / marketing / docs
+origins. Live verified post-redeploy:
+
+```
+curl -X OPTIONS https://api.driftstack.dev/v1/auth/login \
+     -H 'Origin: https://app.driftstack.dev'
+→ access-control-allow-origin: https://app.driftstack.dev ✓
+```
+
+### Customer-dashboard `PUBLIC_API_BASE_URL`
+
+Initial Pages deploy embedded `localhost:3000` in the Astro client
+code (default fallback). Rebuilt with
+`PUBLIC_API_BASE_URL=https://api.driftstack.dev` set + redeployed via
+wrangler. Live verified: `curl -L https://app.driftstack.dev/login`
+emits `api.driftstack.dev` references; no `localhost:3000`. Long-term:
+bake the env into the wrangler-deploy GitHub Actions step.
