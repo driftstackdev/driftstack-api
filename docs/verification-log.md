@@ -19953,3 +19953,31 @@ as V-385 account.md / V-408 auth.md).
 
 API index links it between Audit log and Team RBAC. Astro check
 clean.
+
+## V-422 — fix three-SDK README billing method names + ship TS/Python billing examples
+
+**Tier**: 1 (V-410/411/412 README correctness fix +
+three-SDK billing-flow example parity).
+
+V-410/411/412 READMEs listed wrong billing method names:
+
+- TS: `startCheckout` / `startPortalSession` → actual is
+  `createCheckoutSession` / `createPortalSession`.
+- Python: `start_checkout` / `start_portal_session` → actual is
+  `create_checkout_session` / `create_portal_session`.
+- Go: `StartCheckout` / `StartPortalSession` → actual is
+  `CreateCheckoutSession` / `CreatePortalSession`.
+
+All three READMEs corrected.
+
+**`packages/sdk-typescript/examples/billing-flow.ts`** — new
+example mirroring the existing Go `billing_flow/main.go`. Reads
+billing state, branches on subscription presence, surfaces
+checkout URL or Stripe Customer Portal URL. Typecheck clean.
+
+**`packages/sdk-python/examples/billing_flow.py`** — same shape
+in Python. Mypy clean.
+
+Three-SDK billing-example parity now matches three-SDK
+billing-resource parity. Customers see the recommended
+self-serve billing flow in the language of their choice.

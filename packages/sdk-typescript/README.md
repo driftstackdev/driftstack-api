@@ -95,9 +95,9 @@ client.team.removeMember(membershipId)
 client.account.me()                     // calling account's full state
 
 client.billing.getState()
-client.billing.startCheckout(body)
+client.billing.createCheckoutSession(body)
 client.billing.startTrialPack(body)
-client.billing.startPortalSession()
+client.billing.createPortalSession()
 
 client.auth.signup(body)
 client.auth.verifyEmail(body)
