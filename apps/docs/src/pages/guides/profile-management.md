@@ -130,7 +130,7 @@ const copy = await client.profiles.clone('prf_01HV...');
 const named = await client.profiles.clone('prf_01HV...', { name: 'staging-mirror' });
 ```
 
-Tier-cap + name-conflict are checked the same way as `create`: 429 if your tier limit would be exceeded, 409 on explicit-name collision, 404 if the source profile isn't yours or doesn't exist. The audit-log entry for the new profile carries `payload.cloned_from: prof_<src>`.
+Tier-cap + name-conflict are checked the same way as `create`: 429 if your tier limit would be exceeded, 409 on explicit-name collision, 404 if the source profile isn't yours or doesn't exist. The audit-log entry for the new profile carries `payload.cloned_from: "profile_<uuid>"` (the internal `profile_` prefix; see [audit-log payload reference](/api/audit-log/#payload-reference-v-399) for the format).
 
 ## Snapshots — immutable point-in-time copies (V-312)
 
@@ -167,7 +167,7 @@ const restored = await client.profileSnapshots.restore(snap.id, {
 });
 ```
 
-Tier-cap + name-conflict apply the same way as create. The audit-log entry on the new profile carries `payload.restored_from_snapshot: psnap_<id>`.
+Tier-cap + name-conflict apply the same way as create. The audit-log entry on the new profile carries `payload.restored_from_snapshot: "psnap_<uuid>"` (the public `psnap_` prefix; see [audit-log payload reference](/api/audit-log/#payload-reference-v-399)).
 
 **Delete.** `DELETE /v1/profile-snapshots/:id`.
 

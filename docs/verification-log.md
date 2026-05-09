@@ -19724,3 +19724,23 @@ markdown reference).
 
 API index (apps/docs/api/index.astro) link added above Account.
 Astro check clean.
+
+## V-409 — profile-management guide pins audit payload format
+
+**Tier**: 1 (V-395 + V-400 follow-through; doc precision).
+
+`apps/docs/src/pages/guides/profile-management.md` clone +
+snapshot sections now pin the audit payload format precisely:
+
+- Clone: `payload.cloned_from: "profile_<uuid>"` (internal
+  `profile_` prefix; cross-link to /api/audit-log/#payload-
+  reference-v-399).
+- Snapshot restore: `payload.restored_from_snapshot:
+"psnap_<uuid>"` (public `psnap_` prefix; same cross-link).
+
+Previously these said `prof_<src>` and `psnap_<id>` which were
+imprecise. The format-asymmetry between the two surfaces was
+documented in V-395 + V-400; this slice closes the third doc
+mentioning it.
+
+Astro check clean.
