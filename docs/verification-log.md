@@ -19398,3 +19398,52 @@ covering:
 19 / 19 pass. The mfa-totp.ts library was previously only
 exercised through integration tests; this slice adds direct
 algorithm-level coverage so a regression surfaces at unit time.
+
+## V-397 — V-359 dual-signing test coverage + production-form clarification
+
+**Tier**: 1 (test depth + architectural ground truth surfaced).
+
+`apps/server/tests/unit/webhook-signing.test.ts` gains 6 tests
+covering V-359 dual-signing semantics. While writing them I
+discovered the codebase has TWO webhook delivery paths with
+inconsistent dual-signing forms:
+
+- `webhook-worker.ts` uses `signWebhookPayload` (Stripe-style
+  `t=…,v1=…` header) and DOES NOT thread `secretPrev` through;
+  single-signs only.
+- `durable-webhook-delivery.ts` (production grace-rotation path)
+  emits TWO SEPARATE headers (`x-driftstack-signature` +
+  `x-driftstack-signature-prev`), each a raw hex digest. The SDK
+  verifier accepts the two-header form via the `headerPrev` input
+  field.
+
+The dual-`v1=` form that `signWebhookPayload(secret, secretPrev)`
+emits is therefore an internal code path of the primitive — it
+CAN be emitted but production dispatchers don't reach for it. The
+SDK header parser only keeps the LAST `v1=` entry when consuming
+a dual-`v1=` string, so if production ever switched to that form
+new-secret holders would fail verification during grace.
+
+Tests added:
+
+1. `signWebhookPayload` emits both v1= entries when `secretPrev`
+   is set; format `t=…,v1=…,v1=…`.
+2. The dual-`v1=` SDK-parser limitation is pinned: OLD secret
+   verifies (parser keeps the prev entry), NEW secret rejects.
+   Documents the dispatch-form gotcha so a future consolidation
+   sees the empirical reference.
+3. Separate-header path (production): verifier accepts when the
+   prev header carries the matching secret.
+4. Separate-header path: verifier accepts when the current header
+   carries the matching secret.
+5. Separate-header path: verifier rejects when neither header
+   matches.
+6. `signWebhookPayload` omits the second v1= when `secretPrev` is
+   `undefined` or empty.
+
+Format-consolidation onto a single `t=…,v1=…,v1=…` form (with
+matching SDK parser fix) queued as a separate slice (TD-snap).
+The current production grace-rotation path is correct as-is; this
+slice just empirically pinned both forms in unit-tests.
+
+15/15 webhook-signing tests pass.
