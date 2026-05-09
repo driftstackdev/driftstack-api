@@ -444,4 +444,117 @@ describe('POST /v1/profiles/:id/clone (V-313)', () => {
     });
     expect(res.statusCode).toBe(404);
   });
+
+  // V-394 — V-313 clone edge cases.
+  it('clone-of-clone: cloning an already-cloned profile inherits source archetype', async () => {
+    fx = await buildTestApp();
+    const auth = { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' };
+    const orig = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'gen-0' },
+    });
+    const gen0 = orig.json<{ id: string; archetype: string }>();
+
+    const c1 = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${gen0.id}/clone`,
+      headers: auth,
+      payload: { name: 'gen-1' },
+    });
+    const gen1 = c1.json<{ id: string; archetype: string; name: string }>();
+    expect(gen1.archetype).toBe(gen0.archetype);
+    expect(gen1.name).toBe('gen-1');
+
+    const c2 = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${gen1.id}/clone`,
+      headers: auth,
+      payload: { name: 'gen-2' },
+    });
+    const gen2 = c2.json<{ id: string; archetype: string; name: string }>();
+    expect(gen2.archetype).toBe(gen0.archetype);
+    expect(gen2.id).not.toBe(gen0.id);
+    expect(gen2.id).not.toBe(gen1.id);
+  });
+
+  it("cross-account: caller cannot clone another account's profile (404 not 403)", async () => {
+    fx = await buildTestApp();
+    const ownerAuth = {
+      authorization: `Bearer ${fx.plaintext}`,
+      'content-type': 'application/json',
+    };
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: ownerAuth,
+      payload: { name: 'owners-secret' },
+    });
+    const ownersProfileId = create.json<{ id: string }>().id;
+
+    const other = await buildTestApp();
+    try {
+      const clone = await other.app.inject({
+        method: 'POST',
+        url: `/v1/profiles/${ownersProfileId}/clone`,
+        headers: {
+          authorization: `Bearer ${other.plaintext}`,
+          'content-type': 'application/json',
+        },
+        payload: { name: 'thief' },
+      });
+      // 404 (not 403) — never confirm a profile exists in another
+      // account's namespace. Same posture as snapshot cross-account.
+      expect(clone.statusCode).toBe(404);
+    } finally {
+      await other.cleanup();
+    }
+  });
+
+  it('audit emits profile.created with payload.cloned_from on clone', async () => {
+    fx = await buildTestApp();
+    const auth = { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' };
+    const src = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: auth,
+      payload: { name: 'src-clone-audit' },
+    });
+    const srcId = src.json<{ id: string }>().id;
+
+    const clone = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${srcId}/clone`,
+      headers: auth,
+      payload: { name: 'cloned-audit-target' },
+    });
+    expect(clone.statusCode).toBe(200);
+    const cloned = clone.json<{ id: string }>();
+
+    const audit = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=profile.created&limit=10',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(audit.statusCode).toBe(200);
+    const entries = audit.json<{
+      data: Array<{
+        target_resource_id: string;
+        payload: Record<string, unknown> | null;
+      }>;
+    }>().data;
+    const matching = entries.find(
+      (e) => e.target_resource_id === `profile_${cloned.id.replace(/^prof_/, '')}`,
+    );
+    expect(matching).toBeDefined();
+    // V-313 audit emits cloned_from with the internal "profile_<uuid>"
+    // prefix (services/profiles.ts:257); contrast with V-312 restore
+    // which emits restored_from_snapshot with the public "psnap_<uuid>"
+    // form. The asymmetry is pre-existing — the test pins the actual
+    // wire format for consumers parsing audit payloads.
+    expect(matching?.payload).toMatchObject({
+      cloned_from: `profile_${srcId.replace(/^prof_/, '')}`,
+    });
+  });
 });

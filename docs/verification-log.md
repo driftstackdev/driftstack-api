@@ -19335,3 +19335,34 @@ edge-case tests:
   time" rule applies recursively.
 
 14 / 14 tests pass.
+
+## V-395 — V-313 clone edge-case test coverage + cloned_from format pin
+
+**Tier**: 1 (test depth + doc precision).
+
+`apps/server/tests/integration/profiles.test.ts` gains 3 V-313
+edge-case tests at the bottom of the existing clone describe:
+
+- **Clone-of-clone**: cloning an already-cloned profile inherits
+  the source archetype across N generations. Probes the
+  archetype-pin invariant under chaining.
+- **Cross-account isolation**: caller cannot clone another
+  account's profile. Returns 404 (not 403) — same posture as
+  snapshot cross-account; never confirms ownership existence.
+- **Audit emit format**: profile.created carries
+  `payload.cloned_from: profile_<uuid>` (internal prefix).
+  Surfaces a pre-existing format asymmetry vs V-312 restore which
+  emits `payload.restored_from_snapshot: psnap_<uuid>` (public
+  prefix).
+
+Doc precision: `apps/docs/src/pages/api/audit-log.md` action-
+catalog row for `profile.created` now pins the wire format of
+both payload tags + notes the asymmetry. Future consumers
+parsing audit payloads see the exact prefix to expect.
+
+23 / 23 profile tests + 1124 / 1124 monorepo pass. Lint clean.
+
+Format-asymmetry root cause noted but NOT fixed: `cloned_from`
+emit at `services/profiles.ts:257` uses the internal `profile_`
+prefix; consistency fix would be a backwards-incompatible audit-
+payload change so it stays as-is, documented.
