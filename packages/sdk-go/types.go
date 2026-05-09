@@ -581,24 +581,34 @@ const (
 	SubStatusPaused            SubscriptionStatus = "paused"
 )
 
+// Subscription — V-429. Matches the server's `publicSubscription`
+// output shape. `stripe_subscription_id` is always present (Stripe's
+// id assigned at checkout-completion); `current_period_end` and
+// `canceled_at` are nullable depending on subscription state.
 type Subscription struct {
 	Tier                 AccountTier        `json:"tier"`
 	Status               SubscriptionStatus `json:"status"`
+	StripeSubscriptionID string             `json:"stripe_subscription_id"`
 	CurrentPeriodEnd     *time.Time         `json:"current_period_end"`
 	CancelAtPeriodEnd    bool               `json:"cancel_at_period_end"`
-	StripeSubscriptionID *string            `json:"stripe_subscription_id"`
+	CanceledAt           *time.Time         `json:"canceled_at"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            time.Time          `json:"updated_at"`
 }
 
 type TrialPackState struct {
 	Active               bool       `json:"active"`
-	Redeemed             bool       `json:"redeemed"`
 	CreditCentsRemaining *int       `json:"credit_cents_remaining"`
 	ExpiresAt            *time.Time `json:"expires_at"`
+	Redeemed             bool       `json:"redeemed"`
 }
 
+// GetBillingStateResponse — V-429. `Subscription` is nullable
+// (account never subscribed). `TrialPack` is always present (server's
+// schema has it non-nullable).
 type GetBillingStateResponse struct {
-	Subscription *Subscription   `json:"subscription"`
-	TrialPack    *TrialPackState `json:"trial_pack"`
+	Subscription *Subscription  `json:"subscription"`
+	TrialPack    TrialPackState `json:"trial_pack"`
 }
 
 type CreateCheckoutSessionRequest struct {

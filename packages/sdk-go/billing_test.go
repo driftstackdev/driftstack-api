@@ -23,7 +23,7 @@ func TestBilling_GetState(t *testing.T) {
 				CurrentPeriodEnd:  &periodEnd,
 				CancelAtPeriodEnd: false,
 			},
-			TrialPack: &TrialPackState{Active: false, Redeemed: false},
+			TrialPack: TrialPackState{Active: false, Redeemed: false},
 		})
 	})
 	got, err := client.Billing.GetState(context.Background())
@@ -33,7 +33,7 @@ func TestBilling_GetState(t *testing.T) {
 	if got.Subscription == nil || got.Subscription.Tier != TierAPIBuilder {
 		t.Errorf("unexpected subscription: %+v", got.Subscription)
 	}
-	if got.TrialPack == nil || got.TrialPack.Active {
+	if got.TrialPack.Active {
 		t.Errorf("unexpected trial-pack: %+v", got.TrialPack)
 	}
 }

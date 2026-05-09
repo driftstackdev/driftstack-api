@@ -20182,3 +20182,25 @@ V-353h/V-326c fields documented.
 Three-SDK Account parity: TS (V-385/V-428), Python
 (`client.account.me()` was already there returning `dict[str, Any]`),
 Go (V-428).
+
+## V-429 — Go SDK Subscription + GetBillingStateResponse shapes match server
+
+**Tier**: 1 (rule L empirical-diff bar — Go SDK Subscription struct
+was missing 3 server-returned fields; GetBillingStateResponse had
+TrialPack as nullable pointer when server's schema is non-nullable).
+
+**Subscription** Go was 5 fields. Server's `publicSubscription`
+returns 8: tier, status, stripe_subscription_id, current_period_end,
+cancel_at_period_end, canceled_at, created_at, updated_at.
+
+Missing 3: `canceled_at` (nullable), `created_at` (required),
+`updated_at` (required). Plus `stripe_subscription_id` was typed as
+`*string` (nullable) but server schema requires it (always present).
+
+**GetBillingStateResponse** TrialPack was `*TrialPackState`. Server
+schema has it non-nullable. Now value type.
+
+billing_test.go fixture + billing_flow example updated to match
+the value-type TrialPack.
+
+`go build` + `go test ./...` clean.
