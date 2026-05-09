@@ -21486,3 +21486,37 @@ Three new test files in `packages/sdk-typescript/tests/unit/`:
 
 9 new tests, 100% pass. No other test changes; pre-push gate
 unaffected (1160 → 1169 expected after this lands).
+
+## V-466.go — Go SDK wire-shape tests for V-460 / V-462 / V-463 / V-464
+
+**Tier**: 1 (test parity with V-466 TS coverage).
+
+Mirrors the TS slice on the Go SDK. Same wire-shape contract; same
+discriminated-union semantics on cli-authorize/exchange.
+
+- `auth_test.go` — 4 new TestAuth_CliAuthorize\* tests
+  (Initiate, Bind, Exchange-pending, Exchange-bound).
+- `webhooks_test.go` — TestWebhooks_SendTest +
+  TestWebhooks_Update with pointer-field partial-update + Description
+  nullability round-trip.
+- `audit_log_test.go` (new file) — TestAuditLog_Export covering the
+  JSON branch + the truncated flag at the 10k-row ceiling.
+
+`go test ./...` clean. (Note: Description field on WebhookEndpoint is
+`*string` in Go; `string` in TS; behavioural-equivalent for null.)
+
+## V-467 — docs — CLI/GUI activation flow + audit-log export SDK examples
+
+**Tier**: 1 (customer-facing documentation gap).
+
+V-460 + V-462 shipped server endpoints + SDK methods but the
+docs.driftstack.dev pages didn't reference them. Closing.
+
+- `apps/docs/src/pages/api/auth.md` — new "CLI / GUI activation flow"
+  section: 3-step handshake walkthrough, CSRF-state explanation,
+  per-SDK code examples (TS / Python / Go), default-scope guidance.
+- `apps/docs/src/pages/api/audit-log.md` — extended the Export section
+  with the JSON envelope (generated_at / account_id / row_count /
+  truncated / data) + per-SDK examples.
+
+Astro docs build clean (27 pages).
