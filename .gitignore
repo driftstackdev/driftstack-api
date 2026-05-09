@@ -10,6 +10,11 @@ coverage/
 .env.*
 !.env.example
 
+# V-278 deploy .env files (REAL secrets; never committed). The
+# .template versions ARE committed.
+/infra/env-templates/*.env
+!/infra/env-templates/*.env.template
+
 # Editor
 .vscode/
 .idea/

@@ -7,7 +7,8 @@ V-278 Hetzner deployment artifacts.
 ```
 infra/
 ├── bootstrap/
-│   └── bootstrap.sh                Run-once host bootstrap (Ubuntu 24.04)
+│   ├── bootstrap.sh                Run-once host bootstrap (Ubuntu 24.04)
+│   └── deploy-api.sh               Deploy the Fastify API to a host (V-278.B)
 ├── env-templates/
 │   ├── production.env.template     production .env shape (REDACTED secrets)
 │   └── staging.env.template        staging .env shape
