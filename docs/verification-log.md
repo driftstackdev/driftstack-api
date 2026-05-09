@@ -21747,3 +21747,77 @@ Customer edge (via Cloudflare):
 
 Both legs of the connection are TLS 1.3 + Let's Encrypt. Driftstack's
 control plane is at full Cloudflare Full (strict) posture.
+
+## Founder feedback inbox (2026-05-09 mid-V-278.M)
+
+Three items reported during V-278.M execution. Documenting here as
+named slices for next-wave parallel tracks.
+
+### F-001 — Mobile view bugged on small screens
+
+Frontend issue. Surface unclear (marketing / dashboard / docs?). Need
+to capture which device + URL + screenshot to reproduce. Logged for
+investigation; not a known-broken element.
+
+### F-002 — Signup email didn't arrive
+
+**Root cause** (verified empirically post-V-278.M): the founder's
+signup attempt happened BEFORE the customer-dashboard was rebuilt
+with `PUBLIC_API_BASE_URL=https://api.driftstack.dev`. The Astro
+build embedded `localhost:3000` as the API target; the signup form
+submitted to a non-existent localhost endpoint and never reached the
+live API. Compounded by the production CORS allow-list missing the
+dashboard origin (V-278 follow-up fix).
+
+**Empirical evidence**:
+
+```
+Postmark /messages/outbound TotalCount: 2 (both from agent's probes)
+  14:02:29 → agent-smoke-noemail-probe@driftstack.dev (status=Sent)
+  11:42:35 → noreply@driftstack.dev                  (status=Sent)
+```
+
+The founder's signup is NOT in the ledger — it never reached the API.
+
+**Both root causes already fixed in this session:**
+
+1. Customer-dashboard rebuilt with `PUBLIC_API_BASE_URL` set + redeployed
+   to Pages. Live curl-grep confirms `api.driftstack.dev` references,
+   no `localhost:3000`.
+2. CORS allow-list now includes `https://app.driftstack.dev`. Live
+   preflight OPTIONS returns `access-control-allow-origin:
+https://app.driftstack.dev`.
+
+**Verification path**: founder retries signup at
+`https://app.driftstack.dev/signup`. Postmark `/messages/outbound`
+should show a new `signup-verification` send within seconds of submit.
+Email lands at the supplied address. If still missing → check spam,
+then probe Postmark `/messages/outbound/<id>/details` for delivery
+state.
+
+### F-003 — OAuth (Google / GitHub) for signup + signin
+
+Feature request. Out of scope for V-278.M; landing as a follow-up
+slice. Implementation outline:
+
+- Add OAuth provider config to `apps/server/src/lib/config.ts`
+  (GOOGLE_OAUTH_CLIENT_ID + secret; GITHUB_OAUTH_CLIENT_ID + secret).
+- New routes: `/v1/auth/oauth/<provider>/initiate` (returns redirect
+  URL with state nonce) + `/v1/auth/oauth/<provider>/callback`
+  (consumes code, exchanges with provider, mints account if new email
+  / signs in if existing).
+- Provider handlers using `arctic` or `@oslojs/oauth2` (lightweight,
+  no Passport bloat).
+- Privacy policy + DPA Annex 3 update — Google + GitHub become new
+  sub-processors for the OAuth handshake (auth identifier only; no
+  customer-data flows through them).
+- Customer-dashboard sign-in / sign-up pages: add "Continue with
+  Google" / "Continue with GitHub" buttons that hit the initiate
+  endpoint.
+
+Estimated scope: ~6h of engineering + 1 sub-processor disclosure update.
+
+**Tier**: 1 (signup conversion impact; standard SaaS expectation).
+**Founder action needed first**: register OAuth apps at
+console.cloud.google.com + github.com/settings/developers and supply
+the Client IDs + secrets. Auth callback URL = `https://api.driftstack.dev/v1/auth/oauth/<provider>/callback`.
