@@ -78,6 +78,15 @@ DebugToken? }` matching server.
   `PurposeRecaptureRun` etc. would 400. Fixed.
 - **`WebhookEventType`** (V-433): missing `EventTestPing` (V-356).
   Added.
+- **Typed error coverage** (V-437/V-438): 7 new typed errors close
+  the gap to TS SDK parity. New error types + `errors.Is` sentinels:
+  `EmailAlreadyRegisteredError`, `InvalidCredentialsError`,
+  `InvalidAuthTokenError`, `EmailNotVerifiedError`,
+  `FeatureUnavailableError`, `MfaStepUpRequiredError`,
+  `InternalError`. Customers can now `errors.As(err, &InvalidCredentialsError{})`
+  on login or `errors.As(err, &MfaStepUpRequiredError{})` on
+  step-up-gated operations instead of falling through to
+  `UnknownError`.
 
 ### Notes
 

@@ -36,6 +36,16 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
   `delivery_counts`), V-169 session purpose field, V-174 expanded
   scope enum, etc.
 
+### Added typed errors (V-439)
+
+- `FeatureUnavailableError` — endpoint requires infrastructure not
+  configured in this deployment (HTTP 503).
+- `MfaStepUpRequiredError` — V-353e step-up gate; customer should
+  call `client.auth.mfa_step_up(...)` and retry.
+- `InternalError` — unhandled server error.
+
+`PROBLEM_TYPE_TO_ERROR` now covers 24 typed problem URIs.
+
 ### Notes
 
 - `0.0.1` is the inaugural alpha. Versioning will move to SemVer

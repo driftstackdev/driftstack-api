@@ -20514,3 +20514,15 @@ Three-SDK problem-type parity now complete:
 
 Customers across all three SDKs can now branch on typed shape
 for every server-emitted problem URI.
+
+## V-440 — Go + Python CHANGELOGs document V-437/V-438/V-439 typed-error additions
+
+**Tier**: 1 (V-437/438/439 release-notes follow-through).
+
+`packages/sdk-go/CHANGELOG.md` Fixed section gains a "Typed error
+coverage" entry enumerating the 7 new Go error types + Customer
+usage example via errors.As.
+
+`packages/sdk-python/CHANGELOG.md` Unreleased section gains an
+"Added typed errors (V-439)" subsection with the 3 new exception
+classes + step-up retry guidance + 24-URI coverage note.
