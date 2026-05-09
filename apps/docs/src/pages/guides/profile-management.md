@@ -6,9 +6,9 @@ description: Persistent profiles in Driftstack — create, list, reuse across se
 
 # Profile management
 
-A **profile** is a persistent identity Driftstack maintains across sessions. Cookies, local storage, IndexedDB, and the WebKit-fork's stealth state survive between session lifetimes when you bind the session to a profile.
+A **profile** is a persistent identity Driftstack maintains across sessions. Cookies, local storage, IndexedDB, and the WebKit-fork's stealth state survive between session lifetimes when a session binds to a profile.
 
-If you don't bind a profile, each session starts ephemeral — fresh cookies, fresh storage, no continuity. That's the right choice for one-shot fetches. For workflows that need login state, multi-step flows, or returning-visitor signals, bind a profile.
+If a session doesn't bind a profile, it starts ephemeral — fresh cookies, fresh storage, no continuity. That's the right choice for one-shot fetches. For workflows that need login state, multi-step flows, or returning-visitor signals, bind a profile (note: programmatic binding via the SDK is planned — see "Bind a session to a profile" below).
 
 ## Tier limits
 
@@ -86,7 +86,7 @@ const { data, has_more, next_cursor } = await client.profiles.list({ limit: 50 }
 for (const p of data) console.log(p.name, p.last_used_at);
 ```
 
-The `last_used_at` field updates every time a session binds to the profile. Sort by it client-side to find recently active profiles.
+The `last_used_at` field updates every time a session binds to the profile (once binding lands; see "Bind a session to a profile" below). Sort by it client-side to find recently active profiles.
 
 ## Get one profile
 
@@ -98,15 +98,13 @@ const profile = await client.profiles.get('prf_01HV...');
 
 ## Bind a session to a profile
 
-When a session is created with a profile reference, it inherits the profile's storage state on launch and writes new state back on clean destroy (or clean idle-timeout). Without a profile, the session starts ephemeral.
+> **Status: planned (V-294 catalog).** Programmatic session-to-profile binding via the SDK isn't yet wired. `POST /v1/sessions` currently accepts `{ archetype, purpose, label, metadata }` only — no `profile_id` field. Sessions started via the SDK are profile-less today; the binding lives in the dashboard's GUI client driver layer.
 
-**TypeScript:**
+When the binding lands, sessions created with a profile reference will inherit the profile's storage state on launch and write new state back on clean destroy (or clean idle-timeout). Without a profile, the session starts ephemeral.
 
-```ts
-const session = await client.sessions.create({ label: 'login flow' });
-```
+**Track the rollout:** the [V-294 feature catalog](https://github.com/driftstackdev/driftstack-api/blob/main/docs/architecture/v294-feature-catalog.md) lists "Profile-to-session binding" as IN-FLIGHT; the change will be additive (new optional field on the request body).
 
-The exact field shape for profile binding on session creation is part of the live API contract; consult the OpenAPI spec at `https://api.driftstack.dev/openapi.json` or the SDK type definitions for the most current schema.
+In the meantime, profiles still serve as long-lived archetype anchors for the dashboard's GUI flows + as restore-from-snapshot targets (V-312).
 
 ## Delete a profile
 

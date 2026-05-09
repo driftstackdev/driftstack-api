@@ -20244,3 +20244,26 @@ have always required (no profile_id field). Doc was the lone
 fiction.
 
 Astro check clean.
+
+## V-431 — profile-management guide aligns with V-430 profile-binding caveat
+
+**Tier**: 1 (V-430 follow-through; the guide claimed session-to-
+profile binding works via the SDK but the SDK has no field for
+it).
+
+`apps/docs/src/pages/guides/profile-management.md` updates:
+
+- Intro paragraph reworded: "when a session binds" → "when a
+  session binds (note: programmatic binding via the SDK is
+  planned — see below)".
+- "Bind a session to a profile" section: explicit "Status:
+  planned (V-294 catalog)" callout. Removed misleading TS code
+  example that didn't actually bind. Cross-link to V-294
+  catalog for IN-FLIGHT tracking. Note that profiles still
+  serve as archetype anchors + V-312 snapshot restore targets
+  in the meantime.
+- `last_used_at` paragraph: notes "(once binding lands; see
+  Bind a session to a profile below)".
+
+Astro check clean. Guide tone now matches the empirical state
+of the SDK + V-430 sessions.md callout.
