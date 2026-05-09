@@ -44,6 +44,24 @@ export interface AuditLogQuery extends PaginationQueryInput {
   action?: string;
 }
 
+/**
+ * V-297 — bulk-export envelope for GDPR Article 20 portability. The
+ * SDK exposes the JSON branch (programmatic). Customers wanting a CSV
+ * download in a browser hit `/v1/account/audit-log/export?format=csv`
+ * directly with their bearer.
+ */
+export interface AuditLogExportResponse {
+  generated_at: string;
+  account_id: string;
+  row_count: number;
+  /**
+   * True when the row count hit the 10,000-row server-side ceiling and
+   * older entries were not included.
+   */
+  truncated: boolean;
+  data: AuditLogEntry[];
+}
+
 export class AuditLogResource {
   constructor(private readonly http: HttpClient) {}
 
@@ -71,5 +89,22 @@ export class AuditLogResource {
         ...(cursor !== null ? { cursor } : {}),
       }),
     );
+  }
+
+  /**
+   * V-462 / V-297 — bulk-export the calling account's audit log as a
+   * JSON envelope. Designed for GDPR Article 20 data-portability
+   * requests: a single call, up to 10,000 rows, no pagination.
+   * Capped server-side at 10k; if `truncated` is `true` the older
+   * entries weren't returned. CSV download in a browser is not
+   * surfaced here — hit `/v1/account/audit-log/export?format=csv`
+   * directly with your bearer for the spreadsheet flow.
+   */
+  export(): Promise<AuditLogExportResponse> {
+    return this.http.request<AuditLogExportResponse>({
+      method: 'GET',
+      path: '/v1/account/audit-log/export',
+      query: { format: 'json' },
+    });
   }
 }

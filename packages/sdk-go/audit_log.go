@@ -72,6 +72,37 @@ func (r *AuditLogResource) List(ctx context.Context, query *ListAuditLogQuery) (
 	return &out, nil
 }
 
+// AuditLogExportResponse — V-297 bulk-export envelope (GDPR Article
+// 20 portability). Up to 10,000 rows per call; `Truncated` flips to
+// true when older entries weren't returned.
+type AuditLogExportResponse struct {
+	GeneratedAt time.Time       `json:"generated_at"`
+	AccountID   string          `json:"account_id"`
+	RowCount    int             `json:"row_count"`
+	Truncated   bool            `json:"truncated"`
+	Data        []AuditLogEntry `json:"data"`
+}
+
+// Export returns a single-call JSON bulk-export of the calling
+// account's audit log (V-462 / V-297). Designed for compliance
+// portability requests; up to 10,000 rows. The CSV branch is not
+// surfaced through the SDK — hit /v1/account/audit-log/export?format=csv
+// directly with the bearer for spreadsheet downloads.
+func (r *AuditLogResource) Export(ctx context.Context) (*AuditLogExportResponse, error) {
+	var out AuditLogExportResponse
+	q := url.Values{}
+	q.Set("format", "json")
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/account/audit-log/export",
+		query:  q,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Iterate yields every audit-log entry across cursor pages. Callback
 // returns false to stop early. Action filter narrows to one event type.
 func (r *AuditLogResource) Iterate(

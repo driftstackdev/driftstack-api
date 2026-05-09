@@ -54,6 +54,16 @@ class AuditLogResource:
 
         return iterate_paginated(fetch_page)
 
+    def export(self) -> dict[str, Any]:
+        """V-462 / V-297 — bulk-export the calling account's audit log as
+        a JSON envelope (GDPR Article 20 portability). Single call; up to
+        10,000 rows; ``truncated`` is True when older entries were
+        omitted. The CSV branch is not exposed here — hit
+        ``/v1/account/audit-log/export?format=csv`` directly with the
+        bearer for browser-driven spreadsheet downloads.
+        """
+        return self._http.request("GET", "/v1/account/audit-log/export?format=json")
+
 
 class AsyncAuditLogResource:
     """Async audit-log resource."""
@@ -82,3 +92,7 @@ class AsyncAuditLogResource:
             return await self.list(limit=limit, cursor=cursor, action=action)
 
         return aiterate_paginated(fetch_page)
+
+    async def export(self) -> dict[str, Any]:
+        """V-462 / V-297 — async mirror of ``AuditLogResource.export``."""
+        return await self._http.request("GET", "/v1/account/audit-log/export?format=json")

@@ -283,6 +283,28 @@ export const ListAccountAuditLogResponseSchema = z.object({
 });
 export type ListAccountAuditLogResponse = z.infer<typeof ListAccountAuditLogResponseSchema>;
 
+// V-297 — bulk export envelope for GDPR Article 20 portability.
+// `format=json` returns this shape; `format=csv` returns text/csv
+// (not surfaced through the typed SDK methods — customers wanting
+// CSV download in a browser hit the endpoint directly).
+export const ExportAccountAuditLogQuerySchema = z.object({
+  format: z.enum(['csv', 'json']).optional().default('json'),
+});
+export type ExportAccountAuditLogQuery = z.infer<typeof ExportAccountAuditLogQuerySchema>;
+
+export const ExportAccountAuditLogResponseSchema = z.object({
+  generated_at: Iso8601Schema,
+  account_id: z.string(),
+  row_count: z.number().int().nonnegative(),
+  /** True when the row count hit the 10,000-row server-side ceiling
+   *  and older entries were not included. Customers needing the full
+   *  history should narrow the date window or use the paginated
+   *  /v1/account/audit-log read endpoint. */
+  truncated: z.boolean(),
+  data: z.array(AccountAuditEntrySchema),
+});
+export type ExportAccountAuditLogResponse = z.infer<typeof ExportAccountAuditLogResponseSchema>;
+
 // ───────────────────────────────────────────────────────────────────────────
 // V-219 — customer-facing rate-limit view
 // ───────────────────────────────────────────────────────────────────────────

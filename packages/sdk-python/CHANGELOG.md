@@ -8,6 +8,12 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.audit_log.export()`** + async mirror (V-462 / V-297) —
+  single-call JSON bulk-export of the calling account's audit log.
+  Designed for GDPR Article 20 data-portability requests; up to 10,000
+  rows per call; response dict includes `truncated` for the ceiling
+  case. CSV download (browser-driven spreadsheet flow) is intentionally
+  not surfaced through the SDK.
 - **CLI/GUI activation flow** (V-460 / V-266) — three new methods on
   `client.auth` plus async mirrors: `cli_authorize_initiate`,
   `cli_authorize_bind`, and `cli_authorize_exchange`. CLI/GUI tools

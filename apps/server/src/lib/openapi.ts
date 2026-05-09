@@ -1175,6 +1175,41 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // V-462 — V-297 bulk export (GDPR Article 20 portability). The
+  // `format=csv` branch returns text/csv with content-disposition;
+  // the `format=json` branch (default) returns the JSON envelope
+  // below. SDK methods cover the JSON branch only — CSV download is
+  // browser-driven and not useful through a typed SDK call.
+  const ExportAccountAuditQueryOpenApi = z.object({
+    format: z.enum(['csv', 'json']).optional(),
+  });
+  const ExportAccountAuditResponseOpenApi = z.object({
+    generated_at: z.string(),
+    account_id: z.string(),
+    row_count: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+    data: z.array(AccountAuditEntryOpenApi),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/audit-log/export',
+    summary: "Bulk-export the calling account's audit log (GDPR Article 20)",
+    tags: ['account'],
+    security: auth,
+    request: { query: ExportAccountAuditQueryOpenApi },
+    responses: {
+      200: {
+        description:
+          'JSON envelope when format=json (or omitted); text/csv attachment when format=csv. The `x-driftstack-export-truncated` response header signals when the 10,000-row ceiling was hit.',
+        content: {
+          'application/json': { schema: ExportAccountAuditResponseOpenApi },
+          'text/csv': { schema: { type: 'string' } },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+
   // V-204 — customer email notification preferences.
   const ListEmailPrefsResponseSchema = z.object({
     data: z.array(

@@ -8,6 +8,12 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.AuditLog.Export(ctx)`** (V-462 / V-297) — single-call JSON
+  bulk-export of the calling account's audit log. Designed for GDPR
+  Article 20 data-portability requests; up to 10,000 rows per call;
+  response includes `Truncated bool` for the ceiling case. CSV download
+  (browser-driven spreadsheet flow) is intentionally not surfaced
+  through the SDK. New type: `AuditLogExportResponse`.
 - **CLI/GUI activation flow** (V-460 / V-266) — three new methods on
   `client.Auth`: `CliAuthorizeInitiate`, `CliAuthorizeBind`, and
   `CliAuthorizeExchange`. Tools call `CliAuthorizeInitiate` for a

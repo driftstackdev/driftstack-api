@@ -21207,3 +21207,53 @@ Next slices V-462 (audit-log/export SDK), V-463 (webhook /test SDK),
 V-464 (webhook PATCH SDK) close the remaining three. After those, the
 customer-facing SDK surface reaches full parity with the OpenAPI spec
 for everything not intentionally 🚫.
+
+## V-462 — /v1/account/audit-log/export OpenAPI promotion + three-SDK methods
+
+**Tier**: 1 (V-455 audit gap closure — V-297 GDPR Article 20
+data-portability bulk-export had a partial 〰 OpenAPI presence and a
+hard ❌ across all three customer SDKs).
+
+**api-types** (`packages/api-types/src/accounts.ts`):
+
+- New `ExportAccountAuditLogQuerySchema` + `ExportAccountAuditLogResponseSchema`
+  - types. Mirrors the route's JSON-branch envelope (`generated_at`,
+    `account_id`, `row_count`, `truncated`, `data`). The CSV branch is
+    out of scope for the typed SDK methods.
+
+**OpenAPI** (`apps/server/src/lib/openapi.ts`):
+
+- GET /v1/account/audit-log/export — full registration with
+  query.format enum + dual `application/json` and `text/csv` response
+  content types. Documents the `x-driftstack-export-truncated` header
+  signal for the 10k-row ceiling.
+
+**TS** (`packages/sdk-typescript/src/resources/audit-log.ts`):
+
+- `client.auditLog.export()` returns
+  `Promise<AuditLogExportResponse>`. JSON branch only — CSV download
+  is browser-driven (filename + content-disposition); customers wanting
+  CSV hit the URL directly with the bearer.
+
+**Python** (`packages/sdk-python/src/driftstack/resources/audit_log.py`):
+
+- `AuditLogResource.export()` (sync) + `AsyncAuditLogResource.export`
+  mirror. Returns the JSON envelope as `dict[str, Any]` pending the
+  next regen pass.
+
+**Go** (`packages/sdk-go/audit_log.go`):
+
+- `AuditLogResource.Export(ctx)` returning `*AuditLogExportResponse`.
+  New struct type with `GeneratedAt`, `AccountID`, `RowCount`,
+  `Truncated`, `Data`.
+
+OpenAPI test 8/8 pass; Go build + test green; TS typecheck clean;
+Python pytest 137/137 pass.
+
+V-455 customer-facing SDK gap count: 10 → 9 → 2 actionable (webhook
+PATCH + webhook /test) + 7 intentional 🚫.
+
+(Note: V-413 Tier-2 BLOCKING IP/UA leak in audit payload still pending
+founder verdict — not addressed here. The export endpoint inherits
+the same payload shape via `publicEntry`; closure must happen in one
+place once V-413 verdict lands.)

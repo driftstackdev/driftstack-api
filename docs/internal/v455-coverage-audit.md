@@ -49,26 +49,26 @@ grep -roE "\"/v[0-9][^\"]+\"" packages/sdk-go
 
 ### Account self-service (`/v1/account/*`)
 
-| Route                                          | OpenAPI | TS  | Py  | Go  | Notes                             |
-| ---------------------------------------------- | ------- | --- | --- | --- | --------------------------------- |
-| GET /v1/account/me                             | ✅      | ✅  | ✅  | ✅  | V-385/V-428/V-434                 |
-| PATCH /v1/account/me                           | ✅      | ✅  | ✅  | ✅  | V-450                             |
-| POST /v1/account/me/avatar                     | ✅      | ✅  | ✅  | ✅  | V-387/V-450                       |
-| DELETE /v1/account/me/avatar                   | ✅      | ✅  | ✅  | ✅  | V-387/V-450                       |
-| GET /v1/account/audit-log                      | ✅      | ✅  | ✅  | ✅  | V-449                             |
-| GET /v1/account/audit-log/export               | 〰      | ❌  | ❌  | ❌  | OpenAPI partial; SDK gap (export) |
-| GET /v1/account/email-preferences              | ✅      | ✅  | ✅  | ✅  | V-449                             |
-| PUT /v1/account/email-preferences              | ✅      | ✅  | ✅  | ✅  | V-449                             |
-| GET /v1/account/mfa                            | ✅      | ✅  | ✅  | ✅  | V-448                             |
-| POST /v1/account/mfa/enroll                    | ✅      | ✅  | ✅  | ✅  | V-448                             |
-| POST /v1/account/mfa/verify                    | ✅      | ✅  | ✅  | ✅  | V-448                             |
-| DELETE /v1/account/mfa                         | ✅      | ✅  | ✅  | ✅  | V-448                             |
-| POST /v1/account/mfa/disable                   | ✅      | 〰  | 〰  | 〰  | DELETE alias; SDKs use DELETE     |
-| POST /v1/account/mfa/recovery-codes/regenerate | ✅      | ✅  | ✅  | ✅  | V-448                             |
-| GET /v1/account/rate-limits                    | ✅      | ✅  | ✅  | ✅  | V-450                             |
-| GET /v1/account/web-sessions                   | ✅      | ✅  | ✅  | ✅  | V-450                             |
-| DELETE /v1/account/web-sessions                | ✅      | ✅  | ✅  | ✅  | V-450 (revoke-all-other)          |
-| DELETE /v1/account/web-sessions/:id            | ✅      | ✅  | ✅  | ✅  | V-450                             |
+| Route                                          | OpenAPI | TS  | Py  | Go  | Notes                         |
+| ---------------------------------------------- | ------- | --- | --- | --- | ----------------------------- |
+| GET /v1/account/me                             | ✅      | ✅  | ✅  | ✅  | V-385/V-428/V-434             |
+| PATCH /v1/account/me                           | ✅      | ✅  | ✅  | ✅  | V-450                         |
+| POST /v1/account/me/avatar                     | ✅      | ✅  | ✅  | ✅  | V-387/V-450                   |
+| DELETE /v1/account/me/avatar                   | ✅      | ✅  | ✅  | ✅  | V-387/V-450                   |
+| GET /v1/account/audit-log                      | ✅      | ✅  | ✅  | ✅  | V-449                         |
+| GET /v1/account/audit-log/export               | ✅      | ✅  | ✅  | ✅  | V-462 (JSON branch)           |
+| GET /v1/account/email-preferences              | ✅      | ✅  | ✅  | ✅  | V-449                         |
+| PUT /v1/account/email-preferences              | ✅      | ✅  | ✅  | ✅  | V-449                         |
+| GET /v1/account/mfa                            | ✅      | ✅  | ✅  | ✅  | V-448                         |
+| POST /v1/account/mfa/enroll                    | ✅      | ✅  | ✅  | ✅  | V-448                         |
+| POST /v1/account/mfa/verify                    | ✅      | ✅  | ✅  | ✅  | V-448                         |
+| DELETE /v1/account/mfa                         | ✅      | ✅  | ✅  | ✅  | V-448                         |
+| POST /v1/account/mfa/disable                   | ✅      | 〰  | 〰  | 〰  | DELETE alias; SDKs use DELETE |
+| POST /v1/account/mfa/recovery-codes/regenerate | ✅      | ✅  | ✅  | ✅  | V-448                         |
+| GET /v1/account/rate-limits                    | ✅      | ✅  | ✅  | ✅  | V-450                         |
+| GET /v1/account/web-sessions                   | ✅      | ✅  | ✅  | ✅  | V-450                         |
+| DELETE /v1/account/web-sessions                | ✅      | ✅  | ✅  | ✅  | V-450 (revoke-all-other)      |
+| DELETE /v1/account/web-sessions/:id            | ✅      | ✅  | ✅  | ✅  | V-450                         |
 
 ### Sessions (`/v1/sessions`)
 
@@ -221,7 +221,7 @@ These routes power the admin panel; they're 🚫 for customer SDKs by design but
 | Surface category | Total routes | OpenAPI gaps                        | SDK gaps (TS / Py / Go) |
 | ---------------- | ------------ | ----------------------------------- | ----------------------- |
 | Auth             | 14           | 0 (V-460 closed)                    | 0 (V-460 closed)        |
-| Account          | 18           | 0 (only audit-log/export partial)   | 1 (audit-log/export)    |
+| Account          | 18           | 0                                   | 0 (V-462 closed)        |
 | Sessions         | 10           | 0 (V-461: gui-input 🚫 by L-001)    | 0 (V-461: gui-input 🚫) |
 | Profiles         | 12           | 5 (base CRUD)                       | 0                       |
 | API keys         | 4            | 0                                   | 0                       |
@@ -233,9 +233,9 @@ These routes power the admin panel; they're 🚫 for customer SDKs by design but
 | Status (public)  | 7            | 0 (V-459 closed; 1 SSE intentional) | 6 (intentional)         |
 | Admin            | 27           | 11                                  | 🚫 (admin-only)         |
 
-**Customer-facing OpenAPI gaps after V-461:** 0 (every customer-facing route is registered or intentionally 🚫). 🎉
-**Customer-facing SDK gaps after V-461:** 3 actionable (audit-log/export + webhook PATCH +
-webhook /test). Plus 7 intentional 🚫 (6 status + gui-input).
+**Customer-facing OpenAPI gaps after V-462:** 0 (every customer-facing route is registered or intentionally 🚫). 🎉
+**Customer-facing SDK gaps after V-462:** 2 actionable (webhook PATCH + webhook /test).
+Plus 7 intentional 🚫 (6 status + gui-input).
 **Admin OpenAPI gaps:** 11 routes (Tier-2 follow-up).
 
 ## Per-gap closure slices (priority order)

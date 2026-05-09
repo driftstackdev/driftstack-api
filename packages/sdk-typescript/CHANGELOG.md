@@ -8,6 +8,14 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.auditLog.export()`** (V-462 / V-297) — single-call JSON
+  bulk-export of the calling account's audit log; designed for GDPR
+  Article 20 data-portability requests. Up to 10,000 rows per call;
+  the response includes `truncated: boolean` for the ceiling case.
+  CSV download (browser-driven spreadsheet flow) is intentionally
+  not surfaced through the SDK — hit
+  `/v1/account/audit-log/export?format=csv` directly with the bearer.
+  New type re-exported: `AuditLogExportResponse`.
 - **CLI/GUI activation flow** (V-460 / V-266) — three new methods on
   `client.auth`: `cliAuthorizeInitiate`, `cliAuthorizeBind`, and
   `cliAuthorizeExchange`. CLI/GUI tools no longer need to ask users to
