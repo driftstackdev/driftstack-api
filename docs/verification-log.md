@@ -19306,3 +19306,32 @@ to call out both payload tags emitted on profile.created:
 Customers reading the audit catalog now see both differentiation
 tags + know to filter / branch on payload to distinguish creation
 mechanism.
+
+## V-394 — V-312 snapshot edge-case test coverage
+
+**Tier**: 1 (test depth per memory #18 standing rule).
+
+`apps/server/tests/integration/profile-snapshots.test.ts` gains 5
+edge-case tests:
+
+- DELETE second-time idempotent-on-missing returns 404 (matches
+  the existing GET-after-delete pattern).
+- Snapshot survives parent profile deletion. Frozen
+  `parent_archetype` + `parent_name` persist; restore still
+  creates a fresh profile carrying the captured archetype.
+  In-memory test repo doesn't replicate the Postgres
+  ON-DELETE-SET-NULL cascade behavior — the comment notes that
+  the load-bearing invariant for restore is the frozen metadata,
+  not the FK null-out (architectural lock).
+- Cross-account isolation — second account cannot GET / list /
+  restore / delete the original account's snapshot. Each path
+  returns 404, NOT 403, to avoid leaking ownership existence.
+- Restore audit emits `profile.created` carrying
+  `payload.restored_from_snapshot: psnap_<id>` matching the
+  audit-log doc claim (V-393).
+- Snapshot of a snapshot-restored profile carries the new
+  profile's metadata, not the original. Probes the chain-of-
+  restoration invariant — V-312's "snapshots freeze at capture
+  time" rule applies recursively.
+
+14 / 14 tests pass.

@@ -240,4 +240,215 @@ describe('DELETE /v1/profile-snapshots/:id (V-312)', () => {
     });
     expect(get.statusCode).toBe(404);
   });
+
+  it('404 on second delete (idempotent-on-missing)', async () => {
+    fx = await buildTestApp();
+    const src = await mintProfile(fx, 'src');
+    const cap = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${src.id}/snapshots`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'tmp' },
+    });
+    const snap = cap.json<SnapshotResponse>();
+
+    const first = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profile-snapshots/${snap.id}`,
+      headers: auth(fx),
+    });
+    expect(first.statusCode).toBe(204);
+
+    const second = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profile-snapshots/${snap.id}`,
+      headers: auth(fx),
+    });
+    expect(second.statusCode).toBe(404);
+  });
+});
+
+// V-394 — edge-case suite. Probes parent-deleted survival, cross-
+// account isolation, restore audit payload, and chained restore-
+// of-restored-from snapshot semantics.
+describe('V-312 edge cases (V-394)', () => {
+  it('snapshot survives parent profile deletion; restore creates new profile from frozen archetype', async () => {
+    fx = await buildTestApp();
+    const parent = await mintProfile(fx, 'parent-to-delete');
+    const cap = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${parent.id}/snapshots`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'pre-delete' },
+    });
+    const snap = cap.json<SnapshotResponse>();
+    expect(snap.parent_profile_id).toBe(parent.id);
+
+    // Delete the parent; snapshot must survive.
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${parent.id}`,
+      headers: auth(fx),
+    });
+    expect(del.statusCode).toBe(204);
+
+    const after = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/profile-snapshots/${snap.id}`,
+      headers: auth(fx),
+    });
+    expect(after.statusCode).toBe(200);
+    const orphan = after.json<SnapshotResponse>();
+    // The architectural invariant: frozen parent metadata
+    // (parent_archetype + parent_name) survives parent deletion,
+    // captured at snapshot time. Production Postgres also nulls
+    // parent_profile_id via ON DELETE SET NULL FK; in-memory test
+    // repo intentionally doesn't replicate that cascade behavior
+    // since the frozen-metadata invariant is the load-bearing one
+    // for restore (architectural lock — see migration 0037).
+    expect(orphan.parent_archetype).toBe(parent.archetype);
+    expect(orphan.parent_name).toBe('parent-to-delete');
+
+    // Restore still succeeds — the new profile carries the frozen
+    // archetype + the customer-supplied name.
+    const restore = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profile-snapshots/${snap.id}/restore`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { name: 'phoenix' },
+    });
+    expect(restore.statusCode).toBe(200);
+    const restored = restore.json<ProfileResponse>();
+    expect(restored.archetype).toBe(parent.archetype);
+    expect(restored.id).not.toBe(parent.id);
+  });
+
+  it('snapshots are account-scoped; cross-account access returns 404', async () => {
+    fx = await buildTestApp();
+    const aProfile = await mintProfile(fx, 'a-prof');
+    const cap = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${aProfile.id}/snapshots`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'A1' },
+    });
+    const snap = cap.json<SnapshotResponse>();
+
+    const other = await buildTestApp();
+    try {
+      const otherAuth = { authorization: `Bearer ${other.plaintext}` };
+
+      // Other account: cannot GET the snapshot.
+      const get = await other.app.inject({
+        method: 'GET',
+        url: `/v1/profile-snapshots/${snap.id}`,
+        headers: otherAuth,
+      });
+      expect(get.statusCode).toBe(404);
+
+      // Other account: cannot list across original account's
+      // snapshots — its own list is empty.
+      const list = await other.app.inject({
+        method: 'GET',
+        url: '/v1/profile-snapshots',
+        headers: otherAuth,
+      });
+      expect(list.statusCode).toBe(200);
+      expect(list.json<{ data: SnapshotResponse[] }>().data).toHaveLength(0);
+
+      // Other account: cannot restore.
+      const restore = await other.app.inject({
+        method: 'POST',
+        url: `/v1/profile-snapshots/${snap.id}/restore`,
+        headers: { ...otherAuth, 'content-type': 'application/json' },
+        payload: { name: 'thief' },
+      });
+      expect(restore.statusCode).toBe(404);
+
+      // Other account: cannot delete.
+      const del = await other.app.inject({
+        method: 'DELETE',
+        url: `/v1/profile-snapshots/${snap.id}`,
+        headers: otherAuth,
+      });
+      expect(del.statusCode).toBe(404);
+    } finally {
+      await other.cleanup();
+    }
+  });
+
+  it('restore audit emits profile.created with restored_from_snapshot tag', async () => {
+    fx = await buildTestApp();
+    const src = await mintProfile(fx, 'src-audit');
+    const cap = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${src.id}/snapshots`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'audit-test' },
+    });
+    const snap = cap.json<SnapshotResponse>();
+
+    const restore = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profile-snapshots/${snap.id}/restore`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { name: 'restored-from-audit-test' },
+    });
+    expect(restore.statusCode).toBe(200);
+    const restored = restore.json<ProfileResponse>();
+
+    const audit = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=profile.created&limit=10',
+      headers: auth(fx),
+    });
+    expect(audit.statusCode).toBe(200);
+    const entries = audit.json<{
+      data: Array<{
+        action: string;
+        target_resource_id: string;
+        payload: Record<string, unknown> | null;
+      }>;
+    }>().data;
+    const matching = entries.find(
+      (e) => e.target_resource_id === `profile_${restored.id.replace(/^prof_/, '')}`,
+    );
+    expect(matching).toBeDefined();
+    expect(matching?.payload).toMatchObject({
+      restored_from_snapshot: snap.id,
+    });
+  });
+
+  it('snapshot of a snapshot-restored profile carries the new archetype, not the original parent', async () => {
+    fx = await buildTestApp();
+    const original = await mintProfile(fx, 'chain-src');
+    const cap1 = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${original.id}/snapshots`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'gen-1' },
+    });
+    const snap1 = cap1.json<SnapshotResponse>();
+
+    const restore = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profile-snapshots/${snap1.id}/restore`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { name: 'gen-2' },
+    });
+    const gen2 = restore.json<ProfileResponse>();
+
+    // Snapshot the restored profile — parent metadata reflects the
+    // restored profile, not the original parent of snap1.
+    const cap2 = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${gen2.id}/snapshots`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'gen-2-snap' },
+    });
+    const snap2 = cap2.json<SnapshotResponse>();
+    expect(snap2.parent_profile_id).toBe(gen2.id);
+    expect(snap2.parent_name).toBe('gen-2');
+    expect(snap2.parent_archetype).toBe(gen2.archetype);
+  });
 });
