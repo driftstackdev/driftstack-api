@@ -22176,3 +22176,44 @@ carry contractual SLA terms." Per the marketing-copy-cadence rule
 the agent drafted; founder reviews tone post-hoc. SLA-as-product is
 SURFACE-AS-BLOCKING territory if customer demand starts requiring a
 specific number on the SaaS side; flagged.
+
+## V-478 — sub-processor change-log surface
+
+**Tier**: 1 (compliance transparency; closes the planning-file-83
+"sub-processor change-log surface" line item).
+
+`/trust/sub-processors` now renders a `Change log.` section below
+the main register table. Each entry surfaces date / kind badge /
+subject (or "Register-level entry") / customer-facing summary /
+effective-at date.
+
+`kind` enum: `added` (emerald), `removed` (red), `material_change`
+(amber), `register_published` (slate). Cosmetic edits don't qualify
+and aren't logged — only changes that trigger an Article 28(2)
+30-day notice or the initial publication marker.
+
+Pre-launch entry: `register_published` on 2026-05-10 establishing
+the on-record baseline. Future Article 28(2) events land as
+immutable `added` / `removed` / `material_change` rows in the same
+commit that updates the SUB_PROCESSORS data array (paired with the
+Postmark-delivered notice email).
+
+Data + render landed in:
+
+- `apps/marketing-site/src/data/sub-processors.ts` — new
+  `SubProcessorChangeLogEntry` type + `SUB_PROCESSOR_CHANGELOG`
+  array. `SUB_PROCESSOR_REGISTER_LAST_UPDATED` bumped to 2026-05-10.
+- `apps/marketing-site/src/pages/trust/sub-processors.astro` —
+  imports the new exports + helpers; renders the change-log between
+  the existing register table and the "How sub-processor changes
+  work" section.
+
+Verification:
+
+- `npm run build` — 20 pages in 815ms; no errors.
+- `npm run typecheck` — 26 files, 0 errors / 0 warnings / 0 hints.
+- `node scripts/check-subprocessor-mirror.mjs` — passed (12 public
+  entries, 13 DPA Annex 3 rows; mirror invariant intact).
+
+Commit landed without the V-log entry due to a linter race during
+staging; this entry follows in a docs-only follow-up commit.
