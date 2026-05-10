@@ -24437,3 +24437,48 @@ alerts on failure. Out of scope this wave.
 hook dry-run on this commit's draft). Rule M satisfied: 2 P-track
 slices from 2 different tracks (Track B V-532.B + Track C/D V-542).
 No remote operations. No force-push. No private-flip. No SDK publish.
+
+## V-543 / V-544 / V-530-534 batch verification (Wave 22)
+
+**Date:** 2026-05-11
+**HEAD at landing:** `d80dcce`
+
+### V-543 — customer success playbook (Track C)
+
+Playbook at `docs/internal/v543-customer-success-playbook.md`.
+Activates after first paying customer signs up. Cadence T+0 / T+3 /
+T+7 / T+30 with auto + manual touchpoints. 3-level escalation (docs →
+email → sync call). `customer_journey` schema proposed. 3 open
+questions surfaced for team review.
+
+### V-544 — changelog automation script (Track D)
+
+`scripts/generate-changelog.sh` parses commit range, splits each V-NNN
+in the wave commit pattern into its own bullet, falls back gracefully.
+Output formats md / plain. Smoke test against waves 14→21 produced 16
+bullets covering every V-NNN slice this overnight window.
+
+### V-530-534 batch verification (Track B)
+
+`docs/internal/v530-534-batch-verification.md` consolidates Track B
+real-impl state. 104 new tests across 4 packages over Waves 15-21
+fully account for the 1325 → 1429 suite delta. Interface stability:
+every extension additive; mocks maintained mock/real parity. 2
+cross-agent dependencies outstanding (V-531.B + V-533.C); contracts
+published.
+
+### Verification
+
+`npx vitest run` 1429/1429 across 131 test files (no regression —
+Wave 22 is doc + script only). `npx tsc --build` clean.
+
+### Wave 22 summary
+
+3 P-track slices from 3 different tracks (Track C V-543 + Track D
+V-544 + Track B verification). Rule M satisfied. Cross-agent boundary
+held (Rule G). No remote operations. No force-push. No private-flip.
+No SDK publish.
+
+**Note:** This V-log block lands in a follow-up commit on top of the
+main Wave 22 commit (`d80dcce`) — a linter-race excluded the V-log
+from the original staged set.
