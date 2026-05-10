@@ -102,4 +102,48 @@ export const SUB_PROCESSORS: SubProcessor[] = [
   },
 ];
 
-export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-05-08';
+export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-05-10';
+
+/**
+ * V-478 — sub-processor change-log surface.
+ *
+ * Every material change to the SUB_PROCESSORS register lands here as
+ * an immutable entry. Customers can scan the list to see when each
+ * sub-processor was added or removed, and which Article 28(2) notice
+ * window applied. Adding an entry is paired with the Art 28(2) 30-day
+ * notice email per the DPA.
+ *
+ * `kind` semantics:
+ *   - `added`: a new sub-processor entered the register.
+ *   - `removed`: an entry was withdrawn; the customer-facing change is
+ *     only effective AFTER the notice window closes.
+ *   - `material_change`: an existing entry's region / purpose / transfer
+ *     mechanism changed in a way that triggers Art 28(2). Cosmetic edits
+ *     (rewording, typo fixes) do NOT land here.
+ *   - `register_published`: pre-launch baseline marker. The register has
+ *     been on-record from this date forward.
+ */
+export interface SubProcessorChangeLogEntry {
+  date: string;
+  kind: 'added' | 'removed' | 'material_change' | 'register_published';
+  /** Sub-processor name, or empty for register-level entries. */
+  subject: string;
+  /** Customer-facing summary of what changed and why. */
+  summary: string;
+  /** Date the change took effect (post-notice-window if applicable). */
+  effective_at: string;
+}
+
+export const SUB_PROCESSOR_CHANGELOG: SubProcessorChangeLogEntry[] = [
+  {
+    date: '2026-05-10',
+    kind: 'register_published',
+    subject: '',
+    summary:
+      'Initial sub-processor register published as part of pre-launch ' +
+      'transparency. The register reflects the production sub-processor ' +
+      'list at /v1/status time of publication; future material changes ' +
+      'land here per the Article 28(2) notice cadence.',
+    effective_at: '2026-05-10',
+  },
+];
