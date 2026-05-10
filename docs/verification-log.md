@@ -24269,3 +24269,70 @@ Estimated growth: ~10-15 tests → suite ~1415-1417.
 dry-run on this commit's draft message). Rule M satisfied: 2 P-track
 slices from 2 different tracks (Track B V-530.C + Track A V-540.A). No
 remote operations. No force-push. No private-flip. No SDK publish.
+
+## V-533.A — recapture capture-matrix runner + dedup + cross-agent contract (Track B, Wave 20)
+
+**Date:** 2026-05-10
+
+First sub-slice of V-533 per the anti-substitution clause. Extends
+recapture-automation from per-run primitives (V-179) to matrix-level
+orchestration. New `packages/recapture-automation/src/matrix.ts`:
+
+- `CaptureMatrixSpec` + `expandCaptureMatrix(spec)` — fans out into N
+  `TriggerRecaptureOpts` (order-preserving).
+- `dedupComparisons(list)` — collapses duplicate (surfaceId, outcome,
+  baselineValue, recapturedValue) tuples. `notes` NOT in dedup key.
+- `groupComparisonsByCategory(list)` — splits by file-121 category prefix.
+- `summarizeComparisons(list)` — per-outcome counts.
+
+Cross-agent contract at `docs/internal/v533-cross-agent-contract.md`:
+Agent 2 owns orchestration; Agent 1 owns fork-side capture worker that
+consumes queued runs and calls `recordComparison` per surface.
+
+17 property-style tests in `packages/recapture-automation/tests/matrix.test.ts`
+covering fan-out, dedup, grouping, summary. Package total 26/26 pass
+(9 mock + 17 V-533.A). Full workspace **1419/1419 pass** across 130
+test files (was 1402; +17 = expected).
+
+Sub-slices remaining: V-533.B atlas builder; V-533.C admin routes + HTTP
+transport between Agent 1 worker and this service.
+
+## V-541 — cost monitoring + alerting design (Track C, Wave 20)
+
+**Date:** 2026-05-10
+
+Design doc at `docs/internal/v541-cost-monitoring-design.md`. Per-account
+per-billing-cycle estimated cost across 4 dimensions: compute (session-
+minutes × Mac mini rate), storage (R2 object-bytes-month), egress (TURN
+bandwidth; 0 today), subprocessor (Postmark / Sentry / Stripe / Anthropic
+attribution).
+
+Per-tier alert thresholds: trial €5/€15 soft/hard, tier-1 €30/€80,
+tier-2 €120/€300, enterprise custom. Hard-cap enforcement at session-
+create time returns 402 Payment Required.
+
+Admin endpoint surface designed: `GET /v1/admin/cost/accounts/:id` +
+`GET /v1/admin/cost/overview`. Persistence: `cost_snapshots` table
+(account_id × billing_cycle unique), nightly recompute via scheduled
+BullMQ job.
+
+3 open questions surfaced for team review (currency EUR vs USD;
+reconciliation cadence; Anthropic cost attribution pass-through vs
+margin-bundled).
+
+V-205 + V-211 regex sweep on the doc — zero hits. Sub-slices remaining:
+V-541.B implementation (endpoints + schema + service); V-541.C alert
+delivery + nightly recompute; V-541.D status-page banner.
+
+## Wave 20 — autopilot summary (per Rule M)
+
+| Track | Slice   | Outcome                                                                                                             |
+| ----- | ------- | ------------------------------------------------------------------------------------------------------------------- |
+| B     | V-533.A | Capture matrix runner + dedup + cross-agent contract (Agent 1 worker consumes queued runs); 17 property-style tests |
+| C/D   | V-541   | Cost monitoring + alerting design doc — 4-dimension cost model + per-tier thresholds + admin endpoint surface       |
+
+2 slices, empirical-proof-confirmed (typecheck + vitest 1419/1419 +
+hook dry-run on this commit's draft). Rule M satisfied: 2 P-track
+slices from 2 different tracks (Track B V-533.A + Track C/D V-541).
+Cross-agent boundary held (Rule G). No remote operations. No
+force-push. No private-flip. No SDK publish.

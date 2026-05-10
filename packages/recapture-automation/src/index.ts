@@ -24,3 +24,12 @@ export {
   type MockIosVersionWatcherDeps,
   type MockRecaptureServiceDeps,
 } from './mock.js';
+
+// V-533.A — capture matrix runner + dedup.
+export type { CaptureMatrixSpec, ComparisonSummary } from './matrix.js';
+export {
+  dedupComparisons,
+  expandCaptureMatrix,
+  groupComparisonsByCategory,
+  summarizeComparisons,
+} from './matrix.js';

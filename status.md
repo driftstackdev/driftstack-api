@@ -1,12 +1,26 @@
 # Driftstack API — current status
 
 **Last updated:** 2026-05-10
-**Most recent wave:** Wave 19 (V-530.C + V-540.A)
+**Most recent wave:** Wave 20 (V-533.A + V-541)
 **Mode:** Autopilot active. Waves 1-18 closed; Wave 19 lands this commit;
 Waves 20-26 queued per the overnight directive. Team morning review point:
 `docs/internal/wave-15-18-overnight-batch-report.md` (5-minute scan covers
 Waves 15-18 Track E artifacts; Wave 19 work is post-batch-report and
 focuses on Track B real-impl depth + Track A coverage audit).
+
+## Wave 20 — what landed
+
+- **V-533.A** — recapture capture-matrix runner + dedup + cross-agent
+  contract. `expandCaptureMatrix` fans out (archetypes × version
+  transition) into per-archetype `TriggerRecaptureOpts`. `dedupComparisons`
+  - `groupComparisonsByCategory` + `summarizeComparisons` helpers.
+    Contract doc at `docs/internal/v533-cross-agent-contract.md` — Agent 1
+    consumes queued runs from this service's `RecaptureService.listRuns`.
+    17 property-style tests. Suite 1402 → 1419.
+- **V-541** — cost monitoring + alerting design doc at
+  `docs/internal/v541-cost-monitoring-design.md`. 4-dimension cost model
+  - per-tier alert thresholds + admin endpoint surface. Design-only;
+    V-541.B/C/D implementation slices deferred.
 
 ## Wave 19 — what landed
 
@@ -99,7 +113,7 @@ Full strict mode):
 - https://api.driftstack.dev/health — Fastify control plane (Hetzner production)
 - https://staging.driftstack.dev/health — staging mirror (Hetzner staging)
 
-Tests: **1402/1402 green** across 129 test files (unit + integration +
+Tests: **1419/1419 green** across 130 test files (unit + integration +
 gui-jsdom). Typecheck clean. Full `npx vitest run` empirical proof from
 this wave.
 
