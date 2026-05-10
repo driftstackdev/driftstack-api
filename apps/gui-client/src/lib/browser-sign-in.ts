@@ -19,6 +19,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { open as openInBrowser } from '@tauri-apps/plugin-shell';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
+import { parseDeepLink } from './deep-link';
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -173,33 +174,19 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
     }
   }
 
-  /**
-   * V-328 — handle a deep-link URL of shape
-   *   driftstack://auth/callback?code=<code>&state=<state>
-   * Validates state + code match the in-flight authorization
-   * (CSRF + cross-tab guard) and runs the same exchange the polling
-   * path runs. Mismatched state → silent skip (the deep-link is for
-   * a stale session; the poll loop continues).
-   */
+  // Handle a deep-link URL via the shared parser (V-534.A). Mismatched
+  // state or non-cli-authorize payloads → silent skip; the poll loop
+  // continues as the fallback path.
   async function handleDeepLink(
     rawUrl: string,
     serverUrl: string,
     expectedCode: string,
     expectedState: string,
   ): Promise<void> {
-    let parsed: URL;
-    try {
-      parsed = new URL(rawUrl);
-    } catch {
-      return;
-    }
-    if (parsed.protocol !== 'driftstack:') return;
-    if (parsed.host !== 'auth') return;
-    if (!parsed.pathname.startsWith('/callback')) return;
-    const code = parsed.searchParams.get('code');
-    const incomingState = parsed.searchParams.get('state');
-    if (code !== expectedCode || incomingState !== expectedState) return;
-    // Reuse the polling exchange — same endpoint, same response shape.
+    const result = parseDeepLink(rawUrl);
+    if (!result.ok) return;
+    if (result.payload.kind !== 'cli-authorize') return;
+    if (result.payload.code !== expectedCode || result.payload.state !== expectedState) return;
     await pollOnce(serverUrl, expectedCode, expectedState);
   }
 

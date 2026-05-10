@@ -27,3 +27,13 @@ export {
   LOGIN_FLOW_GENERIC,
   V532B_FORM_RECIPES,
 } from './recipes/forms.js';
+
+// V-532.C — cart + checkout recipe builders.
+export {
+  ADD_TO_CART_GENERIC,
+  ADD_TO_CART_WITH_VARIANT,
+  buildAddToCartRecipe,
+  buildCheckoutRecipe,
+  CHECKOUT_GENERIC,
+  V532C_CHECKOUT_RECIPES,
+} from './recipes/checkout.js';
