@@ -198,6 +198,10 @@ export const ListAuditLogQuerySchema = z.object({
   action: AdminAuditActionSchema.optional(),
   from: Iso8601Schema.optional(),
   to: Iso8601Schema.optional(),
+  // V-521 — admin-side parity with the V-484 customer audit-log
+  // filter set. Drill into a single resource (e.g. one webhook
+  // delivery) across every admin action that touched it.
+  target_resource_id: z.string().min(1).max(200).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   cursor: z.string().optional(),
 });

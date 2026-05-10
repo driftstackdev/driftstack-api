@@ -47,6 +47,10 @@ export class InMemoryAdminAuditLogRepo implements AdminAuditLogRepo {
       const toMs = filters.to.getTime();
       filtered = filtered.filter((r) => r.timestamp.getTime() < toMs);
     }
+    // V-521 — drill-down by resource id.
+    if (filters.targetResourceId) {
+      filtered = filtered.filter((r) => r.targetResourceId === filters.targetResourceId);
+    }
     if (filters.cursor) {
       const cursorMs = new Date(filters.cursor).getTime();
       filtered = filtered.filter((r) => r.timestamp.getTime() < cursorMs);

@@ -23412,3 +23412,80 @@ New `/api/email-preferences` reference page. Covers:
 
 3 slices, empirical-proof-confirmed (vitest + docs build), no
 gates touched, V-205 invariant intact.
+
+## V-521 — admin audit-log target_resource_id filter (Track A, Wave 14)
+
+`/v1/admin/audit-log` gains parity with the V-484 customer-side
+audit-log filter set: a `target_resource_id` query parameter
+that drills into a single resource's admin-action history (e.g.
+"every admin action that touched this webhook delivery
+`wdl_<uuid>`").
+
+### Changes
+
+- `packages/api-types/src/admin.ts`: `ListAuditLogQuerySchema`
+  extends with `target_resource_id: z.string().min(1).max(200).optional()`.
+- `apps/server/src/services/admin-audit.ts`: `ListAuditFilters`
+  interface adds optional `targetResourceId`.
+- `apps/server/src/db/admin-audit-repo.ts`: Drizzle predicate
+  adds `eq(adminAuditLog.targetResourceId, …)` when set.
+- In-memory test repo mirrored.
+- 1 new unit test asserting the filter returns only matching
+  rows + empty array on miss.
+
+### Verification
+
+- `npm run -w apps/server typecheck` — clean.
+- `npx vitest run apps/server/tests/unit/admin-audit.test.ts`
+  — 11/11 passed (was 10; +1 from V-521).
+
+## V-522 — runbook index page (Track C, Wave 14)
+
+New file: `docs/runbooks/README.md`. Index page for the runbook
+collection — categorises every runbook by trigger (pre-launch
+sequencing / day-to-day operations / workspace setup / cross-
+cutting tools) and points at the cross-cutting harness scripts.
+
+The runbook collection grew during this autopilot run (V-499
+incidents, V-510 dr-rehearse, V-513 observability, V-516
+launch-day amendments, V-519 first-customer-day). An index
+makes the collection navigable.
+
+The README also documents the "where to file a new runbook"
+decision tree so future runbooks land in the right place
+without re-deciding each time.
+
+### Verification
+
+- File renders: `docs/runbooks/README.md`. No code touched.
+
+## V-523 — /api/legal docs page (Track D, Wave 14)
+
+New `/api/legal` reference page covering the three /v1/legal
+endpoints: catalog list, required-acceptance list, record-
+acceptance. Highlights the content-hash binding (acceptance
+records `(document_key, version, content_hash)` and rejects
+mismatches with 409), the three `reason` values for required
+acceptance (`never_accepted` / `subprocessor_amendment` /
+`version_bumped`), and the 30-day Art. 28(2) window for
+sub-processor amendments.
+
+Cross-references where documents live: public marketing-site
+URLs, canonical `docs/legal/*.md` source files, this endpoint
+surface (metadata only — body served from public URLs).
+
+### Verification
+
+- `npm run -w apps/docs build` — clean (37 pages, 983ms; was 36
+  before V-523).
+
+## Wave 14 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                                               |
+| ----- | ----- | ----------------------------------------------------------------------------------------------------- |
+| A     | V-521 | Admin audit-log target_resource_id filter parity (V-484 mirror); +1 unit test                         |
+| C     | V-522 | docs/runbooks/README.md index covering pre-launch sequencing + day-to-day + workspace + cross-cutting |
+| D     | V-523 | /api/legal reference page covering catalog + required + accept endpoints with content-hash binding    |
+
+3 slices, empirical-proof-confirmed (vitest + docs build), no
+gates touched, V-205 invariant intact.

@@ -64,6 +64,8 @@ export interface ListAuditFilters {
   from?: Date;
   /** Exclusive upper bound. */
   to?: Date;
+  /** V-521 — exact-match filter on the audit row's targetResourceId. */
+  targetResourceId?: string;
   limit: number;
   /** Pagination cursor — last seen `timestamp` ISO string. */
   cursor?: string;

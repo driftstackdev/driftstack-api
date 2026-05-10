@@ -71,6 +71,11 @@ export function registerAdminAuditLogRoutes(
         ...(query.action !== undefined ? { action: query.action } : {}),
         ...(query.from !== undefined ? { from: new Date(query.from) } : {}),
         ...(query.to !== undefined ? { to: new Date(query.to) } : {}),
+        // V-521 — drill-down by resource id (parity with V-484
+        // customer-side filter).
+        ...(query.target_resource_id !== undefined
+          ? { targetResourceId: query.target_resource_id }
+          : {}),
         limit: query.limit,
         ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
       });

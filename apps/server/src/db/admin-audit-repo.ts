@@ -46,6 +46,11 @@ export class DrizzleAdminAuditLogRepo implements AdminAuditLogRepo {
     if (filters.action) conds.push(eq(adminAuditLog.action, filters.action));
     if (filters.from) conds.push(gte(adminAuditLog.timestamp, filters.from));
     if (filters.to) conds.push(lt(adminAuditLog.timestamp, filters.to));
+    // V-521 — drill-down by resource id (parity with V-484
+    // customer-side filter).
+    if (filters.targetResourceId) {
+      conds.push(eq(adminAuditLog.targetResourceId, filters.targetResourceId));
+    }
     if (filters.cursor) conds.push(lt(adminAuditLog.timestamp, new Date(filters.cursor)));
 
     const rows = await this.database.db

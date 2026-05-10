@@ -140,6 +140,19 @@ describe('AdminAuditService.list — filters', () => {
     expect(page2.items).toHaveLength(0);
   });
 
+  // V-521 — drill-down by resource id (parity with V-484 customer side).
+  it('V-521 — filters by targetResourceId', async () => {
+    const { service } = newService();
+    await seedThree(service);
+    const page = await service.list({ limit: 10, targetResourceId: 'wdl_x' });
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]?.action).toBe('webhook_delivery.replayed');
+    expect(page.items[0]?.targetResourceId).toBe('wdl_x');
+
+    const empty = await service.list({ limit: 10, targetResourceId: 'wdl_other' });
+    expect(empty.items).toEqual([]);
+  });
+
   it('paginates via cursor (limit + nextCursor round-trip)', async () => {
     const { service } = newService();
     await seedThree(service);
