@@ -38,3 +38,16 @@ export type {
   RegionAwareTouchEvent,
 } from './dwell.js';
 export { CLICK_REGIONS, DWELL_SHAPES, generateRegionAwareTouchEvent } from './dwell.js';
+
+// V-530.D — idle-period jitter generator (multi-touch sequencing
+// deferred to a separate slice).
+export type {
+  GenerateIdlePeriodOpts,
+  GenerateIdleSequenceOpts,
+  IdleClass,
+  IdleClassDefaults,
+  IdlePeriod,
+  IdleSequence,
+  IdleSequenceEntry,
+} from './idle.js';
+export { generateIdlePeriod, generateIdleSequence, IDLE_DEFAULTS } from './idle.js';
