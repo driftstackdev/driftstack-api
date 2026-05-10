@@ -33,3 +33,13 @@ export {
   groupComparisonsByCategory,
   summarizeComparisons,
 } from './matrix.js';
+
+// V-533.B — atlas builder.
+export type {
+  ArchetypeVersionSnapshot,
+  Atlas,
+  BuildAtlasOpts,
+  SurfaceStability,
+  VersionTransitionImpact,
+} from './atlas.js';
+export { buildAtlas, classifyOutcomes } from './atlas.js';
