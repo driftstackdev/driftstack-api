@@ -21913,3 +21913,88 @@ competitors. Per the marketing-copy-cadence rule the agent drafted +
 shipped; founder reviews tone post-hoc. If any competitor row needs
 softening / rewording, edit in place — the page is intentionally
 small-surface (single .astro file, all content as data arrays).
+
+## V-469 — per-service Sentry pre-wire (V-278.J-2 partial)
+
+**Tier**: 1 (control-plane observability completion).
+
+**Status**: build-side wiring landed; **founder credential ask
+surfaced** for project creation + DSN provisioning. Project-creation
+itself requires `SENTRY_AUTH_TOKEN` with `project:write` scope, which
+the agent doesn't have access to via chat — so the pattern is
+surface-as-draft-in-commit per `MEMORY.md → autonomous decision
+guidance`.
+
+### Build-side wiring (shipped this slice)
+
+- `apps/customer-dashboard/astro.config.mjs` — `@sentry/astro`
+  integration registered, `enabled` gates on
+  `process.env.PUBLIC_SENTRY_DSN_DASHBOARD`. When the DSN is unset
+  the integration is fully skipped (zero client-bundle inclusion).
+  Source-map upload `authToken` is read from `SENTRY_AUTH_TOKEN`;
+  no-op when unset.
+- `apps/marketing-site/astro.config.mjs` — same shape, env name is
+  `PUBLIC_SENTRY_DSN_MARKETING`, project slug `driftstack-marketing`.
+- `package-lock.json` — `@sentry/astro@^8.55.0` added to both
+  workspaces (matches existing `@sentry/node@^8.55.2` and
+  `@sentry/browser@^8.55.0` in the lockfile).
+- `.github/workflows/deploy-customer-dashboard.yml` +
+  `deploy-marketing.yml` — build step now reads the four new env
+  vars (`PUBLIC_SENTRY_DSN_*`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`,
+  `SENTRY_RELEASE` ← `${{ github.sha }}`, `GIT_SHA` ← same) so the
+  bundle bakes the DSN at build time. Repo-level GH secrets are
+  reused with the existing API deploy (one auth token covers all
+  three projects).
+- `docs/deployment/env-vars.md` — Marketing + Dashboard sections
+  gain `PUBLIC_SENTRY_DSN_MARKETING` / `_DASHBOARD` rows + shared
+  `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` rows.
+
+### Verification
+
+- `npm run build --workspace apps/customer-dashboard` → server built
+  in 809ms; no errors. Sentry integration registered but inert
+  (DSN unset locally).
+- `npm run build --workspace apps/marketing-site` → 18 pages in
+  792ms; no errors.
+
+### What the founder needs to do
+
+**Path A** (preferred — fastest):
+
+1. Sentry → Settings → Auth Tokens → create token with
+   `project:write` + `project:releases` scopes. Add as a repository-
+   level GH secret named `SENTRY_AUTH_TOKEN` (already used by the API
+   deploy; either re-use or create a fresh token).
+2. Reply with the token in chat; agent fires the project-create API
+   directly:
+
+   ```
+   POST https://sentry.io/api/0/teams/driftstack/<team>/projects/
+     { "slug": "driftstack-dashboard", "name": "Driftstack Dashboard", "platform": "javascript-astro" }
+
+   POST https://sentry.io/api/0/teams/driftstack/<team>/projects/
+     { "slug": "driftstack-marketing",  "name": "Driftstack Marketing", "platform": "javascript-astro" }
+   ```
+
+3. Agent reads the resulting client keys (DSNs) from
+   `GET /api/0/projects/driftstack/<slug>/keys/`, populates the GH
+   secrets `PUBLIC_SENTRY_DSN_DASHBOARD` + `_MARKETING`, fires a
+   no-op deploy of each app to bake the DSNs. Empirical proof: open
+   each app, throw a synthetic error from devtools, verify it lands
+   in Sentry under the correct project.
+
+**Path B** (founder runs it themselves):
+
+1. Sentry UI → New Project → JavaScript / Astro → name
+   `driftstack-dashboard`. Copy the DSN.
+2. Repeat for `driftstack-marketing`.
+3. Set the two DSNs as GH secrets:
+   - `PUBLIC_SENTRY_DSN_DASHBOARD`
+   - `PUBLIC_SENTRY_DSN_MARKETING`
+4. Re-run the `Deploy customer dashboard` + `Deploy marketing site`
+   workflows (workflow_dispatch) so they pick up the new build env.
+
+Either path closes V-469. Until done, the runtime posture is
+unchanged from V-278.J — the API project already captures server
+errors; the front-end Astro builds are pre-wired to start capturing
+once the DSNs land.

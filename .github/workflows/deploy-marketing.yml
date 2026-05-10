@@ -78,6 +78,16 @@ jobs:
         run: npm install --no-audit
 
       - name: Build marketing site
+        env:
+          # V-469 — per-service Sentry. DSN is build-time-baked into
+          # client bundle; integration skips entirely when DSN unset.
+          # SENTRY_AUTH_TOKEN governs source-map upload (no-op when
+          # unset, runtime unaffected).
+          PUBLIC_SENTRY_DSN_MARKETING: ${{ secrets.PUBLIC_SENTRY_DSN_MARKETING }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_RELEASE: ${{ github.sha }}
+          GIT_SHA: ${{ github.sha }}
         run: npm run build --workspace apps/marketing-site
 
       - name: Deploy to Cloudflare Pages

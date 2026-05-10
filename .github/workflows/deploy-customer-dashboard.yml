@@ -75,6 +75,21 @@ jobs:
         run: npm install --no-audit
 
       - name: Build customer dashboard
+        env:
+          # V-278.B/F follow-up — bake the live API origin into the
+          # client bundle so the dashboard talks to api.driftstack.dev,
+          # not localhost:3000.
+          PUBLIC_API_BASE_URL: ${{ vars.PUBLIC_API_BASE_URL || 'https://api.driftstack.dev' }}
+          # V-469 — per-service Sentry. DSN is build-time-baked into
+          # client bundle; integration skips entirely when DSN unset.
+          # SENTRY_AUTH_TOKEN governs source-map upload (no-op when
+          # unset, runtime unaffected). All four are reused-or-shared
+          # with the marketing deploy.
+          PUBLIC_SENTRY_DSN_DASHBOARD: ${{ secrets.PUBLIC_SENTRY_DSN_DASHBOARD }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_RELEASE: ${{ github.sha }}
+          GIT_SHA: ${{ github.sha }}
         run: npm run build --workspace apps/customer-dashboard
 
       - name: Deploy to Cloudflare Pages
