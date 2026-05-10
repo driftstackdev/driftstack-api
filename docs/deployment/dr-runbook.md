@@ -38,6 +38,7 @@ SLAs pre-launch and post-launch SLAs will be set per-tier).
 | R2 object loss                    | varies  | depends |
 | Compromised signing key / secret  | < 30min | n/a     |
 | Bad deploy of broken code to prod | < 15min | 0       |
+| Origin TLS certificate failure    | < 1hr   | n/a     |
 
 RPO for Postgres is bounded by Neon's point-in-time history retention
 (default 7d on Pro tier; verify post-launch). Redis is ephemeral —
@@ -62,31 +63,70 @@ DNS hijack). Code + DB intact (Neon is separate; code is in git).
 6. Confirm `/v1/version` reports the expected git SHA on the new
    host.
 
-### Scenario 2 — Postgres logical corruption
+### Scenario 2 — Postgres logical corruption (Neon PITR)
 
 A bad migration, an admin SQL fat-finger, or an unintended
 application write corrupted production data. Neon is healthy.
 
-1. Identify the recovery target time (the latest timestamp where
-   data is known good — usually pre-incident).
-2. Neon dashboard → create branch from point-in-time at the target.
-3. Spin up the server pointed at the branch (locally or on a
-   throwaway host) and verify customer-facing invariants:
+**Concrete recovery commands** (V-496 expansion — copy/paste-ready):
+
+1. Identify the recovery target time (UTC ISO-8601). Usually the
+   minute before the corrupting commit landed:
+
+   ```
+   git -C /Users/john/code/driftstack-api log --oneline -20
+   # Find the bad commit; subtract a minute from its committer time.
+   ```
+
+2. Create a Neon branch from the target time. The Neon dashboard
+   path is `Project → Branches → Create branch → "From point in
+time"`. Or via the Neon CLI:
+
+   ```
+   neon branches create \
+     --project-id "$NEON_PROJECT_ID" \
+     --name "pitr-$(date -u +%Y%m%dT%H%M)" \
+     --parent-timestamp "2026-MM-DDTHH:MM:00Z"
+   neon branches get-connection-uri \
+     --branch-id <new-branch-id> \
+     --role-name driftstack
+   ```
+
+3. Spin up the server pointed at the branch URI (locally or on a
+   throwaway Hetzner host) and verify customer-facing invariants:
    - Every active subscription has a `stripe_customer_id`.
    - Every non-destroyed session has a valid `account_id`.
    - `processed_stripe_events` row count is sane (no missing
      audited events).
+   - Sample customer accounts exist + auth still works against
+     the branch.
+
+   ```
+   DATABASE_URL="<branch-uri>" npm --workspace apps/server run start
+   curl -sS http://localhost:7780/ready
+   curl -sS -H "Authorization: Bearer $TEST_KEY" http://localhost:7780/v1/account/me
+   ```
+
 4. **Decide the recovery path** — there are two:
    - **Cut over to the branch** (fast; loses everything that
-     happened post-incident-time). Update `DATABASE_URL` on the
-     prod host, restart server.
+     happened post-incident-time). SSH-write the new
+     `DATABASE_URL` into `/opt/driftstack/.env` on prod;
+     `systemctl restart driftstack-api`. Verify `/ready` returns
+     `postgres: operational` against the branch.
    - **Surgical patch** (slow; preserves post-incident writes).
      Hand-craft SQL to reverse the corrupting writes against
      production directly. Risky; only for narrow corruption
-     scopes.
+     scopes. Always run inside `BEGIN; … ROLLBACK;` first to
+     preview row counts before committing.
+
 5. Notify affected customers via Postmark with what happened, what
    we restored, and any data that was lost (post-incident writes
    if cut-over path was chosen).
+
+6. Promote the branch to the new primary if cut-over was chosen,
+   so PITR history starts accumulating against the post-recovery
+   state. Old primary can be retained read-only for forensic
+   review then archived after 30 days.
 
 ### Scenario 3 — Postgres / Neon platform outage
 
@@ -110,13 +150,42 @@ Auth cache + rate-limit token buckets are in Redis. Loss is
 disruptive but recoverable: auth path falls back to Postgres
 (slow path), rate-limits start fresh from tier defaults.
 
-1. Confirm scope on status.upstash.com.
+**Concrete recovery commands** (V-496 expansion):
+
+1. Confirm scope on `status.upstash.com`.
 2. If Upstash is up but our cluster is gone (deleted, region
-   migrated, etc.): provision a new cluster, update `REDIS_URL`,
-   restart server.
-3. **No data loss procedure required** — both auth cache and
+   migrated, etc.): provision a new cluster via the Upstash REST
+   API or dashboard:
+
+   ```
+   # Upstash REST endpoint provisioning (UI is faster — link below).
+   # Dashboard: console.upstash.com → New Database → Region: eu-west-1
+   #   Type: Regional → Eviction: noeviction → TLS: Required
+   ```
+
+3. SSH-write the new `REDIS_URL` (rediss:// scheme, includes
+   password):
+
+   ```
+   ssh root@128.140.37.74 'cat /opt/driftstack/.env' \
+     | sed 's|^REDIS_URL=.*|REDIS_URL=rediss://default:<token>@<host>:6379|' \
+     > /tmp/new.env
+   scp /tmp/new.env root@128.140.37.74:/opt/driftstack/.env
+   ssh root@128.140.37.74 'systemctl restart driftstack-api'
+   ```
+
+4. Verify `/ready` returns `redis: operational` and a sample
+   authed request succeeds (which exercises the auth-cache write
+   path).
+
+5. **No data loss procedure required** — both auth cache and
    rate-limit buckets are inherently regenerable. Customer impact
    is increased latency on cold auth + rate-limit window resets.
+
+   Note: the `REDIS_URL` rotation is one of the rare credentials
+   safe to handle by SSH-write only (it's already in the .env on
+   the host; we're swapping host ↔ host). Stripe live keys go via
+   the same SSH-write path per the credential-handling rule.
 
 ### Scenario 5 — R2 object loss
 
@@ -167,19 +236,198 @@ suspected via abuse signals).
 A push to main shipped broken code that's now serving 5xx to
 customers.
 
-1. **Confirm the bad deploy** via `/v1/version` — git SHA matches
-   the suspected-bad commit.
+**Concrete rollback commands** (V-496 expansion):
+
+1. **Confirm the bad deploy** via `/v1/version`:
+
+   ```
+   curl -sS https://api.driftstack.dev/version | jq .
+   # { "git_sha": "abc1234", ... }
+   ```
+
+   Compare to `git log --oneline -5 origin/main`. If the SHA on
+   prod matches the suspected-bad commit, proceed.
+
 2. **Roll back via git revert + redeploy**, NOT via destructive
-   `git reset --hard`. Push the revert commit; the deploy
-   automation runs.
-3. Confirm `/v1/version` reports the revert SHA.
-4. Confirm `/ready` returns 200 + all checks green.
-5. Customer-facing comms: only if the broken deploy lasted long
+   `git reset --hard`. The revert is itself a forward commit:
+
+   ```
+   git revert --no-edit <bad-sha>
+   git push origin main
+   ```
+
+   The `Deploy server` workflow at
+   `.github/workflows/server-deploy.yml` runs on the push and
+   redeploys the revert SHA to Hetzner.
+
+3. **Watch the deploy land** via gh CLI:
+
+   ```
+   gh run list --workflow server-deploy.yml --limit 3
+   gh run watch <run-id>
+   ```
+
+4. Confirm `/v1/version` reports the revert SHA + `/ready`
+   returns 200 + all readiness checks green:
+
+   ```
+   curl -sS https://api.driftstack.dev/version | jq .git_sha
+   curl -sS https://api.driftstack.dev/ready | jq .
+   ```
+
+5. **Express rollback when the deploy pipeline itself is broken**
+   (rare — the revert push didn't trigger CI for some reason): SSH
+   into the prod host and re-run the deploy script manually:
+
+   ```
+   ssh root@128.140.37.74
+   cd /opt/driftstack
+   git fetch origin && git checkout <revert-sha>
+   # apply migrations only if necessary; usually a revert doesn't
+   # touch schema
+   systemctl restart driftstack-api
+   exit
+   curl -sS https://api.driftstack.dev/version | jq .git_sha
+   ```
+
+6. Customer-facing comms: only if the broken deploy lasted long
    enough to be customer-noticeable (>5min of sustained 5xx) or
    if customer data was visibly affected.
-6. Open a fix branch + land the underlying issue properly. Don't
+
+7. Open a fix branch + land the underlying issue properly. Don't
    hot-fix in prod by hand-editing files on the Hetzner host —
    that drift will burn the next deploy.
+
+### Scenario 8 — Origin TLS certificate failure (V-496 NEW)
+
+V-278.M wired Let's Encrypt DNS-01 origin certs via `certbot` +
+`python3-certbot-dns-cloudflare`. Certs auto-renew every ~60 days
+via certbot's systemd timer. The failure modes are:
+
+- **Renewal failed silently** — certbot timer ran, the Cloudflare
+  DNS API rejected the auth attempt (wrong token, revoked token,
+  rate limit), and nginx is still serving the old cert that's
+  now within days of expiring.
+- **Cert already expired** — same as above but past the
+  expiration date; Cloudflare's strict-mode TLS validation fails
+  upstream and customers see 525 / 526 errors.
+
+**Pre-failure detection** (run weekly via cron or manually):
+
+```
+ssh root@128.140.37.74 'certbot certificates'
+# Look for "VALID: <N days>" — alert at <14 days.
+ssh root@128.140.37.74 \
+  'systemctl list-timers --all | grep certbot'
+# Should show "next" running within ~24h.
+```
+
+**Recovery — renewal failed, cert still valid**:
+
+1. Read certbot's last log:
+
+   ```
+   ssh root@128.140.37.74 'tail -100 /var/log/letsencrypt/letsencrypt.log'
+   ```
+
+   Common causes: `Cloudflare DNS challenge: Error finalizing
+order :: An unexpected error occurred.` (transient — retry).
+   `Invalid Cloudflare API token` (token rotated; update creds
+   file).
+
+2. If the Cloudflare token rotated, refresh
+   `/etc/letsencrypt/cf-dns-creds.ini` with the new token (must
+   carry `Zone:DNS:Edit` scope on the `driftstack.dev` zone):
+
+   ```
+   ssh root@128.140.37.74
+   chmod 600 /etc/letsencrypt/cf-dns-creds.ini
+   echo 'dns_cloudflare_api_token = <new-token>' \
+     > /etc/letsencrypt/cf-dns-creds.ini
+   ```
+
+3. Force a renewal attempt:
+
+   ```
+   ssh root@128.140.37.74 \
+     'certbot renew --dns-cloudflare \
+        --dns-cloudflare-credentials /etc/letsencrypt/cf-dns-creds.ini \
+        --force-renewal'
+   ```
+
+4. Reload nginx so it picks up the new cert:
+
+   ```
+   ssh root@128.140.37.74 'nginx -t && systemctl reload nginx'
+   ```
+
+5. Verify the new expiry from the customer edge:
+
+   ```
+   echo | openssl s_client -servername api.driftstack.dev \
+     -connect api.driftstack.dev:443 2>/dev/null \
+     | openssl x509 -noout -dates
+   ```
+
+**Recovery — cert already expired (worst case)**:
+
+1. Cloudflare strict-mode is rejecting the upstream. Customers see
+   525 / 526. Buy time by **temporarily switching Cloudflare SSL
+   mode to Full (not strict)** via the Cloudflare API:
+
+   ```
+   curl -X PATCH \
+     "https://api.cloudflare.com/client/v4/zones/<zone-id>/settings/ssl" \
+     -H "Authorization: Bearer $CF_API_TOKEN" \
+     -H "Content-Type: application/json" \
+     --data '{"value":"full"}'
+   ```
+
+   Full (not strict) accepts the expired cert. Customer impact: a
+   degraded TLS posture (not bit-rotted but no chain verification).
+   This is a stop-gap measure; switch back to `strict` once the
+   new cert lands.
+
+2. Run the certbot renewal flow above (step 1-4 of the
+   "renewal failed" path).
+
+3. **Switch Cloudflare SSL back to `strict`**:
+
+   ```
+   curl -X PATCH \
+     "https://api.cloudflare.com/client/v4/zones/<zone-id>/settings/ssl" \
+     -H "Authorization: Bearer $CF_API_TOKEN" \
+     -H "Content-Type: application/json" \
+     --data '{"value":"strict"}'
+   ```
+
+4. Verify TLS 1.3 + valid cert chain end-to-end (V-278.M empirical
+   proof pattern):
+
+   ```
+   curl -v --resolve api.driftstack.dev:443:<origin-ip> \
+     https://api.driftstack.dev/health 2>&1 | grep "TLS"
+   curl -v https://api.driftstack.dev/health 2>&1 | grep "TLS"
+   ```
+
+5. Set a calendar reminder for the next expiry date (cert + 60d).
+   Open a ticket to triage why the auto-renew failed; if the
+   certbot timer is intermittently failing, add a Sentry-fed
+   monitor that runs `certbot certificates` weekly and alerts on
+   `< 14 days remaining`.
+
+**Long-term hardening**:
+
+- Add a daily smoke-test cron that runs `certbot certificates` and
+  emits a Sentry breadcrumb with the cert expiry. Alert if
+  `< 21 days`.
+- Stage staging.driftstack.dev cert renewal one week ahead of
+  production cert renewal so we get advance failure signal on the
+  same Cloudflare token + DNS-01 path.
+- Document the Cloudflare zone id + Origin CA Key location in the
+  founder credentials register; if the founder ever wants to swap
+  to Cloudflare Origin CA (per V-278.M deviation note), the
+  decision record is one git-blame away.
 
 ## Cross-cutting principles
 
@@ -218,6 +466,15 @@ Before commercial activation:
 - [ ] Scenario 7 (bad deploy) — push a deliberate breaking change
       to a deploy-target branch (NOT main); revert; confirm the
       rollback returned the prod-shape host to known good.
+- [ ] Scenario 8 (cert renewal) — force-renew the staging cert via
+      `certbot renew --force-renewal` against the staging host
+      ahead of its scheduled timer; reload nginx; verify TLS 1.3
+      handshake from the customer edge with the fresh cert. Catches
+      Cloudflare token / DNS-01 misconfigurations early.
+- [ ] Scenario 8 (cert expiry stop-gap) — flip Cloudflare SSL to
+      `full` (not strict) in test mode against staging; verify
+      curl still works; flip back to `strict`. Confirms the
+      stop-gap procedure is one API call away.
 
 Each dry-run gets a V-log entry confirming "rehearsed YYYY-MM-DD,
 RTO observed, gaps surfaced".

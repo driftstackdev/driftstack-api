@@ -222,6 +222,14 @@ export const AccountAuditActionSchema = z.enum([
   'session.destroyed',
   'profile.created',
   'profile.deleted',
+  // V-480 — profile import/export. exported fires on GET ../export
+  // (read-side audit trail for "who pulled what out"); imported fires
+  // on the POST /v1/profiles/import handler when a new profile is
+  // minted from an envelope. Both carry the source profile id +
+  // source account id from the envelope so customers can reconstruct
+  // file-flow lineage post-hoc.
+  'profile.exported',
+  'profile.imported',
   'subscription.tier_changed',
   'webhook_endpoint.created',
   'webhook_endpoint.updated',

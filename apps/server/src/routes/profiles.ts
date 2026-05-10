@@ -15,6 +15,8 @@ import {
   CloneProfileRequestSchema,
   CreateProfileRequestSchema,
   PaginationQuerySchema,
+  PROFILE_EXPORT_ENVELOPE_VERSION,
+  ProfileImportRequestSchema,
   UpdateProfileRequestSchema,
 } from '@driftstack/api-types';
 import type { ProfileRecord, ProfilesService } from '../services/profiles.js';
@@ -230,6 +232,71 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
         ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
       });
       return publicProfile(cloned);
+    },
+  );
+
+  // ── GET /v1/profiles/:id/export (V-480) ──────────────────────────────
+  // Metadata-only JSON export. Per-profile browser state lives driver-
+  // side and is out of scope for v1; the envelope is versioned so a v2
+  // that extends to driver state stays back-compat. Read-side audit
+  // emit lets customers reconstruct file-flow lineage post-hoc.
+  app.get<{ Params: { id: string } }>(
+    '/v1/profiles/:id/export',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
+      const id = uuidFromProfileId(req.params.id);
+      const row = await service.exportProfile({ id, accountId: effective.accountId });
+      return {
+        version: PROFILE_EXPORT_ENVELOPE_VERSION,
+        exported_at: new Date().toISOString(),
+        source_profile_id: `prof_${row.id}`,
+        source_account_id: row.accountId,
+        profile: {
+          name: row.name,
+          archetype: row.archetype,
+          description: row.description,
+        },
+      };
+    },
+  );
+
+  // ── POST /v1/profiles/import (V-480) ────────────────────────────────
+  // Accepts a v1 envelope, mints a fresh profile in the caller's
+  // account. Tier-cap + name-conflict semantics match POST /v1/profiles.
+  // Importing into a different account than the source is permitted
+  // (transfer between teammate accounts via the file).
+  app.post(
+    '/v1/profiles/import',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const parsed = ProfileImportRequestSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+
+      const eff = effectiveAccountIdForWrite(req, ctx);
+      let accountId = ctx.account.id;
+      let tier = ctx.account.tier;
+      if (eff !== undefined) {
+        const owner = await authRepo.getAccount(eff);
+        if (!owner) throw new ForbiddenError('Owner account no longer exists.');
+        accountId = owner.id;
+        tier = owner.tier;
+      }
+
+      const env = parsed.data.envelope;
+      const row = await service.importProfile({
+        accountId,
+        tier,
+        sourceProfileId: env.source_profile_id,
+        sourceAccountId: env.source_account_id,
+        payload: env.profile,
+        ...(parsed.data.name_override !== undefined
+          ? { nameOverride: parsed.data.name_override }
+          : {}),
+      });
+      return publicProfile(row);
     },
   );
 }

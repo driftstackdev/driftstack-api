@@ -89,7 +89,7 @@ export class ProfilesService {
 
   private async emitAuditBestEffort(
     accountId: string,
-    action: 'profile.created' | 'profile.deleted',
+    action: 'profile.created' | 'profile.deleted' | 'profile.exported' | 'profile.imported',
     targetResourceId: string,
     payload: Record<string, unknown>,
   ): Promise<void> {
@@ -255,6 +255,83 @@ export class ProfilesService {
       name: row.name,
       archetype: row.archetype,
       cloned_from: `profile_${source.id}`,
+    });
+    return row;
+  }
+
+  /**
+   * V-480 — export a profile's metadata as an envelope payload (no
+   * envelope-versioning here — that lives at the route layer where the
+   * api-types schema is the canonical shape). Caller wraps in the
+   * versioned envelope. Read-only; emits `profile.exported` audit so
+   * customers can reconstruct file-flow lineage post-hoc.
+   */
+  async exportProfile(args: { id: string; accountId: string }): Promise<ProfileRecord> {
+    const row = await this.repo.findById({ id: args.id, accountId: args.accountId });
+    if (row === null) throw new NotFoundError('Profile not found.');
+    await this.emitAuditBestEffort(args.accountId, 'profile.exported', `profile_${row.id}`, {
+      name: row.name,
+      archetype: row.archetype,
+    });
+    return row;
+  }
+
+  /**
+   * V-480 — import a profile from a metadata envelope. Mints a new
+   * profile (fresh id, fresh timestamps) using the envelope's
+   * name / archetype / description; emits `profile.imported` audit
+   * carrying the source profile + source account ids from the
+   * envelope so the customer-facing audit trail can show
+   * "imported from profile_X originally minted by acc_Y".
+   *
+   * Tier-cap enforcement + name-conflict semantics match `create()`:
+   * importing into an account at its tier cap raises TierLimitError;
+   * importing a name that already exists raises ConflictError unless
+   * the caller supplies `nameOverride`.
+   */
+  async importProfile(args: {
+    accountId: string;
+    tier: AccountTier;
+    sourceProfileId: string;
+    sourceAccountId: string;
+    payload: { name: string; archetype: string; description: string | null };
+    nameOverride?: string;
+  }): Promise<ProfileRecord> {
+    const limit = profileLimitFor(args.tier);
+    if (limit !== null) {
+      const current = await this.repo.countByAccount(args.accountId);
+      if (current >= limit) {
+        throw new TierLimitError(
+          `Tier "${args.tier}" permits at most ${limit.toString()} profiles; you have ${current.toString()}.`,
+          { limit, current, resource: 'profile', tier: args.tier },
+        );
+      }
+    }
+
+    const targetName = args.nameOverride ?? args.payload.name;
+    const conflict = await this.repo.findByAccountAndName({
+      accountId: args.accountId,
+      name: targetName,
+    });
+    if (conflict !== null) {
+      throw new ConflictError(
+        `Profile name "${targetName}" already exists in this account. Pass name_override to rename on import.`,
+        { resource: 'profile', field: 'name' },
+      );
+    }
+
+    const row = await this.repo.insert({
+      accountId: args.accountId,
+      name: targetName,
+      archetype: args.payload.archetype,
+      description: args.payload.description,
+    });
+    await this.emitAuditBestEffort(args.accountId, 'profile.imported', `profile_${row.id}`, {
+      name: row.name,
+      archetype: row.archetype,
+      source_profile_id: args.sourceProfileId,
+      source_account_id: args.sourceAccountId,
+      renamed: args.nameOverride !== undefined,
     });
     return row;
   }

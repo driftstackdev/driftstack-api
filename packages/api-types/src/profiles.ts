@@ -99,3 +99,51 @@ export const ListProfilesResponseSchema = z.object({
   next_cursor: z.string().nullable(),
 });
 export type ListProfilesResponse = z.infer<typeof ListProfilesResponseSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
+// V-480 — profile import / export. Metadata-only round-trip; per-profile
+// browser state (cookies / localStorage / IndexedDB) lives driver-side and
+// is out of scope for v1. The envelope is versioned so a future v2 that
+// extends to driver state stays backward-compatible: callers reject
+// envelopes whose `version` they don't understand.
+// ───────────────────────────────────────────────────────────────────────────
+
+export const PROFILE_EXPORT_ENVELOPE_VERSION = 1 as const;
+
+const ProfileExportPayloadSchema = z.object({
+  name: z.string(),
+  archetype: z.string(),
+  description: z.string().nullable(),
+});
+export type ProfileExportPayload = z.infer<typeof ProfileExportPayloadSchema>;
+
+export const ProfileExportEnvelopeSchema = z.object({
+  version: z.literal(PROFILE_EXPORT_ENVELOPE_VERSION),
+  exported_at: Iso8601Schema,
+  /**
+   * Source profile id at export time. Informational only — the import
+   * path always mints a fresh id; this lets customers trace
+   * "where did this exported file come from" when reviewing the JSON.
+   */
+  source_profile_id: ProfileIdSchema,
+  /**
+   * Source account id at export time. Same informational role as
+   * `source_profile_id`. Importing into a different account is
+   * permitted and common (transfer between teammate accounts via the
+   * file).
+   */
+  source_account_id: z.string(),
+  profile: ProfileExportPayloadSchema,
+});
+export type ProfileExportEnvelope = z.infer<typeof ProfileExportEnvelopeSchema>;
+
+export const ProfileImportRequestSchema = z.object({
+  envelope: ProfileExportEnvelopeSchema,
+  /**
+   * Optional override — let the customer rename on import without
+   * editing the file. Skipped when omitted; the file's `profile.name`
+   * is used.
+   */
+  name_override: ProfileNameSchema.optional(),
+});
+export type ProfileImportRequest = z.infer<typeof ProfileImportRequestSchema>;

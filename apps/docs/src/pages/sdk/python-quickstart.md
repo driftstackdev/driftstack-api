@@ -1,0 +1,168 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: Python quickstart
+description: 5-minute getting-started for the driftstack-sdk Python client. Sync + async, install, auth, first session, error handling, and next steps.
+---
+
+# Python quickstart
+
+V-504 — laser-focused 5-minute path to a working Python Driftstack
+session. For the multi-language overview see the [combined quickstart](/quickstart/).
+
+## Prerequisites
+
+- Python 3.10+ (the SDK uses modern type hints + structural matches).
+- A Driftstack API key. Mint one at
+  [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys).
+
+## 1. Install
+
+```bash
+pip install driftstack-sdk
+# or: uv add driftstack-sdk
+# or: poetry add driftstack-sdk
+```
+
+The package ships both sync (`Driftstack`) and async
+(`AsyncDriftstack`) clients off the same wire shape. Pick whichever
+matches your runtime.
+
+## 2. Configure the client
+
+Sync (most common, integrates with Flask / Django / scripts):
+
+```python
+import os
+from driftstack import Driftstack
+
+client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
+# Optional: base_url="https://api-staging.driftstack.dev"
+```
+
+Async (FastAPI / Starlette / asyncio scripts):
+
+```python
+import asyncio
+import os
+from driftstack import AsyncDriftstack
+
+async def main():
+    async with AsyncDriftstack(api_key=os.environ["DRIFTSTACK_API_KEY"]) as client:
+        ...
+```
+
+The async client is `httpx.AsyncClient`-backed and only opens the
+connection pool inside `async with`. The sync client uses a
+synchronous `httpx.Client` and supports the context-manager pattern
+(`with Driftstack(...) as client:`) for explicit pool cleanup.
+
+## 3. Run a session
+
+Sync:
+
+```python
+import os
+from driftstack import Driftstack
+
+with Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"]) as client:
+    session = client.sessions.create({"label": "demo"})
+    sid = str(session.id)
+
+    try:
+        client.sessions.navigate(sid, {"url": "https://example.com"})
+        screenshot = client.sessions.capture(sid, {"kind": "screenshot"})
+        print("captured:", screenshot["id"])
+
+        state = client.sessions.get_state(sid)
+        print("url:", state["url"], "title:", state["title"])
+    finally:
+        client.sessions.destroy(sid)
+```
+
+Async:
+
+```python
+import asyncio
+import os
+from driftstack import AsyncDriftstack
+
+async def main():
+    async with AsyncDriftstack(api_key=os.environ["DRIFTSTACK_API_KEY"]) as client:
+        session = await client.sessions.create({"label": "demo"})
+        sid = str(session.id)
+        try:
+            await client.sessions.navigate(sid, {"url": "https://example.com"})
+            screenshot = await client.sessions.capture(sid, {"kind": "screenshot"})
+            print("captured:", screenshot["id"])
+        finally:
+            await client.sessions.destroy(sid)
+
+asyncio.run(main())
+```
+
+## 4. Error handling
+
+The SDK raises typed exceptions for server errors. Catch
+`DriftstackError` and inspect `.status` (HTTP) or `.problem.type`
+(RFC 9457):
+
+```python
+from driftstack.errors import DriftstackError
+
+try:
+    client.sessions.create({"label": "demo"})
+except DriftstackError as err:
+    if err.status == 429 and err.problem.type.endswith("/tier-limit"):
+        # Concurrent-session cap reached. Wait + retry, or upgrade.
+        print("cap reached:", err.problem.detail)
+    elif err.status == 401:
+        print("bad API key")
+    else:
+        print("driftstack error:", err.problem)
+```
+
+`err.request_id` carries the `x-request-id` header from the failing
+response; include it in support tickets.
+
+The SDK retries idempotent GETs on 5xx + network errors with
+exponential backoff (max 3 attempts, jittered). Mutating writes
+(POST / PATCH / DELETE) only retry when an
+[idempotency key](/api/idempotency/) is supplied via the
+`idempotency_key=` argument.
+
+## 5. Webhooks (optional)
+
+```python
+from driftstack import verify_webhook_signature
+
+ok = verify_webhook_signature(
+    body=raw_body,
+    header=request.headers["x-driftstack-signature"],
+    header_prev=request.headers.get("x-driftstack-signature-prev"),
+    secret=os.environ["DRIFTSTACK_WEBHOOK_SECRET"],
+)
+if not ok:
+    return Response("invalid signature", status_code=401)
+```
+
+`header_prev` is set by the API during a 24h
+[signing-secret rotation grace window](/webhooks/signature-rotation/);
+verify accepting either keeps deliveries flowing while you roll the
+new secret across your verifier infra.
+
+## Next steps
+
+- [Session lifecycle reference](/guides/session-lifecycle/) —
+  states, idle timeouts, reconnect semantics.
+- [Profile management](/guides/profile-management/) — persistent
+  identity slots that survive across sessions.
+- [Async patterns](/sdk/async-patterns/) — concurrency idioms with
+  the async client.
+- [Webhook event catalog](/webhooks/events/) — every event the
+  platform can push.
+- [Error catalogue](/sdk/error-handling/) — every problem-type you
+  might see and how to react.
+
+Stuck? Email
+[support@driftstack.dev](mailto:support@driftstack.dev) with your
+account id (`acc_…`) and the failing `x-request-id`.

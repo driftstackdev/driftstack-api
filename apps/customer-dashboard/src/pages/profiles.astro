@@ -63,7 +63,10 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           or anonymously.
         </p>
       </div>
-      <button type="button" class="btn-primary shrink-0" data-show-create>New profile</button>
+      <div class="flex shrink-0 flex-wrap items-center gap-2">
+        <button type="button" class="btn-secondary" data-show-import>Import</button>
+        <button type="button" class="btn-primary" data-show-create>New profile</button>
+      </div>
     </header>
 
     <p class="mb-6 text-sm text-slate-500" data-field="usage-line">
@@ -132,6 +135,71 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             Cancel
           </button>
           <span data-snapshot-error class="hidden text-sm text-rose-700"></span>
+        </div>
+      </form>
+    </div>
+
+    <!--
+      V-480 — Import form. Reveals when "Import" is clicked. Accepts a
+      v1 envelope JSON (paste or file upload), optional name override.
+    -->
+    <div
+      data-import-form-wrap
+      class="mb-8 hidden rounded-lg border border-slate-200 bg-white p-6"
+    >
+      <h2 class="text-lg font-semibold text-slate-900">Import profile from JSON</h2>
+      <p class="mt-2 text-sm text-slate-500">
+        Paste a v1 envelope (from another profile's Export action) or upload a
+        <code class="font-mono text-xs">.json</code> file. Tier-cap + name-conflict
+        rules match creating a fresh profile.
+      </p>
+      <form data-import-form class="mt-4 space-y-4">
+        <div>
+          <label for="import-file" class="block text-sm font-medium text-slate-700">
+            Upload envelope (.json)
+          </label>
+          <input
+            id="import-file"
+            data-import-file-input
+            type="file"
+            accept="application/json,.json"
+            class="mt-1 block text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+          />
+        </div>
+        <div>
+          <label for="import-text" class="block text-sm font-medium text-slate-700">
+            Or paste envelope JSON
+          </label>
+          <textarea
+            id="import-text"
+            data-import-text-input
+            rows="6"
+            placeholder='{"version":1,"exported_at":"…","source_profile_id":"prof_…","source_account_id":"…","profile":{"name":"…","archetype":"…","description":null}}'
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs"
+          ></textarea>
+        </div>
+        <div>
+          <label for="import-name-override" class="block text-sm font-medium text-slate-700">
+            Rename on import (optional)
+          </label>
+          <input
+            id="import-name-override"
+            data-import-name-override-input
+            type="text"
+            placeholder="leave blank to keep the envelope's name"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div class="flex items-center gap-3 pt-2">
+          <button type="submit" class="btn-primary" data-import-submit>Import</button>
+          <button
+            type="button"
+            class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            data-import-cancel
+          >
+            Cancel
+          </button>
+          <span data-import-error class="hidden text-sm text-rose-700"></span>
         </div>
       </form>
     </div>
@@ -348,6 +416,11 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           '" data-clone-name="' +
           escapeHtml(p.name) +
           '" class="text-sm text-oxblood-700 hover:underline">Clone</button>' +
+          '<button type="button" data-export="' +
+          escapeHtml(p.id) +
+          '" data-export-name="' +
+          escapeHtml(p.name) +
+          '" class="text-sm text-oxblood-700 hover:underline">Export</button>' +
           '<button type="button" data-snapshot="' +
           escapeHtml(p.id) +
           '" data-snapshot-name="' +
@@ -412,7 +485,57 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           wireDeleteButtons();
           wireCloneButtons();
           wireSnapshotButtons();
+          wireExportButtons();
         }
+      }
+
+      // V-480 — Export button: GETs the envelope, triggers a JSON
+      // download via Blob + a synthetic anchor click. No server-side
+      // attachment headers needed; the dashboard owns the file naming.
+      function wireExportButtons() {
+        const buttons = list.querySelectorAll('[data-export]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-export');
+            const name = btn.getAttribute('data-export-name') || 'profile';
+            if (!id) return;
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = 'Exporting…';
+            authedFetch('/v1/profiles/' + encodeURIComponent(id) + '/export')
+              .then((r) =>
+                r.ok
+                  ? r.json()
+                  : r
+                      .json()
+                      .catch(() => ({}))
+                      .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+              )
+              .then((envelope) => {
+                const text = JSON.stringify(envelope, null, 2);
+                const blob = new Blob([text], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const safeName = name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+                a.download = 'driftstack-profile-' + safeName + '.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                showBanner('Exported "' + name + '".');
+              })
+              .catch((err) => {
+                showBanner(
+                  'Export failed: ' + (err && err.message ? err.message : 'network error'),
+                );
+              })
+              .finally(() => {
+                btn.disabled = false;
+                btn.textContent = original;
+              });
+          });
+        });
       }
 
       function renderUsage(me, count) {
@@ -634,6 +757,119 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
 
       showCreateBtns.forEach((btn) => btn.addEventListener('click', showCreate));
       createCancel.addEventListener('click', hideCreate);
+
+      // V-480 — Import flow wiring.
+      const importFormWrap = root.querySelector('[data-import-form-wrap]');
+      const importForm = root.querySelector('[data-import-form]');
+      const importFileInput = root.querySelector('[data-import-file-input]');
+      const importTextInput = root.querySelector('[data-import-text-input]');
+      const importNameOverrideInput = root.querySelector('[data-import-name-override-input]');
+      const importError = root.querySelector('[data-import-error]');
+      const importSubmit = root.querySelector('[data-import-submit]');
+      const importCancel = root.querySelector('[data-import-cancel]');
+      const showImportBtn = root.querySelector('[data-show-import]');
+
+      function showImport() {
+        if (!token) {
+          showBanner('Sign in to import profiles.');
+          return;
+        }
+        if (importFormWrap) importFormWrap.classList.remove('hidden');
+        if (formWrap) formWrap.classList.add('hidden');
+        if (importTextInput) importTextInput.focus();
+      }
+      function hideImport() {
+        if (importFormWrap) importFormWrap.classList.add('hidden');
+        if (importError) {
+          importError.classList.add('hidden');
+          importError.textContent = '';
+        }
+        if (importForm) importForm.reset();
+      }
+      function showImportError(msg) {
+        if (!importError) return;
+        importError.textContent = msg;
+        importError.classList.remove('hidden');
+      }
+
+      if (showImportBtn) showImportBtn.addEventListener('click', showImport);
+      if (importCancel) importCancel.addEventListener('click', hideImport);
+
+      // File input populates the textarea; either source is acceptable.
+      if (importFileInput) {
+        importFileInput.addEventListener('change', (ev) => {
+          const target = ev.target;
+          if (!(target instanceof HTMLInputElement)) return;
+          const file = target.files && target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (importTextInput && typeof reader.result === 'string') {
+              importTextInput.value = reader.result;
+            }
+          };
+          reader.onerror = () => showImportError('Failed to read file.');
+          reader.readAsText(file);
+        });
+      }
+
+      if (importForm) {
+        importForm.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          if (importError) {
+            importError.classList.add('hidden');
+            importError.textContent = '';
+          }
+          const text = importTextInput ? importTextInput.value.trim() : '';
+          if (!text) {
+            showImportError('Paste an envelope JSON or upload a .json file.');
+            return;
+          }
+          let envelope;
+          try {
+            envelope = JSON.parse(text);
+          } catch (e) {
+            showImportError('Could not parse JSON: ' + (e && e.message ? e.message : ''));
+            return;
+          }
+          const nameOverride =
+            importNameOverrideInput && importNameOverrideInput.value.trim().length > 0
+              ? importNameOverrideInput.value.trim()
+              : undefined;
+          const payload = { envelope: envelope };
+          if (nameOverride !== undefined) payload.name_override = nameOverride;
+          if (importSubmit) {
+            importSubmit.disabled = true;
+            importSubmit.textContent = 'Importing…';
+          }
+          authedFetch('/v1/profiles/import', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          })
+            .then((r) =>
+              r.ok
+                ? r.json()
+                : r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+            )
+            .then((body) => {
+              hideImport();
+              showBanner('Imported as "' + (body.name || 'new profile') + '".');
+              return refresh();
+            })
+            .catch((err) => {
+              showImportError(err && err.message ? err.message : 'Import failed.');
+            })
+            .finally(() => {
+              if (importSubmit) {
+                importSubmit.disabled = false;
+                importSubmit.textContent = 'Import';
+              }
+            });
+        });
+      }
 
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();

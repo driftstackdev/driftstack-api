@@ -22217,3 +22217,147 @@ Verification:
 
 Commit landed without the V-log entry due to a linter race during
 staging; this entry follows in a docs-only follow-up commit.
+
+## V-480 — profile import/export (Track A wave 1 main)
+
+**Tier**: 1 (customer-facing self-service; closes a V-294 catalog
+follow-on for profile portability).
+
+Metadata-only round-trip. Per-profile browser state lives driver-
+side and is out of scope for v1; envelope is versioned (`version: 1`
+literal) so a future v2 stays back-compat.
+
+### Schema (api-types)
+
+- `PROFILE_EXPORT_ENVELOPE_VERSION` const + `ProfileExportEnvelopeSchema`
+  (`{ version, exported_at, source_profile_id, source_account_id,
+profile: { name, archetype, description } }`).
+- `ProfileImportRequestSchema` (`{ envelope, name_override? }`).
+- `AccountAuditActionSchema` += `'profile.exported'` + `'profile.imported'`.
+
+### Service
+
+- `exportProfile()` — read-only; emits `profile.exported` audit.
+- `importProfile()` — tier-cap + name-conflict semantics match
+  `create()`; emits `profile.imported` carrying source ids + a
+  `renamed` flag.
+
+### Routes
+
+- `GET /v1/profiles/:id/export` — auth-gated, account-scoped.
+- `POST /v1/profiles/import` — auth-gated, team-admin gate via
+  `effectiveAccountIdForWrite`.
+
+### Dashboard UI
+
+`apps/customer-dashboard/src/pages/profiles.astro` — header Import
+button + per-row Export button. Export downloads JSON via Blob +
+synthetic anchor (`driftstack-profile-<safe-name>.json`). Import
+form takes file upload OR pasted JSON, plus optional name override.
+
+### Tests
+
+`tests/integration/profile-import-export.test.ts` — 8 tests:
+export 200 / 404 / 400; import 200 happy / name_override / 409
+collision / 400 future-version; round-trip preserves metadata.
+All green.
+
+### Verification
+
+- `npm test` — 1182 / 1182 across 118 files (was 1172 / 117).
+- Customer dashboard build clean (777ms).
+
+Future: SDK methods (`profiles.export()` / `profiles.import()`)
+across TS/Python/Go land as a V-480.sdk follow-up paired with
+wire-shape regression tests.
+
+## V-496 — DR runbook expansion (Track C wave 1)
+
+**Tier**: 1 (operational hardening).
+
+`docs/deployment/dr-runbook.md` changes:
+
+### Scenario 2 (Neon PITR) — concrete commands
+
+`neon branches create --parent-timestamp`, `get-connection-uri`,
+`DATABASE_URL=<branch> npm start` cut-over verification,
+`BEGIN;...ROLLBACK;` surgical-patch preview, branch-promotion for
+post-recovery PITR-history accumulation.
+
+### Scenario 4 (Upstash loss) — concrete commands
+
+REST provisioning instructions, SSH-write `REDIS_URL` swap pattern
+(matches stripe-credential-handling), `/ready` verification step.
+
+### Scenario 7 (bad deploy rollback) — concrete commands
+
+`git revert` + `gh run watch` flow + an "express rollback" path
+when CI itself is broken (SSH-and-manual-script fallback).
+
+### Scenario 8 — origin TLS certificate failure (NEW)
+
+Covers two failure modes:
+
+- **Silent renewal failure** — cert still valid; inspect
+  `/var/log/letsencrypt/letsencrypt.log`, refresh
+  `cf-dns-creds.ini` if the Cloudflare token rotated, force
+  renewal via `certbot renew --force-renewal`, reload nginx.
+- **Post-expiry failure** — Cloudflare strict-mode rejects;
+  customers see 525/526. Stop-gap: flip Cloudflare SSL to `full`
+  (not strict) via `/zones/<id>/settings/ssl` API call to restore
+  service while operator works the renewal flow; flip back to
+  `strict` post-verification.
+
+Long-term: daily `certbot certificates` smoke test → Sentry
+breadcrumb → alert at < 21 days remaining.
+
+### Pre-launch dry-run checklist
+
+Two new checkboxes for Scenario 8: force-renew the staging cert
+ahead of timer (catches token/DNS-01 misconfigs early); flip
+staging Cloudflare SSL `full` ↔ `strict` (confirms stop-gap is
+one API call away).
+
+### Verification
+
+Doc-only. Test suite remains 1182/1182 green.
+
+## V-504 — SDK per-language quickstarts (Track D wave 1)
+
+**Tier**: 1 (customer-facing docs; per-language laser-focused
+5-min path to the first session).
+
+Three new pages in `apps/docs/src/pages/sdk/`:
+
+- `typescript-quickstart.md` — Node 20+, ESM-only, `Driftstack`
+  constructor + `DriftstackError` matching on `status` /
+  `problem.type` + webhook signature verification with `headerPrev`.
+- `python-quickstart.md` — Python 3.10+, sync (`Driftstack`) +
+  async (`AsyncDriftstack`) variants, `httpx`-backed pool semantics,
+  `idempotency_key=` retry policy callout, both webhook helper paths.
+- `go-quickstart.md` — Go 1.21+, idiomatic `defer client.Close()`
+  - `defer Sessions.Destroy`, `errors.As(err, &apiErr)` pattern,
+    `WithBaseURL` / `WithHTTPClient` options, webhook verifier struct.
+
+Same depth structure across all three: prerequisites → install →
+configure → run → error-handling → webhooks → next steps.
+Cross-links consistent so customers land in the same downstream
+content regardless of language.
+
+### Verification
+
+- `cd apps/docs && npm run build` — 30 pages built in 982ms, no
+  errors. Three new pages land at `/sdk/typescript-quickstart`,
+  `/sdk/python-quickstart`, `/sdk/go-quickstart`.
+
+## Wave 1 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                               |
+| ----- | ----- | --------------------------------------------------------------------- |
+| A     | V-480 | Profile import/export — server + tests + UI; 1182/1182                |
+| C     | V-496 | DR runbook expanded; new Scenario 8 cert-failure with full + stop-gap |
+| D     | V-504 | TS / Python / Go per-language quickstarts in apps/docs                |
+
+3 slices, empirical-proof-confirmed (test suite + builds), no
+gates touched, V-205 invariant intact. Continuing into Wave 2 per
+Rule K.
