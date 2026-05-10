@@ -102,6 +102,125 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
                 read-only integrations.
               </span>
             </label>
+            <label class="flex items-start gap-2">
+              <input
+                type="radio"
+                name="scope"
+                value="granular"
+                class="mt-0.5"
+                data-scope-granular-radio
+              />
+              <span>
+                <strong>granular (advanced)</strong> — pick exact per-resource permissions.
+                Tightest possible attack surface for one job. Pick this for keys
+                that should only touch a specific resource (e.g. monitoring that
+                reads sessions but can't see billing).
+              </span>
+            </label>
+          </div>
+
+          <!--
+            V-481 — granular scope picker. Hidden by default; reveals when
+            the "granular" radio is selected. Submits the raw array of
+            selected `verb:resource` scopes.
+          -->
+          <div
+            data-granular-scopes
+            class="mt-4 hidden rounded-md border border-slate-200 bg-slate-50 p-4"
+          >
+            <p class="text-xs text-slate-600">
+              Pick at least one. Granular scopes do not satisfy broad checks —
+              if you select <code class="font-mono">read:sessions</code> only,
+              the key cannot read profiles, webhooks, or billing data. Mix with
+              broad scopes if you want one key for many things.
+            </p>
+            <div class="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <fieldset>
+                <legend class="font-mono text-xs uppercase tracking-wide text-slate-500">
+                  Sessions
+                </legend>
+                <label class="mt-2 flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="granular-scope" value="read:sessions" />
+                  <code class="font-mono text-xs">read:sessions</code>
+                </label>
+                <label class="mt-1 flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="granular-scope" value="write:sessions" />
+                  <code class="font-mono text-xs">write:sessions</code>
+                </label>
+              </fieldset>
+              <fieldset>
+                <legend class="font-mono text-xs uppercase tracking-wide text-slate-500">
+                  Profiles
+                </legend>
+                <label class="mt-2 flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="granular-scope" value="read:profiles" />
+                  <code class="font-mono text-xs">read:profiles</code>
+                </label>
+                <label class="mt-1 flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="granular-scope" value="write:profiles" />
+                  <code class="font-mono text-xs">write:profiles</code>
+                </label>
+                <label class="mt-1 flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="granular-scope" value="admin:profiles" />
+                  <code class="font-mono text-xs">admin:profiles</code>
+                </label>
+              </fieldset>
+              <fieldset>
+                <legend class="font-mono text-xs uppercase tracking-wide text-slate-500">
+                  Webhooks
+                </legend>
+                <label class="mt-2 flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="granular-scope" value="read:webhooks" />
+                  <code class="font-mono text-xs">read:webhooks</code>
+                </label>
+                <label class="mt-1 flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="granular-scope" value="write:webhooks" />
+                  <code class="font-mono text-xs">write:webhooks</code>
+                </label>
+                <label class="mt-1 flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="granular-scope" value="admin:webhooks" />
+                  <code class="font-mono text-xs">admin:webhooks</code>
+                </label>
+              </fieldset>
+              <fieldset>
+                <legend class="font-mono text-xs uppercase tracking-wide text-slate-500">
+                  API keys
+                </legend>
+                <label class="mt-2 flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="granular-scope" value="read:api-keys" />
+                  <code class="font-mono text-xs">read:api-keys</code>
+                </label>
+                <label class="mt-1 flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="granular-scope" value="admin:api-keys" />
+                  <code class="font-mono text-xs">admin:api-keys</code>
+                </label>
+              </fieldset>
+              <fieldset>
+                <legend class="font-mono text-xs uppercase tracking-wide text-slate-500">
+                  Billing
+                </legend>
+                <label class="mt-2 flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="granular-scope" value="read:billing" />
+                  <code class="font-mono text-xs">read:billing</code>
+                </label>
+                <label class="mt-1 flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="granular-scope" value="admin:billing" />
+                  <code class="font-mono text-xs">admin:billing</code>
+                </label>
+              </fieldset>
+              <fieldset>
+                <legend class="font-mono text-xs uppercase tracking-wide text-slate-500">
+                  Audit
+                </legend>
+                <label class="mt-2 flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="granular-scope" value="read:audit" />
+                  <code class="font-mono text-xs">read:audit</code>
+                </label>
+              </fieldset>
+            </div>
+            <p class="mt-3 text-xs text-amber-700" data-granular-warning hidden>
+              Pick at least one granular scope.
+            </p>
           </div>
         </div>
         <div class="flex items-center gap-3 pt-2">
@@ -588,6 +707,23 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       showCreateBtns.forEach((btn) => btn.addEventListener('click', showCreate));
       createCancel.addEventListener('click', hideCreate);
 
+      // V-481 — show/hide the granular scope picker when the
+      // "granular" radio is selected.
+      const granularPanel = root.querySelector('[data-granular-scopes]');
+      const granularWarning = root.querySelector('[data-granular-warning]');
+      const scopeRadios = form.querySelectorAll('input[name="scope"]');
+      scopeRadios.forEach((radio) => {
+        radio.addEventListener('change', () => {
+          if (!granularPanel) return;
+          if (radio.value === 'granular' && radio.checked) {
+            granularPanel.classList.remove('hidden');
+          } else if (radio.checked) {
+            granularPanel.classList.add('hidden');
+            if (granularWarning) granularWarning.hidden = true;
+          }
+        });
+      });
+
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
         createError.classList.add('hidden');
@@ -596,6 +732,21 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         const name = (fd.get('name') || '').toString().trim();
         const scope = (fd.get('scope') || 'account_owner').toString();
         if (!name) return;
+
+        // V-481 — granular submission resolves to the array of checked
+        // checkbox values; broad submission resolves to a single scope.
+        let scopes;
+        if (scope === 'granular') {
+          scopes = fd.getAll('granular-scope').map((v) => v.toString());
+          if (scopes.length === 0) {
+            if (granularWarning) granularWarning.hidden = false;
+            return;
+          }
+          if (granularWarning) granularWarning.hidden = true;
+        } else {
+          scopes = [scope];
+        }
+
         createSubmit.disabled = true;
         createSubmit.textContent = 'Creating…';
         fetch(apiBaseUrl + '/v1/api-keys', {
@@ -604,7 +755,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             'content-type': 'application/json',
             authorization: 'Bearer ' + token,
           },
-          body: JSON.stringify({ name: name, scopes: [scope] }),
+          body: JSON.stringify({ name: name, scopes: scopes }),
         })
           .then((r) =>
             r.ok

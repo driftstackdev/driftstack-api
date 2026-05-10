@@ -288,5 +288,38 @@ export const ApiKeyScopeSchema = z.enum([
   'account_owner',
   'driftstack_internal_admin',
   'gui_control',
+  // V-481 — granular per-resource scopes. Verb:resource order.
+  // Backwards-compat: broad scopes (`read` / `write` / `admin` /
+  // `account_owner`) satisfy granular checks via requireScope's
+  // verb-prefix logic in `apps/server/src/lib/errors-helpers.ts`
+  // and `apps/server/src/services/auth.ts`. Granular scopes do
+  // NOT satisfy broad checks — narrow keys stay narrow.
+  'read:sessions',
+  'write:sessions',
+  'read:profiles',
+  'write:profiles',
+  'admin:profiles',
+  'read:webhooks',
+  'write:webhooks',
+  'admin:webhooks',
+  'read:api-keys',
+  'admin:api-keys',
+  'read:billing',
+  'admin:billing',
+  'read:audit',
 ]);
 export type ApiKeyScope = z.infer<typeof ApiKeyScopeSchema>;
+
+/**
+ * V-481 — split a granular scope into `[verb, resource]`. Returns
+ * null for non-granular scopes (the broad ones don't have a colon).
+ */
+export function parseGranularScope(
+  scope: ApiKeyScope,
+): { verb: 'read' | 'write' | 'admin'; resource: string } | null {
+  const idx = scope.indexOf(':');
+  if (idx === -1) return null;
+  const verb = scope.slice(0, idx);
+  if (verb !== 'read' && verb !== 'write' && verb !== 'admin') return null;
+  return { verb, resource: scope.slice(idx + 1) };
+}

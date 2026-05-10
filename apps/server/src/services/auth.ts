@@ -450,21 +450,43 @@ async function slowPathWebSession(
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * V-174 — scope check with `'admin'` compat alias. During the
- * migration window, an `'admin'`-scoped key satisfies both
- * `'account_owner'` and `'driftstack_internal_admin'` checks. After
- * migration (when no `'admin'`-scoped keys remain), the alias path is
- * removed and `requireScope` enforces exact match only.
+ * V-174 + V-481 — scope check with backwards-compat aliases. See
+ * `lib/errors-helpers.ts::requireScope` for the canonical predicate;
+ * this clone exists because route-side imports want zero indirection.
+ *
+ *   1. Exact match.
+ *   2. V-174 admin alias — `'admin'` satisfies `'account_owner'` +
+ *      `'driftstack_internal_admin'` during the migration window.
+ *   3. V-481 broad-satisfies-granular — required `read:X` accepted
+ *      from `read` / `account_owner`; `write:X` from `write` /
+ *      `account_owner`; `admin:X` from `admin` / `account_owner`.
+ *      Granular scopes do NOT satisfy broad checks.
  */
 export function requireScope(ctx: AccountContext, required: ApiKeyScope): void {
-  if (ctx.apiKey.scopes.includes(required)) return;
-  // Compat: 'admin' covers 'account_owner' and 'driftstack_internal_admin'.
+  const scopes = ctx.apiKey.scopes;
+  if (scopes.includes(required)) return;
+
+  // V-174 admin alias.
   if (
     (required === 'account_owner' || required === 'driftstack_internal_admin') &&
-    ctx.apiKey.scopes.includes('admin')
+    scopes.includes('admin')
   ) {
     return;
   }
+
+  // V-481 broad-satisfies-granular.
+  const idx = required.indexOf(':');
+  if (idx !== -1) {
+    const verb = required.slice(0, idx);
+    if (
+      (verb === 'read' && (scopes.includes('read') || scopes.includes('account_owner'))) ||
+      (verb === 'write' && (scopes.includes('write') || scopes.includes('account_owner'))) ||
+      (verb === 'admin' && (scopes.includes('admin') || scopes.includes('account_owner')))
+    ) {
+      return;
+    }
+  }
+
   throw new ForbiddenError(`This action requires the "${required}" scope.`);
 }
 

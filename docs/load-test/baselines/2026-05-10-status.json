@@ -1,0 +1,31 @@
+{
+  "target": "status",
+  "env": "staging",
+  "url": "https://staging.driftstack.dev/v1/status",
+  "method": "GET",
+  "duration_seconds": 30,
+  "connections": 10,
+  "pipelining": 1,
+  "requests": {
+    "total": 7209,
+    "per_sec_avg": 240.3,
+    "per_sec_p50": 241,
+    "per_sec_p99": 260
+  },
+  "latency_ms": {
+    "avg": 41.17,
+    "p50": 35,
+    "p90": 44,
+    "p99": 121,
+    "max": 138
+  },
+  "throughput_bytes": {
+    "avg": 344763.74,
+    "total": 10343204
+  },
+  "errors": 0,
+  "timeouts": 0,
+  "non_2xx": 0,
+  "started_at": "2026-05-10T16:01:01.859Z",
+  "finished_at": "2026-05-10T16:01:31.939Z"
+}

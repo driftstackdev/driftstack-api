@@ -46,6 +46,21 @@ export const apiKeyScope = pgEnum('api_key_scope', [
   'account_owner', // V-174 customer-account control.
   'driftstack_internal_admin', // V-174 Driftstack-staff-only.
   'gui_control',
+  // V-481 — granular per-resource scopes. Phase 1 schema only;
+  // helper-level enforcement lands in Phase 2. Order: verb:resource.
+  'read:sessions',
+  'write:sessions',
+  'read:profiles',
+  'write:profiles',
+  'admin:profiles',
+  'read:webhooks',
+  'write:webhooks',
+  'admin:webhooks',
+  'read:api-keys',
+  'admin:api-keys',
+  'read:billing',
+  'admin:billing',
+  'read:audit',
 ]);
 
 export const sessionStatus = pgEnum('session_status', [

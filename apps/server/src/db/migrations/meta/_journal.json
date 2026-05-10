@@ -267,6 +267,13 @@
       "when": 1778090428000,
       "tag": "0037_v312_profile_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1778090429000,
+      "tag": "0038_v481_granular_api_key_scopes",
+      "breakpoints": true
     }
   ]
 }

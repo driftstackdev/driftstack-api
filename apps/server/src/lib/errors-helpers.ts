@@ -1,26 +1,69 @@
 // Helpers that need the AccountContext type but live next to errors.ts so
 // services can import without pulling the auth service.
 
-import type { ApiKeyScope } from '@driftstack/api-types';
+import { parseGranularScope, type ApiKeyScope } from '@driftstack/api-types';
 import type { AccountContext } from '../services/auth.js';
 import { ForbiddenError, NotFoundError } from './errors.js';
 
 /**
- * V-174 — scope check with `'admin'` compat alias. During the
- * migration window, an `'admin'`-scoped key satisfies both
- * `'account_owner'` and `'driftstack_internal_admin'` checks. Mirrors
- * `services/auth.ts::requireScope` (kept in sync — both call sites
- * use the same predicate).
+ * V-174 + V-481 — scope check with backwards-compat aliases.
+ *
+ *   1. Exact match — the key carries the required scope verbatim.
+ *   2. V-174 admin alias — `'admin'`-scoped keys satisfy
+ *      `'account_owner'` + `'driftstack_internal_admin'` during the
+ *      migration window. After all `'admin'` keys are migrated,
+ *      this clause stays a no-op (no live keys carry `'admin'`).
+ *   3. V-481 broad-satisfies-granular — when the required scope is
+ *      granular (`read:sessions`, `admin:profiles`, etc.), the key's
+ *      broad scopes can satisfy it on the same verb:
+ *      - required `read:X` is satisfied by any of `read`,
+ *        `account_owner` (read implied by full account access).
+ *      - required `write:X` is satisfied by `write`, `account_owner`.
+ *      - required `admin:X` is satisfied by `account_owner`, `admin`.
+ *      Granular scopes do NOT satisfy broad checks — a key with
+ *      `read:sessions` cannot pass `requireScope('read')`. That's
+ *      the point of granular scoping; narrow keys stay narrow.
+ *
+ * Mirrored in `services/auth.ts::requireScope` (kept in sync — same
+ * predicate evaluated at both call sites).
  */
 export function requireScope(ctx: AccountContext, required: ApiKeyScope): void {
-  if (ctx.apiKey.scopes.includes(required)) return;
+  if (hasScope(ctx, required)) return;
+  throw new ForbiddenError(`This action requires the "${required}" scope.`);
+}
+
+/**
+ * V-481 — pure predicate version of {@link requireScope}. Returns
+ * true iff the key satisfies the required scope (exact, V-174 admin
+ * alias, or V-481 broad-satisfies-granular).
+ */
+export function hasScope(ctx: AccountContext, required: ApiKeyScope): boolean {
+  const scopes = ctx.apiKey.scopes;
+  if (scopes.includes(required)) return true;
+
+  // V-174 admin alias.
   if (
     (required === 'account_owner' || required === 'driftstack_internal_admin') &&
-    ctx.apiKey.scopes.includes('admin')
+    scopes.includes('admin')
   ) {
-    return;
+    return true;
   }
-  throw new ForbiddenError(`This action requires the "${required}" scope.`);
+
+  // V-481 broad satisfies granular on the same verb.
+  const granular = parseGranularScope(required);
+  if (granular === null) return false;
+  switch (granular.verb) {
+    case 'read':
+      return scopes.includes('read') || scopes.includes('account_owner');
+    case 'write':
+      return scopes.includes('write') || scopes.includes('account_owner');
+    case 'admin':
+      return scopes.includes('admin') || scopes.includes('account_owner');
+    default: {
+      const _exhaustive: never = granular.verb;
+      return _exhaustive;
+    }
+  }
 }
 
 export { NotFoundError };
