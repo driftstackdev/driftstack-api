@@ -23489,3 +23489,236 @@ surface (metadata only — body served from public URLs).
 
 3 slices, empirical-proof-confirmed (vitest + docs build), no
 gates touched, V-205 invariant intact.
+
+## V-527 — commit-msg hook hardened with V-211 anonymity regex (Track E, Wave 15)
+
+**Date:** 2026-05-10
+
+New `.git/hooks/commit-msg` hook installed; canonical source
+committed at `scripts/git-hooks/commit-msg`; per-clone installer
+at `scripts/install-git-hooks.sh`. Extends the
+V-205-CLEANUP.C pattern in use in the driftstack + webkit-driftstack
+sister repos with V-211 anonymity-policy regex.
+
+### What it blocks
+
+- **V-205 attribution.** `Co-Authored-By: Claude|Anthropic|GPT|Copilot`,
+  `Generated with [Claude…`, `🤖`, `noreply@anthropic.com`,
+  `noreply@github.com`.
+- **V-211 anonymity.** Standalone-word matches on personal-name
+  tokens (the policy keeps these out of any commit attributed to
+  the Driftstack identity). Regex uses `(^|[^[:alnum:]])TOKEN([^[:alnum:]]|$)`
+  framing so word-substrings like "foundered" or "Joeline" do NOT
+  trigger.
+
+### Regression suite (run before relying on the hook)
+
+- 11/11 synthetic message cases — all 5 V-205 banned strings reject,
+  all 3 V-211 banned tokens reject, the 2 word-substring negatives
+  pass, the 1 clean wave-style subject passes.
+- 2/2 historical-violator commits (`63a20c1` "Handoff: Postmark
+  approval requested" and `ef649a1` Wave 9 pricing-correction body)
+  both REJECT under the new hook. The hook short-circuits on first
+  match, so each surfaces a single banned pattern even though both
+  contain multiple. Sufficient to block — the V-368 force-push scrub
+  scheduled post-privatization is the canonical remediation for
+  history; this hook prevents fresh violations from compounding.
+- 1/1 clean Wave 14 commit (`d4cc781`) — PASSES, confirming clean
+  wave-style commit messages are not impacted.
+
+### Sister-repo parity note
+
+The driftstack + webkit-driftstack hooks predate V-211 regex; they
+catch V-205 attribution leaks only. Backporting V-211 regex to those
+hooks is out of scope for Wave 15 per cross-agent boundary (Rule G);
+flagged as a follow-up for the agent that owns those repos.
+
+## V-524 — public-repo leak audit (Track E, Wave 15)
+
+**Date:** 2026-05-10
+
+Staged audit of every file in the driftstack-api public repo at HEAD
+`d4cc781`. Output: `docs/internal/v524-public-leak-audit.md`. **No
+acts performed** — strictly classification + counts to inform V-525
+extraction plan + V-526 sanitization sweep + V-528 privatization
+runbook.
+
+### Findings
+
+- **911 tracked files** total.
+- `internal-private` cluster: ~88 files (would never be customer-facing
+  under any posture — includes .github/, infra/, status.md, AGENTS.md,
+  most of docs/).
+- `extract-to-sdk-repo` cluster: 157 files across packages/sdk-{typescript,
+  python,go}/ — the three SDK packages that become standalone public
+  repos under the locked architecture verdict.
+- `sanitize-then-keep` cluster: ~75 files including most of
+  apps/marketing-site + apps/docs (customer-facing copy lives as built
+  artifacts on Cloudflare Pages; source stays private under option (a)).
+- `customer-facing-keep` cluster: ~591 files (apps/server source,
+  apps/admin-panel, apps/customer-dashboard — under closed-source posture
+  for option (a) but classification still tracks them so a future re-public
+  flip has the disposition baseline).
+- `delete-entirely`: 0 files.
+
+### V-211 / V-205 string-leak findings (input to V-526 sweep)
+
+- **Personal-name leaks (V-211):** 3 files contain personal-name strings:
+  - `docs/entity-org-transition.md` line 104 — operational engineering
+    context (KvK / BV minting).
+  - `docs/marketing/dashboard-admin-visual-audit.md` lines 188, 250 —
+    self-referential audit confirming the codebase has zero personal-name
+    strings (META: this is the _check_ that the policy holds elsewhere;
+    the literal in the audit gets `<personal-name-pattern>` placeholder).
+  - `docs/verification-log.md` line 11864 — historical V-log entry
+    recording a prior sanitization.
+
+  All 3 are inside the `internal-private` cluster — moving the cluster
+  off the public repo neutralises the leak regardless of in-file
+  sanitization.
+
+- **AI-tooling vs sub-processor disclosure:** All `Claude` / `Anthropic`
+  occurrences classify as one of:
+  - Sub-processor / DPA Annex 3 disclosure (required product disclosure
+    for the bundled-LLM feature; KEEP).
+  - Guard comments enforcing V-205 (KEEP — they are the policy,
+    not violations).
+  - Internal V-log references (handled by `internal-private` cluster move).
+
+  Net: zero AI-tooling references on customer-facing surfaces.
+
+### Verification
+
+- Counts cross-checked via `git ls-files | awk -F/ '{print $1}' | sort
+| uniq -c`.
+- Personal-name leaks enumerated via `git grep -E "Joel|Theunissen"`.
+- Anthropic occurrence classification cross-checked via
+  `git grep -i "anthropic|claude"` and contextual inspection.
+
+## V-530.A — behavioural-simulation per-element-class touch event distributions (Track B, Wave 15)
+
+**Date:** 2026-05-10
+
+First sub-slice of V-530 (per directive's anti-substitution clause —
+sub-slices A/B/C/D rather than silent re-scope). Implements per-element-
+class touch event distributions in `packages/behavioural-simulation`,
+moving the package one module beyond stub-mock-only.
+
+### Changes
+
+- `packages/behavioural-simulation/src/types.ts` — new types: `ElementClass`
+  (7 classes: button | link | input | image | video | scroll-container |
+  generic), `ElementBounds`, `TouchSample`, `TouchEvent`,
+  `TouchDistribution`.
+- `packages/behavioural-simulation/src/interfaces.ts` — new
+  `GenerateTouchEventOpts` + `generateTouchEvent` method on the
+  `BehaviouralSimulator` interface.
+- `packages/behavioural-simulation/src/touch.ts` — NEW module. Per-class
+  distribution table (TOUCH_DISTRIBUTIONS), seeded mulberry32 PRNG +
+  FNV-1a string hash (no new deps), `generateTouchEvent` function
+  with deterministic + pure semantics.
+- `packages/behavioural-simulation/src/mock.ts` — implements the new
+  interface method (delegates to the real touch generator since the
+  generator is already deterministic + pure; mock/real parity from
+  day one).
+- `packages/behavioural-simulation/src/index.ts` — public surface
+  re-exports new types + function + distribution table.
+
+### Property coverage
+
+`packages/behavioural-simulation/tests/touch.test.ts` — 15 property-
+style tests across all 7 element classes:
+
+1. Every element class has a registered distribution.
+2. Every distribution declares valid (non-negative, in-range) parameters.
+3. Determinism: identical (class, bounds, seed) → identical event.
+4. Different seeds produce different events.
+5. Every generated point (start, end, samples) stays within element
+   bounds across 64 seeds per class.
+6. Duration falls within meanDwell ± dwellJitter across 64 seeds per
+   class.
+7. Sample timestamps are monotonically increasing.
+8. First sample tMs == 0; last sample tMs == durationMs.
+9. Sample count matches the class distribution config.
+10. Pressure values are clipped to [0, 1] across all classes + seeds.
+11. Zero-area bounds throw with a clear error.
+12. scroll-container drift / button drift > 5× empirically across 200
+    seeds — class differentiation is empirically distinguishable.
+13. Regression pin: one specific (class, bounds, seed) → expected shape
+    so accidental PRNG / hash / mixing-function changes get caught.
+14. MockBehaviouralSimulator exposes generateTouchEvent for each class.
+15. Determinism via the simulator matches the standalone generator.
+
+### Verification
+
+- `npx tsc --build packages/behavioural-simulation/tsconfig.json` —
+  clean.
+- `npx vitest run packages/behavioural-simulation/tests/` — 22/22 pass
+  (7 prior mock tests + 15 new V-530.A tests).
+- `npx vitest run` (full workspace) — 1340/1340 pass (was 1325 before
+  Wave 15; +15 = expected). 125 test files green.
+- `npx tsc --build` (full workspace) — clean.
+
+### Sub-slices deferred
+
+- **V-530.B (W16):** scroll velocity profiles with decay.
+- **V-530.C (W19):** dwell time models + click-position distributions
+  refined with element-region-aware bias.
+- **V-530.D (later):** idle-period jitter + multi-touch gesture
+  sequencing.
+
+The split was surfaced rather than silently re-scoping a single V-NNN
+onto smaller work (per the directive's anti-substitution clause).
+
+## V-535 — README sanitization (first pass, Track C, Wave 15)
+
+**Date:** 2026-05-10
+
+First sanitization pass on `README.md`. Removes the strongest internal-
+artifact leaks; second pass deferred to W16 for marketing/copy polish.
+
+### Changes
+
+- Repo-layout block: `verification-log.md` line dropped from the public
+  listing; `decisions.md` description loses the "D-NNN" internal-numbering
+  hint; ADR comment loses the inline "ADR-001..ADR-006" rev-bound list
+  (counted-by-glob is fine, rev-bound list rots).
+- Documentation section: V-NNN / D-NNN internal log references removed;
+  rev-bound "D-001..D-034 as of 2026-05-03" line removed; "(V-087 sync)"
+  parenthetical dropped from the architecture cross-reference.
+- Contributing section: "direct push-to-main on internal commits"
+  framing replaced with standard pull-request / ADR-driven contribution
+  language.
+- SDK listing: stale "Go SDK (planned)" corrected (the Go SDK exists at
+  v0.0.x and ships in `packages/sdk-go`); Python descriptor changed from
+  "generated + hand-polished" (internal-process language) to neutral
+  "sync + async clients" description; TS / Python / Go all describe
+  minimum runtime version drawn from each SDK's own manifest.
+
+### V-211 / V-205 audit on the diff
+
+`git grep -E` confirms zero `Joel|Theunissen|founder` (standalone) and
+zero `Claude|Anthropic|GPT|Copilot|noreply` introduced. The README
+remains free of personal-name / AI-process strings.
+
+### Verification
+
+- Read pass diff against the original.
+- Cross-checked SDK runtime claims against each package manifest
+  (`packages/sdk-typescript/package.json` engines, `packages/sdk-python/
+pyproject.toml` requires-python, `packages/sdk-go/go.mod` go version).
+
+## Wave 15 — autopilot summary (per Rule M)
+
+| Track | Slice   | Outcome                                                                                              |
+| ----- | ------- | ---------------------------------------------------------------------------------------------------- |
+| E     | V-527   | commit-msg hook with V-205 + V-211 regex; 11/11 synthetic regression + 2 historical violators caught |
+| E     | V-524   | public-repo leak audit doc — 911 files classified into 5 buckets; staging only                       |
+| B     | V-530.A | Touch event distributions for 7 element classes + 15 property-style tests (+15 to suite → 1340)      |
+| C     | V-535   | README first-pass sanitization — V-NNN/D-NNN internal log refs + stale SDK status corrected          |
+
+4 slices, empirical-proof-confirmed (typecheck + vitest 1340/1340 +
+hook dry-run + git-diff sanitization audit). Rule M satisfied: 2 P-track
+slices (Track E + Track C) from 2 different tracks. No GitHub-private
+flip executed — staged only per the directive. The V-205/V-211 hook is
+now the gate every Wave 16+ commit passes through.

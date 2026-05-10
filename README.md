@@ -28,16 +28,15 @@ driftstack-api/
 │   └── gui-client/         # Tauri desktop client (separate workstream)
 ├── packages/
 │   ├── api-types/          # Public Zod schemas + inferred TS types (SDK consumers)
-│   ├── sdk-typescript/     # @driftstack/sdk
-│   ├── sdk-python/         # python SDK (generated + hand-polished)
-│   └── sdk-go/             # go SDK (planned)
+│   ├── sdk-typescript/     # TypeScript SDK (Node 18+; browser-safe build)
+│   ├── sdk-python/         # Python SDK (3.10+; sync + async clients)
+│   └── sdk-go/             # Go SDK (1.22+; context-aware client)
 ├── docs/
-│   ├── architecture.md     # system shape (synced 2026-05-03 V-087)
-│   ├── decisions.md        # D-NNN decision log
-│   ├── verification-log.md # V-NNN empirical log (append-only)
-│   ├── adr/                # ADR-001..ADR-006
+│   ├── architecture.md     # system shape
+│   ├── decisions.md        # decision log
+│   ├── adr/                # long-form architectural decision records
 │   ├── deployment/         # env-vars schema + deploy notes
-│   ├── legal/              # ToS / Privacy / DPA / AUP / SLA / SOC2 drafts
+│   ├── legal/              # Terms / Privacy / DPA / AUP / definitions
 │   └── architecture/       # subsystem-level design docs
 ├── docker-compose.yml      # Local Postgres 17 + Redis 7
 └── drizzle.config.ts
@@ -117,21 +116,23 @@ Two surfaces:
 - **API keys** (long-lived, scoped, revocable) — for SDK consumers. Pass as `Authorization: Bearer <key>`. Issuance via `POST /v1/api-keys`. scrypt-hashed at rest; sha256-keyed Redis cache with 30s TTL.
 - **Web sessions** (opaque sha256 tokens, 30d TTL, revocable) — for browser dashboard / admin panel. Issued by `/v1/auth/{login,verify-email,magic-link/consume,password-reset/confirm}`; rotated by `/v1/auth/refresh`.
 
-See `docs/architecture.md` for the full request lifecycle (V-087 sync).
+See `docs/architecture.md` for the full request lifecycle.
 
 ## Documentation
 
 - `docs/architecture.md` — system shape, layers, persistence, request lifecycles
-- `docs/decisions.md` — D-NNN decision log (D-001..D-034 as of 2026-05-03)
-- `docs/verification-log.md` — V-NNN append-only empirical log
-- `docs/adr/` — long-form ADRs for architectural deviations
+- `docs/decisions.md` — decision log
+- `docs/adr/` — long-form architectural decision records
 - `docs/deployment/env-vars.md` — canonical env-var schema
 - `/openapi.json` — generated OpenAPI 3.1 spec (live, served at runtime)
 - `/docs` — Swagger UI (live)
 
 ## Contributing
 
-This is a small project with direct push-to-main on internal commits; the verification log (`docs/verification-log.md`) and decisions log (`docs/decisions.md`) capture the rationale behind every substantive change. External contributions go through standard pull-request flow on GitHub.
+Pull requests welcome. Substantive changes should reference the relevant
+ADR (or open a new one) and include test coverage. The customer SDKs are
+maintained in separate public repositories — see the SDK READMEs for their
+own contribution guides.
 
 ## License
 

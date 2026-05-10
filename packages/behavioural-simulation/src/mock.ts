@@ -10,12 +10,15 @@ import type {
   GenerateKeyboardCadenceOpts,
   GenerateMouseTrajectoryOpts,
   GenerateScrollPatternOpts,
+  GenerateTouchEventOpts,
 } from './interfaces.js';
+import { generateTouchEvent } from './touch.js';
 import type {
   BehaviouralProfile,
   KeyboardCadence,
   MouseTrajectory,
   ScrollPattern,
+  TouchEvent,
 } from './types.js';
 
 const DEFAULT_PROFILES: readonly BehaviouralProfile[] = [
@@ -93,6 +96,15 @@ export class MockBehaviouralSimulator implements BehaviouralSimulator {
       durationMs: tickCount * 16,
       seed,
     };
+  }
+
+  generateTouchEvent(opts: GenerateTouchEventOpts): TouchEvent {
+    // The real touch generator is already deterministic + pure (see
+    // `touch.ts`), so the mock surface re-uses it directly rather than
+    // shipping a separate constant-output stub. Mock/real parity here means
+    // callers don't see a behavioural shift when the real Phase 3 simulator
+    // ships behind the same interface.
+    return generateTouchEvent(opts);
   }
 
   listProfiles(): readonly BehaviouralProfile[] {

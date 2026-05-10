@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# V-527 — commit-msg hook (rejects attribution + anonymity leaks).
+#
+# Extends the V-205-CLEANUP.C pattern from driftstack + webkit-driftstack
+# with V-211 anonymity-policy regex (no founder / personal-name strings in
+# any commit attributed to Driftstack <dev@driftstack.dev>).
+#
+# Policies enforced:
+#   - V-205 attribution — Driftstack-only commit attribution. ZERO third-
+#     party tooling trailers, ZERO "Generated with" footers, ZERO robot
+#     emoji markers, ZERO noreply@<tool>.com addresses.
+#   - V-211 anonymity   — ZERO founder framing, ZERO personal-name
+#     references (currently: Joel, Joeltheunissen, Theunissen) in
+#     commit subject or body.
+#
+# Canonical source — version-controlled. Install per-clone with
+# `scripts/install-git-hooks.sh` (copies this file to .git/hooks/).
+set -euo pipefail
+MSG_FILE="${1:?commit-msg hook needs message file}"
+MSG=$(cat "$MSG_FILE")
+
+# V-205 attribution patterns (case-insensitive).
+REJECT_PATTERNS_V205=(
+  'Co-Authored-By: Claude'
+  'Co-Authored-By:.*claude'
+  'Co-Authored-By:.*anthropic'
+  'Co-Authored-By:.*GPT'
+  'Co-Authored-By:.*Copilot'
+  '🤖'
+  'Generated with \[Claude'
+  'noreply@anthropic\.com'
+  'noreply@github\.com'
+)
+
+# V-211 anonymity patterns. Match standalone tokens — avoid biting
+# "foundered" / "foundation" / "Joeline" inside larger words.
+REJECT_PATTERNS_V211=(
+  '(^|[^[:alnum:]])[Ff]ounder([^[:alnum:]]|$)'
+  '(^|[^[:alnum:]])[Jj]oel([^[:alnum:]]|$)'
+  '(^|[^[:alnum:]])[Tt]heunissen([^[:alnum:]]|$)'
+  '(^|[^[:alnum:]])[Jj]oeltheunissen([^[:alnum:]]|$)'
+)
+
+fail() {
+  local pattern="$1"
+  local policy="$2"
+  echo "==========================================================" >&2
+  echo "✗ commit-msg HOOK REJECTED: contains banned pattern" >&2
+  echo "  matched: $pattern" >&2
+  echo "  policy:  $policy" >&2
+  echo "  fix:     remove the offending line(s) from your commit" >&2
+  echo "           message, then re-run git commit." >&2
+  echo "==========================================================" >&2
+  exit 1
+}
+
+for PATTERN in "${REJECT_PATTERNS_V205[@]}"; do
+  if echo "$MSG" | grep -iqE "$PATTERN"; then
+    fail "$PATTERN" "V-205 attribution — Driftstack-only commit attribution"
+  fi
+done
+
+for PATTERN in "${REJECT_PATTERNS_V211[@]}"; do
+  if echo "$MSG" | grep -qE "$PATTERN"; then
+    fail "$PATTERN" "V-211 anonymity — no founder/personal-name in commits"
+  fi
+done
+
+exit 0
