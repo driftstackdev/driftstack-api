@@ -1,0 +1,123 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: API key scopes
+description: Full reference of API key scopes — broad, granular, and the V-481 broad-satisfies-granular rule.
+---
+
+# API key scopes
+
+V-505 reference. Every Driftstack API key carries a set of
+scopes. Each `/v1/*` endpoint declares the scope it requires,
+and the request is allowed only if the key's scope set
+satisfies that requirement.
+
+## Scope categories
+
+There are three categories of scopes, in order of breadth:
+
+1. **Broad scopes** — `read`, `write`, `admin`. Cover every
+   resource of the corresponding verb across the customer's
+   account. The simplest mental model: "this key can do
+   everything a customer can do at this verb level."
+2. **Account-control scopes** — `account_owner`,
+   `driftstack_internal_admin`. Gate customer-account control
+   (`account_owner`) and Driftstack-staff-only operations
+   (`driftstack_internal_admin`). Customer keys never carry
+   `driftstack_internal_admin`.
+3. **Granular scopes (V-481)** — `verb:resource` syntax (e.g.
+   `read:sessions`, `write:webhooks`). Narrow keys for
+   integrations that should not have full account access.
+
+## Full scope list
+
+| Scope                       | Category        | Grants                                                                                                  |
+| --------------------------- | --------------- | ------------------------------------------------------------------------------------------------------- |
+| `read`                      | broad           | All read-side operations across every resource the customer owns.                                       |
+| `write`                     | broad           | All read + state-mutating operations except destructive admin actions.                                  |
+| `admin`                     | broad (legacy)  | Pre-V-174 alias. Treated as satisfying both `account_owner` + `driftstack_internal_admin`.              |
+| `account_owner`             | account-control | Mint API keys, revoke API keys, manage subscription, `/v1/account/*`. Customer dashboard scope.         |
+| `driftstack_internal_admin` | account-control | `/v1/admin/*` — list all accounts, suspend account, change tier, force-actions. Driftstack staff.       |
+| `gui_control`               | special         | Manual-control plane (`tap_at`, `type_focused`). Self-hosted GUI workflow only (locked-decision L-001). |
+| `read:sessions`             | granular        | Read sessions endpoints only.                                                                           |
+| `read:profiles`             | granular        | Read profiles endpoints only.                                                                           |
+| `read:webhooks`             | granular        | Read webhook endpoints only.                                                                            |
+| `read:audit-log`            | granular        | Read audit log only.                                                                                    |
+| `write:sessions`            | granular        | Read + create + delete sessions.                                                                        |
+| `write:profiles`            | granular        | Read + create + delete profiles.                                                                        |
+| `write:webhooks`            | granular        | Read + create + delete webhook endpoints.                                                               |
+| `admin:sessions`            | granular        | All admin operations on sessions (account-owner-equivalent for that resource).                          |
+| `admin:profiles`            | granular        | All admin operations on profiles.                                                                       |
+| `admin:webhooks`            | granular        | All admin operations on webhooks.                                                                       |
+| `admin:api-keys`            | granular        | All admin operations on API keys (mint + revoke). Implies `account_owner` for the keys subtree.         |
+
+## V-481 broad-satisfies-granular rule
+
+A key with a broad scope **satisfies** any granular scope on
+the same verb:
+
+- A key with `read` satisfies `read:sessions`,
+  `read:profiles`, `read:webhooks`, `read:audit-log`.
+- A key with `write` satisfies any `write:*`.
+- A key with `admin` (or `account_owner`) satisfies any
+  `admin:*`.
+
+The reverse is **not** true: a key with `read:sessions` does
+NOT satisfy `read` — narrow keys stay narrow. That's the
+point of granular scoping; a `read:sessions` key can only
+ever read sessions, not profiles or webhooks.
+
+```text
+key with: read              → can do: read, read:sessions, read:profiles, read:webhooks, read:audit-log
+key with: read:sessions     → can do: read:sessions  (only)
+key with: write             → can do: read, write, plus any read:*/write:*
+key with: account_owner     → can do: read, write, plus any read:*/write:*/admin:*
+```
+
+## What happens on a scope mismatch
+
+The API returns HTTP 403 with an RFC 9457 problem-details body:
+
+```json
+{
+  "type": "https://api.driftstack.dev/errors/forbidden",
+  "title": "Forbidden",
+  "status": 403,
+  "detail": "This action requires the \"write:sessions\" scope."
+}
+```
+
+The detail string names the exact scope required so you can
+mint a correctly-scoped replacement key (or extend the
+existing one).
+
+## Picking scopes for a new key
+
+When you mint a key from the dashboard or via
+`POST /v1/api-keys`, you pick scopes per use case. Defaults:
+
+- **CI / test runner:** `read:sessions` + `write:sessions`.
+  No access to profiles, webhooks, or billing.
+- **Production application:** `read` + `write`. Excludes
+  account-management surfaces.
+- **Backup automation:** `read` + `read:audit-log`.
+- **Webhook signing-only key:** mint a key with NO scopes.
+  The key authenticates the webhook signature but cannot
+  call any `/v1/*` endpoint. (This is the recommended
+  pattern — the webhook signing secret is separate from API
+  keys; see [webhooks docs](/webhooks/endpoints) for details.)
+- **Dashboard / customer self-service:** `account_owner`. The
+  default scope minted by the customer dashboard's "first key"
+  flow.
+
+## Source of truth
+
+The full scope enum lives in
+`packages/api-types/src/common.ts:ApiKeyScopeSchema`. The
+`requireScope` predicate is mirrored at two server-side call
+sites (`apps/server/src/lib/errors-helpers.ts` +
+`apps/server/src/services/auth.ts`) and verified by the
+41-case unit test at
+`apps/server/tests/unit/scope-check.test.ts`.
+
+Any scope additions land via V-NNN slice that updates the
+schema, both predicate sites, and this docs page.

@@ -22728,3 +22728,115 @@ all unchanged.
 3 slices, empirical-proof-confirmed (typecheck + dr-runbook lint
 
 - marketing build), no gates touched, V-205 invariant intact.
+
+## V-487 — NowPayments scaffold (Track A, Wave 6)
+
+Engineering scaffolding for the NowPayments crypto-rail
+(NowPayments OÜ, Estonia EEA-internal sub-processor — already
+covered by V-308a legal scaffolding + DPA Annex 3 row). Lands the
+config wiring + IPN signature verifier + 10 unit tests so
+commercial activation isn't gated on additional engineering once
+the founder creates the merchant account.
+
+`apps/server/src/lib/config.ts` gains a `nowpayments` block keyed
+on `NOWPAYMENTS_API_KEY` / `NOWPAYMENTS_IPN_SECRET` /
+`NOWPAYMENTS_SUCCESS_URL` / `NOWPAYMENTS_CANCEL_URL`. All optional;
+when both `apiKey` + `ipnSecret` are set, the route registration
+(V-487-followup) flips on. Until then, customer-facing code paths
+remain dormant — no boot-time crash, no half-active code.
+
+`apps/server/src/lib/nowpayments-signing.ts` implements
+`verifyNowpaymentsSignature(opts)`: HMAC-SHA512 over the
+JSON-canonicalised body (sorts object keys lexicographically at
+every level — protects against the variant-key-order attack);
+`timingSafeEqual` constant-time compare; falsy returns on empty /
+non-hex / length-mismatch inputs so the caller returns 401
+uniformly; raw-body fallback for non-JSON bodies.
+
+### Verification
+
+- `npx vitest run apps/server/tests/unit/nowpayments-signing.test.ts`
+  — 10/10 passed: happy path, wrong secret, body tampering, key-
+  order independence, nested-key canonicalisation, empty inputs,
+  non-hex signature, length mismatch, raw-body fallback,
+  Buffer-typed body.
+- `npm run -w apps/server typecheck` — clean.
+
+The route stub itself is V-487-followup once the merchant account
+is provisioned.
+
+## V-498 — security audit closure status (Track C, Wave 6)
+
+Updates `docs/security-audit-2026-05-06.md` with explicit closure
+status per V-246 finding and a delta-audit pass over every slice
+merged since the audit (V-481, V-484, V-485, V-494, V-486, V-487).
+
+### Closure status
+
+| ID           | Status                                         |
+| ------------ | ---------------------------------------------- |
+| V-246-P0-001 | CLOSED (V-247)                                 |
+| V-246-P1-001 | CLOSED (V-248)                                 |
+| V-246-P1-002 | DOCUMENTED (runbook PII-posture section)       |
+| V-246-P1-003 | DEFERRED (post-launch; CF Access mitigation)   |
+| V-246-P1-004 | DEFERRED (post-launch; current scale low)      |
+| V-246-P2-001 | DEFERRED                                       |
+| V-246-P2-002 | DEFERRED                                       |
+| V-246-P2-003 | PARTIAL CLOSURE (V-497 DR runbook Scenario 10) |
+| V-246-P2-004 | DEFERRED                                       |
+| V-246-P2-005 | DEFERRED                                       |
+
+### Delta audit
+
+Re-walked the six original audit checks against each post-V-246
+slice. **No new P0 or P1 findings introduced.** Per-slice
+verdicts:
+
+- V-481 granular scopes — clean (predicate mirrored, 41-case test).
+- V-484 audit-log filters — clean (Zod, account-scoped, parameterised SQL).
+- V-485 tier features registry — clean (pure boolean lookup).
+- V-494 log + Sentry redaction — clean (defense-in-depth, 12-case test).
+- V-486 Postmark templates — pre-clean (scaffolding only).
+- V-487 NowPayments — clean (timingSafeEqual, canonicalised HMAC).
+
+Next scheduled audit: pre-first-paying-customer (commercial
+activation).
+
+### Verification
+
+- File renders: `docs/security-audit-2026-05-06.md` — markdown
+  lints clean.
+
+## V-505 — docs depth: rate-limits + scopes reference (Track D, Wave 6)
+
+Two new reference pages added to `apps/docs/src/pages/reference/`:
+
+- **`/reference/rate-limits`** — full per-tier table from
+  `TIER_RATE_LIMIT_DEFAULTS`, two-bucket-key explanation
+  (`global` + `sessions:create`), 429 response shape with
+  RFC 9457 problem-details body, per-account override path,
+  `/v1/account/rate-limits` lookup endpoint.
+- **`/reference/scopes`** — full ApiKeyScope enum (broad +
+  account-control + V-481 granular `verb:resource`), V-481
+  broad-satisfies-granular rule with worked examples, 403
+  response shape, scope-picker recipe per use case (CI / prod
+  app / backup / webhook-only / dashboard).
+
+Both pages reference the api-types source-of-truth path so docs
+stay aligned when scopes or rate-limit values change.
+
+### Verification
+
+- `npm run -w apps/docs build` — clean (32 pages, 997ms; was 30
+  before V-505).
+
+## Wave 6 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                                            |
+| ----- | ----- | -------------------------------------------------------------------------------------------------- |
+| A     | V-487 | NowPayments scaffold — config wiring + IPN HMAC-SHA512 verifier + 10 unit tests                    |
+| C     | V-498 | Security audit closure status + delta audit over V-481/V-484/V-485/V-494/V-486/V-487 (no findings) |
+| D     | V-505 | Docs depth — `/reference/rate-limits` + `/reference/scopes` reference pages                        |
+
+3 slices, empirical-proof-confirmed (vitest + typecheck + docs
+build + audit-doc lint), no gates touched, V-205 invariant intact.

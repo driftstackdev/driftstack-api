@@ -106,3 +106,71 @@ All P2s are operational/documentation rather than architectural. None blocking l
 - V-NNN post-launch: V-246-P1-002 (ops runbook docs), V-246-P1-003 (scope refactor), V-246-P1-004 (IP rate limiting), V-246-P2-\* (operational docs + ops procedures).
 
 Audit is the load-bearing artifact; fixes are mechanical from here. Founder reviews this doc on wake to validate the prioritization (e.g. agree V-246-P1-003 is genuinely deferrable given Cloudflare Access mitigation).
+
+---
+
+## V-498 — closure status (2026-05-10)
+
+Pre-launch security audit revisit four days after V-246. Closure status per finding:
+
+| ID           | Severity | Status                      | Notes                                                                                       |
+| ------------ | -------- | --------------------------- | ------------------------------------------------------------------------------------------- |
+| V-246-P0-001 | P0       | **CLOSED (V-247)**          | Key-version counter shipped; cache key bakes the version, stale entries unreachable.        |
+| V-246-P1-001 | P1       | **CLOSED (V-248)**          | Stripe URL allowlist enforced at `/v1/billing/checkout-session` + `/v1/billing/trial-pack`. |
+| V-246-P1-002 | P1       | **DOCUMENTED**              | Runbook §"Log-handling — PII posture" published; ops know to gate raw-log sharing.          |
+| V-246-P1-003 | P1       | **DEFERRED (V-NNN)**        | Operational mitigation via V-135 Cloudflare Access on `admin.driftstack.dev`. Post-launch.  |
+| V-246-P1-004 | P1       | **DEFERRED (V-NNN)**        | IP-based rate limiting on auth endpoints. Post-launch; current scale doesn't draw attacks.  |
+| V-246-P2-001 | P2       | DEFERRED                    | Cache invalidation key-version coverage extension — nice-to-have.                           |
+| V-246-P2-002 | P2       | DEFERRED                    | 30s revocation lag — internal doc only; no customer-facing copy yet.                        |
+| V-246-P2-003 | P2       | **PARTIAL CLOSURE (V-497)** | DR runbook Scenario 10 documents the panic-rotate procedure with overlap window.            |
+| V-246-P2-004 | P2       | DEFERRED                    | Stripe API error log enrichment.                                                            |
+| V-246-P2-005 | P2       | DEFERRED                    | Audit-log retention/pruning cadence — V-163 archive shape exists; cadence not yet locked.   |
+
+**Net status**: P0 closed; P1 closed where actionable pre-launch (2 of 4); 2 P1 deferred with explicit operational mitigations; 4 of 5 P2s deferred unchanged; 1 P2 (P2-003 Stripe rotation) gained a DR runbook entry under V-497.
+
+## V-498 delta audit — what changed since 2026-05-06
+
+Re-checked the four pre-launch slices that landed since V-246 for new findings. Each was reviewed against the same six checks the original audit applied (scope-reach, plaintext-leakage, idempotency, audit-log injection, account-scope leakage, web-session-token security).
+
+### V-481 — granular API key scopes (Track A wave 2)
+
+- `requireScope` mirrored at two call sites (`lib/errors-helpers.ts` + `services/auth.ts`); the unit test matrix at `tests/unit/scope-check.test.ts` (41 cases) asserts both sites evaluate the same predicate. **CLEAN.**
+- Broad-satisfies-granular invariant: `read` satisfies `read:sessions` etc., but granular keys do NOT satisfy broad checks — narrow keys stay narrow. Asserted in tests. **CLEAN.**
+- No new scope can reach `/v1/admin/*` — `driftstack_internal_admin` is the gate, and granular scopes are explicitly enumerated as customer-only verbs (`read`/`write`/`admin` on customer resources). **CLEAN.**
+
+### V-484 — audit-log filter extensions (Track A wave 3)
+
+- New query params (`from` / `to` / `actor_type` / `target_resource_id`) all parse through Zod; malformed values return 400 (`from=not-a-date` test pinned). **CLEAN.**
+- All filters apply against `accountId = ctx.account.id` — no cross-account leakage path exists; route still calls `accountAudit.list(ctx, opts)` which scopes at the service layer. **CLEAN.**
+- `target_resource_id` is bounded to 200 chars; SQL parameterised via Drizzle's `eq`. No injection vector. **CLEAN.**
+
+### V-485 — per-tier feature gating (Track A wave 4)
+
+- `requireTierFeature(tier, feature)` is a pure boolean lookup against `TIER_FEATURES[tier][feature]`. No side effect, no DB hit, no IO. **CLEAN.**
+- Registry is read-only at module load; no runtime mutation paths exist. **CLEAN.**
+- The guard throws `ForbiddenError` (existing, RFC 9457 typed) rather than a custom error — error handling is consistent with the rest of the API. **CLEAN.**
+
+### V-494 — log + Sentry redaction (Track C wave 4)
+
+- pino redact list now covers `password` / `new_password` / `current_password` / `code` (TOTP) / `recovery_code(s)` / `secret` / `signing_secret` / `webhook_secret` / `client_secret` / `totp_secret` / `mfaSecret` / `stripe-signature` header. **CLEAN.**
+- Sentry beforeSend mirrors the pino list with case-insensitive key matching at every nesting depth. Unit test pins the matrix (12 cases) including cycle safety. **CLEAN.**
+- Defense-in-depth posture: pino is best-effort (developers may forget to nest fields under `body.*`); Sentry's recursive walker catches leakage that bypasses pino. Both layers must fail open for a secret to leak. **CLEAN.**
+
+### V-486 — Postmark templates (Track A wave 5)
+
+- Two new templates (`quota-warning`, `session-event-digest`) — DRAFT copy only; no firing logic; no PII enters the renderer pre-activation. When wired (V-486-followup), the dedupe column writes are atomic per the existing `firstSuccessEmailSentAt` pattern. **PRE-CLEAN.**
+
+### V-487 — NowPayments scaffold (Track A wave 6)
+
+- `verifyNowpaymentsSignature` uses `timingSafeEqual` for the constant-time HMAC compare. **CLEAN.**
+- Canonicalises JSON body (sorts keys at every level) before HMAC — protects against the `{"a":1,"b":2}` vs `{"b":2,"a":1}` variant attack. Unit test pins (10 cases) including non-JSON raw-body fallback. **CLEAN.**
+- Falsy returns on empty body / secret / signature, non-hex signature, length mismatch — caller can return 401 uniformly without a special-case path. **CLEAN.**
+- Route consumer not yet wired; verifier is library code only. No new attack surface introduced by V-487 itself.
+
+### Net delta-audit verdict
+
+**No new P0 or P1 findings introduced by V-481 → V-487.** The four review touchpoints (V-481, V-484, V-485, V-494) all align with the existing audit posture. V-486 + V-487 add scaffolding without new ingress.
+
+The original audit's deferred items (P1-003, P1-004, P2-001/002/004/005) remain deferred — none of the post-V-246 work changed the priority calculus.
+
+Next scheduled audit: pre-first-paying-customer (commercial activation), per the V-246 cadence note. That review re-walks the full set + any new code merged since V-498.

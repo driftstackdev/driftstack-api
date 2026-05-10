@@ -123,6 +123,30 @@ const ConfigSchema = z.object({
    * every existing enrollment (customers must re-enroll).
    */
   mfaEncryptionKey: z.string().optional(),
+  /**
+   * V-487 — NowPayments crypto-rail scaffold. Conditional, opt-in
+   * sub-processor (Estonia EEA-internal per the V-308a legal
+   * scaffolding). When `apiKey` + `ipnSecret` are unset, the
+   * `/v1/billing/crypto/*` route stubs return 501 Not Implemented;
+   * the code is wired but inactive until the founder creates the
+   * NowPayments account and SSH-writes the credentials. This lets
+   * launch-day flip the rail on without redeploying.
+   *
+   * `apiKey` — issued in the NowPayments dashboard; gates outbound
+   * calls to api.nowpayments.io.
+   * `ipnSecret` — separate HMAC secret for inbound webhook (IPN)
+   * signature verification. NowPayments signs payloads with this
+   * shared secret; the verifier in `lib/nowpayments-signing.ts`
+   * (V-487-followup) checks the `x-nowpayments-sig` header.
+   */
+  nowpayments: z
+    .object({
+      apiKey: z.string().min(1).optional(),
+      ipnSecret: z.string().min(1).optional(),
+      successUrl: z.string().url().optional(),
+      cancelUrl: z.string().url().optional(),
+    })
+    .optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -253,5 +277,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     },
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,
+    // V-487 — NowPayments scaffold. All fields optional; presence of
+    // BOTH apiKey + ipnSecret is what the route registration checks.
+    nowpayments:
+      env.NOWPAYMENTS_API_KEY ||
+      env.NOWPAYMENTS_IPN_SECRET ||
+      env.NOWPAYMENTS_SUCCESS_URL ||
+      env.NOWPAYMENTS_CANCEL_URL
+        ? {
+            ...(env.NOWPAYMENTS_API_KEY ? { apiKey: env.NOWPAYMENTS_API_KEY } : {}),
+            ...(env.NOWPAYMENTS_IPN_SECRET ? { ipnSecret: env.NOWPAYMENTS_IPN_SECRET } : {}),
+            ...(env.NOWPAYMENTS_SUCCESS_URL ? { successUrl: env.NOWPAYMENTS_SUCCESS_URL } : {}),
+            ...(env.NOWPAYMENTS_CANCEL_URL ? { cancelUrl: env.NOWPAYMENTS_CANCEL_URL } : {}),
+          }
+        : undefined,
   });
 }
