@@ -23065,3 +23065,99 @@ No structural changes to either page; copy-fix only.
 
 3 slices, empirical-proof-confirmed (vitest + marketing build +
 grep verification), no gates touched, V-205 invariant intact.
+
+## V-509 — V-484 filters + team RBAC integration coverage (Track A, Wave 10)
+
+Added one integration test in
+`apps/server/tests/integration/team-rbac-auth-path.test.ts` that
+exercises the V-484 audit-log filter parameters
+(`action` / `actor_type` / `target_resource_id` / `from`)
+under the `X-Driftstack-Account` team-RBAC header.
+
+Test seeds three owner-scoped audit entries (two `customer` /
+`api_key.minted`, one `system` / `session.destroyed`) plus one
+caller-scoped entry that must be excluded from every owner
+query. Hits the four filter axes individually and verifies:
+
+- the filter returns the expected owner-scoped subset
+- caller's own entry never leaks into the owner-scoped result
+- `account_id` on every returned row is the owner's
+
+Catches the regression "filter forwarding works for the caller's
+own audit log but not when scoped to an owner via the team
+header."
+
+### Verification
+
+- `npx vitest run apps/server/tests/integration/team-rbac-auth-path.test.ts`
+  — 32/32 passed (was 31; +1 from V-509).
+
+## V-510 — DR rehearsal harness (Track C, Wave 10)
+
+`scripts/dr-rehearse.sh` lands as the local-only DR rehearsal
+harness. Walks the dr-runbook.md scenarios that don't need
+production touchpoints (Scenarios 2 / 4 / 6 / 7 / 8) and refuses
+to act on any host whose name matches the production patterns
+`api.driftstack.dev` or `staging-api.driftstack.dev`.
+
+Scenario coverage in the harness:
+
+- Scenario 2 — runs `drizzle-kit check` + the audit-log
+  integration tests against the auto-spawned local Postgres.
+- Scenario 4 — runs Redis-fallback + auth-cache invalidation
+  tests.
+- Scenario 6 — runs the SDK webhook-signature dual-accept tests
+  - the V-359 webhook-rotate integration test.
+- Scenario 7 — runs the full vitest suite (the same gate the
+  pre-push hook runs; broken code is rejected at push time).
+- Scenario 8 — inspects the certbot renewal config in
+  dr-runbook.md.
+
+Production-touching scenarios (1 / 3 / 5 / 9 / 10 / 11) are
+explicitly listed as NOT in the harness — they need founder SSH
+
+- Cloudflare + Stripe access. dr-runbook.md updated with a
+  reference to the harness in the pre-launch dry-run checklist.
+
+### Verification
+
+- `scripts/dr-rehearse.sh check-prereqs` — `✓ prereqs ok`.
+- `scripts/dr-rehearse.sh list` — renders the scenario index.
+
+## V-511 — /api/profile-snapshots docs page (Track D, Wave 10)
+
+Profile snapshots had a customer-dashboard surface (V-470 +
+V-512 captures) and SDK + integration coverage but no `/api/`
+reference page. Added `apps/docs/src/pages/api/profile-snapshots.md`
+following the `/api/profiles.md` pattern.
+
+Page covers:
+
+- Capture (`POST /v1/profiles/:id/snapshots`)
+- List per-profile (`GET /v1/profiles/:id/snapshots`)
+- List across account (`GET /v1/profile-snapshots`)
+- Get one (`GET /v1/profile-snapshots/:id`)
+- Restore (`POST /v1/profile-snapshots/:id/restore`)
+- Delete (`DELETE /v1/profile-snapshots/:id`)
+
+Plus: required scopes per endpoint, audit-log emission shape
+(action keys + payload), tier-cap interaction (snapshots are
+NOT counted against `PROFILES_PER_TIER`; restores ARE), storage
+characteristics, SDK pointer, source-of-truth cross-references.
+
+### Verification
+
+- `npm run -w apps/docs build` — clean (34 pages, 979ms; was 33
+  before V-511).
+
+## Wave 10 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                                             |
+| ----- | ----- | --------------------------------------------------------------------------------------------------- |
+| A     | V-509 | Integration test: V-484 filters + X-Driftstack-Account team RBAC; team-rbac-auth-path 31 → 32       |
+| C     | V-510 | scripts/dr-rehearse.sh — local DR harness covering 5 of 11 dr-runbook scenarios; refuses production |
+| D     | V-511 | /api/profile-snapshots reference page — full endpoint coverage + audit + tier-cap interaction       |
+
+3 slices, empirical-proof-confirmed (vitest + harness invocation
+
+- docs build), no gates touched, V-205 invariant intact.

@@ -443,6 +443,133 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
     }
   });
 
+  // V-509 — audit-log filter parameters (from / to / actor_type /
+  // target_resource_id) must be honored when the caller scopes to
+  // an owner via X-Driftstack-Account. Catches "filter forwarding
+  // works for the caller's own audit log but not for the owner's"
+  // regressions.
+  it('V-509 — V-484 filters apply to the owner audit log under X-Driftstack-Account', async () => {
+    fx = await buildTestApp();
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: MEMBERSHIP_ID,
+        ownerAccountId: OWNER_ACCOUNT_ID,
+        role: 'admin',
+      },
+    ]);
+    // Seed: 3 owner-owned audit entries with distinct actor_type +
+    // target_resource_id so each filter axis has a discriminating
+    // hit.
+    await fx.accountAuditRepo.insert({
+      accountId: OWNER_ACCOUNT_ID,
+      actorType: 'customer',
+      actorAccountId: OWNER_ACCOUNT_ID,
+      actorKeyId: null,
+      action: 'api_key.minted',
+      targetResourceId: 'key_owner_target_one',
+      payload: { kind: 'owner-1' },
+    });
+    await fx.accountAuditRepo.insert({
+      accountId: OWNER_ACCOUNT_ID,
+      actorType: 'customer',
+      actorAccountId: OWNER_ACCOUNT_ID,
+      actorKeyId: null,
+      action: 'api_key.minted',
+      targetResourceId: 'key_owner_target_two',
+      payload: { kind: 'owner-2' },
+    });
+    await fx.accountAuditRepo.insert({
+      accountId: OWNER_ACCOUNT_ID,
+      actorType: 'system',
+      actorAccountId: null,
+      actorKeyId: null,
+      action: 'session.destroyed',
+      targetResourceId: 'sess_owner_one',
+      payload: { kind: 'owner-system' },
+    });
+    // Caller-owned entry — must be excluded by every owner-scoped query.
+    await fx.accountAuditRepo.insert({
+      accountId: fx.accountId,
+      actorType: 'customer',
+      actorAccountId: fx.accountId,
+      actorKeyId: null,
+      action: 'api_key.minted',
+      targetResourceId: 'key_caller_target',
+      payload: { kind: 'self' },
+    });
+
+    // Filter by action — only owner's two api_key.minted entries.
+    const byAction = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=api_key.minted',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    expect(byAction.statusCode).toBe(200);
+    const byActionBody = byAction.json<{
+      data: { account_id: string; action: string; target_resource_id: string | null }[];
+    }>();
+    expect(byActionBody.data).toHaveLength(2);
+    for (const row of byActionBody.data) {
+      expect(row.account_id).toBe(`acc_${OWNER_ACCOUNT_ID}`);
+      expect(row.action).toBe('api_key.minted');
+    }
+
+    // Filter by actor_type=system — only owner's destroyed entry.
+    const byActor = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?actor_type=system',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    expect(byActor.statusCode).toBe(200);
+    const byActorBody = byActor.json<{
+      data: { account_id: string; actor_type: string }[];
+    }>();
+    expect(byActorBody.data).toHaveLength(1);
+    expect(byActorBody.data[0]!.account_id).toBe(`acc_${OWNER_ACCOUNT_ID}`);
+    expect(byActorBody.data[0]!.actor_type).toBe('system');
+
+    // Filter by target_resource_id — owner-targeted, exact match.
+    const byTarget = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?target_resource_id=' + encodeURIComponent('key_owner_target_one'),
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    expect(byTarget.statusCode).toBe(200);
+    const byTargetBody = byTarget.json<{
+      data: { account_id: string; target_resource_id: string | null }[];
+    }>();
+    expect(byTargetBody.data).toHaveLength(1);
+    expect(byTargetBody.data[0]!.account_id).toBe(`acc_${OWNER_ACCOUNT_ID}`);
+    expect(byTargetBody.data[0]!.target_resource_id).toBe('key_owner_target_one');
+
+    // Filter by `from` in the past — all 3 owner entries returned;
+    // caller's entry still excluded.
+    const longAgo = new Date('2020-01-01T00:00:00.000Z').toISOString();
+    const byFrom = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/account/audit-log?from=${encodeURIComponent(longAgo)}`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
+      },
+    });
+    expect(byFrom.statusCode).toBe(200);
+    const byFromBody = byFrom.json<{ data: { account_id: string }[] }>();
+    expect(byFromBody.data).toHaveLength(3);
+    for (const row of byFromBody.data) {
+      expect(row.account_id).toBe(`acc_${OWNER_ACCOUNT_ID}`);
+    }
+  });
+
   it('GET /v1/profiles returns 403 when X-Driftstack-Account references a non-member owner', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

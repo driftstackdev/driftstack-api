@@ -584,6 +584,13 @@ one-shot rather than periodic.
 
 Before commercial activation:
 
+> **Local-only rehearsal harness**: `scripts/dr-rehearse.sh` (V-510)
+> walks the scenarios that don't need production touchpoints
+> (Scenarios 2 / 4 / 6 / 7 / 8). The harness refuses to act on
+> production hosts. For Scenarios 1 / 3 / 5 / 9 / 10 / 11 the
+> rehearsal is manual against staging with founder SSH +
+> Cloudflare + Stripe access.
+
 - [ ] Scenario 1 (Hetzner loss) — provision a fresh host; deploy
       from clean state; confirm `/health` + `/ready`. Tear down.
 - [ ] Scenario 2 (PG corruption) — create a Neon branch from a
