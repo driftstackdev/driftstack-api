@@ -23161,3 +23161,96 @@ characteristics, SDK pointer, source-of-truth cross-references.
 3 slices, empirical-proof-confirmed (vitest + harness invocation
 
 - docs build), no gates touched, V-205 invariant intact.
+
+## V-512 — admin webhook DLQ endpoint_id drill-down filter (Track A, Wave 11)
+
+`GET /v1/admin/webhook-dlq` now accepts an optional `endpoint_id`
+query parameter (with or without the `webhook_endpoint_` public
+prefix) for per-endpoint drill-down. Customer-support workflow:
+a customer reports "endpoint X is missing events"; admin pulls
+just that endpoint's stuck deliveries without wading through
+every account's DLQ.
+
+### Changes
+
+- `packages/api-types/src/admin.ts`: `ListDlqQuerySchema` extended
+  with `endpoint_id: z.string().min(1).max(200).optional()`.
+- `apps/server/src/services/webhooks.ts`: `listDlqDeliveries`
+  service interface + implementation accept optional `endpointId`.
+- `apps/server/src/db/webhooks-repo.ts`: Drizzle predicate adds
+  `eq(webhookDeliveries.webhookId, opts.endpointId)` when set.
+- `apps/server/src/routes/admin-webhooks.ts`: route layer strips
+  the public `webhook_endpoint_` prefix before forwarding the
+  filter.
+- In-memory test repo mirrored.
+- 1 new integration test seeding 3 DLQ deliveries across 2
+  endpoints, verifying:
+  - no filter → 3 rows
+  - filter to endpoint A → 2 rows (excludes endpoint B)
+  - filter accepts both prefixed + bare uuid forms
+
+### Verification
+
+- `npm run -w apps/server typecheck` — clean.
+- `npm run -w packages/api-types typecheck` — clean.
+- `npx vitest run apps/server/tests/integration/admin-webhooks.test.ts`
+  — 15/15 passed (was 14; +1 from V-512).
+
+## V-513 — observability runbook (Track C, Wave 11)
+
+New file: `docs/runbooks/observability.md`. Operational
+reference for how Driftstack instruments, monitors, and alerts
+on production. Lays out:
+
+- Layers + tools (pino / Sentry / V-289 synthetics / V-474
+  StatusBadge / V-475 test.ping / V-512 DLQ / V-495 load test /
+  audit logs).
+- Sentry per-service project layout (V-469): server / customer-
+  dashboard / marketing-site / docs / status-site / admin-panel.
+- Alert rules per Sentry project — recommended pre-launch
+  configurations with explicit severity → action mapping.
+- Synthetic check intervals + thresholds + escalation.
+- Load-test cadence post-launch (per-deploy / weekly /
+  quarterly / per-architecture-change).
+- DLQ triage workflow including the V-512 endpoint_id filter +
+  replay-vs-requeue distinction.
+- Audit-log retention posture and per-service Sentry env vars.
+
+Cross-references: dr-runbook.md, incidents.md, launch-day-runbook.md,
+/security marketing surface.
+
+### Verification
+
+- File renders: `docs/runbooks/observability.md`. No code touched.
+
+## V-514 — webhook events subscription model docs (Track D, Wave 11)
+
+`apps/docs/src/pages/webhooks/events.md` gains a "Subscription
+model" section explaining the WebhookEventType vs
+SubscribableWebhookEventType distinction. Covers:
+
+- The two enums and why they differ (`test.ping` is server-emitted
+  but not customer-subscribable).
+- Subscribing to a subset (the standard pattern).
+- Subscribing to every subscribable event (no shorthand by
+  design — intentional opt-in for new event types added later).
+- `POST /v1/webhooks/:id/test` separately.
+
+Plus a forward-reference to V-512's `endpoint_id` DLQ drill-down
+filter in the Related section.
+
+### Verification
+
+- `npm run -w apps/docs build` — clean (34 pages, 1.01s).
+
+## Wave 11 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                                              |
+| ----- | ----- | ---------------------------------------------------------------------------------------------------- |
+| A     | V-512 | DLQ endpoint_id drill-down filter — schema + repo + route + 1 integration test                       |
+| C     | V-513 | New `docs/runbooks/observability.md` — Sentry layout, alert rules, synthetic intervals, DLQ workflow |
+| D     | V-514 | /webhooks/events.md gains subscription-model section explaining the two-enum distinction             |
+
+3 slices, empirical-proof-confirmed (typecheck + integration test
+
+- docs build), no gates touched, V-205 invariant intact.

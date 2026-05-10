@@ -147,9 +147,15 @@ export function registerAdminWebhookRoutes(
       if (!ctx) throw new Error('account context missing after requireAuth');
       const rawQuery = (request.query ?? {}) as ListDlqQueryInput;
       const query = ListDlqQuerySchema.parse(rawQuery);
+      // V-512 — strip the public `webhook_endpoint_` prefix off the
+      // optional drill-down filter so the repo sees a bare uuid.
+      const endpointIdRaw = query.endpoint_id;
+      const endpointId =
+        endpointIdRaw !== undefined ? endpointIdRaw.replace(/^webhook_endpoint_/, '') : undefined;
       const page = await webhooksAdmin.listDlq(ctx, {
         limit: query.limit,
         ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
+        ...(endpointId !== undefined ? { endpointId } : {}),
       });
       return {
         data: page.items.map(publicDelivery),

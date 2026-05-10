@@ -264,11 +264,18 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     return Promise.resolve(this.deliveries.get(deliveryId) ?? null);
   }
 
-  listDlqDeliveries(opts: { limit: number; cursor?: string }): Promise<ListDeliveriesPage> {
+  listDlqDeliveries(opts: {
+    limit: number;
+    cursor?: string;
+    endpointId?: string;
+  }): Promise<ListDeliveriesPage> {
     const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
     const all = Array.from(this.deliveries.values())
       .filter((r) => r.status === 'dlq')
       .filter((r) => (cursorDate ? r.createdAt < cursorDate : true))
+      // V-512 — drill-down filter on endpoint id (the row's
+      // webhookId is the foreign key into webhook_endpoints).
+      .filter((r) => (opts.endpointId ? r.webhookId === opts.endpointId : true))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     const items = all.slice(0, opts.limit);
     const last = items[items.length - 1];

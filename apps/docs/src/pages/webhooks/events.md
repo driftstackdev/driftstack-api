@@ -305,6 +305,75 @@ Auto-disable after N consecutive failures is a planned safety net
 `consecutive_failures` field on `GET /v1/webhooks` to detect a
 drifting endpoint.
 
+## Subscription model (V-514)
+
+Two related but distinct enums in `packages/api-types/src/webhooks.ts`:
+
+- **`WebhookEventType`** — every event the server CAN emit.
+  Includes `test.ping`.
+- **`SubscribableWebhookEventType`** — events a customer can
+  subscribe to via `POST /v1/webhooks` or update via
+  `PATCH /v1/webhooks/:id`. Excludes `test.ping`.
+
+The distinction matters because `test.ping` only fires from the
+explicit `POST /v1/webhooks/:id/test` endpoint regardless of
+subscription — subscribing to it would be meaningless. The
+update-subscription validator rejects `test.ping` with a 400
+`validation-failed` problem detail.
+
+### Subscribing to a subset
+
+```json
+POST /v1/webhooks
+{
+  "url": "https://your-app.example/driftstack-hook",
+  "events": ["session.completed", "session.failed"]
+}
+```
+
+The endpoint receives ONLY events whose type matches the
+subscription set. Adding more events later via PATCH is a no-
+historical-replay operation — past deliveries against the old
+subscription stay delivered/failed/DLQ as they were; only future
+events count.
+
+### Subscribing to every (subscribable) event
+
+Pass the full subscribable enum:
+
+```json
+POST /v1/webhooks
+{
+  "url": "https://your-app.example/driftstack-hook",
+  "events": [
+    "session.completed",
+    "session.failed",
+    "quota.warning_80pct",
+    "quota.exceeded",
+    "api_key.revoked"
+  ]
+}
+```
+
+There's no shorthand for "subscribe to all" — the explicit list
+is the only way. This is intentional: when we add a new
+subscribable event in the future (per the [PLANNED] queue
+above), existing endpoints don't auto-subscribe and start
+receiving deliveries the customer didn't expect. Customers
+opt-in to new events explicitly.
+
+### `test.ping` separately
+
+```json
+POST /v1/webhooks/:id/test
+```
+
+No request body. The endpoint dispatches a one-off
+`test.ping` event with a short stub payload through the same
+delivery infrastructure (HMAC-signed, retried on failure,
+audit-logged). Lets customers verify their handler signature-
+checks correctly before relying on it for production events.
+
 ## Related
 
 - Webhook resource: `apps/server/src/routes/webhooks.ts`
@@ -312,7 +381,7 @@ drifting endpoint.
   `apps/server/src/services/webhooks.ts` +
   `apps/server/src/services/durable-webhook-delivery.ts` (V-173)
 - DLQ admin operations: `apps/admin-panel/src/pages/webhook-dlq.astro`
-  (V-189)
+  (V-189) — V-512 adds the `endpoint_id` drill-down filter
 - Stripe webhook signature (the inverse direction — Stripe → us):
   `apps/server/src/lib/stripe-signing.ts` and
   `docs/deployment/stripe-webhook-testing.md`

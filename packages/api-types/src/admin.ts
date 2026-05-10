@@ -155,6 +155,11 @@ export type QuotaOverrideResponse = z.infer<typeof QuotaOverrideResponseSchema>;
 export const ListDlqQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   cursor: z.string().optional(),
+  // V-512 — optional drill-down by webhook-endpoint id. Customer
+  // support workflow: a customer reports "my endpoint is missing
+  // events"; admin pulls just that endpoint's DLQ rows without
+  // wading through other accounts'.
+  endpoint_id: z.string().min(1).max(200).optional(),
 });
 export type ListDlqQuery = z.infer<typeof ListDlqQuerySchema>;
 export type ListDlqQueryInput = z.input<typeof ListDlqQuerySchema>;

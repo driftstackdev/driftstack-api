@@ -311,10 +311,17 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     return row ? toDeliveryRow(row) : null;
   }
 
-  async listDlqDeliveries(opts: { limit: number; cursor?: string }): Promise<ListDeliveriesPage> {
+  async listDlqDeliveries(opts: {
+    limit: number;
+    cursor?: string;
+    endpointId?: string;
+  }): Promise<ListDeliveriesPage> {
     const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
     const filters = [eq(webhookDeliveries.status, 'dlq' as WebhookDeliveryStatus)];
     if (cursorDate) filters.push(lt(webhookDeliveries.createdAt, cursorDate));
+    // V-512 — drill-down filter; uuid scoped to a single endpoint
+    // (column is `webhook_id` at the schema level).
+    if (opts.endpointId) filters.push(eq(webhookDeliveries.webhookId, opts.endpointId));
 
     const rows = await this.database.db
       .select()

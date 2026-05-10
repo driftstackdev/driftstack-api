@@ -192,8 +192,19 @@ export interface WebhooksRepo {
   // Admin / operational tooling
   /** Look up a delivery by id WITHOUT account-scope. Admin-only callers. */
   findDeliveryById(deliveryId: string): Promise<WebhookDeliveryRow | null>;
-  /** List dlq deliveries across all accounts, paginated by createdAt DESC. */
-  listDlqDeliveries(opts: { limit: number; cursor?: string }): Promise<ListDeliveriesPage>;
+  /**
+   * List dlq deliveries across all accounts, paginated by createdAt DESC.
+   *
+   * V-512 — optional `endpointId` drills into one webhook endpoint's
+   * DLQ rows (uuid; the route layer strips the `webhook_endpoint_`
+   * prefix before forwarding). When unset, returns rows across every
+   * account.
+   */
+  listDlqDeliveries(opts: {
+    limit: number;
+    cursor?: string;
+    endpointId?: string;
+  }): Promise<ListDeliveriesPage>;
   /** Total count of deliveries currently in DLQ across all accounts. */
   countDlqDeliveries(): Promise<number>;
   /**
@@ -705,7 +716,7 @@ export class WebhooksAdminService {
 
   listDlq(
     ctx: AccountContext,
-    opts: { limit: number; cursor?: string },
+    opts: { limit: number; cursor?: string; endpointId?: string },
   ): Promise<ListDeliveriesPage> {
     throwIfMissingScope(ctx, 'admin');
     return this.repo.listDlqDeliveries(opts);

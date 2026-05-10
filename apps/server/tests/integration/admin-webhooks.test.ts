@@ -212,6 +212,67 @@ describe('GET /v1/admin/webhook-dlq', () => {
     });
     expect(res.statusCode).toBe(403);
   });
+
+  // V-512 — drill-down filter by endpoint id. Customer-support
+  // workflow: a customer reports "endpoint X is missing events";
+  // admin pulls just that endpoint's DLQ rows.
+  it('V-512 — endpoint_id filter returns only the named endpoint', async () => {
+    fx = await buildTestApp();
+    // Seed 2 DLQ deliveries for endpoint A + 1 DLQ delivery for endpoint B.
+    const a1 = await seedDelivery(fx, { status: 'dlq' });
+    // seedDelivery creates a fresh endpoint each call; reuse webhookId by
+    // enqueuing directly through the in-memory repo.
+    await fx.webhooksRepo.enqueueDelivery({
+      webhookId: a1.webhookId,
+      eventId: '22222222-3333-4444-5555-666666666666',
+      eventType: 'session.completed',
+      payload: { id: 'evt-2', type: 'session.completed', data: {} },
+    });
+    const all = fx.webhooksRepo.getAllDeliveries();
+    const a2Row = all[all.length - 1];
+    if (!a2Row) throw new Error('seed a2 missing');
+    await fx.webhooksRepo.recordDlq(a2Row.id, {
+      responseStatus: 500,
+      lastError: 'simulated',
+      at: new Date(),
+    });
+
+    const b1 = await seedDelivery(fx, { status: 'dlq' });
+    expect(a1.webhookId).not.toBe(b1.webhookId);
+
+    // No filter — all 3 DLQ rows.
+    const allRes = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/webhook-dlq',
+      headers: auth(fx),
+    });
+    expect(allRes.statusCode).toBe(200);
+    const allBody = allRes.json<{ data: Array<{ id: string }> }>();
+    expect(allBody.data).toHaveLength(3);
+
+    // Filter to endpoint A — should get exactly 2 rows (a1 + a2).
+    const filteredRes = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/webhook-dlq?endpoint_id=webhook_endpoint_${a1.webhookId}`,
+      headers: auth(fx),
+    });
+    expect(filteredRes.statusCode).toBe(200);
+    const filteredBody = filteredRes.json<{ data: Array<{ id: string }> }>();
+    expect(filteredBody.data).toHaveLength(2);
+    const filteredIds = filteredBody.data.map((d) => d.id);
+    expect(filteredIds).toContain(`wdl_${a1.id}`);
+    expect(filteredIds).toContain(`wdl_${a2Row.id}`);
+    expect(filteredIds).not.toContain(`wdl_${b1.id}`);
+
+    // Filter accepts the bare uuid form too (without the prefix).
+    const bareRes = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/webhook-dlq?endpoint_id=${a1.webhookId}`,
+      headers: auth(fx),
+    });
+    expect(bareRes.statusCode).toBe(200);
+    expect(bareRes.json<{ data: unknown[] }>().data).toHaveLength(2);
+  });
 });
 
 describe('POST /v1/admin/webhook-dlq/:id/requeue', () => {
