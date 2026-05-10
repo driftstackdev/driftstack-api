@@ -259,3 +259,54 @@ func (e *MfaStepUpRequiredError) Is(target error) bool { return target == ErrMfa
 type InternalError struct{ apiError }
 
 func (e *InternalError) Is(target error) bool { return target == ErrInternal }
+
+// V-491 — public retry predicate. Mirrors the V-489 TS / V-490
+// Python implementations. Returns true when err is a Driftstack
+// error whose kind is retryable; false otherwise.
+//
+// Retryable: TransportError, InternalError, RateLimitError.
+// NOT retryable: ValidationError, AuthError, NotFoundError,
+// ConflictError, ConcurrencyLimitError, all auth-flow errors,
+// FeatureUnavailableError, MfaStepUpRequiredError.
+//
+// Use this from your own retry/backoff loop when the built-in
+// retry in retry.go doesn't fit. Honour the Retry-After hint on
+// RateLimitError.RetryAfterSeconds when set.
+//
+// Non-Driftstack errors return false — the SDK wraps known errors
+// in a typed Driftstack error, so a non-Driftstack error is
+// something the caller produced and the caller should decide.
+//
+//	for attempt := 0; attempt < 5; attempt++ {
+//	    sess, err := client.Sessions.Create(ctx, opts)
+//	    if err == nil {
+//	        return sess
+//	    }
+//	    if !driftstack.IsRetryable(err) {
+//	        return nil, err
+//	    }
+//	    var rl *driftstack.RateLimitError
+//	    if errors.As(err, &rl) && rl.RetryAfterSeconds > 0 {
+//	        time.Sleep(time.Duration(rl.RetryAfterSeconds) * time.Second)
+//	    } else {
+//	        time.Sleep(backoff(attempt))
+//	    }
+//	}
+func IsRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	var transport *TransportError
+	if errors.As(err, &transport) {
+		return true
+	}
+	var internal *InternalError
+	if errors.As(err, &internal) {
+		return true
+	}
+	var rateLimit *RateLimitError
+	if errors.As(err, &rateLimit) {
+		return true
+	}
+	return false
+}

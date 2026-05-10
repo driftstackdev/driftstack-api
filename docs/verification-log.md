@@ -22931,3 +22931,55 @@ try it?"
 3 slices, empirical-proof-confirmed (vitest + typecheck +
 marketing build + decisions.md lint), no gates touched, V-205
 invariant intact.
+
+## V-490 — Python SDK is_retryable parity (Track B, Wave 8)
+
+`is_retryable(err)` exposed at the top-level `driftstack` module.
+Returns True for `TransportError`, `InternalError`, `RateLimitError`;
+False for everything else and for non-DriftstackError values.
+Mirrors the V-489 TS implementation matrix at
+`packages/sdk-typescript/src/errors.ts:isRetryable`.
+
+### Verification
+
+- `cd packages/sdk-python && .venv/bin/python -m pytest tests/test_errors.py`
+  — 33/33 passed (was 26; +7 from V-490).
+
+## V-491 — Go SDK IsRetryable parity (Track B, Wave 8)
+
+`IsRetryable(err error)` exported from `packages/sdk-go/errors.go`.
+Uses `errors.As` to unwrap typed errors so the predicate works
+even when the SDK wraps a Driftstack error in a fmt-wrapped
+chain (e.g. `fmt.Errorf("custom prefix: %w", driftstackErr)`).
+
+### Verification
+
+- `go test -run IsRetryable ./packages/sdk-go/` — 7/7 passed.
+
+## V-507 — docs depth: error reference page (Track D, Wave 8)
+
+New `/reference/errors` page. Full mapping table covering every
+RFC 9457 problem-type → HTTP status → TS / Python / Go SDK
+class → retryable verdict. Worked retry-loop examples in all
+three languages using the V-489/V-490/V-491 predicates. "Why
+some 5xx aren't retryable" section explains the DriverError /
+FeatureUnavailableError / MfaStepUpRequiredError edge cases.
+Cross-references /reference/scopes and /reference/rate-limits.
+
+### Verification
+
+- `npm run -w apps/docs build` — clean (33 pages, 949ms; was 32
+  before V-507).
+
+## Wave 8 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                         |
+| ----- | ----- | ------------------------------------------------------------------------------- |
+| B     | V-490 | Python SDK is_retryable — 7 tests; total errors test count 26 → 33              |
+| B     | V-491 | Go SDK IsRetryable — errors.As-based unwrap; 7 tests                            |
+| D     | V-507 | Docs `/reference/errors` — full RFC 9457 problem-type → SDK class mapping table |
+
+3 slices (two Track B + one Track D — Tracks A and C cycled in
+prior waves; Wave 8 closed SDK-parity surface). Empirical-proof-
+confirmed (vitest + pytest + go test + docs build), no gates
+touched, V-205 invariant intact.

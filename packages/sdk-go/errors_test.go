@@ -249,3 +249,68 @@ func TestSentinelErrorsAreDistinct(t *testing.T) {
 		t.Fatal("did not expect errors.Is ErrAuth")
 	}
 }
+
+// V-491 — public IsRetryable predicate. Mirrors the V-489 TS /
+// V-490 Python implementations.
+func TestIsRetryableTransport(t *testing.T) {
+	t.Parallel()
+	err := &TransportError{apiError: apiError{Message: "network down"}}
+	if !IsRetryable(err) {
+		t.Fatal("expected IsRetryable to return true for TransportError")
+	}
+}
+
+func TestIsRetryableInternal(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"type":"https://errors.driftstack.dev/internal","title":"Internal","status":500}`)
+	err := errorFromResponse(500, body, "")
+	if !IsRetryable(err) {
+		t.Fatal("expected IsRetryable to return true for InternalError")
+	}
+}
+
+func TestIsRetryableRateLimit(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"type":"https://errors.driftstack.dev/rate-limited","title":"Rate limited","status":429}`)
+	err := errorFromResponse(429, body, "5")
+	if !IsRetryable(err) {
+		t.Fatal("expected IsRetryable to return true for RateLimitError")
+	}
+}
+
+func TestIsRetryableValidation(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"type":"https://errors.driftstack.dev/validation-failed","title":"Validation","status":400}`)
+	err := errorFromResponse(400, body, "")
+	if IsRetryable(err) {
+		t.Fatal("expected IsRetryable to return false for ValidationError")
+	}
+}
+
+func TestIsRetryableAuth(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"type":"https://errors.driftstack.dev/unauthorized","title":"Unauthorized","status":401}`)
+	err := errorFromResponse(401, body, "")
+	if IsRetryable(err) {
+		t.Fatal("expected IsRetryable to return false for AuthError")
+	}
+}
+
+func TestIsRetryableNotFound(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"type":"https://errors.driftstack.dev/not-found","title":"Not found","status":404}`)
+	err := errorFromResponse(404, body, "")
+	if IsRetryable(err) {
+		t.Fatal("expected IsRetryable to return false for NotFoundError")
+	}
+}
+
+func TestIsRetryableNonDriftstackError(t *testing.T) {
+	t.Parallel()
+	if IsRetryable(errors.New("plain error")) {
+		t.Fatal("expected IsRetryable to return false for plain errors")
+	}
+	if IsRetryable(nil) {
+		t.Fatal("expected IsRetryable to return false for nil")
+	}
+}

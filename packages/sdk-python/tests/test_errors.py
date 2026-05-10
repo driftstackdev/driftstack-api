@@ -168,3 +168,43 @@ def test_non_problem_body_yields_transport_error() -> None:
 def test_empty_body_yields_transport_error() -> None:
     err = _error_from_response_data(status=500, text="", retry_after_header=None)
     assert isinstance(err, TransportError)
+
+
+# V-490 — public is_retryable predicate. Mirrors the V-489 TS test
+# matrix at packages/sdk-typescript/tests/unit/errors.test.ts.
+
+from driftstack import is_retryable
+
+
+def test_is_retryable_true_for_transport() -> None:
+    assert is_retryable(TransportError("network down", status=0)) is True
+
+
+def test_is_retryable_true_for_internal() -> None:
+    from driftstack.errors import InternalError
+
+    assert is_retryable(InternalError("upstream", status=500)) is True
+
+
+def test_is_retryable_true_for_rate_limit() -> None:
+    err = RateLimitError("rate limited", retry_after_seconds=5, status=429)
+    assert is_retryable(err) is True
+
+
+def test_is_retryable_false_for_validation() -> None:
+    assert is_retryable(ValidationError("bad payload", status=400)) is False
+
+
+def test_is_retryable_false_for_auth() -> None:
+    assert is_retryable(AuthError("unauthorized", status=401)) is False
+
+
+def test_is_retryable_false_for_not_found() -> None:
+    assert is_retryable(NotFoundError("not found", status=404)) is False
+
+
+def test_is_retryable_false_for_non_driftstack_values() -> None:
+    assert is_retryable(Exception("regular")) is False
+    assert is_retryable("string") is False
+    assert is_retryable(None) is False
+    assert is_retryable(42) is False

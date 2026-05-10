@@ -42,6 +42,7 @@ from driftstack.errors import (
     SessionTimeoutError,
     TransportError,
     ValidationError,
+    is_retryable,
 )
 from driftstack.webhook_signature import verify_webhook_signature
 
@@ -74,5 +75,6 @@ __all__ = [
     "FeatureUnavailableError",
     "InternalError",
     "MfaStepUpRequiredError",
+    "is_retryable",
     "verify_webhook_signature",
 ]

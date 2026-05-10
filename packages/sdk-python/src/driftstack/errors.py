@@ -285,3 +285,36 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/mfa-step-up-required": MfaStepUpRequiredError,
     "https://errors.driftstack.dev/internal": InternalError,
 }
+
+
+# V-490 — public retry predicate. Mirrors the V-489 TS implementation
+# (packages/sdk-typescript/src/errors.ts:isRetryable). Returns True for
+# error kinds where a retry stands a reasonable chance of succeeding;
+# False otherwise. Non-DriftstackError values return False.
+#
+# Retryable: TransportError (network failure), InternalError (5xx),
+# RateLimitError (429 with Retry-After hint).
+#
+# NOT retryable: ValidationError, AuthError, NotFoundError,
+# ConflictError, ConcurrencyLimitError (state-driven, not transient),
+# all auth-flow errors, FeatureUnavailableError (config gate),
+# MfaStepUpRequiredError (needs the customer to step up).
+_RETRYABLE_TYPES: tuple[type[DriftstackError], ...] = (
+    TransportError,
+    InternalError,
+    RateLimitError,
+)
+
+
+def is_retryable(err: object) -> bool:
+    """Return True iff ``err`` is a DriftstackError whose kind is retryable.
+
+    Use this from your own retry/backoff loop when the built-in retry in
+    ``driftstack.retry`` doesn't fit. Honour ``RateLimitError.retry_after_seconds``
+    for the wait between attempts when it's set.
+
+    Non-DriftstackError values (regular Exceptions, None, primitives) return
+    False — the SDK wraps known errors in DriftstackError, so a non-DS error
+    is something the caller threw and the caller should decide how to handle.
+    """
+    return isinstance(err, _RETRYABLE_TYPES)
