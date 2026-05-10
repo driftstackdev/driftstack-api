@@ -22057,3 +22057,41 @@ changes this slice — flagged in the queue as covered.
   in 814ms; no errors.
 - Underlying API contracts unchanged — existing 1169/1169 tests
   remain green; no new test surface needed.
+
+## V-476 — test coverage audit (closeout, no code changes)
+
+**Tier**: 1 (test inventory; documents that the queue's listed
+targets are already covered).
+
+The Tuesday-pickup `V-476 — Test coverage extension batch` named
+six explicit targets. Audit shows all six are already in the green
+pre-pre-push gate:
+
+| Target                                         | Existing coverage                                                                                                                                                                              |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V-298b region preference roundtrip (server)    | `tests/integration/account-me.test.ts`                                                                                                                                                         |
+| V-312 snapshot capture-then-restore happy path | `tests/integration/profile-snapshots.test.ts`                                                                                                                                                  |
+| V-312 tier-cap collision on restore            | `tests/integration/profile-snapshots.test.ts` (409 path)                                                                                                                                       |
+| V-313 clone naming auto-derivation             | `tests/integration/profiles.test.ts` (4 cases incl. "(copy)" / "(copy 2)" / clone-of-clone / cross-account 404)                                                                                |
+| V-353 MFA enroll/verify/disable lifecycle      | `tests/integration/account-mfa.test.ts` + `account-mfa-step-up.test.ts` + `auth-mfa-challenge.test.ts`                                                                                         |
+| V-359 webhook secret rotation grace window     | `tests/unit/webhook-signing.test.ts` (dual-`v1=` primitive + separate-header verifier path) + `webhooks.test.ts` (rotate-secret integration: 200 / 403 / 404 / 409)                            |
+| Cross-SDK regression for V-455 closure (Py/Go) | `tests/test_resources_auth.py` + `test_resources_webhooks.py` (Python) acknowledges "Mirrors V-466 TS / V-466.go"; `auth_test.go` + `webhooks_test.go` + `audit_log_test.go` (Go) per V-466.go |
+
+V-474 status-badge dependency on `/v1/status` is also covered by
+`tests/integration/status.test.ts` (overall_status field shape,
+public no-auth posture, `Cache-Control: public, max-age=30`).
+
+**Final gate**: `npm test` → 117 test files, 1172 / 1172 pass in
+22.7s. (Earlier checkpoints reported 1169/1169; the +3 are picked
+up automatically from V-455 closure follow-on tests merged earlier
+in this session.)
+
+**One residual flagged for a future slice (NOT closed in V-476)**:
+`webhook-signing.test.ts` line 90+ documents that the production
+durable-webhook-delivery dispatcher uses two SEPARATE headers for
+grace-period dual-sign, while the legacy `webhook-worker.ts` uses
+a single Stripe-style header that does NOT thread `secretPrev`. An
+end-to-end test that posts a delivery against an endpoint mid-grace
+and asserts both headers appear has not landed; the unit-level
+primitive coverage stands in for now. Queued as TD-snap (technical
+debt — separate slice).
