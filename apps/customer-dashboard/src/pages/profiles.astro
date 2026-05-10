@@ -73,6 +73,69 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       {atLimit && <span class="text-red-700"> · tier limit reached</span>}
     </p>
 
+    <!--
+      V-470 — Snapshot capture form, hidden by default. Reveals when a
+      profile row's "Snapshot" button is clicked. Replaces the earlier
+      window.prompt flow (some browsers block prompts in non-
+      interactive contexts; inline form is keyboard-accessible).
+    -->
+    <div
+      data-snapshot-form-wrap
+      class="mb-8 hidden rounded-lg border border-slate-200 bg-white p-6"
+    >
+      <h2 class="text-lg font-semibold text-slate-900">
+        Capture snapshot of <span data-snapshot-source-name class="font-mono"></span>
+      </h2>
+      <p class="mt-2 text-sm text-slate-500">
+        Snapshots are immutable point-in-time copies. The original profile
+        keeps evolving; the snapshot is frozen. Restore from
+        <a href="/snapshots" class="text-oxblood-700 underline">/snapshots</a>
+        later.
+      </p>
+      <form data-snapshot-form class="mt-4 space-y-4">
+        <div>
+          <label for="snapshot-label" class="block text-sm font-medium text-slate-700">
+            Snapshot label
+          </label>
+          <input
+            id="snapshot-label"
+            data-snapshot-label-input
+            type="text"
+            required
+            placeholder='e.g. "before-migration", "post-login-state"'
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+          <p class="mt-1 text-xs text-slate-500">
+            Surface why you captured this. Useful when a profile has many
+            snapshots and you're picking one to restore.
+          </p>
+        </div>
+        <div>
+          <label for="snapshot-description" class="block text-sm font-medium text-slate-700">
+            Description (optional)
+          </label>
+          <input
+            id="snapshot-description"
+            data-snapshot-description-input
+            type="text"
+            placeholder="What state was the profile in?"
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+        <div class="flex items-center gap-3 pt-2">
+          <button type="submit" class="btn-primary" data-snapshot-submit>Capture snapshot</button>
+          <button
+            type="button"
+            class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            data-snapshot-cancel
+          >
+            Cancel
+          </button>
+          <span data-snapshot-error class="hidden text-sm text-rose-700"></span>
+        </div>
+      </form>
+    </div>
+
     <!-- V-284 — Create form, hidden by default -->
     <div
       data-create-form-wrap
@@ -374,8 +437,99 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         }
       }
 
-      // V-312 — snapshot-button wiring. Prompts for a label, POSTs
-      // /v1/profiles/:id/snapshots, banners the captured snapshot id.
+      // V-470 — snapshot capture flow now uses an inline form instead
+      // of window.prompt. The form is shared across all profile rows;
+      // a single state variable tracks which profile is being captured.
+      const snapshotFormWrap = root.querySelector('[data-snapshot-form-wrap]');
+      const snapshotForm = root.querySelector('[data-snapshot-form]');
+      const snapshotLabelInput = root.querySelector('[data-snapshot-label-input]');
+      const snapshotDescInput = root.querySelector('[data-snapshot-description-input]');
+      const snapshotSourceName = root.querySelector('[data-snapshot-source-name]');
+      const snapshotError = root.querySelector('[data-snapshot-error]');
+      const snapshotSubmit = root.querySelector('[data-snapshot-submit]');
+      const snapshotCancel = root.querySelector('[data-snapshot-cancel]');
+      let snapshotPending = null; // { id, name } | null
+
+      function showSnapshotForm(id, name) {
+        snapshotPending = { id: id, name: name };
+        if (snapshotSourceName) snapshotSourceName.textContent = name;
+        if (snapshotLabelInput) {
+          snapshotLabelInput.value = '';
+          snapshotLabelInput.focus();
+        }
+        if (snapshotDescInput) snapshotDescInput.value = '';
+        if (snapshotError) {
+          snapshotError.classList.add('hidden');
+          snapshotError.textContent = '';
+        }
+        if (snapshotFormWrap) snapshotFormWrap.classList.remove('hidden');
+        if (formWrap) formWrap.classList.add('hidden');
+      }
+      function hideSnapshotForm() {
+        snapshotPending = null;
+        if (snapshotFormWrap) snapshotFormWrap.classList.add('hidden');
+      }
+      if (snapshotCancel) snapshotCancel.addEventListener('click', hideSnapshotForm);
+      if (snapshotForm) {
+        snapshotForm.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          if (!snapshotPending || !snapshotLabelInput) return;
+          const label = snapshotLabelInput.value.trim();
+          const description = snapshotDescInput
+            ? snapshotDescInput.value.trim()
+            : '';
+          if (!label) {
+            if (snapshotError) {
+              snapshotError.textContent = 'Label is required.';
+              snapshotError.classList.remove('hidden');
+            }
+            return;
+          }
+          if (snapshotError) {
+            snapshotError.classList.add('hidden');
+            snapshotError.textContent = '';
+          }
+          if (snapshotSubmit) {
+            snapshotSubmit.disabled = true;
+            snapshotSubmit.textContent = 'Capturing…';
+          }
+          const payload = { label: label };
+          if (description) payload.description = description;
+          const pendingId = snapshotPending.id;
+          authedFetch('/v1/profiles/' + encodeURIComponent(pendingId) + '/snapshots', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          })
+            .then((r) =>
+              r.ok
+                ? r.json()
+                : r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+            )
+            .then((body) => {
+              hideSnapshotForm();
+              showBanner('Snapshot captured: ' + (body.label || '(no label)'));
+            })
+            .catch((err) => {
+              if (snapshotError) {
+                snapshotError.textContent =
+                  err && err.message ? err.message : 'Snapshot failed.';
+                snapshotError.classList.remove('hidden');
+              }
+            })
+            .finally(() => {
+              if (snapshotSubmit) {
+                snapshotSubmit.disabled = false;
+                snapshotSubmit.textContent = 'Capture snapshot';
+              }
+            });
+        });
+      }
+
+      // V-312 — snapshot-button wiring. Opens the inline form;
+      // form-submit POSTs /v1/profiles/:id/snapshots.
       function wireSnapshotButtons() {
         const buttons = list.querySelectorAll('[data-snapshot]');
         buttons.forEach((btn) => {
@@ -383,40 +537,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             const id = btn.getAttribute('data-snapshot');
             const name = btn.getAttribute('data-snapshot-name') || '(unnamed)';
             if (!id) return;
-            const label = window.prompt(
-              'Snapshot label (e.g. "before-migration"):\n\nThis captures profile "' +
-                name +
-                '" as an immutable point-in-time copy. The original profile keeps evolving; the snapshot is frozen.',
-            );
-            if (!label || !label.trim()) return;
-            btn.disabled = true;
-            const original = btn.textContent;
-            btn.textContent = 'Capturing…';
-            authedFetch('/v1/profiles/' + encodeURIComponent(id) + '/snapshots', {
-              method: 'POST',
-              body: JSON.stringify({ label: label.trim() }),
-            })
-              .then((r) =>
-                r.ok
-                  ? r.json()
-                  : r
-                      .json()
-                      .catch(() => ({}))
-                      .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
-              )
-              .then((body) => {
-                showBanner('Snapshot captured: ' + (body.label || '(no label)'));
-              })
-              .catch((err) => {
-                showBanner(
-                  'Snapshot failed: ' +
-                    (err && err.message ? err.message : 'network error'),
-                );
-              })
-              .finally(() => {
-                btn.disabled = false;
-                btn.textContent = original;
-              });
+            showSnapshotForm(id, name);
           });
         });
       }

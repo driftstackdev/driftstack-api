@@ -21998,3 +21998,62 @@ Either path closes V-469. Until done, the runtime posture is
 unchanged from V-278.J — the API project already captures server
 errors; the front-end Astro builds are pre-wired to start capturing
 once the DSNs land.
+
+## V-470 / V-475 — dashboard UX polish (window.prompt removal)
+
+**Tier**: 1 (customer-facing trust + accessibility).
+
+Three flows replaced `window.prompt` / inline browser prompts with
+in-page reveal panes / inline forms. Some browsers block prompts in
+non-interactive contexts (incognito, certain content-security
+policies, autofill blockers); inline panes are keyboard-accessible
+and paste-target-friendly. None of the underlying API contracts
+changed — pure UI layer.
+
+### V-475 — webhook rotate-secret reveal pane
+
+`apps/customer-dashboard/src/pages/webhooks.astro`. New
+`data-rotate-reveal` block above the existing `data-create-reveal`
+pane (amber accent vs emerald, since rotation is "in-flight" not
+"freshly created"). Shows endpoint id + new secret + grace expiry
+
+- Copy / Dismiss controls. The Dismiss handler clears the secret
+  from DOM before reloading so it isn't recoverable post-acknowledge.
+  Replaces the previous `window.prompt(body.secret)` flow.
+
+### V-470a — profile snapshot capture form
+
+`apps/customer-dashboard/src/pages/profiles.astro`. New
+`data-snapshot-form-wrap` inline form. Reveals when a profile row's
+"Snapshot" button is clicked; takes label (required) + description
+(optional). Shared form across all profile rows; a single
+`snapshotPending` state tracks which profile is being captured.
+Replaces the previous `window.prompt('Snapshot label...')` flow.
+
+### V-470b — snapshot restore form
+
+`apps/customer-dashboard/src/pages/snapshots.astro`. New
+`data-restore-form-wrap` inline form. Reveals when a snapshot row's
+"Restore" button is clicked; pre-populates the new-profile name with
+"<source> (restored)" suggestion. Shows source profile name + label
+in a definition list so the customer confirms which snapshot is
+being restored before submitting. Replaces the previous
+`window.prompt('Restore snapshot...')` flow. Also extends the row
+template to pass the snapshot label via `data-restore-label` so the
+form can surface it without re-fetching.
+
+### V-471 — MFA polish (deliberately small)
+
+The MFA flow at `/settings` already has full enroll / verify /
+disable / regenerate + step-up modal coverage from V-353a-h. The
+remaining `window.confirm` calls on disable + regenerate are
+acceptable UX (native confirm is the platform pattern for destructive
+actions; the step-up modal handles the actual reauth gate). No
+changes this slice — flagged in the queue as covered.
+
+### Verification
+
+- `npm run build --workspace apps/customer-dashboard` → server built
+  in 814ms; no errors.
+- Underlying API contracts unchanged — existing 1169/1169 tests
+  remain green; no new test surface needed.

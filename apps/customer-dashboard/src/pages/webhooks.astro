@@ -201,6 +201,47 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
     </div>
 
     <!--
+      V-475 — rotate-secret in-page reveal. Replaces the window.prompt
+      shown in earlier slices; some browsers block prompts in
+      non-interactive contexts (incognito, autofill blockers, etc.).
+      Inline reveal is keyboard-accessible + paste-target-friendly.
+    -->
+    <div
+      data-rotate-reveal
+      class="mb-8 hidden rounded-lg border border-amber-300 bg-amber-50 p-6"
+    >
+      <h2 class="text-lg font-semibold text-amber-900">Signing secret rotated</h2>
+      <p class="mt-1 text-sm text-amber-900">
+        Copy the new secret now — it won't be shown again. The old secret stays
+        valid for the grace window below; roll your verifier forward before
+        then or the next delivery will fail signature check.
+      </p>
+      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-amber-800">
+        Endpoint
+      </p>
+      <p data-rotate-endpoint-id class="mt-1 font-mono text-xs text-slate-900"></p>
+      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-amber-800">
+        New secret
+      </p>
+      <pre
+        data-rotate-secret
+        class="mt-1 overflow-x-auto rounded border border-amber-200 bg-white px-3 py-2 font-mono text-xs text-slate-900"
+      ></pre>
+      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-amber-800">
+        Old secret valid until
+      </p>
+      <p data-rotate-grace-expires class="mt-1 text-sm text-slate-900"></p>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button type="button" data-rotate-copy class="btn-primary text-sm">
+          Copy secret
+        </button>
+        <button type="button" data-rotate-dismiss class="btn-secondary text-sm">
+          I've saved it
+        </button>
+      </div>
+    </div>
+
+    <!--
       V-351b — Edit-endpoint form. Hidden by default; reveals when a
       row's "Edit" button is clicked. Mirrors the V-347 create form
       shape; PATCHes the live endpoint instead of POSTing a new one.
@@ -1119,8 +1160,65 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
 
       // V-359 — wire the per-row "Rotate secret" buttons. Generates
       // a fresh signing secret with a 24h grace during which both the
-      // old + new secrets are accepted. Plaintext shown ONCE in a
-      // browser prompt (no in-page reveal — secrets are sensitive).
+      // old + new secrets are accepted.
+      //
+      // V-475 — plaintext lands in an in-page reveal pane (not a
+      // window.prompt). Some browsers block prompts in non-interactive
+      // contexts (incognito mode, autofill blockers, etc.) — and even
+      // when shown, prompts aren't keyboard-accessible for paste.
+      const rotateRevealEl = root.querySelector('[data-rotate-reveal]');
+      const rotateSecretEl = root.querySelector('[data-rotate-secret]');
+      const rotateEndpointIdEl = root.querySelector('[data-rotate-endpoint-id]');
+      const rotateGraceEl = root.querySelector('[data-rotate-grace-expires]');
+      const rotateCopyBtn = root.querySelector('[data-rotate-copy]');
+      const rotateDismissBtn = root.querySelector('[data-rotate-dismiss]');
+
+      function showRotateReveal(endpointId, secret, graceExpiresAt) {
+        if (!rotateRevealEl || !rotateSecretEl) return;
+        if (rotateEndpointIdEl) rotateEndpointIdEl.textContent = endpointId;
+        rotateSecretEl.textContent = secret;
+        if (rotateGraceEl) {
+          rotateGraceEl.textContent = new Date(graceExpiresAt).toLocaleString();
+        }
+        rotateRevealEl.classList.remove('hidden');
+        rotateRevealEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      function hideRotateReveal() {
+        if (!rotateRevealEl || !rotateSecretEl) return;
+        rotateRevealEl.classList.add('hidden');
+        // Clear secret from DOM so it isn't recoverable post-dismiss.
+        rotateSecretEl.textContent = '';
+        if (rotateEndpointIdEl) rotateEndpointIdEl.textContent = '';
+        if (rotateGraceEl) rotateGraceEl.textContent = '';
+      }
+
+      if (rotateDismissBtn) {
+        rotateDismissBtn.addEventListener('click', () => {
+          hideRotateReveal();
+          window.location.reload();
+        });
+      }
+      if (rotateCopyBtn) {
+        rotateCopyBtn.addEventListener('click', () => {
+          if (!rotateSecretEl) return;
+          const secret = rotateSecretEl.textContent || '';
+          if (!secret) return;
+          navigator.clipboard
+            .writeText(secret)
+            .then(() => {
+              const orig = rotateCopyBtn.textContent;
+              rotateCopyBtn.textContent = 'Copied ✓';
+              window.setTimeout(() => {
+                rotateCopyBtn.textContent = orig;
+              }, 1500);
+            })
+            .catch(() => {
+              showBanner('Copy failed. Select the secret manually.');
+            });
+        });
+      }
+
       function wireRotateButtons() {
         const buttons = ul.querySelectorAll('[data-rotate]');
         buttons.forEach((btn) => {
@@ -1157,17 +1255,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
                       .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
               )
               .then((body) => {
-                // Show the new plaintext ONCE in a browser prompt so
-                // the customer can copy it. Subsequent reads are
-                // impossible — only the prefix is retrievable.
-                const grace = new Date(body.grace_expires_at).toLocaleString();
-                window.prompt(
-                  'New signing secret (copy now — shown ONCE):\n\nOld secret stays active until ' +
-                    grace +
-                    '. Roll forward your verifier within that window.',
-                  body.secret,
-                );
-                window.location.reload();
+                showRotateReveal(id, body.secret, body.grace_expires_at);
               })
               .catch((err) => {
                 showBanner(

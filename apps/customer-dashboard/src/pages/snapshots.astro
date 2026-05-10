@@ -34,6 +34,63 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       </p>
     </header>
 
+    <!--
+      V-470 — Restore form, hidden by default. Reveals when a snapshot
+      row's "Restore" button is clicked. Replaces the earlier
+      window.prompt flow.
+    -->
+    <div
+      data-restore-form-wrap
+      class="mb-8 hidden rounded-lg border border-slate-200 bg-white p-6"
+    >
+      <h2 class="text-lg font-semibold text-slate-900">
+        Restore from snapshot
+      </h2>
+      <p class="mt-2 text-sm text-slate-500">
+        Restoring creates a new profile populated with the snapshot's frozen
+        state. Counts against your tier's profile cap and rejects on name
+        conflict.
+      </p>
+      <dl
+        data-restore-source
+        class="mt-4 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-xs text-slate-500"
+      >
+        <dt>Source profile</dt>
+        <dd data-restore-source-name class="font-mono text-slate-900">—</dd>
+        <dt>Snapshot label</dt>
+        <dd data-restore-source-label class="font-mono text-slate-900">—</dd>
+      </dl>
+      <form data-restore-form class="mt-4 space-y-4">
+        <div>
+          <label for="restore-name" class="block text-sm font-medium text-slate-700">
+            New profile name
+          </label>
+          <input
+            id="restore-name"
+            data-restore-name-input
+            type="text"
+            required
+            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+          <p class="mt-1 text-xs text-slate-500">
+            Default suggestion is the source profile name + " (restored)". Edit
+            to whatever surfaces the purpose for your team.
+          </p>
+        </div>
+        <div class="flex items-center gap-3 pt-2">
+          <button type="submit" class="btn-primary" data-restore-submit>Restore</button>
+          <button
+            type="button"
+            class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            data-restore-cancel
+          >
+            Cancel
+          </button>
+          <span data-restore-error class="hidden text-sm text-rose-700"></span>
+        </div>
+      </form>
+    </div>
+
     <ul
       data-list
       class="mb-10 hidden divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white"
@@ -124,6 +181,8 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           escapeHtml(s.id) +
           '" data-restore-from="' +
           escapeHtml(s.parent_name) +
+          '" data-restore-label="' +
+          escapeHtml(s.label || '') +
           '" class="text-sm text-oxblood-700 hover:underline">Restore</button>' +
           '<button type="button" data-delete="' +
           escapeHtml(s.id) +
@@ -162,41 +221,110 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         wireDeleteButtons();
       }
 
+      // V-470 — restore flow uses an inline form instead of
+      // window.prompt. Form state is shared; a single pending id
+      // tracks which snapshot is being restored.
+      const restoreFormWrap = root.querySelector('[data-restore-form-wrap]');
+      const restoreForm = root.querySelector('[data-restore-form]');
+      const restoreNameInput = root.querySelector('[data-restore-name-input]');
+      const restoreSourceName = root.querySelector('[data-restore-source-name]');
+      const restoreSourceLabel = root.querySelector('[data-restore-source-label]');
+      const restoreError = root.querySelector('[data-restore-error]');
+      const restoreSubmit = root.querySelector('[data-restore-submit]');
+      const restoreCancel = root.querySelector('[data-restore-cancel]');
+      let restorePending = null; // { id, from, label } | null
+
+      function showRestoreForm(id, from, label) {
+        restorePending = { id: id, from: from, label: label };
+        if (restoreSourceName) restoreSourceName.textContent = from || '(deleted)';
+        if (restoreSourceLabel) restoreSourceLabel.textContent = label || '—';
+        if (restoreNameInput) {
+          restoreNameInput.value = (from || 'profile') + ' (restored)';
+          restoreNameInput.focus();
+          restoreNameInput.select();
+        }
+        if (restoreError) {
+          restoreError.classList.add('hidden');
+          restoreError.textContent = '';
+        }
+        if (restoreFormWrap) {
+          restoreFormWrap.classList.remove('hidden');
+          restoreFormWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+      function hideRestoreForm() {
+        restorePending = null;
+        if (restoreFormWrap) restoreFormWrap.classList.add('hidden');
+      }
+      if (restoreCancel) restoreCancel.addEventListener('click', hideRestoreForm);
+      if (restoreForm) {
+        restoreForm.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          if (!restorePending || !restoreNameInput) return;
+          const name = restoreNameInput.value.trim();
+          if (!name) {
+            if (restoreError) {
+              restoreError.textContent = 'Name is required.';
+              restoreError.classList.remove('hidden');
+            }
+            return;
+          }
+          if (restoreError) {
+            restoreError.classList.add('hidden');
+            restoreError.textContent = '';
+          }
+          if (restoreSubmit) {
+            restoreSubmit.disabled = true;
+            restoreSubmit.textContent = 'Restoring…';
+          }
+          const pendingId = restorePending.id;
+          authedFetch('/v1/profile-snapshots/' + encodeURIComponent(pendingId) + '/restore', {
+            method: 'POST',
+            body: JSON.stringify({ name: name }),
+          })
+            .then(async (r) => {
+              if (r.ok) {
+                const body = await r.json();
+                hideRestoreForm();
+                showBanner('Restored to new profile: ' + (body.name || name));
+                return refresh();
+              }
+              let msg;
+              try {
+                const body = await r.json();
+                msg = body.detail || body.title || 'HTTP ' + r.status;
+              } catch (_e) {
+                msg = 'HTTP ' + r.status;
+              }
+              if (restoreError) {
+                restoreError.textContent = msg;
+                restoreError.classList.remove('hidden');
+              }
+            })
+            .catch((err) => {
+              if (restoreError) {
+                restoreError.textContent =
+                  err && err.message ? err.message : 'Restore failed.';
+                restoreError.classList.remove('hidden');
+              }
+            })
+            .finally(() => {
+              if (restoreSubmit) {
+                restoreSubmit.disabled = false;
+                restoreSubmit.textContent = 'Restore';
+              }
+            });
+        });
+      }
+
       function wireRestoreButtons() {
         list.querySelectorAll('[data-restore]').forEach((btn) => {
           btn.addEventListener('click', () => {
             const id = btn.getAttribute('data-restore');
             const from = btn.getAttribute('data-restore-from') || '';
-            const suggested = from + ' (restored)';
-            const name = window.prompt(
-              'Restore snapshot into a new profile.\n\nNew profile name:',
-              suggested,
-            );
-            if (!name) return;
-            authedFetch('/v1/profile-snapshots/' + encodeURIComponent(id) + '/restore', {
-              method: 'POST',
-              body: JSON.stringify({ name }),
-            })
-              .then(async (r) => {
-                if (r.ok) {
-                  const body = await r.json();
-                  showBanner('Restored to new profile: ' + (body.name || name));
-                  return refresh();
-                }
-                let msg;
-                try {
-                  const body = await r.json();
-                  msg = body.detail || body.title || 'HTTP ' + r.status;
-                } catch (_e) {
-                  msg = 'HTTP ' + r.status;
-                }
-                showBanner('Restore failed: ' + msg);
-              })
-              .catch((err) => {
-                showBanner(
-                  'Restore failed: ' + (err && err.message ? err.message : 'network error'),
-                );
-              });
+            const label = btn.getAttribute('data-restore-label') || '';
+            if (!id) return;
+            showRestoreForm(id, from, label);
           });
         });
       }
