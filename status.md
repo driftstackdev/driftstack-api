@@ -1,9 +1,23 @@
 # Driftstack API — current status
 
 **Last updated:** 2026-05-10
-**Most recent wave:** Wave 17 (V-526.A on cleanup branch + V-528 + V-531 on main)
-**Mode:** Autopilot active. Waves 1-16 closed; Wave 17 lands this commit;
-Waves 18-26 queued per the overnight directive.
+**Most recent wave:** Wave 18 (V-532.A + Track E batch report)
+**Mode:** Autopilot active. Waves 1-17 closed; Wave 18 lands this commit;
+Waves 19-26 queued per the overnight directive. Team morning review point:
+`docs/internal/wave-15-18-overnight-batch-report.md` (single 5-minute
+scan covers all 4 overnight Track E artifacts).
+
+## Wave 18 — what landed
+
+- **V-532.A** — recipe-library navigation flow kickoff: 2 reference
+  recipes (`SEARCH_FLOW_GENERIC`, `PAGINATED_LISTING_GENERIC`) + 3
+  builder helpers (`navigateAndWait`, `tapAndWait`, `typeInto`) + 2
+  recipe builders + 11 property-style tests. Suite 1373 → 1384.
+- **Track E batch report** —
+  `docs/internal/wave-15-18-overnight-batch-report.md` consolidates
+  V-524 / V-525 / V-526.A / V-527 / V-528 / V-531 / V-532.A into a
+  single team-morning-review doc with a 75-minute review-and-execute
+  path.
 
 ## Wave 17 — what landed
 

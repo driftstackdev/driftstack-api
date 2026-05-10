@@ -24060,3 +24060,77 @@ confirmed (typecheck + vitest 1373/1373 + hook dry-run). Rule M satisfied:
 2 P-track slices from 2 different tracks (Track E + Track B). No GitHub
 remote operations performed. No force-push, no GitHub-private flip,
 no SDK publish. Cross-agent V-531 contract published for Agent 1.
+
+## V-532.A — recipe-library navigation flow kickoff (Track B, Wave 18)
+
+**Date:** 2026-05-10
+
+First sub-slice of V-532 (per the anti-substitution clause). The
+recipe-library package had a shell + 2 demo recipes (`noop_smoke_test`,
+`login_form_demo`) but no real navigation-flow library. V-532.A adds:
+
+- `packages/recipe-library/src/recipes/navigation.ts` — NEW.
+  - Builder helpers: `navigateAndWait`, `tapAndWait`, `typeInto`.
+  - `buildSearchFlowRecipe()` — produces a search-flow recipe from
+    site-specific selectors + query.
+  - `buildPaginatedListingRecipe()` — produces an N-page paginated-
+    listing recipe.
+  - 2 reference recipes: `SEARCH_FLOW_GENERIC` (example.com search) +
+    `PAGINATED_LISTING_GENERIC` (3-page example.com product list).
+  - Catalogue export: `V532A_NAVIGATION_RECIPES`.
+- `packages/recipe-library/src/index.ts` — re-exports the new symbols.
+
+### Test coverage
+
+`packages/recipe-library/tests/navigation.test.ts` — 11 tests covering:
+builder helpers (navigate/wait/tap/type pairs), search-flow recipe
+shape, paginated-listing N→N+(N-1) captures+taps invariant, pageCount
+< 1 rejection, catalogue contents + ids, MockRecipeRunner deterministic
+execution of both reference recipes.
+
+### Verification
+
+- `npx tsc --build packages/recipe-library/tsconfig.json` — clean.
+- `npx vitest run packages/recipe-library/tests/` — 19/19 pass (8 prior
+  mock + 11 new V-532.A).
+- `npx vitest run` (full workspace) — **1384/1384 pass** across 128 test
+  files (was 1373 before Wave 18; +11 = expected).
+- `npx tsc --build` (full workspace) — clean.
+
+### Sub-slices remaining
+
+- **V-532.B (later):** fill-form refinement + paginate refinements.
+- **V-532.C (later):** infinite-scroll detection + cart + checkout
+  recipes.
+- **V-532.D (later):** multi-step wizard recipe with branch-on-state.
+
+## Track E batch report — Waves 15-18 consolidation (Wave 18)
+
+**Date:** 2026-05-10
+
+Single consolidation doc for the Driftstack team's morning review:
+`docs/internal/wave-15-18-overnight-batch-report.md`.
+
+Covers: per-wave landed artifacts (V-524 / V-525 / V-526.A / V-527 /
+V-528 / V-531 / V-532.A) with cross-references; Track E privatization
+sequencing diagram; Track B real-implementation progression with
+sub-slice posture; cross-agent V-NNN handshakes outstanding (V-531 →
+Agent 1); 3 open questions for team review surfaced from V-528 runbook;
+anti-actions held; 75-minute team review-and-execute path for tomorrow;
+continuation queue (Waves 19-26).
+
+8 hours of autopilot work produces a lot of V-NNN entries + spec docs.
+The batch report compresses Waves 15-18 into a single ~5-minute scan +
+points at the doc clusters that need deeper review.
+
+## Wave 18 — autopilot summary (per Rule M)
+
+| Track | Slice        | Outcome                                                                                                   |
+| ----- | ------------ | --------------------------------------------------------------------------------------------------------- |
+| B     | V-532.A      | recipe-library navigation flow kickoff: 2 reference recipes + 3 builder helpers + 11 property-style tests |
+| E     | batch report | Waves 15-18 consolidation doc for team morning review                                                     |
+
+2 slices, empirical-proof-confirmed (typecheck + vitest 1384/1384 + hook
+dry-run on this commit's draft message). Rule M satisfied: 2 P-track
+slices from 2 different tracks (Track B V-532.A + Track E batch report).
+No remote operations. No force-push. No private-flip. No SDK publish.
