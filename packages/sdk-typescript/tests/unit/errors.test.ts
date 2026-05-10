@@ -237,6 +237,29 @@ describe('errorFromProblem — V-441 ops-flow problem types', () => {
   });
 });
 
+describe('V-492 — PROBLEM_TYPES coverage parity', () => {
+  // Every PROBLEM_TYPES URI exposed by api-types must dispatch to a
+  // typed DriftstackError subclass (not the bare DriftstackError
+  // fallback). Catches: "we added a new problem-type to the server
+  // but forgot to wire it into the SDK." The test loops the
+  // PROBLEM_TYPES enum and asserts errorFromProblem returns a
+  // SUBCLASS of DriftstackError for each.
+  it('every PROBLEM_TYPES URI is mapped to a typed subclass', () => {
+    const uris = Object.values(PROBLEM_TYPES);
+    expect(uris.length).toBeGreaterThan(0);
+
+    for (const uri of uris) {
+      const e = errorFromProblem({ type: uri, title: 'test', status: 400 }, null);
+      // The bare DriftstackError fallback is what unknown URIs
+      // produce. Every known URI should produce a strict subclass.
+      // `e.constructor === DriftstackError` would be true only
+      // for the fallback path.
+      expect(e.constructor.name).not.toBe('DriftstackError');
+      expect(e).toBeInstanceOf(DriftstackError);
+    }
+  });
+});
+
 describe('V-489 — isRetryable predicate', () => {
   it('returns true for transport errors', () => {
     const e = new TransportError('network down');

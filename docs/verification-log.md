@@ -22983,3 +22983,85 @@ Cross-references /reference/scopes and /reference/rate-limits.
 prior waves; Wave 8 closed SDK-parity surface). Empirical-proof-
 confirmed (vitest + pytest + go test + docs build), no gates
 touched, V-205 invariant intact.
+
+## V-492 — error-mapping coverage parity test (Track A, Wave 9)
+
+Added `V-492 — PROBLEM_TYPES coverage parity` test in
+`packages/sdk-typescript/tests/unit/errors.test.ts`. Iterates
+every `PROBLEM_TYPES` URI exposed by `@driftstack/api-types` and
+asserts `errorFromProblem` returns a strict subclass of
+`DriftstackError` (not the bare-class fallback) for each.
+
+Catches the failure mode "we added a new server-side problem-type
+but forgot to wire it into the SDK switch" — which would otherwise
+ship as a silent regression where the SDK demotes the typed error
+to the generic `DriftstackError`.
+
+Python + Go SDK equivalents are V-492-followup; both already use
+explicit dispatch tables (`PROBLEM_TYPE_TO_ERROR` in Python /
+`error_mapping.go` in Go) so the failure mode is harder to
+introduce there, but a parallel test pins the contract.
+
+### Verification
+
+- `npx vitest run packages/sdk-typescript/tests/unit/errors.test.ts`
+  — 26/26 passed (was 25; +1 from V-492).
+
+## V-493 — sub-processor parity audit (Track B, Wave 9)
+
+Audited the parity between
+`apps/marketing-site/src/data/sub-processors.ts:SUB_PROCESSORS`
+(customer-facing) and `docs/legal/dpa.md` Annex 3 table (legal).
+Both intend to mirror the same canonical list; drift creates
+GDPR Article 28(2) risk.
+
+Findings logged at `docs/internal/v493-sub-processor-parity-audit.md`:
+
+- **F1 (Tier-3 founder action)**: MacStadium + LiveKit are in the
+  marketing list but NOT the DPA Annex 3.
+- **F2–F5 (Tier-1 engineering follow-up if approved)**:
+  presentation-only deltas — corp-vs-data jurisdiction split,
+  opt-in qualifier on Anthropic / NowPayments, parent legal
+  entity for Postmark, Stripe regional split.
+
+This audit DID NOT modify either source. Sub-processor list
+changes are Tier-3 (trigger 30-day Art. 28(2) notice).
+
+### Verification
+
+- File renders: `docs/internal/v493-sub-processor-parity-audit.md`.
+
+## V-508 — index page scrutiny + copy fixes (Track D, Wave 9)
+
+Two stale references corrected on `apps/marketing-site/src/pages/`:
+
+- **`index.astro`** — hero code sample used the V-136-renamed-away
+  archetype id `iphone-16-pro-ios-26-4-1`. Fixed to the canonical
+  `iphone16pro_ios18_7_safari26_4` (matches `LOCKED_ARCHETYPE_ID`
+  in `packages/api-types/src/common.ts:235`).
+- **`index.astro` + `pricing.astro`** — bullet copy referenced
+  "OpenAI / Anthropic" or "OpenAI or Anthropic" for BYOK. The
+  authoritative policy per DPA Annex 3 + the rest of the marketing
+  site (`faq.astro`, `comparison.astro`, `pricing.astro` lines
+  26 + 641-647) is **Anthropic only**. OpenAI mentions corrected
+  to align.
+
+No structural changes to either page; copy-fix only.
+
+### Verification
+
+- `npm run -w apps/marketing-site build` — clean (20 pages, 739ms).
+- `grep -rn "OpenAI" apps/marketing-site/src/` — only the
+  `decisions.md` ID-prefix comparator reference remains
+  (intentional, unrelated to LLM policy).
+
+## Wave 9 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                                             |
+| ----- | ----- | --------------------------------------------------------------------------------------------------- |
+| A     | V-492 | TS SDK problem-type coverage parity test (catches future PROBLEM_TYPES additions missing from SDK)  |
+| B     | V-493 | Sub-processor parity audit — 5 findings logged at docs/internal/v493-…audit.md (1 Tier-3, 4 Tier-1) |
+| D     | V-508 | Index page archetype-id + OpenAI→Anthropic copy fix (DPA-aligned); pricing page same OpenAI fix     |
+
+3 slices, empirical-proof-confirmed (vitest + marketing build +
+grep verification), no gates touched, V-205 invariant intact.

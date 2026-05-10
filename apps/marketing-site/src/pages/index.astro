@@ -52,7 +52,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 
 const session = await ds.sessions.create({
-  archetype: 'iphone-16-pro-ios-26-4-1',
+  archetype: 'iphone16pro_ios18_7_safari26_4',
   proxy: { type: 'wireguard', config: '...' },
 });
 
@@ -253,7 +253,7 @@ await session.destroy();`}</code></pre>
             </li>
             <li class="flex gap-2">
               <span class="text-oxblood-700">→</span>
-              <span>Bundled LLM, or bring your own API key from OpenAI / Anthropic, for AI-driven sessions (Builder+)</span>
+              <span>Bundled LLM, or bring your own Anthropic API key, for AI-driven sessions (Builder+)</span>
             </li>
           </ul>
           <a href="/pricing#api" class="btn-secondary mt-6 inline-flex">See API pricing →</a>
