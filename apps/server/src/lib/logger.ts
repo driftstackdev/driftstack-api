@@ -14,14 +14,42 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
     level: config.logLevel,
     base: { service: 'driftstack-api' },
     timestamp: pino.stdTimeFunctions.isoTime,
+    // V-494 — defense-in-depth log redaction. Pino dot-paths cannot
+    // wildcard-match every nested location, so we list the known
+    // fields. New sensitive fields MUST be added here whenever a
+    // request/response shape gains them. Mirrored in
+    // `lib/sentry.ts::beforeSend` so Sentry captures don't carry
+    // secrets even when pino is bypassed.
     redact: {
       paths: [
+        // Auth headers
         'req.headers.authorization',
         'req.headers.cookie',
         'res.headers["set-cookie"]',
+        'req.headers["stripe-signature"]',
+        // Direct fields seen on objects logged inline
         'apiKey',
         'plaintext',
         'body.plaintext',
+        'secret',
+        'signingSecret',
+        'webhookSecret',
+        // Request-body fields on auth + MFA + password flows
+        'body.password',
+        'body.new_password',
+        'body.current_password',
+        'body.code',
+        'body.recovery_code',
+        'body.recovery_codes',
+        'body.signing_secret',
+        'body.secret',
+        // Response-body fields surfaced on enrolment / mint paths
+        'recovery_codes',
+        'recoveryCodes',
+        'totpSecret',
+        'totp_secret',
+        'mfaSecret',
+        'client_secret',
       ],
       censor: '[redacted]',
     },

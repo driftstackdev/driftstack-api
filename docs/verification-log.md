@@ -22504,3 +22504,121 @@ no gates touched, V-205 invariant intact. Continuing into Wave 4
 per Rule K — next candidates: V-485 per-tier feature gating
 framework (Track A) / V-494 ops hardening (Track C) / V-500
 marketing depth (Track D).
+
+## V-485 — per-tier feature gating framework (Track A, Wave 4)
+
+Single-source-of-truth registry for "which capabilities does this
+tier unlock?" — replaces scattered `tier === 'X'` conditionals with
+one helper `requireTierFeature(tier, feature)` that throws 403
+`ForbiddenError` when the gate fails. Lives in
+`packages/api-types/src/common.ts:TIER_FEATURES`; consumed via
+`apps/server/src/lib/errors-helpers.ts`.
+
+Today's matrix (locked per ADR-004 + founder Tier 3 spec):
+
+| Tier          | concurrent | profiles | env  | aiAgent | llmBilling             | trialPack |
+| ------------- | ---------- | -------- | ---- | ------- | ---------------------- | --------- |
+| trial_pack    | 1          | 1        | test | false   | null                   | true      |
+| solo_manual   | 1          | 10       | live | false   | null                   | false     |
+| team_manual   | 3          | 50       | live | true    | byok_only              | false     |
+| agency_manual | 8          | 200      | live | true    | byok_only              | false     |
+| api_starter   | 2          | 25       | live | true    | byok_only              | false     |
+| api_builder   | 8          | 100      | live | true    | byok_or_bundled        | false     |
+| api_scale     | 24         | 500      | live | true    | byok_or_bundled        | false     |
+| enterprise    | 32         | custom   | live | true    | byok_or_bundled_custom | false     |
+
+Server-side wiring deliberately scoped: registry + helper + 16
+unit tests, no consumer migrations yet. AI-agent endpoints land
+in V-487+ and call `requireTierFeature(tier, 'aiAgent')` instead
+of carrying their own tier-list. Existing concurrent-cap +
+profile-cap call sites continue to read directly from
+`TIER_CONCURRENT_SESSION_LIMITS` / `PROFILES_PER_TIER` (the
+registry mirrors those values, so flipping later is mechanical).
+
+### Verification
+
+- `npm run -w packages/api-types typecheck` — clean.
+- `npm run -w apps/server typecheck` — clean.
+- `npx vitest run apps/server/tests/unit/tier-features.test.ts`
+  — 16/16 passed: covers registry shape (no missing tiers), agreement
+  with `TIER_CONCURRENT_SESSION_LIMITS` / `PROFILES_PER_TIER`,
+  trial-pack uniqueness, AI-agent matrix lock, predicate vs guard
+  behaviour, exhaustive aiAgent gate (only OFF on trial_pack +
+  solo_manual; throws on those, not on any other tier).
+
+## V-494 — ops hardening: log + Sentry redaction (Track C, Wave 4)
+
+Extends the pino redact list and adds a Sentry `beforeSend` /
+`beforeBreadcrumb` filter. Sensitive request/response fields
+(`password`, `new_password`, `current_password`, `recovery_code`,
+`recovery_codes`, `code` (TOTP), `secret`, `signing_secret`,
+`webhook_secret`, `client_secret`, `totp_secret`, `mfaSecret`,
+`stripe-signature` header) are now stripped at TWO independent
+choke points:
+
+1. **pino** — structured-log redaction at write time, dot-paths
+   listed in `apps/server/src/lib/logger.ts:redact.paths`.
+2. **Sentry** — recursive scrubber (`scrubInPlace`) walks every
+   event's `request` / `extra` / `contexts` / `breadcrumbs`
+   before send; case-insensitive match against the
+   `SENTRY_SENSITIVE_KEYS` set. Mirrors the pino list so events
+   that bypass pino (Sentry's automatic request capture) are
+   still scrubbed before leaving the host.
+
+Defense-in-depth posture: pino is best-effort (fields a developer
+forgets to nest under `body.*` slip through); Sentry's scrubber
+matches by key name regardless of nesting depth. Both layers must
+fail open for a secret to leak.
+
+### Verification
+
+- `npm run -w apps/server typecheck` — clean.
+- `npx vitest run apps/server/tests/unit/sentry-scrub.test.ts`
+  — 12/12 passed: top-level redaction (password / new_password /
+  current_password / recovery_code / secret / plaintext / apiKey /
+  authorization / cookie / stripe-signature), case-insensitivity,
+  nested structures (request.headers + request.data + breadcrumbs +
+  extras), cycle safety (depth-bounded), scalar/null no-op.
+- ESLint + tsc clean across the touched files.
+
+## V-500 — marketing depth (Track D, Wave 4)
+
+Three new FAQ groups added to `apps/marketing-site/src/pages/faq.astro`,
+filling buyer-question gaps reported pre-launch:
+
+1. **Architecture + sessions** — "are these real iPhones or
+   emulated?" / "Playwright Selenium Puppeteer compat?" /
+   "where do my sessions actually run?" — direct, technical
+   answers naming WebKit C++ source / CDP-compatible WS / EU
+   Falkenstein region.
+2. **Migrating from another vendor** — "migrating from
+   Browserless / Bright Data / ScrapingBee / Browserbase?" +
+   "side-by-side comparison before committing?" — points at
+   the trial pack as the empirical evaluation path.
+3. **Acceptable use** — "is X allowed?" with explicit AUP
+   boundary (legitimate automation: yes; ad fraud, sneaker
+   bots against opted-out vendors, attacks on third-party
+   systems: no) + "what if Driftstack goes away?" answered
+   with data-portability + self-hosted source-escrow.
+
+40 total `<details>` accordions on the page (was 28). All 7
+existing groups preserved unchanged. No copy edits to other
+pages this slice — index / pricing / comparison untouched.
+
+### Verification
+
+- `npm run -w apps/marketing-site build` — clean (20 pages, 822ms).
+- HTML inspection of `dist/faq/index.html`: all 3 new group titles
+  render; `<details>` count climbed from 28 → 40 (matching the 12
+  new entries added).
+
+## Wave 4 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                                         |
+| ----- | ----- | ----------------------------------------------------------------------------------------------- |
+| A     | V-485 | Per-tier feature gating registry — TIER_FEATURES + requireTierFeature; 16 unit tests pin matrix |
+| C     | V-494 | Ops hardening — extended pino redact + Sentry beforeSend scrubber; 12 unit tests pin scrub list |
+| D     | V-500 | Marketing depth — 3 new FAQ groups (architecture / migration / acceptable use); 12 new entries  |
+
+3 slices, empirical-proof-confirmed (vitest + builds), no gates
+touched, V-205 invariant intact.

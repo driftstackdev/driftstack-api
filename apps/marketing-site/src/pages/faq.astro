@@ -151,6 +151,59 @@ const groups: FaqGroup[] = [
     ],
   },
   {
+    // V-500 — architecture + sessions group. Three buyer-recurring
+    // questions buried in support threads pre-launch; pulling them
+    // up so prospects answer themselves.
+    title: 'Architecture + sessions',
+    entries: [
+      {
+        q: 'Are these real iPhones or emulated?',
+        a: 'Neither, exactly. Driftstack runs a fork of the WebKit + Safari source code (the same C++ that ships on iOS) on Linux fleet hardware. The browser engine is identical to what runs on a physical iPhone — same JavaScriptCore, same WebCore, same fingerprint primitives. What\'s different is the OS the engine runs on (Linux instead of iOS) and the hardware below it (data-center x86 instead of Apple Silicon). The fingerprints surfaces that real-iPhone detectors check (canvas, WebGL, audio, navigator, prototype chain, error stacks) match a real iPhone bit-for-bit because they\'re produced by the same code. The surfaces that detectors <em>can\'t</em> check from JavaScript (kernel timings, GPU silicon counters) are the ones we don\'t emulate, and detection methods that target those are vanishingly rare in practice.',
+      },
+      {
+        q: 'Does Driftstack work with Playwright / Selenium / Puppeteer?',
+        a: 'Driftstack exposes a CDP-compatible WebSocket endpoint per session, so any tool that speaks Chrome DevTools Protocol works — Playwright connects via <span class="font-mono">connectOverCDP()</span>, Puppeteer via <span class="font-mono">puppeteer.connect()</span>. Selenium is supported via WebDriver BiDi; the Driftstack Selenium driver wraps the WebDriver session against the underlying CDP endpoint. SDK quickstarts at <a href="https://docs.driftstack.dev/sdk/typescript-quickstart" class="text-oxblood-700 underline">/sdk/typescript-quickstart</a>, <a href="https://docs.driftstack.dev/sdk/python-quickstart" class="text-oxblood-700 underline">/sdk/python-quickstart</a>, <a href="https://docs.driftstack.dev/sdk/go-quickstart" class="text-oxblood-700 underline">/sdk/go-quickstart</a>.',
+      },
+      {
+        q: 'Where do my sessions actually run?',
+        a: 'EU production runs in Hetzner Falkenstein (Germany). Staging is the same. Customer data — accounts, profiles, audit logs, session recordings — sits in Neon (EU region) and Cloudflare R2 (EU bucket). The <a href="/trust/sub-processors" class="text-oxblood-700 underline">sub-processor list</a> has the full breakdown with each provider\'s region. Latency from EU customer locations is typically &lt;30ms to the API control plane and &lt;100ms session round-trip on the data plane. US/APAC customers see proportionally higher session round-trip; multi-region rollout is on the <a href="/roadmap" class="text-oxblood-700 underline">roadmap</a> for post-Series A.',
+      },
+    ],
+  },
+  {
+    // V-500 — migrating-from group. The four named alternatives in
+    // /comparison are the natural origin systems; explicit migration
+    // steps reduce discovery friction.
+    title: 'Migrating from another vendor',
+    entries: [
+      {
+        q: 'Migrating from Browserless / Bright Data / ScrapingBee / Browserbase?',
+        a: 'Most CDP-based migrations are a one-line endpoint change in your SDK init — point Playwright/Puppeteer at the Driftstack WebSocket URL instead of the previous vendor\'s. The fingerprint surface changes (you go from Chromium to real WebKit), so any test or production flow that depended on Chrome-specific behaviours (e.g. a specific user-agent string, Chrome-only DevTools commands, Blink-specific CSS bugs) needs adjustment. The <a href="/comparison" class="text-oxblood-700 underline">comparison page</a> covers feature-by-feature differences; the <a href="https://docs.driftstack.dev" class="text-oxblood-700 underline">docs</a> include a migration recipe per vendor. Email <a href="mailto:support@driftstack.dev" class="text-oxblood-700 underline">support@driftstack.dev</a> if you want a hand reviewing your test suite for Chrome-specific assertions before you cut over.',
+      },
+      {
+        q: 'Can I run a side-by-side comparison before committing?',
+        a: 'Yes — that\'s exactly what the $2.99 trial pack is for. 16 hours of session time gives most teams enough fleet capacity to run their existing test suite or scraping job through Driftstack in parallel with their current vendor and compare outputs. Many customers convert to a paid tier after seeing real fingerprint match rates in their actual flows; some discover their detection-evasion problem isn\'t worth solving and stay on a Chromium service. Either outcome is fine — we\'d rather you make the right call than the upsell.',
+      },
+    ],
+  },
+  {
+    // V-500 — acceptable-use group. Pre-empts the "can I do shady
+    // thing X" inquiries that pad support inboxes; the AUP link is
+    // also explicit so prospects can read the boundary before
+    // emailing.
+    title: 'Acceptable use',
+    entries: [
+      {
+        q: 'Is X allowed? (sneaker bots / scraping / ad fraud / etc.)',
+        a: 'The full Acceptable Use Policy is at <a href="/legal/aup" class="text-oxblood-700 underline">/legal/aup</a> — read it before signing up if you\'re unsure. Short version: Driftstack is built for legitimate automation — QA, accessibility testing, market research, regulated-industry compliance testing, agency multi-client management, AI-agent-driven flows. We don\'t allow attacks on third-party systems, fraud (ad fraud, fake-account creation, payment fraud), CSAM or other illegal content, large-scale scraping that violates target ToS in a way that bypasses authentication or reasonable rate limits, or operating sneaker bots / ticket bots against vendors who have publicly prohibited bot purchasing. Suspected abuse triggers an account review under the AUP escalation flow; persistent violations terminate the account.',
+      },
+      {
+        q: 'What happens if Driftstack as a business goes away?',
+        a: 'Two protections. (1) <strong>Data portability:</strong> profiles + audit logs + session metadata can be exported as CSV/JSON from the dashboard or via the API at any time, so customers can take their data with them on any timeline. (2) <strong>Self-hosted SKU:</strong> Enterprise + Self-hosted licensees receive source escrow — if the cloud service is sunsetted, the source escrow agreement releases the WebKit fork + control-plane code so customers can continue running the stack on their own hardware indefinitely. Pre-launch we have no investors and no debt, so the most likely "Driftstack goes away" scenario is a planned wind-down with months of notice, not a sudden shutoff. Self-hosted on day one is the answer for customers who can\'t accept any cloud-vendor risk.',
+      },
+    ],
+  },
+  {
     title: 'Support + reliability',
     entries: [
       {

@@ -21,6 +21,90 @@ import type { FastifyInstance } from 'fastify';
 import type { SentryConfig } from './config.js';
 import type { Logger } from './logger.js';
 
+// V-494 — sensitive-key denylist for Sentry event scrubbing. Keep in
+// sync with `lib/logger.ts::redact.paths`. Match is case-insensitive
+// on the bare key name (no path prefix); Sentry events have many
+// envelope shapes (request.data, breadcrumbs[*].data, extra,
+// contexts.*) so substring/key matching is more robust than dot-paths.
+// All entries lowercase — comparison is `key.toLowerCase()` so storing
+// non-lowercase variants here is dead weight (and a bug if the comparison
+// ever drifts). Tests pin both case-sensitive and case-insensitive paths.
+const SENTRY_SENSITIVE_KEYS = new Set<string>([
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'stripe-signature',
+  'password',
+  'new_password',
+  'current_password',
+  'newpassword',
+  'currentpassword',
+  'code',
+  'recovery_code',
+  'recovery_codes',
+  'recoverycode',
+  'recoverycodes',
+  'apikey',
+  'api_key',
+  'plaintext',
+  'secret',
+  'signing_secret',
+  'signingsecret',
+  'webhooksecret',
+  'webhook_secret',
+  'totp_secret',
+  'totpsecret',
+  'mfasecret',
+  'client_secret',
+  'clientsecret',
+]);
+
+function isSensitiveKey(key: string): boolean {
+  return SENTRY_SENSITIVE_KEYS.has(key.toLowerCase());
+}
+
+/**
+ * V-494 — recursively walk a Sentry event-shaped value and replace
+ * sensitive field values with `'[redacted]'`. Mutates in place to
+ * avoid allocating a parallel object tree on every event. Stops
+ * descending at scalars or after a max depth (defensive against
+ * accidentally cyclic structures Sentry may attach).
+ */
+function scrubInPlace(value: unknown, depth = 0): void {
+  if (depth > 8) return;
+  if (value === null || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    for (const item of value) scrubInPlace(item, depth + 1);
+    return;
+  }
+  const obj = value as Record<string, unknown>;
+  for (const key of Object.keys(obj)) {
+    if (isSensitiveKey(key)) {
+      obj[key] = '[redacted]';
+    } else {
+      scrubInPlace(obj[key], depth + 1);
+    }
+  }
+}
+
+function scrubSentryEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
+  scrubInPlace(event.request);
+  scrubInPlace(event.extra);
+  scrubInPlace(event.contexts);
+  scrubInPlace(event.breadcrumbs);
+  return event;
+}
+
+function scrubSentryBreadcrumb(crumb: Sentry.Breadcrumb): Sentry.Breadcrumb {
+  scrubInPlace(crumb.data);
+  return crumb;
+}
+
+// V-494 — exposed under a `__test_*` name so the unit test in
+// tests/unit/sentry-scrub.test.ts can pin the redaction matrix.
+// Not part of the public sentry-helper surface.
+export { scrubInPlace as __test_scrubInPlace };
+
 export interface SentryBreadcrumb {
   /** Logical category, e.g. `'http.request'`, `'auth'`, `'billing'`. */
   category: string;
@@ -73,6 +157,14 @@ export function initSentry({ config, logger }: InitSentryArgs): SentryClient {
     environment: config.environment,
     ...(config.release !== undefined ? { release: config.release } : {}),
     tracesSampleRate: config.tracesSampleRate,
+    // V-494 — secret-stripping filter mirrored from
+    // `lib/logger.ts::redact`. Sentry events carry request data,
+    // breadcrumb data, and `extra` context — any of those can leak
+    // a password / TOTP code / webhook secret if upstream code logs
+    // the wrong field. beforeSend walks the event recursively and
+    // redacts known-sensitive keys.
+    beforeSend: scrubSentryEvent,
+    beforeBreadcrumb: scrubSentryBreadcrumb,
     // Default integrations include http + console + onUncaughtException +
     // onUnhandledRejection — exactly what we want for a Node service.
   });

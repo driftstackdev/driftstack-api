@@ -1,7 +1,13 @@
 // Helpers that need the AccountContext type but live next to errors.ts so
 // services can import without pulling the auth service.
 
-import { parseGranularScope, type ApiKeyScope } from '@driftstack/api-types';
+import {
+  parseGranularScope,
+  TIER_FEATURES,
+  type AccountTier,
+  type ApiKeyScope,
+  type TierBooleanFeature,
+} from '@driftstack/api-types';
 import type { AccountContext } from '../services/auth.js';
 import { ForbiddenError, NotFoundError } from './errors.js';
 
@@ -64,6 +70,30 @@ export function hasScope(ctx: AccountContext, required: ApiKeyScope): boolean {
       return _exhaustive;
     }
   }
+}
+
+/**
+ * V-485 — per-tier feature guard. Throws `ForbiddenError` when the
+ * given tier does NOT have the requested boolean feature enabled.
+ *
+ * Use this in route handlers gating tier-restricted endpoints (e.g.
+ * AI-agent endpoints land in V-487+). The single guard call replaces
+ * `if (tier === 'X' || tier === 'Y') throw …` style scattered
+ * conditionals — when a tier's feature row in
+ * `packages/api-types/src/common.ts:TIER_FEATURES` flips, every
+ * call site picks it up automatically.
+ *
+ * Today's matrix: only `aiAgent` is gated this way. `trialPack` is
+ * exposed mainly for read-side decisions (apiKeyEnvironment). Future
+ * features (`customArchetypes`, `multiRegion`, …) extend
+ * `TierFeatures` and pass through the same guard.
+ */
+export function requireTierFeature(tier: AccountTier, feature: TierBooleanFeature): void {
+  if (TIER_FEATURES[tier][feature]) return;
+  throw new ForbiddenError(
+    `The "${feature}" feature is not available on the "${tier}" tier. ` +
+      `Upgrade to a tier that includes this feature.`,
+  );
 }
 
 export { NotFoundError };

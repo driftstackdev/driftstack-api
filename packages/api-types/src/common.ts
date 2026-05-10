@@ -214,6 +214,137 @@ export const TIER_RATE_LIMIT_DEFAULTS: Record<
 };
 
 /**
+ * V-485 — per-tier feature gating registry.
+ *
+ * Single source of truth for "which capabilities does this tier
+ * unlock?" Today the server checks `tier === 'trial_pack'` /
+ * `PROFILES_PER_TIER[tier]` / `TIER_CONCURRENT_SESSION_LIMITS[tier]`
+ * in scattered call sites; this registry is the central place for
+ * those plus the AI-agent + LLM-billing gates that ship with V-487+.
+ *
+ * Mirrors the customer-facing matrix in
+ * `apps/marketing-site/src/data/pricing.ts:API_TIERS` — the marketing
+ * site renders display strings; this registry exposes the values
+ * route handlers and services act on. Both layers MUST agree.
+ *
+ * Consumers:
+ *   - Server: `requireTierFeature(tier, key)` in
+ *     `apps/server/src/lib/errors-helpers.ts` throws 403 with
+ *     `feature_not_available` problem-type when the gate fails.
+ *   - Customer dashboard: read TIER_FEATURES directly to drive
+ *     conditional UI (e.g. hide AI-agent CTA on Solo Manual).
+ *
+ * Adding a new feature: extend `TierFeatures`, populate every row
+ * in `TIER_FEATURES`, then have the route handler call
+ * `requireTierFeature(tier, 'newFeature')` on the gated path.
+ */
+export type LlmBilling = 'byok_only' | 'byok_or_bundled' | 'byok_or_bundled_custom' | null;
+
+export interface TierFeatures {
+  /** Concurrent session cap. Mirrors TIER_CONCURRENT_SESSION_LIMITS. */
+  concurrentSessions: number;
+  /** Profile-count cap. `'custom'` for Enterprise (negotiated). */
+  profiles: number | 'custom';
+  /** Stripe environment for API-key minting (test on trial_pack, live elsewhere). */
+  apiKeyEnvironment: 'test' | 'live';
+  /** AI-agent (LLM-driven sessions) feature available on this tier. */
+  aiAgent: boolean;
+  /** LLM billing model when aiAgent is true; `null` when off. */
+  llmBilling: LlmBilling;
+  /** True for the trial_pack tier — distinguishes one-time from subscription. */
+  trialPack: boolean;
+}
+
+export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
+  trial_pack: {
+    concurrentSessions: 1,
+    profiles: 1,
+    apiKeyEnvironment: 'test',
+    aiAgent: false,
+    llmBilling: null,
+    trialPack: true,
+  },
+  solo_manual: {
+    concurrentSessions: 1,
+    profiles: 10,
+    apiKeyEnvironment: 'live',
+    aiAgent: false,
+    llmBilling: null,
+    trialPack: false,
+  },
+  team_manual: {
+    concurrentSessions: 3,
+    profiles: 50,
+    apiKeyEnvironment: 'live',
+    aiAgent: true,
+    llmBilling: 'byok_only',
+    trialPack: false,
+  },
+  agency_manual: {
+    concurrentSessions: 8,
+    profiles: 200,
+    apiKeyEnvironment: 'live',
+    aiAgent: true,
+    llmBilling: 'byok_only',
+    trialPack: false,
+  },
+  api_starter: {
+    concurrentSessions: 2,
+    profiles: 25,
+    apiKeyEnvironment: 'live',
+    aiAgent: true,
+    llmBilling: 'byok_only',
+    trialPack: false,
+  },
+  api_builder: {
+    concurrentSessions: 8,
+    profiles: 100,
+    apiKeyEnvironment: 'live',
+    aiAgent: true,
+    llmBilling: 'byok_or_bundled',
+    trialPack: false,
+  },
+  api_scale: {
+    concurrentSessions: 24,
+    profiles: 500,
+    apiKeyEnvironment: 'live',
+    aiAgent: true,
+    llmBilling: 'byok_or_bundled',
+    trialPack: false,
+  },
+  enterprise: {
+    concurrentSessions: 32,
+    profiles: 'custom',
+    apiKeyEnvironment: 'live',
+    aiAgent: true,
+    llmBilling: 'byok_or_bundled_custom',
+    trialPack: false,
+  },
+};
+
+/** Feature keys whose gate is a boolean. Convenience type for `requireTierFeature`. */
+export type TierBooleanFeature = {
+  [K in keyof TierFeatures]: TierFeatures[K] extends boolean ? K : never;
+}[keyof TierFeatures];
+
+/**
+ * Lookup a tier's feature config. Pure function; no side effects.
+ * Prefer this over indexing TIER_FEATURES directly so tests can mock.
+ */
+export function tierFeatures(tier: AccountTier): TierFeatures {
+  return TIER_FEATURES[tier];
+}
+
+/**
+ * Boolean predicate — does this tier have the given boolean feature
+ * enabled? For non-boolean features (concurrentSessions, profiles,
+ * llmBilling), use `tierFeatures(tier)` and inspect directly.
+ */
+export function tierHasFeature(tier: AccountTier, feature: TierBooleanFeature): boolean {
+  return TIER_FEATURES[tier][feature];
+}
+
+/**
  * Currently-locked archetype identifier + human-readable label.
  *
  * The identifier (`iphone16pro_ios18_7_safari26_4`) is what the API
