@@ -10,8 +10,10 @@ import type {
   GenerateKeyboardCadenceOpts,
   GenerateMouseTrajectoryOpts,
   GenerateScrollPatternOpts,
+  GenerateScrollVelocityProfileOpts,
   GenerateTouchEventOpts,
 } from './interfaces.js';
+import { generateScrollVelocityProfile, type ScrollVelocityProfile } from './scroll.js';
 import { generateTouchEvent } from './touch.js';
 import type {
   BehaviouralProfile,
@@ -105,6 +107,12 @@ export class MockBehaviouralSimulator implements BehaviouralSimulator {
     // callers don't see a behavioural shift when the real Phase 3 simulator
     // ships behind the same interface.
     return generateTouchEvent(opts);
+  }
+
+  generateScrollVelocityProfile(opts: GenerateScrollVelocityProfileOpts): ScrollVelocityProfile {
+    // Same parity pattern as generateTouchEvent — the real generator is
+    // already deterministic + pure.
+    return generateScrollVelocityProfile(opts);
   }
 
   listProfiles(): readonly BehaviouralProfile[] {

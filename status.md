@@ -1,11 +1,27 @@
 # Driftstack API — current status
 
 **Last updated:** 2026-05-10
-**Most recent wave:** Wave 15 (V-524 / V-527 / V-530.A / V-535)
-**Mode:** Autopilot active. Waves 1-14 closed; Wave 15 lands this commit;
-Waves 16-26 queued per the overnight directive.
+**Most recent wave:** Wave 16 (V-525 / V-530.B / V-535 pass-2)
+**Mode:** Autopilot active. Waves 1-15 closed; Wave 16 lands this commit;
+Waves 17-26 queued per the overnight directive.
 
-## Wave 15 — what landed
+## Wave 16 — what landed
+
+- **V-525** — SDK extraction plan at `docs/internal/v525-sdk-extraction-plan.md`
+  - extraction script at `scripts/extract-sdk-repos.sh`. Script ran once
+    tonight; 3 local branches materialized: `sdk-extract/typescript` (`6980d36`,
+    57 commits), `sdk-extract/python` (`2c9a9cb`, 50 commits), `sdk-extract/go`
+    (`fdfb9cf`, 50 commits). No remote push; no GitHub repo creation. Gated
+    on Track E manual trigger.
+- **V-530.B** — second sub-slice of behavioural-simulation real impl:
+  scroll velocity profiles with exponential decay (`v(t) = v0 * exp(-decay*t)`),
+  per-element-class flick/friction defaults, analytic per-tick deltas,
+  seeded determinism. 19 property-style tests. Suite 1340 → 1359.
+- **V-535 pass-2** — README polish: "Pre-launch / Phase 2" framing replaced
+  with neutral "Active development"; apps + packages clusters in the repo
+  layout filled in to match disk reality (7 apps + 9 packages listed).
+
+## Wave 15 — what landed (recap)
 
 - **V-527** — commit-msg hook installed extending the sister-repo V-205
   pattern with V-211 anonymity regex (founder / personal-name tokens).
@@ -18,8 +34,7 @@ Waves 16-26 queued per the overnight directive.
   performed. Feeds V-525 / V-526 / V-528.
 - **V-530.A** — first sub-slice of behavioural-simulation real implementation:
   per-element-class touch event distributions (7 classes) + seeded
-  PRNG + 15 property-style tests across all classes. Test suite grew
-  1325 → 1340.
+  PRNG + 15 property-style tests across all classes.
 - **V-535** — README sanitization first pass: internal-log references
   (V-NNN, D-NNN) removed, stale SDK status corrected, contributing
   section rewritten in standard pull-request language.
@@ -36,7 +51,7 @@ Full strict mode):
 - https://api.driftstack.dev/health — Fastify control plane (Hetzner production)
 - https://staging.driftstack.dev/health — staging mirror (Hetzner staging)
 
-Tests: **1340/1340 green** across 125 test files (unit + integration +
+Tests: **1359/1359 green** across 126 test files (unit + integration +
 gui-jsdom). Typecheck clean. Full `npx vitest run` empirical proof from
 this wave.
 
@@ -81,8 +96,12 @@ this wave.
 - [`docs/internal/v455-coverage-audit.md`](./docs/internal/v455-coverage-audit.md)
   — pre-launch coverage audit (closed).
 
-## Wave 16 — queued
+## Wave 17 — queued
 
-Per the overnight directive: V-525 SDK extraction plan + V-530.B
-(scroll velocity module) + V-535 second-pass README polish + 1 P-track
-slice. Scheduled via ScheduleWakeup.
+Per the overnight directive: V-526 sanitization sweep (apply pass on
+files classified `sanitize-then-keep` in V-524, staged in
+branch `cleanup/v526-sanitize`) + V-528 privatization runbook +
+V-531 webrtc-streaming kickoff (server-side encode pipeline w/ mock
+frame source; cross-agent contract doc at
+`docs/internal/v531-cross-agent-contract.md`). Scheduled via
+ScheduleWakeup.

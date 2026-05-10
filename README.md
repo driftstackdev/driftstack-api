@@ -2,7 +2,11 @@
 
 Customer-facing REST API and control plane for Driftstack — an iPhone Safari automation platform.
 
-> **Status:** Pre-launch. Control-plane API surface is built and tested (auth flow, profiles, sessions, billing, webhooks, admin). Mock WebKit driver is the contract; the real driver swaps in when the Driftstack WebKit fork closes Phase 2.
+> **Status:** Active development. The control-plane API surface is built and
+> tested end-to-end (auth flow, profiles, sessions, billing, webhooks, admin).
+> The WebKit driver interface is the contract between this control plane and
+> the browser engine; a mock driver ships in this repo and the real driver
+> ships in the WebKit fork repo.
 
 ## Stack
 
@@ -25,12 +29,21 @@ driftstack-api/
 │   │   ├── src/{routes,services,drivers,schemas,db,middleware,lib}
 │   │   └── tests/{unit,integration,e2e}/
 │   ├── marketing-site/     # Astro static-build (driftstack.dev)
-│   └── gui-client/         # Tauri desktop client (separate workstream)
+│   ├── customer-dashboard/ # Astro customer portal (app.driftstack.dev)
+│   ├── admin-panel/        # Astro admin UI (internal)
+│   ├── docs/               # Astro docs site (docs.driftstack.dev)
+│   ├── status-site/        # Status page (status.driftstack.dev)
+│   └── gui-client/         # Tauri desktop client (macOS / Windows / Linux)
 ├── packages/
-│   ├── api-types/          # Public Zod schemas + inferred TS types (SDK consumers)
-│   ├── sdk-typescript/     # TypeScript SDK (Node 18+; browser-safe build)
-│   ├── sdk-python/         # Python SDK (3.10+; sync + async clients)
-│   └── sdk-go/             # Go SDK (1.22+; context-aware client)
+│   ├── api-types/             # Public Zod schemas + inferred TS types
+│   ├── sdk-typescript/        # TypeScript SDK (Node 18+; browser-safe build)
+│   ├── sdk-python/            # Python SDK (3.10+; sync + async clients)
+│   ├── sdk-go/                # Go SDK (1.22+; context-aware client)
+│   ├── behavioural-simulation/ # Synthetic touch / scroll / keyboard cadence
+│   ├── recipe-library/         # Navigation flow library
+│   ├── recapture-automation/   # Capture matrix orchestration
+│   ├── webrtc-streaming/       # Server-side WebRTC encode pipeline
+│   └── webhook-delivery/       # Outbound webhook delivery primitives
 ├── docs/
 │   ├── architecture.md     # system shape
 │   ├── decisions.md        # decision log

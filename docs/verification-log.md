@@ -23722,3 +23722,193 @@ hook dry-run + git-diff sanitization audit). Rule M satisfied: 2 P-track
 slices (Track E + Track C) from 2 different tracks. No GitHub-private
 flip executed — staged only per the directive. The V-205/V-211 hook is
 now the gate every Wave 16+ commit passes through.
+
+## V-525 — SDK extraction plan + 3 local extraction branches (Track E, Wave 16)
+
+**Date:** 2026-05-10
+
+Design + extraction-mechanism slice. Two artifacts: `docs/internal/v525-sdk-extraction-plan.md`
+(design doc) + `scripts/extract-sdk-repos.sh` (extraction script). Script ran
+once tonight to materialize 3 local branches; no remote push, no GitHub repo
+creation.
+
+### Design doc highlights
+
+- Target per-SDK repo shape: `src/` + `tests/` + `examples/` + `README.md` +
+  `LICENSE` (NEW — none of the 3 SDKs currently has a per-package LICENSE
+  file) + `CHANGELOG.md` (already present per-SDK) + manifest + `.github/
+workflows/`. No internal docs, no V-NNN references, no AGENTS.md.
+- Target repo names + module identifiers:
+  - TS: `driftstackdev/driftstack-typescript-sdk` (`@driftstack/sdk` on npm).
+  - Py: `driftstackdev/driftstack-python-sdk` (`driftstack-sdk` on PyPI).
+  - Go: `driftstackdev/driftstack-go-sdk` (`github.com/driftstackdev/driftstack-go-sdk`).
+- Post-extraction per-SDK adjustments documented: add LICENSE; update manifest
+  repository URLs; for Go SDK update `go.mod` module path; for TS SDK decide
+  api-types bundling vs separate publish.
+- Historical V-205 violator commits (`63a20c1`, `ef649a1`) explicitly flagged
+  as a sequencing dependency — the V-368 force-push scrub MUST land against
+  driftstack-api BEFORE the SDK branches push to public remotes, otherwise
+  the violation propagates.
+- Reversibility audit: every Track E staging step in Waves 15-17 is reversible
+  until the GitHub-private flip (V-528). Branches can be deleted; docs can be
+  reverted; hook can be uninstalled.
+
+### Extraction script + branch refs
+
+`scripts/extract-sdk-repos.sh` uses `git subtree split --prefix=packages/sdk-<lang>`
+to produce 3 branches with the SDK files at the branch root. Idempotent
+(deletes the existing branch and re-splits on re-run). Warns if any V-205
+violator commit is still reachable from HEAD.
+
+Branches materialized this wave:
+
+| SDK | Branch                   | HEAD SHA  | Commit count |
+| --- | ------------------------ | --------- | -----------: |
+| TS  | `sdk-extract/typescript` | `6980d36` |           57 |
+| Py  | `sdk-extract/python`     | `2c9a9cb` |           50 |
+| Go  | `sdk-extract/go`         | `fdfb9cf` |           50 |
+
+### Verification
+
+- `git branch --list 'sdk-extract/*'` shows all 3 branches present.
+- `git ls-tree -r --name-only <branch>` confirms each branch's tree root
+  contains the SDK files directly (no `packages/sdk-<lang>/` prefix).
+- Re-running the script reproduces the same branch SHAs (deterministic
+  subtree-split output for unchanged source).
+
+## V-530.B — behavioural-simulation scroll velocity profiles (Track B, Wave 16)
+
+**Date:** 2026-05-10
+
+Second sub-slice of V-530 (per the anti-substitution clause). Adds a
+realistic scroll velocity decay model alongside the existing constant-tick
+`generateScrollPattern` mock surface. New module:
+`packages/behavioural-simulation/src/scroll.ts`.
+
+### Model
+
+- **Velocity curve:** `v(t) = v0 * exp(-decay * t)` — exponential decay
+  from initial finger-flick velocity `v0` to rest threshold (5 px/s).
+- **Per-tick delta:** analytic integration of `v(τ)` over each tick
+  interval `[t, t+tickInterval]`, giving a precise pixel delta per tick:
+  `(v0 / decay) * (exp(-decay*t) - exp(-decay*(t+tickInterval)))`.
+- **Direction sign convention:** 'down'/'right' → positive `deltaPx`,
+  'up'/'left' → negative. `totalDistancePx` is always absolute.
+- **Per-element-class defaults** (`SCROLL_VELOCITY_DEFAULTS`): scroll-container
+  has the strongest flicks + lowest friction; button/link/input have weak
+  flicks + high friction (scrolling on those is unusual but possible).
+- **Termination:** velocity below 5 px/s OR duration cap at 5000 ms.
+- **Seeded determinism:** mulberry32 PRNG + FNV-1a string hash, matching
+  V-530.A — no new dependencies.
+
+### Changes
+
+- `packages/behavioural-simulation/src/scroll.ts` — NEW. Exports
+  `generateScrollVelocityProfile`, `SCROLL_VELOCITY_DEFAULTS`, types
+  `ScrollVelocityProfile`, `ScrollVelocityTick`, `ScrollVelocityClassDefaults`.
+- `packages/behavioural-simulation/src/interfaces.ts` — new
+  `GenerateScrollVelocityProfileOpts` + `generateScrollVelocityProfile`
+  method on the `BehaviouralSimulator` interface.
+- `packages/behavioural-simulation/src/mock.ts` — implements the new
+  interface method (delegates to the standalone generator; same mock/real
+  parity pattern as V-530.A).
+- `packages/behavioural-simulation/src/index.ts` — re-exports.
+
+### Property coverage
+
+`packages/behavioural-simulation/tests/scroll-velocity.test.ts` — 19
+property-style tests:
+
+1. Every element class has a registered scroll-velocity default.
+2. Every default declares strictly positive parameters.
+3. scroll-container default has higher initial velocity than generic.
+4. scroll-container default has lower decay rate than generic.
+5. Determinism: identical inputs → identical profile.
+6. Different seeds produce different profiles.
+7. Velocity is monotonically non-increasing across ticks.
+8. Tick timestamps are strictly monotonically increasing.
+9. Delta signs match direction across all classes + seeds.
+10. cumulativePx matches running sum of deltaPx exactly.
+11. totalDistancePx equals |cumulativePx at last tick|.
+12. durationMs equals the last tick tMs.
+13. Initial velocity stays within mean ± jitter (no override).
+14. Explicit initialVelocity + decayRate overrides class defaults.
+15. scroll-container average duration > button average duration (class
+    differentiation, 100 seeds).
+16. Rejects tickIntervalMs ≤ 0.
+17. Regression pin — deterministic shape for fixed inputs.
+18. MockBehaviouralSimulator exposes generateScrollVelocityProfile.
+19. Mock parity: simulator surface output equals standalone generator output.
+
+### Verification
+
+- `npx tsc --build packages/behavioural-simulation/tsconfig.json` — clean.
+- `npx vitest run packages/behavioural-simulation/tests/` — 41/41 pass
+  (7 mock + 15 V-530.A touch + 19 V-530.B scroll-velocity).
+- `npx vitest run` (full workspace) — **1359/1359 pass** across 126 test
+  files (was 1340 before Wave 16; +19 = expected).
+- `npx tsc --build` (full workspace) — clean.
+
+### Sub-slices remaining
+
+- **V-530.C (W19):** dwell time models + click-position distributions
+  refined with element-region-aware bias.
+- **V-530.D (later):** idle-period jitter + multi-touch gesture
+  sequencing.
+
+## V-535 — README sanitization pass-2 (Track C, Wave 16)
+
+**Date:** 2026-05-10
+
+Continuing the V-526 sanitization posture on the most-visible file.
+First-pass scrubbed V-NNN / D-NNN references + stale SDK status; second
+pass tightens the engineering-audience framing (the README's audience
+under the Track E option-(a) verdict is the internal team / future
+hires, not customers — customer-facing copy lives in the SDK READMEs
+that move to the standalone repos).
+
+### Changes
+
+- Status block: replaced "Pre-launch ... real driver swaps in when the
+  WebKit fork closes Phase 2" with neutral "Active development" framing;
+  the WebKit driver-interface contract description stays but drops the
+  internal "Phase 2" milestone reference.
+- Repo layout — apps cluster: filled in `customer-dashboard`,
+  `admin-panel`, `docs`, `status-site` (previously omitted under "..."
+  framing). Replaced "(separate workstream)" Tauri parenthetical with
+  the actual platform list (macOS / Windows / Linux).
+- Repo layout — packages cluster: added `behavioural-simulation`,
+  `recipe-library`, `recapture-automation`, `webrtc-streaming`,
+  `webhook-delivery` (previously elided — but they exist on disk and a
+  layout that omits half the workspace is misleading).
+
+### V-211 / V-205 guard re-run
+
+`git grep -E -i "(claude|anthropic|gpt|copilot|noreply)" README.md` —
+ZERO hits.
+`git grep -E "(^|[^[:alnum:]])(Founder|Joel|Theunissen)([^[:alnum:]]|$)" README.md` —
+ZERO hits.
+
+### Verification
+
+- Read pass diff against the pre-pass-2 README.
+- Package directory references cross-checked against `ls packages/`
+  (9 packages: api-types, behavioural-simulation, recapture-automation,
+  recipe-library, sdk-go, sdk-python, sdk-typescript, webhook-delivery,
+  webrtc-streaming — all listed).
+- Apps directory references cross-checked against `ls apps/` (7 apps:
+  admin-panel, customer-dashboard, docs, gui-client, marketing-site,
+  server, status-site — all listed).
+
+## Wave 16 — autopilot summary (per Rule M)
+
+| Track | Slice   | Outcome                                                                                         |
+| ----- | ------- | ----------------------------------------------------------------------------------------------- |
+| E     | V-525   | SDK extraction design doc + script + 3 local branches (TS/Py/Go) materialized via subtree split |
+| B     | V-530.B | Scroll velocity profiles with exponential decay + 19 property-style tests (+19 to suite → 1359) |
+| C     | V-535   | README pass-2 — engineering-audience framing tightened, full apps + packages listing accurate   |
+
+3 slices, empirical-proof-confirmed (typecheck + vitest 1359/1359 +
+hook dry-run + branch-listing audit). Rule M satisfied: 2 P-track slices
+from 2 different tracks (Track E + Track C). No GitHub remote operations
+performed. No force-push, no GitHub-private flip, no SDK publish.

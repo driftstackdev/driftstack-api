@@ -17,8 +17,16 @@ export type {
   GenerateKeyboardCadenceOpts,
   GenerateMouseTrajectoryOpts,
   GenerateScrollPatternOpts,
+  GenerateScrollVelocityProfileOpts,
   GenerateTouchEventOpts,
 } from './interfaces.js';
 
+export type {
+  ScrollVelocityClassDefaults,
+  ScrollVelocityProfile,
+  ScrollVelocityTick,
+} from './scroll.js';
+
 export { MockBehaviouralSimulator } from './mock.js';
 export { generateTouchEvent, TOUCH_DISTRIBUTIONS } from './touch.js';
+export { generateScrollVelocityProfile, SCROLL_VELOCITY_DEFAULTS } from './scroll.js';

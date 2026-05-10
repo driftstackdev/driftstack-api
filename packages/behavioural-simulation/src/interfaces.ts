@@ -1,6 +1,7 @@
 // V-127 stub interfaces. The Phase 3 real implementation slots in
 // here without changing call sites.
 
+import type { ScrollVelocityProfile } from './scroll.js';
 import type {
   BehaviouralProfile,
   ElementBounds,
@@ -43,6 +44,21 @@ export interface GenerateTouchEventOpts {
   seed?: string;
 }
 
+export interface GenerateScrollVelocityProfileOpts {
+  /** Direction of the scroll. */
+  direction: 'up' | 'down' | 'left' | 'right';
+  /** Element class the scroll initiates from (informs defaults). */
+  elementClass: ElementClass;
+  /** Optional explicit initial velocity (px/s). Overrides class default. */
+  initialVelocityPxPerSec?: number;
+  /** Optional explicit decay rate (1/s). Overrides class default. */
+  decayRate?: number;
+  /** Optional tick interval (ms). Default 16 ms. */
+  tickIntervalMs?: number;
+  /** Optional seed override (defaults to deterministic per-call seed). */
+  seed?: string;
+}
+
 /**
  * Behavioural simulator interface. Phase 3 ships the real generators
  * (humanlike Bezier mouse paths, hand-position-aware keystroke
@@ -62,11 +78,19 @@ export interface BehaviouralSimulator {
   /**
    * Produce a touch event sampled from the per-class distribution.
    *
-   * V-530.A — added in Wave 15. Sub-slices B (scroll velocity), C (dwell +
-   * click-position), D (idle jitter + multi-touch sequencing) extend the
-   * touch surface in later waves.
+   * V-530.A — added in Wave 15. Sub-slices C (dwell + click-position),
+   * D (idle jitter + multi-touch sequencing) extend the touch surface
+   * in later waves.
    */
   generateTouchEvent(opts: GenerateTouchEventOpts): TouchEvent;
+
+  /**
+   * Produce a scroll velocity profile with exponential decay starting
+   * from a finger-flick initial velocity. Distinct from the constant-tick
+   * `generateScrollPattern` surface — this is the realistic finger-flick
+   * model. V-530.B — added in Wave 16.
+   */
+  generateScrollVelocityProfile(opts: GenerateScrollVelocityProfileOpts): ScrollVelocityProfile;
 
   /** Convenience: returns the simulator's loaded profile catalogue. */
   listProfiles(): readonly BehaviouralProfile[];
