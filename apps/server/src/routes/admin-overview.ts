@@ -33,9 +33,13 @@ export function registerAdminOverviewRoutes(
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
 
-      const [activeAccounts, suspendedAccounts, dlqDepth] = await Promise.all([
+      // V-515 — also surface deleted-account count + computed total
+      // so the admin panel can show "X of Y accounts active" without
+      // a second roundtrip.
+      const [activeAccounts, suspendedAccounts, deletedAccounts, dlqDepth] = await Promise.all([
         accountsAdmin.countByStatus(ctx, 'active'),
         accountsAdmin.countByStatus(ctx, 'suspended'),
+        accountsAdmin.countByStatus(ctx, 'deleted'),
         webhooksAdmin.countDlq(ctx),
       ]);
 
@@ -43,6 +47,8 @@ export function registerAdminOverviewRoutes(
         accounts: {
           active: activeAccounts,
           suspended: suspendedAccounts,
+          deleted: deletedAccounts,
+          total: activeAccounts + suspendedAccounts + deletedAccounts,
         },
         webhooks: {
           dlq_depth: dlqDepth,

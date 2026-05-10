@@ -278,6 +278,62 @@ If any red: stop, close the gap, re-verify.
 - `docs/founder-actions/v278-hetzner-deploy-keys.md` — Hetzner provisioning runbook.
 - `docs/operations/production-env-schema.md` — env-var schema in provisioning order.
 - `docs/deployment/runbook.md` — day-to-day operations (logs, restart, scale).
-- `docs/deployment/dr-runbook.md` — disaster-recovery procedures.
+- `docs/deployment/dr-runbook.md` — disaster-recovery procedures (11 scenarios
+  incl. V-497 Cloudflare Pages rollback, Stripe panic-rotate, Hetzner regional
+  outage).
+- `docs/runbooks/incidents.md` — V-499 incident classification + GDPR Art.
+  33–34 timeline + sub-processor incident propagation + CSE escalation tree +
+  post-incident review template.
+- `docs/runbooks/observability.md` — V-513 Sentry per-service projects +
+  alert rules + synthetic check thresholds + DLQ triage workflow + load-test
+  cadence.
+- `scripts/dr-rehearse.sh` — V-510 local-only DR rehearsal harness
+  (Scenarios 2/4/6/7/8). Refuses to act on production hosts.
 - `docs/adr/ADR-004-pricing-restructure-two-ladder.md` — pricing values + 19 SKUs.
 - `docs/adr/ADR-003-paid-trial-pack-replaces-free-tier.md` — trial-pack mechanics.
+
+---
+
+## V-516 launch-day amendments (post-Wave-11 state)
+
+The following items, shipped during Waves 1–11 of the autopilot
+run, should be confirmed during T-24h or T-0 alongside the
+checklist above.
+
+### T-24h additions
+
+- [ ] V-485 tier-features registry — sanity-check: `tierFeatures(tier)`
+      returns the expected aiAgent + concurrentSessions values for
+      the tier of the first-paying-customer's account.
+- [ ] V-494 secret redaction — confirm pino logs produced during the
+      T-24h staging smoke test do NOT contain any of the redacted
+      keys (`password` / `new_password` / `recovery_code` /
+      `stripe-signature` header).
+- [ ] V-499 incident runbook — verify the customer-facing
+      `/trust/incidents` page renders and the "open an incident"
+      flow actually creates a visible entry.
+- [ ] V-513 observability — open Sentry; confirm at least one
+      breadcrumb-trail event arrives from a staging request.
+      Confirm the alert rules listed in `observability.md` are
+      configured in the Sentry dashboard.
+- [ ] V-510 DR rehearsal — `scripts/dr-rehearse.sh all` exits 0.
+      This exercises 5 local scenarios; the 6 production-touching
+      scenarios (1 / 3 / 5 / 9 / 10 / 11) need explicit founder
+      rehearsal pre-launch per `dr-runbook.md`.
+- [ ] V-487 NowPayments scaffold — confirm the IPN secret + API
+      key are provisioned in the production .env (or that the
+      crypto rail is intentionally NOT live yet, in which case
+      the absent env vars are correct).
+
+### T-0 additions
+
+- [ ] StatusBadge (V-474) on the marketing site shows green
+      (`/v1/status` returns `operational`).
+- [ ] DLQ depth at `/v1/admin/overview` is 0 within the first hour;
+      any non-zero count pages founder per the V-513 alert rules.
+- [ ] V-484 audit-log filters render correctly on the customer-
+      dashboard `/audit-log` page (date pickers + actor-type select +
+      target_resource_id input apply cleanly).
+- [ ] V-512 admin DLQ drill-down filter works:
+      `GET /v1/admin/webhook-dlq?endpoint_id=<known-endpoint>`
+      returns the expected subset.

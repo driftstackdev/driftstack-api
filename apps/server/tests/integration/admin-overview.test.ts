@@ -18,7 +18,7 @@ const auth = (fixture: TestAppFixture): { authorization: string } => ({
 });
 
 interface OverviewResponse {
-  accounts: { active: number; suspended: number };
+  accounts: { active: number; suspended: number; deleted: number; total: number };
   webhooks: { dlq_depth: number };
 }
 
@@ -69,6 +69,28 @@ describe('GET /v1/admin/overview', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<OverviewResponse>();
     expect(body.accounts.suspended).toBe(1);
+  });
+
+  // V-515 — total + deleted counts.
+  it('V-515 — exposes deleted count and computed total', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    await seedAdditionalAccount(fx, {
+      accountId: '00000000-0000-4000-8000-0000000000c1',
+      apiKeyId: '00000000-0000-4000-8000-0000000000c2',
+      tier: 'team_manual',
+      email: 'count-test@driftstack.local',
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/overview',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<OverviewResponse>();
+    expect(body.accounts.deleted).toBeGreaterThanOrEqual(0);
+    expect(body.accounts.total).toBe(
+      body.accounts.active + body.accounts.suspended + body.accounts.deleted,
+    );
   });
 
   it('rejects without admin scope', async () => {

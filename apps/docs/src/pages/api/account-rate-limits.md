@@ -1,0 +1,142 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: Account rate limits
+description: Read your account's effective per-bucket rate-limit config — tier defaults plus any active admin overrides.
+---
+
+# Account rate limits
+
+V-517 reference. Driftstack enforces per-tier token-bucket rate
+limits on every authenticated `/v1/*` call. The
+`/v1/account/rate-limits` endpoint exposes the **effective** config
+your account is hitting right now — tier defaults merged with any
+active admin overrides.
+
+For the broader explanation of how rate limits work + the per-tier
+defaults table, see [/reference/rate-limits](/reference/rate-limits).
+
+## Get effective rate-limit config
+
+`GET /v1/account/rate-limits`
+
+Returns the rate-limit config that's actually being applied to
+this account. Two bucket keys exist: `global` (every authenticated
+`/v1/*` call) and `sessions:create` (`POST /v1/sessions` only —
+lower cap because session creation is expensive).
+
+Response (200):
+
+```json
+{
+  "tier": "api_builder",
+  "buckets": [
+    {
+      "bucket_key": "global",
+      "capacity": 1800,
+      "refill_per_second": 30,
+      "source": "tier_default",
+      "override_expires_at": null
+    },
+    {
+      "bucket_key": "sessions:create",
+      "capacity": 60,
+      "refill_per_second": 1,
+      "source": "tier_default",
+      "override_expires_at": null
+    }
+  ]
+}
+```
+
+When an active admin override is in place for a bucket, that row
+shows `source: "override"` plus the override's `override_expires_at`
+timestamp:
+
+```json
+{
+  "bucket_key": "global",
+  "capacity": 6000,
+  "refill_per_second": 100,
+  "source": "override",
+  "override_expires_at": "2026-06-15T12:00:00Z"
+}
+```
+
+After the override expires, subsequent reads return the
+tier-default row again. The override doesn't disappear from the
+admin's audit trail — only from the calling account's effective
+config.
+
+Required scope: `read` or `account_owner`.
+
+## Bucket reference
+
+| Bucket key        | Consumed by                 | Why a separate bucket?                                                          |
+| ----------------- | --------------------------- | ------------------------------------------------------------------------------- |
+| `global`          | Every authenticated `/v1/*` | Coarse anti-abuse cap — protects against runaway scripts                        |
+| `sessions:create` | `POST /v1/sessions` only    | Lower cap because session creation is the most expensive op (driver allocation) |
+
+A `POST /v1/sessions` consumes from BOTH buckets — hitting either
+cap returns 429.
+
+## Per-tier defaults
+
+The defaults the endpoint returns when no override is active are
+locked in `packages/api-types/src/common.ts:TIER_RATE_LIMIT_DEFAULTS`.
+Full table at [/reference/rate-limits](/reference/rate-limits).
+
+## Admin overrides
+
+Driftstack staff can configure per-account, per-bucket overrides
+that supersede tier defaults for a configurable window. Overrides
+have:
+
+- `capacity` and `refill_per_second` — the new ceiling
+- `expires_at` — when the override automatically reverts to tier
+  default
+- `reason` — admin-side audit string (not exposed on the customer
+  endpoint)
+
+When an override exists for a bucket and `now < expires_at`, the
+override takes effect. When `now >= expires_at`, the bucket falls
+back to the tier default automatically.
+
+Customers needing legitimate high-throughput workloads (Enterprise,
+agencies running scraping jobs across many domains) request
+overrides via `support@driftstack.dev` with workload shape +
+expected steady-state RPS. Admins evaluate, set the override via
+`/v1/admin/rate-limit-overrides`, and notify the customer.
+
+## Customer-dashboard surface
+
+The `/usage` page on the customer dashboard renders the same data
+visually — bucket name + capacity + refill rate per row, with a
+badge when an override is active. No additional surface today;
+the dashboard reads this endpoint directly.
+
+## What happens when you hit a cap
+
+The API returns HTTP 429 with an RFC 9457 problem-details body:
+
+```json
+{
+  "type": "https://errors.driftstack.dev/rate-limited",
+  "title": "Rate limit exceeded",
+  "status": 429,
+  "detail": "Rate limit for \"global\" exceeded for tier \"api_starter\".",
+  "bucket": "global",
+  "retry_after_seconds": 12
+}
+```
+
+The `Retry-After` HTTP header carries the same value as
+`retry_after_seconds`. SDK clients honour it automatically with
+exponential backoff capped at 30s; see
+[/reference/errors](/reference/errors) for retry-loop examples.
+
+## Source of truth
+
+Routes: `apps/server/src/routes/account-rate-limits.ts`. Schema:
+`packages/api-types/src/common.ts:TIER_RATE_LIMIT_DEFAULTS`.
+Override repo: `apps/server/src/db/rate-limit-overrides-repo.ts`.
+Admin route: `apps/server/src/routes/admin-rate-limit-overrides.ts`.

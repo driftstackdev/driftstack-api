@@ -23254,3 +23254,70 @@ filter in the Related section.
 3 slices, empirical-proof-confirmed (typecheck + integration test
 
 - docs build), no gates touched, V-205 invariant intact.
+
+## V-515 — admin overview metrics expansion (Track A, Wave 12)
+
+`/v1/admin/overview` response gains `accounts.deleted` (count of
+deleted accounts) and `accounts.total` (computed
+active+suspended+deleted) so the admin panel can show
+"X of Y accounts active" without a second roundtrip.
+
+### Verification
+
+- `npx vitest run apps/server/tests/integration/admin-overview.test.ts`
+  — 4/4 passed (was 3; +1 from V-515 verifying total = active +
+  suspended + deleted).
+
+## V-516 — launch-day runbook depth-fill (Track C, Wave 12)
+
+`docs/operations/launch-day-runbook.md` extended with:
+
+- Cross-references to V-499 incidents.md, V-513 observability.md,
+  V-510 dr-rehearse.sh, V-497 DR runbook scenarios 9/10/11.
+- New "V-516 launch-day amendments" section adding T-24h checks
+  for V-485 tier-features sanity, V-494 redaction sanity,
+  V-499 incident page render verification, V-513 Sentry alert
+  configuration confirmation, V-510 dr-rehearse.sh exit-0 gate,
+  V-487 NowPayments env-var presence (or intentional absence).
+- T-0 additions for V-474 StatusBadge green check, DLQ-depth-zero
+  verification at `/v1/admin/overview`, V-484 audit-log filter
+  rendering, V-512 admin DLQ drill-down filter sanity check.
+
+### Verification
+
+- File renders: `docs/operations/launch-day-runbook.md`. No code
+  touched.
+
+## V-517 — /api/account-rate-limits docs page (Track D, Wave 12)
+
+New `/api/account-rate-limits` reference page on the docs site.
+Covers:
+
+- `GET /v1/account/rate-limits` endpoint shape including
+  override resolution semantics (`source: "tier_default"` vs
+  `"override"` + `override_expires_at` timestamp).
+- Bucket reference (global vs sessions:create) + why each is a
+  separate bucket.
+- Per-tier defaults pointer to `/reference/rate-limits`.
+- Admin override mechanics — when overrides take effect,
+  customer-facing surface, request flow.
+- Customer-dashboard `/usage` surface.
+- 429 response shape with `retry_after_seconds` + cross-link to
+  `/reference/errors`.
+- Source-of-truth file references.
+
+### Verification
+
+- `npm run -w apps/docs build` — clean (35 pages, 1.02s; was 34
+  before V-517).
+
+## Wave 12 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                                       |
+| ----- | ----- | --------------------------------------------------------------------------------------------- |
+| A     | V-515 | Admin overview gains accounts.deleted + accounts.total; +1 integration test                   |
+| C     | V-516 | Launch-day runbook gains V-516 amendments section + cross-refs to V-499/V-513/V-510           |
+| D     | V-517 | New `/api/account-rate-limits` reference page covering effective config + override resolution |
+
+3 slices, empirical-proof-confirmed (vitest + docs build), no
+gates touched, V-205 invariant intact.
