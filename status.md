@@ -1,8 +1,44 @@
 # Driftstack API — current status
 
-**Last updated:** 2026-05-09
-**HEAD at checkpoint:** `632a5f2` (final commit will land at V-CHKPT.4)
-**Mode:** PAUSED — autopilot stopped pending Tuesday founder reactivation
+**Last updated:** 2026-05-10
+**HEAD at last checkpoint:** `92da30c`
+**Mode:** PAUSED → SEAMLESS HANDOFF (founder switching Claude accounts)
+
+## Seamless handoff prompt for the next Claude session
+
+Paste this verbatim as the first message in the new Claude account:
+
+```
+You're picking up an in-flight project. Read in this order, then
+report back with a one-paragraph "I'm oriented" summary before
+proposing any work:
+
+1. /Users/john/code/driftstack-api/status.md (this file)
+2. /Users/john/code/driftstack-api/docs/progress/v278-final-state.md
+3. /Users/john/code/driftstack-api/docs/progress/tuesday-pickup.md
+4. /Users/john/.claude/projects/-Users-john/memory/MEMORY.md
+   (auto-memory; persists across Claude accounts because it's
+   user-machine-scoped, not account-scoped)
+5. tail -200 /Users/john/code/driftstack-api/docs/verification-log.md
+
+Current pause status: V-278 control plane v1.0 LIVE (6/6 URLs HTTP 200
+at TLS 1.3 Full strict). F-002 signup-email is pending Postmark
+account approval (form submitted 2026-05-09, expected response by
+~2026-05-11; see docs/internal/postmark-approval-request.md). When
+Postmark approves, retry signup at app.driftstack.dev/signup with any
+external email → verification email arrives within seconds; F-002
+closes.
+
+Don't continue the V-294 catalog or fire any new V-NNN slices until
+the founder explicitly reactivates autopilot. The session was paused
+per cost-discipline (Agent 1 priority through Tuesday).
+```
+
+You'll hit a memory directory automatically — Claude Code stores its
+auto-memory at `/Users/john/.claude/projects/-Users-john/memory/`,
+keyed to the user-machine pair, not the Claude account. So switching
+accounts on the same machine preserves all 13 memory rules + project
+context.
 
 ## What's live right now
 
@@ -68,6 +104,14 @@ to "live infrastructure" plus closed the long-running V-455 audit:
 
 ## Awaiting founder
 
+- **Postmark account approval** — submitted 2026-05-09 via
+  postmarkapp.com/help; founder estimates by Monday. Until approved,
+  signups for non-`@driftstack.dev` recipients silently drop at the
+  Postmark layer (see
+  [`docs/internal/postmark-approval-request.md`](./docs/internal/postmark-approval-request.md)).
+  Empirically root-caused 2026-05-09 — same-domain signup probe
+  succeeded; cross-domain probe (kidakev946@imashr.com) was rejected
+  by Postmark with the pre-approval same-domain restriction.
 - F-001 mobile UI bug: device + URL + screenshot to reproduce.
 - F-003 OAuth: register OAuth apps at Google Cloud Console + GitHub
   Developer Settings; supply Client IDs + secrets. Callback URL
