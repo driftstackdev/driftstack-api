@@ -1,7 +1,7 @@
 # Driftstack API — current status
 
 **Last updated:** 2026-05-10
-**Most recent wave:** Wave 24 (V-548 + V-549 + V-550)
+**Most recent wave:** Wave 25 (V-551 + V-552 + Wave 15-25 consolidation report)
 **Mode:** Autopilot active. Waves 1-18 closed; Wave 19 lands this commit;
 Waves 20-26 queued per the overnight directive. Team morning review point:
 `docs/internal/wave-15-18-overnight-batch-report.md` (5-minute scan covers
