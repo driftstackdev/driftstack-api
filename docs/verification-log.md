@@ -21821,3 +21821,95 @@ Estimated scope: ~6h of engineering + 1 sub-processor disclosure update.
 **Founder action needed first**: register OAuth apps at
 console.cloud.google.com + github.com/settings/developers and supply
 the Client IDs + secrets. Auth callback URL = `https://api.driftstack.dev/v1/auth/oauth/<provider>/callback`.
+
+## V-472 / V-473 / V-474 — marketing-site customer-trust pages + status badge
+
+**Tier**: 1 (customer-facing surfaces; closes three of the
+"Apps/docs gaps" line items in `docs/progress/tuesday-pickup.md`).
+
+Three net-new public pages + a reusable component, all on the
+marketing-site Astro app. None of these existed prior to this slice;
+all built clean and live behind `npm run build` (18 pages, 977ms,
+0 errors / 0 warnings on `astro check`).
+
+### V-472 — `/comparison`
+
+`apps/marketing-site/src/pages/comparison.astro`. Comparison surface
+between Driftstack and four named competitors: Browserless,
+Bright Data, ScrapingBee, Browserbase. Tone is differentiation, not
+disparagement — each competitor has a section that names the workload
+shape they fit, plus a "Where Driftstack isn't the fit" section that
+explicitly redirects desktop-only / pure-HTML-scraping / IP-pool-as-
+product workloads.
+
+Content claims about competitors are confined to category-level facts
+that are uncontroversial from each vendor's own marketing (Chromium-
+based, proxy-network-first, scraping-API surface, etc.). No
+benchmarks vs them — those land on `benchmarks.driftstack.dev`
+(catalog row V-345) once empirical data is collected.
+
+The COMPARISON_ROWS table covers 12 features: engine, device target,
+stealth approach, fingerprint posture, pricing model, metering
+surprises, customer-controlled proxies, data residency, GUI, SDK
+languages, self-hosted, trial path. Driftstack column highlighted in
+oxblood-700; competitor columns in slate-500 muted text.
+
+### V-473 — `/roadmap`
+
+`apps/marketing-site/src/pages/roadmap.astro`. Public roadmap with
+three buckets — Now (5 items, live and supported), Next (7 items, in
+active engineering), Later (6 items, on the deck). Sourced selectively
+from the internal V-294 catalog. Internal V-NNN tags are intentionally
+NOT exposed; customer-facing language only.
+
+No date commitments — the page lead frames it: "We don't publish
+dates; we publish ordering." Email CTA at the bottom invites concrete
+demand to reorder the deck.
+
+Content authority: per `MEMORY.md → marketing copy cadence`, agent
+drafts; founder reviews tone post-hoc.
+
+### V-474 — `<StatusBadge />` component + footer wire
+
+`apps/marketing-site/src/components/StatusBadge.astro`. Reusable Astro
+component, embeds anywhere on the marketing site. Client-side
+fetches `https://api.driftstack.dev/v1/status` (already in production
+CORS allow-list) and renders a colored pill: emerald for `operational`,
+amber for `degraded`, red for `major_outage`, slate for unknown /
+fetch failure.
+
+- Props: `className` (override) and `withLabel` (default true; false
+  for tighter dot-only header strip variant).
+- 4-second `AbortController` timeout — a slow status endpoint doesn't
+  keep the badge spinning forever.
+- Failure mode is intentionally cautious: a fetch error renders
+  "status unavailable", NOT "down". The badge link points at the
+  future `https://status.driftstack.dev` for detailed history.
+- `/v1/status` already caches at 30s server-side
+  (`cache-control: public, max-age=30`); Cloudflare edge likely
+  extends.
+
+Wired into `Footer.astro` next to the © line. Visible site-wide.
+
+### Header / Footer wire-in
+
+- `Header.astro` desktop nav adds `Compare` (between Pricing and
+  Self-hosted). Roadmap deferred to mobile menu + footer to keep
+  desktop nav at 5 + 2 CTA — fits cleanly at md-breakpoint without
+  overflow. Mobile hamburger gets both via the new
+  `mobileExtraItems` array.
+- `Footer.astro` "Product" column adds Comparison and Roadmap links;
+  bottom strip gets the StatusBadge.
+
+### Verification
+
+- `cd apps/marketing-site && npm run build` → 18 pages, 977ms, no
+  errors. comparison + roadmap render to static HTML.
+- `npm run typecheck` → 24 files, 0 errors / 0 warnings / 0 hints.
+- Will deploy on next wrangler push to driftstack-marketing.
+
+**Founder Tier-3 surfacing notes**: comparison page names four named
+competitors. Per the marketing-copy-cadence rule the agent drafted +
+shipped; founder reviews tone post-hoc. If any competitor row needs
+softening / rewording, edit in place — the page is intentionally
+small-surface (single .astro file, all content as data arrays).

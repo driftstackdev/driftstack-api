@@ -1,0 +1,417 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+// V-472 — comparison page. Driftstack vs Browserless / Bright Data /
+// ScrapingBee / Browserbase. Tone: differentiation, not disparagement.
+// Each competitor has a legitimate audience and use-case; the page
+// names where Driftstack's posture is materially different and where
+// it isn't a fit.
+//
+// Content claims about competitors are confined to category-level
+// facts that are uncontroversial from each vendor's own marketing
+// (Chromium-based, proxy-network-first, scraping-API surface, etc.).
+// No performance benchmarks vs them — those land on the future
+// /benchmarks subdomain (V-345) once empirical data is collected.
+
+interface ComparisonRow {
+  feature: string;
+  driftstack: string;
+  browserless: string;
+  brightData: string;
+  scrapingBee: string;
+  browserbase: string;
+}
+
+const COMPARISON_ROWS: ComparisonRow[] = [
+  {
+    feature: 'Browser engine',
+    driftstack: 'Apple WebKit (C++ source-level fork)',
+    browserless: 'Chromium / Chrome',
+    brightData: 'Chromium-based scraping browser',
+    scrapingBee: 'Chromium (Puppeteer)',
+    browserbase: 'Chromium / Stagehand',
+  },
+  {
+    feature: 'Primary device target',
+    driftstack: 'iPhone 16 Pro · iOS 26.4 · Safari',
+    browserless: 'Desktop Chrome',
+    brightData: 'Desktop + mobile UA simulation',
+    scrapingBee: 'Desktop Chrome',
+    browserbase: 'Desktop Chrome',
+  },
+  {
+    feature: 'Stealth approach',
+    driftstack: 'Source-level — no JS-runtime patches',
+    browserless: 'Stealth plugins (puppeteer-extra)',
+    brightData: 'Proprietary anti-detection layer',
+    scrapingBee: 'Stealth headers + rotating proxies',
+    browserbase: 'Stealth bundles + AI-assisted',
+  },
+  {
+    feature: 'Fingerprint posture',
+    driftstack: 'Bit-identical to reference iPhone',
+    browserless: 'Configurable per session',
+    brightData: 'Real-device fingerprint pool',
+    scrapingBee: 'Auto-rotated UA + headers',
+    browserbase: 'Per-session profiles',
+  },
+  {
+    feature: 'Pricing model',
+    driftstack: 'Per concurrent session, hours unmetered',
+    browserless: 'Per browser-hour + per-unit',
+    brightData: 'Per GB + per request',
+    scrapingBee: 'Per API call (request credits)',
+    browserbase: 'Per browser-hour',
+  },
+  {
+    feature: 'Session metering surprises',
+    driftstack: 'None — flat within concurrent cap',
+    browserless: 'Idle browser hours billable',
+    brightData: 'GB egress can spike',
+    scrapingBee: 'Hard JS pages cost more credits',
+    browserbase: 'Idle browser hours billable',
+  },
+  {
+    feature: 'Customer-controlled proxies',
+    driftstack: 'BYO SOCKS5 / WireGuard / OpenVPN',
+    browserless: 'Per-session proxy config',
+    brightData: 'Their proxy network is the product',
+    scrapingBee: 'Bundled (their pool)',
+    browserbase: 'Per-session proxy config',
+  },
+  {
+    feature: 'Data residency',
+    driftstack: 'EU-only compute + storage',
+    browserless: 'US / EU regions',
+    brightData: 'Global; configurable per plan',
+    scrapingBee: 'US default',
+    browserbase: 'US / EU regions',
+  },
+  {
+    feature: 'GUI for human operators',
+    driftstack: 'Yes — Tauri client, Manual ladder',
+    browserless: 'API-first (no GUI)',
+    brightData: 'Browser product + dashboard',
+    scrapingBee: 'API-first (no GUI)',
+    browserbase: 'Replay viewer + dashboard',
+  },
+  {
+    feature: 'SDK languages',
+    driftstack: 'TypeScript · Python · Go',
+    browserless: 'Any (REST + Puppeteer)',
+    brightData: 'Any (REST + scraping browser)',
+    scrapingBee: 'Any (REST)',
+    browserbase: 'TypeScript · Python',
+  },
+  {
+    feature: 'Self-hosted option',
+    driftstack: 'Yes — three SKUs, source escrow',
+    browserless: 'Yes — open-source core',
+    brightData: 'No',
+    scrapingBee: 'No',
+    browserbase: 'No',
+  },
+  {
+    feature: 'Trial path',
+    driftstack: '$2.99 paid trial pack · 16h · once',
+    browserless: 'Free tier with usage cap',
+    brightData: 'Free trial with credit',
+    scrapingBee: '1,000 free credits',
+    browserbase: 'Free credits on signup',
+  },
+];
+---
+
+<BaseLayout
+  title="Comparison"
+  description="How Driftstack compares to Browserless, Bright Data, ScrapingBee, and Browserbase. WebKit source-level fork vs Chromium. iPhone Safari vs desktop. Concurrent caps vs per-call metering."
+>
+  <!-- Hero -->
+  <section class="bg-gradient-to-b from-white to-slate-50">
+    <div class="mx-auto max-w-6xl px-6 pb-16 pt-20 md:pt-24">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Comparison</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+        How Driftstack compares.
+      </h1>
+      <p class="mt-6 max-w-prose text-lg text-slate-600">
+        Driftstack and the platforms below all give code or humans a remote
+        browser session. The difference is in <strong>which browser</strong>,
+        <strong>how fingerprints are produced</strong>, and
+        <strong>what shows up on the invoice</strong>.
+      </p>
+      <p class="mt-3 max-w-prose text-base text-slate-600">
+        Each row in the table below is a category-level fact pulled from each
+        vendor's own marketing — not a benchmark, not a value judgement.
+        Pick whichever fits your workload; Driftstack is the right answer for
+        a specific shape of problem, and we name where it isn't.
+      </p>
+    </div>
+  </section>
+
+  <!-- Comparison table -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[900px] border-collapse text-sm">
+          <thead>
+            <tr class="border-b-2 border-oxblood-700">
+              <th
+                class="sticky left-0 bg-white px-4 py-3 text-left font-mono text-xs uppercase tracking-widest text-slate-500"
+              >
+                Feature
+              </th>
+              <th
+                class="px-4 py-3 text-left font-mono text-xs uppercase tracking-widest text-oxblood-700"
+              >
+                Driftstack
+              </th>
+              <th
+                class="px-4 py-3 text-left font-mono text-xs uppercase tracking-widest text-slate-500"
+              >
+                Browserless
+              </th>
+              <th
+                class="px-4 py-3 text-left font-mono text-xs uppercase tracking-widest text-slate-500"
+              >
+                Bright Data
+              </th>
+              <th
+                class="px-4 py-3 text-left font-mono text-xs uppercase tracking-widest text-slate-500"
+              >
+                ScrapingBee
+              </th>
+              <th
+                class="px-4 py-3 text-left font-mono text-xs uppercase tracking-widest text-slate-500"
+              >
+                Browserbase
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              COMPARISON_ROWS.map((row) => (
+                <tr class="border-b border-slate-100 align-top">
+                  <th
+                    scope="row"
+                    class="sticky left-0 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700"
+                  >
+                    {row.feature}
+                  </th>
+                  <td class="px-4 py-3 text-slate-900">
+                    <span class="font-medium">{row.driftstack}</span>
+                  </td>
+                  <td class="px-4 py-3 text-slate-600">{row.browserless}</td>
+                  <td class="px-4 py-3 text-slate-600">{row.brightData}</td>
+                  <td class="px-4 py-3 text-slate-600">{row.scrapingBee}</td>
+                  <td class="px-4 py-3 text-slate-600">{row.browserbase}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="mt-6 max-w-prose text-xs text-slate-500">
+        Last reviewed 2026-05-10. If a competitor row drifts from current
+        public marketing, mail
+        <a href="mailto:support@driftstack.dev" class="text-oxblood-700 underline"
+          >support@driftstack.dev</a
+        > and we'll update.
+      </p>
+    </div>
+  </section>
+
+  <!-- Per-competitor sections -->
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        Side-by-side
+      </p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+        When each is the right answer.
+      </h2>
+      <p class="mt-3 max-w-prose text-slate-600">
+        We name the workload each platform fits. If yours doesn't match
+        Driftstack, we'd rather you find the right tool than buy the wrong
+        one and churn.
+      </p>
+
+      <div class="mt-10 grid gap-6 md:grid-cols-2">
+        <!-- Browserless -->
+        <div class="rounded-lg border border-slate-200 bg-white p-6">
+          <h3 class="text-xl font-semibold text-slate-900">Driftstack vs Browserless</h3>
+          <p class="mt-3 text-sm text-slate-600">
+            Browserless is the canonical "Chrome-as-a-service" platform —
+            Puppeteer / Playwright over a hosted browser pool, REST and
+            WebSocket APIs, open-source self-hosted core. Pick Browserless
+            when the target site renders fine on desktop Chrome and you
+            don't need iOS-specific signals.
+          </p>
+          <p class="mt-3 text-sm text-slate-600">
+            Pick Driftstack when the target reads
+            <code class="font-mono text-xs">navigator.userAgent</code>,
+            <code class="font-mono text-xs">User-Agent-Client-Hints</code>,
+            Touch events, Core Text font metrics, or any other iOS-specific
+            primitive — and a Chromium-flavored answer would mismatch a real
+            iPhone visitor.
+          </p>
+          <p class="mt-3 text-xs font-mono uppercase tracking-widest text-slate-500">
+            Pricing shape
+          </p>
+          <p class="mt-1 text-sm text-slate-600">
+            Browserless meters browser-hours plus per-unit operations. Idle
+            browsers count. Driftstack meters concurrent caps; idle is free
+            within your cap.
+          </p>
+        </div>
+
+        <!-- Bright Data -->
+        <div class="rounded-lg border border-slate-200 bg-white p-6">
+          <h3 class="text-xl font-semibold text-slate-900">Driftstack vs Bright Data</h3>
+          <p class="mt-3 text-sm text-slate-600">
+            Bright Data's core asset is its proxy network — residential, ISP,
+            mobile, datacenter pools at large scale. The Scraping Browser is
+            a Chromium-derived product layered on top. Pick Bright Data when
+            the unlock you need is
+            <strong>which IP the request comes from</strong>, not which
+            browser engine renders the page.
+          </p>
+          <p class="mt-3 text-sm text-slate-600">
+            Pick Driftstack when the unlock you need is the engine —
+            iPhone WebKit returning iOS-shaped fingerprints. Bring your own
+            proxy network or use SOCKS5 / WireGuard / OpenVPN to whatever IP
+            pool you've already paid for. We don't sell proxies; we don't
+            mark up egress.
+          </p>
+          <p class="mt-3 text-xs font-mono uppercase tracking-widest text-slate-500">
+            Pricing shape
+          </p>
+          <p class="mt-1 text-sm text-slate-600">
+            Bright Data bills per GB transferred + per request on most
+            products. Driftstack bills concurrent caps; bandwidth is
+            customer-egress, so it doesn't appear on our invoice at all.
+          </p>
+        </div>
+
+        <!-- ScrapingBee -->
+        <div class="rounded-lg border border-slate-200 bg-white p-6">
+          <h3 class="text-xl font-semibold text-slate-900">Driftstack vs ScrapingBee</h3>
+          <p class="mt-3 text-sm text-slate-600">
+            ScrapingBee's API surface is the simplest of any vendor in this
+            list — POST a URL, get HTML or extracted data back. Stealth
+            headers and proxy rotation are bundled. Pick ScrapingBee when the
+            workload is
+            <strong>fetch-this-page-give-me-the-DOM</strong> and you don't
+            need to interact with the page after rendering.
+          </p>
+          <p class="mt-3 text-sm text-slate-600">
+            Pick Driftstack when the workload is interactive — multi-step
+            checkouts, form fills, modal navigation, login state across many
+            requests, profile-bound cookie persistence — and the engine
+            needs to be iPhone Safari, not generic Chromium.
+          </p>
+          <p class="mt-3 text-xs font-mono uppercase tracking-widest text-slate-500">
+            Pricing shape
+          </p>
+          <p class="mt-1 text-sm text-slate-600">
+            ScrapingBee bills per API call with cost multipliers for hard
+            pages (premium proxies, JS rendering). Predictable per-fetch.
+            Driftstack bills concurrent caps regardless of how many actions
+            run inside each session.
+          </p>
+        </div>
+
+        <!-- Browserbase -->
+        <div class="rounded-lg border border-slate-200 bg-white p-6">
+          <h3 class="text-xl font-semibold text-slate-900">Driftstack vs Browserbase</h3>
+          <p class="mt-3 text-sm text-slate-600">
+            Browserbase is a managed Chromium platform optimized for AI
+            agent workloads — Stagehand integration, replay viewer for
+            debugging agent runs, observability tuned to LLM-driven
+            sessions. Pick Browserbase when your agent stack is built around
+            Chromium primitives and your target sites accept desktop Chrome.
+          </p>
+          <p class="mt-3 text-sm text-slate-600">
+            Pick Driftstack when the agent needs to look like a real iPhone
+            visitor — same engine, same fingerprints, same touch events,
+            same Core Text rendering. Our optional AI-agent feature works
+            against the same WebKit engine your code drives manually; no
+            Chromium fallback under the hood.
+          </p>
+          <p class="mt-3 text-xs font-mono uppercase tracking-widest text-slate-500">
+            Pricing shape
+          </p>
+          <p class="mt-1 text-sm text-slate-600">
+            Browserbase bills browser-hours; idle counts. Driftstack bills
+            concurrent caps; idle within the cap is free. Bring-your-own
+            Anthropic key is supported — no LLM proxy markup unless you
+            explicitly opt into bundled.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- When NOT Driftstack -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        Where Driftstack isn't the fit
+      </p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+        When to pick something else.
+      </h2>
+      <div class="mt-10 grid gap-8 md:grid-cols-3">
+        <div>
+          <h3 class="text-lg font-medium text-slate-900">Desktop-only targets</h3>
+          <p class="mt-3 text-sm text-slate-600">
+            If your target site is a B2B dashboard or an internal tool that
+            only desktop users hit, an iPhone fingerprint adds zero unlock
+            and may attract attention. Browserless or Browserbase are the
+            cleaner picks.
+          </p>
+        </div>
+        <div>
+          <h3 class="text-lg font-medium text-slate-900">Pure HTML scraping</h3>
+          <p class="mt-3 text-sm text-slate-600">
+            "Fetch URL, extract data, never interact" is exactly the workload
+            ScrapingBee and similar API-first scrapers price for. Driftstack
+            costs more per fetch in that shape because you're paying for
+            engine fidelity you don't need.
+          </p>
+        </div>
+        <div>
+          <h3 class="text-lg font-medium text-slate-900">IP-pool-as-product</h3>
+          <p class="mt-3 text-sm text-slate-600">
+            If the unlock is residential / mobile / ISP IPs at scale and the
+            engine is interchangeable, Bright Data or a dedicated proxy
+            vendor will outprice us. Driftstack expects you to bring your
+            own egress.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <div class="flex flex-col items-start gap-6 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Try it</p>
+          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+            $2.99 trial pack — 16 hours, used once.
+          </h2>
+          <p class="mt-3 max-w-prose text-slate-600">
+            The trial pack is the cheapest way to verify whether the iPhone
+            engine difference matters for your workload. If the answer is
+            no, the comparison above will help you pick the right alternative.
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <a href="/pricing#trial-pack" class="btn-primary">Start trial — $2.99</a>
+          <a href="/pricing" class="btn-secondary">See full pricing</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

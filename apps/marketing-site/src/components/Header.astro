@@ -7,9 +7,16 @@
 
 const navItems = [
   { href: '/pricing', label: 'Pricing' },
+  { href: '/comparison', label: 'Compare' },
   { href: '/self-hosted', label: 'Self-hosted' },
   { href: '/faq', label: 'FAQ' },
   { href: 'https://docs.driftstack.dev', label: 'Docs', external: true },
+];
+
+// Mobile-menu list mirrors desktop + adds the secondary pages that
+// don't earn a top-level desktop slot (currently: Roadmap).
+const mobileExtraItems = [
+  { href: '/roadmap', label: 'Roadmap' },
 ];
 const pathname = Astro.url.pathname;
 ---
@@ -71,15 +78,15 @@ const pathname = Astro.url.pathname;
           class="absolute right-0 top-12 z-20 flex w-56 flex-col gap-1 rounded-md border border-slate-200 bg-white p-3 shadow-lg"
         >
           {
-            navItems.map((item) => (
+            [...navItems, ...mobileExtraItems].map((item) => (
               <a
                 href={item.href}
                 class:list={[
                   'rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100',
                   pathname === item.href && 'text-oxblood-700 font-medium',
                 ]}
-                target={item.external ? '_blank' : undefined}
-                rel={item.external ? 'noopener noreferrer' : undefined}
+                target={'external' in item && item.external ? '_blank' : undefined}
+                rel={'external' in item && item.external ? 'noopener noreferrer' : undefined}
               >
                 {item.label}
               </a>

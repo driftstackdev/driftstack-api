@@ -1,0 +1,230 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+// V-473 — public roadmap. Sourced selectively from the internal V-294
+// catalog; internal V-NNN tags are intentionally NOT exposed (they
+// rotate fast and would confuse customers). Customer-facing groupings
+// are Now / Next / Later, framed as feature outcomes, not engineering
+// slices.
+//
+// Items here are forward-looking — no commitment to specific dates.
+// The marketing-copy-cadence rule applies: agent drafts; founder
+// reviews tone post-hoc.
+
+interface RoadmapItem {
+  title: string;
+  body: string;
+}
+
+const NOW: RoadmapItem[] = [
+  {
+    title: 'iPhone 16 Pro · iOS 26.4 fingerprint parity',
+    body: 'The reference archetype is locked at bit-identical parity against a real iPhone 16 Pro on iOS 26.4 / Safari 26.4 across every measured fingerprint signal. This is the platform foundation; everything else builds on top.',
+  },
+  {
+    title: 'TypeScript · Python · Go SDKs',
+    body: 'First-class clients in three languages, with idempotency keys, scope-based permission helpers, behavioural-preset selectors, proxy configuration helpers, and webhook signature verification. Wire-shape regression tested across all three.',
+  },
+  {
+    title: 'Customer dashboard at app.driftstack.dev',
+    body: 'Account self-service for sessions, profiles, snapshots, API keys, webhooks, billing, audit log, MFA enrollment, and team management. Live; ships with the rest of the platform.',
+  },
+  {
+    title: 'Webhook delivery infrastructure',
+    body: 'HMAC-SHA256-signed events with 5-minute timestamp tolerance, configurable retries, dead-letter queue, and dashboard replay. Subscribe to session lifecycle, quota, and API-key events.',
+  },
+  {
+    title: 'GUI client for human operators',
+    body: 'Tauri-based desktop client (macOS first) for the Manual ladder. Drive sessions yourself, manage 10–200 persistent profiles, no code required.',
+  },
+];
+
+const NEXT: RoadmapItem[] = [
+  {
+    title: 'Public status page',
+    body: 'status.driftstack.dev with manual + auto-poll incident history, email subscriptions, and a simple-by-design surface for "is the platform working right now?".',
+  },
+  {
+    title: 'OAuth signup (Google · GitHub)',
+    body: '"Continue with Google" / "Continue with GitHub" alongside email + password. Provider-verified emails skip the verification step.',
+  },
+  {
+    title: 'API key rotation with grace window',
+    body: 'Rotate a key without breaking in-flight clients. New key issued, old key kept valid for a configurable grace period, then auto-revoked. Same pattern already shipped for webhook signing secrets.',
+  },
+  {
+    title: 'Account deletion (GDPR Article 17)',
+    body: 'Self-service account deletion with explicit retention disclosure — recordings hard-deleted, invoice history kept per EU tax law, audit trail of the deletion event itself preserved.',
+  },
+  {
+    title: 'Recipe library',
+    body: 'A curated library of pre-built session flows for the most common targets. Fork into your account, customize, run. Saves the "I just want to log into X and capture a screenshot" use case from being a 50-line scaffold each time.',
+  },
+  {
+    title: 'Live session WebRTC stream',
+    body: 'Watch a remote session render live in your browser, including from the GUI client. Useful for debugging detection challenges and verifying that a session actually navigated to where you expected.',
+  },
+  {
+    title: 'Workflow recording',
+    body: 'Record a manual session in the GUI client, replay it programmatically via the SDK. Closes the gap between "explored manually" and "automated reliably" without re-implementing every click.',
+  },
+];
+
+const LATER: RoadmapItem[] = [
+  {
+    title: 'Additional iOS archetypes',
+    body: 'iPhone 15 Pro, iPhone 14, older iOS releases. Same source-level fidelity as the reference archetype; pick which device-and-OS combination matches your target population.',
+  },
+  {
+    title: 'Android Chrome archetypes',
+    body: 'Samsung Galaxy S24 / Pixel 9 / mid-tier Android device parity, source-level (Chromium fork instead of WebKit fork). Lands after the iOS catalog matures.',
+  },
+  {
+    title: 'Hardware-key MFA (WebAuthn)',
+    body: 'YubiKey / Touch ID / platform authenticators in addition to TOTP recovery codes. Single sign-on integrations (SAML / OIDC) for team accounts.',
+  },
+  {
+    title: 'Public benchmark page',
+    body: 'benchmarks.driftstack.dev with comparative detection results — published methodology, reproducible test rigs, raw data.',
+  },
+  {
+    title: 'Self-hosted parity polish',
+    body: 'Same control plane as the SaaS — admin UI, dashboard, status surface — runnable inside a single VPC with zero outbound traffic to driftstack.dev.',
+  },
+  {
+    title: 'AI agent layer',
+    body: 'Optional bundled-or-BYOK LLM-driven session execution: describe a goal in natural language, the agent navigates the session against your target. The plumbing for both bundled and BYOK billing is already in tier configuration; the agent layer itself is the work.',
+  },
+];
+---
+
+<BaseLayout
+  title="Roadmap"
+  description="What's live now, what's landing next, and what's further out for Driftstack. iPhone Safari fingerprint platform — additional archetypes, GUI streaming, recipe library, AI agent layer."
+>
+  <!-- Hero -->
+  <section class="bg-gradient-to-b from-white to-slate-50">
+    <div class="mx-auto max-w-6xl px-6 pb-16 pt-20 md:pt-24">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Roadmap</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+        What's live, next, and further out.
+      </h1>
+      <p class="mt-6 max-w-prose text-lg text-slate-600">
+        We don't publish dates; we publish ordering. <strong>Now</strong> ships
+        today. <strong>Next</strong> is in active engineering and lands in the
+        weeks ahead. <strong>Later</strong> is on the deck and will move up
+        as the foundation supports it.
+      </p>
+      <p class="mt-3 max-w-prose text-base text-slate-600">
+        If something on the Later list would unlock a real workload for you
+        today, mail
+        <a href="mailto:support@driftstack.dev" class="text-oxblood-700 underline"
+          >support@driftstack.dev</a
+        > — concrete demand reorders the deck.
+      </p>
+    </div>
+  </section>
+
+  <!-- Now -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <div class="mb-8 flex items-baseline gap-4">
+        <span
+          class="rounded-full bg-emerald-100 px-3 py-1 font-mono text-xs uppercase tracking-widest text-emerald-700"
+        >
+          Now
+        </span>
+        <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+          Live and supported today.
+        </h2>
+      </div>
+      <ul class="grid gap-6 md:grid-cols-2">
+        {
+          NOW.map((item) => (
+            <li class="rounded-lg border border-emerald-200 bg-emerald-50/40 p-6">
+              <h3 class="text-lg font-medium text-slate-900">{item.title}</h3>
+              <p class="mt-3 text-sm text-slate-600">{item.body}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <!-- Next -->
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <div class="mb-8 flex items-baseline gap-4">
+        <span
+          class="rounded-full bg-oxblood-100 px-3 py-1 font-mono text-xs uppercase tracking-widest text-oxblood-700"
+        >
+          Next
+        </span>
+        <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+          In active engineering.
+        </h2>
+      </div>
+      <ul class="grid gap-6 md:grid-cols-2">
+        {
+          NEXT.map((item) => (
+            <li class="rounded-lg border border-oxblood-200 bg-white p-6">
+              <h3 class="text-lg font-medium text-slate-900">{item.title}</h3>
+              <p class="mt-3 text-sm text-slate-600">{item.body}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <!-- Later -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <div class="mb-8 flex items-baseline gap-4">
+        <span
+          class="rounded-full bg-slate-200 px-3 py-1 font-mono text-xs uppercase tracking-widest text-slate-600"
+        >
+          Later
+        </span>
+        <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+          On the deck.
+        </h2>
+      </div>
+      <ul class="grid gap-6 md:grid-cols-2">
+        {
+          LATER.map((item) => (
+            <li class="rounded-lg border border-slate-200 bg-slate-50/60 p-6">
+              <h3 class="text-lg font-medium text-slate-900">{item.title}</h3>
+              <p class="mt-3 text-sm text-slate-600">{item.body}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <div class="flex flex-col items-start gap-6 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+            Influence the order
+          </p>
+          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+            Tell us what would unlock your workload.
+          </h2>
+          <p class="mt-3 max-w-prose text-slate-600">
+            Customer demand is the single best ordering signal we have. If
+            you're trying to decide whether to bet on Driftstack and a Later
+            item is the deal-breaker, say so — that information moves it up.
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <a href="mailto:support@driftstack.dev" class="btn-primary">Email us</a>
+          <a href="/pricing#trial-pack" class="btn-secondary">Try the platform</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
