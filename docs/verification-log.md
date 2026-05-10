@@ -22122,3 +22122,57 @@ Build clean: customer-dashboard server in 877ms. Underlying API
 contract unchanged — V-296 server-side service + route + tests +
 SDK methods (TS / Python / Go) all stay green; this is pure UI
 layer.
+
+## V-477 — trust-center landing + public incident history
+
+**Tier**: 1 (customer-trust artifacts; closes the "Trust center
+additions" line item in `docs/progress/tuesday-pickup.md` #7).
+
+Two new public pages on the marketing-site Astro app, plus footer
+wire-in. Pre-existing trust surfaces (`/security`,
+`/trust/sub-processors`) get a dedicated landing that aggregates
+them; the incident-history page documents the public-incident bar
+ahead of the first paying customer so the policy is on-record
+empty rather than absent.
+
+### V-477a — `/trust/index.astro` (trust center landing)
+
+Four-card grid linking to `/security`, `/trust/sub-processors`,
+`/trust/incidents`, `/legal/dpa`. Hero embeds the V-474
+`<StatusBadge />` so visitors see live platform status alongside
+the static documentation. Quick-reference dl below covers the six
+questions buyer evaluations always ask (data residency, egress,
+key recoverability, DPA path, SLA stance, security questionnaire
+intake).
+
+### V-477b — `/trust/incidents.astro` (incident history)
+
+Empty list on launch with explicit "no customer-impacting incidents
+to date" empty state. Documents the public-incident bar (customer-
+impacting downtime, security events, sub-processor incidents,
+maintenance windows). Each future entry will include date, severity
+badge, duration, customer impact, components, summary, then root
+cause + remediation appended within seven days of resolution.
+
+`INCIDENTS` array is currently empty; entries land as immutable
+records when an incident closes.
+
+### Footer wire-in
+
+`Footer.astro` Trust column adds `Trust center` (top) +
+`Incidents`. The pre-existing `Status` link remains as the
+external-host alias.
+
+### Verification
+
+- `cd apps/marketing-site && npm run build` → 20 pages in 750ms
+  (was 18; +2 trust pages). No errors.
+- `npm run typecheck` → 26 files, 0 errors / 0 warnings / 0 hints.
+
+**Founder note**: trust-center copy says "pre-launch we don't
+publish a contractual SLA — we publish incidents at /trust/incidents
+and the live status above. Self-hosted SKUs and Enterprise tiers
+carry contractual SLA terms." Per the marketing-copy-cadence rule
+the agent drafted; founder reviews tone post-hoc. SLA-as-product is
+SURFACE-AS-BLOCKING territory if customer demand starts requiring a
+specific number on the SaaS side; flagged.
