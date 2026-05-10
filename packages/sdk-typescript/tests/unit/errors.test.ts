@@ -239,11 +239,7 @@ describe('errorFromProblem — V-441 ops-flow problem types', () => {
 
 describe('V-489 — isRetryable predicate', () => {
   it('returns true for transport errors', () => {
-    const e = new TransportError({
-      type: 'about:blank',
-      title: 'Network error',
-      status: 0,
-    });
+    const e = new TransportError('network down');
     expect(isRetryable(e)).toBe(true);
   });
 
