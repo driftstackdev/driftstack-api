@@ -144,6 +144,50 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       </div>
     </div>
 
+    <!--
+      V-296b — dedicated rotate reveal pane. Mirrors the V-475 webhook
+      rotate-secret pattern. Surfaces the new plaintext + grace expiry
+      so the customer knows how long the OLD key keeps working.
+      Replaces the previous reuse of the create-flow pane (which
+      didn't surface the grace metadata).
+    -->
+    <div
+      data-rotate-reveal
+      class="mb-8 hidden rounded-lg border border-amber-300 bg-amber-50 p-6"
+    >
+      <h2 class="text-lg font-semibold text-amber-900">API key rotated</h2>
+      <p class="mt-1 text-sm text-amber-900">
+        Copy the new plaintext now — it won't be shown again. The previous key
+        keeps working for the grace window below; deploy the new key everywhere
+        before then or requests using the old key will start returning 401.
+      </p>
+      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-amber-800">
+        Rotated from
+      </p>
+      <p data-rotate-from-id class="mt-1 font-mono text-xs text-slate-900"></p>
+      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-amber-800">
+        New plaintext
+      </p>
+      <pre
+        data-rotate-plaintext
+        class="mt-1 overflow-x-auto rounded border border-amber-200 bg-white px-3 py-2 font-mono text-xs text-slate-900"></pre>
+      <p class="mt-3 text-xs font-mono uppercase tracking-widest text-amber-800">
+        Old key valid until
+      </p>
+      <p data-rotate-grace-expires class="mt-1 text-sm text-slate-900"></p>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button type="button" data-rotate-copy class="btn-primary text-sm">
+          Copy plaintext
+        </button>
+        <button type="button" data-rotate-dismiss class="btn-secondary text-sm">
+          I've saved it
+        </button>
+        <span data-rotate-copy-feedback class="hidden text-xs text-amber-700"
+          >Copied.</span
+        >
+      </div>
+    </div>
+
     <!-- Security notice -->
     <div
       class="mb-6 flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
@@ -415,6 +459,60 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         });
       }
 
+      // V-296b — dedicated rotate-reveal pane wiring (mirrors V-475
+      // webhook rotate-secret pattern). Replaces the earlier reuse of
+      // the create-flow pane.
+      const rotateReveal = root.querySelector('[data-rotate-reveal]');
+      const rotatePlaintext = root.querySelector('[data-rotate-plaintext]');
+      const rotateFromId = root.querySelector('[data-rotate-from-id]');
+      const rotateGraceEl = root.querySelector('[data-rotate-grace-expires]');
+      const rotateCopyBtn = root.querySelector('[data-rotate-copy]');
+      const rotateDismissBtn = root.querySelector('[data-rotate-dismiss]');
+      const rotateCopyFb = root.querySelector('[data-rotate-copy-feedback]');
+
+      function showRotateReveal(rotatedFromId, plaintext, graceExpiresAt) {
+        if (!rotateReveal || !rotatePlaintext) return;
+        if (rotateFromId) rotateFromId.textContent = rotatedFromId || '—';
+        rotatePlaintext.textContent = plaintext || '';
+        if (rotateGraceEl) {
+          rotateGraceEl.textContent = graceExpiresAt
+            ? new Date(graceExpiresAt).toLocaleString()
+            : '—';
+        }
+        if (rotateCopyFb) rotateCopyFb.classList.add('hidden');
+        rotateReveal.classList.remove('hidden');
+        rotateReveal.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      function hideRotateReveal() {
+        if (!rotateReveal || !rotatePlaintext) return;
+        rotateReveal.classList.add('hidden');
+        // Wipe plaintext from DOM so it isn't recoverable post-dismiss.
+        rotatePlaintext.textContent = '';
+        if (rotateFromId) rotateFromId.textContent = '';
+        if (rotateGraceEl) rotateGraceEl.textContent = '';
+      }
+
+      if (rotateDismissBtn) rotateDismissBtn.addEventListener('click', hideRotateReveal);
+      if (rotateCopyBtn) {
+        rotateCopyBtn.addEventListener('click', () => {
+          if (!rotatePlaintext) return;
+          const plaintext = rotatePlaintext.textContent || '';
+          if (!plaintext) return;
+          navigator.clipboard
+            .writeText(plaintext)
+            .then(() => {
+              if (rotateCopyFb) rotateCopyFb.classList.remove('hidden');
+              window.setTimeout(() => {
+                if (rotateCopyFb) rotateCopyFb.classList.add('hidden');
+              }, 2000);
+            })
+            .catch(() => {
+              showBanner('Copy failed. Select the plaintext manually.');
+            });
+        });
+      }
+
       function wireRotateButtons() {
         const buttons = ul.querySelectorAll('[data-rotate]');
         buttons.forEach((btn) => {
@@ -449,11 +547,13 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
                 return r.json();
               })
               .then((body) => {
-                // Reuse the create-flow reveal pane: same plaintext-shown-once
-                // UX. Body also has rotated_from + grace_period_ends_at fields
-                // which tell the user their old key still works for 24h.
-                revealPre.textContent = body.plaintext || '';
-                reveal.classList.remove('hidden');
+                // V-296b — surface the rotated_from + grace_period_ends_at
+                // fields the response carries; not just the plaintext.
+                showRotateReveal(
+                  body.rotated_from || '',
+                  body.plaintext || '',
+                  body.grace_period_ends_at || '',
+                );
                 return refresh();
               })
               .catch((err) => {

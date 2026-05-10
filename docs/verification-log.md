@@ -22095,3 +22095,30 @@ end-to-end test that posts a delivery against an endpoint mid-grace
 and asserts both headers appear has not landed; the unit-level
 primitive coverage stands in for now. Queued as TD-snap (technical
 debt — separate slice).
+
+## V-296b — API key rotate dedicated reveal pane
+
+**Tier**: 1 (UX polish; surfaces grace-window metadata that V-296
+already returned in the response).
+
+V-296 originally reused the create-key reveal pane for rotation
+(line 17145 of this log: "Reuses existing plaintext-reveal pane
+(V-270)"). The reveal showed plaintext but did NOT surface
+`rotated_from` or `grace_period_ends_at`, so the customer had to
+remember from the confirm dialog that the old key still works for
+24h. Same gap V-475 closed for webhook secret rotation.
+
+This slice mirrors the V-475 amber rotate-reveal pattern onto
+`apps/customer-dashboard/src/pages/api-keys.astro`:
+
+- New `data-rotate-reveal` block alongside `data-created-reveal`.
+- Surfaces: rotated-from key id, new plaintext, grace-expiry
+  timestamp (rendered via `Date.toLocaleString()`).
+- Controls: Copy plaintext (with feedback) + Dismiss.
+- Dismiss handler clears plaintext from DOM so it isn't
+  recoverable post-acknowledge.
+
+Build clean: customer-dashboard server in 877ms. Underlying API
+contract unchanged — V-296 server-side service + route + tests +
+SDK methods (TS / Python / Go) all stay green; this is pure UI
+layer.
