@@ -23321,3 +23321,94 @@ Covers:
 
 3 slices, empirical-proof-confirmed (vitest + docs build), no
 gates touched, V-205 invariant intact.
+
+## V-518 — schema invariants test (Track A, Wave 13)
+
+New unit test `apps/server/tests/unit/schema-invariants.test.ts`
+pinning cross-enum invariants in api-types:
+
+- Every `AccountTier` has rows in `TIER_FEATURES`,
+  `TIER_CONCURRENT_SESSION_LIMITS`, `PROFILES_PER_TIER`,
+  `TIER_RATE_LIMIT_DEFAULTS` (no orphans, no missing tiers).
+- `TIER_FEATURES.concurrentSessions` agrees with
+  `TIER_CONCURRENT_SESSION_LIMITS`; `TIER_FEATURES.profiles`
+  agrees with `PROFILES_PER_TIER`.
+- Every `PROBLEM_TYPES` URI is unique, rooted at
+  `errors.driftstack.dev/`, non-empty.
+- Every `WebhookEventType` is either in
+  `SubscribableWebhookEventType` or is the `test.ping` sentinel
+  (partition invariant); test.ping is never subscribable.
+- TIER_FEATURES internal: `llmBilling === null iff aiAgent === false`,
+  `apiKeyEnvironment === 'test' iff trialPack === true`,
+  exactly one tier (`trial_pack`) has `trialPack: true`.
+
+Catches future "added a new tier / problem-type / webhook event
+without updating the related tables" regressions.
+
+### Verification
+
+- `npx vitest run apps/server/tests/unit/schema-invariants.test.ts`
+  — 17/17 passed.
+
+## V-519 — first-customer-day playbook (Track C, Wave 13)
+
+New file: `docs/runbooks/first-customer-day.md`. Distinct from
+`launch-day-runbook.md` — covers the first 7 days AFTER a real
+paying customer signs up. Structure:
+
+- **Hour 0** — watch (Sentry breadcrumbs / pino structured logs /
+  DLQ depth / webhook deliveries) without touching; intentional
+  outreach (personal welcome email from `support@`, status page
+  check-in).
+- **Hour 1–24** — active monitoring (session creation latency
+  vs load-test baseline, tier-cap behaviour, audit-log filter +
+  export sanity); proactive outreach triggers (50% concurrent
+  cap / 3× webhook 4xx / any account_id-tagged Sentry error /
+  trial credit < 50%).
+- **Day 2–7** — categorise feedback into "what worked" (case
+  study with consent), "what didn't" (V-NNN slices triaged
+  P-1/P-2/P-3), "what's next" (transition to standard support).
+
+Cross-references launch-day-runbook, incidents, observability,
+DR, email service.
+
+### Verification
+
+- File renders: `docs/runbooks/first-customer-day.md`. No code
+  touched.
+
+## V-520 — /api/email-preferences docs page (Track D, Wave 13)
+
+New `/api/email-preferences` reference page. Covers:
+
+- Operational vs transactional/informational email categories
+  (operational mail is never opt-outable by design).
+- `GET /v1/account/email-preferences` — list current opt-in
+  state across all categories.
+- `PUT /v1/account/email-preferences` — set one preference.
+- Team-RBAC semantics: members can read owner preferences via
+  X-Driftstack-Account; admins can write; members are read-only
+  on writes.
+- Full opt-outable categories table (8 entries) with defaults.
+- Explicit "what's NOT opt-outable" list — signup-verification,
+  password-reset, billing-failure, subscription-cancellation,
+  support-ack, status-incident-\* (separate opt-in surface),
+  GDPR Art. 34 security notices.
+- Customer-dashboard `/settings → Email` surface.
+- Source-of-truth file references.
+
+### Verification
+
+- `npm run -w apps/docs build` — clean (36 pages, 1.03s; was 35
+  before V-520).
+
+## Wave 13 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                                                       |
+| ----- | ----- | ------------------------------------------------------------------------------------------------------------- |
+| A     | V-518 | Schema invariants test — 17 cases pinning AccountTier coverage + PROBLEM_TYPES uniqueness + webhook partition |
+| C     | V-519 | first-customer-day.md playbook covering hour-0 / day-1 / week-1 monitoring + outreach posture                 |
+| D     | V-520 | /api/email-preferences reference page — operational vs opt-outable + 8 categories + team RBAC                 |
+
+3 slices, empirical-proof-confirmed (vitest + docs build), no
+gates touched, V-205 invariant intact.
