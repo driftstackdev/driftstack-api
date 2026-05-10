@@ -1,9 +1,27 @@
 # Driftstack API — current status
 
 **Last updated:** 2026-05-10
-**Most recent wave:** Wave 16 (V-525 / V-530.B / V-535 pass-2)
-**Mode:** Autopilot active. Waves 1-15 closed; Wave 16 lands this commit;
-Waves 17-26 queued per the overnight directive.
+**Most recent wave:** Wave 17 (V-526.A on cleanup branch + V-528 + V-531 on main)
+**Mode:** Autopilot active. Waves 1-16 closed; Wave 17 lands this commit;
+Waves 18-26 queued per the overnight directive.
+
+## Wave 17 — what landed
+
+- **V-526.A** — sanitization sweep policy + first-file POC on branch
+  `cleanup/v526-sanitize` (`0db414b`). `docs/internal/v526-sanitization-sweep-policy.md`
+  defines the rules + a 75-file checklist; `.env.example` has 2 V-NNN
+  comment markers removed. Bulk sweep deferred to V-526.B.
+- **V-528** — privatization runbook at
+  `docs/internal/v528-repo-privatization-runbook.md`. 7-step sequence
+  the team triggers tomorrow + reversibility analysis at each step + 3
+  open questions surfaced for team review (publish posture, api-types
+  bundling, external announcement).
+- **V-531** — webrtc-streaming server-side encode pipeline + cross-agent
+  contract for the WKWebView frame extraction (Agent 1 implements on
+  harness side per `docs/internal/v531-cross-agent-contract.md`). New
+  `FrameSource` interface + `MockFrameSource` + `EncodePipeline` with
+  pass-through codec for solo testing. 14 new property-style tests.
+  Suite 1359 → 1373.
 
 ## Wave 16 — what landed
 
@@ -51,7 +69,7 @@ Full strict mode):
 - https://api.driftstack.dev/health — Fastify control plane (Hetzner production)
 - https://staging.driftstack.dev/health — staging mirror (Hetzner staging)
 
-Tests: **1359/1359 green** across 126 test files (unit + integration +
+Tests: **1373/1373 green** across 127 test files (unit + integration +
 gui-jsdom). Typecheck clean. Full `npx vitest run` empirical proof from
 this wave.
 
@@ -96,12 +114,10 @@ this wave.
 - [`docs/internal/v455-coverage-audit.md`](./docs/internal/v455-coverage-audit.md)
   — pre-launch coverage audit (closed).
 
-## Wave 17 — queued
+## Wave 18 — queued
 
-Per the overnight directive: V-526 sanitization sweep (apply pass on
-files classified `sanitize-then-keep` in V-524, staged in
-branch `cleanup/v526-sanitize`) + V-528 privatization runbook +
-V-531 webrtc-streaming kickoff (server-side encode pipeline w/ mock
-frame source; cross-agent contract doc at
-`docs/internal/v531-cross-agent-contract.md`). Scheduled via
-ScheduleWakeup.
+Per the overnight directive: V-532 recipe-library kickoff (common
+navigation flows per file 56: login / search / fill-form / paginate /
+infinite-scroll / cart / checkout / multi-step wizard) + Track E
+batch report ready for team morning review + 1 more P-track from
+Track C or D.

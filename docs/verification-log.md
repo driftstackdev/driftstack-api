@@ -23912,3 +23912,151 @@ ZERO hits.
 hook dry-run + branch-listing audit). Rule M satisfied: 2 P-track slices
 from 2 different tracks (Track E + Track C). No GitHub remote operations
 performed. No force-push, no GitHub-private flip, no SDK publish.
+
+## V-526.A — sanitization sweep policy + first file (Track E, Wave 17, branch cleanup/v526-sanitize)
+
+**Date:** 2026-05-10
+**Branch:** `cleanup/v526-sanitize` (not on `main`)
+**Branch HEAD:** `0db414b`
+
+Per the directive, V-526 sanitization changes stage on a separate branch
+that the Driftstack team reviews + merges. This avoids landing
+not-yet-reviewed sweeps on `main`.
+
+### Artifacts on the branch
+
+- `docs/internal/v526-sanitization-sweep-policy.md` — policy + 75-file
+  checklist + rules (V-205 attribution, V-211 anonymity, internal-process
+  artifact patterns, acceptable references that stay).
+- `.env.example` — V-079 + V-266 comment markers removed (engineering
+  scaffolding, not customer-helpful — clean inline comment without the
+  V-NNN tag stays).
+
+### Sub-slice posture
+
+V-526.A is a POC + policy slice; V-526.B (next wave) processes the bulk:
+~37 marketing-site files + ~50 docs site files + 1 docs/api file. The
+checklist lives in the policy doc so the next agent run picks up cleanly.
+
+## V-528 — privatization runbook (Track E, Wave 17)
+
+**Date:** 2026-05-10
+
+Step-by-step runbook the Driftstack team triggers tomorrow:
+`docs/internal/v528-repo-privatization-runbook.md`.
+
+### Structure
+
+- **Pre-flight checks** — clean working tree, extraction branches present,
+  V-526 reviewed + merged, commit-msg hook installed, gh auth status.
+- **Step 1** — copy LICENSE to each extraction branch.
+- **Step 2** — apply per-SDK adjustments from V-525 plan (manifest URLs,
+  Go module path, .github/workflows).
+- **Step 3** — create 3 GitHub repos (`driftstack-typescript-sdk` /
+  `driftstack-python-sdk` / `driftstack-go-sdk`) + push branches.
+- **Step 4** — flip driftstack-api private via
+  `gh repo edit --visibility private`.
+- **Step 5** — V-205 historical scrub (now safe — force-push against
+  private repo has zero public blast radius).
+- **Step 6** — redirect external links pointing at driftstack-api source.
+- **Step 7** — enable SDK CI + publish workflows; tag first releases.
+
+### Reversibility analysis
+
+- Pre-Step-4: fully reversible (branches deletable, repos deletable, hook
+  removable, V-526 / V-525 / V-524 revertable).
+- Post-Step-4 / pre-publish: technically reversible (private → public flip
+  back is supported by GitHub; fork detection works).
+- Post-publish (Step 7 tags pushed): npm / PyPI versions immutable —
+  roll forward only.
+
+### Open questions surfaced for team review
+
+1. Manual-tag vs automated-publish posture for SDK releases.
+2. Bundle `@driftstack/api-types` into `@driftstack/sdk` vs separate npm
+   publish.
+3. External announcement (blog / status banner) vs silent flip.
+
+## V-531 — webrtc-streaming server-side encode pipeline + cross-agent contract (Track B, Wave 17)
+
+**Date:** 2026-05-10
+
+First real implementation slice on the webrtc-streaming package, paralleling
+the V-530 series on behavioural-simulation. Lands the pipeline consumer
+side (this repo) + the contract doc that defines what Agent 1 implements on
+the harness/WebKit side.
+
+### Cross-agent V-NNN handshake
+
+Document at `docs/internal/v531-cross-agent-contract.md` specifies:
+
+- Language-level interface (`FrameSource`, `VideoFrame`, `FrameSourceConfig`).
+- IPC envelope shape (16-byte header — magic / sequence / timestamp / width /
+  height — followed by raw pixel payload; Unix domain socket transport).
+- Coordination protocol: this wave Agent 2; next wave Agent 1 implements
+  on webkit-driftstack side; integration wave Agent 2 wires the real
+  consumer-side IPC reader.
+- Change-management protocol (interface changes require coordinated commit
+  pairs).
+
+### Changes
+
+- `packages/webrtc-streaming/src/frame-source.ts` — NEW.
+  - `FrameSource` interface (start / pullNextFrame / stop / getState).
+  - `VideoFrame` type (timestampMicros / width / height / pixelFormat / data /
+    sequence).
+  - `FrameSourceConfig` (targetFps / targetWidth / targetHeight /
+    preferredPixelFormat).
+  - `MockFrameSource` class — synthetic frame source for solo testing
+    with deterministic timestamps + configurable fillByte + maxFrames cap.
+  - Supports 4 pixel formats: I420 / NV12 / BGRA / RGBA with correct
+    per-format byte budgets.
+- `packages/webrtc-streaming/src/encode-pipeline.ts` — NEW.
+  - `EncodePipeline` class that consumes `FrameSource` and emits
+    `EncodedChunk`s via `onChunk` callback.
+  - `onEnd` callback fires on source drain.
+  - Configurable keyframe interval (default 30 frames ≈ 1/sec at 30fps).
+  - V-531.A "raw" pass-through codec (no real encoder dep this wave —
+    V-531.B will swap libvpx / openh264 behind the same interface).
+  - Stats tracking: framesIn / chunksOut / bytesOut / framesDropped.
+  - `stop()` halts mid-stream (verified in tests).
+- `packages/webrtc-streaming/src/index.ts` — re-exports.
+
+### Test coverage
+
+`packages/webrtc-streaming/tests/encode-pipeline.test.ts` — 14 tests
+covering: MockFrameSource sequence + timestamp + maxFrames + pixel-format
+budgets + not-started + stopped + fillByte; EncodePipeline one-chunk-per-
+frame + sequence preservation + keyframe interval + onEnd-on-drain +
+stop-mid-stream + start-in-non-idle rejects + stats + pass-through
+payload length.
+
+### Verification
+
+- `npx tsc --build packages/webrtc-streaming/tsconfig.json` — clean.
+- `npx vitest run packages/webrtc-streaming/tests/` — 23/23 pass (9 prior
+  mock + 14 new encode-pipeline).
+- `npx vitest run` (full workspace) — **1373/1373 pass** across 127 test
+  files (was 1359 before Wave 17; +14 = expected).
+- `npx tsc --build` (full workspace) — clean.
+
+### Cross-agent dependency
+
+This wave commits the contract; Agent 1 picks up the WKWebView-side
+implementation in their next wave on webkit-driftstack. Until then, the
+production `WebRtcStreamingService` impl uses `MockFrameSource` only — no
+real streaming.
+
+## Wave 17 — autopilot summary (per Rule M)
+
+| Track | Slice   | Outcome                                                                                                       |
+| ----- | ------- | ------------------------------------------------------------------------------------------------------------- |
+| E     | V-526.A | Sanitization sweep policy + .env.example V-NNN markers removed; on branch `cleanup/v526-sanitize` (`0db414b`) |
+| E     | V-528   | Privatization runbook covering pre-flight + 7 steps + reversibility + open-questions for team review          |
+| B     | V-531   | webrtc-streaming server-side encode pipeline + MockFrameSource + cross-agent contract doc + 14 tests          |
+
+3 slices (V-526.A on branch, V-528 + V-531 on main), empirical-proof-
+confirmed (typecheck + vitest 1373/1373 + hook dry-run). Rule M satisfied:
+2 P-track slices from 2 different tracks (Track E + Track B). No GitHub
+remote operations performed. No force-push, no GitHub-private flip,
+no SDK publish. Cross-agent V-531 contract published for Agent 1.

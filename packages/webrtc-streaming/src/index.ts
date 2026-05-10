@@ -19,3 +19,14 @@ export type {
 } from './interfaces.js';
 
 export { MockWebRtcStreamingService } from './mock.js';
+
+export type {
+  FramePixelFormat,
+  FrameSource,
+  FrameSourceConfig,
+  VideoFrame,
+} from './frame-source.js';
+export { MockFrameSource } from './frame-source.js';
+
+export type { EncodedChunk, EncodePipelineOpts, EncodePipelineStats } from './encode-pipeline.js';
+export { EncodePipeline } from './encode-pipeline.js';
