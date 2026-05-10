@@ -71,12 +71,19 @@ describe('initSentry', () => {
       logger,
     });
     expect(sentry.isInitialized).toBe(true);
-    expect(Sentry.init).toHaveBeenCalledWith({
-      dsn: 'https://abc@o123.ingest.de.sentry.io/456',
-      environment: 'production',
-      release: 'v1.2.3',
-      tracesSampleRate: 0.1,
-    });
+    // V-494 — Sentry.init now also receives `beforeSend` and
+    // `beforeBreadcrumb` scrubbers; the test asserts the named
+    // fields and accepts additional opts the production code adds.
+    expect(Sentry.init).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dsn: 'https://abc@o123.ingest.de.sentry.io/456',
+        environment: 'production',
+        release: 'v1.2.3',
+        tracesSampleRate: 0.1,
+        beforeSend: expect.any(Function),
+        beforeBreadcrumb: expect.any(Function),
+      }),
+    );
     expect(logger.info).toHaveBeenCalledWith(
       expect.objectContaining({ component: 'sentry', environment: 'production' }),
       'Sentry initialized',
