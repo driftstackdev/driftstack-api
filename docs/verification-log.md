@@ -24134,3 +24134,138 @@ points at the doc clusters that need deeper review.
 dry-run on this commit's draft message). Rule M satisfied: 2 P-track
 slices from 2 different tracks (Track B V-532.A + Track E batch report).
 No remote operations. No force-push. No private-flip. No SDK publish.
+
+## V-530.C — dwell time models + element-region-aware click-position bias (Track B, Wave 19)
+
+**Date:** 2026-05-10
+
+Third sub-slice of V-530 per the anti-substitution clause. Extends the
+V-530.A touch event distributions with two refinements:
+
+1. **Dwell-time models** beyond a flat per-class mean. Three distribution
+   shapes (`DWELL_SHAPES` map): `tight` (button/link — narrow gaussian),
+   `normal` (input/generic — moderate gaussian), `long-tailed` (image/
+   video/scroll-container — lognormal-flavoured with mean 1.0 + right
+   tail). All shapes mean-normalised to 1.0 so the multiplier is
+   compatible with V-530.A's existing per-class dwell.
+2. **Element-region-aware click-position bias** via `CLICK_REGIONS` map.
+   Each element class declares 1+ sub-regions of its bounds (centre +
+   radius + weight). Generator samples one region weighted by `weight`
+   and then samples a position within that region's bounds. Image gets
+   2 regions (focal-point 0.7 + upper-half-caption 0.3); video gets 2
+   (play affordance 0.8 + close affordance 0.2); other classes 1 region
+   each.
+
+### Changes
+
+- `packages/behavioural-simulation/src/dwell.ts` — NEW.
+  - `DWELL_SHAPES`: per-class table (button/link → tight; input/generic
+    → normal; image/video/scroll-container → long-tailed).
+  - `CLICK_REGIONS`: per-class weighted-region table (1-2 regions per
+    class with verified centre±radius ⊂ [0, 1]).
+  - `generateRegionAwareTouchEvent(opts)`: pure + deterministic
+    generator that weighted-samples a region, computes region-local
+    bounds, delegates to `generateTouchEvent` (V-530.A) against those
+    bounds, then scales dwell by the sampled multiplier.
+  - `RegionAwareTouchEvent` extends `TouchEvent` with
+    `selectedRegionIndex`, `dwellShape`, `dwellMultiplier`.
+  - Custom `regions` opt overrides class defaults (for custom components
+    with non-standard affordance layout).
+- `packages/behavioural-simulation/src/index.ts` — re-exports.
+
+### Test coverage
+
+`packages/behavioural-simulation/tests/dwell.test.ts` — 18 property-style
+tests:
+
+1. Every class has a registered dwell shape.
+2. Every class has at least 1 click region.
+3. All region centres + radii are within [0, 1].
+4. Regions stay within element bounds [0, 1] (centre ± radius).
+5. Per-class dwell-shape assignments (button/link tight; image/video/
+   scroll-container long-tailed).
+6. Determinism: identical inputs → identical event.
+7. Start + end + sample points stay within original element bounds
+   across 64 seeds per class.
+8. selectedRegionIndex is a valid index into the class's region map.
+9. dwellShape matches the class table.
+10. dwellMultiplier is positive across many seeds.
+11. Image (2 regions) selects both regions over 200 seeds.
+12. Button (1 region) always selects region 0.
+13. Image weight 0.7 region chosen more often than weight 0.3 region
+    across 500 seeds (ratio > 1.5).
+14. Long-tailed dwell has higher max multiplier than tight dwell across
+    500 seeds (max ratio > 1.5).
+15. Custom regions override class defaults — verified by region-position
+    constraint check.
+16. Rejects empty regions list with `at least one region` message.
+17. Rejects zero-area bounds.
+18. Regression pin — deterministic shape for fixed inputs.
+
+### Verification
+
+- `npx tsc --build packages/behavioural-simulation/tsconfig.json` —
+  clean. (Resolved a TS noUncheckedIndexedAccess warning on the
+  region-sampling loop by adding explicit type narrowing.)
+- `npx vitest run packages/behavioural-simulation/tests/` — 59/59 pass
+  (7 mock + 15 V-530.A touch + 19 V-530.B scroll-velocity + 18 V-530.C
+  dwell).
+- `npx vitest run` (full workspace) — **1402/1402 pass** across 129
+  test files (was 1384 before Wave 19; +18 = expected).
+- `npx tsc --build` (full workspace) — clean.
+
+### Sub-slice remaining
+
+- **V-530.D (later):** idle-period jitter + multi-touch gesture
+  sequencing.
+
+## V-540.A — E2E coverage audit (Track A, Wave 19)
+
+**Date:** 2026-05-10
+
+Audit-only slice. Catalogue the gap between the 32 route modules in
+`apps/server/src/routes/` and the 12 Playwright specs in
+`apps/server/tests/e2e/`. Output:
+`docs/internal/v540-e2e-coverage-audit.md`.
+
+### Findings
+
+- 32 route modules; 12 E2E specs cover the highest-traffic surfaces
+  (auth / sessions / admin tier-change / admin audit-note / rate-limit
+  / concurrency-limit / profile-limit / customer-journey / webhooks /
+  openapi-contract / smoke).
+- 4 HIGH-leverage gaps (customer-facing, no E2E): `account-mfa.ts`,
+  `billing.ts`, `legal.ts`, `profile-snapshots.ts`.
+- 5 MEDIUM-leverage gaps (admin / power-user): `admin-incidents.ts`,
+  `admin-validation-harness.ts`, `admin-overview.ts`, `auth-cli.ts`,
+  `team.ts`.
+- 4 LOW-leverage gaps (well-covered indirectly OR SSE limitations).
+
+### Recommended V-540.B coverage (next wave)
+
+Three specs targeting HIGH-leverage gaps:
+
+1. `account-mfa.spec.ts` — TOTP happy path + invalid-code path.
+2. `legal-acceptance.spec.ts` — required → accept → re-accept-on-bump.
+3. `profile-snapshots.spec.ts` — create + restore + diff.
+
+Estimated growth: ~10-15 tests → suite ~1415-1417.
+
+### Verification
+
+- 32 route modules counted via `ls apps/server/src/routes/ | wc -l`.
+- 12 E2E specs counted via `ls apps/server/tests/e2e/*.spec.ts | wc -l`.
+- Each E2E spec's coverage description extracted from its file header.
+- This audit is doc-only — no test count change this wave.
+
+## Wave 19 — autopilot summary (per Rule M)
+
+| Track | Slice   | Outcome                                                                                                           |
+| ----- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| B     | V-530.C | Region-aware touch generator: 3 dwell shapes + 1-2 click regions per class + 18 property-style tests (+18 → 1402) |
+| A     | V-540.A | E2E coverage audit doc — 32 routes vs 12 specs; 4 HIGH-leverage gaps surfaced for V-540.B implementation          |
+
+2 slices, empirical-proof-confirmed (typecheck + vitest 1402/1402 + hook
+dry-run on this commit's draft message). Rule M satisfied: 2 P-track
+slices from 2 different tracks (Track B V-530.C + Track A V-540.A). No
+remote operations. No force-push. No private-flip. No SDK publish.

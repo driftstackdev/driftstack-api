@@ -1,11 +1,27 @@
 # Driftstack API — current status
 
 **Last updated:** 2026-05-10
-**Most recent wave:** Wave 18 (V-532.A + Track E batch report)
-**Mode:** Autopilot active. Waves 1-17 closed; Wave 18 lands this commit;
-Waves 19-26 queued per the overnight directive. Team morning review point:
-`docs/internal/wave-15-18-overnight-batch-report.md` (single 5-minute
-scan covers all 4 overnight Track E artifacts).
+**Most recent wave:** Wave 19 (V-530.C + V-540.A)
+**Mode:** Autopilot active. Waves 1-18 closed; Wave 19 lands this commit;
+Waves 20-26 queued per the overnight directive. Team morning review point:
+`docs/internal/wave-15-18-overnight-batch-report.md` (5-minute scan covers
+Waves 15-18 Track E artifacts; Wave 19 work is post-batch-report and
+focuses on Track B real-impl depth + Track A coverage audit).
+
+## Wave 19 — what landed
+
+- **V-530.C** — third sub-slice of behavioural-simulation real impl:
+  dwell time models (3 shapes: tight / normal / long-tailed) +
+  element-region-aware click-position bias (CLICK_REGIONS table —
+  image/video get 2 regions, others 1). `generateRegionAwareTouchEvent`
+  builds on V-530.A by weighted-sampling a region and scaling dwell.
+  18 property-style tests including region-weight ratio empirical
+  verification. Suite 1384 → 1402.
+- **V-540.A** — E2E coverage audit doc at
+  `docs/internal/v540-e2e-coverage-audit.md`. 32 routes vs 12 specs
+  mapped; 4 HIGH-leverage gaps (account-mfa, billing, legal,
+  profile-snapshots) recommended for V-540.B implementation in the
+  next wave.
 
 ## Wave 18 — what landed
 
@@ -83,7 +99,7 @@ Full strict mode):
 - https://api.driftstack.dev/health — Fastify control plane (Hetzner production)
 - https://staging.driftstack.dev/health — staging mirror (Hetzner staging)
 
-Tests: **1373/1373 green** across 127 test files (unit + integration +
+Tests: **1402/1402 green** across 129 test files (unit + integration +
 gui-jsdom). Typecheck clean. Full `npx vitest run` empirical proof from
 this wave.
 
