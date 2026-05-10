@@ -112,8 +112,14 @@ const FILTER_OPTIONS = [
       </div>
     </header>
 
+    <!--
+      V-484 — extended filter row. Action filter (existing V-354)
+      stays at the top; from/to date range + actor type + target id
+      land in a collapsible "More filters" panel below to keep the
+      common case (action-only filtering) one click.
+    -->
     <div class="mb-4 flex flex-wrap items-center gap-3">
-      <label class="text-sm font-medium text-slate-700" for="audit-filter">Filter:</label>
+      <label class="text-sm font-medium text-slate-700" for="audit-filter">Action:</label>
       <select
         id="audit-filter"
         data-filter
@@ -125,8 +131,85 @@ const FILTER_OPTIONS = [
           ))
         }
       </select>
+      <button
+        type="button"
+        data-show-more-filters
+        class="text-sm text-oxblood-700 hover:underline"
+      >
+        More filters ▾
+      </button>
       <span class="text-xs text-slate-500" data-count>—</span>
     </div>
+
+    <details data-more-filters class="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <summary class="cursor-pointer text-sm font-medium text-slate-700">
+        Date range · actor · target resource
+      </summary>
+      <div class="mt-4 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+        <div>
+          <label for="audit-from" class="block text-xs font-medium text-slate-600">From</label>
+          <input
+            id="audit-from"
+            data-filter-from
+            type="datetime-local"
+            class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+          />
+          <p class="mt-1 text-[11px] text-slate-500">Inclusive lower bound.</p>
+        </div>
+        <div>
+          <label for="audit-to" class="block text-xs font-medium text-slate-600">To</label>
+          <input
+            id="audit-to"
+            data-filter-to
+            type="datetime-local"
+            class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+          />
+          <p class="mt-1 text-[11px] text-slate-500">Inclusive upper bound.</p>
+        </div>
+        <div>
+          <label for="audit-actor" class="block text-xs font-medium text-slate-600">Actor</label>
+          <select
+            id="audit-actor"
+            data-filter-actor
+            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+          >
+            <option value="">Any</option>
+            <option value="customer">Customer (you)</option>
+            <option value="system">System</option>
+            <option value="staff">Staff (Driftstack support)</option>
+          </select>
+        </div>
+        <div>
+          <label for="audit-target" class="block text-xs font-medium text-slate-600"
+            >Target resource id</label
+          >
+          <input
+            id="audit-target"
+            data-filter-target
+            type="text"
+            placeholder="e.g. profile_<id>"
+            class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm font-mono"
+          />
+          <p class="mt-1 text-[11px] text-slate-500">Exact match.</p>
+        </div>
+      </div>
+      <div class="mt-3 flex gap-2">
+        <button
+          type="button"
+          data-apply-filters
+          class="rounded-md bg-oxblood-700 px-3 py-1.5 text-xs font-medium text-white"
+        >
+          Apply filters
+        </button>
+        <button
+          type="button"
+          data-clear-filters
+          class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700"
+        >
+          Clear
+        </button>
+      </div>
+    </details>
 
     <div class="rounded-lg border border-slate-200 bg-white">
       <ul class="divide-y divide-slate-100" data-list>
@@ -272,10 +355,22 @@ const FILTER_OPTIONS = [
         else loadMoreRow.classList.add('hidden');
       }
 
+      // V-484 — extra filter state held alongside activeFilter.
+      let activeFrom = '';
+      let activeTo = '';
+      let activeActor = '';
+      let activeTarget = '';
+
       function buildUrl(cursor) {
         const params = ['limit=' + PAGE_LIMIT];
         if (activeFilter) params.push('action=' + encodeURIComponent(activeFilter));
         if (cursor) params.push('cursor=' + encodeURIComponent(cursor));
+        // V-484 — additional filter query params.
+        if (activeFrom) params.push('from=' + encodeURIComponent(activeFrom));
+        if (activeTo) params.push('to=' + encodeURIComponent(activeTo));
+        if (activeActor) params.push('actor_type=' + encodeURIComponent(activeActor));
+        if (activeTarget)
+          params.push('target_resource_id=' + encodeURIComponent(activeTarget));
         return apiBaseUrl + '/v1/account/audit-log?' + params.join('&');
       }
 
@@ -347,6 +442,57 @@ const FILTER_OPTIONS = [
             activeFilter = target.value || '';
             refresh();
           }
+        });
+      }
+
+      // V-484 — wire the "More filters" panel.
+      const moreFiltersToggle = root.querySelector('[data-show-more-filters]');
+      const moreFiltersDetails = root.querySelector('[data-more-filters]');
+      const filterFromInput = root.querySelector('[data-filter-from]');
+      const filterToInput = root.querySelector('[data-filter-to]');
+      const filterActorSelect = root.querySelector('[data-filter-actor]');
+      const filterTargetInput = root.querySelector('[data-filter-target]');
+      const applyFiltersBtn = root.querySelector('[data-apply-filters]');
+      const clearFiltersBtn = root.querySelector('[data-clear-filters]');
+
+      if (moreFiltersToggle && moreFiltersDetails) {
+        moreFiltersToggle.addEventListener('click', function () {
+          moreFiltersDetails.open = !moreFiltersDetails.open;
+        });
+      }
+
+      function localToIso(local) {
+        // <input type="datetime-local"> emits "YYYY-MM-DDTHH:MM" in
+        // local time; coerce to UTC ISO so the server compares like-
+        // for-like.
+        if (!local) return '';
+        const d = new Date(local);
+        if (isNaN(d.getTime())) return '';
+        return d.toISOString();
+      }
+
+      if (applyFiltersBtn) {
+        applyFiltersBtn.addEventListener('click', function () {
+          activeFrom = filterFromInput ? localToIso(filterFromInput.value) : '';
+          activeTo = filterToInput ? localToIso(filterToInput.value) : '';
+          activeActor = filterActorSelect ? filterActorSelect.value || '' : '';
+          activeTarget = filterTargetInput
+            ? filterTargetInput.value.trim()
+            : '';
+          refresh();
+        });
+      }
+      if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener('click', function () {
+          if (filterFromInput) filterFromInput.value = '';
+          if (filterToInput) filterToInput.value = '';
+          if (filterActorSelect) filterActorSelect.value = '';
+          if (filterTargetInput) filterTargetInput.value = '';
+          activeFrom = '';
+          activeTo = '';
+          activeActor = '';
+          activeTarget = '';
+          refresh();
         });
       }
 

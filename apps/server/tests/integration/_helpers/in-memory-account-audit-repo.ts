@@ -41,6 +41,11 @@ export class InMemoryAccountAuditRepo implements AccountAuditRepo {
       .filter((r) => r.accountId === accountId)
       .filter((r) => (opts.action ? r.action === opts.action : true))
       .filter((r) => (cursorDate ? r.timestamp < cursorDate : true))
+      // V-484 — date range + actor + target_resource_id filters.
+      .filter((r) => (opts.from ? r.timestamp >= opts.from : true))
+      .filter((r) => (opts.to ? r.timestamp <= opts.to : true))
+      .filter((r) => (opts.actorType ? r.actorType === opts.actorType : true))
+      .filter((r) => (opts.targetResourceId ? r.targetResourceId === opts.targetResourceId : true))
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
     const items = filtered.slice(0, opts.limit);

@@ -282,6 +282,13 @@ export const ListAccountAuditLogQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
   cursor: z.string().optional(),
   action: AccountAuditActionSchema.optional(),
+  // V-484 — additional filters. ISO 8601 dates for from/to (inclusive).
+  // Coerced from query strings; Zod's coerce.date() handles
+  // YYYY-MM-DD and full ISO 8601 timestamps.
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  actor_type: AccountAuditActorTypeSchema.optional(),
+  target_resource_id: z.string().min(1).max(200).optional(),
 });
 export type ListAccountAuditLogQuery = z.infer<typeof ListAccountAuditLogQuerySchema>;
 

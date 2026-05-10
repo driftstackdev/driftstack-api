@@ -2,8 +2,9 @@
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 
 // V-184a — onboarding step 3. Brief intro + CTA to tier-select.
-// Tier 3 visual UX (full brand intro + "what you'll do next" content)
-// surfaces in V-184b draft.
+// V-501 — copy polish + "what happens next" 3-step within Tier-1 bounds.
+// Tier 3 visual UX (full brand intro + animated diagrams) lands in
+// V-184b draft.
 ---
 
 <DashboardLayout title="Welcome" withSidebar={false}>
@@ -13,31 +14,62 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
       Your account is ready.
     </h1>
     <p class="mt-4 text-slate-600">
-      Driftstack runs real iPhone Safari sessions — same WebKit C++ engine, same
-      fingerprint surface as a physical iPhone. Pick how you want to start:
+      Driftstack runs real iPhone Safari sessions — same WebKit C++ engine,
+      same fingerprint surface as a physical iPhone. Pick how you want to
+      start:
     </p>
 
     <ul class="mt-8 space-y-4">
       <li class="rounded-lg border border-oxblood-200 bg-white p-5">
-        <h2 class="text-lg font-semibold text-slate-900">Trial pack — $2.99</h2>
+        <div class="flex items-baseline justify-between gap-3">
+          <h2 class="text-lg font-semibold text-slate-900">Trial pack</h2>
+          <span class="font-mono text-sm text-slate-700">$2.99 · one-time</span>
+        </div>
         <p class="mt-2 text-sm text-slate-600">
-          16 hours of session time. One-time. No subscription. Best path to
-          evaluate before committing.
+          16 hours of session time. No subscription, no auto-renewal.
+          14-day window. Best path to evaluate before committing — most
+          first-time customers start here.
         </p>
         <a href="/select-tier?focus=trial" class="btn-primary mt-4 inline-flex">
           Start trial pack
         </a>
       </li>
       <li class="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 class="text-lg font-semibold text-slate-900">Pick a tier</h2>
+        <div class="flex items-baseline justify-between gap-3">
+          <h2 class="text-lg font-semibold text-slate-900">Pick a tier</h2>
+          <span class="font-mono text-sm text-slate-500">$79–$1,499 / mo</span>
+        </div>
         <p class="mt-2 text-sm text-slate-600">
-          Skip the trial and go straight to a paid subscription — Solo Manual
-          for human-driven sessions through to API Scale for high-volume
-          automation.
+          Skip the trial and go straight to a monthly subscription — Solo
+          Manual for human-driven sessions through to API Scale for
+          high-volume automation. Cancel anytime.
         </p>
         <a href="/select-tier" class="btn-secondary mt-4 inline-flex">View tiers</a>
       </li>
     </ul>
+
+    <section
+      aria-label="What happens next"
+      class="mt-10 rounded-lg border border-slate-200 bg-slate-50 p-5"
+    >
+      <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-700">
+        What happens next
+      </h2>
+      <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-600">
+        <li>
+          You'll be redirected to Stripe to confirm payment. We never see
+          your card details.
+        </li>
+        <li>
+          Back here, you'll create your first session — a real iPhone
+          Safari that runs on our fleet.
+        </li>
+        <li>
+          We'll mint your first API key automatically. You can revoke or
+          rotate it any time on the API keys page.
+        </li>
+      </ol>
+    </section>
 
     <p class="mt-8 text-xs text-slate-500">
       Already know what you want? <a href="/" class="text-oxblood-700 underline">

@@ -68,6 +68,13 @@ export function registerAccountAuditRoutes(
         limit: parsed.data.limit,
         ...(parsed.data.cursor !== undefined ? { cursor: parsed.data.cursor } : {}),
         ...(parsed.data.action !== undefined ? { action: parsed.data.action } : {}),
+        // V-484 — additional filters forwarded to the service layer.
+        ...(parsed.data.from !== undefined ? { from: parsed.data.from } : {}),
+        ...(parsed.data.to !== undefined ? { to: parsed.data.to } : {}),
+        ...(parsed.data.actor_type !== undefined ? { actorType: parsed.data.actor_type } : {}),
+        ...(parsed.data.target_resource_id !== undefined
+          ? { targetResourceId: parsed.data.target_resource_id }
+          : {}),
         ...(effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {}),
       });
 

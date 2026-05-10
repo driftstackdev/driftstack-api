@@ -13,6 +13,9 @@ import {
 // "Change plan" reuse: this same page is reachable from /billing
 // "Change plan" link (post-onboarding) — the trial-pack CTA is
 // hidden when the account already has an active subscription.
+//
+// V-501 — disabled-while-pending guards on checkout buttons; copy
+// micro-polish (cancel-anytime line, clearer "what changes" framing).
 
 const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 
@@ -33,9 +36,9 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
     <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Choose your tier</p>
     <h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Pick a plan.</h1>
     <p class="mt-3 text-sm text-slate-600">
-      All tiers run the same engine. Differences are concurrent caps + profile
-      counts + AI-agent gating. Concurrent caps are the only metering primitive
-      on paid tiers per ADR-004.
+      All tiers run the same engine. Only concurrent caps and profile
+      counts change between them — there's no fingerprint or feature
+      gating. Cancel anytime; pro-rated refunds within the first 14 days.
     </p>
 
     <div
@@ -122,6 +125,23 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
         });
       }
 
+      // V-501 — disable a button while its checkout-session call is in
+      // flight so the customer can't double-click and create two Stripe
+      // sessions. Original label restored on error so they can retry.
+      function withBusy(btn, work) {
+        if (btn.disabled) return Promise.resolve();
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Redirecting…';
+        return Promise.resolve()
+          .then(work)
+          .catch((err) => {
+            btn.disabled = false;
+            btn.textContent = original;
+            throw err;
+          });
+      }
+
       const trialBtn = root.querySelector('[data-action="buy-trial-pack"]');
       if (trialBtn) {
         trialBtn.addEventListener('click', () => {
@@ -129,6 +149,7 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
             showBanner('Sign up first.');
             return;
           }
+          withBusy(trialBtn, () =>
           authedFetch('/v1/billing/trial-pack', {
             method: 'POST',
             body: JSON.stringify({
@@ -146,13 +167,13 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
             .then((body) => {
               if (body.checkout_url) window.location.href = body.checkout_url;
             })
-            .catch((err) => {
-              showBanner(
-                "Couldn't start trial-pack checkout (" +
-                  (err && err.message ? err.message : 'network error') +
-                  ').',
-              );
-            });
+          ).catch((err) => {
+            showBanner(
+              "Couldn't start trial-pack checkout (" +
+                (err && err.message ? err.message : 'network error') +
+                ').',
+            );
+          });
         });
       }
 
@@ -164,32 +185,33 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
             return;
           }
           const tier = btn.getAttribute('data-tier');
-          authedFetch('/v1/billing/checkout-session', {
-            method: 'POST',
-            body: JSON.stringify({
-              tier,
-              billing_period: 'monthly',
-              success_url: window.location.origin + '/first-session?subscribed=' + tier,
-              cancel_url: window.location.origin + '/select-tier',
-            }),
-          })
-            .then((r) =>
-              r.ok
-                ? r.json()
-                : r
-                    .json()
-                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
-            )
-            .then((body) => {
-              if (body.checkout_url) window.location.href = body.checkout_url;
+          withBusy(btn, () =>
+            authedFetch('/v1/billing/checkout-session', {
+              method: 'POST',
+              body: JSON.stringify({
+                tier,
+                billing_period: 'monthly',
+                success_url: window.location.origin + '/first-session?subscribed=' + tier,
+                cancel_url: window.location.origin + '/select-tier',
+              }),
             })
-            .catch((err) => {
-              showBanner(
-                "Couldn't start checkout (" +
-                  (err && err.message ? err.message : 'network error') +
-                  ').',
-              );
-            });
+              .then((r) =>
+                r.ok
+                  ? r.json()
+                  : r
+                      .json()
+                      .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+              )
+              .then((body) => {
+                if (body.checkout_url) window.location.href = body.checkout_url;
+              }),
+          ).catch((err) => {
+            showBanner(
+              "Couldn't start checkout (" +
+                (err && err.message ? err.message : 'network error') +
+                ').',
+            );
+          });
         });
       });
     })();

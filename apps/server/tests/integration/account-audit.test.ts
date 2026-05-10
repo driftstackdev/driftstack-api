@@ -261,3 +261,165 @@ describe('GET /v1/account/audit-log', () => {
     );
   });
 });
+
+// V-484 — additional filter parameters: from / to / actor_type /
+// target_resource_id. Driven through the Fastify route so we exercise
+// the schema parsing + service forwarding + repo predicate end-to-end.
+describe('GET /v1/account/audit-log — V-484 filters', () => {
+  it('400 on malformed `from` (not an ISO date)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?from=not-a-date',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('400 on unknown actor_type enum value', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?actor_type=bogus',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('filters by actor_type=customer (smoke)', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: auth(fx),
+      payload: { name: 'k1', scopes: ['read'] },
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?actor_type=customer',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<ListResponse>();
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
+    expect(body.data.every((e) => e.actor_type === 'customer')).toBe(true);
+  });
+
+  it('returns empty when actor_type=staff but no staff actions yet', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: auth(fx),
+      payload: { name: 'k1', scopes: ['read'] },
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?actor_type=staff',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<ListResponse>();
+    expect(body.data).toEqual([]);
+  });
+
+  it('filters by target_resource_id (exact match)', async () => {
+    fx = await buildTestApp();
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: auth(fx),
+      payload: { name: 'targeted', scopes: ['read'] },
+    });
+    expect(created.statusCode).toBe(201);
+    // Make a second event we want to exclude.
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: auth(fx),
+      payload: { name: 'unrelated', scopes: ['read'] },
+    });
+
+    const all = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?action=api_key.minted',
+      headers: auth(fx),
+    });
+    const allBody = all.json<ListResponse>();
+    expect(allBody.data.length).toBe(2);
+    const targetId = allBody.data.find(
+      (e) => (e.payload as { name?: string } | null)?.name === 'targeted',
+    )!.target_resource_id!;
+
+    const filtered = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/account/audit-log?target_resource_id=${encodeURIComponent(targetId)}`,
+      headers: auth(fx),
+    });
+    expect(filtered.statusCode).toBe(200);
+    const body = filtered.json<ListResponse>();
+    expect(body.data.length).toBe(1);
+    expect(body.data[0]!.target_resource_id).toBe(targetId);
+  });
+
+  it('returns empty when `to` is in the past (before any events)', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: auth(fx),
+      payload: { name: 'k1', scopes: ['read'] },
+    });
+    const longAgo = new Date('2020-01-01T00:00:00.000Z').toISOString();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/account/audit-log?to=${encodeURIComponent(longAgo)}`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<ListResponse>();
+    expect(body.data).toEqual([]);
+  });
+
+  it('returns events when `from` is in the past (inclusive of now)', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: auth(fx),
+      payload: { name: 'k1', scopes: ['read'] },
+    });
+    const longAgo = new Date('2020-01-01T00:00:00.000Z').toISOString();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/account/audit-log?from=${encodeURIComponent(longAgo)}`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<ListResponse>();
+    expect(body.data.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('combines from + actor_type + action filters', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: auth(fx),
+      payload: { name: 'k1', scopes: ['read'] },
+    });
+    const longAgo = new Date('2020-01-01T00:00:00.000Z').toISOString();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url:
+        `/v1/account/audit-log?from=${encodeURIComponent(longAgo)}` +
+        `&actor_type=customer&action=api_key.minted`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<ListResponse>();
+    expect(body.data.length).toBe(1);
+    expect(body.data[0]!.action).toBe('api_key.minted');
+    expect(body.data[0]!.actor_type).toBe('customer');
+  });
+});

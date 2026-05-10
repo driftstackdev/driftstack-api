@@ -1,6 +1,6 @@
 // V-216 — Drizzle-backed AccountAuditRepo.
 
-import { type SQL, and, desc, eq, lt } from 'drizzle-orm';
+import { type SQL, and, desc, eq, gte, lt, lte } from 'drizzle-orm';
 import type { AccountAuditAction, AccountAuditActorType } from '@driftstack/api-types';
 import type {
   AccountAuditEntryRow,
@@ -39,6 +39,14 @@ export class DrizzleAccountAuditRepo implements AccountAuditRepo {
     const filters: SQL[] = [eq(accountAuditLog.accountId, accountId)];
     if (cursorDate) filters.push(lt(accountAuditLog.timestamp, cursorDate));
     if (opts.action) filters.push(eq(accountAuditLog.action, opts.action));
+    // V-484 — additional filters: from/to date range, actor_type,
+    // target_resource_id (exact match).
+    if (opts.from) filters.push(gte(accountAuditLog.timestamp, opts.from));
+    if (opts.to) filters.push(lte(accountAuditLog.timestamp, opts.to));
+    if (opts.actorType) filters.push(eq(accountAuditLog.actorType, opts.actorType));
+    if (opts.targetResourceId) {
+      filters.push(eq(accountAuditLog.targetResourceId, opts.targetResourceId));
+    }
 
     const rows = await this.database.db
       .select()

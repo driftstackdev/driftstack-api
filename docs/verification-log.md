@@ -22361,3 +22361,146 @@ content regardless of language.
 3 slices, empirical-proof-confirmed (test suite + builds), no
 gates touched, V-205 invariant intact. Continuing into Wave 2 per
 Rule K.
+
+## Wave 2 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                                         |
+| ----- | ----- | ----------------------------------------------------------------------------------------------- |
+| A     | V-481 | Granular API-key scopes — migration 0038 + helper + UI; 41 unit tests; broad-satisfies-granular |
+| C     | V-495 | Load-test harness (autocannon) + standing methodology + 2026-05-10 status baseline              |
+| D     | V-503 | /security defense-in-depth (6 layers) + threat model + supply-chain section                     |
+
+3 slices. V-481 phase 1 = schema + helpers + UI; phase 2 = service-layer
+narrowing (queued, ~20-30 call sites). V-495 baseline: 7,209 reqs / 240
+req/s avg, p50=35ms, p99=121ms, 0 errors against `/v1/status`. No gates
+touched, V-205 invariant intact. Continuing into Wave 3 per Rule K.
+
+## V-484 — audit-log filter extensions (Track A, Wave 3)
+
+`GET /v1/account/audit-log` now accepts four additional query
+parameters layered on the existing V-216/V-354 base:
+
+- `from` (ISO 8601, inclusive lower bound on `timestamp`)
+- `to` (ISO 8601, inclusive upper bound on `timestamp`)
+- `actor_type` — filter by `customer | system | staff`
+- `target_resource_id` — exact match (e.g. `key_<id>`,
+  `webhook_endpoint_<id>`)
+
+Schema lives in `packages/api-types/src/accounts.ts`
+(`ListAccountAuditLogQuerySchema`); service interface
+`ListAccountAuditOpts` extended in
+`apps/server/src/services/account-audit.ts`; Drizzle predicate
+extended in `apps/server/src/db/account-audit-repo.ts` (`gte` /
+`lte` / `eq` on `timestamp` / `actorType` / `targetResourceId`);
+in-memory test repo mirror in
+`apps/server/tests/integration/_helpers/in-memory-account-audit-repo.ts`.
+
+Dashboard `/audit-log` gets a `<details>` "More filters" panel:
+datetime-local from/to inputs (converted to UTC ISO via
+`localToIso()`), actor-type select, target-resource-id text
+input. Apply / clear buttons reset cursor and re-issue the list.
+
+### Verification
+
+- `npm run -w apps/server typecheck` — clean.
+- `npm run -w packages/api-types typecheck` — clean.
+- `npx vitest run apps/server/tests/integration/account-audit.test.ts`
+  — 18/18 passed (10 existing + 8 new V-484 cases: malformed `from`
+  → 400, unknown `actor_type` → 400, `actor_type=customer` smoke,
+  `actor_type=staff` empty result, exact `target_resource_id`
+  match, past `to` → empty, past `from` → events visible, combined
+  `from` + `actor_type` + `action`).
+- `npm run -w apps/customer-dashboard build` — clean (server
+  built in 788ms, 13 pages).
+
+## V-499 — incident runbooks (Track C, Wave 3)
+
+New file: `docs/runbooks/incidents.md`. Standalone runbook covering
+the operating manual for production incidents post-launch:
+
+1. Severity classification (P-0 / P-1 / P-2 / P-3 with examples
+   and response times).
+2. Customer-reported bug triage flow (acknowledge → reproduce →
+   classify → fix/workaround → V-NNN → close → PIR).
+3. Security incident response — first 60 min containment,
+   evidence preservation, timeline discipline; GDPR Art. 33–34
+   notification clock pinned to Dutch DPA (AP); customer
+   notification template aligned to Art. 34(2); credential
+   exposure handling for support-thread leaks.
+4. Sub-processor incident propagation — forwarding upstream
+   incidents (Hetzner, Neon, Upstash, Cloudflare, Postmark,
+   Stripe, Sentry) to the trust center within 60 min, treating
+   upstream security incidents as Driftstack security incidents.
+5. CSE escalation tree — single-on-call pre-launch posture; P-0
+   pages 24/7 via Sentry mobile + synthetic-check fallback; P-1
+   queues 22:00–09:00 CET unless customer-active; failover gap
+   honestly disclosed at /trust/incidents.
+6. Post-incident review template — blameless, action-items map
+   to V-NNN slices / decisions.md entries / memory writes.
+7. Self-revising clause — runbook itself updated post-incident
+   via V-NNN slice with `runbook` tag.
+
+Cross-linked to `docs/deployment/dr-runbook.md` (loss-of-data /
+loss-of-host scenarios) and `docs/operations/launch-day-runbook.md`
+(launch-day playbook). No code changes; doc-only slice.
+
+### Verification
+
+- File renders: `docs/runbooks/incidents.md` — markdown lints
+  clean (one document, header structure 1.x → 7.x). Cross-refs
+  resolve to existing files.
+
+## V-501 — onboarding-flow polish (Track D, Wave 3)
+
+Tier-1 placeholder copy + micro-UX wins on three onboarding
+pages, staying within V-184a placeholder bounds (Tier-3 visual
+overhaul still queued at V-184b).
+
+- `welcome.astro`: clearer trial-pack vs subscription framing
+  (price displayed inline with each option as a `font-mono`
+  span; "no auto-renewal" + "cancel anytime" cues); new
+  "What happens next" 3-step section explaining the redirect
+  to Stripe → first session creation → API-key minting
+  sequence so customers know what to expect.
+- `first-session.astro`: explicit explainer that an API key
+  will be minted in the background and shown once on the next
+  page; `aria-busy`-style pattern on the submit button (default
+  vs busy label spans) with `data-submit` disabled while the
+  key+session round-trip is in flight, guarding against
+  double-mint from a duplicate click; busy state is reset on
+  error so customer can retry.
+- `select-tier.astro`: copy revision — "no fingerprint or
+  feature gating between tiers" + "cancel anytime; pro-rated
+  refunds within the first 14 days"; new `withBusy(btn, work)`
+  helper applied to both trial-pack and per-tier subscribe
+  buttons so a click is dead until the Stripe redirect (or
+  error reset) completes.
+
+No backend touch points. Stripe integration unchanged. The
+trial-pack hero card still lives above the paid grid; the
+"Change plan" reuse semantic (hide trial-pack CTA when subscribed)
+is unchanged.
+
+### Verification
+
+- `npm run -w apps/customer-dashboard build` — clean (854ms,
+  21 pages).
+- Visual check pending against running dev server in next
+  session — code paths exercised: form submit handler retains
+  prior behaviour, withBusy wrapper preserves all existing
+  `.then()` / `.catch()` semantics, no regression in success-URL
+  shape.
+
+## Wave 3 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                                           |
+| ----- | ----- | ------------------------------------------------------------------------------------------------- |
+| A     | V-484 | Audit-log filter extensions — 4 new query params + Drizzle predicate + UI panel; 18/18 tests      |
+| C     | V-499 | Incident runbooks document — full classification + GDPR + sub-processor + CSE tree + PIR template |
+| D     | V-501 | Onboarding polish — welcome / first-session / select-tier copy + double-submit guards             |
+
+3 slices, empirical-proof-confirmed (vitest run + dashboard build),
+no gates touched, V-205 invariant intact. Continuing into Wave 4
+per Rule K — next candidates: V-485 per-tier feature gating
+framework (Track A) / V-494 ops hardening (Track C) / V-500
+marketing depth (Track D).

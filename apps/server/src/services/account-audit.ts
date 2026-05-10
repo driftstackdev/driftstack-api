@@ -43,6 +43,15 @@ export interface ListAccountAuditOpts {
   limit: number;
   cursor?: string;
   action?: AccountAuditAction;
+  // V-484 — additional filters layered on the base shape.
+  /** Inclusive lower bound on `timestamp`. */
+  from?: Date;
+  /** Inclusive upper bound on `timestamp`. */
+  to?: Date;
+  /** Filter by actor — `customer` (most common), `system`, `staff`. */
+  actorType?: AccountAuditActorType;
+  /** Filter by exact target resource id (e.g. `webhook_endpoint_<id>`). */
+  targetResourceId?: string;
 }
 
 export interface ListAccountAuditPage {
