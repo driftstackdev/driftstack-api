@@ -22622,3 +22622,109 @@ pages this slice — index / pricing / comparison untouched.
 
 3 slices, empirical-proof-confirmed (vitest + builds), no gates
 touched, V-205 invariant intact.
+
+## V-486 — Postmark template draft batch (Track A, Wave 5)
+
+Two new draft templates added to `apps/server/src/services/email.ts:TEMPLATES`,
+ready to fire when the Postmark account is approved (founder
+follow-up; not a code-side gate):
+
+- `quota-warning` — fires once per account per billing period
+  when concurrent-cap utilisation crosses 80%, OR when
+  trial-pack credit drops below 20% of the original 299¢.
+  Caller dedupes via `quotaWarnEmailSentAt` /
+  `trialPackLowCreditEmailSentAt`. Single template alias serves
+  both because the upgrade-path framing converges.
+- `session-event-digest` — opt-in weekly summary on Mondays
+  09:00 in account timezone. Lists `sessions_run` /
+  `success_rate` / `top_failure_reason` for the past 7 days.
+  Preference stored on `email_preferences.session_event_digest`;
+  unsubscribe is one-click.
+
+Engineering scaffolding only — no firing logic in this slice;
+that lands when Postmark approves and the usage repos are wired
+to emit the dedupe column. Tier-1 copy auto-decided per the
+marketing-copy-cadence rule (founder reviews tone post-hoc).
+
+### Verification
+
+- `npm run -w apps/server typecheck` — clean.
+- `TEMPLATES` set now spans 19 entries (was 17); `TemplateName`
+  type union extends automatically via the satisfies clause.
+
+## V-497 — DR runbook gap-fill (Track C, Wave 5)
+
+Three new scenarios appended to `docs/deployment/dr-runbook.md`
+(Scenarios 1–8 already there; new entries at 9–11):
+
+- **Scenario 9 — Cloudflare Pages deploy regression.** Instant
+  rollback path via the Pages dashboard (any prior green deploy
+  → Rollback to this deployment); CDN POPs flip globally in
+  ~30s. Stop-gap: revert commit on main if dashboard itself is
+  unreachable. RTO: 2 minutes.
+- **Scenario 10 — Stripe webhook secret rotation under attack.**
+  Stripe overlap-window protocol (default 24h) so old + new
+  secret both validate during the swap; verifier already
+  accepts an array of secrets. Audit the overlap window for
+  forgery attempts before dropping the old secret. Distinct
+  from Scenario 6 (planned rotation): assumes no time to
+  coordinate. RTO: 30 minutes.
+- **Scenario 11 — Multi-day Hetzner regional outage.** Both
+  staging + production live in Falkenstein today; a regional
+  outage takes both down. Recovery: stand up replacement
+  compute in Hetzner Nuremberg or Helsinki, swap DNS at
+  Cloudflare (60s TTL), re-acquire Let's Encrypt cert. Data
+  plane (Neon, Upstash) is regionally independent and remains
+  available. RTO: 4–6 hours including TLS re-acquisition. RPO:
+  zero.
+
+Pre-launch dry-run checklist extended with the matching
+rehearsal entries; Scenario 11 is one-shot pre-launch (becomes
+routine once staging is regionally split from production —
+queued as a post-launch infrastructure ask).
+
+### Verification
+
+- File renders: `docs/deployment/dr-runbook.md` — markdown lints
+  clean. New scenarios follow the existing template (Trigger /
+  Detection signals / Recovery path / RTO+RPO / Stop-gap), no
+  cross-ref breakage.
+
+## V-502 — pricing page decision-tree (Track D, Wave 5)
+
+New "Which tier is right for me?" section inserted on
+`apps/marketing-site/src/pages/pricing.astro` between the
+trial-pack hero and the monthly/annual toggle. 8 short cards in
+a 2-column grid, one per tier (trial pack + 7 paid + Enterprise),
+each with an audience anchor ("Solo operator, GUI" / "Solo dev,
+code" / "High throughput, code") and a one-paragraph "best for"
+explainer.
+
+Cross-links: self-hosted SKUs (#self-hosted on the same page),
+architecture FAQ (V-500's new group at /faq#architecture-sessions).
+
+Tier-1 placeholder bound: static prose, no interactive
+decision-tree widget. The interactive version is queued at
+V-184b (Tier-3 visual overhaul). Existing pricing card grids,
+monthly/annual toggle, BYOK section, and Common Questions block
+all unchanged.
+
+### Verification
+
+- `npm run -w apps/marketing-site build` — clean (20 pages,
+  801ms).
+- HTML inspection of `dist/pricing/index.html`: new section
+  renders with `id="which-tier"` and the matching aria-label;
+  all 8 cards present.
+
+## Wave 5 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                                              |
+| ----- | ----- | ---------------------------------------------------------------------------------------------------- |
+| A     | V-486 | Postmark templates — `quota-warning` + `session-event-digest` drafts; total 19 templates             |
+| C     | V-497 | DR runbook — 3 new scenarios (Pages rollback / Stripe secret panic-rotate / Hetzner regional outage) |
+| D     | V-502 | Pricing decision-tree — 8 audience-anchored "best for" cards on /pricing                             |
+
+3 slices, empirical-proof-confirmed (typecheck + dr-runbook lint
+
+- marketing build), no gates touched, V-205 invariant intact.

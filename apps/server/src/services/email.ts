@@ -278,6 +278,34 @@ const TEMPLATES = {
     html: (v) =>
       `<p>Driftstack has resolved the open service-status incident.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Incident:</strong></td><td>${v.title}</td></tr><tr><td><strong>Resolved at:</strong></td><td>${v.incidentTime} (UTC)</td></tr></table><p><strong>Resolution notes:</strong><br />${v.message}</p><p>Live status: <a href="${v.statusPageUrl}">${v.statusPageUrl}</a><br />Unsubscribe: <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
   },
+  // V-486 — DRAFT copy. Quota-warning fires once per account per
+  // billing period when concurrent-cap utilisation crosses 80%, OR
+  // when trial-pack credit drops below 20% of the original 299¢.
+  // Caller dedupes via `quotaWarnEmailSentAt` (concurrent variant)
+  // / `trialPackLowCreditEmailSentAt` (credit variant). Templates
+  // share one alias because the copy paths converge — they both
+  // tell the customer "you're approaching the ceiling, here's the
+  // upgrade path."
+  'quota-warning': {
+    subject: 'Driftstack — approaching your tier limit',
+    text: (v) =>
+      `You're at ${v.utilizationPct}% of your Driftstack ${v.quotaName} on the ${v.tier} tier.\n\nNothing's blocked yet — this is a heads-up. ${v.contextSentence}\n\nUpgrade path: ${v.upgradeUrl}\nUsage detail: ${v.usageUrl}\n\nThis is the only email you'll get for this period. The dashboard reflects live state.\n\n— Driftstack`,
+    html: (v) =>
+      `<p>You're at <strong>${v.utilizationPct}%</strong> of your Driftstack <strong>${v.quotaName}</strong> on the <strong>${v.tier}</strong> tier.</p><p>Nothing's blocked yet — this is a heads-up. ${v.contextSentence}</p><p><strong>Upgrade path:</strong> <a href="${v.upgradeUrl}">${v.upgradeUrl}</a><br /><strong>Usage detail:</strong> <a href="${v.usageUrl}">${v.usageUrl}</a></p><p>This is the only email you'll get for this period. The dashboard reflects live state.</p><p>— Driftstack</p>`,
+  },
+  // V-486 — DRAFT copy. Weekly session-event digest, opt-in. Lists
+  // {sessions_run, success_rate, top_failure_reason} for the past
+  // 7 days. Sent on Mondays at 09:00 in the account's timezone (or
+  // UTC if region preference is unset). Customers who don't want
+  // it unsubscribe via the link in the footer; preference stored
+  // on `email_preferences.session_event_digest`.
+  'session-event-digest': {
+    subject: 'Driftstack — your weekly session summary',
+    text: (v) =>
+      `Last week on Driftstack:\n\n  Sessions run: ${v.sessionsRun}\n  Success rate: ${v.successRatePct}%\n  Top failure reason: ${v.topFailureReason}\n\nFull dashboard: ${v.dashboardUrl}\n\nNo failures in the past week? You'll still get this email — that's by design. To turn the digest off, manage email preferences:\n${v.preferencesUrl}\n\nUnsubscribe (one click): ${v.unsubscribeLink}\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Last week on Driftstack:</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Sessions run:</strong></td><td>${v.sessionsRun}</td></tr><tr><td><strong>Success rate:</strong></td><td>${v.successRatePct}%</td></tr><tr><td><strong>Top failure reason:</strong></td><td>${v.topFailureReason}</td></tr></table><p>Full dashboard: <a href="${v.dashboardUrl}">${v.dashboardUrl}</a></p><p>No failures in the past week? You'll still get this email — that's by design. To turn the digest off, <a href="${v.preferencesUrl}">manage email preferences</a>.</p><p>Unsubscribe (one click): <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
+  },
 } satisfies Record<string, Template>;
 
 type TemplateName = keyof typeof TEMPLATES;

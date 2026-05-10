@@ -151,6 +151,140 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   </section>
 
   <!-- Monthly/annual toggle (controls both Manual + API tables) -->
+  <!-- V-502 — decision-tree section between trial-pack hero and the
+       monthly/annual toggle. Static prose ladder; intentionally
+       no JS interaction (Tier-1 placeholder bound). -->
+  <section
+    id="which-tier"
+    aria-label="Which tier is right for me?"
+    class="border-t border-slate-200 bg-white"
+  >
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        Pick your tier
+      </p>
+      <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+        Which tier is right for me?
+      </h2>
+      <p class="mt-3 max-w-3xl text-sm text-slate-600">
+        All tiers run the same engine and the same fingerprint surface.
+        Differences are concurrent caps + profile counts + AI-agent
+        availability. The right tier is the one that matches your access
+        pattern (Manual vs API) and your peak parallelism — switch any
+        time, prorated automatically.
+      </p>
+
+      <ul class="mt-8 grid gap-4 md:grid-cols-2">
+        <li class="rounded-lg border border-oxblood-200 bg-white p-5">
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+            Just looking
+          </p>
+          <h3 class="mt-2 font-medium text-slate-900">
+            Trial pack — $2.99
+          </h3>
+          <p class="mt-2 text-sm text-slate-600">
+            16 hours of session time, no auto-renewal. The right entry if
+            you want to run your existing test suite or scraping job
+            against Driftstack and compare outputs before committing.
+          </p>
+        </li>
+        <li class="rounded-lg border border-slate-200 bg-white p-5">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+            Solo operator, GUI
+          </p>
+          <h3 class="mt-2 font-medium text-slate-900">Solo Manual — $79/mo</h3>
+          <p class="mt-2 text-sm text-slate-600">
+            One human clicking in the desktop GUI client; up to 10
+            persistent profiles. Power users running 1 session at a time
+            across 10 different client identities — sneaker resellers,
+            sole-trader compliance work, individual researchers.
+          </p>
+        </li>
+        <li class="rounded-lg border border-slate-200 bg-white p-5">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+            Small team, GUI
+          </p>
+          <h3 class="mt-2 font-medium text-slate-900">Team Manual — $249/mo</h3>
+          <p class="mt-2 text-sm text-slate-600">
+            3 humans clicking in parallel; 50 profiles. Account managers
+            running multiple client identities concurrently. AI-agent
+            available (BYOK).
+          </p>
+        </li>
+        <li class="rounded-lg border border-slate-200 bg-white p-5">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+            Agency, GUI
+          </p>
+          <h3 class="mt-2 font-medium text-slate-900">Agency Manual — $699/mo</h3>
+          <p class="mt-2 text-sm text-slate-600">
+            8 concurrent operators; 200 profiles. Marketing agencies,
+            compliance teams, legal-tech ops juggling many client
+            identities at once.
+          </p>
+        </li>
+        <li class="rounded-lg border border-slate-200 bg-white p-5">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+            Solo dev, code
+          </p>
+          <h3 class="mt-2 font-medium text-slate-900">API Starter — $149/mo</h3>
+          <p class="mt-2 text-sm text-slate-600">
+            Programmatic SDK access; 2 concurrent sessions; 25 profiles.
+            Solo developers writing test automation or evaluation-stage
+            scrapers. AI-agent available (BYOK).
+          </p>
+        </li>
+        <li class="rounded-lg border border-slate-200 bg-white p-5">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+            Production scale, code
+          </p>
+          <h3 class="mt-2 font-medium text-slate-900">API Builder — $499/mo</h3>
+          <p class="mt-2 text-sm text-slate-600">
+            8 concurrent; 100 profiles. Production automation jobs,
+            CI suites running real iPhone Safari, AI-agent flows with
+            either BYOK or bundled-rate billing.
+          </p>
+        </li>
+        <li class="rounded-lg border border-slate-200 bg-white p-5">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+            High throughput, code
+          </p>
+          <h3 class="mt-2 font-medium text-slate-900">API Scale — $1,499/mo</h3>
+          <p class="mt-2 text-sm text-slate-600">
+            24 concurrent; 500 profiles. High-volume automation fleets,
+            agencies running scraping jobs across many domains, AI-agent
+            workflows at scale.
+          </p>
+        </li>
+        <li class="rounded-lg border border-slate-200 bg-white p-5">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+            Custom contract
+          </p>
+          <h3 class="mt-2 font-medium text-slate-900">Enterprise — from $4,000/mo</h3>
+          <p class="mt-2 text-sm text-slate-600">
+            Annual contracts only. Custom concurrency + profiles +
+            archetypes + SLA + DPA terms. The right tier for regulated
+            industries (finance, healthcare) needing custom paperwork or
+            customers needing a dedicated CSM.
+          </p>
+        </li>
+      </ul>
+
+      <p class="mt-8 max-w-3xl text-sm text-slate-600">
+        Need to run on your own hardware (regulated industry, air-gapped
+        deployment, custom hardware fingerprint)?
+        <a href="#self-hosted" class="text-oxblood-700 underline">
+          See self-hosted SKUs
+        </a>
+        — pricing is engine-license-based with source-escrow, not the
+        per-seat ladder above. Or
+        <a href="/faq#architecture-sessions" class="text-oxblood-700 underline">
+          read the architecture FAQ
+        </a>
+        if you're still deciding whether real-WebKit fits your workload.
+      </p>
+    </div>
+  </section>
+
   <section class="border-t border-slate-200 bg-slate-50">
     <div class="mx-auto max-w-6xl px-6 py-10">
       <div class="flex items-center justify-end">

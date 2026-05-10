@@ -429,6 +429,141 @@ order :: An unexpected error occurred.` (transient — retry).
   to Cloudflare Origin CA (per V-278.M deviation note), the
   decision record is one git-blame away.
 
+### Scenario 9 — Cloudflare Pages deploy regression (V-497 NEW)
+
+**Trigger**: a marketing-site / customer-dashboard / docs / status-site
+deploy to Cloudflare Pages succeeds at the build step but produces a
+broken page in production (404, hydration error, blank content,
+unstyled output, broken auth wire). Customer-visible within minutes
+because Cloudflare Pages doesn't gate deploys behind a manual approval
+once Git integration is wired.
+
+**Detection signals**
+
+- `StatusBadge` (V-474) shows `down` or `degraded` (the badge
+  fetches `/v1/status`, so a marketing-site break alone keeps the
+  badge healthy).
+- Customer report on a specific URL (`/pricing` / `/dashboard` /
+  `/sdk/typescript-quickstart`).
+- Sentry frontend errors spiking on `*.driftstack.dev` projects
+  (per-service init from V-469).
+
+**Recovery path (Cloudflare Pages instant rollback)**
+
+1. **Cloudflare dashboard → Pages → \<project\> → Deployments**.
+   Find the most recent green deploy that _predates_ the
+   regression. The "Production" badge tracks the live deploy.
+2. Click the prior deploy → **Rollback to this deployment**.
+   Cloudflare promotes the older bundle to the production alias
+   immediately; CDN POPs flip within ~30 seconds globally. No
+   Git operation required.
+3. **Verify** by visiting the affected URL from a clean browser
+   session (cmd-shift-N / private window — incognito bypasses CDN
+   caching at the browser layer; Cloudflare's edge cache flips on
+   the rollback).
+4. **Code-side fix** lands as a forward commit on `main` — never
+   force-push to fix Pages. The rollback bought time; the next
+   deploy ships the actual fix.
+
+**RTO**: 2 minutes (single click in the dashboard). **RPO**: zero —
+no customer state lives in Pages, only static HTML/JS/CSS.
+
+**Stop-gap**: if the Cloudflare dashboard is itself unavailable,
+push a `revert` commit on `main` of the offending deploy. Pages
+auto-deploys forward — equivalent latency to the dashboard rollback
+once the build completes (~2 min on top of git push).
+
+### Scenario 10 — Stripe webhook secret rotation under attack (V-497 NEW)
+
+**Trigger**: the `STRIPE_WEBHOOK_SECRET` is suspected leaked or
+compromised mid-incident. Distinct from Scenario 6 (planned
+rotation): here we don't have time to coordinate a swap window with
+Stripe. Customer-billing webhooks may be silently dropped or
+forged.
+
+**Recovery path**
+
+1. **Generate the new secret in Stripe Dashboard → Developers →
+   Webhooks → \<endpoint\> → Signing secret → Roll**. Stripe lets
+   the OLD secret continue signing for a configurable overlap
+   window (default 24h) — DO take the overlap.
+2. **SSH-write the new secret** to Hetzner production (per
+   `docs/deployment/stripe-webhook-testing.md`); reload the
+   server (`systemctl reload driftstack-server` — pino logs
+   confirm new secret loaded).
+3. **The verifier code** at `apps/server/src/lib/webhook-signing.ts`
+   already accepts an array of secrets. Drop the old secret from
+   the env file as soon as the overlap window passes.
+4. **Audit** the events in the overlap window — Stripe Dashboard →
+   Developers → Webhooks → \<endpoint\> → Events list. Any 401/403
+   responses on the endpoint during the overlap are forgery
+   attempts; document in the incident timeline.
+5. **Customer comms**: not required if no events were forged. If
+   forged events are confirmed (rare; Stripe signature verification
+   is robust), this becomes a security incident under
+   `docs/runbooks/incidents.md` §3 — including the GDPR Art. 33–34
+   clock if any customer billing data was disclosed.
+
+**RTO**: 30 minutes (longer than Scenario 6's planned rotation
+because the overlap window has to be analysed for forgery).
+**RPO**: zero — Stripe retains the canonical event ledger; we can
+always reconstruct from the Stripe events API.
+
+### Scenario 11 — Multi-day Hetzner regional outage (V-497 NEW)
+
+**Trigger**: Hetzner Falkenstein region is unreachable for >12h.
+Both production and staging hosts are in Falkenstein today (per
+ADR-001 control-plane hosting); a regional outage takes both down
+simultaneously. Distinct from Scenario 1 (single-host loss):
+single-host has Hetzner's other hosts as the recovery target;
+regional outage requires cross-region failover.
+
+**Detection signals**
+
+- Hetzner status page (https://status.hetzner.com) reports
+  Falkenstein affected.
+- Synthetic checks fire on production AND staging — the dual-host
+  failure pattern distinguishes regional from per-host.
+- Customer reports concentrate around the same window.
+
+**Recovery path**
+
+1. **Status page**: post a "regional infrastructure outage at our
+   primary provider" incident on the trust center
+   (`apps/marketing-site/src/data/incidents.ts`) within 30 min;
+   StatusBadge flips red. Customers see a real cause, not a vague
+   "we're having issues."
+2. **Stand up replacement compute** in Hetzner Nuremberg or Helsinki
+   (both EU; both in the Hetzner DPA scope). Process is the same
+   as Scenario 1 — provision via the Hetzner CLI, deploy from
+   clean state — but doubled because we need both prod and staging.
+3. **Update DNS** at Cloudflare to point `api.driftstack.dev` and
+   `staging-api.driftstack.dev` at the new IPs. TTL is 60s on
+   these records (per `docs/deployment/dns.md`); propagation is
+   under 2 min.
+4. **Verify TLS** with the Cloudflare Full (strict) posture from
+   V-278.M — the Let's Encrypt cert lives on the host filesystem,
+   so a fresh provisioning re-runs the cert acquisition step. If
+   the new region's IP isn't yet in the rate-limit allowance,
+   fall back to Cloudflare's strict-with-known-CA mode for the
+   first hour.
+5. **Database / Redis**: Neon and Upstash are both EU-region but
+   independent of Hetzner — they remain available. The new
+   compute connects to the existing data plane via env vars; no
+   data migration required.
+6. **Customer comms**: hourly updates on the trust center until
+   resolved. SLA credits per `apps/marketing-site/src/pages/legal/sla.astro`
+   apply automatically against the next invoice.
+
+**RTO**: 4–6 hours including TLS re-acquisition. **RPO**: zero —
+data plane is regionally independent.
+
+**Pre-launch posture**: this scenario is rehearseable but not
+fully solveable until staging lives in a DIFFERENT Hetzner region
+from production (queued as a post-launch infrastructure ask). For
+now the runbook documents the recovery path; the rehearsal is
+one-shot rather than periodic.
+
 ## Cross-cutting principles
 
 - **Never reach for `git reset --hard` or `git push --force` to
@@ -475,6 +610,20 @@ Before commercial activation:
       `full` (not strict) in test mode against staging; verify
       curl still works; flip back to `strict`. Confirms the
       stop-gap procedure is one API call away.
+- [ ] Scenario 9 (Pages rollback) — push a deliberate hydration-
+      breaking change to a marketing-site preview branch; deploy
+      to a Pages preview env; rollback via the Cloudflare
+      dashboard; confirm the preview returns to known good in
+      under 2 min. Practiced quarterly because the Pages UI evolves.
+- [ ] Scenario 10 (Stripe secret panic-rotate) — rehearse the
+      Stripe overlap-window rotation in test mode end-to-end;
+      time the drop-old-secret step against the audit window;
+      confirm the verifier accepts both the new + old secrets
+      during overlap.
+- [ ] Scenario 11 (Hetzner regional failover) — full provision-
+      from-clean rehearsal in a non-Falkenstein region, including
+      DNS swap + Let's Encrypt re-acquisition. One-shot pre-launch;
+      after staging is regionally split this becomes routine.
 
 Each dry-run gets a V-log entry confirming "rehearsed YYYY-MM-DD,
 RTO observed, gaps surfaced".
