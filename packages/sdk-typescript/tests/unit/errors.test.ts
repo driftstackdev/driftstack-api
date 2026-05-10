@@ -9,9 +9,11 @@ import {
   EmailNotVerifiedError,
   errorFromProblem,
   FeatureUnavailableError,
+  InternalError,
   InvalidAuthTokenError,
   InvalidCredentialsError,
   InvalidKeyError,
+  isRetryable,
   MfaStepUpRequiredError,
   NotFoundError,
   RateLimitError,
@@ -232,5 +234,68 @@ describe('errorFromProblem — V-441 ops-flow problem types', () => {
     expect(e).toBeInstanceOf(MfaStepUpRequiredError);
     expect(e.kind).toBe('mfa_step_up_required');
     expect(e.status).toBe(403);
+  });
+});
+
+describe('V-489 — isRetryable predicate', () => {
+  it('returns true for transport errors', () => {
+    const e = new TransportError({
+      type: 'about:blank',
+      title: 'Network error',
+      status: 0,
+    });
+    expect(isRetryable(e)).toBe(true);
+  });
+
+  it('returns true for internal errors (5xx)', () => {
+    const e = new InternalError({
+      type: PROBLEM_TYPES.Internal,
+      title: 'Internal',
+      status: 500,
+    });
+    expect(isRetryable(e)).toBe(true);
+  });
+
+  it('returns true for rate-limited errors', () => {
+    const e = errorFromProblem(
+      { type: PROBLEM_TYPES.RateLimited, title: 'Rate limited', status: 429 },
+      '5',
+    );
+    expect(isRetryable(e)).toBe(true);
+  });
+
+  it('returns false for validation errors', () => {
+    const e = new ValidationError({
+      type: PROBLEM_TYPES.ValidationFailed,
+      title: 'Validation',
+      status: 400,
+    });
+    expect(isRetryable(e)).toBe(false);
+  });
+
+  it('returns false for auth errors', () => {
+    const e = new AuthError({
+      type: PROBLEM_TYPES.Unauthorized,
+      title: 'Unauthorized',
+      status: 401,
+    });
+    expect(isRetryable(e)).toBe(false);
+  });
+
+  it('returns false for not-found errors', () => {
+    const e = new NotFoundError({
+      type: PROBLEM_TYPES.NotFound,
+      title: 'Not found',
+      status: 404,
+    });
+    expect(isRetryable(e)).toBe(false);
+  });
+
+  it('returns false for non-DriftstackError thrown values', () => {
+    expect(isRetryable(new Error('regular'))).toBe(false);
+    expect(isRetryable('string')).toBe(false);
+    expect(isRetryable(undefined)).toBe(false);
+    expect(isRetryable(null)).toBe(false);
+    expect(isRetryable({ status: 500 })).toBe(false);
   });
 });

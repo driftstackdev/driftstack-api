@@ -415,3 +415,40 @@ function extensionMembers(p: Problem): Record<string, unknown> {
   }
   return out;
 }
+
+/**
+ * V-489 — `isRetryable(err)` predicate exposed for SDK consumers
+ * who run their own retry/backoff loop instead of the built-in one
+ * in `retry.ts`. Returns `true` when a retry stands a reasonable
+ * chance of succeeding; `false` when it doesn't.
+ *
+ * Retryable kinds:
+ *   - `transport` (network failure, DNS, TLS handshake — should
+ *     succeed once connectivity is restored)
+ *   - `internal` (5xx from Driftstack — likely transient)
+ *   - `rate_limited` (429 with a Retry-After hint — back off then
+ *     retry)
+ *
+ * NOT retryable:
+ *   - 4xx that aren't 429 (validation, authn, authz, not found,
+ *     conflict, tier-limit, MFA-step-up — retrying without a state
+ *     change won't help)
+ *   - any DriftstackError where `kind: 'unknown'` is not the case
+ *     and the kind is not in the retryable set above
+ *
+ * For non-DriftstackError thrown values, returns false — the SDK
+ * always wraps known errors in a DriftstackError, so a non-DS error
+ * is something the caller threw and the caller should decide how
+ * to handle.
+ */
+export function isRetryable(err: unknown): boolean {
+  if (!(err instanceof DriftstackError)) return false;
+  switch (err.kind) {
+    case 'transport':
+    case 'internal':
+    case 'rate_limited':
+      return true;
+    default:
+      return false;
+  }
+}

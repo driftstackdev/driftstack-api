@@ -36,6 +36,7 @@ export type {
 export {
   DriftstackError,
   type DriftstackErrorKind,
+  isRetryable,
   AuthError,
   BadRequestError,
   ConcurrencyLimitError,

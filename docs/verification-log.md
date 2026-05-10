@@ -22840,3 +22840,94 @@ stay aligned when scopes or rate-limit values change.
 
 3 slices, empirical-proof-confirmed (vitest + typecheck + docs
 build + audit-doc lint), no gates touched, V-205 invariant intact.
+
+## V-488 — OAuth 2.0 PKCE pre-stage (Track A, Wave 7)
+
+Engineering scaffolding for the eventual third-party OAuth flow
+(register-client → authorize → code → token-exchange → opaque
+access token). Lands the cryptographic primitive plus the
+decision record so the route-layer work in V-488-followup is
+purely additive.
+
+### Files
+
+- `apps/server/src/lib/oauth-pkce.ts` — RFC 7636 PKCE helpers:
+  `computeS256Challenge(verifier)`, `verifyS256Challenge({verifier, challenge})`,
+  `verifyPlainChallenge` (also exposed but the route layer will
+  refuse `plain` at registration time per the locked decision).
+  Constant-time comparisons; throws on RFC alphabet violations
+  for compute, returns false on every malformed input for verify
+  so the caller path is uniform.
+- `apps/server/tests/unit/oauth-pkce.test.ts` — 17 tests pin
+  the matrix: RFC 7636 §A.2 vector, edge cases (43-char min,
+  128-char max, alphabet violations), wrong verifier, malformed
+  challenge, plain method correctness, encoding round-trip.
+- `docs/decisions.md` — D-2026-05-10-01: PKCE-only with `S256`,
+  opaque tokens (no JWT), no refresh tokens v1, token
+  introspection through the existing `/v1/api-keys/:id` shape.
+
+### Verification
+
+- `npx vitest run apps/server/tests/unit/oauth-pkce.test.ts`
+  — 17/17 passed.
+- `npm run -w apps/server typecheck` — clean.
+
+Route registration + DB schema for `oauth_clients` /
+`oauth_authorizations` is V-488-followup.
+
+## V-489 — packages depth: TS SDK `isRetryable(err)` predicate (Track B, Wave 7)
+
+Surveyed packages/{api-types, sdk-typescript, sdk-python, sdk-go}
+for depth-fill opportunities. Error-class coverage already at
+parity across the three SDKs. The one user-facing helper that was
+missing: a public `isRetryable(err)` predicate so SDK consumers
+running their own retry loop (instead of the built-in one) can
+make retry decisions without re-implementing the kind-to-
+retryability mapping.
+
+### Files
+
+- `packages/sdk-typescript/src/errors.ts` — `isRetryable(err)`
+  exported. Returns true for `transport`, `internal`, and
+  `rate_limited`; false for everything else (validation, auth,
+  not-found, conflict, tier-limit, MFA-step-up). Non-DriftstackError
+  values return false.
+- `packages/sdk-typescript/src/index.ts` — public export added.
+- `packages/sdk-typescript/tests/unit/errors.test.ts` — 7 new
+  cases.
+
+Python + Go SDK equivalents are V-489-followup.
+
+### Verification
+
+- `npx vitest run packages/sdk-typescript/tests/unit/errors.test.ts`
+  — 25/25 passed (was 18; +7 from V-489).
+
+## V-506 — about page operating-commitments section (Track D, Wave 7)
+
+New "Operating commitments" section on
+`apps/marketing-site/src/pages/about.astro`. Four trust-signal
+cards covering: pre-launch security audit cadence (→ /security),
+DR rehearsals (→ /trust/incidents), sub-processor change-log
+per Article 28(2) (→ /trust/sub-processors), source escrow for
+Enterprise + Self-hosted (→ FAQ).
+
+About-page narrative now reads: "what we are" → "things you'll
+notice" → "what we promise to do" → "company facts" → "want to
+try it?"
+
+### Verification
+
+- `npm run -w apps/marketing-site build` — clean (20 pages, 748ms).
+
+## Wave 7 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                                              |
+| ----- | ----- | ---------------------------------------------------------------------------------------------------- |
+| A     | V-488 | OAuth PKCE pre-stage — S256 verifier + decision record; 17 unit tests pin the RFC 7636 vector        |
+| B     | V-489 | TS SDK `isRetryable(err)` helper — public predicate for consumer-side retry loops; 7 new tests       |
+| D     | V-506 | About page operating-commitments section — 4 trust-signal cards cross-linked to existing public docs |
+
+3 slices, empirical-proof-confirmed (vitest + typecheck +
+marketing build + decisions.md lint), no gates touched, V-205
+invariant intact.

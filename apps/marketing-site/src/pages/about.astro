@@ -101,6 +101,98 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </div>
   </section>
 
+  <!-- V-506 — transparency commitments. Surfaces public-facing
+       trust signals already shipped (security audit cadence, DR
+       runbooks, incident protocol, source-escrow for self-hosted)
+       so the about page is not just "what we are" but "what we
+       commit to". Visible in the About narrative because customers
+       evaluating us read this page before /security and /trust. -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        Operating commitments
+      </p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+        What we promise to do.
+      </h2>
+      <p class="mt-4 max-w-3xl text-sm text-slate-600">
+        Pre-launch is the time when promises matter most — once
+        you're paying for production access, you can't unwind a
+        commitment. So we publish the operating commitments that
+        every customer can hold us to, with the public links to
+        verify each one.
+      </p>
+
+      <div class="mt-10 grid gap-6 md:grid-cols-2">
+        <div class="rounded-lg border border-slate-200 bg-white p-5">
+          <h3 class="font-semibold text-slate-900">
+            Pre-launch security audit, on a cadence
+          </h3>
+          <p class="mt-2 text-sm text-slate-600">
+            Every meaningful slice of code merged is re-audited
+            against the same six checks (scope-reach, plaintext-
+            leakage, idempotency, audit-log injection, account-
+            scope leakage, web-session-token security). Findings
+            with closure status published at
+            <a href="/security" class="text-oxblood-700 underline">
+              /security
+            </a>. Pre-paying-customer deep audit happens before
+            commercial activation.
+          </p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-white p-5">
+          <h3 class="font-semibold text-slate-900">
+            Disaster recovery rehearsed pre-launch
+          </h3>
+          <p class="mt-2 text-sm text-slate-600">
+            Eleven DR scenarios documented with concrete recovery
+            commands — host loss, Postgres corruption, Redis loss,
+            R2 object loss, signing-key rotation under attack,
+            bad deploys, cert renewal failures, Cloudflare Pages
+            regressions, multi-day Hetzner regional outage. Every
+            scenario is rehearseable on staging before commercial
+            activation. Public-facing posture at
+            <a href="/trust/incidents" class="text-oxblood-700 underline">
+              /trust/incidents
+            </a>.
+          </p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-white p-5">
+          <h3 class="font-semibold text-slate-900">
+            Sub-processor change-log per Article 28(2)
+          </h3>
+          <p class="mt-2 text-sm text-slate-600">
+            Every change to our sub-processor list (additions,
+            removals, region migrations) is published 30 days
+            before it takes effect at
+            <a href="/trust/sub-processors" class="text-oxblood-700 underline">
+              /trust/sub-processors
+            </a>. Customers get a right-of-objection window to
+            terminate the affected portion of service if a new
+            sub-processor doesn't meet their requirements.
+          </p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-white p-5">
+          <h3 class="font-semibold text-slate-900">
+            Source escrow for Enterprise + Self-hosted
+          </h3>
+          <p class="mt-2 text-sm text-slate-600">
+            Enterprise customers and Self-hosted licensees get
+            access to the WebKit fork + control-plane source
+            under a written escrow agreement. If Driftstack
+            sunsets the cloud service, escrow releases the source
+            so customers can continue running on their own
+            hardware indefinitely. The
+            <a href="/faq#acceptable-use" class="text-oxblood-700 underline">
+              FAQ "what if Driftstack goes away?"
+            </a>
+            entry has the full mechanics.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Company facts -->
   <section class="border-t border-slate-200 bg-white">
     <div class="mx-auto max-w-6xl px-6 py-16">
