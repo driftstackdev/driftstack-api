@@ -24482,3 +24482,69 @@ No SDK publish.
 **Note:** This V-log block lands in a follow-up commit on top of the
 main Wave 22 commit (`d80dcce`) — a linter-race excluded the V-log
 from the original staged set.
+
+## V-553 — unit-test coverage audit (Track A, Wave 23)
+
+**Date:** 2026-05-11
+
+Doc at `docs/internal/v553-unit-test-coverage-audit.md`. Companion to
+V-540.A E2E audit. Catalogues the gap between 40 service modules in
+`apps/server/src/services/` and 32 unit specs.
+
+20 service modules have no direct unit spec (50% file-name gap), but
+effective coverage is higher because many of those modules have
+integration coverage. Audit classifies the 20 as HIGH (2 — email.ts +
+cli-authorize.ts) / MED (5) / LOW (13) priority for unit-spec
+addition.
+
+Recommended V-553.B (next wave): `email.test.ts` (retry semantics
+integration doesn't exercise) + `cli-authorize.test.ts` (polling-loop
+race conditions integration misses).
+
+Doc-only this wave; V-553.B implements.
+
+## V-545 — status-page enhancements design (Track C, Wave 23)
+
+**Date:** 2026-05-11
+
+Doc at `docs/internal/v545-status-page-enhancements.md`. Designs 3
+enhancement sub-slices on top of the V-295c status site:
+
+- **V-545.A** — incident-update timeline. `incident_updates` table +
+  admin route to post updates + status-site render.
+- **V-545.B** — subscriber email notifications (3 Postmark templates:
+  incident-opened / incident-updated / incident-resolved) with 1-per-
+  hour throttle + per-component subscribe.
+- **V-545.C** — status-site history view + permalink + RSS feed.
+
+3 open questions surfaced for team review (email-throttling default,
+per-component granularity, RSS scope).
+
+## V-547 — chaos engineering scenario catalogue (Track D, Wave 23)
+
+**Date:** 2026-05-11
+
+Doc at `docs/internal/v547-chaos-engineering-scenarios.md`. 10
+scenarios across 5 categories (sub-processor / database / cache /
+storage / infrastructure). Each scenario specifies fault + expected
+behaviour + rehearsal method + current state (PASS / partial /
+target).
+
+PASS today: 3, 4, 7. Partial / V-547.B target: 1, 5, 6, 8.
+V-547.C target: 3 (LLM timeout) + 10 (cert renewal). Manual: 9
+(Hetzner instance down).
+
+Rehearsal cadence: pre-launch P0 (1, 4, 6, 9); post-launch quarterly
+rotation through 1-10; post-incident within 30 days.
+
+## Wave 23 — autopilot summary (per Rule M)
+
+| Track | Slice | Outcome                                                                                            |
+| ----- | ----- | -------------------------------------------------------------------------------------------------- |
+| A     | V-553 | Unit-test coverage audit — 40 services / 32 specs / 20 file-name gaps; 2 HIGH priority for V-553.B |
+| C     | V-545 | Status-page enhancements design — 3 sub-slices (timeline + subs + history)                         |
+| D     | V-547 | Chaos engineering scenario catalogue — 10 scenarios / 5 categories / rehearsal cadence             |
+
+3 slices, all doc-only (1429/1429 holds; no test count change). Rule
+M satisfied: 3 P-track slices from 3 different tracks (A + C + D). No
+remote operations. No force-push. No private-flip. No SDK publish.
