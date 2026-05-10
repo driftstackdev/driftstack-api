@@ -17,3 +17,13 @@ export {
   typeInto,
   V532A_NAVIGATION_RECIPES,
 } from './recipes/navigation.js';
+
+// V-532.B — login + fill-form recipe builders.
+export type { FormField } from './recipes/forms.js';
+export {
+  buildFillFormRecipe,
+  buildLoginRecipe,
+  CONTACT_FORM_GENERIC,
+  LOGIN_FLOW_GENERIC,
+  V532B_FORM_RECIPES,
+} from './recipes/forms.js';

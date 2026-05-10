@@ -1,7 +1,7 @@
 # Driftstack API — current status
 
 **Last updated:** 2026-05-10
-**Most recent wave:** Wave 20 (V-533.A + V-541)
+**Most recent wave:** Wave 21 (V-532.B + V-542)
 **Mode:** Autopilot active. Waves 1-18 closed; Wave 19 lands this commit;
 Waves 20-26 queued per the overnight directive. Team morning review point:
 `docs/internal/wave-15-18-overnight-batch-report.md` (5-minute scan covers
@@ -113,7 +113,7 @@ Full strict mode):
 - https://api.driftstack.dev/health — Fastify control plane (Hetzner production)
 - https://staging.driftstack.dev/health — staging mirror (Hetzner staging)
 
-Tests: **1419/1419 green** across 130 test files (unit + integration +
+Tests: **1429/1429 green** across 131 test files (unit + integration +
 gui-jsdom). Typecheck clean. Full `npx vitest run` empirical proof from
 this wave.
 

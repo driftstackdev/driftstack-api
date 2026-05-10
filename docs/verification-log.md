@@ -24336,3 +24336,104 @@ hook dry-run on this commit's draft). Rule M satisfied: 2 P-track
 slices from 2 different tracks (Track B V-533.A + Track C/D V-541).
 Cross-agent boundary held (Rule G). No remote operations. No
 force-push. No private-flip. No SDK publish.
+
+## V-532.B — recipe-library login + fill-form builders (Track B, Wave 21)
+
+**Date:** 2026-05-11
+
+Second sub-slice of V-532 per the anti-substitution clause. V-532.A
+shipped search + paginated-listing recipes; V-532.B adds the form-
+interaction family. New `packages/recipe-library/src/recipes/forms.ts`:
+
+- `buildLoginRecipe(opts)` — navigate → wait → type username → type
+  password → tap submit → wait for success → capture. Category 'login'.
+- `buildFillFormRecipe(opts)` — navigate → wait for first field → N
+  type steps (one per field) → tap submit → wait for success → capture.
+  Category 'form'. Rejects empty `fields`.
+- `FormField` type for the multi-field array.
+- 2 reference recipes: `LOGIN_FLOW_GENERIC`, `CONTACT_FORM_GENERIC`
+  (3-field contact form).
+- `V532B_FORM_RECIPES` catalogue export.
+
+10 property-style tests in `packages/recipe-library/tests/forms.test.ts`:
+shape verification + credential propagation + selector mapping + field-
+order preservation + first-wait-barrier targeting first field + empty-
+fields rejection + reference-recipe IDs + MockRecipeRunner deterministic
+execution against both reference recipes.
+
+### Verification
+
+- `npx tsc --build packages/recipe-library/tsconfig.json` — clean
+  (one noUncheckedIndexedAccess narrowing on `fields[0]`).
+- `npx vitest run packages/recipe-library/tests/` — 29/29 pass (8 mock
+  - 11 V-532.A navigation + 10 V-532.B forms).
+- `npx vitest run` (full workspace) — **1429/1429 pass** across 131
+  test files (was 1419 before Wave 21; +10 = expected).
+- `npx tsc --build` (full workspace) — clean.
+
+### Sub-slices remaining
+
+- **V-532.C (later):** infinite-scroll detection + cart + checkout
+  recipes.
+- **V-532.D (later):** multi-step wizard recipe with branch-on-state.
+
+## V-542 — backup + DR verification checklist (Track C/D, Wave 21)
+
+**Date:** 2026-05-11
+
+Manual verification artifact at
+`docs/internal/v542-backup-verification-checklist.md`. Structured
+pass/fail checklist for `scripts/dr-rehearse.sh` rehearsal runs.
+
+### Structure
+
+- Section A — pre-rehearsal state (HEAD recorded, snapshot available,
+  R2 listing exported, no active production sessions).
+- Section B — rehearsal execution (script runs clean, Postgres + Redis
+  start, control plane boots + /health 200, route count matches
+  production, cleanup runs).
+- Section C — restore-completeness (account counts match, sample
+  accounts intact, R2 sample objects present, sub-processor creds NOT
+  using prod tokens).
+- Section D — roll-forward decision (pending migration applies on
+  restored snapshot; rehearsal duration within 5min SLA).
+- Section E — post-rehearsal cleanup (containers + temp files + result
+  logging).
+
+### Pass/fail criteria
+
+- PASS: every B + C item ticks.
+- FAIL: any B or C item doesn't tick — log root cause + open follow-up
+  V-NNN slice.
+- A + D items informational; E items hygiene.
+
+### When to run
+
+- Weekly during pre-launch.
+- After every Drizzle migration touching data tables.
+- Before each marketing-site launch wave.
+- Quarterly post-launch.
+
+### Automation target (V-542.B)
+
+Scheduled BullMQ job invokes `dr-rehearse.sh` with structured JSON
+output, logs results to a new `dr_rehearsal_log` table, Postmark
+alerts on failure. Out of scope this wave.
+
+### Verification
+
+- File written; cross-checked `scripts/dr-rehearse.sh` exists +
+  executable.
+- V-205 + V-211 regex sweep: zero hits.
+
+## Wave 21 — autopilot summary (per Rule M)
+
+| Track | Slice   | Outcome                                                                                                |
+| ----- | ------- | ------------------------------------------------------------------------------------------------------ |
+| B     | V-532.B | recipe-library login + fill-form builders + 2 reference recipes + 10 property-style tests (+10 → 1429) |
+| C/D   | V-542   | Backup + DR verification checklist (5 sections, pass/fail criteria, automation target for V-542.B)     |
+
+2 slices, empirical-proof-confirmed (typecheck + vitest 1429/1429 +
+hook dry-run on this commit's draft). Rule M satisfied: 2 P-track
+slices from 2 different tracks (Track B V-532.B + Track C/D V-542).
+No remote operations. No force-push. No private-flip. No SDK publish.
