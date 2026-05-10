@@ -92,7 +92,7 @@ remaining.
 | recapture-automation   | V-533.A matrix + cross-agent contract                        | V-533.B atlas / V-533.C admin routes   |
 | gui-client             | (none)                                                       | V-534 Tauri deepen                     |
 
-Cross-agent contracts published for V-531 + V-533. Agent 2 picks up
+Cross-agent contracts published for V-531 + V-533. Agent 1 picks up
 the WebKit-fork-side work next.
 
 ## Track A — testing audits (Waves 19+23)
@@ -187,7 +187,7 @@ When autopilot resumes:
 - **V-534** — gui-client Tauri deepen (kicked-off slice).
 - Implementation slices for any Track C/D plan the team approves.
 
-The V-531.B real codec + V-533.C admin routes are gated on Agent 2's
+The V-531.B real codec + V-533.C admin routes are gated on Agent 1's
 webkit-driftstack-side work landing.
 
 ## Verification
