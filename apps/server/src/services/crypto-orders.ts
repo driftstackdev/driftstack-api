@@ -260,6 +260,36 @@ export class CryptoOrdersService {
   }
 
   /**
+   * V-666.Y — admin clears a previously-recorded refund request.
+   * Used when the customer reconsiders or ops determines the refund
+   * was raised in error. Both refund_requested_at + refund_reason
+   * are reset to null. Idempotent: calling on an order with no
+   * existing refund returns ok:'noop' so ops scripts don't need to
+   * check first.
+   *
+   * Returns:
+   *   - { ok: 'cleared', order } when a refund was previously set
+   *     and is now cleared
+   *   - { ok: 'noop' } when no refund had been requested
+   *   - null when the order doesn't exist
+   */
+  async cancelRefundRequest(args: {
+    order_id: string;
+  }): Promise<{ ok: 'cleared'; order: CryptoOrder } | { ok: 'noop' } | null> {
+    const order = await this.opts.repo.getById(args.order_id);
+    if (order === null) return null;
+    if (order.refund_requested_at === null) return { ok: 'noop' };
+    const updated: CryptoOrder = {
+      ...order,
+      refund_requested_at: null,
+      refund_reason: null,
+      updated_at: this.nowFn(),
+    };
+    await this.opts.repo.upsert(updated);
+    return { ok: 'cleared', order: updated };
+  }
+
+  /**
    * V-666.Q — customer-side note update. Caller scopes to their own
    * account; cross-account PATCH returns null (404-style). Empty
    * string is normalised to null. Length cap enforced at the route

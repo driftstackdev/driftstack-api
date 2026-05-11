@@ -12,6 +12,10 @@ import type { CryptoOrderData } from './use-crypto-order';
 
 export interface AdminCryptoOrder extends CryptoOrderData {
   account_id: string | null;
+  /** V-666.X — admin refund-request timestamp (ISO). Null when no refund recorded. */
+  refund_requested_at?: string | null;
+  /** V-666.X — admin refund-request reason. Null when no refund recorded. */
+  refund_reason?: string | null;
 }
 
 export interface AdminCryptoOrdersListData {

@@ -7,6 +7,7 @@
 //   GET  /v1/admin/crypto-orders/:order_id
 //   POST /v1/admin/crypto-orders/:order_id/apply-ipn  (V-666.F)
 //   POST /v1/admin/crypto-orders/:order_id/request-refund (V-666.X)
+//   POST /v1/admin/crypto-orders/:order_id/cancel-refund-request (V-666.Y)
 //   POST /v1/admin/crypto-orders/sweep-expired        (V-666.L)
 //
 // Auth: driftstack_internal_admin scope. Used by the founder dashboard
@@ -369,6 +370,32 @@ export function registerAdminCryptoOrdersRoutes(
         );
       }
       return reply.send(toPublic(result.order));
+    },
+  );
+
+  // V-666.Y — admin clears a previously-recorded refund request.
+  // Idempotent: returns 200 even when no refund was outstanding
+  // (the response includes a `noop: true` flag so the dashboard can
+  // distinguish "cleared something" from "nothing to clear").
+  app.post<{ Params: { order_id: string } }>(
+    '/v1/admin/crypto-orders/:order_id/cancel-refund-request',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
+      const params = parseOrThrow(GetParams, req.params);
+      const result = await deps.service.cancelRefundRequest({
+        order_id: params.order_id,
+      });
+      if (result === null) {
+        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
+      }
+      if (result.ok === 'noop') {
+        const order = await deps.service.getById(params.order_id);
+        if (order === null) {
+          throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
+        }
+        return reply.send({ ...toPublic(order), noop: true });
+      }
+      return reply.send({ ...toPublic(result.order), noop: false });
     },
   );
 }
