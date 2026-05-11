@@ -78,6 +78,8 @@ import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerNowpaymentsWebhookRoutes } from '../routes/webhooks-nowpayments.js';
 import { registerOAuthRoutes } from '../routes/oauth.js';
 import { OAuthService, type OAuthStore } from '../services/oauth.js';
+import { registerAdminCostRoutes } from '../routes/admin-cost.js';
+import type { CostMonitoringService } from '../services/cost-monitoring.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
 import { registerProfileSnapshotsRoutes } from '../routes/profile-snapshots.js';
 import { registerBillingRoutes } from '../routes/billing.js';
@@ -198,6 +200,12 @@ export interface AppDeps {
    * a Drizzle-backed implementation in V-667.C.
    */
   oauthStore?: OAuthStore;
+  /**
+   * V-541.B — cost-monitoring service. When provided,
+   * /v1/admin/cost/* routes register. Pre-launch posture: optional;
+   * the service is internal-admin-only.
+   */
+  costMonitoringService?: CostMonitoringService;
   /** V-081: profile CRUD service. Optional during scaffolding window. */
   profilesService?: ProfilesService;
   /**
@@ -288,9 +296,35 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     },
   });
 
-  // Security headers. Permissive CORS is dev-only; prod sets explicit origins.
+  // V-664 — security headers. Helmet defaults are tuned for HTML
+  // surfaces; for a JSON API some defaults are wrong (CORP same-origin
+  // would block legitimate cross-origin SDK calls; CSP doesn't apply
+  // to JSON responses). The config below makes the chosen policy
+  // explicit so the security posture is reviewable.
   await app.register(helmet, {
-    contentSecurityPolicy: false, // API only — no HTML to protect
+    // No HTML to protect — CSP is a no-op for JSON-only responses.
+    contentSecurityPolicy: false,
+    // SDK consumers fetch from any origin; the CORS middleware below is
+    // the boundary, not CORP. Setting CORP to cross-origin (rather than
+    // helmet's default same-origin) avoids blocking SDK preflights at
+    // the response layer.
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    // Same logic for embedder policy — require-corp would force every
+    // embedded resource to opt in, which is not how a JSON API is consumed.
+    crossOriginEmbedderPolicy: false,
+    // HSTS posture: 2 years, include subdomains, preload-eligible.
+    // The deploy is already HTTPS-only via Cloudflare; HSTS preload
+    // closes the gap on first-visit downgrade attacks.
+    strictTransportSecurity: {
+      maxAge: 63_072_000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    // Defaults retained explicitly:
+    // - X-Content-Type-Options: nosniff
+    // - X-Frame-Options: SAMEORIGIN  (we ship no embeddable UI)
+    // - Referrer-Policy: no-referrer
+    // - X-DNS-Prefetch-Control: off
   });
   await app.register(cors, {
     origin:
@@ -436,6 +470,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerOAuthRoutes(app, {
       service: new OAuthService(deps.oauthStore),
     });
+  }
+  if (deps.costMonitoringService !== undefined) {
+    registerAdminCostRoutes(app, { service: deps.costMonitoringService });
   }
   if (deps.profilesService !== undefined) {
     registerProfileRoutes(app, { service: deps.profilesService, authRepo: deps.authRepo });

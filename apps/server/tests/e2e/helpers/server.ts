@@ -13,6 +13,7 @@ import type { AddressInfo } from 'node:net';
 import { Redis } from 'ioredis';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import { eq } from 'drizzle-orm';
 import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -55,6 +56,11 @@ import { DrizzleBillingRepo } from '../../../src/db/billing-repo.js';
 import { InMemoryBillingProvider } from '../../integration/_helpers/in-memory-billing.js';
 import { InMemoryOAuthStore } from '../../../src/services/oauth.js';
 import {
+  CostMonitoringService,
+  type UsageAggregator,
+} from '../../../src/services/cost-monitoring.js';
+import type { UsageInputs } from '../../../src/lib/cost-estimator.js';
+import {
   ValidationHarnessService,
   type ValidationHarnessRecaptureBridge,
 } from '../../../src/services/validation-harness.js';
@@ -69,6 +75,12 @@ export interface TestServer {
   webhookWorker: WebhookDeliveryWorker;
   /** V-540.B-15 — Stripe stub state for billing-write spec assertions. */
   billingProvider: InMemoryBillingProvider;
+  /**
+   * V-541.B / V-540.B-3 — populate this map to drive the cost
+   * aggregator from a spec. Keyed on accountId; value is the usage
+   * snapshot the aggregator returns for any billing-cycle query.
+   */
+  costUsageByAccount: Map<string, UsageInputs>;
   cleanup: () => Promise<void>;
   resetState: () => Promise<void>;
 }
@@ -229,6 +241,35 @@ export async function startTestServer(): Promise<TestServer> {
     accountAuditService,
   );
 
+  // V-541.B / V-540.B-3 — wire a cost-monitoring service backed by an
+  // in-memory aggregator. Tests populate `costUsageByAccount` to drive
+  // the aggregator; tier resolution reads the live accounts table.
+  const costUsageByAccount = new Map<string, UsageInputs>();
+  const costAggregator: UsageAggregator = {
+    aggregateForAccount: async ({ accountId }) =>
+      Promise.resolve(costUsageByAccount.get(accountId) ?? null),
+  };
+  const costMonitoringService = new CostMonitoringService({
+    aggregator: costAggregator,
+    rates: {
+      computeCentsPerMinute: 1,
+      storageCentsPerGbMonth: 2,
+      egressCentsPerGb: 5,
+      emailCentsPerSend: 1,
+      llmCentsPer1kInputTokens: 30,
+      llmCentsPer1kOutputTokens: 150,
+    },
+    resolveTier: async (accountId) => {
+      const db = drizzle(client, { schema });
+      const [row] = await db
+        .select({ tier: schema.accounts.tier })
+        .from(schema.accounts)
+        .where(eq(schema.accounts.id, accountId))
+        .limit(1);
+      return row?.tier ?? null;
+    },
+  });
+
   // V-540.B-15 — wire BillingService against the real Drizzle repo
   // (reads/writes accounts.stripe_customer_id + trial_pack columns)
   // and the in-memory provider stub. Real Stripe never fires in e2e;
@@ -272,6 +313,7 @@ export async function startTestServer(): Promise<TestServer> {
     scheduledJobsService,
     billingService,
     oauthStore: new InMemoryOAuthStore(),
+    costMonitoringService,
     rateLimitStore,
     permissiveCors: true,
   });
@@ -292,5 +334,14 @@ export async function startTestServer(): Promise<TestServer> {
     await client.end({ timeout: 5 });
   };
 
-  return { baseUrl, client, redis, webhookWorker, billingProvider, cleanup, resetState };
+  return {
+    baseUrl,
+    client,
+    redis,
+    webhookWorker,
+    billingProvider,
+    costUsageByAccount,
+    cleanup,
+    resetState,
+  };
 }
