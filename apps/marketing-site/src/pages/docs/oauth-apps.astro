@@ -1,0 +1,210 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-678 — developer docs page for OAuth third-party app authors.
+// Describes the V-667 family (registration, authorize, exchange,
+// introspect, revoke) from the perspective of an integrator, NOT
+// from the perspective of an internal Driftstack engineer.
+//
+// Posture: pre-launch / no public OAuth client registration. This
+// page exists so integrators can read the contract before we open
+// the admin route to self-service registration (V-667.F follow-up).
+// Today they email support to request a client; the steps below
+// describe what happens after that.
+
+const SCOPES = [
+  { name: 'read:sessions', desc: 'Read session metadata + history.' },
+  { name: 'write:sessions', desc: 'Start + stop sessions on the account.' },
+  { name: 'read:profiles', desc: 'Read browser-profile metadata.' },
+  { name: 'write:profiles', desc: 'Create + update browser profiles.' },
+  { name: 'read:recordings', desc: 'List session recordings + fetch playback URLs.' },
+];
+---
+
+<BaseLayout title="OAuth apps — Driftstack developer docs" description="Integrate a third-party app with Driftstack using OAuth 2.0 + PKCE-S256. Endpoints, scopes, token lifecycle, revocation.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>OAuth 2.0 integration</h1>
+
+    <p class="lead">
+      Driftstack uses OAuth 2.0 with PKCE-S256 for third-party app
+      access. This page documents the authorization code flow your
+      app uses to act on a Driftstack customer's behalf.
+    </p>
+
+    <h2>Getting a client_id</h2>
+    <p>
+      Self-service OAuth client registration is not yet open
+      (V-667.F follow-up). Until it is, email
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>
+      with:
+    </p>
+    <ul>
+      <li>Your app name and a one-paragraph description</li>
+      <li>Your redirect URI(s) — HTTPS only in production,
+        <code>http://localhost:&lt;port&gt;</code> is accepted for development</li>
+      <li>Which scopes you need (see the table below); we'll push back
+        if the request is broader than your use case justifies</li>
+    </ul>
+    <p>
+      We turn around new client registrations within one business
+      day. You get back a <code>client_id</code> (prefixed
+      <code>oac_</code>) and a <code>client_secret</code> (prefixed
+      <code>oas_</code>). The secret is shown to you ONCE — we only
+      store the hash on our side, so we cannot recover it for you.
+      Treat it like a Stripe secret key.
+    </p>
+
+    <h2>Available scopes</h2>
+    <table>
+      <thead><tr><th>Scope</th><th>What it grants</th></tr></thead>
+      <tbody>
+        {SCOPES.map((s) => (
+          <tr><td><code>{s.name}</code></td><td>{s.desc}</td></tr>
+        ))}
+      </tbody>
+    </table>
+    <p>
+      Scopes follow the verb:resource pattern. Always request the
+      narrowest scope set your app actually needs — broad scopes get
+      pushed back during the human review step.
+    </p>
+
+    <h2>Authorization flow</h2>
+
+    <h3>1. Mint a PKCE verifier</h3>
+    <p>
+      Generate a high-entropy random string (RFC 7636 §4.1, 43–128
+      characters from <code>[A-Za-z0-9-._~]</code>). Compute the
+      <code>code_challenge</code> as the URL-safe base64 of
+      <code>SHA-256(verifier)</code>. Keep the verifier in your app
+      until step 3 — never send it to anyone except Driftstack at
+      the token endpoint.
+    </p>
+
+    <h3>2. Redirect the customer to /v1/oauth/authorize</h3>
+    <pre><code>{`GET /v1/oauth/authorize
+  ?client_id=oac_…
+  &redirect_uri=https://yourapp.com/oauth/callback
+  &state=<csrf-token>
+  &code_challenge=<sha256(verifier) base64url>
+  &code_challenge_method=S256
+  &scope=read:sessions write:sessions`}</code></pre>
+    <p>
+      The customer signs into Driftstack if they aren't already,
+      then sees a consent screen for your app + the requested
+      scopes. On approval they're redirected back to your
+      <code>redirect_uri</code> with <code>?code=…&amp;state=…</code>.
+      Verify <code>state</code> matches what you sent (CSRF guard).
+    </p>
+
+    <h3>3. Exchange the code for an access token</h3>
+    <pre><code>{`POST /v1/oauth/token
+Content-Type: application/json
+
+{
+  "code": "...",
+  "code_verifier": "<your pkce verifier>",
+  "client_id": "oac_…",
+  "client_secret": "oas_…",
+  "redirect_uri": "https://yourapp.com/oauth/callback"
+}`}</code></pre>
+    <p>The response carries the token:</p>
+    <pre><code>{`{
+  "access_token": "oat_…",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": ["read:sessions", "write:sessions"]
+}`}</code></pre>
+    <p>
+      Tokens live for <strong>one hour</strong>. There are no
+      refresh tokens — when the token expires, run the full
+      authorize → exchange dance again. This is intentional: it
+      makes consent re-confirmation a regular event rather than a
+      forever-grant.
+    </p>
+
+    <h3>4. Use the token</h3>
+    <p>
+      Bearer-token authentication against the Driftstack API:
+    </p>
+    <pre><code>{`Authorization: Bearer oat_…`}</code></pre>
+    <p>
+      The token can only call API surfaces whose required scope is a
+      subset of the token's scope. A token with
+      <code>read:sessions</code> can call <code>GET /v1/sessions</code>
+      but not <code>POST /v1/sessions</code>.
+    </p>
+
+    <h2>Introspection (RFC 7662)</h2>
+    <p>
+      Check whether a token is still active + what scopes it carries:
+    </p>
+    <pre><code>{`POST /v1/oauth/introspect
+Content-Type: application/json
+
+{ "token": "oat_…" }
+
+→ { "active": true, "client_id": "oac_…", "account_id": "acc_…",
+    "scope": ["read:sessions"], "exp": 1736600000 }`}</code></pre>
+    <p>
+      A revoked or expired token returns <code>{`{"active": false}`}</code>.
+      Use introspection sparingly — the access-token request itself
+      already carries the scope information.
+    </p>
+
+    <h2>Revocation (RFC 7009)</h2>
+    <p>
+      Invalidate a token before its 1-hour expiry — useful when the
+      customer signs out of your app:
+    </p>
+    <pre><code>{`POST /v1/oauth/revoke
+Content-Type: application/json
+
+{ "token": "oat_…", "token_type_hint": "access_token" }
+
+→ 200 OK`}</code></pre>
+    <p>
+      The endpoint always returns 200 — even for tokens that don't
+      exist — per RFC 7009 to prevent token-enumeration probes.
+      <code>token_type_hint</code> is optional and informational.
+    </p>
+
+    <h2>Security expectations</h2>
+    <ul>
+      <li><strong>Always validate <code>state</code></strong> on the
+        redirect back. Without it, your callback is wide open to CSRF.</li>
+      <li><strong>Generate a fresh PKCE verifier per authorization
+        flow.</strong> Re-using a verifier defeats its purpose.</li>
+      <li><strong>HTTPS-only redirect_uri</strong> in production.
+        Driftstack rejects HTTP redirect URIs that aren't localhost.</li>
+      <li><strong>Store client_secret server-side.</strong> Browser
+        apps cannot keep it secret; if your app is browser-based, talk
+        to support about a public-client variant (no secret, PKCE-only).</li>
+      <li><strong>Tokens are bearer tokens.</strong> Anyone who reads
+        the token can act as the customer. Treat them like passwords.</li>
+    </ul>
+
+    <h2>Rate limits</h2>
+    <p>
+      Token-issued requests count against the customer's account
+      rate limits, not your app's. If you're going to mint many
+      tokens for many customers, be aware that high per-customer
+      QPS will hit the tier limits.
+    </p>
+
+    <h2>Sandbox</h2>
+    <p>
+      We don't yet operate a separate sandbox environment. Test
+      against your own dev account on the production API; use the
+      <code>read:*</code>-only scopes if you don't want your dev
+      account's session usage to count against billing.
+    </p>
+
+    <h2>Support</h2>
+    <p>
+      Questions, bug reports, or scope requests:
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+      We aim to respond within one business day.
+    </p>
+  </main>
+</BaseLayout>

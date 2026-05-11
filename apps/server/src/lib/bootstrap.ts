@@ -80,6 +80,8 @@ import { ProfileSnapshotsService } from '../services/profile-snapshots.js';
 import { DrizzleProfileSnapshotsRepo } from '../db/profile-snapshots-repo.js';
 import type { AccountTier } from '@driftstack/api-types';
 import { BillingService, type BillingProvider } from '../services/billing.js';
+import { CostMonitoringService } from '../services/cost-monitoring.js';
+import { DEFAULT_COST_RATES, DEFAULT_TIER_THRESHOLDS_DERIVED } from './cost-defaults.js';
 import { StripeBillingProvider } from '../services/stripe-billing-provider.js';
 import { StripeApiClient } from './stripe-api.js';
 import { DrizzleBillingRepo } from '../db/billing-repo.js';
@@ -538,6 +540,36 @@ export async function createProductionDeps(
     );
   }
 
+  // V-541.G — CostMonitoringService wired against the production
+  // defaults from `cost-defaults.ts`. The aggregator is a stub
+  // returning null until V-541.H wires a real usage_records →
+  // UsageInputs aggregator (this would join sessions, usage_records,
+  // and Postmark / OpenAI cost lines). Until then, the admin and
+  // customer cost routes register but always return "no usage in
+  // cycle" — better than 404-routes-missing because the dashboard
+  // can render an empty breakdown rather than a broken nav link.
+  //
+  // Tier resolution leans on the billing repo's getAccount → tier
+  // field; this is the same source the existing billingService
+  // uses, so the cost service can't drift away from the tier the
+  // customer actually pays for.
+  const costMonitoringService = new CostMonitoringService({
+    aggregator: {
+      // eslint-disable-next-line @typescript-eslint/require-await
+      aggregateForAccount: async () => null,
+    },
+    rates: DEFAULT_COST_RATES,
+    tierThresholds: DEFAULT_TIER_THRESHOLDS_DERIVED,
+    resolveTier: async (accountId) => {
+      const acc = await new DrizzleBillingRepo(dbHandle).getAccount(accountId);
+      return acc?.tier ?? null;
+    },
+  });
+  logger.info(
+    { component: 'cost-monitoring' },
+    'CostMonitoringService wired with DEFAULT_COST_RATES + DEFAULT_TIER_THRESHOLDS_DERIVED (stub aggregator — V-541.H follow-up will populate real usage data)',
+  );
+
   // Readiness checks. Postgres + Redis are required; R2 only checked
   // if configured. Postmark + Sentry are never readiness-gated.
   const readinessChecks: ReadinessCheck[] = [
@@ -611,6 +643,7 @@ export async function createProductionDeps(
         }
       : {}),
     ...(billingService !== undefined ? { billingService } : {}),
+    costMonitoringService,
     readinessChecks,
     permissiveCors: false,
     corsAllowedOrigins: (process.env.CORS_ALLOWED_ORIGINS ?? '')
