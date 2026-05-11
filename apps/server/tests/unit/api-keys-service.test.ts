@@ -1,0 +1,318 @@
+// V-553.B-20 — unit tests for ApiKeysService.
+//
+// Surface under test:
+//   - create(): account_owner scope gate, legal acceptance block,
+//     test vs live env prefix from tier, mint records audit
+//   - list(): returns row set scoped by effectiveAccountId
+//   - rotate(): scope gate, NotFound on missing, BadRequest on revoked,
+//     sets old key's expiresAt, audit records both key ids
+//   - revoke(): scope gate, NotFound on missing, idempotent on
+//     already-revoked, fires webhook + audit on success
+
+import { describe, expect, it } from 'vitest';
+import type { ApiKeyScope, AccountTier } from '@driftstack/api-types';
+import {
+  ApiKeysService,
+  type ApiKeysRepo,
+  type CustomerAuditEmitter,
+  type LegalAcceptanceGate,
+  type NewApiKeyInput,
+  type RevocationWebhookEmitter,
+} from '../../src/services/api-keys.js';
+import type { AccountContext, AccountRow, ApiKeyRow } from '../../src/services/auth.js';
+import { LegalAcceptanceRequiredError } from '../../src/lib/errors.js';
+
+function makeAccount(overrides: Partial<AccountRow> = {}): AccountRow {
+  return {
+    id: 'acc_1',
+    email: 'u@example.com',
+    name: null,
+    tier: 'solo_manual',
+    status: 'active',
+    timezone: null,
+    avatarR2Key: null,
+    slug: null,
+    region: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+function makeKey(overrides: Partial<ApiKeyRow> = {}): ApiKeyRow {
+  return {
+    id: 'k1',
+    accountId: 'acc_1',
+    name: 'caller',
+    keyPrefix: 'ds_live_abc',
+    keyHash: 'hash',
+    scopes: ['account_owner'],
+    lastUsedAt: null,
+    revokedAt: null,
+    expiresAt: null,
+    createdAt: new Date(),
+    ...overrides,
+  };
+}
+
+function ctxWith(
+  scopes: ApiKeyScope[],
+  accountOverrides: Partial<AccountRow> = {},
+): AccountContext {
+  return {
+    account: makeAccount(accountOverrides),
+    apiKey: makeKey({ scopes }),
+    rateLimitOverrides: {},
+    teams: [],
+  } as unknown as AccountContext;
+}
+
+function makeRepo(initial: ApiKeyRow[] = []): {
+  repo: ApiKeysRepo;
+  state: {
+    rows: ApiKeyRow[];
+    revoked: Array<{ id: string; at: Date }>;
+    expiresSet: Array<{ id: string; at: Date }>;
+  };
+} {
+  const state = {
+    rows: [...initial],
+    revoked: [] as Array<{ id: string; at: Date }>,
+    expiresSet: [] as Array<{ id: string; at: Date }>,
+  };
+  let counter = state.rows.length;
+  const repo: ApiKeysRepo = {
+    insertApiKey: (input: NewApiKeyInput) => {
+      counter += 1;
+      const row: ApiKeyRow = {
+        id: `k_new_${counter.toString()}`,
+        accountId: input.accountId,
+        name: input.name,
+        keyPrefix: input.keyPrefix,
+        keyHash: input.keyHash,
+        scopes: input.scopes,
+        lastUsedAt: null,
+        revokedAt: null,
+        expiresAt: input.expiresAt,
+        createdAt: new Date(),
+      };
+      state.rows.push(row);
+      return Promise.resolve(row);
+    },
+    listApiKeys: (accountId) =>
+      Promise.resolve(state.rows.filter((r) => r.accountId === accountId)),
+    findApiKey: (id, accountId) =>
+      Promise.resolve(state.rows.find((r) => r.id === id && r.accountId === accountId) ?? null),
+    findApiKeyUnscoped: (id) => Promise.resolve(state.rows.find((r) => r.id === id) ?? null),
+    markRevoked: (id, at) => {
+      const r = state.rows.find((row) => row.id === id);
+      if (r) r.revokedAt = at;
+      state.revoked.push({ id, at });
+      return Promise.resolve();
+    },
+    setExpiresAt: (id, at) => {
+      const r = state.rows.find((row) => row.id === id);
+      if (r) r.expiresAt = at;
+      state.expiresSet.push({ id, at });
+      return Promise.resolve();
+    },
+    listAllApiKeys: () => Promise.resolve({ items: state.rows, nextCursor: null }),
+  };
+  return { repo, state };
+}
+
+function makeAudit(): {
+  audit: CustomerAuditEmitter;
+  calls: Array<{ action: string; accountId: string; targetResourceId?: string | null }>;
+} {
+  const calls: Array<{ action: string; accountId: string; targetResourceId?: string | null }> = [];
+  const audit: CustomerAuditEmitter = {
+    record: (args) => {
+      calls.push({
+        action: args.action,
+        accountId: args.accountId,
+        targetResourceId: args.targetResourceId ?? null,
+      });
+      return Promise.resolve();
+    },
+  };
+  return { audit, calls };
+}
+
+function makeWebhooks(): {
+  webhooks: RevocationWebhookEmitter;
+  calls: Array<{ accountId: string; eventType: string; data: Record<string, unknown> }>;
+} {
+  const calls: Array<{ accountId: string; eventType: string; data: Record<string, unknown> }> = [];
+  const webhooks: RevocationWebhookEmitter = {
+    enqueueEvent: (accountId, eventType, data) => {
+      calls.push({ accountId, eventType, data });
+      return Promise.resolve(1);
+    },
+  };
+  return { webhooks, calls };
+}
+
+function makeLegalGate(
+  pending: Array<{ documentKey: string; currentVersion: string }> = [],
+): LegalAcceptanceGate {
+  return {
+    required: () => Promise.resolve(pending),
+  };
+}
+
+describe('V-553.B-20 ApiKeysService.create', () => {
+  it('rejects callers without account_owner scope', async () => {
+    const { repo } = makeRepo();
+    const svc = new ApiKeysService(repo);
+    await expect(
+      svc.create(ctxWith(['read']), { name: 'mine', scopes: ['read'], expiresAt: null }),
+    ).rejects.toThrow(/account_owner/);
+  });
+
+  it('blocks on pending legal acceptances', async () => {
+    const { repo } = makeRepo();
+    const gate = makeLegalGate([{ documentKey: 'tos', currentVersion: '2026-05-01' }]);
+    const svc = new ApiKeysService(repo, null, null, gate);
+    await expect(
+      svc.create(ctxWith(['account_owner']), { name: 'mine', scopes: ['read'], expiresAt: null }),
+    ).rejects.toThrow(LegalAcceptanceRequiredError);
+  });
+
+  it('mints a live key + records audit for non-trial tier', async () => {
+    const { repo, state } = makeRepo();
+    const { audit, calls } = makeAudit();
+    const svc = new ApiKeysService(repo, null, null, null, audit);
+    const result = await svc.create(ctxWith(['account_owner'], { tier: 'solo_manual' }), {
+      name: 'mine',
+      scopes: ['read'],
+      expiresAt: null,
+    });
+    expect(result.plaintext).toMatch(/^ds_live_/);
+    expect(state.rows).toHaveLength(1);
+    expect(calls[0]?.action).toBe('api_key.minted');
+    expect(calls[0]?.accountId).toBe('acc_1');
+  });
+
+  it('mints a test key for trial_pack tier', async () => {
+    const { repo } = makeRepo();
+    const svc = new ApiKeysService(repo);
+    const result = await svc.create(ctxWith(['account_owner'], { tier: 'trial_pack' }), {
+      name: 'mine',
+      scopes: ['read'],
+      expiresAt: null,
+    });
+    expect(result.plaintext).toMatch(/^ds_test_/);
+  });
+
+  it('honours effectiveAccountId + effectiveTier (V-326e6 team-scoped mint)', async () => {
+    const { repo, state } = makeRepo();
+    const svc = new ApiKeysService(repo);
+    const result = await svc.create(
+      ctxWith(['account_owner'], { id: 'acc_member', tier: 'trial_pack' }),
+      { name: 'team-key', scopes: ['read'], expiresAt: null },
+      { effectiveAccountId: 'acc_owner', effectiveTier: 'api_starter' as AccountTier },
+    );
+    expect(result.row.accountId).toBe('acc_owner');
+    expect(result.plaintext).toMatch(/^ds_live_/);
+    expect(state.rows[0]?.accountId).toBe('acc_owner');
+  });
+});
+
+describe('V-553.B-20 ApiKeysService.list', () => {
+  it('returns rows scoped to the caller account', async () => {
+    const { repo } = makeRepo([
+      makeKey({ id: 'a1', accountId: 'acc_1' }),
+      makeKey({ id: 'a2', accountId: 'acc_other' }),
+    ]);
+    const svc = new ApiKeysService(repo);
+    const rows = await svc.list(ctxWith(['read']));
+    expect(rows.map((r) => r.id)).toEqual(['a1']);
+  });
+
+  it('honours effectiveAccountId redirection', async () => {
+    const { repo } = makeRepo([
+      makeKey({ id: 'a1', accountId: 'acc_member' }),
+      makeKey({ id: 'a2', accountId: 'acc_owner' }),
+    ]);
+    const svc = new ApiKeysService(repo);
+    const rows = await svc.list(ctxWith(['read'], { id: 'acc_member' }), {
+      effectiveAccountId: 'acc_owner',
+    });
+    expect(rows.map((r) => r.id)).toEqual(['a2']);
+  });
+});
+
+describe('V-553.B-20 ApiKeysService.rotate', () => {
+  it('throws NotFound when the key does not exist', async () => {
+    const { repo } = makeRepo();
+    const svc = new ApiKeysService(repo);
+    await expect(svc.rotate(ctxWith(['account_owner']), 'k_missing')).rejects.toThrow(/not found/);
+  });
+
+  it('throws BadRequest when rotating a revoked key', async () => {
+    const { repo } = makeRepo([
+      makeKey({ id: 'k_old', accountId: 'acc_1', revokedAt: new Date('2026-01-01Z') }),
+    ]);
+    const svc = new ApiKeysService(repo);
+    await expect(svc.rotate(ctxWith(['account_owner']), 'k_old')).rejects.toThrow(/revoked/);
+  });
+
+  it('mints a new row, sets old key expiry, audits both ids', async () => {
+    const { repo, state } = makeRepo([makeKey({ id: 'k_old', accountId: 'acc_1' })]);
+    const { audit, calls } = makeAudit();
+    const svc = new ApiKeysService(repo, null, null, null, audit);
+    const result = await svc.rotate(ctxWith(['account_owner']), 'k_old');
+    expect(result.newRow.id).not.toBe('k_old');
+    expect(result.gracePeriodEndsAt).toBeInstanceOf(Date);
+    expect(state.expiresSet).toHaveLength(1);
+    expect(state.expiresSet[0]?.id).toBe('k_old');
+    expect(calls[0]?.action).toBe('api_key.rotated');
+    expect(calls[0]?.targetResourceId).toBe('key_k_old');
+  });
+
+  it('rejects rotation by callers without account_owner scope', async () => {
+    const { repo } = makeRepo([makeKey({ id: 'k_old' })]);
+    const svc = new ApiKeysService(repo);
+    await expect(svc.rotate(ctxWith(['read']), 'k_old')).rejects.toThrow(/account_owner/);
+  });
+});
+
+describe('V-553.B-20 ApiKeysService.revoke', () => {
+  it('rejects callers without account_owner scope', async () => {
+    const { repo } = makeRepo([makeKey({ id: 'k_x' })]);
+    const svc = new ApiKeysService(repo);
+    await expect(svc.revoke(ctxWith(['read']), 'k_x')).rejects.toThrow(/account_owner/);
+  });
+
+  it('throws NotFound for unknown id', async () => {
+    const { repo } = makeRepo();
+    const svc = new ApiKeysService(repo);
+    await expect(svc.revoke(ctxWith(['account_owner']), 'k_missing')).rejects.toThrow(/not found/);
+  });
+
+  it('is idempotent on an already-revoked key (no extra webhook / audit)', async () => {
+    const { repo } = makeRepo([
+      makeKey({ id: 'k_x', accountId: 'acc_1', revokedAt: new Date('2026-01-01Z') }),
+    ]);
+    const { webhooks, calls: hookCalls } = makeWebhooks();
+    const { audit, calls: auditCalls } = makeAudit();
+    const svc = new ApiKeysService(repo, null, webhooks, null, audit);
+    await svc.revoke(ctxWith(['account_owner']), 'k_x');
+    expect(hookCalls).toHaveLength(0);
+    expect(auditCalls).toHaveLength(0);
+  });
+
+  it('marks the key revoked, fires webhook + audit on success', async () => {
+    const { repo, state } = makeRepo([makeKey({ id: 'k_x', accountId: 'acc_1' })]);
+    const { webhooks, calls: hookCalls } = makeWebhooks();
+    const { audit, calls: auditCalls } = makeAudit();
+    const svc = new ApiKeysService(repo, null, webhooks, null, audit);
+    await svc.revoke(ctxWith(['account_owner']), 'k_x');
+    expect(state.revoked).toHaveLength(1);
+    expect(state.revoked[0]?.id).toBe('k_x');
+    expect(hookCalls[0]?.eventType).toBe('api_key.revoked');
+    expect(auditCalls[0]?.action).toBe('api_key.revoked');
+    expect(auditCalls[0]?.targetResourceId).toBe('key_k_x');
+  });
+});

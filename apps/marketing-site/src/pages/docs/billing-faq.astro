@@ -1,0 +1,150 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-694 — billing FAQ. Pulls together the questions that the
+// /docs/cost-monitoring + /pricing/crypto pages don't explicitly
+// answer (proration, refunds, trial → paid, NowPayments vs Stripe).
+---
+
+<BaseLayout title="Billing FAQ — Driftstack" description="Common questions about Driftstack billing — proration, refunds, crypto vs card, trial conversion.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Billing FAQ</h1>
+
+    <p class="lead">
+      The answers below cover the questions support sees most often
+      about how Driftstack billing works.
+    </p>
+
+    <h2>How does the trial work?</h2>
+    <p>
+      Every new account starts on the <strong>Trial Pack</strong>: a
+      14-day window with 50 session-minutes included, capped at 2
+      concurrent sessions. No card is required to start. API keys
+      minted on a trial account use the <code>ds_test_…</code>
+      prefix; they continue to work after the trial ends but cannot
+      open new sessions without an upgrade.
+    </p>
+
+    <h2>How does upgrading to a paid tier work?</h2>
+    <p>
+      Visit <a href="/pricing">/pricing</a> and pick a tier. You can
+      pay with a <strong>credit/debit card</strong> (Stripe Checkout)
+      or with <strong>crypto</strong> (NowPayments — BTC, ETH, USDC,
+      USDT, and more). The upgrade applies immediately on payment
+      confirmation; usage from the moment of upgrade is billed against
+      the new tier.
+    </p>
+
+    <h2>What about proration on upgrades / downgrades?</h2>
+    <p>
+      <strong>Upgrades</strong> are prorated by Stripe: you pay the
+      pro-rata difference for the remainder of the current billing
+      cycle, then the new full price from the next cycle. Crypto
+      upgrades (NowPayments) charge the <em>full</em> new tier price
+      and reset the billing cycle to the upgrade date — crypto is
+      pay-as-you-go-style because we cannot guarantee in-cycle
+      reconciliation against an on-chain payment.
+    </p>
+    <p>
+      <strong>Downgrades</strong> take effect at the end of the
+      current cycle (you keep the higher tier until then). No refund
+      is issued for the unused portion of the higher tier.
+    </p>
+
+    <h2>Can I get a refund?</h2>
+    <p>
+      Card payments: full refund within <strong>14 days of payment</strong>
+      if you haven't used more than the trial pack's session minutes.
+      Past the 14-day window we do not refund unless the issue is on
+      our side (extended outage, billing error).
+    </p>
+    <p>
+      Crypto payments: <strong>no refunds</strong> are issued in
+      crypto. If a billing error occurred and a refund is due, we
+      issue a tier credit equal to the affected amount instead.
+      Crypto transactions are final on-chain and on-chain reversal is
+      not something we can perform.
+    </p>
+
+    <h2>Why do crypto payments take longer to confirm?</h2>
+    <p>
+      Crypto payments are subject to on-chain confirmation latency.
+      Most BTC payments take 10-30 minutes; USDC/USDT on Polygon or
+      BSC typically settle in 1-5 minutes. Until NowPayments reports
+      <code>finished</code>, the order is in <code>confirming</code>
+      state and the tier change is not applied. The
+      <a href="/docs/teams">team admin dashboard</a> shows the order
+      state live; you'll also get an email confirmation when the
+      payment lands.
+    </p>
+
+    <h2>What if I send the wrong amount in crypto?</h2>
+    <ul>
+      <li><strong>Underpayment:</strong> the order transitions to
+        <code>partial</code> and stays there. Support reaches out to
+        arrange a top-up (send the difference to the same address)
+        or a tier downgrade.</li>
+      <li><strong>Overpayment:</strong> the order completes as
+        <code>paid</code> and the difference is recorded as account
+        credit usable against the next renewal. Surplus credit does
+        not expire.</li>
+      <li><strong>Wrong currency / network:</strong> contact
+        support — recovery depends on the chain. We can usually
+        recover ETH and USDC sent to the wrong address; we cannot
+        recover BTC sent to a Lightning address or vice versa.</li>
+    </ul>
+
+    <h2>How do I see what I've been billed?</h2>
+    <p>
+      The <strong>Billing</strong> view in the dashboard
+      (<a href="/docs/cost-monitoring">/docs/cost-monitoring</a>)
+      shows your current cycle's spend, the cost breakdown by line
+      item (sessions, recordings, egress), and the next renewal
+      date. Stripe customers also get an emailed invoice within 24h
+      of each renewal. Crypto customers get an order receipt email
+      within 24h of payment confirmation.
+    </p>
+
+    <h2>How do tax / VAT work?</h2>
+    <p>
+      Stripe handles VAT on card payments automatically — EU + UK
+      customers see VAT added at checkout based on their billing
+      country. Crypto payments are quoted <em>VAT-exclusive</em>;
+      VAT for EU/UK customers is invoiced separately in EUR after
+      the crypto payment confirms (you'll receive a follow-up
+      payment link for the VAT amount). B2B customers can provide a
+      VAT number on <a href="/docs/teams">/docs/teams</a> for
+      reverse-charge invoicing.
+    </p>
+
+    <h2>What happens at the end of a billing cycle?</h2>
+    <p>
+      Stripe customers are auto-renewed; the new cycle starts the
+      moment the renewal payment confirms. Crypto customers receive
+      a renewal reminder 7 days before the cycle ends with a link
+      to the next checkout. If a crypto renewal is not paid within
+      48 hours of cycle end, the account drops to a read-only
+      grace state for 7 days, then is downgraded to the Trial Pack
+      tier until renewal.
+    </p>
+
+    <h2>Cancel anytime</h2>
+    <p>
+      Cancellation is available via the dashboard at any time — no
+      retention friction. Cancellation takes effect at the end of
+      the current cycle; the account continues to function fully
+      until then. Sessions, profiles, recordings, and API keys
+      stay accessible for <strong>30 days</strong> after the cycle
+      end, then are purged.
+    </p>
+
+    <h2>Support</h2>
+    <p>
+      Billing-specific questions:
+      <a href="mailto:billing@driftstack.dev">billing@driftstack.dev</a>.
+      For payment-stuck-in-pending issues, include the
+      <code>order_id</code> from the checkout-confirmation email so
+      we can look up the NowPayments status.
+    </p>
+  </main>
+</BaseLayout>

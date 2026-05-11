@@ -77,6 +77,7 @@ import { registerAuthCliRoutes } from '../routes/auth-cli.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerNowpaymentsWebhookRoutes } from '../routes/webhooks-nowpayments.js';
 import { registerCryptoCheckoutRoutes } from '../routes/billing-crypto.js';
+import { registerCryptoQuoteRoutes } from '../routes/billing-crypto-quote.js';
 import { registerCustomerCryptoOrdersRoutes } from '../routes/billing-crypto-orders.js';
 import { registerAdminCryptoOrdersRoutes } from '../routes/admin-crypto-orders.js';
 import type { CryptoOrdersService } from '../services/crypto-orders.js';
@@ -508,6 +509,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerCustomerCryptoOrdersRoutes(app, { service: deps.cryptoOrdersService });
     registerAdminCryptoOrdersRoutes(app, { service: deps.cryptoOrdersService });
   }
+  registerCryptoQuoteRoutes(app);
   if (deps.oauthStore !== undefined) {
     registerOAuthRoutes(app, {
       service: new OAuthService(deps.oauthStore),
