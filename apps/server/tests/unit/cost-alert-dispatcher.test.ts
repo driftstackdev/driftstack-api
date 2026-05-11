@@ -1,0 +1,182 @@
+// V-541.C — unit tests for CostAlertDispatcher.
+
+import { describe, expect, it, vi } from 'vitest';
+import {
+  CostAlertDispatcher,
+  type AlertSink,
+  type CostAlertPayload,
+} from '../../src/services/cost-alert-dispatcher.js';
+import { CostMonitoringService, type UsageAggregator } from '../../src/services/cost-monitoring.js';
+import type { CostRates, UsageInputs } from '../../src/lib/cost-estimator.js';
+
+const RATES: CostRates = {
+  computeCentsPerMinute: 1,
+  storageCentsPerGbMonth: 2,
+  egressCentsPerGb: 5,
+  emailCentsPerSend: 1,
+  llmCentsPer1kInputTokens: 30,
+  llmCentsPer1kOutputTokens: 150,
+};
+
+function makeFixture(rows: Map<string, UsageInputs>): {
+  dispatcher: CostAlertDispatcher;
+  capturedAlerts: CostAlertPayload[];
+} {
+  const aggregator: UsageAggregator = {
+    aggregateForAccount: ({ accountId }) => Promise.resolve(rows.get(accountId) ?? null),
+  };
+  const service = new CostMonitoringService({
+    aggregator,
+    rates: RATES,
+    tierThresholds: {
+      solo_manual: { softCents: 100, hardCents: 200 },
+      api_builder: { softCents: 1000, hardCents: 2000 },
+    },
+    resolveTier: () => Promise.resolve('solo_manual'),
+  });
+  const capturedAlerts: CostAlertPayload[] = [];
+  const sink: AlertSink = (alert) => {
+    capturedAlerts.push(alert);
+    return Promise.resolve();
+  };
+  return {
+    dispatcher: new CostAlertDispatcher({ service, sendAlert: sink }),
+    capturedAlerts,
+  };
+}
+
+const EMPTY: UsageInputs = {
+  sessionMinutes: 0,
+  storageGbMonths: 0,
+  egressGb: 0,
+  emailSends: 0,
+  llmInputTokens: 0,
+  llmOutputTokens: 0,
+};
+
+describe('V-541.C dispatcher — first evaluation (no prior state)', () => {
+  it('fires critical alert when account starts over-hard', async () => {
+    const rows = new Map([['a', { ...EMPTY, sessionMinutes: 1_000 }]]);
+    const { dispatcher, capturedAlerts } = makeFixture(rows);
+    const r = await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(r.alertsFired).toBe(1);
+    expect(capturedAlerts[0]?.severity).toBe('critical');
+    expect(capturedAlerts[0]?.previous_state).toBeNull();
+  });
+
+  it('fires warn alert when account starts between-soft-and-hard', async () => {
+    const rows = new Map([['a', { ...EMPTY, sessionMinutes: 150 }]]); // 150 → between 100/200
+    const { dispatcher, capturedAlerts } = makeFixture(rows);
+    const r = await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(r.alertsFired).toBe(1);
+    expect(capturedAlerts[0]?.severity).toBe('warn');
+  });
+
+  it('skips when account starts under-soft (no alert needed)', async () => {
+    const rows = new Map([['a', { ...EMPTY, sessionMinutes: 10 }]]);
+    const { dispatcher, capturedAlerts } = makeFixture(rows);
+    const r = await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(r.alertsFired).toBe(0);
+    expect(r.alertsSkipped).toBe(1);
+    expect(capturedAlerts).toEqual([]);
+  });
+
+  it('skips accounts with no usage in cycle', async () => {
+    const { dispatcher } = makeFixture(new Map());
+    const r = await dispatcher.evaluate({
+      accountIds: ['a', 'b'],
+      billingCycle: '2026-05',
+    });
+    expect(r.alertsFired).toBe(0);
+    expect(r.alertsSkipped).toBe(0); // no summaries returned at all
+  });
+});
+
+describe('V-541.C dispatcher — transitions across evaluations', () => {
+  it('escalation: under-soft → between → over-hard fires two separate alerts', async () => {
+    const rows = new Map<string, UsageInputs>([['a', { ...EMPTY, sessionMinutes: 10 }]]);
+    const { dispatcher, capturedAlerts } = makeFixture(rows);
+    await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(capturedAlerts).toHaveLength(0);
+
+    rows.set('a', { ...EMPTY, sessionMinutes: 150 });
+    await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(capturedAlerts).toHaveLength(1);
+    expect(capturedAlerts[0]?.severity).toBe('warn');
+    expect(capturedAlerts[0]?.previous_state).toBe('under-soft');
+
+    rows.set('a', { ...EMPTY, sessionMinutes: 1_000 });
+    await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(capturedAlerts).toHaveLength(2);
+    expect(capturedAlerts[1]?.severity).toBe('critical');
+    expect(capturedAlerts[1]?.previous_state).toBe('between-soft-and-hard');
+  });
+
+  it('recovery: over-hard → under-soft fires a resolved alert', async () => {
+    const rows = new Map<string, UsageInputs>([['a', { ...EMPTY, sessionMinutes: 1_000 }]]);
+    const { dispatcher, capturedAlerts } = makeFixture(rows);
+    await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(capturedAlerts[0]?.severity).toBe('critical');
+
+    rows.set('a', { ...EMPTY, sessionMinutes: 10 });
+    await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(capturedAlerts[1]?.severity).toBe('resolved');
+    expect(capturedAlerts[1]?.previous_state).toBe('over-hard');
+    expect(capturedAlerts[1]?.current_state).toBe('under-soft');
+  });
+
+  it('steady state: no transition → no alert', async () => {
+    const rows = new Map<string, UsageInputs>([['a', { ...EMPTY, sessionMinutes: 150 }]]);
+    const { dispatcher, capturedAlerts } = makeFixture(rows);
+    await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(capturedAlerts).toHaveLength(1); // initial warn
+    await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(capturedAlerts).toHaveLength(1); // no new alert
+  });
+
+  it('reset() clears prior state — first eval after reset fires again', async () => {
+    const rows = new Map<string, UsageInputs>([['a', { ...EMPTY, sessionMinutes: 1_000 }]]);
+    const { dispatcher, capturedAlerts } = makeFixture(rows);
+    await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(capturedAlerts).toHaveLength(1);
+    dispatcher.reset();
+    await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(capturedAlerts).toHaveLength(2);
+  });
+});
+
+describe('V-541.C dispatcher — payload shape', () => {
+  it('carries account_id, tier, severity, prior + current state, total + thresholds', async () => {
+    const rows = new Map([['acc_test', { ...EMPTY, sessionMinutes: 250 }]]);
+    const { dispatcher, capturedAlerts } = makeFixture(rows);
+    await dispatcher.evaluate({ accountIds: ['acc_test'], billingCycle: '2026-05' });
+    const alert = capturedAlerts[0];
+    expect(alert?.account_id).toBe('acc_test');
+    expect(alert?.tier).toBe('solo_manual');
+    expect(alert?.severity).toBe('critical');
+    expect(alert?.previous_state).toBeNull();
+    expect(alert?.current_state).toBe('over-hard');
+    expect(alert?.total_cents).toBe(250);
+    expect(alert?.threshold_soft_cents).toBe(100);
+    expect(alert?.threshold_hard_cents).toBe(200);
+    expect(alert?.billing_cycle).toBe('2026-05');
+  });
+
+  it('sendAlert is awaited (rejection bubbles out of evaluate)', async () => {
+    const rows = new Map([['a', { ...EMPTY, sessionMinutes: 1_000 }]]);
+    const aggregator: UsageAggregator = {
+      aggregateForAccount: ({ accountId }) => Promise.resolve(rows.get(accountId) ?? null),
+    };
+    const service = new CostMonitoringService({
+      aggregator,
+      rates: RATES,
+      tierThresholds: { solo_manual: { softCents: 100, hardCents: 200 } },
+      resolveTier: () => Promise.resolve('solo_manual'),
+    });
+    const sink: AlertSink = vi.fn(() => Promise.reject(new Error('postmark down')));
+    const dispatcher = new CostAlertDispatcher({ service, sendAlert: sink });
+    await expect(
+      dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' }),
+    ).rejects.toThrow('postmark down');
+  });
+});

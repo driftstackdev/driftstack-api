@@ -326,13 +326,34 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // - Referrer-Policy: no-referrer
     // - X-DNS-Prefetch-Control: off
   });
+  // V-664.B — CORS hardening. Pins methods, allowed headers, and
+  // preflight cache window explicitly. Without these, defaults expand
+  // the surface in ways that are easy to miss.
+  //
+  // `credentials: true` is required by the customer dashboard's
+  // cookie-based session (Article-13 auth), NOT by the SDK (which
+  // sends Authorization: Bearer ...). With credentials:true the spec
+  // forbids origin:*, hence the explicit allow-list / regex in prod.
   await app.register(cors, {
     origin:
       deps.permissiveCors === true
         ? true
         : [/^https?:\/\/localhost(:\d+)?$/, ...(deps.corsAllowedOrigins ?? [])],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'authorization',
+      'content-type',
+      'x-request-id',
+      'stripe-signature',
+      'x-nowpayments-sig',
+    ],
     exposedHeaders: ['x-request-id', 'x-ratelimit-remaining', 'retry-after'],
+    // Cache preflight responses for 10 minutes — reduces CORS preflight
+    // round-trips for the SDK + dashboard without delaying policy
+    // changes excessively (deploy frequency is daily-ish; 10 min is
+    // shorter than any expected policy-change ETA).
+    maxAge: 600,
   });
 
   await app.register(requestIdPlugin);
