@@ -26,6 +26,16 @@ const GetParams = z.object({
   order_id: z.string().min(1),
 });
 
+// V-666.F — admin manual IPN application. Operator path: when
+// NowPayments fails to deliver an IPN (rare), ops can advance an
+// order by hand by posting the provider_status they observed in
+// the NowPayments dashboard. The same state machine that the real
+// IPN route uses applies (forward-only, reverse-to-pending rejected).
+const ApplyIpnBody = z.object({
+  provider_status: z.string().min(1),
+  payment_id: z.string().min(1),
+});
+
 function toPublic(order: CryptoOrder): Record<string, unknown> {
   return {
     order_id: order.order_id,
@@ -78,6 +88,37 @@ export function registerAdminCryptoOrdersRoutes(
         throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
       }
       return reply.send(toPublic(order));
+    },
+  );
+
+  // V-666.F — manual IPN application. Used by ops to recover from
+  // missed NowPayments webhooks. Routes through the same state
+  // machine as the public IPN endpoint, so the forward-only +
+  // idempotency guarantees still hold.
+  app.post<{
+    Params: { order_id: string };
+    Body: { provider_status?: string; payment_id?: string };
+  }>(
+    '/v1/admin/crypto-orders/:order_id/apply-ipn',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    async (
+      req: FastifyRequest<{
+        Params: { order_id: string };
+        Body: { provider_status?: string; payment_id?: string };
+      }>,
+      reply,
+    ) => {
+      const params = parseOrThrow(GetParams, req.params);
+      const body = parseOrThrow(ApplyIpnBody, req.body);
+      const updated = await deps.service.applyIpnStatus({
+        order_id: params.order_id,
+        payment_id: body.payment_id,
+        provider_status: body.provider_status,
+      });
+      if (updated === null) {
+        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
+      }
+      return reply.send(toPublic(updated));
     },
   );
 }

@@ -1,0 +1,186 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-685 — rate-limits developer docs. Companion to /docs/webhooks +
+// /docs/api-quickstart; describes the bucket model, the headers
+// returned on every response, what to do when 429ed, and how to
+// request an override.
+
+const BUCKETS = [
+  {
+    name: 'global',
+    desc: 'Default bucket for unclassified writes.',
+    soloCapacity: '300 req/min',
+    apiBuilder: '3,000 req/min',
+  },
+  {
+    name: 'sessions:start',
+    desc: 'POST /v1/sessions — burst-sensitive.',
+    soloCapacity: '60 req/min',
+    apiBuilder: '600 req/min',
+  },
+  {
+    name: 'sessions:read',
+    desc: 'GET /v1/sessions/* — generous because polling is common.',
+    soloCapacity: '600 req/min',
+    apiBuilder: '6,000 req/min',
+  },
+  {
+    name: 'profiles:write',
+    desc: 'POST/PATCH /v1/profiles — usage is bursty around setup.',
+    soloCapacity: '120 req/min',
+    apiBuilder: '1,200 req/min',
+  },
+];
+---
+
+<BaseLayout title="Rate limits — Driftstack developer docs" description="Driftstack API rate limits. Buckets, response headers, 429 backoff, overrides.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Rate limits</h1>
+
+    <p class="lead">
+      Driftstack uses a per-account token-bucket scheme to keep one
+      noisy customer from degrading the platform for everyone else.
+      This page documents the buckets, the response headers your
+      client should consume, and how to react to 429s gracefully.
+    </p>
+
+    <h2>How the buckets work</h2>
+    <p>
+      Each request increments a counter against one or more named
+      buckets. Buckets refill at a tier-dependent rate. If any bucket
+      is empty when your request lands, you get a 429 + a
+      <code>Retry-After</code> header.
+    </p>
+    <p>
+      Buckets are <strong>per account</strong>, not per API key. If
+      you mint 10 keys to spread your load, you're still hitting
+      the same buckets — the limit is on the account.
+    </p>
+
+    <h2>Bucket reference</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Bucket</th>
+          <th>Solo Manual</th>
+          <th>API Builder</th>
+          <th>What it covers</th>
+        </tr>
+      </thead>
+      <tbody>
+        {BUCKETS.map((b) => (
+          <tr>
+            <td><code>{b.name}</code></td>
+            <td class="font-mono">{b.soloCapacity}</td>
+            <td class="font-mono">{b.apiBuilder}</td>
+            <td>{b.desc}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    <p class="text-sm text-slate-500">
+      Higher tiers (API Scale, Enterprise) get larger buckets — see
+      the <a href="/pricing/comparison">tier comparison</a> for the
+      full matrix. Trial Pack uses the same bucket sizes as Solo
+      Manual.
+    </p>
+
+    <h2>Response headers</h2>
+    <p>
+      Every API response carries headers describing the calling
+      account's rate-limit state for the bucket hit by the request:
+    </p>
+    <table>
+      <thead><tr><th>Header</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td><code>X-RateLimit-Limit</code></td><td>The bucket capacity (tokens).</td></tr>
+        <tr><td><code>X-RateLimit-Remaining</code></td><td>Tokens left after this request.</td></tr>
+        <tr><td><code>X-RateLimit-Reset</code></td><td>Unix seconds when the bucket will be full again.</td></tr>
+        <tr><td><code>X-RateLimit-Bucket</code></td><td>The bucket name (e.g. <code>sessions:start</code>).</td></tr>
+      </tbody>
+    </table>
+    <p>
+      Track <code>X-RateLimit-Remaining</code> against a low-water
+      mark in your client; if it drops below, say, 20% of the limit,
+      slow your request rate proactively rather than waiting for the
+      429.
+    </p>
+
+    <h2>When you hit a 429</h2>
+    <pre><code>{`HTTP/1.1 429 Too Many Requests
+Retry-After: 12
+X-RateLimit-Bucket: sessions:start
+Content-Type: application/json
+
+{
+  "error": {
+    "code": "rate_limited",
+    "message": "Rate limit exceeded on bucket sessions:start. Retry after 12 seconds.",
+    "bucket": "sessions:start",
+    "retry_after_seconds": 12
+  }
+}`}</code></pre>
+    <p>
+      Your client should:
+    </p>
+    <ol>
+      <li>Stop sending requests to the same bucket immediately.</li>
+      <li>Wait at least <code>Retry-After</code> seconds.</li>
+      <li>Resume with reduced concurrency; gradually ramp back up.</li>
+    </ol>
+    <p>
+      <strong>Do not</strong> retry-loop without backoff. We log
+      sustained 429s as abuse and may rate-limit further or
+      temporarily disable your key.
+    </p>
+
+    <h2>Concurrent sessions</h2>
+    <p>
+      Separate from per-bucket request rate, your tier caps the
+      number of <em>concurrently running</em> sessions:
+    </p>
+    <ul>
+      <li>Solo Manual: 1 concurrent</li>
+      <li>Team Manual: 5 concurrent</li>
+      <li>Agency Manual: 25 concurrent</li>
+      <li>API Starter: 10 concurrent</li>
+      <li>API Builder: 50 concurrent</li>
+      <li>API Scale: 250 concurrent</li>
+    </ul>
+    <p>
+      Exceeding the concurrency cap returns 409 Conflict (not 429);
+      wait for an existing session to finish before starting another.
+    </p>
+
+    <h2>Requesting a temporary override</h2>
+    <p>
+      For one-off events (load tests, customer-facing demos), email
+      <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>
+      describing the bucket(s) + multiplier + duration you need. We
+      generally approve up to 5× for up to 48h on the spot for paid
+      tiers. Anything larger needs a quick conversation about why.
+    </p>
+    <p>
+      Overrides are visible in your dashboard under
+      <strong>Settings → Rate limits</strong>. They expire
+      automatically at the configured time.
+    </p>
+
+    <h2>Testing rate-limit behaviour locally</h2>
+    <p>
+      The self-hosted dev stack (see the
+      <a href="https://github.com/driftstack/driftstack-api/blob/main/docs/runbooks/self-hosted-mac-local.md">self-hosted mac local</a>
+      runbook) runs the same rate-limit code path against a local
+      Redis. Use it to exercise your 429 handling without consuming
+      real production budget.
+    </p>
+
+    <h2>Support</h2>
+    <p>
+      Sustained 429s that you didn't expect, or a need to discuss a
+      production-impacting limit:
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+    </p>
+  </main>
+</BaseLayout>
