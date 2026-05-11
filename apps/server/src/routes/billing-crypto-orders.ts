@@ -1,9 +1,10 @@
 // V-666.G — customer-facing crypto-orders routes.
 //
-//   GET  /v1/billing/crypto-orders              — list caller's own orders
-//   GET  /v1/billing/crypto-orders/:id          — single order lookup
-//   POST /v1/billing/crypto-orders/:id/cancel   — abandon a pending order (V-666.J)
-//   GET  /v1/billing/crypto-orders/:id/receipt  — normalized receipt payload (V-666.M)
+//   GET  /v1/billing/crypto-orders                  — list caller's own orders
+//   GET  /v1/billing/crypto-orders/:id              — single order lookup
+//   POST /v1/billing/crypto-orders/:id/cancel       — abandon a pending order (V-666.J)
+//   GET  /v1/billing/crypto-orders/:id/receipt      — normalized receipt JSON (V-666.M)
+//   GET  /v1/billing/crypto-orders/:id/receipt.txt  — same receipt as text/plain (V-666.P)
 //
 // All routes are scoped to the calling account. Cross-account
 // id lookups return 404 (not 403) — we don't leak the existence of
@@ -101,6 +102,38 @@ export function registerCustomerCryptoOrdersRoutes(
         throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
       }
       return reply.send(receipt);
+    },
+  );
+
+  // V-666.P — plain-text rendering of the same receipt. Useful for
+  // wget / curl / cron jobs that pipe the receipt to a file without
+  // an extra jq step. Identical access semantics as the JSON variant.
+  app.get<{ Params: { order_id: string } }>(
+    '/v1/billing/crypto-orders/:order_id/receipt.txt',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
+      const ctx = requireCtx(req);
+      const params = parseOrThrow(GetParams, req.params);
+      const receipt = await deps.service.getReceipt({
+        order_id: params.order_id,
+        account_id: ctx.account.id,
+      });
+      if (receipt === null) {
+        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
+      }
+      const lines = [
+        'Driftstack receipt',
+        '',
+        `Order: ${receipt.order_id}`,
+        `Issued: ${receipt.issued_at}`,
+        `Status: ${receipt.status}`,
+        `Product: ${receipt.product}`,
+        `Amount: ${(receipt.price_cents / 100).toFixed(2)} ${receipt.price_currency}`,
+      ];
+      if (receipt.paid_at !== null) lines.push(`Paid at: ${receipt.paid_at}`);
+      if (receipt.payment_id !== null) lines.push(`Payment id: ${receipt.payment_id}`);
+      lines.push(`Created: ${receipt.created_at}`);
+      return reply.type('text/plain; charset=utf-8').send(lines.join('\n') + '\n');
     },
   );
 

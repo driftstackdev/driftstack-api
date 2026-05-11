@@ -294,3 +294,82 @@ describe('V-666.M GET /v1/billing/crypto-orders/:order_id/receipt', () => {
     expect(body.issued_at).toBeTruthy();
   });
 });
+
+describe('V-666.P GET /v1/billing/crypto-orders/:order_id/receipt.txt', () => {
+  it('401 without auth', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing/crypto-orders/ord_x/receipt.txt',
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('404 on cross-account fetch', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_alien',
+      account_id: 'acc_other',
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing/crypto-orders/ord_alien/receipt.txt',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('200 + text/plain body with the canonical receipt lines for a paid order', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_txt',
+      account_id: fx.accountId,
+      product: 'team_manual',
+      price_cents: 8000,
+      price_currency: 'EUR',
+    });
+    await fx.cryptoOrdersService.applyIpnStatus({
+      order_id: 'ord_txt',
+      payment_id: 'np_txt',
+      provider_status: 'finished',
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing/crypto-orders/ord_txt/receipt.txt',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/plain');
+    const body = res.body;
+    expect(body).toContain('Driftstack receipt');
+    expect(body).toContain('Order: ord_txt');
+    expect(body).toContain('Status: paid');
+    expect(body).toContain('Amount: 80.00 EUR');
+    expect(body).toContain('Payment id: np_txt');
+    expect(body.endsWith('\n')).toBe(true);
+  });
+
+  it('omits paid_at + payment_id lines for a pending order', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_pending_txt',
+      account_id: fx.accountId,
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing/crypto-orders/ord_pending_txt/receipt.txt',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.body;
+    expect(body).toContain('Status: pending');
+    expect(body).not.toContain('Paid at:');
+    expect(body).not.toContain('Payment id:');
+  });
+});
