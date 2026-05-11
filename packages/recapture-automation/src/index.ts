@@ -43,3 +43,13 @@ export type {
   VersionTransitionImpact,
 } from './atlas.js';
 export { buildAtlas, classifyOutcomes } from './atlas.js';
+
+// V-533.C — recapture scheduler.
+export type {
+  ArchetypeRunHistory,
+  SchedulePriority,
+  ScheduleEntry,
+  ScheduleRecaptureBatchOpts,
+  ScheduleRecaptureBatchResult,
+} from './scheduler.js';
+export { scheduleRecaptureBatch } from './scheduler.js';
