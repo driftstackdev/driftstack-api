@@ -94,6 +94,36 @@ export interface CryptoOrdersServiceOpts {
   repo: CryptoOrdersRepo;
   /** Test seam — defaults to Date.now. */
   nowFn?: () => number;
+  /**
+   * V-666.I — optional webhook emitter (wire-ready posture). When
+   * provided, applyIpnStatus fires `crypto.order.paid` whenever an
+   * order transitions to the paid state. Best-effort: emission
+   * failures don't roll back the state transition.
+   *
+   * Production wiring is deferred — the
+   * `webhook_event_type` Postgres enum does NOT yet carry
+   * `crypto.order.paid`. Adding it requires a forward migration; until
+   * that lands the bootstrap MUST NOT pass a `WebhooksService`-backed
+   * emitter here (the INSERT into webhook_deliveries would 22P02
+   * invalid input value for enum). Unit tests pass a local mock
+   * emitter that doesn't go through the DB.
+   */
+  webhooks?: CryptoOrderWebhookEmitter;
+}
+
+/**
+ * V-666.I — local emitter contract. Decoupled from {@link WebhooksService}
+ * on purpose: this interface accepts the literal `'crypto.order.paid'`
+ * even though the WebhookEventType union does not yet include it. The
+ * separation lets the V-666.I emission path land + be tested ahead of
+ * the DB migration that adds the enum value.
+ */
+export interface CryptoOrderWebhookEmitter {
+  enqueueEvent: (
+    accountId: string,
+    eventType: 'crypto.order.paid',
+    data: Record<string, unknown>,
+  ) => Promise<number>;
 }
 
 export class CryptoOrdersService {
@@ -170,6 +200,29 @@ export class CryptoOrdersService {
         updated_at: this.nowFn(),
       };
       await this.opts.repo.upsert(updated);
+      // V-666.I — fire crypto.order.paid when transitioning INTO the
+      // paid state. Skipped when the order was already paid (re-deliver
+      // of the same IPN). Skipped when no emitter is wired. Best-effort:
+      // an emission failure is swallowed so the IPN ack stays 200.
+      if (
+        order.status !== 'paid' &&
+        mapped === 'paid' &&
+        updated.account_id !== null &&
+        this.opts.webhooks !== undefined
+      ) {
+        try {
+          await this.opts.webhooks.enqueueEvent(updated.account_id, 'crypto.order.paid', {
+            order_id: updated.order_id,
+            product: updated.product,
+            price_cents: updated.price_cents,
+            price_currency: updated.price_currency,
+            payment_id: updated.payment_id,
+            paid_at: new Date(updated.updated_at).toISOString(),
+          });
+        } catch {
+          /* swallow */
+        }
+      }
       return updated;
     }
     // No-op transition. Record the payment_id if we didn't have it yet.

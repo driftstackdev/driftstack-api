@@ -1,0 +1,139 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-695 — pagination developer docs. Covers the cursor-based pagination
+// pattern used across all list endpoints. Companion to /docs/api-quickstart.
+---
+
+<BaseLayout title="Pagination — Driftstack developer docs" description="Cursor-based pagination on Driftstack list endpoints — limit, cursor, has_more.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Pagination</h1>
+
+    <p class="lead">
+      Every Driftstack <code>GET /v1/...</code> list endpoint uses
+      cursor-based pagination. This page covers the request shape,
+      response envelope, and the iteration pattern you should use
+      from clients.
+    </p>
+
+    <h2>Why cursors, not offsets?</h2>
+    <p>
+      Offset pagination (<code>page=3&amp;size=50</code>) gets unreliable
+      when the underlying list mutates between requests — newly-inserted
+      rows shift indexes and pages can repeat or skip items. Cursors
+      reference a specific row in a stable sort order, so iteration
+      stays consistent even under concurrent writes.
+    </p>
+
+    <h2>Request</h2>
+    <p>List endpoints accept two query parameters:</p>
+    <ul>
+      <li><code>limit</code> — page size, integer 1-100. Defaults to
+        <strong>50</strong>. Hard cap at 100; values above are rejected
+        with 400.</li>
+      <li><code>cursor</code> — opaque string returned by the previous
+        page. Omit on the first request.</li>
+    </ul>
+
+    <pre><code>{`GET /v1/profiles?limit=20&cursor=eyJpZCI6InByb2ZfYWJjIiwidHMiOjE3MTU0NzAwMDB9
+Authorization: Bearer ds_live_…`}</code></pre>
+
+    <h2>Response envelope</h2>
+    <pre><code>{`{
+  "data": [
+    { "id": "prof_aaa", "name": "us-mobile-bot", ... },
+    { "id": "prof_bbb", "name": "eu-desktop-bot", ... }
+  ],
+  "has_more": true,
+  "next_cursor": "eyJpZCI6InByb2ZfYmJiIiwidHMiOjE3MTU0Njk5MDB9"
+}`}</code></pre>
+    <ul>
+      <li><strong><code>data</code></strong> — array of resources, at
+        most <code>limit</code> entries.</li>
+      <li><strong><code>has_more</code></strong> — boolean. <code>true</code>
+        when there are more pages, <code>false</code> on the final page.</li>
+      <li><strong><code>next_cursor</code></strong> — string when
+        <code>has_more</code> is true; <code>null</code> on the final
+        page. Pass it as <code>cursor</code> on the next request.</li>
+    </ul>
+
+    <h2>Iteration pattern</h2>
+    <p>The canonical client loop:</p>
+    <pre><code>{`async function* iterateAll(client) {
+  let cursor = undefined;
+  while (true) {
+    const url = new URL('/v1/profiles', client.baseUrl);
+    url.searchParams.set('limit', '100');
+    if (cursor) url.searchParams.set('cursor', cursor);
+    const res = await fetch(url, { headers: client.headers });
+    const page = await res.json();
+    for (const item of page.data) yield item;
+    if (!page.has_more) break;
+    cursor = page.next_cursor;
+  }
+}`}</code></pre>
+
+    <h2>Sort order</h2>
+    <p>
+      All list endpoints sort by <code>created_at DESC</code> with
+      <code>id DESC</code> as the tiebreaker. New resources appear on
+      the first page; older resources page off the back. If you need
+      a different order (e.g. oldest-first or by name), fetch the full
+      list and sort client-side — server-side sort overrides aren't
+      currently supported.
+    </p>
+
+    <h2>Cursor stability</h2>
+    <p>
+      Cursors are <strong>opaque</strong> — they're base64-encoded
+      tuples of <code>(created_at, id)</code> from the row at the page
+      boundary. You should treat them as black boxes:
+    </p>
+    <ul>
+      <li>Don't parse or modify cursor strings — the encoding is not
+        a stable API surface and may change.</li>
+      <li>Cursors are valid <strong>indefinitely</strong>. You can
+        persist a cursor and resume iteration days later.</li>
+      <li>If a cursor's referenced row is deleted, the next page
+        starts from the closest row in sort order; no error is
+        raised.</li>
+    </ul>
+
+    <h2>Filter parameters</h2>
+    <p>
+      Some endpoints accept additional filters in the query string
+      (e.g. <code>GET /v1/account/audit?action=api_key.created</code>).
+      Filters compose with pagination — the cursor encodes the
+      filter context, so paging through filtered results is
+      consistent. Switching filters mid-iteration requires a new
+      cursor (omit <code>cursor</code> on the first filtered request).
+    </p>
+
+    <h2>Total counts</h2>
+    <p>
+      List responses do <strong>not</strong> include a total-count
+      field. Computing total counts on large tables is expensive
+      and most clients don't need it. If you need a count for a
+      specific resource, the resource's dedicated endpoint exposes
+      it (e.g. <code>GET /v1/account/me</code> carries
+      <code>profile_count</code> for the current account).
+    </p>
+
+    <h2>Rate limits during iteration</h2>
+    <p>
+      List requests count against the standard read rate-limit
+      bucket. A full iteration through 10,000 profiles at
+      <code>limit=100</code> is 100 requests — well within the
+      bucket for any non-trial tier. If you hit
+      <code>429 rate_limit_exceeded</code>, back off and retry; the
+      <code>Retry-After</code> header tells you for how long.
+      See <a href="/docs/rate-limits">/docs/rate-limits</a> for details.
+    </p>
+
+    <h2>Support</h2>
+    <p>
+      Pagination questions or surprising cursor behaviour:
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+    </p>
+  </main>
+</BaseLayout>

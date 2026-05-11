@@ -1,8 +1,10 @@
 // V-666.B — unit tests for the crypto-orders state machine.
+// V-666.I — appended tests for crypto.order.paid webhook emission.
 
 import { describe, expect, it } from 'vitest';
 import {
   CryptoOrdersService,
+  type CryptoOrderWebhookEmitter,
   InMemoryCryptoOrdersRepo,
   mapNowpaymentsStatus,
 } from '../../src/services/crypto-orders.js';
@@ -241,5 +243,139 @@ describe('V-666.B applyIpnStatus — unknown order / unknown status', () => {
     });
     expect(updated?.status).toBe('pending');
     expect(updated?.payment_id).toBeNull(); // status didn't change → no recorded payment_id either
+  });
+});
+
+describe('V-666.I crypto.order.paid webhook emission', () => {
+  function makeEmitter(): {
+    emitter: CryptoOrderWebhookEmitter;
+    calls: Array<{ accountId: string; eventType: string; data: Record<string, unknown> }>;
+  } {
+    const calls: Array<{ accountId: string; eventType: string; data: Record<string, unknown> }> =
+      [];
+    const emitter: CryptoOrderWebhookEmitter = {
+      enqueueEvent: (accountId, eventType, data) => {
+        calls.push({ accountId, eventType, data });
+        return Promise.resolve(1);
+      },
+    };
+    return { emitter, calls };
+  }
+
+  async function seed(
+    opts: {
+      emitter?: CryptoOrderWebhookEmitter;
+      account_id?: string | null;
+    } = {},
+  ): Promise<{ svc: CryptoOrdersService }> {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({
+      repo,
+      nowFn: () => 2_000,
+      ...(opts.emitter !== undefined ? { webhooks: opts.emitter } : {}),
+    });
+    await svc.create({
+      order_id: 'ord_pay',
+      account_id: opts.account_id === undefined ? 'acc_buyer' : opts.account_id,
+      product: 'team_growth',
+      price_cents: 14900,
+      price_currency: 'EUR',
+    });
+    return { svc };
+  }
+
+  it('fires crypto.order.paid when transitioning pending → paid', async () => {
+    const { emitter, calls } = makeEmitter();
+    const { svc } = await seed({ emitter });
+    await svc.applyIpnStatus({
+      order_id: 'ord_pay',
+      payment_id: 'np_42',
+      provider_status: 'finished',
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.eventType).toBe('crypto.order.paid');
+    expect(calls[0]?.accountId).toBe('acc_buyer');
+    expect(calls[0]?.data.order_id).toBe('ord_pay');
+    expect(calls[0]?.data.product).toBe('team_growth');
+    expect(calls[0]?.data.price_cents).toBe(14900);
+    expect(calls[0]?.data.payment_id).toBe('np_42');
+  });
+
+  it('fires crypto.order.paid when transitioning confirming → paid', async () => {
+    const { emitter, calls } = makeEmitter();
+    const { svc } = await seed({ emitter });
+    await svc.applyIpnStatus({
+      order_id: 'ord_pay',
+      payment_id: 'np_step',
+      provider_status: 'confirming',
+    });
+    expect(calls).toHaveLength(0);
+    await svc.applyIpnStatus({
+      order_id: 'ord_pay',
+      payment_id: 'np_step',
+      provider_status: 'finished',
+    });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('does NOT re-fire on a duplicate paid IPN (idempotent)', async () => {
+    const { emitter, calls } = makeEmitter();
+    const { svc } = await seed({ emitter });
+    await svc.applyIpnStatus({
+      order_id: 'ord_pay',
+      payment_id: 'np_1',
+      provider_status: 'finished',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'ord_pay',
+      payment_id: 'np_1',
+      provider_status: 'finished',
+    });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('does NOT fire when transitioning to failed (not a paid event)', async () => {
+    const { emitter, calls } = makeEmitter();
+    const { svc } = await seed({ emitter });
+    await svc.applyIpnStatus({
+      order_id: 'ord_pay',
+      payment_id: 'np_x',
+      provider_status: 'failed',
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('does NOT fire when the order has a null account_id (pre-signup checkout)', async () => {
+    const { emitter, calls } = makeEmitter();
+    const { svc } = await seed({ emitter, account_id: null });
+    await svc.applyIpnStatus({
+      order_id: 'ord_pay',
+      payment_id: 'np_y',
+      provider_status: 'finished',
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('swallows emitter errors so the order stays paid', async () => {
+    const failing: CryptoOrderWebhookEmitter = {
+      enqueueEvent: () => Promise.reject(new Error('boom')),
+    };
+    const { svc } = await seed({ emitter: failing });
+    const updated = await svc.applyIpnStatus({
+      order_id: 'ord_pay',
+      payment_id: 'np_z',
+      provider_status: 'finished',
+    });
+    expect(updated?.status).toBe('paid');
+  });
+
+  it('does not throw when no emitter is wired', async () => {
+    const { svc } = await seed();
+    const updated = await svc.applyIpnStatus({
+      order_id: 'ord_pay',
+      payment_id: 'np_silent',
+      provider_status: 'finished',
+    });
+    expect(updated?.status).toBe('paid');
   });
 });
