@@ -1,0 +1,303 @@
+// V-553.B-19 — unit tests for ProfileSnapshotsService (V-312).
+//
+// Surface under test:
+//   - capture(): 404 when parent profile missing / cross-account,
+//     happy path snapshots metadata with empty state_blob
+//   - list(): repo pass-through
+//   - get(): 404 on missing, returns row on hit
+//   - restore(): 404 on missing snapshot, TierLimitError when at cap,
+//     ConflictError on duplicate name, happy path creates new profile
+//     + records audit
+//   - delete(): 404 when not found, returns void on success
+
+import { describe, expect, it } from 'vitest';
+import {
+  ProfileSnapshotsService,
+  type ProfileSnapshotRecord,
+  type ProfileSnapshotsRepo,
+} from '../../src/services/profile-snapshots.js';
+import type { ProfileRecord, ProfilesRepo } from '../../src/services/profiles.js';
+import type { AccountAuditService } from '../../src/services/account-audit.js';
+import { ConflictError, NotFoundError, TierLimitError } from '../../src/lib/errors.js';
+
+function makeProfile(overrides: Partial<ProfileRecord> = {}): ProfileRecord {
+  return {
+    id: 'prof_1',
+    accountId: 'acc_1',
+    name: 'p1',
+    archetype: 'default',
+    description: null,
+    lastUsedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+function makeSnapshot(overrides: Partial<ProfileSnapshotRecord> = {}): ProfileSnapshotRecord {
+  return {
+    id: 'psnap_1',
+    accountId: 'acc_1',
+    parentProfileId: 'prof_1',
+    label: 'before-update',
+    description: null,
+    parentArchetype: 'default',
+    parentName: 'p1',
+    stateBlob: {},
+    capturedAt: new Date(),
+    createdAt: new Date(),
+    ...overrides,
+  };
+}
+
+function makeRepos(
+  opts: {
+    profiles?: ProfileRecord[];
+    snapshots?: ProfileSnapshotRecord[];
+    countOverride?: number;
+  } = {},
+): {
+  snapshotsRepo: ProfileSnapshotsRepo;
+  profilesRepo: ProfilesRepo;
+  state: {
+    profiles: ProfileRecord[];
+    snapshots: ProfileSnapshotRecord[];
+  };
+} {
+  const profiles = [...(opts.profiles ?? [])];
+  const snapshots = [...(opts.snapshots ?? [])];
+  let snapshotCounter = snapshots.length;
+  let profileCounter = profiles.length;
+  const snapshotsRepo: ProfileSnapshotsRepo = {
+    insert: (input) => {
+      snapshotCounter += 1;
+      const row: ProfileSnapshotRecord = {
+        id: `psnap_${snapshotCounter.toString()}`,
+        accountId: input.accountId,
+        parentProfileId: input.parentProfileId,
+        label: input.label,
+        description: input.description,
+        parentArchetype: input.parentArchetype,
+        parentName: input.parentName,
+        stateBlob: input.stateBlob,
+        capturedAt: new Date(),
+        createdAt: new Date(),
+      };
+      snapshots.push(row);
+      return Promise.resolve(row);
+    },
+    list: ({ accountId, parentProfileId, limit }) =>
+      Promise.resolve({
+        data: snapshots
+          .filter((s) => s.accountId === accountId)
+          .filter((s) => parentProfileId === undefined || s.parentProfileId === parentProfileId)
+          .slice(0, limit ?? 50),
+        hasMore: false,
+        nextCursor: null,
+      }),
+    findById: ({ id, accountId }) =>
+      Promise.resolve(snapshots.find((s) => s.id === id && s.accountId === accountId) ?? null),
+    delete: ({ id, accountId }) => {
+      const idx = snapshots.findIndex((s) => s.id === id && s.accountId === accountId);
+      if (idx < 0) return Promise.resolve(false);
+      snapshots.splice(idx, 1);
+      return Promise.resolve(true);
+    },
+  };
+  const profilesRepo: ProfilesRepo = {
+    insert: (input) => {
+      profileCounter += 1;
+      const row: ProfileRecord = {
+        id: `prof_${profileCounter.toString()}`,
+        accountId: input.accountId,
+        name: input.name,
+        archetype: input.archetype,
+        description: input.description,
+        lastUsedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      profiles.push(row);
+      return Promise.resolve(row);
+    },
+    countByAccount: (accountId) =>
+      Promise.resolve(
+        opts.countOverride ?? profiles.filter((p) => p.accountId === accountId).length,
+      ),
+    findById: ({ id, accountId }) =>
+      Promise.resolve(profiles.find((p) => p.id === id && p.accountId === accountId) ?? null),
+    findByAccountAndName: ({ accountId, name }) =>
+      Promise.resolve(profiles.find((p) => p.accountId === accountId && p.name === name) ?? null),
+    list: () => Promise.resolve({ data: profiles, hasMore: false, nextCursor: null }),
+    update: ({ id }) => Promise.resolve(profiles.find((p) => p.id === id) as ProfileRecord),
+    delete: () => Promise.resolve(true),
+    touch: () => Promise.resolve(),
+  };
+  return { snapshotsRepo, profilesRepo, state: { profiles, snapshots } };
+}
+
+function makeAudit(): { audit: AccountAuditService; calls: { action: string }[] } {
+  const calls: { action: string }[] = [];
+  const audit = {
+    record: (args: { action: string }) => {
+      calls.push(args);
+      return Promise.resolve();
+    },
+  } as unknown as AccountAuditService;
+  return { audit, calls };
+}
+
+describe('V-553.B-19 ProfileSnapshotsService.capture', () => {
+  it('throws NotFound when parent profile does not exist', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos();
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    await expect(
+      svc.capture({ accountId: 'acc_1', profileId: 'prof_missing', label: 'l' }),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it('throws NotFound for cross-account profile (404, not 403)', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos({
+      profiles: [makeProfile({ id: 'prof_other', accountId: 'acc_other' })],
+    });
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    await expect(
+      svc.capture({ accountId: 'acc_1', profileId: 'prof_other', label: 'l' }),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it('captures parent archetype + name + empty state_blob', async () => {
+    const { snapshotsRepo, profilesRepo, state } = makeRepos({
+      profiles: [makeProfile({ id: 'prof_1', name: 'sales-bot', archetype: 'mobile_ios' })],
+    });
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    const snap = await svc.capture({
+      accountId: 'acc_1',
+      profileId: 'prof_1',
+      label: 'pre-update',
+      description: 'before tweaking viewport',
+    });
+    expect(snap.parentName).toBe('sales-bot');
+    expect(snap.parentArchetype).toBe('mobile_ios');
+    expect(snap.label).toBe('pre-update');
+    expect(snap.description).toBe('before tweaking viewport');
+    expect(snap.stateBlob).toEqual({});
+    expect(state.snapshots).toHaveLength(1);
+  });
+});
+
+describe('V-553.B-19 ProfileSnapshotsService.list', () => {
+  it('forwards filters to the repo', async () => {
+    const snaps = [
+      makeSnapshot({ id: 'psnap_a', parentProfileId: 'prof_1' }),
+      makeSnapshot({ id: 'psnap_b', parentProfileId: 'prof_2' }),
+    ];
+    const { snapshotsRepo, profilesRepo } = makeRepos({ snapshots: snaps });
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    const page = await svc.list({ accountId: 'acc_1', parentProfileId: 'prof_1' });
+    expect(page.data.map((s) => s.id)).toEqual(['psnap_a']);
+  });
+});
+
+describe('V-553.B-19 ProfileSnapshotsService.get', () => {
+  it('throws NotFound when the snapshot is missing or cross-account', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos({
+      snapshots: [makeSnapshot({ id: 'psnap_other', accountId: 'acc_other' })],
+    });
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    await expect(svc.get({ id: 'psnap_other', accountId: 'acc_1' })).rejects.toThrow(NotFoundError);
+  });
+
+  it('returns the row when found', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos({
+      snapshots: [makeSnapshot({ id: 'psnap_42', label: 'good' })],
+    });
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    const row = await svc.get({ id: 'psnap_42', accountId: 'acc_1' });
+    expect(row.label).toBe('good');
+  });
+});
+
+describe('V-553.B-19 ProfileSnapshotsService.restore', () => {
+  it('throws NotFound when snapshot is missing', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos();
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    await expect(
+      svc.restore({
+        accountId: 'acc_1',
+        snapshotId: 'psnap_missing',
+        tier: 'solo_manual',
+        name: 'restored',
+      }),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it('throws TierLimitError when at the tier cap', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos({
+      snapshots: [makeSnapshot()],
+      countOverride: 1_000_000, // way over any tier cap
+    });
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    await expect(
+      svc.restore({
+        accountId: 'acc_1',
+        snapshotId: 'psnap_1',
+        tier: 'solo_manual',
+        name: 'restored',
+      }),
+    ).rejects.toThrow(TierLimitError);
+  });
+
+  it('throws ConflictError when the new name already exists', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos({
+      profiles: [makeProfile({ name: 'taken' })],
+      snapshots: [makeSnapshot()],
+    });
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    await expect(
+      svc.restore({
+        accountId: 'acc_1',
+        snapshotId: 'psnap_1',
+        tier: 'solo_manual',
+        name: 'taken',
+      }),
+    ).rejects.toThrow(ConflictError);
+  });
+
+  it('creates a new profile from the snapshot archetype + records audit', async () => {
+    const { snapshotsRepo, profilesRepo, state } = makeRepos({
+      snapshots: [makeSnapshot({ parentArchetype: 'mobile_ios' })],
+    });
+    const { audit, calls } = makeAudit();
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo, audit);
+    const restored = await svc.restore({
+      accountId: 'acc_1',
+      snapshotId: 'psnap_1',
+      tier: 'team_manual',
+      name: 'mobile-bot-v2',
+    });
+    expect(restored.name).toBe('mobile-bot-v2');
+    expect(restored.archetype).toBe('mobile_ios');
+    expect(state.profiles).toHaveLength(1);
+    expect(calls.map((c) => c.action)).toEqual(['profile.created']);
+  });
+});
+
+describe('V-553.B-19 ProfileSnapshotsService.delete', () => {
+  it('throws NotFound when the snapshot does not exist', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos();
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    await expect(svc.delete({ id: 'psnap_missing', accountId: 'acc_1' })).rejects.toThrow(
+      NotFoundError,
+    );
+  });
+
+  it('removes the row from the repo on success', async () => {
+    const { snapshotsRepo, profilesRepo, state } = makeRepos({
+      snapshots: [makeSnapshot()],
+    });
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    await svc.delete({ id: 'psnap_1', accountId: 'acc_1' });
+    expect(state.snapshots).toHaveLength(0);
+  });
+});

@@ -1,0 +1,148 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-693 — teams developer docs. Walks through the V-298b team RBAC
+// surface (invite → accept → member/admin roles) and the V-330b/d/e/f
+// effectiveAccountId redirection that lets team admins act on the
+// owner account's resources.
+---
+
+<BaseLayout title="Teams & RBAC — Driftstack developer docs" description="Team accounts, invites, roles, and the effectiveAccountId redirection model.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Teams &amp; RBAC</h1>
+
+    <p class="lead">
+      Driftstack supports team accounts where multiple users share a
+      single billing entity. This page covers the invite flow, the
+      member vs. admin roles, and how API calls made by team admins
+      are routed to the owner account.
+    </p>
+
+    <h2>Vocabulary</h2>
+    <ul>
+      <li><strong>Owner account</strong> — the account that pays the
+        bill. Sessions, profiles, recordings, and webhooks all live
+        on the owner account.</li>
+      <li><strong>Member</strong> — a user invited to the owner
+        account with read-only access to its resources.</li>
+      <li><strong>Admin</strong> — a member who can also create
+        and modify resources (sessions, profiles, API keys) on the
+        owner account.</li>
+      <li><strong>Tiers that support teams:</strong> Team Manual,
+        Team Growth, Team Scale, Agency Manual, Agency Growth,
+        Agency Scale, and Enterprise. Solo tiers are single-user.</li>
+    </ul>
+
+    <h2>Invite flow</h2>
+    <pre><code>{`# 1. Owner creates an invite
+POST /v1/teams/invites
+Authorization: Bearer ds_live_owner_…
+{ "email": "dev@example.com", "role": "admin" }
+
+→ 201 Created
+{
+  "id": "inv_…",
+  "email": "dev@example.com",
+  "role": "admin",
+  "expires_at": "2026-05-18T13:00:00.000Z",
+  "accept_url": "https://app.driftstack.dev/teams/accept/inv_…"
+}
+
+# 2. Invitee signs up + accepts via accept_url
+POST /v1/teams/invites/inv_…/accept
+Authorization: Bearer ds_live_invitee_…
+
+→ 200 OK
+{ "joined_account_id": "acc_owner_…", "role": "admin" }`}</code></pre>
+
+    <p>
+      Invites expire in <strong>7 days</strong>. The owner can revoke
+      an outstanding invite by <code>DELETE /v1/teams/invites/:id</code>.
+    </p>
+
+    <h2>Listing + removing members</h2>
+    <pre><code>{`GET /v1/teams/members
+Authorization: Bearer ds_live_owner_…
+
+→ 200 OK
+{
+  "members": [
+    { "account_id": "acc_owner_…", "role": "owner", "email": "founder@…" },
+    { "account_id": "acc_member_…", "role": "admin", "email": "dev@…" }
+  ]
+}
+
+# Owner removes a member (cannot remove self):
+DELETE /v1/teams/members/acc_member_…`}</code></pre>
+    <p>
+      The owner is always returned in the list and cannot be removed
+      (transferring ownership is a support-ticket operation today;
+      programmatic transfer is V-694 follow-up).
+    </p>
+
+    <h2>effectiveAccountId redirection (V-330b / d / e / f)</h2>
+    <p>
+      When a team admin (not the owner) calls an API endpoint that
+      operates on team-shared resources, the server transparently
+      redirects the lookup to the <strong>owner</strong> account.
+      The admin's API key carries the admin scope; the resource lookup
+      reads from the owner's row set.
+    </p>
+    <p>
+      Affected surfaces:
+    </p>
+    <ul>
+      <li><strong>V-330b:</strong> account-audit reads
+        (<code>GET /v1/account/audit</code>) — admin sees owner audit.</li>
+      <li><strong>V-330d:</strong> sessions, profiles, recordings —
+        admin reads + writes against owner resources.</li>
+      <li><strong>V-330e:</strong> webhooks + endpoint config —
+        admin manages the owner's webhook subscriptions.</li>
+      <li><strong>V-330f:</strong> cost monitoring + billing — admin
+        sees owner's cost dashboard but cannot change tier (tier
+        upgrades are owner-only).</li>
+    </ul>
+    <p>
+      The redirection is transparent: admin calls
+      <code>GET /v1/sessions</code> and receives the owner's sessions
+      without passing any account id. The scope check still applies
+      against the <em>caller</em> key — an admin without the right
+      scope is rejected the same as any other caller.
+    </p>
+
+    <h2>What admins cannot do</h2>
+    <ul>
+      <li>Change the owner's <strong>tier</strong> (Stripe / NowPayments
+        checkout is owner-only).</li>
+      <li>Manage the team itself — invite, remove members, or rotate
+        the owner-key. Those mutations are gated on the
+        <code>team_owner</code> scope which only the owner has.</li>
+      <li>See or modify other admins' API keys; each member's keys
+        are private to that member's account.</li>
+    </ul>
+
+    <h2>Audit trail</h2>
+    <p>
+      Every team mutation (invite, accept, role change, member
+      removal) writes an <code>account_audit</code> entry on the
+      owner account with <code>actor_account_id</code> set to the
+      member who triggered it. Read these via
+      <code>GET /v1/account/audit?action=team.*</code> (owner-only).
+    </p>
+
+    <h2>Pricing impact</h2>
+    <p>
+      Members do not pay separately — usage is billed to the owner
+      account. Each tier has a seat cap (Team Manual: 3 seats, Team
+      Growth: 8, Team Scale: 20, Agency: 50, Enterprise: custom).
+      Adding a member past the cap returns
+      <code>tier_seat_limit_reached</code>.
+    </p>
+
+    <h2>Support</h2>
+    <p>
+      Team setup or ownership transfers: <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>.
+      RBAC + audit questions: <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+    </p>
+  </main>
+</BaseLayout>
