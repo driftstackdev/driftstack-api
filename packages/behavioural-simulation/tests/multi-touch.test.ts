@@ -1,0 +1,182 @@
+import { describe, expect, it } from 'vitest';
+import {
+  generatePinchGesture,
+  generateTwoFingerScrollGesture,
+  generateThreeFingerSwipeGesture,
+  interleaveGestureStream,
+} from '../src/multi-touch.js';
+
+describe('V-530.E generatePinchGesture', () => {
+  it('produces 2 fingers symmetric around the centre', () => {
+    const g = generatePinchGesture({
+      startCentre: { x: 200, y: 300 },
+      startSpanPx: 100,
+      endSpanPx: 200,
+      seed: 'p1',
+    });
+    expect(g.kind).toBe('pinch');
+    expect(g.fingers).toHaveLength(2);
+    expect(g.fingers[0]?.start.x).toBeLessThan(g.fingers[1]?.start.x ?? 0);
+  });
+
+  it('finger ends are further apart when zoom in (endSpan > startSpan)', () => {
+    const g = generatePinchGesture({
+      startCentre: { x: 0, y: 0 },
+      startSpanPx: 100,
+      endSpanPx: 300,
+      seed: 'zoom-in',
+    });
+    const startSpan = (g.fingers[1]?.start.x ?? 0) - (g.fingers[0]?.start.x ?? 0);
+    const endSpan = (g.fingers[1]?.end.x ?? 0) - (g.fingers[0]?.end.x ?? 0);
+    expect(endSpan).toBeGreaterThan(startSpan);
+  });
+
+  it('finger ends closer together on zoom out', () => {
+    const g = generatePinchGesture({
+      startCentre: { x: 0, y: 0 },
+      startSpanPx: 300,
+      endSpanPx: 100,
+      seed: 'zoom-out',
+    });
+    const startSpan = (g.fingers[1]?.start.x ?? 0) - (g.fingers[0]?.start.x ?? 0);
+    const endSpan = (g.fingers[1]?.end.x ?? 0) - (g.fingers[0]?.end.x ?? 0);
+    expect(endSpan).toBeLessThan(startSpan);
+  });
+
+  it('per-finger samples are monotonically increasing in tMs', () => {
+    const g = generatePinchGesture({
+      startCentre: { x: 0, y: 0 },
+      startSpanPx: 100,
+      endSpanPx: 200,
+      seed: 'monotonic',
+    });
+    for (const finger of g.fingers) {
+      for (let i = 1; i < finger.samples.length; i += 1) {
+        expect(finger.samples[i]?.tMs).toBeGreaterThanOrEqual(finger.samples[i - 1]?.tMs ?? 0);
+      }
+    }
+  });
+
+  it('seeded determinism', () => {
+    const a = generatePinchGesture({
+      startCentre: { x: 0, y: 0 },
+      startSpanPx: 100,
+      endSpanPx: 200,
+      seed: 'fixed',
+    });
+    const b = generatePinchGesture({
+      startCentre: { x: 0, y: 0 },
+      startSpanPx: 100,
+      endSpanPx: 200,
+      seed: 'fixed',
+    });
+    expect(a).toEqual(b);
+  });
+});
+
+describe('V-530.E generateTwoFingerScrollGesture', () => {
+  it('produces 2 fingers offset by fingerSeparationPx', () => {
+    const g = generateTwoFingerScrollGesture({
+      start: { x: 100, y: 100 },
+      direction: 'down',
+      distancePx: 200,
+      fingerSeparationPx: 80,
+      seed: 's1',
+    });
+    expect(g.fingers).toHaveLength(2);
+    expect(g.fingers[1]?.start.x).toBe((g.fingers[0]?.start.x ?? 0) + 80);
+    expect(g.fingers[0]?.start.y).toBe(g.fingers[1]?.start.y);
+  });
+
+  it('end positions reflect direction down by distancePx', () => {
+    const g = generateTwoFingerScrollGesture({
+      start: { x: 100, y: 100 },
+      direction: 'down',
+      distancePx: 200,
+      seed: 's2',
+    });
+    expect(g.fingers[0]?.end.y).toBeCloseTo(300, 0);
+    expect(g.fingers[1]?.end.y).toBeCloseTo(300, 0);
+  });
+
+  it('end positions reflect direction left by distancePx', () => {
+    const g = generateTwoFingerScrollGesture({
+      start: { x: 500, y: 100 },
+      direction: 'left',
+      distancePx: 100,
+      seed: 's3',
+    });
+    expect(g.fingers[0]?.end.x).toBeCloseTo(400, 0);
+  });
+});
+
+describe('V-530.E generateThreeFingerSwipeGesture', () => {
+  it('produces 3 fingers laid out horizontally', () => {
+    const g = generateThreeFingerSwipeGesture({
+      start: { x: 200, y: 300 },
+      direction: 'right',
+      distancePx: 150,
+      fingerSeparationPx: 60,
+      seed: 'sw1',
+    });
+    expect(g.fingers).toHaveLength(3);
+    // Centre finger at start.x; others ±60.
+    expect(g.fingers[0]?.start.x).toBe(140);
+    expect(g.fingers[1]?.start.x).toBe(200);
+    expect(g.fingers[2]?.start.x).toBe(260);
+  });
+
+  it('all 3 fingers move in the same direction by distancePx', () => {
+    const g = generateThreeFingerSwipeGesture({
+      start: { x: 0, y: 0 },
+      direction: 'up',
+      distancePx: 100,
+      seed: 'sw2',
+    });
+    for (const finger of g.fingers) {
+      expect(finger.end.y).toBeCloseTo(-100, 0);
+    }
+  });
+
+  it('fingerIds are 1, 2, 3', () => {
+    const g = generateThreeFingerSwipeGesture({
+      start: { x: 0, y: 0 },
+      direction: 'right',
+      distancePx: 100,
+      seed: 'sw3',
+    });
+    expect(g.fingers.map((f) => f.fingerId)).toEqual([1, 2, 3]);
+  });
+});
+
+describe('V-530.E interleaveGestureStream', () => {
+  it('returns a time-sorted stream with fingerId tagged', () => {
+    const g = generatePinchGesture({
+      startCentre: { x: 0, y: 0 },
+      startSpanPx: 100,
+      endSpanPx: 200,
+      samples: 5,
+      seed: 'inter',
+    });
+    const stream = interleaveGestureStream(g);
+    expect(stream.length).toBe(10); // 2 fingers × 5 samples
+    for (let i = 1; i < stream.length; i += 1) {
+      expect(stream[i]?.tMs).toBeGreaterThanOrEqual(stream[i - 1]?.tMs ?? 0);
+    }
+  });
+
+  it('stable tie-break by fingerId ascending', () => {
+    const g = generateTwoFingerScrollGesture({
+      start: { x: 0, y: 0 },
+      direction: 'down',
+      distancePx: 100,
+      samples: 3,
+      seed: 'tie',
+    });
+    const stream = interleaveGestureStream(g);
+    // At each tMs, finger 1 comes before finger 2.
+    const sameTime = stream.filter((s) => s.tMs === stream[0]?.tMs);
+    expect(sameTime[0]?.fingerId).toBe(1);
+    expect(sameTime[1]?.fingerId).toBe(2);
+  });
+});
