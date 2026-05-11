@@ -1,0 +1,295 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-670 (V-550 follow-up) — public security overview as an evaluator
+// checklist. /security is the architecture deep-dive; this page is
+// the buyer-evaluation companion — every security claim mapped to
+// its verifiable evidence (code path, test, public doc link). The
+// goal: a prospective customer's CISO can self-serve a security
+// review without scheduling a call.
+---
+
+<BaseLayout
+  title="Security overview"
+  description="Driftstack security claims, mapped one-to-one to their verifiable evidence. Code paths, tests, and public docs — so your security review can self-serve."
+>
+  <section class="bg-gradient-to-b from-white to-slate-50">
+    <div class="mx-auto max-w-5xl px-6 pb-12 pt-20 md:pt-24">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        Trust center · Security overview
+      </p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+        Every claim, mapped to evidence.
+      </h1>
+      <p class="mt-6 max-w-prose text-lg text-slate-600">
+        Architecture deep-dive lives at
+        <a href="/security" class="text-oxblood-700 underline">/security</a>;
+        this page is what you skim before scheduling a vendor review
+        call. Each claim links to the code, test, or doc you can verify
+        for yourself.
+      </p>
+    </div>
+  </section>
+
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-5xl px-6 py-16">
+      <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+        Authentication &amp; access
+      </h2>
+      <ul class="mt-6 space-y-4">
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-slate-900">API keys are scrypt-hashed at rest</p>
+            <p class="mt-1 text-sm text-slate-600">
+              Keys never round-trip a plaintext value through any
+              storage layer. Hash params (N=2^15, r=8, p=1) live alongside
+              the hash so verification is straightforward. A database
+              breach surfaces hashes, not credentials.
+            </p>
+            <p class="mt-1 text-xs font-mono text-slate-500">
+              apps/server/src/lib/api-keys.ts · hashApiKey() / verifyApiKey()
+            </p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-slate-900">MFA: TOTP + recovery codes</p>
+            <p class="mt-1 text-sm text-slate-600">
+              AES-256-GCM at-rest encryption of TOTP secrets. Recovery
+              codes are scrypt-hashed (mirroring API key handling). Step-up
+              gate (V-353e) requires MFA on destructive admin paths.
+            </p>
+            <p class="mt-1 text-xs font-mono text-slate-500">
+              apps/server/src/lib/mfa-totp.ts · apps/server/src/services/mfa.ts
+            </p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-slate-900">OAuth 2.0 (invite-only) with PKCE-S256</p>
+            <p class="mt-1 text-sm text-slate-600">
+              Third-party OAuth requires admin invitation (no self-service
+              client registration). PKCE-S256 mandatory; client_secret
+              sha256-hashed at rest; one-shot authorization codes; opaque
+              bearer tokens (no JWT).
+            </p>
+            <p class="mt-1 text-xs font-mono text-slate-500">
+              apps/server/src/services/oauth.ts · apps/server/src/lib/oauth-pkce.ts
+            </p>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-5xl px-6 py-16">
+      <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+        Transport &amp; egress
+      </h2>
+      <ul class="mt-6 space-y-4">
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-slate-900">TLS 1.3, mTLS where applicable</p>
+            <p class="mt-1 text-sm text-slate-600">
+              Cloudflare edge enforces TLS 1.3 strict; origin enforces
+              client-cert validation on internal hops. No plaintext HTTP
+              on any path (verified via the deploy pipeline's TLS check).
+            </p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-slate-900">Customer-controlled session egress</p>
+            <p class="mt-1 text-sm text-slate-600">
+              Session network traffic exits through the customer's
+              configured egress (SOCKS5 / WireGuard / OpenVPN). Driftstack
+              does not see destination URLs, response bodies, or any
+              session-traffic payload.
+            </p>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-5xl px-6 py-16">
+      <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+        Webhooks &amp; integrations
+      </h2>
+      <ul class="mt-6 space-y-4">
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-slate-900">
+              Outbound webhooks are HMAC-SHA256 signed
+            </p>
+            <p class="mt-1 text-sm text-slate-600">
+              Every webhook delivery carries
+              <code class="font-mono">X-Driftstack-Signature</code>
+              with timestamp + body HMAC. Customers verify via the
+              SDK helper; replay attacks rejected via timestamp
+              tolerance window.
+            </p>
+            <p class="mt-1 text-xs font-mono text-slate-500">
+              apps/server/src/lib/webhook-signing.ts
+            </p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-slate-900">
+              Inbound webhooks (Stripe, NowPayments) signature-verified
+              before any state mutation
+            </p>
+            <p class="mt-1 text-sm text-slate-600">
+              Stripe: V-080 timestamp+sha256 HMAC. NowPayments: V-487
+              HMAC-SHA512 on canonical-keyed JSON. Shared raw-body
+              parser ensures the bytes the signature was computed over
+              are the bytes the verifier sees.
+            </p>
+            <p class="mt-1 text-xs font-mono text-slate-500">
+              apps/server/src/lib/stripe-signing.ts ·
+              apps/server/src/lib/nowpayments-signing.ts
+            </p>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-5xl px-6 py-16">
+      <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+        Data residency &amp; retention
+      </h2>
+      <ul class="mt-6 space-y-4">
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-slate-900">EU-only data plane</p>
+            <p class="mt-1 text-sm text-slate-600">
+              Compute (Hetzner Nuremberg), database (Neon Frankfurt),
+              object storage (Cloudflare R2 EU jurisdiction). Full
+              sub-processor list at
+              <a href="/trust/sub-processors" class="text-oxblood-700 underline"
+                >/trust/sub-processors</a
+              >.
+            </p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-slate-900">Customer-configurable capture retention</p>
+            <p class="mt-1 text-sm text-slate-600">
+              Default 30 days for screenshots / DOM, 90 days for
+              recordings. Customer can lower the retention per-account
+              from the dashboard; cannot raise it past contractual
+              maxima.
+            </p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-slate-900">Account deletion: 30-day grace, then hard delete</p>
+            <p class="mt-1 text-sm text-slate-600">
+              Cancellation triggers soft-delete with 30 days of
+              recovery. After that: hard delete of profile data,
+              sessions, captures. Per our DPA.
+            </p>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-5xl px-6 py-16">
+      <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+        Observability &amp; incident response
+      </h2>
+      <ul class="mt-6 space-y-4">
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-slate-900">
+              Public incident history + status page
+            </p>
+            <p class="mt-1 text-sm text-slate-600">
+              Customer-impacting outages are posted publicly within
+              the incident-response SLA window. Live status at
+              <a href="https://status.driftstack.dev" class="text-oxblood-700 underline">status.driftstack.dev</a>;
+              historical archive at
+              <a href="/trust/incidents" class="text-oxblood-700 underline">/trust/incidents</a>.
+            </p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-slate-900">
+              Vulnerability disclosure: 2-day ack, 5-day triage
+            </p>
+            <p class="mt-1 text-sm text-slate-600">
+              Safe-harbour for good-faith research. Coordinated
+              disclosure window: 90 days, extendable on agreement.
+              Full policy at
+              <a href="/trust/compliance" class="text-oxblood-700 underline"
+                >/trust/compliance</a
+              >.
+            </p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-slate-900">
+              Chaos engineering rehearsal harness
+            </p>
+            <p class="mt-1 text-sm text-slate-600">
+              Sub-processor outages, DB failover, Redis-down,
+              webhook-signature failures — all covered by scripted
+              drills in <code class="font-mono">scripts/chaos/</code>.
+              Drills run dry-run by default; execute mode requires
+              explicit operator opt-in.
+            </p>
+            <p class="mt-1 text-xs font-mono text-slate-500">
+              scripts/chaos/ · docs/internal/v547-chaos-engineering-scenarios.md
+            </p>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-5xl px-6 py-16">
+      <div class="flex flex-col items-start gap-6 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+            Still need a deeper look?
+          </h2>
+          <p class="mt-3 max-w-prose text-slate-600">
+            The
+            <a href="/security" class="text-oxblood-700 underline">architecture deep-dive at /security</a>
+            walks the five-pillar surface in detail. For pen-test
+            evidence or compliance certifications, see
+            <a href="/trust/compliance" class="text-oxblood-700 underline"
+              >/trust/compliance</a
+            >. Anything else, just email.
+          </p>
+        </div>
+        <a href="mailto:security@driftstack.dev" class="btn-primary">Email security</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

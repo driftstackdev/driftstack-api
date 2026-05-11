@@ -53,6 +53,7 @@ import { createEmailService } from '../../../src/services/email.js';
 import { BillingService } from '../../../src/services/billing.js';
 import { DrizzleBillingRepo } from '../../../src/db/billing-repo.js';
 import { InMemoryBillingProvider } from '../../integration/_helpers/in-memory-billing.js';
+import { InMemoryOAuthStore } from '../../../src/services/oauth.js';
 import {
   ValidationHarnessService,
   type ValidationHarnessRecaptureBridge,
@@ -270,6 +271,7 @@ export async function startTestServer(): Promise<TestServer> {
     accountLifecycleService,
     scheduledJobsService,
     billingService,
+    oauthStore: new InMemoryOAuthStore(),
     rateLimitStore,
     permissiveCors: true,
   });

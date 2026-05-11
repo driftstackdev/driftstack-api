@@ -76,6 +76,8 @@ import { registerAuthRoutes } from '../routes/auth.js';
 import { registerAuthCliRoutes } from '../routes/auth-cli.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerNowpaymentsWebhookRoutes } from '../routes/webhooks-nowpayments.js';
+import { registerOAuthRoutes } from '../routes/oauth.js';
+import { OAuthService, type OAuthStore } from '../services/oauth.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
 import { registerProfileSnapshotsRoutes } from '../routes/profile-snapshots.js';
 import { registerBillingRoutes } from '../routes/billing.js';
@@ -189,6 +191,13 @@ export interface AppDeps {
    * lands, this stays undefined and the route is not registered.
    */
   nowpaymentsIpnSecret?: string;
+  /**
+   * V-667.B — OAuth store. When provided, /v1/oauth/* + /v1/admin/oauth/*
+   * routes register. When omitted, OAuth is not exposed (pre-launch
+   * posture). Tests pass `new InMemoryOAuthStore()`; production wires
+   * a Drizzle-backed implementation in V-667.C.
+   */
+  oauthStore?: OAuthStore;
   /** V-081: profile CRUD service. Optional during scaffolding window. */
   profilesService?: ProfilesService;
   /**
@@ -421,6 +430,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerNowpaymentsWebhookRoutes(app, {
       ipnSecret: deps.nowpaymentsIpnSecret,
       logger: deps.logger,
+    });
+  }
+  if (deps.oauthStore !== undefined) {
+    registerOAuthRoutes(app, {
+      service: new OAuthService(deps.oauthStore),
     });
   }
   if (deps.profilesService !== undefined) {
