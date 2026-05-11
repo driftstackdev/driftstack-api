@@ -3,6 +3,7 @@
 //   GET  /v1/admin/crypto-orders?account_id=acc_X&limit=N
 //   GET  /v1/admin/crypto-orders/stats                (V-666.N)
 //   GET  /v1/admin/crypto-orders/daily?days=N         (V-666.O)
+//   GET  /v1/admin/crypto-orders.csv                  (V-666.V)
 //   GET  /v1/admin/crypto-orders/:order_id
 //   POST /v1/admin/crypto-orders/:order_id/apply-ipn  (V-666.F)
 //   POST /v1/admin/crypto-orders/sweep-expired        (V-666.L)
@@ -14,6 +15,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { buildCsv } from '../lib/csv.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import type { CryptoOrder, CryptoOrdersService } from '../services/crypto-orders.js';
 
@@ -56,6 +58,15 @@ const SweepBody = z.object({
 // warehouse, not the live in-memory repo.
 const DailyQuery = z.object({
   days: z.string().regex(/^\d+$/).optional(),
+});
+
+// V-666.V — CSV export query. Same shape as ListQuery but with a
+// higher limit ceiling (1000) since CSV is the export path.
+const CsvQuery = z.object({
+  account_id: z.string().min(1).optional(),
+  limit: z.string().regex(/^\d+$/).optional(),
+  status: z.enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled']).optional(),
+  search: z.string().min(1).max(200).optional(),
 });
 
 function toPublic(order: CryptoOrder): Record<string, unknown> {
@@ -113,6 +124,80 @@ export function registerAdminCryptoOrdersRoutes(
         ...(query.search !== undefined ? { search: query.search } : {}),
       });
       return reply.send({ orders: orders.map(toPublic) });
+    },
+  );
+
+  // V-666.V — admin CSV export. Same filter set as the JSON list
+  // route. Max limit raised to 1000 to match a typical export window;
+  // for larger datasets the operator paginates by account_id /
+  // date-bucket and concatenates. Returns text/csv with a Content-
+  // Disposition attachment so a browser GET triggers a download.
+  app.get<{
+    Querystring: {
+      account_id?: string;
+      limit?: string;
+      status?: string;
+      search?: string;
+    };
+  }>(
+    '/v1/admin/crypto-orders.csv',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    async (
+      req: FastifyRequest<{
+        Querystring: {
+          account_id?: string;
+          limit?: string;
+          status?: string;
+          search?: string;
+        };
+      }>,
+      reply,
+    ) => {
+      const query = parseOrThrow(CsvQuery, req.query);
+      let limit = 1000;
+      if (query.limit !== undefined) {
+        const n = Number.parseInt(query.limit, 10);
+        if (!Number.isInteger(n) || n < 1 || n > 1000) {
+          throw new BadRequestError('limit must be an integer between 1 and 1000.');
+        }
+        limit = n;
+      }
+      const orders = await deps.service.listForAdmin({
+        ...(query.account_id !== undefined ? { accountId: query.account_id } : {}),
+        limit,
+        ...(query.status !== undefined ? { status: query.status } : {}),
+        ...(query.search !== undefined ? { search: query.search } : {}),
+      });
+      const csv = buildCsv({
+        header: [
+          'order_id',
+          'account_id',
+          'product',
+          'price_cents',
+          'price_currency',
+          'status',
+          'payment_id',
+          'customer_note',
+          'created_at',
+          'updated_at',
+        ],
+        rows: orders.map((o) => [
+          o.order_id,
+          o.account_id,
+          o.product,
+          o.price_cents,
+          o.price_currency,
+          o.status,
+          o.payment_id,
+          o.customer_note,
+          new Date(o.created_at).toISOString(),
+          new Date(o.updated_at).toISOString(),
+        ]),
+      });
+      return reply
+        .type('text/csv; charset=utf-8')
+        .header('content-disposition', 'attachment; filename="crypto-orders.csv"')
+        .send(csv);
     },
   );
 

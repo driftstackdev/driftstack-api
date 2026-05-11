@@ -1,0 +1,193 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-707 — overview of the end-to-end crypto-payments flow at
+// Driftstack: how a customer goes from picking a tier to a paid
+// invoice + receipt, what the system does in between, and where the
+// support seams are. Companion to /docs/billing-faq (general billing)
+// and /pricing/crypto (the pricing-page CTA).
+---
+
+<BaseLayout title="Crypto payments — how it works — Driftstack" description="Step-by-step walkthrough of paying for Driftstack with crypto: tier pick → NowPayments → confirmations → receipt.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Crypto payments — how it works</h1>
+
+    <p class="lead">
+      Driftstack accepts crypto for every paid tier via
+      <a href="https://nowpayments.io">NowPayments</a>. This page
+      walks through the full lifecycle of a crypto order so you know
+      what to expect, what state your order is in at each step, and
+      where to turn if something looks stuck.
+    </p>
+
+    <h2>Supported coins</h2>
+    <p>
+      NowPayments converts your incoming payment to a stable
+      settlement currency on our side. From your end, the supported
+      coins for the customer-facing checkout are:
+    </p>
+    <ul>
+      <li>Bitcoin (BTC) — main-net only</li>
+      <li>Ethereum (ETH) — main-net only</li>
+      <li>USDC / USDT — ERC-20, TRC-20, and BEP-20 networks</li>
+      <li>Litecoin (LTC), Bitcoin Cash (BCH), Dogecoin (DOGE), Polygon (MATIC)</li>
+    </ul>
+    <p>
+      The full live list is available in the checkout dropdown; the
+      enumeration there is the source of truth.
+    </p>
+
+    <h2>The order lifecycle</h2>
+    <p>
+      Every crypto order moves through this state machine. The same
+      states surface in the <strong>Billing → Crypto orders</strong>
+      view in the dashboard.
+    </p>
+    <table>
+      <thead>
+        <tr><th>State</th><th>What it means</th><th>What you can do</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>pending</code></td>
+          <td>Order minted. We're waiting to see any payment activity on-chain.</td>
+          <td>Pay the address, or cancel the order if you've changed your mind.</td>
+        </tr>
+        <tr>
+          <td><code>confirming</code></td>
+          <td>Payment seen on the network. Awaiting block confirmations.</td>
+          <td>Wait. Cancellation now requires support so we can reconcile your funds.</td>
+        </tr>
+        <tr>
+          <td><code>partial</code></td>
+          <td>An on-chain payment arrived but the amount is below the invoice. Common when the exchange rate moved between quote + payment.</td>
+          <td>Contact support — we can top-up-invoice or refund.</td>
+        </tr>
+        <tr>
+          <td><code>paid</code></td>
+          <td>All confirmations received. Your tier is upgraded.</td>
+          <td>Download the receipt (JSON / text / PDF formats — see below).</td>
+        </tr>
+        <tr>
+          <td><code>failed</code></td>
+          <td>Payment timed out, was refunded by NowPayments, or otherwise won't settle.</td>
+          <td>Open a fresh order from the pricing page. Contact support if funds left your wallet.</td>
+        </tr>
+        <tr>
+          <td><code>cancelled</code></td>
+          <td>You cancelled before any on-chain activity. Terminal.</td>
+          <td>Open a fresh order whenever you're ready.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Step-by-step</h2>
+
+    <h3>1. Pick a tier</h3>
+    <p>
+      Either from the <a href="/pricing">/pricing</a> page or from the
+      dashboard's billing view. Click "Pay with crypto" instead of
+      the Stripe Checkout button. We mint an order in
+      <code>pending</code> state immediately.
+    </p>
+
+    <h3>2. Pay the address</h3>
+    <p>
+      You'll be shown a deposit address + an exact amount in the coin
+      you picked. The address is single-use — only send the exact
+      amount, and only on the displayed network (sending USDC-ERC20
+      to a USDC-TRC20 address loses funds). The dashboard's order
+      view polls every five seconds so you'll see the transition to
+      <code>confirming</code> within seconds of the network seeing
+      your transaction.
+    </p>
+
+    <h3>3. Wait for confirmations</h3>
+    <p>
+      Required confirmations vary by coin: Bitcoin needs 2 blocks
+      (about 20 minutes), Ethereum needs 12 blocks (about 3 minutes),
+      USDC / USDT on Tron is a few seconds. The order stays in
+      <code>confirming</code> until the threshold is reached.
+    </p>
+
+    <h3>4. Order moves to paid</h3>
+    <p>
+      Your tier upgrade is applied the moment the order transitions
+      to <code>paid</code>. We also fire two side effects:
+    </p>
+    <ul>
+      <li>The <code>crypto.order.paid</code> webhook event (if you
+        have webhooks configured) so your systems know the upgrade is live.</li>
+      <li>A receipt email to the account address.</li>
+    </ul>
+
+    <h3>5. Download a receipt</h3>
+    <p>
+      Three formats are available for every paid order via the API:
+    </p>
+    <pre><code>{`# JSON envelope — programmatic consumers
+GET /v1/billing/crypto-orders/:id/receipt
+
+# Plain-text — cron jobs / curl pipelines
+GET /v1/billing/crypto-orders/:id/receipt.txt
+
+# PDF — for accounting / archival
+GET /v1/billing/crypto-orders/:id/receipt.pdf`}</code></pre>
+
+    <h2>If something looks stuck</h2>
+    <p>
+      The most common "stuck" cases:
+    </p>
+    <ul>
+      <li><strong>You see a pending order but nothing on-chain
+        yet.</strong> Confirm the transaction broadcast went out
+        from your wallet. Network mempool latency can be a few minutes
+        on busy chains.</li>
+      <li><strong>The block explorer shows your payment but the
+        order is still <code>pending</code>.</strong> NowPayments is
+        waiting for the confirmation threshold. Wait the documented
+        block count.</li>
+      <li><strong><code>partial</code> state.</strong> Open a support
+        ticket; we can manually top-up or refund.</li>
+      <li><strong>Stuck more than 24 hours.</strong> The order will
+        auto-transition to <code>failed</code>; open a new order or
+        contact support for reconciliation.</li>
+    </ul>
+
+    <h2>Refunds</h2>
+    <p>
+      Crypto refunds are operationally heavier than card refunds
+      because we need a return address on the same network and we
+      eat the on-chain fees. We honour refund requests within 7 days
+      of payment for any reason, with the customer covering the
+      network fee on the return transaction. Email
+      <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>
+      with your order id + return address.
+    </p>
+
+    <h2>Tax + invoicing</h2>
+    <p>
+      The PDF receipt is the canonical artefact for your accountant.
+      For VAT-registered EU customers we issue a separate VAT invoice
+      on request — include your VAT id when you contact billing@.
+    </p>
+
+    <h2>Related docs</h2>
+    <ul>
+      <li><a href="/pricing">Pricing</a> — tier comparison.</li>
+      <li><a href="/docs/billing-faq">Billing FAQ</a> — proration,
+        trial → paid, card-vs-crypto.</li>
+      <li><a href="/docs/webhooks">Webhooks</a> — listen for
+        <code>crypto.order.paid</code>.</li>
+      <li><a href="/docs/api-quickstart">API quickstart</a> — get
+        an API key once your order is paid.</li>
+    </ul>
+
+    <h2>Need help?</h2>
+    <p>
+      <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>.
+      For payment-status questions, include the order_id we minted at
+      checkout — that's what we look up first.
+    </p>
+  </main>
+</BaseLayout>

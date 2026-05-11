@@ -1,5 +1,6 @@
 // V-666.D — integration tests for the admin crypto-orders routes.
 // V-666.T — extended with status + search query-param coverage.
+// V-666.V — extended with CSV export coverage.
 //
 //   GET /v1/admin/crypto-orders
 //   GET /v1/admin/crypto-orders/:order_id
@@ -241,6 +242,97 @@ describe('V-666.T GET /v1/admin/crypto-orders — status + search filters', () =
     expect(res.statusCode).toBe(200);
     const body = res.json<AdminOrdersListResponse>();
     expect(body.orders.map((o) => o.order_id)).toEqual(['ord_noted']);
+  });
+});
+
+describe('V-666.V GET /v1/admin/crypto-orders.csv', () => {
+  it('403 for a customer key without internal-admin scope', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/crypto-orders.csv',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('200 text/csv with header row and one row per order, newest-first', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    await seedOrders(fx, [
+      {
+        order_id: 'ord_csv_a',
+        account_id: fx.accountId,
+        product: 'solo_manual',
+        createdOffsetMs: -2000,
+      },
+      {
+        order_id: 'ord_csv_b',
+        account_id: fx.accountId,
+        product: 'team_growth',
+        createdOffsetMs: -1000,
+        customer_note: 'note,with,commas',
+      },
+    ]);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/crypto-orders.csv',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.headers['content-disposition']).toContain('attachment');
+    expect(res.headers['content-disposition']).toContain('crypto-orders.csv');
+    const lines = res.body.split('\r\n');
+    expect(lines[0]).toBe(
+      'order_id,account_id,product,price_cents,price_currency,status,payment_id,customer_note,created_at,updated_at',
+    );
+    expect(lines[1]?.startsWith('ord_csv_b,')).toBe(true);
+    expect(lines[2]?.startsWith('ord_csv_a,')).toBe(true);
+    // The comma-laden customer_note got quoted properly.
+    expect(lines[1]).toContain('"note,with,commas"');
+  });
+
+  it('applies status filter (V-666.T compatibility)', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    await seedOrders(fx, [
+      {
+        order_id: 'ord_csv_paid',
+        account_id: fx.accountId,
+        product: 'solo_manual',
+        status: 'paid',
+      },
+      {
+        order_id: 'ord_csv_pending',
+        account_id: fx.accountId,
+        product: 'solo_manual',
+        status: 'pending',
+      },
+    ]);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/crypto-orders.csv?status=paid',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const lines = res.body.split('\r\n').filter((l) => l.length > 0);
+    expect(lines).toHaveLength(2); // header + 1 row
+    expect(lines[1]?.startsWith('ord_csv_paid,')).toBe(true);
+  });
+
+  it('400 on out-of-range limit (raised ceiling 1000)', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/crypto-orders.csv?limit=2000',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(400);
   });
 });
 
