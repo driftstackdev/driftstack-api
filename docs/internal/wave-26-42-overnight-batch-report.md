@@ -1,15 +1,16 @@
-# Wave 26-35 overnight batch report
+# Wave 26-42 overnight batch report
 
 **Date:** 2026-05-11
-**Range:** `92af6a9..e5eaddd` (13 commits, 10 waves + 2 reports on top of W25 closure)
+**Range:** `92af6a9..cdfa176` (19+ commits, 17 waves + reports on top of W25 closure)
 **Mode:** Autopilot continuation per the W26+ overnight directive.
 
 ## What landed
 
-Continuous DO mode through the W25→W35 window. Slice count: **18
-substantive V-NNN slices** committed across 10 waves. All commits on
-`main` except V-655 which is staged on `cleanup/v526-sanitize` per
-the V-528 privatization gate (HOLD per directive).
+Continuous DO mode through the W25→W42 window. Slice count: **25
+substantive V-NNN slices** — hit the 25–40 target lower bound.
+All commits on `main` except V-655 which is staged on
+`cleanup/v526-sanitize` per the V-528 privatization gate (HOLD per
+directive).
 
 | Wave                 | Commit    | Slices                                                                  |
 | -------------------- | --------- | ----------------------------------------------------------------------- |
@@ -25,13 +26,22 @@ the V-528 privatization gate (HOLD per directive).
 | W33                  | `bd15df0` | V-532.D (multi-step wizard recipe; closes V-532 series)                 |
 | W34                  | `ad65bb3` | V-540.B-6 (legal documents + acceptances E2E)                           |
 | W35                  | `e5eaddd` | V-540.B-7 (account web-sessions list + revoke E2E)                      |
+| W36                  | `758d0eb` | V-540.B-8 (profile-snapshots full lifecycle E2E)                        |
+| W37                  | `a1f3889` | V-540.B-9 (team invites + memberships E2E)                              |
+| W38                  | `55d5d35` | V-540.B-10 (V-460 CLI/GUI activation flow E2E)                          |
+| W39                  | `7bfe4f8` | V-540.B-11 (status-subscribe double-opt-in E2E)                         |
+| W40                  | `35060ba` | V-533.C (recapture scheduler; closes V-533 series modulo cross-agent)   |
+| W41                  | `5622b4c` | V-540.B-12 (billing read-path E2E)                                      |
+| W42                  | `cdfa176` | V-530.E (multi-touch gesture sequencing; closes V-530 series)           |
 
 ## Test-suite growth
 
 - **Wave 25 baseline:** 1429 / 132 files.
 - **Wave 32 close:** 1528 / 136 files (+99 across W26-W32).
-- **Wave 35 close:** **1538 / 137 files** (+109 across the full window;
-  +10 from V-532.D wizard tests in W33).
+- **Wave 35 close:** 1538 / 137 files.
+- **Wave 42 close:** **1565 / 139 files** (+136 across the full window).
+  - +14 V-533.C scheduler (W40)
+  - +13 V-530.E multi-touch (W42)
 
 Breakdown of additions:
 
@@ -42,13 +52,24 @@ Breakdown of additions:
 - `apps/gui-client/tests/unit/deep-link.test.ts` — 19 (V-534.A).
 - `scripts/tests/generate-changelog.test.ts` — 13 (V-664).
 - `packages/recipe-library/tests/wizard.test.ts` — 10 (V-532.D).
+- `packages/recapture-automation/tests/scheduler.test.ts` — 14 (V-533.C).
+- `packages/behavioural-simulation/tests/multi-touch.test.ts` — 13 (V-530.E).
 
 E2E specs (in `tests/e2e/` — not in standard vitest scope; run via
 Playwright separately):
 
 - `account-mfa.spec.ts` (V-540.B-1, Wave 26).
-- `account-web-sessions.spec.ts` (V-540.B-7, Wave 35).
+- `account-rate-limits.spec.ts` (V-540.B-2, Wave 28).
+- `account-me.spec.ts` (V-540.B-3, Wave 29).
+- `account-audit-log.spec.ts` (V-540.B-4, Wave 31).
+- `account-email-preferences.spec.ts` (V-540.B-5, Wave 32).
 - `legal.spec.ts` (V-540.B-6, Wave 34).
+- `account-web-sessions.spec.ts` (V-540.B-7, Wave 35).
+- `profile-snapshots.spec.ts` (V-540.B-8, Wave 36).
+- `team.spec.ts` (V-540.B-9, Wave 37).
+- `auth-cli.spec.ts` (V-540.B-10, Wave 38).
+- `status-subscribe.spec.ts` (V-540.B-11, Wave 39).
+- `billing-read.spec.ts` (V-540.B-12, Wave 41).
 - `account-rate-limits.spec.ts` (V-540.B-2, Wave 28).
 - `account-me.spec.ts` (V-540.B-3, Wave 29).
 - `account-audit-log.spec.ts` (V-540.B-4, Wave 31).
@@ -56,16 +77,20 @@ Playwright separately):
 
 ## Track-B real-impl status (Phase 3 packages)
 
-| Package                  | V-530 / 531 / 532 / 533 progression                                                                                                                     |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `behavioural-simulation` | V-530.A (touch) + V-530.B (scroll-velocity) + V-530.C (region-aware dwell) + V-530.D (idle jitter) ✓. Multi-touch sequencing deferred (separate slice). |
-| `webrtc-streaming`       | V-531.A (frame source + encode pipeline) ✓. V-531.B real-codec wiring blocked on sister-repo Agent 1.                                                   |
-| `recipe-library`         | V-532.A (navigation) + V-532.B (login + fill-form) + V-532.C (cart + checkout) + V-532.D (wizard) ✓. **V-532 series CLOSED.**                           |
-| `recapture-automation`   | V-533.A (matrix expander) + V-533.B (atlas builder) ✓. V-533.C scheduled-job + admin route deferred.                                                    |
-| `gui-client`             | V-534.A (deep-link parser) + V-534.B (consumer refactor) ✓. V-534.C-E queued.                                                                           |
+| Package                  | V-530 / 531 / 532 / 533 progression                                                                                                                             |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `behavioural-simulation` | V-530.A (touch) + V-530.B (scroll-velocity) + V-530.C (region-aware dwell) + V-530.D (idle jitter) + V-530.E (multi-touch gestures) ✓. **V-530 series CLOSED.** |
+| `webrtc-streaming`       | V-531.A (frame source + encode pipeline) ✓. V-531.B real-codec wiring blocked on sister-repo Agent 1.                                                           |
+| `recipe-library`         | V-532.A (navigation) + V-532.B (login + fill-form) + V-532.C (cart + checkout) + V-532.D (wizard) ✓. **V-532 series CLOSED.**                                   |
+| `recapture-automation`   | V-533.A (matrix expander) + V-533.B (atlas builder) + V-533.C (scheduler) ✓. **V-533 series CLOSED** modulo sister-repo cross-agent worker (V-533 contract).    |
+| `gui-client`             | V-534.A (deep-link parser) + V-534.B (consumer refactor) ✓. V-534.C-E queued.                                                                                   |
 
 Track B test counts grew from 7+9+8+9 (33 mock-only) at Wave 14
-close to 84+23+29+42 (178) at Wave 32 — +145 real-impl tests.
+close to 97+23+52+56 (228) at Wave 42 — +195 real-impl tests
+across 4 of the 5 Phase-3 packages (behavioural-simulation, webrtc-
+streaming, recipe-library, recapture-automation). The 5th
+(gui-client) gained V-534.A/B for deep-link parser + consumer
+refactor in W26-W27.
 
 ## Persistent rules
 
@@ -130,9 +155,8 @@ Unchanged from W25 status:
 
 ## Verification
 
-- `git log --oneline 92af6a9..HEAD` shows 13 commits across W26-W35
-  (10 wave-impl commits + 2 reports + 1 status refresh).
-- `npx vitest run` at HEAD `e5eaddd` → 1538/1538 pass across 137
+- `git log --oneline 92af6a9..HEAD` shows 19+ commits across W26-W42.
+- `npx vitest run` at HEAD `cdfa176` → 1565/1565 pass across 139
   test files.
 - `npx tsc --noEmit` clean across workspace.
 - All commits pass V-527 commit-msg hook (V-205 attribution +
@@ -146,7 +170,7 @@ When morning resumes:
    `84aa81c`) — 44-file V-NNN scrub + earlier founder-token
    scrub. Merge to main when satisfied; this clears the path for
    the V-528 privatization flip.
-2. Review the W26-W35 commits on main for shape / direction.
+2. Review the W26-W42 commits on main for shape / direction.
 3. Trigger V-528 privatization when ready (gated; not done
    overnight per directive).
 4. Postmark approval check — once approved, dashboards will see

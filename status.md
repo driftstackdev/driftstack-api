@@ -1,35 +1,37 @@
 # Driftstack API — current status
 
 **Last updated:** 2026-05-11
-**Most recent wave:** Wave 35 (V-540.B-7 web-sessions E2E)
+**Most recent wave:** Wave 42 (V-530.E multi-touch gestures; V-530 series CLOSED)
 **Mode:** Autopilot active. Waves 1-25 closed; Waves 26-34 landed across
 the overnight window per the W26+ directive. Team morning review point:
-`docs/internal/wave-26-35-overnight-batch-report.md` (covers W26-W35
-in full).
+`docs/internal/wave-26-42-overnight-batch-report.md` (covers W26-W42
+in full — 25 substantive V-NNN slices, target hit).
 
-## W26-W34 — overnight rollup
+## W26-W42 — overnight rollup
 
-17 substantive V-NNN slices on `main` across 9 waves on top of W25 close
-(`92af6a9..ad65bb3`). V-655 (V-NNN customer-surface scrub of 44 files)
-is staged on `cleanup/v526-sanitize` per the V-528 privatization HOLD.
+**25 substantive V-NNN slices** on `main` across 17 waves on top of
+W25 close (`92af6a9..cdfa176`) — hit the 25–40 target lower bound.
+V-655 (V-NNN customer-surface scrub of 44 files) is staged on
+`cleanup/v526-sanitize` per the V-528 privatization HOLD.
 
-- **W26** — V-654 (agent-label re-swap) + V-534.A (gui-client deep-link
-  parser) + V-540.B-1 (account-mfa E2E) + V-655 (cleanup branch).
-- **W27** — V-534.B (deep-link parser consumer refactor) + V-532.C
-  (cart + checkout recipes).
-- **W28** — V-530.D (idle-period jitter, closes V-530 series modulo
-  multi-touch) + V-540.B-2 (account-rate-limits E2E).
-- **W29** — V-533.B (atlas builder) + V-540.B-3 (account-me E2E).
-- **W30** — V-665 (Postmark email-failure categorisation +
-  pending-approval logging).
-- **W31** — V-540.B-4 (audit-log E2E).
-- **W32** — V-540.B-5 (email-preferences E2E) + V-664 (changelog
-  script regression tests).
-- **W33** — V-532.D (multi-step wizard recipe; closes V-532 series).
-- **W34** — V-540.B-6 (legal documents + acceptances E2E).
+Phase-3 series CLOSED this window:
 
-Tests: **1528/1528 green across 136 test files** at HEAD `ad65bb3`
-(was 1429 / 132 at W25 close; +99 across the window).
+- **V-530** (behavioural-simulation) — A + B + C + D + E.
+- **V-532** (recipe-library) — A + B + C + D.
+- **V-533** (recapture-automation) — A + B + C (modulo sister-repo
+  fork-side worker per V-533 contract).
+
+V-540.B (E2E coverage) shipped 12 specs covering customer-facing
+account/\*, profile-snapshots, team, auth-cli, status-subscribe,
+legal, billing-read.
+
+Other slices: V-534.A/B (gui-client deep-link parser + consumer
+refactor), V-654 (agent-label re-swap), V-655 (V-NNN scrub on
+cleanup branch), V-664 (changelog script tests), V-665 (Postmark
+email-failure categorisation).
+
+Tests: **1565/1565 green across 139 test files** at HEAD `cdfa176`
+(was 1429 / 132 at W25 close; +136 across the window).
 
 ## Wave 20 — what landed
 
