@@ -513,7 +513,26 @@ export function ApiKeyStep({
   );
 }
 
-function ProfileStep({
+// V-669 — archetype picker in the first-run wizard. Aligns with the
+// existing ARCHETYPES catalogue elsewhere in the GUI; selecting one
+// here pre-seeds the profile's archetype field.
+const PROFILE_ARCHETYPE_OPTIONS = [
+  {
+    value: 'iphone16pro_ios18_7_safari26_4',
+    label: 'iPhone 16 Pro · iOS 18.7 · Safari 26.4',
+    description:
+      'Most popular — matches the default fleet image. Pick this unless you know you need something else.',
+  },
+  {
+    value: 'iphone15pro_ios17_5_safari17_5',
+    label: 'iPhone 15 Pro · iOS 17.5 · Safari 17.5',
+    description: 'Legacy archetype — match a production user base still on the prior generation.',
+  },
+] as const;
+
+type ProfileArchetype = (typeof PROFILE_ARCHETYPE_OPTIONS)[number]['value'];
+
+export function ProfileStep({
   onSkip,
   onCreated,
 }: {
@@ -522,6 +541,7 @@ function ProfileStep({
 }): JSX.Element {
   const { client } = useSettings();
   const [name, setName] = useState('');
+  const [archetype, setArchetype] = useState<ProfileArchetype>('iphone16pro_ios18_7_safari26_4');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -535,10 +555,7 @@ function ProfileStep({
     setSubmitting(true);
     setError(null);
     try {
-      await client.profiles.create({
-        name: trimmed,
-        archetype: 'iphone16pro_ios18_7_safari26_4',
-      });
+      await client.profiles.create({ name: trimmed, archetype });
       onCreated();
     } catch (err) {
       setError(friendlyError(err));
@@ -568,12 +585,41 @@ function ProfileStep({
             disabled={submitting}
             autoFocus
           />
-          <span className="text-2xs text-ink-muted">
-            Archetype defaults to iPhone 16 Pro / iOS 18.7 / Safari 26.4. More archetypes can be
-            added later from the Profiles view.
-          </span>
         </label>
       </div>
+
+      <fieldset className="mt-4">
+        <legend className="section-label">Archetype</legend>
+        <div className="mt-2 space-y-2">
+          {PROFILE_ARCHETYPE_OPTIONS.map((opt) => (
+            <label
+              key={opt.value}
+              className={`flex cursor-pointer items-start gap-3 rounded-md border p-3 transition ${
+                archetype === opt.value
+                  ? 'border-accent bg-accent-subtle'
+                  : 'border-surface-divider bg-surface-raised hover:border-surface-strong'
+              }`}
+            >
+              <input
+                type="radio"
+                name="profile-archetype"
+                value={opt.value}
+                checked={archetype === opt.value}
+                onChange={() => setArchetype(opt.value)}
+                disabled={submitting}
+                className="mt-0.5"
+              />
+              <span className="flex-1">
+                <span className="block text-sm font-medium text-ink-primary">{opt.label}</span>
+                <span className="mt-0.5 block text-xs text-ink-secondary">{opt.description}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <p className="mt-2 text-2xs text-ink-muted">
+          Additional archetypes can be added later from the Profiles view.
+        </p>
+      </fieldset>
 
       {error !== null && (
         <p className="mt-4 text-xs text-status-error" role="alert">

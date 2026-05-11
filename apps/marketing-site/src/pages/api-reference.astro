@@ -177,6 +177,243 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
     </div>
   </section>
 
+  <!-- V-662 — Common patterns: side-by-side cURL / TS / Python / Go
+       samples for the three most-used flows. Reduces the
+       "what does it actually look like to call this?" friction
+       that the route-list above doesn't answer on its own. -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Common patterns</p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+        Three flows, four languages.
+      </h2>
+      <p class="mt-3 max-w-prose text-slate-600">
+        Most integrations are built on the same three operations:
+        spin up a session, drive it, capture artifacts. Below: each
+        one in cURL, TypeScript, Python, and Go. Copy-paste straight
+        into a quickstart.
+      </p>
+
+      <!-- Create a session -->
+      <div class="mt-10">
+        <h3 class="text-xl font-semibold text-slate-900">1. Create a session</h3>
+        <p class="mt-2 max-w-prose text-sm text-slate-600">
+          The minimal "hello world" — provision an iPhone 16 Pro Safari
+          session, return its id. Default archetype if you don't pass one.
+        </p>
+        <div class="mt-5 grid gap-4 md:grid-cols-2">
+          <pre
+            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>
+curl -X POST https://api.driftstack.dev/v1/sessions \
+  -H "authorization: Bearer $DRIFTSTACK_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{"archetype":"iphone16pro_ios18_7_safari26_4"}'</code></pre>
+          <pre
+            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>
+import { Driftstack } from "@driftstack/sdk";
+const client = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
+const session = await client.sessions.create({
+  archetype: "iphone16pro_ios18_7_safari26_4",
+});
+console.log(session.id);</code></pre>
+          <pre
+            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>
+from driftstack import Driftstack
+client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
+session = client.sessions.create(archetype="iphone16pro_ios18_7_safari26_4")
+print(session.id)</code></pre>
+          <pre
+            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>
+client := driftstack.NewClient(driftstack.Config{
+    APIKey: os.Getenv("DRIFTSTACK_API_KEY"),
+})
+session, err := client.Sessions.Create(ctx, &driftstack.SessionCreateParams{
+    Archetype: "iphone16pro_ios18_7_safari26_4",
+})
+if err != nil { return err }
+fmt.Println(session.ID)</code></pre>
+        </div>
+      </div>
+
+      <!-- Drive the session -->
+      <div class="mt-12">
+        <h3 class="text-xl font-semibold text-slate-900">2. Drive the session</h3>
+        <p class="mt-2 max-w-prose text-sm text-slate-600">
+          Navigate, tap, wait. <code class="font-mono">interact</code>
+          handles taps, swipes, and key presses; <code class="font-mono">wait</code>
+          blocks until a DOM condition is met or a timeout fires.
+        </p>
+        <div class="mt-5 grid gap-4 md:grid-cols-2">
+          <pre
+            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>
+curl -X POST $URL/navigate \
+  -d '{"url":"https://example.com"}' ...
+curl -X POST $URL/interact \
+  -d '{"action":{"kind":"tap_at","x":50,"y":120}}' ...
+curl -X POST $URL/wait \
+  -d '{"condition":{"kind":"selector","selector":"main"}}' ...</code></pre>
+          <pre
+            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>
+await client.sessions.navigate(session.id, { url: "https://example.com" });
+await client.sessions.interact(session.id, {
+  action: { kind: "tap_at", x: 50, y: 120 },
+});
+await client.sessions.wait(session.id, {
+  condition: { kind: "selector", selector: "main" },
+  timeout_ms: 5000,
+});</code></pre>
+          <pre
+            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>
+client.sessions.navigate(session.id, url="https://example.com")
+client.sessions.interact(session.id, action={
+    "kind": "tap_at", "x": 50, "y": 120,
+})
+client.sessions.wait(session.id, condition={
+    "kind": "selector", "selector": "main",
+}, timeout_ms=5000)</code></pre>
+          <pre
+            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>
+_, err = client.Sessions.Navigate(ctx, session.ID, &driftstack.NavigateParams{
+    URL: "https://example.com",
+})
+_, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractParams{
+    Action: driftstack.TapAt{X: 50, Y: 120},
+})</code></pre>
+        </div>
+      </div>
+
+      <!-- Capture artifacts -->
+      <div class="mt-12">
+        <h3 class="text-xl font-semibold text-slate-900">3. Capture a screenshot</h3>
+        <p class="mt-2 max-w-prose text-sm text-slate-600">
+          <code class="font-mono">capture</code> takes one of four kinds:
+          <code class="font-mono">screenshot</code>, <code class="font-mono">dom</code>,
+          <code class="font-mono">pdf</code>, or <code class="font-mono">recording</code>.
+          The response carries a base64 <code class="font-mono">data</code> field
+          for the first three; recordings stream to R2 + return a
+          signed-URL handle.
+        </p>
+        <div class="mt-5 grid gap-4 md:grid-cols-2">
+          <pre
+            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>
+curl -X POST $URL/capture \
+  -d '{"kind":"screenshot"}' ...
+# response.data is base64 PNG</code></pre>
+          <pre
+            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>
+const shot = await client.sessions.capture(session.id, {
+  kind: "screenshot",
+});
+fs.writeFileSync("out.png", Buffer.from(shot.data, "base64"));</code></pre>
+          <pre
+            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>
+shot = client.sessions.capture(session.id, kind="screenshot")
+Path("out.png").write_bytes(base64.b64decode(shot.data))</code></pre>
+          <pre
+            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>
+shot, _ := client.Sessions.Capture(ctx, session.ID, &driftstack.CaptureParams{
+    Kind: "screenshot",
+})
+data, _ := base64.StdEncoding.DecodeString(shot.Data)
+os.WriteFile("out.png", data, 0644)</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- V-662 — Error taxonomy quick reference. The interactive Scalar
+       UI documents each shape, but customers evaluating the platform
+       often want one screen with "here's what can go wrong + how to
+       react" before they pick the SDK. -->
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Error reference</p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+        What can go wrong, and what to do about it.
+      </h2>
+      <p class="mt-3 max-w-prose text-slate-600">
+        Every error is RFC 7807
+        <code class="font-mono">application/problem+json</code> with a
+        stable <code class="font-mono">type</code> URI. SDK clients
+        translate these into typed error classes; the cURL caller
+        gets the JSON straight.
+      </p>
+      <div class="mt-8 overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-300 text-left">
+              <th class="py-2 pr-4 font-medium text-slate-900">Status</th>
+              <th class="py-2 pr-4 font-medium text-slate-900">Type URI</th>
+              <th class="py-2 pr-4 font-medium text-slate-900">When</th>
+              <th class="py-2 font-medium text-slate-900">SDK class</th>
+            </tr>
+          </thead>
+          <tbody class="font-mono text-xs">
+            <tr class="border-b border-slate-200">
+              <td class="py-2 pr-4">400</td>
+              <td class="py-2 pr-4">errors.driftstack.dev/validation-failed</td>
+              <td class="py-2 pr-4 font-sans">Zod schema mismatch on request body.</td>
+              <td class="py-2">ValidationError</td>
+            </tr>
+            <tr class="border-b border-slate-200">
+              <td class="py-2 pr-4">401</td>
+              <td class="py-2 pr-4">errors.driftstack.dev/unauthorized</td>
+              <td class="py-2 pr-4 font-sans">API key missing, malformed, or revoked.</td>
+              <td class="py-2">UnauthorizedError</td>
+            </tr>
+            <tr class="border-b border-slate-200">
+              <td class="py-2 pr-4">404</td>
+              <td class="py-2 pr-4">errors.driftstack.dev/not-found</td>
+              <td class="py-2 pr-4 font-sans">Resource id doesn't exist or isn't visible to this key.</td>
+              <td class="py-2">NotFoundError</td>
+            </tr>
+            <tr class="border-b border-slate-200">
+              <td class="py-2 pr-4">409</td>
+              <td class="py-2 pr-4">errors.driftstack.dev/conflict</td>
+              <td class="py-2 pr-4 font-sans">Resource state precludes the operation (e.g. trial pack already purchased).</td>
+              <td class="py-2">ConflictError</td>
+            </tr>
+            <tr class="border-b border-slate-200">
+              <td class="py-2 pr-4">410</td>
+              <td class="py-2 pr-4">errors.driftstack.dev/session-destroyed</td>
+              <td class="py-2 pr-4 font-sans">Session was destroyed; create a new one.</td>
+              <td class="py-2">SessionDestroyedError</td>
+            </tr>
+            <tr class="border-b border-slate-200">
+              <td class="py-2 pr-4">422</td>
+              <td class="py-2 pr-4">errors.driftstack.dev/tier-limit</td>
+              <td class="py-2 pr-4 font-sans">Account hit a tier cap (concurrent, profile count).</td>
+              <td class="py-2">TierLimitError</td>
+            </tr>
+            <tr class="border-b border-slate-200">
+              <td class="py-2 pr-4">429</td>
+              <td class="py-2 pr-4">errors.driftstack.dev/rate-limited</td>
+              <td class="py-2 pr-4 font-sans">Per-account rate limit; <code>retry-after</code> header carries seconds.</td>
+              <td class="py-2">RateLimitedError <em class="font-sans not-italic text-slate-500">(retryable)</em></td>
+            </tr>
+            <tr class="border-b border-slate-200">
+              <td class="py-2 pr-4">500</td>
+              <td class="py-2 pr-4">errors.driftstack.dev/internal</td>
+              <td class="py-2 pr-4 font-sans">Server-side fault. Logged + alerted.</td>
+              <td class="py-2">InternalError <em class="font-sans not-italic text-slate-500">(retryable)</em></td>
+            </tr>
+            <tr>
+              <td class="py-2 pr-4">503</td>
+              <td class="py-2 pr-4">errors.driftstack.dev/transport</td>
+              <td class="py-2 pr-4 font-sans">Sub-processor down; safe to retry with backoff.</td>
+              <td class="py-2">TransportError <em class="font-sans not-italic text-slate-500">(retryable)</em></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="mt-4 text-xs text-slate-500">
+        SDK consumers can use <code class="font-mono">isRetryable(err)</code>
+        (TypeScript) / equivalent predicates in Python + Go to filter
+        which errors to retry without re-implementing the mapping.
+      </p>
+    </div>
+  </section>
+
   <!-- Spec posture -->
   <section class="border-t border-slate-200 bg-slate-50">
     <div class="mx-auto max-w-6xl px-6 py-16">

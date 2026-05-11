@@ -50,6 +50,9 @@ import { DrizzleAccountLifecycleRepo } from '../../../src/db/account-lifecycle-r
 import { ScheduledJobsService } from '../../../src/services/scheduled-jobs.js';
 import { DrizzleScheduledJobsRepo } from '../../../src/db/scheduled-jobs-repo.js';
 import { createEmailService } from '../../../src/services/email.js';
+import { BillingService } from '../../../src/services/billing.js';
+import { DrizzleBillingRepo } from '../../../src/db/billing-repo.js';
+import { InMemoryBillingProvider } from '../../integration/_helpers/in-memory-billing.js';
 import {
   ValidationHarnessService,
   type ValidationHarnessRecaptureBridge,
@@ -63,6 +66,8 @@ export interface TestServer {
   client: ReturnType<typeof postgres>;
   redis: Redis;
   webhookWorker: WebhookDeliveryWorker;
+  /** V-540.B-15 — Stripe stub state for billing-write spec assertions. */
+  billingProvider: InMemoryBillingProvider;
   cleanup: () => Promise<void>;
   resetState: () => Promise<void>;
 }
@@ -222,6 +227,29 @@ export async function startTestServer(): Promise<TestServer> {
     legalService,
     accountAuditService,
   );
+
+  // V-540.B-15 — wire BillingService against the real Drizzle repo
+  // (reads/writes accounts.stripe_customer_id + trial_pack columns)
+  // and the in-memory provider stub. Real Stripe never fires in e2e;
+  // the stub gives deterministic checkout URLs + records calls for
+  // assertion.
+  const billingRepo = new DrizzleBillingRepo({ db: drizzle(client, { schema }) });
+  const billingProvider = new InMemoryBillingProvider();
+  const billingService = new BillingService(billingRepo, billingProvider, {
+    tierPrices: {
+      solo_manual: { monthly: 'price_solo_monthly', annual: 'price_solo_annual' },
+      team_manual: { monthly: 'price_team_monthly', annual: 'price_team_annual' },
+      agency_manual: { monthly: 'price_agency_monthly', annual: 'price_agency_annual' },
+      api_starter: { monthly: 'price_api_starter_monthly', annual: 'price_api_starter_annual' },
+      api_builder: { monthly: 'price_api_builder_monthly', annual: 'price_api_builder_annual' },
+      api_scale: { monthly: 'price_api_scale_monthly', annual: 'price_api_scale_annual' },
+    },
+    trialPackPriceId: 'price_trial_pack_one_time',
+    defaultSuccessUrl: 'http://localhost:5173/billing/success',
+    defaultCancelUrl: 'http://localhost:5173/billing/cancel',
+    portalReturnUrl: 'http://localhost:5173/billing',
+  });
+
   const app = await buildApp({
     logger,
     authRepo,
@@ -241,6 +269,7 @@ export async function startTestServer(): Promise<TestServer> {
     validationHarnessService,
     accountLifecycleService,
     scheduledJobsService,
+    billingService,
     rateLimitStore,
     permissiveCors: true,
   });
@@ -261,5 +290,5 @@ export async function startTestServer(): Promise<TestServer> {
     await client.end({ timeout: 5 });
   };
 
-  return { baseUrl, client, redis, webhookWorker, cleanup, resetState };
+  return { baseUrl, client, redis, webhookWorker, billingProvider, cleanup, resetState };
 }
