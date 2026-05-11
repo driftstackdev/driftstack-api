@@ -1,9 +1,14 @@
 // V-534.AM — admin order-detail drawer.
+// V-534.AN — adds inline action buttons (edit note, request/clear
+//            refund) so an admin can act without first scrolling
+//            back to the table row.
 //
 // Click a row in CryptoOrdersAdminView (V-534.AG) to open this drawer
 // with the full order envelope: account, status, customer note,
 // refund metadata, internal note, and timestamps. Pure presentational
-// — receives an order object + an onClose handler.
+// — receives an order object + optional action callbacks. When the
+// callbacks are omitted, the action buttons are not rendered (the
+// drawer remains useful in read-only contexts like ops dashboards).
 
 import { CryptoOrderStatusBadge } from './CryptoOrderStatusBadge';
 import { formatCents } from '../lib/crypto-format';
@@ -12,6 +17,12 @@ import type { AdminCryptoOrder } from '../lib/use-admin-crypto-orders-list';
 export interface CryptoOrderAdminDetailDrawerProps {
   order: AdminCryptoOrder;
   onClose: () => void;
+  /** Fires when admin clicks "Edit note". Optional — read-only when omitted. */
+  onEditNote?: (order: AdminCryptoOrder) => void;
+  /** Fires when admin clicks "Request refund" (paid orders only). */
+  onRequestRefund?: (order: AdminCryptoOrder) => void;
+  /** Fires when admin clicks "Clear refund" (orders with refund_requested_at set). */
+  onCancelRefund?: (order: AdminCryptoOrder) => void;
 }
 
 function formatIso(iso: string | null | undefined): string {
@@ -22,8 +33,11 @@ function formatIso(iso: string | null | undefined): string {
 export function CryptoOrderAdminDetailDrawer(
   props: CryptoOrderAdminDetailDrawerProps,
 ): JSX.Element {
-  const { order, onClose } = props;
+  const { order, onClose, onEditNote, onRequestRefund, onCancelRefund } = props;
   const refundOutstanding = order.refund_requested_at != null;
+  const isPaid = order.status === 'paid';
+  const hasAnyAction =
+    onEditNote !== undefined || onRequestRefund !== undefined || onCancelRefund !== undefined;
   return (
     <aside
       role="complementary"
@@ -104,6 +118,40 @@ export function CryptoOrderAdminDetailDrawer(
           <p className="mt-1 text-sm text-ink-secondary">No refund recorded.</p>
         )}
       </section>
+
+      {hasAnyAction && (
+        <section aria-label="Order actions" className="flex flex-wrap gap-2">
+          {onEditNote !== undefined && (
+            <button
+              type="button"
+              onClick={() => onEditNote(order)}
+              className="rounded border border-surface-divider px-3 py-1 text-sm font-medium hover:bg-surface-inset"
+            >
+              {order.internal_note != null && order.internal_note.length > 0
+                ? 'Edit note'
+                : 'Add note'}
+            </button>
+          )}
+          {onRequestRefund !== undefined && isPaid && !refundOutstanding && (
+            <button
+              type="button"
+              onClick={() => onRequestRefund(order)}
+              className="rounded border border-surface-divider px-3 py-1 text-sm font-medium hover:bg-surface-inset"
+            >
+              Request refund
+            </button>
+          )}
+          {onCancelRefund !== undefined && refundOutstanding && (
+            <button
+              type="button"
+              onClick={() => onCancelRefund(order)}
+              className="rounded border border-status-warning/40 px-3 py-1 text-sm font-medium text-status-warning hover:bg-status-warning/10"
+            >
+              Clear refund
+            </button>
+          )}
+        </section>
+      )}
     </aside>
   );
 }

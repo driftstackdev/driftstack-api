@@ -1,4 +1,5 @@
 // V-534.AM — unit tests for CryptoOrderAdminDetailDrawer.
+// V-534.AN — extended for inline action callbacks.
 
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
@@ -87,5 +88,96 @@ describe('V-534.AM CryptoOrderAdminDetailDrawer', () => {
   it('sets aria-label on the aside to the order id', () => {
     render(<CryptoOrderAdminDetailDrawer order={makeOrder()} onClose={vi.fn()} />);
     expect(screen.getByLabelText('Order detail for ord_abc')).toBeTruthy();
+  });
+});
+
+describe('V-534.AN CryptoOrderAdminDetailDrawer — inline actions', () => {
+  it('does NOT render any action button when callbacks are omitted', () => {
+    render(<CryptoOrderAdminDetailDrawer order={makeOrder()} onClose={vi.fn()} />);
+    // The only button present should be Close.
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]?.textContent).toBe('Close');
+  });
+
+  it('renders Edit/Add note when onEditNote is provided + fires the callback', () => {
+    const onEditNote = vi.fn();
+    render(
+      <CryptoOrderAdminDetailDrawer
+        order={makeOrder({ internal_note: null })}
+        onClose={vi.fn()}
+        onEditNote={onEditNote}
+      />,
+    );
+    const btn = screen.getByRole('button', { name: /Add note/i });
+    fireEvent.click(btn);
+    expect(onEditNote).toHaveBeenCalledTimes(1);
+    expect(onEditNote.mock.calls[0]?.[0]).toMatchObject({ order_id: 'ord_abc' });
+  });
+
+  it('label flips to "Edit note" when an internal_note already exists', () => {
+    render(
+      <CryptoOrderAdminDetailDrawer
+        order={makeOrder({ internal_note: 'existing context' })}
+        onClose={vi.fn()}
+        onEditNote={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /Edit note/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Add note/i })).toBeNull();
+  });
+
+  it('renders "Request refund" only for paid orders with no outstanding refund', () => {
+    const onRequestRefund = vi.fn();
+    const { rerender } = render(
+      <CryptoOrderAdminDetailDrawer
+        order={makeOrder({ status: 'pending' })}
+        onClose={vi.fn()}
+        onRequestRefund={onRequestRefund}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /Request refund/i })).toBeNull();
+    rerender(
+      <CryptoOrderAdminDetailDrawer
+        order={makeOrder({ status: 'paid' })}
+        onClose={vi.fn()}
+        onRequestRefund={onRequestRefund}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /Request refund/i })).toBeTruthy();
+  });
+
+  it('renders "Clear refund" only when refund_requested_at is set + fires the callback', () => {
+    const onCancelRefund = vi.fn();
+    render(
+      <CryptoOrderAdminDetailDrawer
+        order={makeOrder({
+          refund_requested_at: '2026-05-11T10:00:00.000Z',
+          refund_reason: 'duplicate',
+        })}
+        onClose={vi.fn()}
+        onCancelRefund={onCancelRefund}
+      />,
+    );
+    const btn = screen.getByRole('button', { name: 'Clear refund' });
+    fireEvent.click(btn);
+    expect(onCancelRefund).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides "Request refund" when a refund is already outstanding (even on paid orders)', () => {
+    render(
+      <CryptoOrderAdminDetailDrawer
+        order={makeOrder({
+          status: 'paid',
+          refund_requested_at: '2026-05-11T10:00:00.000Z',
+          refund_reason: 'r',
+        })}
+        onClose={vi.fn()}
+        onRequestRefund={vi.fn()}
+        onCancelRefund={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /Request refund/i })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Clear refund' })).toBeTruthy();
   });
 });

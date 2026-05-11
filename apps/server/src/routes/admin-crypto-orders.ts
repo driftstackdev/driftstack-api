@@ -3,6 +3,7 @@
 //   GET  /v1/admin/crypto-orders?account_id=acc_X&limit=N
 //   GET  /v1/admin/crypto-orders/stats                (V-666.N)
 //   GET  /v1/admin/crypto-orders/daily?days=N         (V-666.O)
+//   GET  /v1/admin/crypto-orders/pending-age           (V-666.AC)
 //   GET  /v1/admin/crypto-orders.csv                  (V-666.V)
 //   GET  /v1/admin/crypto-orders/:order_id
 //   POST /v1/admin/crypto-orders/:order_id/apply-ipn  (V-666.F)
@@ -256,6 +257,24 @@ export function registerAdminCryptoOrdersRoutes(
         refund_pending_cents: stats.refundPendingCents,
         truncated: stats.truncated,
         scanned: stats.scanned,
+      });
+    },
+  );
+
+  // V-666.AC — pending-orders age histogram. Buckets currently-
+  // pending orders by age (under 1h / 1-6h / 6-24h / over 24h) so
+  // ops can spot stale checkouts that should be swept or contacted.
+  app.get(
+    '/v1/admin/crypto-orders/pending-age',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    async (_req, reply) => {
+      const histo = await deps.service.getPendingAgeHistogram();
+      return reply.send({
+        buckets: histo.buckets,
+        pending_value_cents: histo.pendingValueCents,
+        total: histo.total,
+        truncated: histo.truncated,
+        scanned: histo.scanned,
       });
     },
   );

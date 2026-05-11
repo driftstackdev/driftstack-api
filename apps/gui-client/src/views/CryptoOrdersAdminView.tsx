@@ -334,7 +334,24 @@ export function CryptoOrdersAdminView(): JSX.Element {
       )}
 
       {detailOrder !== null && (
-        <CryptoOrderAdminDetailDrawer order={detailOrder} onClose={() => setDetailOrder(null)} />
+        <CryptoOrderAdminDetailDrawer
+          order={detailOrder}
+          onClose={() => setDetailOrder(null)}
+          onEditNote={(o) => {
+            setNoteTarget(o);
+            setNoteInput(o.internal_note ?? '');
+            setDetailOrder(null);
+          }}
+          onRequestRefund={(o) => {
+            setRefundTarget(o);
+            setReasonInput('');
+            setDetailOrder(null);
+          }}
+          onCancelRefund={(o) => {
+            void refund.cancel(o.order_id);
+            setDetailOrder(null);
+          }}
+        />
       )}
     </div>
   );

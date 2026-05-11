@@ -13,6 +13,7 @@
 // V-666.Y — appended tests for admin cancelRefundRequest.
 // V-666.AA — appended tests for admin setInternalNote.
 // V-666.AB — appended tests for getStatsForAdmin refund-pending metrics.
+// V-666.AC — appended tests for getPendingAgeHistogram.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -1717,5 +1718,138 @@ describe('V-666.AB getStatsForAdmin — refund-pending metrics', () => {
     const after = await svc.getStatsForAdmin();
     expect(after.refundPendingCount).toBe(1);
     expect(after.refundPendingCents).toEqual({ USD: 5000 });
+  });
+});
+
+describe('V-666.AC getPendingAgeHistogram', () => {
+  const NOW = 100_000_000_000;
+  const HOUR = 60 * 60 * 1_000;
+
+  async function seedAtAges(
+    ages: Array<{ id: string; ageMs: number; currency?: string }>,
+  ): Promise<CryptoOrdersService> {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = NOW;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
+    for (const { id, ageMs, currency } of ages) {
+      now = NOW - ageMs;
+      await svc.create({
+        order_id: id,
+        account_id: 'acc',
+        product: 'team_growth',
+        price_cents: 14900,
+        price_currency: currency ?? 'EUR',
+      });
+    }
+    now = NOW;
+    return svc;
+  }
+
+  it('returns all-zero buckets when no pending orders exist', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo, nowFn: () => NOW });
+    const histo = await svc.getPendingAgeHistogram();
+    expect(histo.total).toBe(0);
+    expect(histo.buckets).toEqual({
+      under_1h: 0,
+      h1_to_6h: 0,
+      h6_to_24h: 0,
+      over_24h: 0,
+    });
+    expect(histo.pendingValueCents).toEqual({});
+  });
+
+  it('buckets pending orders correctly by age', async () => {
+    const svc = await seedAtAges([
+      { id: 'fresh', ageMs: 30 * 60_000 }, // 30m → under_1h
+      { id: 'fresh2', ageMs: 45 * 60_000 }, // 45m → under_1h
+      { id: 'mid', ageMs: 3 * HOUR }, // 3h → h1_to_6h
+      { id: 'old', ageMs: 12 * HOUR }, // 12h → h6_to_24h
+      { id: 'stale', ageMs: 36 * HOUR }, // 36h → over_24h
+      { id: 'ancient', ageMs: 72 * HOUR }, // 72h → over_24h
+    ]);
+    const histo = await svc.getPendingAgeHistogram();
+    expect(histo.buckets).toEqual({
+      under_1h: 2,
+      h1_to_6h: 1,
+      h6_to_24h: 1,
+      over_24h: 2,
+    });
+    expect(histo.total).toBe(6);
+  });
+
+  it('only counts pending orders (ignores paid / failed / cancelled)', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = NOW;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
+    now = NOW - 30 * 60_000;
+    await svc.create({
+      order_id: 'p_pending',
+      account_id: 'acc',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    now = NOW - 30 * 60_000;
+    await svc.create({
+      order_id: 'p_paid',
+      account_id: 'acc',
+      product: 'x',
+      price_cents: 200,
+      price_currency: 'EUR',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'p_paid',
+      payment_id: 'np',
+      provider_status: 'finished',
+    });
+    now = NOW;
+    const histo = await svc.getPendingAgeHistogram();
+    expect(histo.total).toBe(1);
+    expect(histo.buckets.under_1h).toBe(1);
+    expect(histo.pendingValueCents).toEqual({ EUR: 100 });
+  });
+
+  it('aggregates pending value by currency', async () => {
+    const svc = await seedAtAges([
+      { id: 'eur_a', ageMs: 30 * 60_000, currency: 'EUR' },
+      { id: 'eur_b', ageMs: 2 * HOUR, currency: 'EUR' },
+      { id: 'usd_a', ageMs: 4 * HOUR, currency: 'USD' },
+    ]);
+    const histo = await svc.getPendingAgeHistogram();
+    expect(histo.pendingValueCents).toEqual({ EUR: 14900 * 2, USD: 14900 });
+  });
+
+  it('flags truncated=true when the scan hits scanLimit', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = NOW - 30 * 60_000;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
+    for (let i = 0; i < 3; i += 1) {
+      await svc.create({
+        order_id: `p_${i.toString()}`,
+        account_id: 'acc',
+        product: 'x',
+        price_cents: 100,
+        price_currency: 'EUR',
+      });
+    }
+    now = NOW;
+    const histo = await svc.getPendingAgeHistogram({ scanLimit: 3 });
+    expect(histo.truncated).toBe(true);
+    expect(histo.scanned).toBe(3);
+  });
+
+  it('uses < 1h boundary exclusively (an exactly-1h-old order goes to h1_to_6h)', async () => {
+    const svc = await seedAtAges([{ id: 'edge', ageMs: HOUR }]);
+    const histo = await svc.getPendingAgeHistogram();
+    expect(histo.buckets.under_1h).toBe(0);
+    expect(histo.buckets.h1_to_6h).toBe(1);
+  });
+
+  it('uses < 24h boundary exclusively (an exactly-24h-old order goes to over_24h)', async () => {
+    const svc = await seedAtAges([{ id: 'edge24', ageMs: 24 * HOUR }]);
+    const histo = await svc.getPendingAgeHistogram();
+    expect(histo.buckets.h6_to_24h).toBe(0);
+    expect(histo.buckets.over_24h).toBe(1);
   });
 });

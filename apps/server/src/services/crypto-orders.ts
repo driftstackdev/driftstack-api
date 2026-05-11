@@ -578,6 +578,62 @@ export class CryptoOrdersService {
   }
 
   /**
+   * V-666.AC — pending-orders age histogram. For each currently-
+   * pending order (status === 'pending'), bucket by age since
+   * created_at. Buckets are: under_1h / 1h_to_6h / 6h_to_24h /
+   * over_24h. The over_24h bucket is the most operationally
+   * interesting — those are candidates for sweepExpiredOrders.
+   *
+   * Pure read-only; does not mutate orders. The scanLimit / truncated
+   * pattern mirrors getStatsForAdmin so an oversized backlog doesn't
+   * blow the response time.
+   */
+  async getPendingAgeHistogram(opts: { scanLimit?: number } = {}): Promise<{
+    buckets: {
+      under_1h: number;
+      h1_to_6h: number;
+      h6_to_24h: number;
+      over_24h: number;
+    };
+    /** Sum of price_cents across pending orders, by currency. */
+    pendingValueCents: Record<string, number>;
+    /** Convenience total = sum of the four bucket counts. */
+    total: number;
+    truncated: boolean;
+    scanned: number;
+  }> {
+    const scanLimit = opts.scanLimit ?? 10_000;
+    const rows = await this.opts.repo.listAll({ limit: scanLimit });
+    const now = this.nowFn();
+    const buckets = {
+      under_1h: 0,
+      h1_to_6h: 0,
+      h6_to_24h: 0,
+      over_24h: 0,
+    };
+    const pendingValueCents: Record<string, number> = {};
+    let total = 0;
+    for (const o of rows) {
+      if (o.status !== 'pending') continue;
+      total += 1;
+      const ageMs = now - o.created_at;
+      if (ageMs < 60 * 60_000) buckets.under_1h += 1;
+      else if (ageMs < 6 * 60 * 60_000) buckets.h1_to_6h += 1;
+      else if (ageMs < 24 * 60 * 60_000) buckets.h6_to_24h += 1;
+      else buckets.over_24h += 1;
+      pendingValueCents[o.price_currency] =
+        (pendingValueCents[o.price_currency] ?? 0) + o.price_cents;
+    }
+    return {
+      buckets,
+      pendingValueCents,
+      total,
+      truncated: rows.length === scanLimit,
+      scanned: rows.length,
+    };
+  }
+
+  /**
    * V-666.M — build a normalized receipt payload for an order the
    * caller owns. Returns null when the order doesn't exist OR
    * belongs to another account (404-style; no existence leak).

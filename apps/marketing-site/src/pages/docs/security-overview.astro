@@ -1,0 +1,187 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-713 — public security overview. Pitched at customer security
+// review + procurement teams. Companion to /docs/data-residency,
+// /docs/audit-log, /docs/incident-policy. Keeps the surface area
+// honest — describes what we do, what we don't, and where to find
+// the auditable evidence.
+---
+
+<BaseLayout title="Security overview — Driftstack" description="Driftstack's security posture: data handling, encryption, auth, incident response, and what's in scope for our threat model.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Security overview</h1>
+
+    <p class="lead">
+      This page is the entry point for a security review of
+      Driftstack. It links out to the concrete controls + policy
+      pages; this document is a map, not an exhaustive specification.
+      For the contract-grade detail (SOC2 reports, pen-test
+      summaries) reach out to
+      <a href="mailto:security@driftstack.dev">security@driftstack.dev</a>.
+    </p>
+
+    <h2>Data handling</h2>
+    <ul>
+      <li>
+        <strong>At rest:</strong> All customer data in Postgres is on
+        encrypted volumes (AES-256). API keys, OAuth client secrets,
+        and MFA seeds are stored as SHA-256 hashes — the plaintext is
+        only ever shown once, at mint time.
+      </li>
+      <li>
+        <strong>In transit:</strong> TLS 1.2+ enforced on every
+        public endpoint. HSTS preload-listed for
+        <code>driftstack.dev</code> and subdomains.
+      </li>
+      <li>
+        <strong>Recordings:</strong> WebM files land in Cloudflare R2
+        with server-side encryption. Playback URLs are presigned and
+        expire in 1 hour; the underlying object is never publicly
+        listable.
+      </li>
+      <li>
+        <strong>Profile state:</strong> Browser cookies, localStorage,
+        and IndexedDB persisted per profile are encrypted at the
+        application layer with a per-account key (V-312); the raw
+        Postgres column never holds plaintext.
+      </li>
+    </ul>
+
+    <h2>Authentication + authorization</h2>
+    <ul>
+      <li>
+        Customer keys are scoped: <code>read</code> /
+        <code>write</code> / <code>account_owner</code>. We default to
+        least-privilege; the dashboard's "create key" flow defaults to
+        <code>read</code> with an explicit checkbox to widen.
+      </li>
+      <li>
+        MFA (TOTP) is available for every account and required for
+        any operation we classify as "sensitive" — see the dashboard
+        for the per-account toggle. We re-prompt for MFA after 15
+        minutes of step-up inactivity.
+      </li>
+      <li>
+        Admin actions are gated behind a separate
+        <code>driftstack_internal_admin</code> scope that no customer
+        key can hold. See <a href="/docs/admin-api">/docs/admin-api</a>
+        for the surface.
+      </li>
+      <li>
+        Every login event + every key mint/revoke is captured in the
+        account audit log (V-074); customers can self-serve a full
+        log export.
+      </li>
+    </ul>
+
+    <h2>Network + infrastructure</h2>
+    <ul>
+      <li>
+        Stateless API services in three regions (EU, US-East,
+        AP-South). Customer traffic is GeoDNS-routed to the nearest
+        region; cross-region failover is automatic for the API +
+        dashboard surfaces.
+      </li>
+      <li>
+        Postgres clusters per region with continuous WAL archiving to
+        R2; 7-day point-in-time recovery is the default. Enterprise
+        contracts can negotiate longer windows.
+      </li>
+      <li>
+        No customer data is ever copied across regions without a
+        customer-driven request. See
+        <a href="/docs/data-residency">/docs/data-residency</a> for
+        the residency policy.
+      </li>
+      <li>
+        WAF + rate-limiting in front of every public endpoint. DDoS
+        absorption is handled at the CDN edge.
+      </li>
+    </ul>
+
+    <h2>Browser sandbox</h2>
+    <ul>
+      <li>
+        Customer-supplied <code>script</code> bodies run in a
+        sandboxed Node context with no filesystem, network, or
+        process API. Only the <code>page</code> automation surface +
+        <code>console</code> are exposed. CPU + wall-clock budgets
+        are enforced per session.
+      </li>
+      <li>
+        Each session is one isolated browser instance backed by an
+        ephemeral disk slice; cross-session state never bleeds. The
+        only persistence path is the customer-managed
+        <strong>profile</strong> mechanism (which we encrypt — see
+        above).
+      </li>
+    </ul>
+
+    <h2>Sub-processors</h2>
+    <p>
+      A full sub-processor list with a description of what each
+      receives is available at
+      <a href="/legal/sub-processors">/legal/sub-processors</a>. The
+      shortlist as of 2026:
+    </p>
+    <ul>
+      <li>Stripe (card billing only — no payment data touches our infra)</li>
+      <li>NowPayments (crypto checkout)</li>
+      <li>Cloudflare (CDN, WAF, R2 object storage)</li>
+      <li>Postmark (transactional email)</li>
+      <li>Sentry (engineering error monitoring; PII-scrubbed at SDK level)</li>
+    </ul>
+    <p>
+      We publish 30-day notice before adding or rotating a sub-
+      processor. Enterprise contracts can opt into the announcement
+      mailing list at <code>announcements@</code>.
+    </p>
+
+    <h2>Audit + observability</h2>
+    <p>
+      Three log streams are customer-readable:
+    </p>
+    <ul>
+      <li>
+        <a href="/docs/audit-log">Account audit log</a> — every
+        mutation on your account (key mints, profile changes, billing
+        events).
+      </li>
+      <li>
+        Session logs — per-session navigation + console output
+        retained per tier.
+      </li>
+      <li>
+        Cost ledger — every billable event, queryable via the API.
+      </li>
+    </ul>
+
+    <h2>Incident response</h2>
+    <p>
+      See <a href="/docs/incident-policy">/docs/incident-policy</a>
+      for the disclosure timeline + the
+      <a href="https://status.driftstack.dev">status page</a>
+      cadence. Security-relevant incidents are disclosed within 72h
+      of confirmation; we do not bury exposure events.
+    </p>
+
+    <h2>Vulnerability reporting</h2>
+    <p>
+      Email <a href="mailto:security@driftstack.dev">security@driftstack.dev</a>
+      with the details. We respond within 1 business day. Our
+      <a href="/legal/vulnerability-disclosure">vulnerability
+      disclosure policy</a> covers safe-harbour for good-faith
+      research; please review it before testing.
+    </p>
+
+    <h2>Related</h2>
+    <ul>
+      <li><a href="/docs/data-residency">Data residency</a></li>
+      <li><a href="/docs/admin-api">Admin API + scope</a></li>
+      <li><a href="/docs/incident-policy">Incident policy</a></li>
+      <li><a href="/docs/audit-log">Audit log</a></li>
+      <li><a href="/legal/sub-processors">Sub-processors</a></li>
+    </ul>
+  </main>
+</BaseLayout>
