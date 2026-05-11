@@ -6,10 +6,13 @@
 // V-666.N — appended tests for getStatsForAdmin.
 // V-666.O — appended tests for getDailyBreakdownForAdmin.
 // V-666.Q — appended tests for updateCustomerNote.
+// V-666.R — appended tests for paid-receipt email notifier.
 
 import { describe, expect, it } from 'vitest';
 import {
   CryptoOrdersService,
+  type CryptoOrderPaidEmail,
+  type CryptoOrderPaidEmailNotifier,
   type CryptoOrderWebhookEmitter,
   InMemoryCryptoOrdersRepo,
   mapNowpaymentsStatus,
@@ -982,5 +985,145 @@ describe('V-666.Q updateCustomerNote', () => {
       customer_note: null,
     });
     expect(r?.customer_note).toBeNull();
+  });
+});
+
+describe('V-666.R paid-receipt email notifier', () => {
+  function makeNotifier(): {
+    notifier: CryptoOrderPaidEmailNotifier;
+    calls: CryptoOrderPaidEmail[];
+  } {
+    const calls: CryptoOrderPaidEmail[] = [];
+    const notifier: CryptoOrderPaidEmailNotifier = {
+      notifyOrderPaid: (intent) => {
+        calls.push(intent);
+        return Promise.resolve();
+      },
+    };
+    return { notifier, calls };
+  }
+
+  async function seed(
+    opts: { notifier?: CryptoOrderPaidEmailNotifier; account_id?: string | null } = {},
+  ): Promise<{ svc: CryptoOrdersService }> {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({
+      repo,
+      nowFn: () => 5_000,
+      ...(opts.notifier !== undefined ? { paidEmailNotifier: opts.notifier } : {}),
+    });
+    await svc.create({
+      order_id: 'ord_paid_email',
+      account_id: opts.account_id === undefined ? 'acc_buyer' : opts.account_id,
+      product: 'team_growth',
+      price_cents: 14900,
+      price_currency: 'EUR',
+    });
+    return { svc };
+  }
+
+  it('fires the notifier on pending → paid transition', async () => {
+    const { notifier, calls } = makeNotifier();
+    const { svc } = await seed({ notifier });
+    await svc.applyIpnStatus({
+      order_id: 'ord_paid_email',
+      payment_id: 'np_42',
+      provider_status: 'finished',
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.account_id).toBe('acc_buyer');
+    expect(calls[0]?.order_id).toBe('ord_paid_email');
+    expect(calls[0]?.price_cents).toBe(14900);
+    expect(calls[0]?.price_currency).toBe('EUR');
+    expect(calls[0]?.payment_id).toBe('np_42');
+    expect(calls[0]?.paid_at).toBe(new Date(5_000).toISOString());
+  });
+
+  it('does NOT fire on a duplicate paid IPN (idempotent)', async () => {
+    const { notifier, calls } = makeNotifier();
+    const { svc } = await seed({ notifier });
+    await svc.applyIpnStatus({
+      order_id: 'ord_paid_email',
+      payment_id: 'np_1',
+      provider_status: 'finished',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'ord_paid_email',
+      payment_id: 'np_1',
+      provider_status: 'finished',
+    });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('does NOT fire on a non-paid transition (failed/confirming)', async () => {
+    const { notifier, calls } = makeNotifier();
+    const { svc } = await seed({ notifier });
+    await svc.applyIpnStatus({
+      order_id: 'ord_paid_email',
+      payment_id: 'np_x',
+      provider_status: 'confirming',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'ord_paid_email',
+      payment_id: 'np_x',
+      provider_status: 'failed',
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('does NOT fire when the order has a null account_id (pre-signup checkout)', async () => {
+    const { notifier, calls } = makeNotifier();
+    const { svc } = await seed({ notifier, account_id: null });
+    await svc.applyIpnStatus({
+      order_id: 'ord_paid_email',
+      payment_id: 'np_y',
+      provider_status: 'finished',
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('swallows notifier errors so the order still transitions to paid', async () => {
+    const failing: CryptoOrderPaidEmailNotifier = {
+      notifyOrderPaid: () => Promise.reject(new Error('postmark down')),
+    };
+    const { svc } = await seed({ notifier: failing });
+    const updated = await svc.applyIpnStatus({
+      order_id: 'ord_paid_email',
+      payment_id: 'np_z',
+      provider_status: 'finished',
+    });
+    expect(updated?.status).toBe('paid');
+  });
+
+  it('runs alongside the webhook emitter on the same paid transition', async () => {
+    const { notifier, calls: emailCalls } = makeNotifier();
+    const webhookCalls: Array<{ eventType: string }> = [];
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({
+      repo,
+      nowFn: () => 5_000,
+      paidEmailNotifier: notifier,
+      webhooks: {
+        enqueueEvent: (_acc, eventType) => {
+          webhookCalls.push({ eventType });
+          return Promise.resolve(1);
+        },
+      },
+    });
+    await svc.create({
+      order_id: 'ord_paid_email',
+      account_id: 'acc_buyer',
+      product: 'team_growth',
+      price_cents: 14900,
+      price_currency: 'EUR',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'ord_paid_email',
+      payment_id: 'np_q',
+      provider_status: 'finished',
+    });
+    expect(emailCalls).toHaveLength(1);
+    expect(webhookCalls).toHaveLength(1);
+    expect(webhookCalls[0]?.eventType).toBe('crypto.order.paid');
   });
 });

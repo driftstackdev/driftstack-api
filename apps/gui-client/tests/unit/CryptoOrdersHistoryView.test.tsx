@@ -1,5 +1,6 @@
 // V-534.X — unit tests for CryptoOrdersHistoryView.
 // V-534.Z — extended for per-row cancel button.
+// V-534.AE — extended for row-selection → detail-view side panel.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -195,5 +196,110 @@ describe('V-534.Z CryptoOrdersHistoryView — cancel button', () => {
         typeof url === 'string' && url.endsWith('/cancel') && init?.method === 'POST',
     );
     expect(cancelCalls.length).toBe(1);
+  });
+});
+
+describe('V-534.AE CryptoOrdersHistoryView — row selection opens detail', () => {
+  it('shows the detail-view empty state until a row is clicked', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              orders: [sample({ order_id: 'ord_one', status: 'pending' })],
+            }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersHistoryView />);
+    await waitFor(() => {
+      expect(screen.getByText('ord_one')).toBeTruthy();
+    });
+    // Empty-state copy from CryptoOrderDetailView.
+    expect(screen.getByText(/Pick an order to view its details/i)).toBeTruthy();
+  });
+
+  it('clicking a row fetches that order_id and marks the row as selected', async () => {
+    const detailCalls: string[] = [];
+    const fetchMock = vi.fn((url: string) => {
+      if (typeof url === 'string' && url.includes('/v1/billing/crypto-orders/ord_pick')) {
+        detailCalls.push(url);
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve(
+              sample({
+                order_id: 'ord_pick',
+                status: 'pending',
+                payment_id: null,
+              }),
+            ),
+        } as unknown as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            orders: [
+              sample({ order_id: 'ord_skip', status: 'pending' }),
+              sample({ order_id: 'ord_pick', status: 'pending' }),
+            ],
+          }),
+      } as unknown as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<CryptoOrdersHistoryView />);
+    const cell = await waitFor(() => screen.getByText('ord_pick'));
+    const row = cell.closest('tr');
+    expect(row).not.toBeNull();
+    fireEvent.click(row!);
+    await waitFor(() => {
+      expect(detailCalls.length).toBeGreaterThan(0);
+    });
+    // aria-selected reflects the picked row.
+    expect(row?.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('clicking the Cancel button does NOT change the selected row', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (typeof url === 'string' && url.endsWith('/cancel') && method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(sample({ order_id: 'ord_cancel', status: 'cancelled' })),
+        } as unknown as Response);
+      }
+      if (typeof url === 'string' && url.includes('/v1/billing/crypto-orders/ord_')) {
+        // detail GET — return whichever id was asked for
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(sample({ order_id: 'ord_other', status: 'pending' })),
+        } as unknown as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            orders: [sample({ order_id: 'ord_cancel', status: 'pending' })],
+          }),
+      } as unknown as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<CryptoOrdersHistoryView />);
+    const btn = await waitFor(() =>
+      screen.getByRole('button', { name: /Cancel order ord_cancel/i }),
+    );
+    fireEvent.click(btn);
+    // Row stays unselected (we stopped propagation on the cancel click).
+    const row = screen.getByText('ord_cancel').closest('tr');
+    expect(row?.getAttribute('aria-selected')).toBe('false');
   });
 });

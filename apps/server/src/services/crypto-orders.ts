@@ -120,6 +120,20 @@ export interface CryptoOrdersServiceOpts {
    * emitter that doesn't go through the DB.
    */
   webhooks?: CryptoOrderWebhookEmitter;
+  /**
+   * V-666.R — optional "paid receipt email" notifier. Same wire-ready
+   * posture as `webhooks`: when supplied, applyIpnStatus invokes it on
+   * the same paid-transition where the webhook fires. Best-effort:
+   * notifier errors are swallowed so the IPN ack stays 200.
+   *
+   * The notifier is an *intent emitter* — it does not directly call
+   * Postmark. Production wiring routes through the existing
+   * EmailService template path (template ID + per-account locale
+   * resolution belongs there). In tests, a local mock captures the
+   * intent so we can assert the args without standing up the email
+   * pipeline.
+   */
+  paidEmailNotifier?: CryptoOrderPaidEmailNotifier;
 }
 
 /**
@@ -135,6 +149,28 @@ export interface CryptoOrderWebhookEmitter {
     eventType: 'crypto.order.paid',
     data: Record<string, unknown>,
   ) => Promise<number>;
+}
+
+/**
+ * V-666.R — local notifier contract for the "receipt email on paid"
+ * scaffold. Same decoupling rationale as
+ * {@link CryptoOrderWebhookEmitter}: the service emits an intent and
+ * the production EmailService consumes it. Tests pass a mock
+ * implementation so the paid-transition fan-out is verifiable without
+ * the Postmark wiring.
+ */
+export interface CryptoOrderPaidEmail {
+  account_id: string;
+  order_id: string;
+  product: string;
+  price_cents: number;
+  price_currency: string;
+  payment_id: string | null;
+  paid_at: string;
+}
+
+export interface CryptoOrderPaidEmailNotifier {
+  notifyOrderPaid: (intent: CryptoOrderPaidEmail) => Promise<void>;
 }
 
 export class CryptoOrdersService {
@@ -471,23 +507,38 @@ export class CryptoOrdersService {
       // paid state. Skipped when the order was already paid (re-deliver
       // of the same IPN). Skipped when no emitter is wired. Best-effort:
       // an emission failure is swallowed so the IPN ack stays 200.
-      if (
-        order.status !== 'paid' &&
-        mapped === 'paid' &&
-        updated.account_id !== null &&
-        this.opts.webhooks !== undefined
-      ) {
-        try {
-          await this.opts.webhooks.enqueueEvent(updated.account_id, 'crypto.order.paid', {
-            order_id: updated.order_id,
-            product: updated.product,
-            price_cents: updated.price_cents,
-            price_currency: updated.price_currency,
-            payment_id: updated.payment_id,
-            paid_at: new Date(updated.updated_at).toISOString(),
-          });
-        } catch {
-          /* swallow */
+      if (order.status !== 'paid' && mapped === 'paid' && updated.account_id !== null) {
+        const paidAtIso = new Date(updated.updated_at).toISOString();
+        if (this.opts.webhooks !== undefined) {
+          try {
+            await this.opts.webhooks.enqueueEvent(updated.account_id, 'crypto.order.paid', {
+              order_id: updated.order_id,
+              product: updated.product,
+              price_cents: updated.price_cents,
+              price_currency: updated.price_currency,
+              payment_id: updated.payment_id,
+              paid_at: paidAtIso,
+            });
+          } catch {
+            /* swallow */
+          }
+        }
+        // V-666.R — paid-receipt email scaffold. Fired in parallel with
+        // the webhook above; failures swallowed so the IPN ack still 200s.
+        if (this.opts.paidEmailNotifier !== undefined) {
+          try {
+            await this.opts.paidEmailNotifier.notifyOrderPaid({
+              account_id: updated.account_id,
+              order_id: updated.order_id,
+              product: updated.product,
+              price_cents: updated.price_cents,
+              price_currency: updated.price_currency,
+              payment_id: updated.payment_id,
+              paid_at: paidAtIso,
+            });
+          } catch {
+            /* swallow */
+          }
         }
       }
       return updated;

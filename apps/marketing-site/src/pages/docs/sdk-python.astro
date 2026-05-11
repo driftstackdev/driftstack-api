@@ -1,0 +1,136 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-704 — Python SDK quickstart. Companion to V-703 (TypeScript SDK).
+// Same skeleton, Python-idiomatic examples. Pitched at teams running
+// scrapers, data pipelines, or ML inference where Driftstack supplies
+// the browser leg.
+---
+
+<BaseLayout title="Python SDK quickstart — Driftstack" description="Use the Driftstack Python SDK to start browser sessions, stream events, and pull recordings from sync or async Python.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Python SDK quickstart</h1>
+
+    <p class="lead">
+      The <code>driftstack</code> Python package wraps the same REST
+      surface as <a href="/docs/api-quickstart">the curl quickstart</a>.
+      It supports both synchronous and asyncio call-styles from a
+      single client, so it slots into Django, Flask, FastAPI, or a
+      plain script equally well.
+    </p>
+
+    <h2>1. Install</h2>
+    <pre><code>{`pip install driftstack
+# or, with poetry / uv:
+poetry add driftstack
+uv add driftstack`}</code></pre>
+
+    <p>
+      Python ≥ 3.10 is supported. The package ships type stubs;
+      <code>mypy --strict</code> works against the public surface
+      without further config.
+    </p>
+
+    <h2>2. Construct the client</h2>
+    <pre><code>{`import os
+from driftstack import Driftstack
+
+client = Driftstack(api_key=os.environ["DRIFTSTACK_KEY"])
+# base_url kwarg overrides the default https://api.driftstack.dev
+# for staging or self-hosted deployments.`}</code></pre>
+
+    <p>
+      Reuse one client across your process. It is internally pooled
+      via <code>httpx</code> and safe for concurrent use across
+      threads or asyncio tasks.
+    </p>
+
+    <h2>3. Start a session</h2>
+    <pre><code>{`session = client.sessions.start(
+    target_url="https://example.com",
+    profile_archetype="default",
+)
+print(session.id, session.status, session.live_url)`}</code></pre>
+
+    <p>
+      <code>session</code> is a <code>pydantic</code> model. Access
+      fields by attribute (<code>session.id</code>); the model raises
+      <code>ValidationError</code> if the API ever returns an
+      unexpected shape, so misconfigured deployments surface loudly.
+    </p>
+
+    <h2>4. Wait for the session to finish</h2>
+    <pre><code>{`done = client.sessions.wait_until_terminal(session.id, timeout_seconds=120)
+if done.status == "completed":
+    recording = client.recordings.get(done.id)
+    print("Recording:", recording.playback_url)`}</code></pre>
+
+    <p>
+      <code>wait_until_terminal</code> polls every 2 seconds with
+      exponential backoff up to 10s. For production loads, prefer
+      <a href="/docs/webhooks">webhooks</a> over polling.
+    </p>
+
+    <h2>5. Stream live events (asyncio)</h2>
+    <pre><code>{`import asyncio
+from driftstack import AsyncDriftstack
+
+async def watch(session_id: str) -> None:
+    async with AsyncDriftstack(api_key=os.environ["DRIFTSTACK_KEY"]) as client:
+        async for event in client.sessions.stream(session_id):
+            if event.type == "navigation":
+                print("navigated to", event.url)
+
+asyncio.run(watch("sess_..."))`}</code></pre>
+
+    <p>
+      The async iterator is backed by Server-Sent Events. It
+      auto-reconnects on transient failures and closes cleanly when
+      the session terminates.
+    </p>
+
+    <h2>Error handling</h2>
+    <p>
+      Every SDK method raises <code>DriftstackError</code> on non-2xx
+      responses. The exception carries <code>status</code>,
+      <code>code</code>, and <code>detail</code> so you can branch on
+      structured causes:
+    </p>
+    <pre><code>{`from driftstack import DriftstackError
+
+try:
+    client.sessions.start(target_url="not-a-url")
+except DriftstackError as exc:
+    if exc.code == "invalid_request":
+        # user-facing validation error
+        ...
+    else:
+        raise`}</code></pre>
+
+    <h2>Sync ↔ async parity</h2>
+    <p>
+      Every method on <code>Driftstack</code> has a mirror on
+      <code>AsyncDriftstack</code>. The async variant returns
+      coroutines and async iterators; the sync variant blocks the
+      caller. Pick the one that fits your runtime; do not mix them in
+      a single call-chain.
+    </p>
+
+    <h2>Where to go next</h2>
+    <ul>
+      <li><a href="/api-reference">Full API reference</a> — every endpoint, every field.</li>
+      <li><a href="/docs/sdk-typescript">TypeScript SDK</a> — same surface, TS-native.</li>
+      <li><a href="/docs/webhooks">Webhooks</a> — avoid polling in production.</li>
+      <li><a href="/docs/cost-monitoring">Cost monitoring</a> — set
+        alerts before the bill surprises you.</li>
+      <li><a href="/docs/error-codes">Error codes</a> — the structured
+        codes <code>DriftstackError</code> exposes.</li>
+    </ul>
+
+    <h2>Need help?</h2>
+    <p>
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+      We respond within one business day.
+    </p>
+  </main>
+</BaseLayout>
