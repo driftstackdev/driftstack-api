@@ -1,0 +1,389 @@
+// V-667 — OAuth 2.0 authorization-code flow service (invite-only v1).
+//
+// Builds on V-488's PKCE primitives. The full third-party OAuth flow:
+//
+//   1. Admin uses /v1/admin/oauth/clients to register an OAuth client
+//      (invite-only — no self-service signup v1). Returns a
+//      `client_id` + `client_secret`.
+//   2. Third-party app redirects the customer to GET /v1/oauth/authorize
+//      with `client_id`, `redirect_uri`, `state`, `code_challenge`,
+//      `code_challenge_method=S256`, `scope`.
+//   3. The dashboard renders an approval screen. After approval, the
+//      dashboard POSTs /v1/oauth/authorize/complete which calls
+//      `OAuthService.approveAuthorization`.
+//   4. Customer is redirected back to the third-party app with `code`
+//      + `state` query params.
+//   5. The app POSTs /v1/oauth/token with `code`, `code_verifier`,
+//      `client_id`, `client_secret`. Returns an opaque access token.
+//
+// Tokens are OPAQUE bearer strings (no JWT — D-2026-05-10-01 decision).
+// They live in the same logical surface as API keys: introspection via
+// the existing `/v1/api-keys/:id` shape, scopes are a subset of
+// `ApiKeyScope`. No refresh tokens v1 — the third-party re-prompts the
+// customer if their access token expires.
+
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import type { ApiKeyScope } from '@driftstack/api-types';
+import { verifyS256Challenge } from '../lib/oauth-pkce.js';
+
+const CODE_TTL_SECONDS = 5 * 60;
+const TOKEN_TTL_SECONDS = 60 * 60; // 1 hour — short by design; no refresh tokens.
+
+export interface OAuthClient {
+  client_id: string;
+  /** sha256 hex of the secret — never the secret itself in the store. */
+  client_secret_hash: string;
+  /** Allowed redirect URIs. Exact-match check on /authorize. */
+  redirect_uris: readonly string[];
+  /** Human-readable label for the admin console. */
+  label: string;
+  /** Account that the admin registered this client on behalf of (if any). */
+  account_id: string | null;
+  created_at: number;
+  /** Soft-deleted clients reject /authorize + /token. */
+  revoked_at: number | null;
+}
+
+export interface AuthorizationCode {
+  code: string;
+  client_id: string;
+  redirect_uri: string;
+  state: string;
+  scope: readonly ApiKeyScope[];
+  code_challenge: string;
+  /** Account that approved the authorization. */
+  account_id: string;
+  created_at: number;
+  /** Once-only: set on exchange. Second exchange returns invalid_grant. */
+  consumed_at: number | null;
+}
+
+export interface AccessToken {
+  token: string;
+  client_id: string;
+  account_id: string;
+  scope: readonly ApiKeyScope[];
+  created_at: number;
+  expires_at: number;
+}
+
+export interface OAuthStore {
+  // Clients
+  insertClient(client: OAuthClient): Promise<void>;
+  getClient(client_id: string): Promise<OAuthClient | null>;
+  listClients(): Promise<readonly OAuthClient[]>;
+  revokeClient(client_id: string, at: number): Promise<void>;
+  // Authorization codes
+  insertCode(code: AuthorizationCode): Promise<void>;
+  getCode(code: string): Promise<AuthorizationCode | null>;
+  markCodeConsumed(code: string, at: number): Promise<void>;
+  // Access tokens
+  insertToken(token: AccessToken): Promise<void>;
+  getToken(token: string): Promise<AccessToken | null>;
+  revokeToken(token: string): Promise<void>;
+}
+
+export class InMemoryOAuthStore implements OAuthStore {
+  private readonly clients = new Map<string, OAuthClient>();
+  private readonly codes = new Map<string, AuthorizationCode>();
+  private readonly tokens = new Map<string, AccessToken>();
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async insertClient(c: OAuthClient): Promise<void> {
+    this.clients.set(c.client_id, c);
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async getClient(id: string): Promise<OAuthClient | null> {
+    return this.clients.get(id) ?? null;
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async listClients(): Promise<readonly OAuthClient[]> {
+    return [...this.clients.values()];
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async revokeClient(id: string, at: number): Promise<void> {
+    const c = this.clients.get(id);
+    if (c) this.clients.set(id, { ...c, revoked_at: at });
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async insertCode(c: AuthorizationCode): Promise<void> {
+    this.codes.set(c.code, c);
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async getCode(code: string): Promise<AuthorizationCode | null> {
+    const c = this.codes.get(code);
+    if (c === undefined) return null;
+    if (Date.now() - c.created_at > CODE_TTL_SECONDS * 1000) {
+      this.codes.delete(code);
+      return null;
+    }
+    return c;
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async markCodeConsumed(code: string, at: number): Promise<void> {
+    const c = this.codes.get(code);
+    if (c) this.codes.set(code, { ...c, consumed_at: at });
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async insertToken(t: AccessToken): Promise<void> {
+    this.tokens.set(t.token, t);
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async getToken(token: string): Promise<AccessToken | null> {
+    const t = this.tokens.get(token);
+    if (t === undefined) return null;
+    if (Date.now() > t.expires_at) {
+      this.tokens.delete(token);
+      return null;
+    }
+    return t;
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async revokeToken(token: string): Promise<void> {
+    this.tokens.delete(token);
+  }
+}
+
+export class OAuthError extends Error {
+  constructor(
+    public readonly code:
+      | 'invalid_client'
+      | 'invalid_request'
+      | 'unauthorized_client'
+      | 'access_denied'
+      | 'invalid_grant'
+      | 'invalid_scope',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'OAuthError';
+  }
+}
+
+export interface RegisterClientArgs {
+  label: string;
+  redirect_uris: readonly string[];
+  account_id?: string | null;
+}
+
+export interface RegisterClientResult {
+  client_id: string;
+  /** Plaintext — surfaced ONCE on registration. The store keeps only the hash. */
+  client_secret: string;
+}
+
+export interface AuthorizeArgs {
+  client_id: string;
+  redirect_uri: string;
+  state: string;
+  code_challenge: string;
+  code_challenge_method: 'S256';
+  scope: readonly ApiKeyScope[];
+}
+
+export interface AuthorizeResult {
+  /** Identifier the dashboard uses to fetch authorization context for the approval screen. */
+  authorization_id: string;
+  client: { client_id: string; label: string };
+  scope: readonly ApiKeyScope[];
+  redirect_uri: string;
+  state: string;
+}
+
+export interface ApproveAuthorizationArgs {
+  authorization_id: string;
+  account_id: string;
+}
+
+export interface ApproveAuthorizationResult {
+  code: string;
+  redirect_uri: string;
+  state: string;
+}
+
+export interface ExchangeCodeArgs {
+  code: string;
+  code_verifier: string;
+  client_id: string;
+  client_secret: string;
+  redirect_uri: string;
+}
+
+export interface ExchangeCodeResult {
+  access_token: string;
+  token_type: 'Bearer';
+  expires_in: number;
+  scope: readonly ApiKeyScope[];
+}
+
+export class OAuthService {
+  private readonly pendingAuthorizations = new Map<string, AuthorizationCode & { pending: true }>();
+
+  constructor(
+    private readonly store: OAuthStore,
+    private readonly nowFn: () => number = () => Date.now(),
+    private readonly secretHasher: (s: string) => string = sha256Hex,
+  ) {}
+
+  async registerClient(args: RegisterClientArgs): Promise<RegisterClientResult> {
+    if (!args.label.trim()) throw new OAuthError('invalid_request', 'label required');
+    if (args.redirect_uris.length === 0) {
+      throw new OAuthError('invalid_request', 'at least one redirect_uri required');
+    }
+    for (const uri of args.redirect_uris) {
+      // Lock-down: HTTPS only, except localhost. Mirrors RFC 8252 native-app guidance.
+      if (!isAllowedRedirectUri(uri)) {
+        throw new OAuthError('invalid_request', `redirect_uri rejected: ${uri}`);
+      }
+    }
+    const client_id = `oac_${randomBytes(12).toString('base64url')}`;
+    const client_secret = `oas_${randomBytes(32).toString('base64url')}`;
+    await this.store.insertClient({
+      client_id,
+      client_secret_hash: this.secretHasher(client_secret),
+      redirect_uris: [...args.redirect_uris],
+      label: args.label,
+      account_id: args.account_id ?? null,
+      created_at: this.nowFn(),
+      revoked_at: null,
+    });
+    return { client_id, client_secret };
+  }
+
+  async listClients(): Promise<readonly OAuthClient[]> {
+    return this.store.listClients();
+  }
+
+  async revokeClient(client_id: string): Promise<void> {
+    await this.store.revokeClient(client_id, this.nowFn());
+  }
+
+  async authorize(args: AuthorizeArgs): Promise<AuthorizeResult> {
+    if (args.code_challenge_method !== 'S256') {
+      throw new OAuthError('invalid_request', 'only S256 PKCE is supported');
+    }
+    const client = await this.store.getClient(args.client_id);
+    if (client === null || client.revoked_at !== null) {
+      throw new OAuthError('invalid_client', 'unknown or revoked client_id');
+    }
+    if (!client.redirect_uris.includes(args.redirect_uri)) {
+      throw new OAuthError('invalid_request', 'redirect_uri not registered');
+    }
+    // Stage the pending authorization in-memory; dashboard exchanges
+    // authorization_id → approval result via approveAuthorization.
+    const authorization_id = `oaa_${randomBytes(16).toString('base64url')}`;
+    this.pendingAuthorizations.set(authorization_id, {
+      code: '', // assigned on approval
+      client_id: args.client_id,
+      redirect_uri: args.redirect_uri,
+      state: args.state,
+      scope: [...args.scope],
+      code_challenge: args.code_challenge,
+      account_id: '', // set on approval
+      created_at: this.nowFn(),
+      consumed_at: null,
+      pending: true,
+    });
+    return {
+      authorization_id,
+      client: { client_id: client.client_id, label: client.label },
+      scope: args.scope,
+      redirect_uri: args.redirect_uri,
+      state: args.state,
+    };
+  }
+
+  async approveAuthorization(args: ApproveAuthorizationArgs): Promise<ApproveAuthorizationResult> {
+    const pending = this.pendingAuthorizations.get(args.authorization_id);
+    if (pending === undefined) {
+      throw new OAuthError('invalid_request', 'unknown or expired authorization_id');
+    }
+    this.pendingAuthorizations.delete(args.authorization_id);
+    if (this.nowFn() - pending.created_at > CODE_TTL_SECONDS * 1000) {
+      throw new OAuthError('invalid_request', 'authorization expired before approval');
+    }
+    const code = `oac_${randomBytes(32).toString('base64url')}`;
+    await this.store.insertCode({
+      code,
+      client_id: pending.client_id,
+      redirect_uri: pending.redirect_uri,
+      state: pending.state,
+      scope: pending.scope,
+      code_challenge: pending.code_challenge,
+      account_id: args.account_id,
+      created_at: this.nowFn(),
+      consumed_at: null,
+    });
+    return { code, redirect_uri: pending.redirect_uri, state: pending.state };
+  }
+
+  async exchangeCode(args: ExchangeCodeArgs): Promise<ExchangeCodeResult> {
+    const client = await this.store.getClient(args.client_id);
+    if (client === null || client.revoked_at !== null) {
+      throw new OAuthError('invalid_client', 'unknown or revoked client_id');
+    }
+    if (
+      !constantTimeStringEqual(client.client_secret_hash, this.secretHasher(args.client_secret))
+    ) {
+      throw new OAuthError('invalid_client', 'client_secret mismatch');
+    }
+    const code = await this.store.getCode(args.code);
+    if (code === null) throw new OAuthError('invalid_grant', 'code unknown or expired');
+    if (code.consumed_at !== null) {
+      throw new OAuthError('invalid_grant', 'code already exchanged');
+    }
+    if (code.client_id !== args.client_id) {
+      throw new OAuthError('invalid_grant', 'code issued to a different client');
+    }
+    if (code.redirect_uri !== args.redirect_uri) {
+      throw new OAuthError('invalid_grant', 'redirect_uri mismatch');
+    }
+    if (!verifyS256Challenge({ verifier: args.code_verifier, challenge: code.code_challenge })) {
+      throw new OAuthError('invalid_grant', 'PKCE verification failed');
+    }
+    await this.store.markCodeConsumed(args.code, this.nowFn());
+
+    const token = `oat_${randomBytes(32).toString('base64url')}`;
+    const now = this.nowFn();
+    await this.store.insertToken({
+      token,
+      client_id: client.client_id,
+      account_id: code.account_id,
+      scope: code.scope,
+      created_at: now,
+      expires_at: now + TOKEN_TTL_SECONDS * 1000,
+    });
+    return {
+      access_token: token,
+      token_type: 'Bearer',
+      expires_in: TOKEN_TTL_SECONDS,
+      scope: code.scope,
+    };
+  }
+
+  async introspect(token: string): Promise<AccessToken | null> {
+    return this.store.getToken(token);
+  }
+}
+
+function isAllowedRedirectUri(uri: string): boolean {
+  try {
+    const u = new URL(uri);
+    if (u.protocol === 'https:') return true;
+    if (u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function sha256Hex(s: string): string {
+  return createHash('sha256').update(s).digest('hex');
+}
+
+function constantTimeStringEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}

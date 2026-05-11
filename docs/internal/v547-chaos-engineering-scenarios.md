@@ -225,10 +225,14 @@ V-547.C target.
 
 ## Sub-slices
 
-- **V-547 (THIS WAVE):** scenario catalogue (this doc).
-- **V-547.B (later):** automation harness for scenarios 1, 4, 5, 6, 7,
-  8 (sub-processor + DB + cache + storage faults). Manual for the
-  infrastructure scenarios.
+- **V-547 (Wave 23):** scenario catalogue (this doc).
+- **V-547.B / V-659 (Wave 45):** rehearsal harness landed at
+  `scripts/chaos/`. Covers scenarios 1, 2, 6 (P0 + lowest-risk Stripe
+  signature). Each script defaults to `CHAOS_MODE=dry-run`
+  (touch-nothing); `CHAOS_MODE=execute` fires the fault injection
+  against a local docker-compose stack. Scenarios 4, 5, 7, 8 will
+  land in V-547.B continuation slices once the rehearsal harness
+  pattern is validated against the first paying-customer load.
 - **V-547.C (later):** scheduled chaos drill cron + post-drill admin
   report.
 
