@@ -5,6 +5,7 @@
 // V-666.M — appended tests for getReceipt.
 // V-666.N — appended tests for getStatsForAdmin.
 // V-666.O — appended tests for getDailyBreakdownForAdmin.
+// V-666.Q — appended tests for updateCustomerNote.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -904,5 +905,82 @@ describe('V-666.O getDailyBreakdownForAdmin', () => {
     setNow(Date.parse('2026-05-11T12:00:00Z'));
     const out = await svc.getDailyBreakdownForAdmin({ days: 7, scanLimit: 5 });
     expect(out.truncated).toBe(true);
+  });
+});
+
+describe('V-666.Q updateCustomerNote', () => {
+  async function seed(): Promise<{ svc: CryptoOrdersService }> {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo, nowFn: () => 4_000 });
+    await svc.create({
+      order_id: 'ord_note',
+      account_id: 'acc_owner',
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    return { svc };
+  }
+
+  it('returns null when the order does not exist', async () => {
+    const { svc } = await seed();
+    const r = await svc.updateCustomerNote({
+      order_id: 'ord_missing',
+      account_id: 'acc_owner',
+      customer_note: 'PO-42',
+    });
+    expect(r).toBeNull();
+  });
+
+  it('returns null (not 403) on cross-account note update', async () => {
+    const { svc } = await seed();
+    const r = await svc.updateCustomerNote({
+      order_id: 'ord_note',
+      account_id: 'acc_other',
+      customer_note: 'sneaky',
+    });
+    expect(r).toBeNull();
+  });
+
+  it('writes the note + bumps updated_at on success', async () => {
+    const { svc } = await seed();
+    const r = await svc.updateCustomerNote({
+      order_id: 'ord_note',
+      account_id: 'acc_owner',
+      customer_note: 'PO-42',
+    });
+    expect(r?.customer_note).toBe('PO-42');
+    const fetched = await svc.getById('ord_note');
+    expect(fetched?.customer_note).toBe('PO-42');
+  });
+
+  it('normalises empty string to null', async () => {
+    const { svc } = await seed();
+    await svc.updateCustomerNote({
+      order_id: 'ord_note',
+      account_id: 'acc_owner',
+      customer_note: 'first',
+    });
+    const r = await svc.updateCustomerNote({
+      order_id: 'ord_note',
+      account_id: 'acc_owner',
+      customer_note: '',
+    });
+    expect(r?.customer_note).toBeNull();
+  });
+
+  it('explicitly passing null clears the note', async () => {
+    const { svc } = await seed();
+    await svc.updateCustomerNote({
+      order_id: 'ord_note',
+      account_id: 'acc_owner',
+      customer_note: 'mine',
+    });
+    const r = await svc.updateCustomerNote({
+      order_id: 'ord_note',
+      account_id: 'acc_owner',
+      customer_note: null,
+    });
+    expect(r?.customer_note).toBeNull();
   });
 });

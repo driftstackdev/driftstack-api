@@ -36,6 +36,12 @@ export interface CryptoOrder {
   /** NowPayments payment_id once the order is matched to an IPN. */
   payment_id: string | null;
   status: CryptoOrderStatus;
+  /**
+   * V-666.Q — customer-supplied free-text note for their own
+   * bookkeeping (PO numbers, internal labels, etc.). Capped at 500
+   * chars at the route layer. Null when unset.
+   */
+  customer_note: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -153,11 +159,36 @@ export class CryptoOrdersService {
       price_currency: args.price_currency,
       payment_id: null,
       status: 'pending',
+      customer_note: null,
       created_at: now,
       updated_at: now,
     };
     await this.opts.repo.upsert(order);
     return order;
+  }
+
+  /**
+   * V-666.Q — customer-side note update. Caller scopes to their own
+   * account; cross-account PATCH returns null (404-style). Empty
+   * string is normalised to null. Length cap enforced at the route
+   * layer; this method trusts whatever the route validated.
+   */
+  async updateCustomerNote(args: {
+    order_id: string;
+    account_id: string;
+    customer_note: string | null;
+  }): Promise<CryptoOrder | null> {
+    const order = await this.opts.repo.getById(args.order_id);
+    if (order === null || order.account_id !== args.account_id) return null;
+    const normalised =
+      args.customer_note === null || args.customer_note.length === 0 ? null : args.customer_note;
+    const updated: CryptoOrder = {
+      ...order,
+      customer_note: normalised,
+      updated_at: this.nowFn(),
+    };
+    await this.opts.repo.upsert(updated);
+    return updated;
   }
 
   async getById(orderId: string): Promise<CryptoOrder | null> {

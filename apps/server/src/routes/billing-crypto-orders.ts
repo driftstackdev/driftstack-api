@@ -1,10 +1,11 @@
 // V-666.G — customer-facing crypto-orders routes.
 //
-//   GET  /v1/billing/crypto-orders                  — list caller's own orders
-//   GET  /v1/billing/crypto-orders/:id              — single order lookup
-//   POST /v1/billing/crypto-orders/:id/cancel       — abandon a pending order (V-666.J)
-//   GET  /v1/billing/crypto-orders/:id/receipt      — normalized receipt JSON (V-666.M)
-//   GET  /v1/billing/crypto-orders/:id/receipt.txt  — same receipt as text/plain (V-666.P)
+//   GET   /v1/billing/crypto-orders                  — list caller's own orders
+//   GET   /v1/billing/crypto-orders/:id              — single order lookup
+//   PATCH /v1/billing/crypto-orders/:id              — update customer_note (V-666.Q)
+//   POST  /v1/billing/crypto-orders/:id/cancel       — abandon a pending order (V-666.J)
+//   GET   /v1/billing/crypto-orders/:id/receipt      — normalized receipt JSON (V-666.M)
+//   GET   /v1/billing/crypto-orders/:id/receipt.txt  — same receipt as text/plain (V-666.P)
 //
 // All routes are scoped to the calling account. Cross-account
 // id lookups return 404 (not 403) — we don't leak the existence of
@@ -35,10 +36,15 @@ function toPublic(order: CryptoOrder): Record<string, unknown> {
     price_currency: order.price_currency,
     payment_id: order.payment_id,
     status: order.status,
+    customer_note: order.customer_note ?? null,
     created_at: new Date(order.created_at).toISOString(),
     updated_at: new Date(order.updated_at).toISOString(),
   };
 }
+
+const UpdateNoteSchema = z.object({
+  customer_note: z.string().max(500).nullable(),
+});
 
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
   if (!request.account) throw new Error('account context missing after requireAuth');
@@ -82,6 +88,37 @@ export function registerCustomerCryptoOrdersRoutes(
         throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
       }
       return reply.send(toPublic(order));
+    },
+  );
+
+  // V-666.Q — update the customer's free-text note on an order
+  // (PO numbers / internal labels). Length cap 500 chars; empty
+  // string normalised to null.
+  app.patch<{
+    Params: { order_id: string };
+    Body: { customer_note?: string | null };
+  }>(
+    '/v1/billing/crypto-orders/:order_id',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (
+      req: FastifyRequest<{
+        Params: { order_id: string };
+        Body: { customer_note?: string | null };
+      }>,
+      reply,
+    ) => {
+      const ctx = requireCtx(req);
+      const params = parseOrThrow(GetParams, req.params);
+      const body = parseOrThrow(UpdateNoteSchema, req.body);
+      const updated = await deps.service.updateCustomerNote({
+        order_id: params.order_id,
+        account_id: ctx.account.id,
+        customer_note: body.customer_note,
+      });
+      if (updated === null) {
+        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
+      }
+      return reply.send(toPublic(updated));
     },
   );
 

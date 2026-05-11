@@ -373,3 +373,82 @@ describe('V-666.P GET /v1/billing/crypto-orders/:order_id/receipt.txt', () => {
     expect(body).not.toContain('Payment id:');
   });
 });
+
+describe('V-666.Q PATCH /v1/billing/crypto-orders/:order_id (customer_note)', () => {
+  it('401 without auth', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/billing/crypto-orders/ord_x',
+      payload: { customer_note: 'PO-42' },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('404 when the order does not exist', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/billing/crypto-orders/ord_missing',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { customer_note: 'PO-42' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('404 (not 403) on cross-account PATCH', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_other_note',
+      account_id: 'acc_someone',
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/billing/crypto-orders/ord_other_note',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { customer_note: 'hacky' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('writes the note + returns the updated order body', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_my_note',
+      account_id: fx.accountId,
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/billing/crypto-orders/ord_my_note',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { customer_note: 'invoice 2026-05-42' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ customer_note: string | null }>();
+    expect(body.customer_note).toBe('invoice 2026-05-42');
+  });
+
+  it('400 on a note > 500 chars', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_too_long_note',
+      account_id: fx.accountId,
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/billing/crypto-orders/ord_too_long_note',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { customer_note: 'x'.repeat(501) },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

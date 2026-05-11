@@ -1,0 +1,142 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-703 — TypeScript SDK quickstart. Companion to /docs/api-quickstart
+// (raw HTTP / curl) and /docs/cli-quickstart. Pitched at teams that
+// already have a Node/Bun/Deno service and want a typed surface
+// instead of hand-rolling fetch calls. Posture matches V-680: code
+// samples runnable verbatim once a key is in hand.
+---
+
+<BaseLayout title="TypeScript SDK quickstart — Driftstack" description="Use the Driftstack TypeScript SDK to start browser sessions, stream events, and pull recordings — with full type-safety.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>TypeScript SDK quickstart</h1>
+
+    <p class="lead">
+      The <code>@driftstack/sdk</code> package wraps the same REST
+      surface as <a href="/docs/api-quickstart">the curl quickstart</a>,
+      with end-to-end types generated from the OpenAPI spec. If you're
+      already in a TS codebase, this is the recommended way to call
+      Driftstack.
+    </p>
+
+    <h2>1. Install</h2>
+    <pre><code>{`# bun
+bun add @driftstack/sdk
+
+# npm
+npm install @driftstack/sdk
+
+# pnpm
+pnpm add @driftstack/sdk`}</code></pre>
+
+    <p>
+      Node ≥ 20, Bun ≥ 1.1, and Deno ≥ 1.40 are supported. The SDK
+      ships ESM-only; if you're still on CommonJS, use a dynamic
+      <code>import()</code>.
+    </p>
+
+    <h2>2. Construct the client</h2>
+    <pre><code>{`import { Driftstack } from '@driftstack/sdk';
+
+const client = new Driftstack({
+  apiKey: process.env.DRIFTSTACK_KEY!,
+  // baseUrl defaults to https://api.driftstack.dev; override for
+  // self-hosted deployments or staging.
+});`}</code></pre>
+
+    <p>
+      The constructor does not make any network calls. Reuse one
+      client across your process — it is internally pooled and safe
+      for concurrent use.
+    </p>
+
+    <h2>3. Start a session</h2>
+    <pre><code>{`const { session } = await client.sessions.start({
+  target_url: 'https://example.com',
+  profile_archetype: 'default',
+});
+
+console.log(session.id, session.status, session.live_url);`}</code></pre>
+
+    <p>
+      The return type is fully discriminated — TypeScript narrows
+      <code>session.status</code> through the lifecycle (
+      <code>queued</code> → <code>running</code> → <code>completed</code>
+      / <code>failed</code>).
+    </p>
+
+    <h2>4. Wait for the session to finish</h2>
+    <pre><code>{`const done = await client.sessions.waitUntilTerminal(session.id, {
+  timeoutMs: 120_000,
+});
+
+if (done.status === 'completed') {
+  const { playback_url } = await client.recordings.get(done.id);
+  console.log('Recording:', playback_url);
+}`}</code></pre>
+
+    <p>
+      <code>waitUntilTerminal</code> polls every 2 seconds with
+      exponential backoff up to 10s. For production workloads, prefer
+      webhooks (see <a href="/docs/webhooks">webhooks</a>) so you're
+      not paying for idle polling.
+    </p>
+
+    <h2>5. Stream live events</h2>
+    <pre><code>{`for await (const event of client.sessions.stream(session.id)) {
+  if (event.type === 'navigation') {
+    console.log('navigated to', event.url);
+  }
+}`}</code></pre>
+
+    <p>
+      The async-iterator is backed by Server-Sent Events. It
+      reconnects automatically with exponential backoff on transient
+      failures and closes when the session terminates.
+    </p>
+
+    <h2>Error handling</h2>
+    <p>
+      Every SDK method throws a typed <code>DriftstackError</code> on
+      non-2xx responses. The error carries <code>status</code>,
+      <code>code</code>, and <code>detail</code> so you can branch on
+      structured causes:
+    </p>
+    <pre><code>{`import { DriftstackError } from '@driftstack/sdk';
+
+try {
+  await client.sessions.start({ target_url: 'not-a-url' });
+} catch (err) {
+  if (err instanceof DriftstackError && err.code === 'invalid_request') {
+    // user-facing validation error
+  } else {
+    throw err;
+  }
+}`}</code></pre>
+
+    <h2>Bundled vs tree-shaken</h2>
+    <p>
+      The SDK is fully tree-shakeable. If you only import
+      <code>client.sessions.*</code>, the recordings and billing
+      modules never reach your bundle. Typical Next.js / Vite
+      production bundles add ~12 kB gzipped.
+    </p>
+
+    <h2>Where to go next</h2>
+    <ul>
+      <li><a href="/api-reference">Full API reference</a> — every endpoint, every field.</li>
+      <li><a href="/docs/webhooks">Webhooks</a> — avoid polling in production.</li>
+      <li><a href="/docs/cost-monitoring">Cost monitoring</a> — set
+        alerts before the bill surprises you.</li>
+      <li><a href="/docs/error-codes">Error codes</a> — the structured
+        codes <code>DriftstackError</code> exposes.</li>
+    </ul>
+
+    <h2>Need help?</h2>
+    <p>
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+      We respond within one business day.
+    </p>
+  </main>
+</BaseLayout>
