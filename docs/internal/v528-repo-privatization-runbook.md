@@ -18,33 +18,49 @@ requires re-creating the public repo + force-pushing the original history.
 
 ## Pre-flight checks (run before triggering)
 
+### Fast path (V-656 pre-stage script — recommended)
+
+```bash
+cd /Users/john/code/driftstack-api
+scripts/v528-prestage.sh
+```
+
+Runs every pre-flight check in one shot:
+
+- Clean working tree
+- On `main`
+- `LICENSE` present + copied to `/tmp/driftstack-api-LICENSE` (Step 1 input)
+- `gh auth status` is good
+- V-527 commit-msg hook installed
+- All 3 `sdk-extract/<lang>` branches exist (re-runs extract idempotently)
+- `cleanup/v526-sanitize` state reported (commits ahead/behind)
+- V-205 violator commits audited (`63a20c1`, `ef649a1`)
+- Per-SDK adjustment scripts present + executable
+
+Exit 0 only when every check passes. Total wall-clock ≈ 30s.
+
+### Manual path (legacy — kept for reference)
+
 ```bash
 cd /Users/john/code/driftstack-api
 
 # 1. Confirm clean working tree.
 git status
-# Expected: nothing to commit, working tree clean (on `main`).
 
 # 2. Confirm extraction branches exist + reflect current main.
 git branch --list 'sdk-extract/*'
-# Expected: 3 branches: sdk-extract/typescript, sdk-extract/python, sdk-extract/go
 
 # 3. Re-run extraction to pick up any changes since Wave 16.
 scripts/extract-sdk-repos.sh
-# Verifies branches reflect HEAD of main; idempotent.
 
-# 4. Confirm V-526 sanitization branch is reviewed + merged (or merged
-#    on its own pre-flip).
+# 4. Confirm V-526 sanitization branch is reviewed + merged.
 git log cleanup/v526-sanitize..main --oneline
-# Expected: either empty (branch merged) or short list of accepted changes.
 
 # 5. Verify commit-msg hook installed.
 ls -la .git/hooks/commit-msg
-# Expected: present + executable.
 
 # 6. Confirm gh auth status.
 gh auth status
-# Expected: authenticated as a user with admin rights on driftstackdev org.
 ```
 
 If any pre-flight check fails, stop and fix before proceeding.
@@ -73,16 +89,39 @@ zero banned strings — `"Add LICENSE (MIT)"` passes (verified by dry-run).
 
 ### Step 2 — apply per-SDK adjustments (V-525 design doc)
 
-On each `sdk-extract/<lang>` branch, apply the per-SDK adjustments listed
-in `docs/internal/v525-sdk-extraction-plan.md`:
+V-656 pre-wrote three adjustment scripts that apply every V-525 change
+deterministically. Each runs on its own extraction branch:
 
-- **TS:** update `package.json` repository.url + bundle api-types.
-- **Py:** update `pyproject.toml` URLs.
-- **Go:** update `go.mod` module path (`github.com/driftstackdev/driftstack-go-sdk`).
-- **All:** add `.github/workflows/ci.yml` and `.github/workflows/publish.yml`.
+```bash
+git checkout sdk-extract/typescript && scripts/v528-adjust-typescript.sh
+git checkout sdk-extract/python     && scripts/v528-adjust-python.sh
+git checkout sdk-extract/go         && scripts/v528-adjust-go.sh
+git checkout main
+```
 
-Detailed diffs in V-525 plan; can be applied manually or via a follow-up
-script.
+Each script is idempotent (re-running on an already-adjusted branch
+no-ops) and refuses to run on the wrong branch.
+
+What each script does:
+
+- **TS** (`scripts/v528-adjust-typescript.sh`): adds LICENSE, rewrites
+  `package.json` repository.url, drops the `@driftstack/api-types`
+  dependency, copies api-types source into `src/_generated/`, rewrites
+  every `from '@driftstack/api-types'` import to point at the local
+  generated copy, adds `.github/workflows/ci.yml` + `publish.yml` (npm).
+- **Py** (`scripts/v528-adjust-python.sh`): adds LICENSE, rewrites
+  `pyproject.toml` `[project.urls]` Repository URL, adds CI workflow
+  (Python 3.10/3.11/3.12 matrix; ruff + mypy + pytest), adds publish
+  workflow (`python -m build` + `twine upload` on tag).
+- **Go** (`scripts/v528-adjust-go.sh`): adds LICENSE, rewrites
+  `go.mod` module path (`github.com/driftstackdev/driftstack-api/
+packages/sdk-go` → `github.com/driftstackdev/driftstack-go-sdk`),
+  rewrites any in-tree imports referencing the old path, adds CI
+  workflow (Go 1.21/1.22 matrix; vet + build + test). No publish
+  workflow needed — Go modules publish via tag push.
+
+Original V-525 diffs remain the source of truth; the scripts implement
+them.
 
 ### Step 3 — create 3 new GitHub repos + push branches
 
@@ -142,17 +181,32 @@ driftstack-api's history. Now that the repo is private, the force-push
 scrub is safe — no public-visible blast radius.
 
 ```bash
-git filter-repo --commit-callback '
-  if commit.message.find(b"Claude") != -1 or commit.message.find(b"founder") != -1:
-    # Apply targeted message rewrites; keep code unchanged
-    commit.message = ...rewritten message...
-' --force
+# Dry-run first — prints replacements that would apply.
+scripts/v528-scrub-violators.sh
+
+# After Step 4 confirmed (repo is private), run with --confirm.
+scripts/v528-scrub-violators.sh --confirm
+# (script prompts for "scrub-violators" confirmation token)
+
+# After history rewrite, push forced:
 git push --force origin main
 ```
 
-(Specific filter-repo invocation TBD — exact rewrites per the violators'
-message content. The V-368 pattern from sister-repo cleanups is the
-reference; copy the approach.)
+The script applies plain-text message replacements via filter-repo:
+
+- AI-tooling proper-noun strings (`Claude` / `Anthropic` / etc.) →
+  process-handoff / LLM-vendor framing per the sub-processor
+  disclosure context.
+- Personal-name / founder tokens → team / driftstack-team framing per
+  V-211.
+
+Replacements are minimal and surgical — code trees, author identity,
+and pre-violator commit SHAs all preserved.
+
+A pre-scrub backup tag is created automatically
+(`pre-v528-scrub-<timestamp>`) so a careful operator can recover via
+`git reset --hard <tag>` if the rewrite is wrong; delete the tag
+after verification.
 
 ⚠️ **Run Step 5 ONLY AFTER Step 3** — if SDK extraction branches were
 pushed to public remotes already, those public remotes carry the un-scrubbed
@@ -217,17 +271,18 @@ The `publish.yml` workflow picks up the tag push and publishes.
 
 ## Estimated wall-clock time
 
-- Pre-flight: 5 min
-- Step 1 (LICENSE per branch): 5 min
-- Step 2 (per-SDK adjustments): 30-60 min depending on api-types bundling
-  decision
+With V-656 pre-stage:
+
+- Pre-flight: 30 sec (`scripts/v528-prestage.sh`)
+- Step 1 (LICENSE staging): handled by pre-stage script (0 min)
+- Step 2 (per-SDK adjustments): 1-2 min per SDK via adjustment scripts
 - Step 3 (repo creation + push): 10 min
 - Step 4 (private flip): 1 min
-- Step 5 (V-205 scrub + force push): 15-30 min
+- Step 5 (V-205 scrub + force push): 5 min (script-driven)
 - Step 6 (external link redirect): 15 min
 - Step 7 (CI secrets + first publish): 30 min
 
-Total: ~2-3 hours for a careful run.
+Total: ~30-40 min for a careful run (down from 2-3 hours pre-V-656).
 
 ## Open questions for the team
 
