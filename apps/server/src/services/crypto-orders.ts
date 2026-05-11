@@ -58,6 +58,15 @@ export interface CryptoOrder {
    * refund_requested_at.
    */
   refund_reason: string | null;
+  /**
+   * V-666.AA — admin-only internal note attached to the order. Used
+   * by ops to record context that should NOT be visible to the
+   * customer (e.g. "VIP account, manual outreach", "fraud signal,
+   * watch for chargeback"). Capped at 2000 chars at the route layer
+   * — twice the customer_note budget since these are internal +
+   * support runbooks tend to be more verbose. Null when unset.
+   */
+  internal_note: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -214,6 +223,7 @@ export class CryptoOrdersService {
       customer_note: null,
       refund_requested_at: null,
       refund_reason: null,
+      internal_note: null,
       created_at: now,
       updated_at: now,
     };
@@ -257,6 +267,33 @@ export class CryptoOrdersService {
     };
     await this.opts.repo.upsert(updated);
     return { ok: 'recorded', order: updated };
+  }
+
+  /**
+   * V-666.AA — admin sets / updates / clears the internal note on
+   * an order. Works on every status (unlike requestRefund which is
+   * paid-only) since ops may want to record context on a pending
+   * order ("customer reached out about wallet network mistake") just
+   * as much as on a paid one. Empty string normalises to null so
+   * "clearing" the note is the same code path as "unset".
+   *
+   * Returns the updated order, or null when the order doesn't exist.
+   */
+  async setInternalNote(args: {
+    order_id: string;
+    internal_note: string | null;
+  }): Promise<CryptoOrder | null> {
+    const order = await this.opts.repo.getById(args.order_id);
+    if (order === null) return null;
+    const normalised =
+      args.internal_note === null || args.internal_note.length === 0 ? null : args.internal_note;
+    const updated: CryptoOrder = {
+      ...order,
+      internal_note: normalised,
+      updated_at: this.nowFn(),
+    };
+    await this.opts.repo.upsert(updated);
+    return updated;
   }
 
   /**

@@ -1,5 +1,7 @@
 // V-534.AG — admin crypto-orders view.
 // V-534.AK — adds inline refund-request action with confirmation modal.
+// V-534.AL — adds inline internal-note editor (admin-only field, never
+//            shown to the customer).
 //
 // Admin-only counterpart to CryptoOrdersHistoryView. Calls
 // /v1/admin/crypto-orders (V-666.D + V-666.T) and renders the full
@@ -20,6 +22,7 @@ import {
   useAdminCryptoOrdersList,
   type AdminCryptoOrder,
 } from '../lib/use-admin-crypto-orders-list';
+import { useAdminInternalNote } from '../lib/use-admin-internal-note';
 import { useAdminRequestRefund } from '../lib/use-admin-request-refund';
 
 const STATUS_OPTIONS: Array<{ value: AdminCryptoOrder['status'] | ''; label: string }> = [
@@ -37,11 +40,14 @@ export function CryptoOrdersAdminView(): JSX.Element {
   const [search, setSearch] = useState<string>('');
   const [refundTarget, setRefundTarget] = useState<AdminCryptoOrder | null>(null);
   const [reasonInput, setReasonInput] = useState<string>('');
+  const [noteTarget, setNoteTarget] = useState<AdminCryptoOrder | null>(null);
+  const [noteInput, setNoteInput] = useState<string>('');
   const { state, refetch } = useAdminCryptoOrdersList({
     status: status === '' ? null : status,
     search,
   });
   const refund = useAdminRequestRefund();
+  const internalNote = useAdminInternalNote();
 
   useEffect(() => {
     if (refund.state.kind === 'succeeded') {
@@ -52,6 +58,16 @@ export function CryptoOrdersAdminView(): JSX.Element {
       });
     }
   }, [refund.state, refund, refetch]);
+
+  useEffect(() => {
+    if (internalNote.state.kind === 'succeeded') {
+      void refetch().then(() => {
+        internalNote.reset();
+        setNoteTarget(null);
+        setNoteInput('');
+      });
+    }
+  }, [internalNote.state, internalNote, refetch]);
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
@@ -142,29 +158,44 @@ export function CryptoOrdersAdminView(): JSX.Element {
                   </td>
                   <td className="py-2 pr-4 text-ink-secondary">{formatRelative(o.created_at)}</td>
                   <td className="py-2 pr-4">
-                    {isPaid && !refundOutstanding && (
+                    <div className="flex flex-wrap items-center gap-1">
                       <button
                         type="button"
                         onClick={() => {
-                          setRefundTarget(o);
-                          setReasonInput('');
+                          setNoteTarget(o);
+                          setNoteInput(o.internal_note ?? '');
                         }}
                         className="rounded border border-surface-divider px-2 py-1 text-xs font-medium hover:bg-surface-inset"
+                        aria-label={`Edit internal note for ${o.order_id}`}
                       >
-                        Request refund
+                        {o.internal_note != null && o.internal_note.length > 0
+                          ? 'Edit note'
+                          : 'Add note'}
                       </button>
-                    )}
-                    {refundOutstanding && (
-                      <button
-                        type="button"
-                        onClick={() => void refund.cancel(o.order_id)}
-                        disabled={isCancellingHere}
-                        className="rounded border border-status-warning/40 px-2 py-1 text-xs font-medium text-status-warning hover:bg-status-warning/10 disabled:opacity-50"
-                        aria-label={`Cancel refund request for ${o.order_id}`}
-                      >
-                        {isCancellingHere ? 'Clearing…' : 'Clear refund'}
-                      </button>
-                    )}
+                      {isPaid && !refundOutstanding && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRefundTarget(o);
+                            setReasonInput('');
+                          }}
+                          className="rounded border border-surface-divider px-2 py-1 text-xs font-medium hover:bg-surface-inset"
+                        >
+                          Request refund
+                        </button>
+                      )}
+                      {refundOutstanding && (
+                        <button
+                          type="button"
+                          onClick={() => void refund.cancel(o.order_id)}
+                          disabled={isCancellingHere}
+                          className="rounded border border-status-warning/40 px-2 py-1 text-xs font-medium text-status-warning hover:bg-status-warning/10 disabled:opacity-50"
+                          aria-label={`Cancel refund request for ${o.order_id}`}
+                        >
+                          {isCancellingHere ? 'Clearing…' : 'Clear refund'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -175,6 +206,10 @@ export function CryptoOrdersAdminView(): JSX.Element {
 
       {refund.state.kind === 'failed' && (
         <ErrorBanner message={refund.state.message} onDismiss={() => refund.reset()} />
+      )}
+
+      {internalNote.state.kind === 'failed' && (
+        <ErrorBanner message={internalNote.state.message} onDismiss={() => internalNote.reset()} />
       )}
 
       {refundTarget !== null && (
@@ -223,6 +258,58 @@ export function CryptoOrdersAdminView(): JSX.Element {
                 className="rounded border border-status-error/40 bg-status-error/10 px-3 py-1 text-sm font-medium text-status-error hover:bg-status-error/20 disabled:opacity-50"
               >
                 {refund.state.kind === 'submitting' ? 'Submitting…' : 'Confirm refund'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {noteTarget !== null && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Edit internal note"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <div className="flex w-full max-w-md flex-col gap-4 rounded-md border border-surface-divider bg-surface-base p-6">
+            <h3 className="text-base font-semibold">Internal note</h3>
+            <p className="text-sm text-ink-secondary">
+              Admin-only context for order{' '}
+              <span className="font-mono text-xs">{noteTarget.order_id}</span>. This note is never
+              shown to the customer. Leave empty + save to clear.
+            </p>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="sr-only">Internal note</span>
+              <textarea
+                value={noteInput}
+                onChange={(e) => setNoteInput(e.target.value)}
+                rows={5}
+                maxLength={2000}
+                placeholder="VIP — manual outreach scheduled / fraud signal / etc."
+                className="rounded border border-surface-divider bg-surface-inset p-2 text-sm"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setNoteTarget(null);
+                  setNoteInput('');
+                }}
+                className="rounded border border-surface-divider px-3 py-1 text-sm hover:bg-surface-inset"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = noteInput.trim().length === 0 ? null : noteInput;
+                  void internalNote.save(noteTarget.order_id, next);
+                }}
+                disabled={internalNote.state.kind === 'submitting'}
+                className="rounded border border-surface-divider bg-surface-inset px-3 py-1 text-sm font-medium hover:bg-surface-base disabled:opacity-50"
+              >
+                {internalNote.state.kind === 'submitting' ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>

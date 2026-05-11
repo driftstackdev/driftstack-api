@@ -8,6 +8,7 @@
 //   POST /v1/admin/crypto-orders/:order_id/apply-ipn  (V-666.F)
 //   POST /v1/admin/crypto-orders/:order_id/request-refund (V-666.X)
 //   POST /v1/admin/crypto-orders/:order_id/cancel-refund-request (V-666.Y)
+//   PATCH /v1/admin/crypto-orders/:order_id/internal-note (V-666.AA)
 //   POST /v1/admin/crypto-orders/sweep-expired        (V-666.L)
 //
 // Auth: driftstack_internal_admin scope. Used by the founder dashboard
@@ -80,11 +81,17 @@ function toPublic(order: CryptoOrder): Record<string, unknown> {
     price_currency: order.price_currency,
     payment_id: order.payment_id,
     status: order.status,
+    customer_note: order.customer_note ?? null,
     refund_requested_at:
       // Defensive `!= null` so `undefined` from older repo fixtures
       // still serialises to null rather than throwing a Date(undefined).
       order.refund_requested_at != null ? new Date(order.refund_requested_at).toISOString() : null,
     refund_reason: order.refund_reason ?? null,
+    // V-666.AA — admin-only field; nullish-coalesce mirrors the
+    // defensive posture on refund_reason so older repo fixtures
+    // serialise cleanly even before they round-trip through the
+    // service's create() path.
+    internal_note: order.internal_note ?? null,
     created_at: new Date(order.created_at).toISOString(),
     updated_at: new Date(order.updated_at).toISOString(),
   };
@@ -94,6 +101,13 @@ function toPublic(order: CryptoOrder): Record<string, unknown> {
 // capped at 500 chars (matches customer_note ceiling for symmetry).
 const RequestRefundBody = z.object({
   reason: z.string().min(1).max(500),
+});
+
+// V-666.AA — admin internal-note body. Empty string normalises to
+// null at the service layer; 2000-char ceiling is twice the
+// customer_note budget because internal runbooks tend to be longer.
+const InternalNoteBody = z.object({
+  internal_note: z.string().max(2000).nullable(),
 });
 
 export function registerAdminCryptoOrdersRoutes(
@@ -193,6 +207,7 @@ export function registerAdminCryptoOrdersRoutes(
           'customer_note',
           'refund_requested_at',
           'refund_reason',
+          'internal_note',
           'created_at',
           'updated_at',
         ],
@@ -207,6 +222,7 @@ export function registerAdminCryptoOrdersRoutes(
           o.customer_note,
           o.refund_requested_at !== null ? new Date(o.refund_requested_at).toISOString() : null,
           o.refund_reason,
+          o.internal_note,
           new Date(o.created_at).toISOString(),
           new Date(o.updated_at).toISOString(),
         ]),
@@ -370,6 +386,35 @@ export function registerAdminCryptoOrdersRoutes(
         );
       }
       return reply.send(toPublic(result.order));
+    },
+  );
+
+  // V-666.AA — admin sets / clears the internal-note field on an
+  // order. PATCH semantics: send { internal_note: "..." } to set,
+  // { internal_note: null } or { internal_note: "" } to clear.
+  app.patch<{
+    Params: { order_id: string };
+    Body: { internal_note?: string | null };
+  }>(
+    '/v1/admin/crypto-orders/:order_id/internal-note',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    async (
+      req: FastifyRequest<{
+        Params: { order_id: string };
+        Body: { internal_note?: string | null };
+      }>,
+      reply,
+    ) => {
+      const params = parseOrThrow(GetParams, req.params);
+      const body = parseOrThrow(InternalNoteBody, req.body);
+      const updated = await deps.service.setInternalNote({
+        order_id: params.order_id,
+        internal_note: body.internal_note,
+      });
+      if (updated === null) {
+        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
+      }
+      return reply.send(toPublic(updated));
     },
   );
 

@@ -11,6 +11,7 @@
 // V-666.W — appended tests for getStatsForAdmin avgTimeToPaidMs metric.
 // V-666.X — appended tests for admin requestRefund.
 // V-666.Y — appended tests for admin cancelRefundRequest.
+// V-666.AA — appended tests for admin setInternalNote.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -1510,5 +1511,119 @@ describe('V-666.Y cancelRefundRequest', () => {
     await svc.cancelRefundRequest({ order_id: 'ord_y' });
     const fetched = await svc.getById('ord_y');
     expect(fetched?.status).toBe('paid');
+  });
+});
+
+describe('V-666.AA setInternalNote', () => {
+  async function seed(now: number = 1_000): Promise<{
+    svc: CryptoOrdersService;
+    setNow: (t: number) => void;
+  }> {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let n = now;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => n });
+    await svc.create({
+      order_id: 'ord_note',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 14900,
+      price_currency: 'EUR',
+    });
+    return {
+      svc,
+      setNow: (t) => {
+        n = t;
+      },
+    };
+  }
+
+  it('returns null when the order does not exist', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    const r = await svc.setInternalNote({
+      order_id: 'ord_missing',
+      internal_note: 'hi',
+    });
+    expect(r).toBeNull();
+  });
+
+  it('writes the note + bumps updated_at on first set', async () => {
+    const { svc, setNow } = await seed();
+    setNow(50_000);
+    const r = await svc.setInternalNote({
+      order_id: 'ord_note',
+      internal_note: 'VIP customer, manual outreach',
+    });
+    expect(r?.internal_note).toBe('VIP customer, manual outreach');
+    expect(r?.updated_at).toBe(50_000);
+  });
+
+  it('overwrites the note on subsequent writes', async () => {
+    const { svc } = await seed();
+    await svc.setInternalNote({
+      order_id: 'ord_note',
+      internal_note: 'first take',
+    });
+    const r = await svc.setInternalNote({
+      order_id: 'ord_note',
+      internal_note: 'amended take',
+    });
+    expect(r?.internal_note).toBe('amended take');
+  });
+
+  it('empty string normalises to null', async () => {
+    const { svc } = await seed();
+    await svc.setInternalNote({
+      order_id: 'ord_note',
+      internal_note: 'something',
+    });
+    const r = await svc.setInternalNote({
+      order_id: 'ord_note',
+      internal_note: '',
+    });
+    expect(r?.internal_note).toBeNull();
+  });
+
+  it('explicit null clears the note', async () => {
+    const { svc } = await seed();
+    await svc.setInternalNote({
+      order_id: 'ord_note',
+      internal_note: 'something',
+    });
+    const r = await svc.setInternalNote({
+      order_id: 'ord_note',
+      internal_note: null,
+    });
+    expect(r?.internal_note).toBeNull();
+  });
+
+  it('does not change the order status (works in any state)', async () => {
+    const { svc } = await seed();
+    await svc.applyIpnStatus({
+      order_id: 'ord_note',
+      payment_id: 'np',
+      provider_status: 'finished',
+    });
+    const r = await svc.setInternalNote({
+      order_id: 'ord_note',
+      internal_note: 'paid, watch for chargeback',
+    });
+    expect(r?.status).toBe('paid');
+    expect(r?.internal_note).toBe('paid, watch for chargeback');
+  });
+
+  it('preserves customer_note (separate field from internal_note)', async () => {
+    const { svc } = await seed();
+    await svc.updateCustomerNote({
+      order_id: 'ord_note',
+      account_id: 'acc',
+      customer_note: 'PO-9999',
+    });
+    const r = await svc.setInternalNote({
+      order_id: 'ord_note',
+      internal_note: 'support note',
+    });
+    expect(r?.customer_note).toBe('PO-9999');
+    expect(r?.internal_note).toBe('support note');
   });
 });

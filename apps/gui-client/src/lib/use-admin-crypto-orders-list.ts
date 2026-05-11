@@ -12,10 +12,14 @@ import type { CryptoOrderData } from './use-crypto-order';
 
 export interface AdminCryptoOrder extends CryptoOrderData {
   account_id: string | null;
+  /** Customer-side bookkeeping note (also surfaced to the customer). */
+  customer_note?: string | null;
   /** V-666.X — admin refund-request timestamp (ISO). Null when no refund recorded. */
   refund_requested_at?: string | null;
   /** V-666.X — admin refund-request reason. Null when no refund recorded. */
   refund_reason?: string | null;
+  /** V-666.AA — admin-only internal note. Not visible to the customer. */
+  internal_note?: string | null;
 }
 
 export interface AdminCryptoOrdersListData {

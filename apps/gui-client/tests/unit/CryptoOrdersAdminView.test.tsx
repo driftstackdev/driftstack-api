@@ -1,5 +1,6 @@
 // V-534.AG — unit tests for CryptoOrdersAdminView.
 // V-534.AK — extended for refund-request action button + confirmation modal.
+// V-534.AL — extended for internal-note editor.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -359,5 +360,190 @@ describe('V-534.AK CryptoOrdersAdminView — refund-request action', () => {
         ),
       ).toBe(true);
     });
+  });
+});
+
+describe('V-534.AL CryptoOrdersAdminView — internal note editor', () => {
+  it('shows "Add note" when no internal_note is set + "Edit note" when one exists', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              orders: [
+                makeOrder({ order_id: 'ord_blank', status: 'pending' }),
+                makeOrder({
+                  order_id: 'ord_noted',
+                  status: 'pending',
+                  internal_note: 'watch this',
+                }),
+              ],
+            }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersAdminView />);
+    await waitFor(() => {
+      expect(screen.getByText('ord_blank')).toBeTruthy();
+    });
+    expect(
+      screen.getByRole('button', { name: /Edit internal note for ord_blank/i }).textContent,
+    ).toContain('Add note');
+    expect(
+      screen.getByRole('button', { name: /Edit internal note for ord_noted/i }).textContent,
+    ).toContain('Edit note');
+  });
+
+  it('clicking the button opens the editor pre-filled with the current value', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              orders: [
+                makeOrder({
+                  order_id: 'ord_n',
+                  status: 'pending',
+                  internal_note: 'existing context',
+                }),
+              ],
+            }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersAdminView />);
+    fireEvent.click(
+      await waitFor(() => screen.getByRole('button', { name: /Edit internal note for ord_n/i })),
+    );
+    const dialog = screen.getByRole('dialog', { name: /Edit internal note/i });
+    expect(dialog).toBeTruthy();
+    const textarea = dialog.querySelector('textarea');
+    expect(textarea?.value).toBe('existing context');
+  });
+
+  it('Save sends PATCH /internal-note with the entered text', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'PATCH' && url.endsWith('/internal-note')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve(
+              makeOrder({
+                order_id: 'ord_n',
+                status: 'pending',
+                internal_note: 'support runbook applied',
+              }),
+            ),
+        } as unknown as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            orders: [makeOrder({ order_id: 'ord_n', status: 'pending' })],
+          }),
+      } as unknown as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<CryptoOrdersAdminView />);
+    fireEvent.click(
+      await waitFor(() => screen.getByRole('button', { name: /Edit internal note for ord_n/i })),
+    );
+    const dialog = screen.getByRole('dialog', { name: /Edit internal note/i });
+    const textarea = dialog.querySelector('textarea') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: 'support runbook applied' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save/i }));
+    await waitFor(() => {
+      const patchCalls = fetchMock.mock.calls.filter(
+        ([u, init]) =>
+          typeof u === 'string' && u.endsWith('/internal-note') && init?.method === 'PATCH',
+      );
+      expect(patchCalls.length).toBeGreaterThan(0);
+      const body = JSON.parse((patchCalls[0]?.[1] as RequestInit).body as string) as {
+        internal_note: string | null;
+      };
+      expect(body.internal_note).toBe('support runbook applied');
+    });
+  });
+
+  it('Save with empty textarea sends internal_note=null (clear)', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'PATCH' && url.endsWith('/internal-note')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve(
+              makeOrder({ order_id: 'ord_n', status: 'pending', internal_note: null }),
+            ),
+        } as unknown as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            orders: [
+              makeOrder({
+                order_id: 'ord_n',
+                status: 'pending',
+                internal_note: 'to be cleared',
+              }),
+            ],
+          }),
+      } as unknown as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<CryptoOrdersAdminView />);
+    fireEvent.click(
+      await waitFor(() => screen.getByRole('button', { name: /Edit internal note for ord_n/i })),
+    );
+    const dialog = screen.getByRole('dialog', { name: /Edit internal note/i });
+    const textarea = dialog.querySelector('textarea') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save/i }));
+    await waitFor(() => {
+      const patchCalls = fetchMock.mock.calls.filter(
+        ([u, init]) =>
+          typeof u === 'string' && u.endsWith('/internal-note') && init?.method === 'PATCH',
+      );
+      expect(patchCalls.length).toBeGreaterThan(0);
+      const body = JSON.parse((patchCalls[0]?.[1] as RequestInit).body as string) as {
+        internal_note: string | null;
+      };
+      expect(body.internal_note).toBeNull();
+    });
+  });
+
+  it('Cancel closes the modal without firing a PATCH', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            orders: [makeOrder({ order_id: 'ord_n', status: 'pending' })],
+          }),
+      } as unknown as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<CryptoOrdersAdminView />);
+    fireEvent.click(
+      await waitFor(() => screen.getByRole('button', { name: /Edit internal note for ord_n/i })),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog', { name: /Edit internal note/i })).toBeNull();
+    const patchCalls = fetchMock.mock.calls.filter(([, init]) => init?.method === 'PATCH');
+    expect(patchCalls).toHaveLength(0);
   });
 });

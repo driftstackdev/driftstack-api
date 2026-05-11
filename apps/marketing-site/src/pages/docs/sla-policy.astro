@@ -1,0 +1,154 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-711 — SLA policy for the public API + dashboard. Companion to
+// /docs/incident-policy (operational response) and /docs/api-versioning
+// (deprecation timelines). Pitched at procurement / customer security
+// review.
+---
+
+<BaseLayout title="SLA policy — Driftstack" description="Service availability commitments, measurement methodology, and remedy mechanics for each tier.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>SLA policy</h1>
+
+    <p class="lead">
+      This page documents Driftstack's availability commitments by
+      tier, how we measure uptime, what counts as an "incident," and
+      the credit mechanics when we fail to meet the target. It
+      describes the standard offering; enterprise contracts can
+      negotiate a tier-specific SLA addendum that supersedes this
+      page.
+    </p>
+
+    <h2>Tier-by-tier availability targets</h2>
+    <table>
+      <thead>
+        <tr><th>Tier</th><th>Monthly target</th><th>Max allowed downtime / month</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Trial / api_starter</td><td>—</td><td>(no SLA — best effort)</td></tr>
+        <tr><td>solo_manual / solo_automated</td><td>99.5%</td><td>~3h 40m</td></tr>
+        <tr><td>team_manual / team_growth</td><td>99.9%</td><td>~43m</td></tr>
+        <tr><td>api_builder / api_scale</td><td>99.95%</td><td>~21m</td></tr>
+        <tr><td>agency_manual / enterprise</td><td>99.99% (per addendum)</td><td>~4m</td></tr>
+      </tbody>
+    </table>
+    <p>
+      Tier upgrades take effect immediately on payment confirmation;
+      SLA credit accruals reset at the boundary so a mid-month upgrade
+      does not retroactively apply the higher target.
+    </p>
+
+    <h2>What's covered</h2>
+    <p>The SLA applies to these public surfaces:</p>
+    <ul>
+      <li><code>https://api.driftstack.dev/*</code> — every documented endpoint.</li>
+      <li><code>https://app.driftstack.dev/*</code> — the customer dashboard.</li>
+      <li>The live-view streaming endpoints for an active session.</li>
+    </ul>
+
+    <h2>What's NOT covered</h2>
+    <ul>
+      <li>Scheduled maintenance windows announced &gt;72h in advance
+        on <a href="https://status.driftstack.dev">status.driftstack.dev</a>.
+        Maintenance windows are capped at 4h/month and rarely
+        triggered (most deploys are zero-downtime rolling restarts).</li>
+      <li>Failures attributable to a customer-supplied
+        <code>target_url</code>, profile state, or script — those
+        affect that session's success rate, not Driftstack's
+        availability.</li>
+      <li>Sub-processor outages we cannot route around: NowPayments
+        IPN delivery, Stripe Checkout, Postmark email. We surface
+        the impact + the upstream status page link on
+        status.driftstack.dev.</li>
+      <li>Force majeure: regional cloud-provider failures, large-scale
+        DDoS against shared infrastructure, government-mandated
+        shutdowns. We still publish the incident; it just does not
+        accrue SLA credits.</li>
+    </ul>
+
+    <h2>How we measure</h2>
+    <p>
+      Availability is measured per calendar month, using probes from
+      our health-probe service (V-295b). The probes target:
+    </p>
+    <ul>
+      <li><code>GET /v1/health</code> — the API health endpoint.</li>
+      <li><code>GET /</code> on the dashboard — the customer-facing
+        SPA shell.</li>
+    </ul>
+    <p>
+      A probe is "failed" when it returns non-2xx OR exceeds 5s. A
+      minute is counted as downtime when 3+ consecutive probes fail
+      (i.e. ≥ 3 minutes of failure register, mirroring the auto-
+      incident threshold from V-295b). Probes run every 60s from
+      three geo-distributed locations; the minute counts as down only
+      when ≥ 2 of 3 locations register a failure (avoids regional
+      ISP routing issues being counted against us).
+    </p>
+
+    <h2>Credit mechanics</h2>
+    <p>
+      Missing the monthly target accrues a credit on the customer's
+      next invoice, computed against the monthly subscription fee:
+    </p>
+    <table>
+      <thead>
+        <tr><th>Uptime in month</th><th>Credit</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Below target, ≥ 99.0%</td><td>5%</td></tr>
+        <tr><td>Below 99.0%, ≥ 95.0%</td><td>10%</td></tr>
+        <tr><td>Below 95.0%</td><td>25%</td></tr>
+      </tbody>
+    </table>
+    <p>
+      Credits are capped at the customer's monthly subscription fee
+      for that month — they cannot exceed what was paid. Credits do
+      not apply to per-minute or per-session usage charges, only the
+      tier subscription line.
+    </p>
+
+    <h2>How to request a credit</h2>
+    <ol>
+      <li>
+        Email <a href="mailto:billing@driftstack.dev">billing@driftstack.dev</a>
+        within 30 days of the calendar month closing.
+      </li>
+      <li>
+        Include the time range you observed the impact + the failure
+        symptom you saw (5xx, timeout, etc.). If possible, include
+        the session ids that were affected.
+      </li>
+      <li>
+        We reconcile against the probe data + the audit trail on
+        status.driftstack.dev within 5 business days. Approved credits
+        appear on the next invoice as a line-item.
+      </li>
+    </ol>
+
+    <h2>Enterprise SLA addenda</h2>
+    <p>
+      Enterprise contracts can negotiate:
+    </p>
+    <ul>
+      <li>Higher per-incident credit percentages.</li>
+      <li>Hard ceilings on degraded-but-not-down windows (P95 latency
+        budgets).</li>
+      <li>Dedicated 24/7 oncall pager with named first responders.</li>
+      <li>Maintenance-window pre-approval rights.</li>
+    </ul>
+    <p>
+      Contact <a href="mailto:sales@driftstack.dev">sales@driftstack.dev</a>
+      to start the conversation. The default-tier SLA above is the
+      floor — addenda only ever strengthen it.
+    </p>
+
+    <h2>Related</h2>
+    <ul>
+      <li><a href="/docs/incident-policy">Incident communication policy</a></li>
+      <li><a href="/docs/api-versioning">API versioning + deprecation timelines</a></li>
+      <li><a href="https://status.driftstack.dev">Status page</a></li>
+    </ul>
+  </main>
+</BaseLayout>
