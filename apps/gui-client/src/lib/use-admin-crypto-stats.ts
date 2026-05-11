@@ -20,6 +20,10 @@ export interface AdminCryptoStatsData {
   paid_revenue_cents: Record<string, number>;
   avg_time_to_paid_ms: number | null;
   paid_sample: number;
+  /** V-666.AB — count of paid orders with an outstanding refund intent. */
+  refund_pending_count?: number;
+  /** V-666.AB — price_cents sum by currency across refund-pending orders. */
+  refund_pending_cents?: Record<string, number>;
   truncated: boolean;
   scanned: number;
 }

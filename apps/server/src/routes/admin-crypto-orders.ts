@@ -239,6 +239,8 @@ export function registerAdminCryptoOrdersRoutes(
   // more orders exist than the scan window (10k default).
   // V-666.W — adds avg_time_to_paid_ms + paid_sample for the ops
   // "how fast are customers actually paying" KPI.
+  // V-666.AB — adds refund_pending_count + refund_pending_cents for
+  // the "how many refunds are in flight" ops view.
   app.get(
     '/v1/admin/crypto-orders/stats',
     { preHandler: [app.requireScope('driftstack_internal_admin')] },
@@ -250,6 +252,8 @@ export function registerAdminCryptoOrdersRoutes(
         paid_revenue_cents: stats.paidRevenueCents,
         avg_time_to_paid_ms: stats.avgTimeToPaidMs,
         paid_sample: stats.paidSample,
+        refund_pending_count: stats.refundPendingCount,
+        refund_pending_cents: stats.refundPendingCents,
         truncated: stats.truncated,
         scanned: stats.scanned,
       });

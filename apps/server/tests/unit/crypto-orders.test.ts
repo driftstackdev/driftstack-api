@@ -12,6 +12,7 @@
 // V-666.X — appended tests for admin requestRefund.
 // V-666.Y — appended tests for admin cancelRefundRequest.
 // V-666.AA — appended tests for admin setInternalNote.
+// V-666.AB — appended tests for getStatsForAdmin refund-pending metrics.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -1625,5 +1626,96 @@ describe('V-666.AA setInternalNote', () => {
     });
     expect(r?.customer_note).toBe('PO-9999');
     expect(r?.internal_note).toBe('support note');
+  });
+});
+
+describe('V-666.AB getStatsForAdmin — refund-pending metrics', () => {
+  async function seedMixed(): Promise<CryptoOrdersService> {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = 1_000;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
+    // Paid + refund-pending in EUR.
+    await svc.create({
+      order_id: 'ord_r1',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 14900,
+      price_currency: 'EUR',
+    });
+    now = 2_000;
+    await svc.applyIpnStatus({ order_id: 'ord_r1', payment_id: 'np', provider_status: 'finished' });
+    now = 3_000;
+    await svc.requestRefund({ order_id: 'ord_r1', reason: 'chargeback risk' });
+    // Paid + refund-pending in USD.
+    now = 4_000;
+    await svc.create({
+      order_id: 'ord_r2',
+      account_id: 'acc',
+      product: 'api_starter',
+      price_cents: 5000,
+      price_currency: 'USD',
+    });
+    now = 5_000;
+    await svc.applyIpnStatus({ order_id: 'ord_r2', payment_id: 'np', provider_status: 'finished' });
+    now = 6_000;
+    await svc.requestRefund({ order_id: 'ord_r2', reason: 'duplicate' });
+    // Paid without refund.
+    now = 7_000;
+    await svc.create({
+      order_id: 'ord_clean',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 14900,
+      price_currency: 'EUR',
+    });
+    now = 8_000;
+    await svc.applyIpnStatus({
+      order_id: 'ord_clean',
+      payment_id: 'np',
+      provider_status: 'finished',
+    });
+    // Pending order — should not appear in refund-pending count.
+    now = 9_000;
+    await svc.create({
+      order_id: 'ord_pending',
+      account_id: 'acc',
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    return svc;
+  }
+
+  it('counts refund-pending orders + sums their price_cents by currency', async () => {
+    const svc = await seedMixed();
+    const stats = await svc.getStatsForAdmin();
+    expect(stats.refundPendingCount).toBe(2);
+    expect(stats.refundPendingCents).toEqual({ EUR: 14900, USD: 5000 });
+  });
+
+  it('refundPendingCount=0 + refundPendingCents={} when no refunds are pending', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await svc.create({
+      order_id: 'ord_p',
+      account_id: 'acc',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    await svc.applyIpnStatus({ order_id: 'ord_p', payment_id: 'np', provider_status: 'finished' });
+    const stats = await svc.getStatsForAdmin();
+    expect(stats.refundPendingCount).toBe(0);
+    expect(stats.refundPendingCents).toEqual({});
+  });
+
+  it('cancelling a refund request decrements the pending count on the next snapshot', async () => {
+    const svc = await seedMixed();
+    const before = await svc.getStatsForAdmin();
+    expect(before.refundPendingCount).toBe(2);
+    await svc.cancelRefundRequest({ order_id: 'ord_r1' });
+    const after = await svc.getStatsForAdmin();
+    expect(after.refundPendingCount).toBe(1);
+    expect(after.refundPendingCents).toEqual({ USD: 5000 });
   });
 });

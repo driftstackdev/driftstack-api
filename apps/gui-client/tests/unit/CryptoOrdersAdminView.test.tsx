@@ -1,6 +1,7 @@
 // V-534.AG — unit tests for CryptoOrdersAdminView.
 // V-534.AK — extended for refund-request action button + confirmation modal.
 // V-534.AL — extended for internal-note editor.
+// V-534.AM — extended for row-click → detail-drawer wiring.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -545,5 +546,74 @@ describe('V-534.AL CryptoOrdersAdminView — internal note editor', () => {
     expect(screen.queryByRole('dialog', { name: /Edit internal note/i })).toBeNull();
     const patchCalls = fetchMock.mock.calls.filter(([, init]) => init?.method === 'PATCH');
     expect(patchCalls).toHaveLength(0);
+  });
+});
+
+describe('V-534.AM CryptoOrdersAdminView — row click opens detail drawer', () => {
+  it('clicking a row opens the detail drawer for that order', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              orders: [makeOrder({ order_id: 'ord_open', status: 'paid' })],
+            }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersAdminView />);
+    const cell = await waitFor(() => screen.getByText('ord_open'));
+    const row = cell.closest('tr');
+    expect(row).not.toBeNull();
+    fireEvent.click(row!);
+    expect(screen.getByLabelText('Order detail for ord_open')).toBeTruthy();
+    expect(row?.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('clicking an action button does NOT open the drawer (stopPropagation)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              orders: [makeOrder({ order_id: 'ord_no_drawer', status: 'pending' })],
+            }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersAdminView />);
+    await waitFor(() => {
+      expect(screen.getByText('ord_no_drawer')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Edit internal note for ord_no_drawer/i }));
+    expect(screen.queryByLabelText('Order detail for ord_no_drawer')).toBeNull();
+  });
+
+  it('Close button on the drawer dismisses it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              orders: [makeOrder({ order_id: 'ord_close', status: 'paid' })],
+            }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersAdminView />);
+    const cell = await waitFor(() => screen.getByText('ord_close'));
+    fireEvent.click(cell.closest('tr')!);
+    expect(screen.getByLabelText('Order detail for ord_close')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Close order detail/i }));
+    expect(screen.queryByLabelText('Order detail for ord_close')).toBeNull();
   });
 });

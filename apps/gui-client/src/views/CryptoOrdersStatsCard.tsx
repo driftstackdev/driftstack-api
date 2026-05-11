@@ -54,6 +54,8 @@ export function CryptoOrdersStatsCard(): JSX.Element {
 
   const { data } = state;
   const revenueEntries = Object.entries(data.paid_revenue_cents);
+  const refundPendingEntries = Object.entries(data.refund_pending_cents ?? {});
+  const refundPendingCount = data.refund_pending_count ?? 0;
 
   return (
     <section
@@ -71,7 +73,7 @@ export function CryptoOrdersStatsCard(): JSX.Element {
         </button>
       </header>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
         <div>
           <p className="text-xs uppercase text-ink-secondary">Total orders</p>
           <p className="text-xl font-semibold">{data.total}</p>
@@ -88,6 +90,16 @@ export function CryptoOrdersStatsCard(): JSX.Element {
           <p className="text-xs uppercase text-ink-secondary">Avg time-to-pay</p>
           <p className="text-xl font-semibold">
             {data.avg_time_to_paid_ms !== null ? formatDurationMs(data.avg_time_to_paid_ms) : '—'}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs uppercase text-ink-secondary">Refund pending</p>
+          <p
+            className={`text-xl font-semibold ${
+              refundPendingCount > 0 ? 'text-status-warning' : ''
+            }`}
+          >
+            {refundPendingCount}
           </p>
         </div>
       </div>
@@ -118,6 +130,19 @@ export function CryptoOrdersStatsCard(): JSX.Element {
           </ul>
         )}
       </div>
+
+      {refundPendingEntries.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs uppercase text-ink-secondary">Refund pending value</p>
+          <ul className="flex flex-wrap gap-3 text-sm">
+            {refundPendingEntries.map(([currency, cents]) => (
+              <li key={currency} className="font-mono text-status-warning">
+                {formatCents(cents, currency)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {data.truncated && (
         <p className="text-xs text-status-warning">

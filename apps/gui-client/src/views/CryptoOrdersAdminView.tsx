@@ -2,6 +2,9 @@
 // V-534.AK — adds inline refund-request action with confirmation modal.
 // V-534.AL — adds inline internal-note editor (admin-only field, never
 //            shown to the customer).
+// V-534.AM — clicking an order row opens a detail drawer with the full
+//            envelope; action buttons stop propagation so they don't
+//            also open the drawer.
 //
 // Admin-only counterpart to CryptoOrdersHistoryView. Calls
 // /v1/admin/crypto-orders (V-666.D + V-666.T) and renders the full
@@ -15,6 +18,7 @@
 // customer's order).
 
 import { useEffect, useState } from 'react';
+import { CryptoOrderAdminDetailDrawer } from '../components/CryptoOrderAdminDetailDrawer';
 import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { formatCents, formatRelative } from '../lib/crypto-format';
@@ -42,6 +46,7 @@ export function CryptoOrdersAdminView(): JSX.Element {
   const [reasonInput, setReasonInput] = useState<string>('');
   const [noteTarget, setNoteTarget] = useState<AdminCryptoOrder | null>(null);
   const [noteInput, setNoteInput] = useState<string>('');
+  const [detailOrder, setDetailOrder] = useState<AdminCryptoOrder | null>(null);
   const { state, refetch } = useAdminCryptoOrdersList({
     status: status === '' ? null : status,
     search,
@@ -140,7 +145,14 @@ export function CryptoOrdersAdminView(): JSX.Element {
               const isCancellingHere =
                 refund.state.kind === 'submitting' && refund.state.orderId === o.order_id;
               return (
-                <tr key={o.order_id} className="border-t border-surface-divider">
+                <tr
+                  key={o.order_id}
+                  onClick={() => setDetailOrder(o)}
+                  aria-selected={detailOrder?.order_id === o.order_id}
+                  className={`cursor-pointer border-t border-surface-divider hover:bg-surface-inset ${
+                    detailOrder?.order_id === o.order_id ? 'bg-surface-inset' : ''
+                  }`}
+                >
                   <td className="py-2 pr-4 font-mono text-xs">{o.order_id}</td>
                   <td className="py-2 pr-4 font-mono text-xs">{o.account_id ?? '—'}</td>
                   <td className="py-2 pr-4">{o.product}</td>
@@ -161,7 +173,8 @@ export function CryptoOrdersAdminView(): JSX.Element {
                     <div className="flex flex-wrap items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setNoteTarget(o);
                           setNoteInput(o.internal_note ?? '');
                         }}
@@ -175,7 +188,8 @@ export function CryptoOrdersAdminView(): JSX.Element {
                       {isPaid && !refundOutstanding && (
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setRefundTarget(o);
                             setReasonInput('');
                           }}
@@ -187,7 +201,10 @@ export function CryptoOrdersAdminView(): JSX.Element {
                       {refundOutstanding && (
                         <button
                           type="button"
-                          onClick={() => void refund.cancel(o.order_id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void refund.cancel(o.order_id);
+                          }}
                           disabled={isCancellingHere}
                           className="rounded border border-status-warning/40 px-2 py-1 text-xs font-medium text-status-warning hover:bg-status-warning/10 disabled:opacity-50"
                           aria-label={`Cancel refund request for ${o.order_id}`}
@@ -314,6 +331,10 @@ export function CryptoOrdersAdminView(): JSX.Element {
             </div>
           </div>
         </div>
+      )}
+
+      {detailOrder !== null && (
+        <CryptoOrderAdminDetailDrawer order={detailOrder} onClose={() => setDetailOrder(null)} />
       )}
     </div>
   );

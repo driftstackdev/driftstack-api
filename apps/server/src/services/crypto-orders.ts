@@ -508,6 +508,20 @@ export class CryptoOrdersService {
     avgTimeToPaidMs: number | null;
     /** V-666.W — count of paid orders used to compute avgTimeToPaidMs. */
     paidSample: number;
+    /**
+     * V-666.AB — count of paid orders with a refund_requested_at
+     * timestamp set (i.e. the operator has asked for a refund but
+     * the on-chain refund hasn't been confirmed yet). Useful for the
+     * "how many refunds are in flight" ops question.
+     */
+    refundPendingCount: number;
+    /**
+     * V-666.AB — sum of `price_cents` across the refund-pending
+     * orders, broken down by currency. Mirrors paidRevenueCents
+     * shape so the dashboard can display them side-by-side without
+     * extra plumbing.
+     */
+    refundPendingCents: Record<string, number>;
     truncated: boolean;
     scanned: number;
   }> {
@@ -522,8 +536,10 @@ export class CryptoOrdersService {
       cancelled: 0,
     };
     const paidRevenueCents: Record<string, number> = {};
+    const refundPendingCents: Record<string, number> = {};
     let paidElapsedSumMs = 0;
     let paidSample = 0;
+    let refundPendingCount = 0;
     for (const o of rows) {
       byStatus[o.status] += 1;
       if (o.status === 'paid') {
@@ -538,6 +554,15 @@ export class CryptoOrdersService {
           paidSample += 1;
         }
       }
+      // V-666.AB — a refund is "pending" while refund_requested_at
+      // is set. The order may technically be in any status (we don't
+      // gate the field, only the requestRefund route does), but in
+      // practice only paid orders ever get it set today.
+      if (o.refund_requested_at !== null) {
+        refundPendingCount += 1;
+        refundPendingCents[o.price_currency] =
+          (refundPendingCents[o.price_currency] ?? 0) + o.price_cents;
+      }
     }
     return {
       total: rows.length,
@@ -545,6 +570,8 @@ export class CryptoOrdersService {
       paidRevenueCents,
       avgTimeToPaidMs: paidSample > 0 ? Math.round(paidElapsedSumMs / paidSample) : null,
       paidSample,
+      refundPendingCount,
+      refundPendingCents,
       truncated: rows.length === scanLimit,
       scanned: rows.length,
     };

@@ -1,0 +1,132 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-712 — public API changelog. Customer-facing summary of meaningful
+// API changes: new endpoints, schema additions (backward compatible),
+// deprecations, and security-relevant changes. Companion to
+// /docs/api-versioning (the policy) and the in-repo CHANGELOG (the
+// engineering-detail log).
+---
+
+<BaseLayout title="API changelog — Driftstack" description="Recent additions, deprecations, and breaking-change notices for the Driftstack public API.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>API changelog</h1>
+
+    <p class="lead">
+      This page summarises customer-facing API changes by month.
+      Backward-compatible additions appear without ceremony; the
+      <strong>Breaking</strong> tag flags anything that requires a
+      caller to update before the documented sunset date.
+    </p>
+
+    <h2>2026-05</h2>
+    <ul>
+      <li>
+        <strong>Crypto orders — PDF receipts.</strong>
+        <code>GET /v1/billing/crypto-orders/:id/receipt.pdf</code>
+        joins the existing <code>.txt</code> + JSON receipt variants.
+        Content-Disposition: attachment + a meaningful filename so
+        a browser GET triggers a download.
+      </li>
+      <li>
+        <strong>Crypto orders — customer note.</strong>
+        <code>PATCH /v1/billing/crypto-orders/:id</code> accepts
+        <code>{ customer_note: string | null }</code> (capped 500
+        chars). Stored on the order envelope and returned on subsequent
+        GETs.
+      </li>
+      <li>
+        <strong>Crypto orders — admin CSV export.</strong>
+        <code>GET /v1/admin/crypto-orders.csv</code> reuses the V-666.T
+        status + search filters and exports up to 1000 rows per call.
+      </li>
+      <li>
+        <strong>Crypto orders — admin stats KPIs.</strong>
+        <code>GET /v1/admin/crypto-orders/stats</code> response gains
+        <code>avg_time_to_paid_ms</code> + <code>paid_sample</code>
+        and (later in the month) <code>refund_pending_count</code> +
+        <code>refund_pending_cents</code>. Existing fields are
+        unchanged.
+      </li>
+      <li>
+        <strong>Crypto orders — admin refund flow.</strong> New admin-
+        only routes for recording refund intent +
+        clearing the intent + setting an admin-only internal note:
+        <code>POST .../request-refund</code>,
+        <code>POST .../cancel-refund-request</code>,
+        <code>PATCH .../internal-note</code>.
+      </li>
+      <li>
+        <strong>Webhooks — <code>crypto.order.paid</code>.</strong>
+        Now fires alongside the existing webhook surface when an order
+        transitions to paid (account-scoped, single-fire, idempotent
+        re-deliver of the same IPN doesn't re-fire).
+      </li>
+    </ul>
+
+    <h2>2026-04</h2>
+    <ul>
+      <li>
+        <strong>Crypto orders — admin status + search filters.</strong>
+        <code>GET /v1/admin/crypto-orders</code> accepts
+        <code>status</code> + <code>search</code> query params
+        filtering across order_id / product / customer_note.
+      </li>
+      <li>
+        <strong>Crypto orders — receipt + cancel endpoints.</strong>
+        <code>GET /v1/billing/crypto-orders/:id/receipt</code>,
+        <code>.txt</code> variant,
+        <code>POST /v1/billing/crypto-orders/:id/cancel</code> for
+        self-service abandonment of pending orders.
+      </li>
+      <li>
+        <strong>Crypto orders — admin daily breakdown.</strong>
+        <code>GET /v1/admin/crypto-orders/daily?days=N</code> returns
+        per-(date, status) counts for the last N days (max 90).
+      </li>
+    </ul>
+
+    <h2>2026-03</h2>
+    <ul>
+      <li>
+        <strong>Crypto orders — initial release.</strong>
+        <code>POST /v1/billing/crypto-checkout</code> mints orders;
+        the IPN webhook from NowPayments at
+        <code>POST /webhooks/nowpayments/ipn</code> drives the order
+        state machine. Customer-facing list at
+        <code>GET /v1/billing/crypto-orders</code>; admin surface at
+        <code>GET /v1/admin/crypto-orders</code>.
+      </li>
+    </ul>
+
+    <h2>Versioning policy</h2>
+    <p>
+      See <a href="/docs/api-versioning">the versioning policy</a> for
+      the full lifecycle:
+    </p>
+    <ul>
+      <li>New endpoints + new optional fields ship without bumping the version.</li>
+      <li>Removing a field or changing its type requires a 6-month
+        sunset window with a <code>Deprecation</code> + <code>Sunset</code>
+        response header from the moment the deprecation lands.</li>
+      <li>Major-version bumps (next is v2) ship in lock-step with
+        published migration notes and at least 12 months of v1 support.</li>
+    </ul>
+
+    <h2>Subscribe</h2>
+    <p>
+      We post a summary of each month's changes to
+      <a href="https://status.driftstack.dev">status.driftstack.dev</a>
+      as a non-incident announcement, and email the
+      <code>api-changes@</code> mailing list. Subscribe at
+      <a href="https://app.driftstack.dev/settings/notifications">app.driftstack.dev/settings/notifications</a>.
+    </p>
+
+    <h2>Related</h2>
+    <ul>
+      <li><a href="/docs/api-versioning">API versioning policy</a></li>
+      <li><a href="/api-reference">API reference</a></li>
+      <li><a href="/docs/error-codes">Error codes</a></li>
+    </ul>
+  </main>
+</BaseLayout>

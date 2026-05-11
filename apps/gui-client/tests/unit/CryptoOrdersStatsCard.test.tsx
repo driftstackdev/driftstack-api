@@ -1,4 +1,5 @@
 // V-534.AI — unit tests for CryptoOrdersStatsCard.
+// V-666.AB — extended for refund-pending count + value display.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -217,5 +218,84 @@ describe('V-534.AI CryptoOrdersStatsCard', () => {
     await waitFor(() => {
       expect(screen.getByText(/HTTP 403/)).toBeTruthy();
     });
+  });
+});
+
+describe('V-666.AB CryptoOrdersStatsCard — refund-pending metrics', () => {
+  it('shows refund-pending count of 0 when none are pending', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve(
+              makeStats({
+                refund_pending_count: 0,
+                refund_pending_cents: {},
+              }),
+            ),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersStatsCard />);
+    await waitFor(() => {
+      expect(screen.getByText('Refund pending')).toBeTruthy();
+    });
+    // The "Refund pending value" block should not render when empty.
+    expect(screen.queryByText('Refund pending value')).toBeNull();
+  });
+
+  it('renders the refund-pending count + currency breakdown', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve(
+              makeStats({
+                refund_pending_count: 2,
+                refund_pending_cents: { EUR: 14900, USD: 5000 },
+              }),
+            ),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersStatsCard />);
+    await waitFor(() => {
+      expect(screen.getByText('Refund pending value')).toBeTruthy();
+    });
+    expect(screen.getByText('149.00 EUR')).toBeTruthy();
+    expect(screen.getByText('50.00 USD')).toBeTruthy();
+    // The "Refund pending" KPI cell shows the count (2).
+    const refundPendingLabel = screen.getByText('Refund pending');
+    expect(refundPendingLabel.nextElementSibling?.textContent).toBe('2');
+  });
+
+  it('tolerates an older API response without the refund-pending fields', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => {
+            const base = makeStats();
+            delete base.refund_pending_count;
+            delete base.refund_pending_cents;
+            return Promise.resolve(base);
+          },
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersStatsCard />);
+    await waitFor(() => {
+      expect(screen.getByText('Refund pending')).toBeTruthy();
+    });
+    // Defaults to 0 in the count + omits the breakdown block.
+    expect(screen.queryByText('Refund pending value')).toBeNull();
   });
 });
