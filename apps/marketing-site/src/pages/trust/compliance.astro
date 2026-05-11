@@ -1,0 +1,278 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-661 (V-550.C) — compliance + pen-test + vulnerability-disclosure
+// page. Honest current-state surface: no claims for certifications we
+// don't have. Where work is in progress, we name the certification
+// and the expected timeline. Where we have no plans, the page is
+// silent (positive-list-only — silence is not a no).
+---
+
+<BaseLayout
+  title="Compliance & disclosure"
+  description="Driftstack compliance posture, pen-test access, vulnerability disclosure policy, and sub-processor change SLA. Honest current state — no certifications we don't have."
+>
+  <section class="bg-gradient-to-b from-white to-slate-50">
+    <div class="mx-auto max-w-4xl px-6 pb-12 pt-20 md:pt-24">
+      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        Trust center · Compliance
+      </p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+        Compliance posture &amp; disclosure
+      </h1>
+      <p class="mt-6 max-w-prose text-lg text-slate-600">
+        Where we are today, where we're going, and how to engage the
+        platform if you've found a vulnerability or need pen-test
+        evidence for a security review.
+      </p>
+    </div>
+  </section>
+
+  <!-- Current certifications -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-4xl px-6 py-16">
+      <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+        Certifications &amp; attestations
+      </h2>
+      <p class="mt-3 max-w-prose text-slate-600">
+        We list certifications that are either in place or actively in
+        progress. We don't list certifications we have no plans to
+        pursue — silence on a certification means "not on the current
+        roadmap", not "not applicable".
+      </p>
+
+      <table class="mt-8 w-full text-sm">
+        <thead>
+          <tr class="border-b border-slate-200 text-left">
+            <th class="py-2 pr-4 font-medium text-slate-900">Standard</th>
+            <th class="py-2 pr-4 font-medium text-slate-900">Status</th>
+            <th class="py-2 font-medium text-slate-900">Expected</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="border-b border-slate-100">
+            <td class="py-3 pr-4 align-top">
+              <span class="font-medium text-slate-900">GDPR Article 28</span><br />
+              <span class="text-xs text-slate-500">DPA with SCCs ready to sign</span>
+            </td>
+            <td class="py-3 pr-4 align-top">
+              <span
+                class="inline-block rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
+                >In place</span
+              >
+            </td>
+            <td class="py-3 align-top text-slate-600">Today — see
+              <a href="/legal/dpa" class="text-oxblood-700 underline">/legal/dpa</a>
+            </td>
+          </tr>
+          <tr class="border-b border-slate-100">
+            <td class="py-3 pr-4 align-top">
+              <span class="font-medium text-slate-900">SOC 2 Type I</span><br />
+              <span class="text-xs text-slate-500">Trust Services Criteria (security)</span>
+            </td>
+            <td class="py-3 pr-4 align-top">
+              <span
+                class="inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700"
+                >In progress</span
+              >
+            </td>
+            <td class="py-3 align-top text-slate-600">Q3 2026 (audit window)</td>
+          </tr>
+          <tr class="border-b border-slate-100">
+            <td class="py-3 pr-4 align-top">
+              <span class="font-medium text-slate-900">SOC 2 Type II</span><br />
+              <span class="text-xs text-slate-500">After 6-month observation window</span>
+            </td>
+            <td class="py-3 pr-4 align-top">
+              <span
+                class="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+                >Planned</span
+              >
+            </td>
+            <td class="py-3 align-top text-slate-600">Q1 2027</td>
+          </tr>
+          <tr>
+            <td class="py-3 pr-4 align-top">
+              <span class="font-medium text-slate-900">Independent pen-test</span><br />
+              <span class="text-xs text-slate-500">Annual external assessment</span>
+            </td>
+            <td class="py-3 pr-4 align-top">
+              <span
+                class="inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700"
+                >Scheduled</span
+              >
+            </td>
+            <td class="py-3 align-top text-slate-600">First engagement Q3 2026</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Pen-test access -->
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-4xl px-6 py-16">
+      <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+        Pen-test report access
+      </h2>
+      <p class="mt-3 max-w-prose text-slate-600">
+        The most recent pen-test executive summary is publicly
+        downloadable below. The full report — with remediation status
+        per finding and unredacted methodology — is available under NDA
+        to prospective customers under active security review.
+      </p>
+
+      <div class="mt-8 grid gap-6 md:grid-cols-2">
+        <div class="rounded-lg border border-slate-200 bg-white p-6">
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+            Public summary
+          </p>
+          <h3 class="mt-2 text-lg font-semibold text-slate-900">
+            Executive summary (PDF)
+          </h3>
+          <p class="mt-2 text-sm text-slate-600">
+            Findings count by severity, remediation status, scope of
+            the engagement. No sensitive technical detail.
+          </p>
+          <p class="mt-4 text-sm">
+            <span class="inline-block rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-600">
+              Available after first engagement (Q3 2026)
+            </span>
+          </p>
+        </div>
+        <div class="rounded-lg border border-slate-200 bg-white p-6">
+          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+            Full report (NDA-gated)
+          </p>
+          <h3 class="mt-2 text-lg font-semibold text-slate-900">
+            Request under NDA
+          </h3>
+          <p class="mt-2 text-sm text-slate-600">
+            Email
+            <a href="mailto:security@driftstack.dev" class="text-oxblood-700 underline"
+              >security@driftstack.dev</a
+            > with your company name and use case. We respond within
+            one business day with the NDA. Approved requests receive a
+            7-day signed download URL.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Vulnerability disclosure -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-4xl px-6 py-16">
+      <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+        Vulnerability disclosure policy
+      </h2>
+      <p class="mt-3 max-w-prose text-slate-600">
+        Found a security issue? Please report it privately — we're a
+        small team but we take security seriously and respond quickly.
+      </p>
+
+      <dl class="mt-8 space-y-6">
+        <div>
+          <dt class="text-sm font-medium text-slate-900">Where to report</dt>
+          <dd class="mt-1 text-sm text-slate-600">
+            <a href="mailto:security@driftstack.dev" class="text-oxblood-700 underline"
+              >security@driftstack.dev</a
+            >. Use PGP if your finding involves customer data exposure
+            (key fingerprint published on this page once available).
+          </dd>
+        </div>
+        <div>
+          <dt class="text-sm font-medium text-slate-900">What we commit to</dt>
+          <dd class="mt-1 text-sm text-slate-600">
+            <ul class="list-inside list-disc space-y-1">
+              <li>Acknowledge receipt within 2 business days.</li>
+              <li>Triage + initial severity within 5 business days.</li>
+              <li>
+                Status updates at least every 14 days until resolution.
+              </li>
+              <li>
+                Coordinated disclosure window: 90 days from report,
+                extendable on mutual agreement.
+              </li>
+              <li>
+                Public credit on this page (with reporter consent) once
+                the finding is remediated.
+              </li>
+            </ul>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-sm font-medium text-slate-900">Safe-harbour</dt>
+          <dd class="mt-1 text-sm text-slate-600">
+            We won't pursue legal action against good-faith security
+            research on the platform's public surface (api.driftstack.dev,
+            driftstack.dev, app.driftstack.dev) provided you:
+            <ul class="mt-2 list-inside list-disc space-y-1">
+              <li>Don't access, modify, or exfiltrate other customers' data.</li>
+              <li>Don't degrade service availability (no load tests against prod).</li>
+              <li>Report findings privately before public disclosure.</li>
+            </ul>
+          </dd>
+        </div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- Sub-processor change SLA -->
+  <section class="border-t border-slate-200 bg-slate-50">
+    <div class="mx-auto max-w-4xl px-6 py-16">
+      <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+        Sub-processor change SLA
+      </h2>
+      <p class="mt-3 max-w-prose text-slate-600">
+        Per GDPR Article 28(2) and DPA Annex 3, we provide 30 calendar
+        days' notice for any material change to the sub-processor list
+        (additions or replacements). Customers can object via email to
+        <a href="mailto:support@driftstack.dev" class="text-oxblood-700 underline"
+          >support@driftstack.dev</a
+        > during the notice window.
+      </p>
+      <p class="mt-4 max-w-prose text-slate-600">
+        The live list is published at
+        <a href="/trust/sub-processors" class="text-oxblood-700 underline"
+          >/trust/sub-processors</a
+        > and material changes are emitted as an RSS feed (subscribe
+        from the same page when V-550.A lands).
+      </p>
+    </div>
+  </section>
+
+  <!-- Audit-log retention -->
+  <section class="border-t border-slate-200 bg-white">
+    <div class="mx-auto max-w-4xl px-6 py-16">
+      <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+        Audit log retention
+      </h2>
+      <p class="mt-3 max-w-prose text-slate-600">
+        Per ADR-006:
+      </p>
+      <ul class="mt-4 max-w-prose list-inside list-disc space-y-2 text-slate-600">
+        <li>
+          <span class="font-medium text-slate-900">Customer-facing audit log</span> —
+          retained for 90 days, surfaced via the dashboard +
+          <a
+            href="https://docs.driftstack.dev/api/audit"
+            class="text-oxblood-700 underline">/v1/account/audit</a
+          >. Includes every action the customer's account took (API
+          key mints, profile creates, billing changes).
+        </li>
+        <li>
+          <span class="font-medium text-slate-900">Admin audit log</span> —
+          internal-only retention of 365 days for every privileged
+          admin action. Customer access requires legal process or
+          explicit customer consent.
+        </li>
+        <li>
+          <span class="font-medium text-slate-900">Access logs</span> —
+          90 days hot, 1 year cold for forensic timeline reconstruction.
+          Read-restricted to the on-call engineer + compliance lead.
+        </li>
+      </ul>
+    </div>
+  </section>
+</BaseLayout>

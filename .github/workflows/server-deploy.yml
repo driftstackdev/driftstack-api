@@ -124,7 +124,21 @@ jobs:
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy via SSH
+      # V-549.A / V-660 — pre-deploy smoke against the live target.
+      # If production is already broken, abort instead of layering a
+      # new deploy on top. Sub-second cost.
+      - name: Pre-deploy production smoke (V-549.A)
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 5 \
+            https://api.driftstack.dev/health > /dev/null
+          curl --fail --silent --show-error --max-time 5 \
+            https://api.driftstack.dev/openapi.json \
+            | jq -e '.openapi | startswith("3.1")' > /dev/null
+          echo "Pre-deploy smoke OK; proceeding with deploy."
+
+      - name: Deploy via SSH with auto-rollback (V-549.B)
         if: steps.gate.outputs.ready == 'true'
         uses: appleboy/ssh-action@v1
         with:
@@ -135,16 +149,41 @@ jobs:
             set -euo pipefail
             cd /opt/driftstack
             echo "${{ secrets.DEPLOY_DOTENV_BASE64 }}" | base64 -d > .env
+
+            # V-549.B — capture the currently-running image tag so we can
+            # roll back to it if the post-deploy health-check fails.
+            PREV_TAG=$(docker compose images --quiet driftstack-api 2>/dev/null \
+              | xargs -r docker inspect --format '{{(index .RepoTags 0)}}' 2>/dev/null \
+              | head -n1 || true)
+            if [ -n "$PREV_TAG" ]; then
+              echo "Previous image tag (for rollback): $PREV_TAG"
+            else
+              echo "No previous image tag detected — first deploy or scratch state."
+            fi
+
             export IMAGE_TAG='${{ needs.build-image.outputs.image-tag }}'
             docker compose pull
             docker compose up -d --remove-orphans
+
+            HEALTHY=0
             for i in 1 2 3 4 5 6 7 8 9 10; do
               if curl -fsS http://127.0.0.1:7780/health > /dev/null; then
                 echo "production (tag) healthy"
-                exit 0
+                HEALTHY=1
+                break
               fi
               echo "attempt $i: not ready yet, sleeping"
               sleep 3
             done
-            echo "production /health never returned 200"
-            exit 1
+
+            if [ "$HEALTHY" -ne 1 ]; then
+              echo "Post-deploy /health failed. Initiating V-549.B rollback."
+              if [ -n "$PREV_TAG" ]; then
+                export IMAGE_TAG="$PREV_TAG"
+                docker compose up -d --remove-orphans
+                echo "Rolled back to $PREV_TAG. Manual verification required."
+              else
+                echo "No previous tag to roll back to. Manual intervention required."
+              fi
+              exit 1
+            fi

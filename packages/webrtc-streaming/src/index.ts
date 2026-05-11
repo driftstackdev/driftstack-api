@@ -30,3 +30,6 @@ export { MockFrameSource } from './frame-source.js';
 
 export type { EncodedChunk, EncodePipelineOpts, EncodePipelineStats } from './encode-pipeline.js';
 export { EncodePipeline } from './encode-pipeline.js';
+
+export type { MockEncodedStream, MockEncodedStreamOpts } from './mock-codec-wrapper.js';
+export { createMockEncodedStream } from './mock-codec-wrapper.js';

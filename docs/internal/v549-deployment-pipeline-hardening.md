@@ -30,6 +30,10 @@ Gaps:
 
 V-549 closes these gaps with minimal infra change.
 
+**Implementation status:** V-549.A + V-549.B landed via V-660 (Wave 46)
+in `.github/workflows/server-deploy.yml`. V-549.C remains design-only
+until multi-instance landing.
+
 ## Three hardening layers
 
 ### V-549.A — pre-deploy smoke
