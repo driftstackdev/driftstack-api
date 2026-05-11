@@ -1,0 +1,148 @@
+// V-534.S — unit tests for useWebhooksList.
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderHook, waitFor } from '@testing-library/react';
+import type { WebhooksListResponse } from '../../src/lib/use-webhooks-list';
+
+interface MockSettings {
+  settings: { apiKey: string | null; baseUrl: string };
+}
+const useSettingsMock = vi.fn<() => MockSettings>();
+vi.mock('../../src/lib/SettingsContext', () => ({
+  useSettings: () => useSettingsMock(),
+}));
+
+const { useWebhooksList } = await import('../../src/lib/use-webhooks-list');
+
+const SAMPLE: WebhooksListResponse = {
+  webhooks: [
+    {
+      id: 'wh_1',
+      url: 'https://hooks.example/a',
+      events: ['session.completed'],
+      description: null,
+      active: true,
+      disabledAt: null,
+      createdAt: '2026-05-01T00:00:00.000Z',
+      counts: { delivered: 12, failed: 1, dlq: 0 },
+    },
+  ],
+};
+
+beforeEach(() => {
+  useSettingsMock.mockReturnValue({
+    settings: { apiKey: 'sk_test', baseUrl: 'https://api.driftstack.dev' },
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
+
+describe('V-534.S useWebhooksList — auto-fetch', () => {
+  it('transitions loading → ready', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(SAMPLE),
+        } as unknown as Response),
+      ),
+    );
+    const { result } = renderHook(() => useWebhooksList());
+    expect(result.current.state.kind).toBe('loading');
+    await waitFor(() => expect(result.current.state.kind).toBe('ready'));
+    if (result.current.state.kind === 'ready') {
+      expect(result.current.state.data.webhooks).toHaveLength(1);
+      expect(result.current.state.data.webhooks[0]?.counts.delivered).toBe(12);
+    }
+  });
+
+  it('calls /v1/webhooks with the bearer Authorization header', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(SAMPLE),
+      } as unknown as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    renderHook(() => useWebhooksList());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe('https://api.driftstack.dev/v1/webhooks');
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const headers = init?.headers as Record<string, string> | undefined;
+    expect(headers?.authorization).toBe('Bearer sk_test');
+  });
+});
+
+describe('V-534.S useWebhooksList — error paths', () => {
+  it('errors when no API key configured', async () => {
+    useSettingsMock.mockReturnValue({
+      settings: { apiKey: null, baseUrl: 'https://api.driftstack.dev' },
+    });
+    const { result } = renderHook(() => useWebhooksList());
+    await waitFor(() => expect(result.current.state.kind).toBe('error'));
+    if (result.current.state.kind === 'error') {
+      expect(result.current.state.message).toMatch(/API key/);
+    }
+  });
+
+  it('surfaces HTTP non-2xx', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 503,
+          json: () => Promise.resolve({}),
+        } as unknown as Response),
+      ),
+    );
+    const { result } = renderHook(() => useWebhooksList());
+    await waitFor(() => expect(result.current.state.kind).toBe('error'));
+    if (result.current.state.kind === 'error') {
+      expect(result.current.state.message).toBe('HTTP 503');
+    }
+  });
+
+  it('surfaces network failures', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('offline'))),
+    );
+    const { result } = renderHook(() => useWebhooksList());
+    await waitFor(() => expect(result.current.state.kind).toBe('error'));
+    if (result.current.state.kind === 'error') {
+      expect(result.current.state.message).toBe('offline');
+    }
+  });
+});
+
+describe('V-534.S useWebhooksList — manual mode', () => {
+  it('starts idle when manual=true', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useWebhooksList({ manual: true }));
+    expect(result.current.state.kind).toBe('idle');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('refetch() advances from idle to ready', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(SAMPLE),
+      } as unknown as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useWebhooksList({ manual: true }));
+    await result.current.refetch();
+    await waitFor(() => expect(result.current.state.kind).toBe('ready'));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

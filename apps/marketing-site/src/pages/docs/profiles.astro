@@ -1,0 +1,165 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-691 — profiles developer docs. Companion to /docs/sessions;
+// covers the saved-profile lifecycle for customers running
+// repeatable, identity-bound automations.
+
+const SAMPLE_PROFILE = `{
+  "id": "prof_…",
+  "name": "us-east-sales-bot",
+  "archetype": "default",
+  "user_agent": "Mozilla/5.0 (X11; Linux x86_64) ...",
+  "viewport": { "width": 1280, "height": 800 },
+  "locale": "en-US",
+  "timezone": "America/New_York",
+  "cookies_persisted": true,
+  "created_at": "2026-05-01T00:00:00.000Z",
+  "updated_at": "2026-05-11T12:00:00.000Z"
+}`;
+---
+
+<BaseLayout title="Profiles API — Driftstack developer docs" description="Saved browser profiles for repeatable, identity-bound automations.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Profiles</h1>
+
+    <p class="lead">
+      A profile is a saved browser identity — user agent, viewport,
+      locale, timezone, persisted cookies. Sessions can either run
+      ad-hoc (with a built-in archetype) or be pinned to a saved
+      profile for consistent identity across runs.
+    </p>
+
+    <h2>When to use a profile</h2>
+    <ul>
+      <li><strong>Authenticated scraping.</strong> The site requires
+        login; you want the session to carry over so each run doesn't
+        need to re-authenticate.</li>
+      <li><strong>A/B-tested rendering.</strong> The site personalises
+        based on cookies; you want to consistently see the same
+        variant across runs.</li>
+      <li><strong>Geographic + locale fidelity.</strong> You're
+        automating against a region-locked feature and need the
+        browser fingerprint to match.</li>
+    </ul>
+    <p>
+      If your automation doesn't care about identity continuity, skip
+      profiles and let sessions use the default archetype.
+    </p>
+
+    <h2>POST /v1/profiles — mint</h2>
+    <pre><code>{`POST /v1/profiles
+Authorization: Bearer ds_live_…
+Content-Type: application/json
+
+{
+  "name": "us-east-sales-bot",
+  "archetype": "default",                 ← starting point
+  "viewport": { "width": 1280, "height": 800 },
+  "locale": "en-US",
+  "timezone": "America/New_York",
+  "cookies_persisted": true               ← keep cookies across sessions
+}
+
+→ 201 Created
+${SAMPLE_PROFILE}`}</code></pre>
+    <p>
+      <code>archetype</code> selects the base preset (see
+      <a href="/docs/sessions">the sessions docs</a> for the list).
+      Subsequent fields override the archetype's defaults.
+    </p>
+
+    <h2>GET /v1/profiles — list</h2>
+    <pre><code>{`GET /v1/profiles?limit=25
+Authorization: Bearer ds_live_…
+
+→ 200 OK
+{
+  "profiles": [...],
+  "nextCursor": "cur_…"
+}`}</code></pre>
+
+    <h2>GET /v1/profiles/:id</h2>
+    <pre><code>{`GET /v1/profiles/prof_…
+Authorization: Bearer ds_live_…
+
+→ 200 OK
+${SAMPLE_PROFILE}`}</code></pre>
+
+    <h2>PATCH /v1/profiles/:id — update</h2>
+    <pre><code>{`PATCH /v1/profiles/prof_…
+Authorization: Bearer ds_live_…
+Content-Type: application/json
+
+{
+  "name": "us-east-sales-bot-v2",
+  "viewport": { "width": 1440, "height": 900 }
+}
+
+→ 200 OK
+${SAMPLE_PROFILE}`}</code></pre>
+    <p>
+      Only the fields you supply are updated. The
+      <code>cookies_persisted</code> flag is sticky — you cannot flip
+      it back to <code>false</code> after a session has written
+      cookies; you'd need to delete + re-mint the profile.
+    </p>
+
+    <h2>DELETE /v1/profiles/:id</h2>
+    <pre><code>{`DELETE /v1/profiles/prof_…
+Authorization: Bearer ds_live_…
+
+→ 204 No Content`}</code></pre>
+    <p>
+      Persisted cookies + storage state are deleted. In-flight
+      sessions that started with this profile keep running but
+      can't be pinned to it again. Idempotent: a second DELETE on
+      the same id returns 204.
+    </p>
+
+    <h2>Snapshot history (V-312)</h2>
+    <p>
+      Profile snapshots record the cookies + storage state at the
+      end of each session that used the profile. Customers can
+      restore a previous snapshot if the current state is broken
+      (e.g. the site logged the profile out):
+    </p>
+    <pre><code>{`GET /v1/profiles/prof_…/snapshots
+Authorization: Bearer ds_live_…
+
+→ {
+  "snapshots": [
+    { "id": "snap_…", "captured_at": "2026-05-11T11:00:00.000Z" },
+    ...
+  ]
+}
+
+POST /v1/profiles/prof_…/snapshots/snap_…/restore
+→ 200 OK { "restored": true }`}</code></pre>
+    <p>
+      Snapshots are kept for 30 days. Older snapshots are pruned
+      automatically.
+    </p>
+
+    <h2>Privacy + retention</h2>
+    <ul>
+      <li>Cookies + storage state stored in encrypted form at rest.</li>
+      <li>Profile + snapshots deleted on account deletion + 30 days
+        after the most recent customer-initiated DELETE.</li>
+      <li>No identifying customer data is included in the profile
+        fingerprint — the browser fingerprint is what you configure.</li>
+    </ul>
+
+    <h2>Limits</h2>
+    <p>
+      Max profiles per account: 50 (Solo Manual / API Starter), 250
+      (Team Manual / API Builder), 1000 (API Scale). Need more?
+      Email <a href="mailto:support@driftstack.dev">support</a>.
+    </p>
+
+    <h2>Support</h2>
+    <p>
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+    </p>
+  </main>
+</BaseLayout>

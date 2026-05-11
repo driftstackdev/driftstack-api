@@ -1,0 +1,148 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-692 — recordings developer docs. Companion to /docs/sessions
+// (which mentions recordings briefly); this is the deeper look at
+// the recording lifecycle + format + retention.
+---
+
+<BaseLayout title="Recordings — Driftstack developer docs" description="Session recordings — format, retention, playback URLs, redaction.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Recordings</h1>
+
+    <p class="lead">
+      Driftstack can record every session as a video for later
+      playback. This page covers the format, retention, playback
+      URL semantics, and redaction options.
+    </p>
+
+    <h2>Opt-in per session</h2>
+    <p>
+      Recordings are <strong>off by default</strong> — set
+      <code>record: true</code> on
+      <code>POST /v1/sessions</code> to enable. Storage costs apply
+      (~€0.015/GB-month at R2 list); a typical 10-minute session is
+      ~30 MB compressed.
+    </p>
+
+    <h2>Format</h2>
+    <ul>
+      <li><strong>Container:</strong> WebM (VP9 video, no audio).</li>
+      <li><strong>Resolution:</strong> matches the session's
+        viewport (1280×800 default, 1440×900 if the profile
+        overrides).</li>
+      <li><strong>Frame rate:</strong> 30 fps.</li>
+      <li><strong>Bitrate:</strong> adaptive; ~500 kbps typical.</li>
+    </ul>
+    <p>
+      We expose the WebM as-is — no transcoding. Most modern
+      browsers play it natively; for offline analysis, ffmpeg can
+      convert to MP4 in seconds (<code>ffmpeg -i in.webm -c:v
+      libx264 -crf 23 out.mp4</code>).
+    </p>
+
+    <h2>GET /v1/sessions/:id/recording</h2>
+    <pre><code>{`GET /v1/sessions/sess_…/recording
+Authorization: Bearer ds_live_…
+
+→ 200 OK
+{
+  "playback_url": "https://r2-…/recordings/sess_…/recording.webm?sig=…",
+  "expires_at": "2026-05-11T13:00:00.000Z",
+  "size_bytes": 31457280,
+  "duration_ms": 600000
+}`}</code></pre>
+    <p>
+      <code>playback_url</code> is presigned and expires in
+      <strong>1 hour</strong>. Cache the URL on your side if you're
+      embedding it in a UI, but refresh by calling the endpoint
+      again before the TTL.
+    </p>
+    <p>
+      Recordings are not available immediately on session end — the
+      WebM finalisation takes a few seconds. The endpoint returns
+      404 with <code>code: "recording_not_ready"</code> until then;
+      retry with exponential backoff.
+    </p>
+
+    <h2>Retention</h2>
+    <table>
+      <thead><tr><th>Tier</th><th>Recording retention</th></tr></thead>
+      <tbody>
+        <tr><td>Trial Pack</td><td>7 days</td></tr>
+        <tr><td>Solo Manual / API Starter</td><td>30 days</td></tr>
+        <tr><td>Team Manual / API Builder</td><td>90 days</td></tr>
+        <tr><td>Agency Manual / API Scale</td><td>180 days</td></tr>
+        <tr><td>Enterprise</td><td>Custom (default 180 days)</td></tr>
+      </tbody>
+    </table>
+    <p>
+      After retention expires, the recording is deleted from R2 and
+      the endpoint returns <code>recording_expired</code>. Customer-
+      initiated DELETE of a session is immediate.
+    </p>
+
+    <h2>session.recording_ready webhook</h2>
+    <p>
+      Subscribe to the <code>session.recording_ready</code> event
+      type if your pipeline kicks off downstream processing as
+      soon as the recording lands:
+    </p>
+    <pre><code>{`POST /v1/webhooks
+{
+  "url": "https://yourapp.com/driftstack-webhook",
+  "events": ["session.recording_ready"]
+}
+
+// When fired, the payload carries:
+{
+  "id": "evt_…",
+  "type": "session.recording_ready",
+  "data": {
+    "session_id": "sess_…",
+    "playback_url": "https://r2-…/…?sig=…",
+    "expires_at": "...",
+    "size_bytes": 31457280
+  }
+}`}</code></pre>
+    <p>
+      The playback URL in the webhook payload is presigned + valid
+      for 24 hours from the webhook fire. Past 24h you must call
+      the GET endpoint to refresh.
+    </p>
+
+    <h2>Redaction (V-540 follow-up)</h2>
+    <p>
+      Field-level redaction during recording (e.g. blacking out
+      password inputs) is a planned feature. Today the recording
+      captures everything visible in the browser viewport — assume
+      anything on-screen during the session is in the recording.
+      Don't record sessions that involve sensitive data without
+      redaction in place.
+    </p>
+
+    <h2>Storage cost</h2>
+    <p>
+      Recording bytes count against the cost-monitoring egress meter
+      (see <a href="/docs/cost-monitoring">/docs/cost-monitoring</a>).
+      Frequent playback of large recordings can move your cost
+      bands; the dashboard's billing-cost view shows the breakdown.
+    </p>
+
+    <h2>Privacy posture</h2>
+    <ul>
+      <li>Recordings stored in R2 with at-rest encryption (S3-SSE).</li>
+      <li>Presigned URLs are bearer tokens — anyone with the URL
+        can play within the 1-hour TTL. Don't paste them into
+        public channels.</li>
+      <li>Customer-deleted sessions purge the recording immediately;
+        retention-expired recordings are purged by the daily R2
+        lifecycle policy.</li>
+    </ul>
+
+    <h2>Support</h2>
+    <p>
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+    </p>
+  </main>
+</BaseLayout>
