@@ -59,6 +59,17 @@ export function registerAdminCostRoutes(
     },
   );
 
+  // V-683 — config inspector. Returns the wired rate card + tier
+  // thresholds without touching usage data. Useful for ops to verify
+  // a deploy + for the "what did we ship?" admin dashboard.
+  app.get(
+    '/v1/admin/cost/config',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    (_req, reply) => {
+      return reply.send(deps.service.getConfig());
+    },
+  );
+
   app.get<{ Querystring: { account_ids: string; billing_cycle?: string } }>(
     '/v1/admin/cost/overview',
     { preHandler: [app.requireScope('driftstack_internal_admin')] },

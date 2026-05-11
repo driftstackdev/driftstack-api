@@ -1,0 +1,216 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-684 — webhooks developer docs. Companion to /docs/api-quickstart
+// + /docs/oauth-apps; covers the subscribe→deliver→verify→retry
+// loop developers integrate against.
+
+const EVENT_TYPES = [
+  { name: 'session.completed', desc: 'Fires when a session finishes normally + the recording is ready.' },
+  { name: 'session.failed', desc: 'Fires when a session ends in an errored state.' },
+  { name: 'quota.warning_80pct', desc: 'Fires when an account hits 80% of a tier-metered quota.' },
+  { name: 'quota.exceeded', desc: 'Fires when an account exceeds a tier-metered quota.' },
+  { name: 'api_key.revoked', desc: 'Fires when an API key is revoked from the dashboard.' },
+];
+---
+
+<BaseLayout title="Webhooks — Driftstack developer docs" description="Subscribe to Driftstack events. Signature verification, retry policy, secret rotation.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Webhooks</h1>
+
+    <p class="lead">
+      Driftstack delivers event notifications to your HTTPS endpoint
+      as they happen. Use webhooks to react to session completion,
+      quota events, and key revocations without polling.
+    </p>
+
+    <h2>Event types</h2>
+    <table>
+      <thead><tr><th>Event</th><th>When it fires</th></tr></thead>
+      <tbody>
+        {EVENT_TYPES.map((e) => (
+          <tr><td><code>{e.name}</code></td><td>{e.desc}</td></tr>
+        ))}
+      </tbody>
+    </table>
+    <p class="text-sm text-slate-500">
+      Each account can have up to 10 active endpoints. Mint as many
+      narrow-purpose endpoints as you need rather than one mega-endpoint
+      that fans out — easier to retire individual integrations later.
+    </p>
+
+    <h2>Creating an endpoint</h2>
+    <pre><code>{`POST /v1/webhooks
+Authorization: Bearer ds_live_…
+Content-Type: application/json
+
+{
+  "url": "https://yourapp.com/driftstack-webhook",
+  "events": ["session.completed", "session.failed"],
+  "description": "Production listener"
+}
+
+→ {
+  "id": "wh_…",
+  "secret": "whsec_v1_…",   ← shown ONCE; copy it now
+  "url": "https://yourapp.com/driftstack-webhook",
+  "events": ["session.completed", "session.failed"],
+  …
+}`}</code></pre>
+    <p>
+      <strong>Important:</strong> the <code>secret</code> is shown
+      once in the response and never again. Store it in your config /
+      secret manager. If you lose it, rotate via
+      <code>POST /v1/webhooks/&lt;id&gt;/rotate-secret</code>.
+    </p>
+    <p>
+      Endpoint URLs MUST be HTTPS. <code>http://</code> is rejected
+      at registration time.
+    </p>
+
+    <h2>Delivery payload</h2>
+    <p>
+      Every event arrives as a JSON POST to your endpoint:
+    </p>
+    <pre><code>{`POST /driftstack-webhook
+X-Driftstack-Event: session.completed
+X-Driftstack-Event-Id: evt_…
+X-Driftstack-Signature: v1=hmac-sha256-hex
+X-Driftstack-Timestamp: 1736600000
+Content-Type: application/json
+
+{
+  "id": "evt_…",
+  "type": "session.completed",
+  "created_at": "2026-05-11T12:00:00.000Z",
+  "data": { /* event-specific payload */ }
+}`}</code></pre>
+
+    <h2>Signature verification</h2>
+    <p>
+      Always verify the signature before trusting the payload —
+      otherwise anyone who guesses your endpoint URL can spoof events.
+    </p>
+    <p>
+      The signature is computed as:
+    </p>
+    <pre><code>{`signature = HMAC-SHA256(
+  secret,
+  X-Driftstack-Timestamp + "." + raw_request_body
+)`}</code></pre>
+    <p>
+      Server-side verification in Node.js looks like:
+    </p>
+    <pre><code>{`import { createHmac, timingSafeEqual } from 'node:crypto';
+
+function verify(req, secret) {
+  const sig = req.headers['x-driftstack-signature'];   // 'v1=abc…'
+  const ts = req.headers['x-driftstack-timestamp'];     // unix seconds
+  const body = req.rawBody;                              // RAW bytes — NOT parsed JSON
+  if (!sig?.startsWith('v1=') || !ts || !body) return false;
+
+  // Reject replays — Driftstack signs with the current timestamp;
+  // anything older than 5 minutes is almost certainly a replay.
+  if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false;
+
+  const expected = createHmac('sha256', secret)
+    .update(\`\${ts}.\${body}\`)
+    .digest('hex');
+  return timingSafeEqual(
+    Buffer.from(sig.slice(3), 'hex'),
+    Buffer.from(expected, 'hex'),
+  );
+}`}</code></pre>
+
+    <h2>Retry policy</h2>
+    <p>
+      Driftstack retries non-2xx responses with exponential backoff:
+    </p>
+    <ul>
+      <li>Retry at: <strong>30s, 2m, 10m, 1h, 6h, 24h</strong> after the
+        previous attempt.</li>
+      <li>After <strong>6 failed attempts</strong>, the delivery
+        moves to a dead-letter queue (DLQ). You can requeue from the
+        dashboard or via the admin API.</li>
+      <li>After <strong>10 consecutive failures across all deliveries</strong>
+        for one endpoint, the endpoint is auto-disabled. You'll see
+        an email + a banner in the dashboard.</li>
+    </ul>
+    <p>
+      Your endpoint should:
+    </p>
+    <ul>
+      <li>Return 2xx within <strong>10 seconds</strong>. Slower than
+        that, we consider the delivery failed.</li>
+      <li>Be <strong>idempotent</strong> — we may retry the same
+        <code>X-Driftstack-Event-Id</code> if our delivery infra
+        retried before getting your response.</li>
+      <li>Acknowledge fast + process asynchronously. A 200 response
+        means "I have the payload"; process it on your side after.</li>
+    </ul>
+
+    <h2>Secret rotation</h2>
+    <p>
+      When you suspect a leaked secret (or just for routine hygiene),
+      rotate it:
+    </p>
+    <pre><code>{`POST /v1/webhooks/<id>/rotate-secret
+Authorization: Bearer ds_live_…
+
+→ {
+  "secret": "whsec_v1_NEW…",     ← shown ONCE; copy it now
+  "previous_secret_expires_at": "2026-05-12T12:00:00.000Z"
+}`}</code></pre>
+    <p>
+      Driftstack <strong>dual-signs</strong> outbound deliveries with
+      both the old + new secrets for 24 hours after the rotation.
+      Your verifier should try both during the grace window so you
+      can deploy the new secret without dropped events.
+    </p>
+
+    <h2>Testing</h2>
+    <p>
+      Use the test endpoint to fire a synthetic
+      <code>test.ping</code> event at any active endpoint:
+    </p>
+    <pre><code>{`POST /v1/webhooks/<id>/test
+Authorization: Bearer ds_live_…
+
+→ { "delivery_id": "wd_…" }`}</code></pre>
+    <p>
+      The test event arrives at your endpoint with the same headers +
+      signature as a real event. Your endpoint's response is captured
+      so you can debug from the dashboard.
+    </p>
+
+    <h2>Inspecting deliveries</h2>
+    <p>
+      Per-endpoint delivery log + counts available from the dashboard
+      under <strong>Webhooks → &lt;endpoint&gt; → Deliveries</strong>.
+      Failed deliveries surface the response status + first 256 bytes
+      of your endpoint's response body so you can debug.
+    </p>
+
+    <h2>What to do when something goes wrong</h2>
+    <ul>
+      <li><strong>Signatures don't verify</strong> — confirm you're
+        hashing the <em>raw</em> request body, not the parsed JSON.
+        Most frameworks parse the body by default; you need a raw-body
+        middleware ahead of the JSON parser.</li>
+      <li><strong>Endpoint auto-disabled</strong> — fix the receiving
+        service, then re-enable via the dashboard. Past deliveries
+        in DLQ can be requeued.</li>
+      <li><strong>Duplicate events</strong> — expected. Dedupe on
+        <code>X-Driftstack-Event-Id</code>.</li>
+      <li><strong>Missing events</strong> — check the endpoint
+        registration includes the event type you're expecting; events
+        only fire to endpoints subscribed to that type.</li>
+    </ul>
+
+    <h2>Support</h2>
+    <p>
+      Questions or trouble integrating?
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+    </p>
+  </main>
+</BaseLayout>

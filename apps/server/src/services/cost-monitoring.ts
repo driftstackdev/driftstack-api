@@ -77,6 +77,18 @@ export class CostMonitoringService {
    * the id list (typically the result of an `accounts` table list).
    * Accounts with no usage in the cycle are omitted from the result.
    */
+  /**
+   * V-683 — return the rates + tier-threshold table currently
+   * wired into this service so admin tooling can verify what's in
+   * production. Read-only; no usage data is accessed.
+   */
+  getConfig(): { rates: CostRates; tierThresholds: Record<string, AlertThresholds> } {
+    return {
+      rates: this.opts.rates,
+      tierThresholds: this.opts.tierThresholds ?? DEFAULT_TIER_THRESHOLDS,
+    };
+  }
+
   async getOverview(args: {
     accountIds: readonly string[];
     billingCycle: string;
