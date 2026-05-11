@@ -27,6 +27,7 @@ These read by-incident, when something specific is happening:
 | [`../deployment/runbook.md`](../deployment/runbook.md)                               | Routine ops — logs, restart, scale, deploy.                                                                                                                                  |
 | [`../deployment/stripe-webhook-testing.md`](../deployment/stripe-webhook-testing.md) | Stripe webhook signature rotation, IPN testing.                                                                                                                              |
 | [`v295c-status-site-cf-pages.md`](v295c-status-site-cf-pages.md)                     | Status site (Cloudflare Pages) deploy, posting an incident.                                                                                                                  |
+| [`cost-monitoring.md`](cost-monitoring.md)                                           | Cost-alert triage, nightly-job ops, dispatcher reset, threshold tuning, "why doesn't this match my invoice?" script (V-673).                                                 |
 
 ## Workspace setup
 

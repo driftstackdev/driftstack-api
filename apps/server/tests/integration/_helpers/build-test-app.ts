@@ -10,6 +10,10 @@ import { buildApp } from '../../../src/lib/app.js';
 import type { R2 } from '../../../src/lib/r2.js';
 import { createTestLogger } from '../../../src/lib/logger.js';
 import { CostMonitoringService } from '../../../src/services/cost-monitoring.js';
+import {
+  CryptoOrdersService,
+  InMemoryCryptoOrdersRepo,
+} from '../../../src/services/crypto-orders.js';
 import type { UsageInputs } from '../../../src/lib/cost-estimator.js';
 import { MemoryRateLimitStore } from '../../../src/lib/memory-rate-limit-store.js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../../../src/lib/api-keys.js';
@@ -278,6 +282,10 @@ export interface TestAppFixture {
    * snapshot the aggregator returns for any billing-cycle query.
    */
   costUsageByAccount: Map<string, UsageInputs>;
+  /** V-666.C — handle to the crypto-orders service powering POST /v1/billing/crypto-checkout. */
+  cryptoOrdersService: CryptoOrdersService;
+  /** V-666.C — in-memory repo so tests can read back orders by id. */
+  cryptoOrdersRepo: InMemoryCryptoOrdersRepo;
   /** Plaintext API key — pass as `Authorization: Bearer <plaintext>`. */
   plaintext: string;
   accountId: string;
@@ -809,6 +817,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     },
   });
 
+  // V-666.C — in-memory crypto-orders store for the customer-facing
+  // /v1/billing/crypto-checkout route. Tests that exercise the IPN
+  // pipeline can read back the resulting CryptoOrder by id.
+  const cryptoOrdersRepo = new InMemoryCryptoOrdersRepo();
+  const cryptoOrdersService = new CryptoOrdersService({ repo: cryptoOrdersRepo });
+
   const app = await buildApp({
     logger: testLogger,
     authRepo,
@@ -843,6 +857,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     profileSnapshotsService,
     billingService,
     costMonitoringService,
+    cryptoOrdersService,
     sessionRepo: sessionsRepo,
     apiKeysRepo,
     profilesRepo,
@@ -889,6 +904,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     scheduledJobsService,
     driver,
     costUsageByAccount,
+    cryptoOrdersService,
+    cryptoOrdersRepo,
     plaintext,
     accountId,
     apiKeyId,

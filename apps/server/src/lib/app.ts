@@ -76,6 +76,8 @@ import { registerAuthRoutes } from '../routes/auth.js';
 import { registerAuthCliRoutes } from '../routes/auth-cli.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerNowpaymentsWebhookRoutes } from '../routes/webhooks-nowpayments.js';
+import { registerCryptoCheckoutRoutes } from '../routes/billing-crypto.js';
+import type { CryptoOrdersService } from '../services/crypto-orders.js';
 import { registerOAuthRoutes } from '../routes/oauth.js';
 import { OAuthService, type OAuthStore } from '../services/oauth.js';
 import { registerAdminCostRoutes } from '../routes/admin-cost.js';
@@ -194,6 +196,13 @@ export interface AppDeps {
    * lands, this stays undefined and the route is not registered.
    */
   nowpaymentsIpnSecret?: string;
+  /**
+   * V-666.C — crypto-orders service. When provided, POST
+   * /v1/billing/crypto-checkout is registered. The webhook route
+   * also picks this up (V-666.B) so IPN updates land on the same
+   * in-memory store.
+   */
+  cryptoOrdersService?: CryptoOrdersService;
   /**
    * V-667.B — OAuth store. When provided, /v1/oauth/* + /v1/admin/oauth/*
    * routes register. When omitted, OAuth is not exposed (pre-launch
@@ -486,7 +495,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerNowpaymentsWebhookRoutes(app, {
       ipnSecret: deps.nowpaymentsIpnSecret,
       logger: deps.logger,
+      ...(deps.cryptoOrdersService !== undefined
+        ? { ordersService: deps.cryptoOrdersService }
+        : {}),
     });
+  }
+  if (deps.cryptoOrdersService !== undefined) {
+    registerCryptoCheckoutRoutes(app, { service: deps.cryptoOrdersService });
   }
   if (deps.oauthStore !== undefined) {
     registerOAuthRoutes(app, {
