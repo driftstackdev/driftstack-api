@@ -28,6 +28,7 @@ These read by-incident, when something specific is happening:
 | [`../deployment/stripe-webhook-testing.md`](../deployment/stripe-webhook-testing.md) | Stripe webhook signature rotation, IPN testing.                                                                                                                              |
 | [`v295c-status-site-cf-pages.md`](v295c-status-site-cf-pages.md)                     | Status site (Cloudflare Pages) deploy, posting an incident.                                                                                                                  |
 | [`cost-monitoring.md`](cost-monitoring.md)                                           | Cost-alert triage, nightly-job ops, dispatcher reset, threshold tuning, "why doesn't this match my invoice?" script (V-673).                                                 |
+| [`crypto-payments.md`](crypto-payments.md)                                           | NowPayments IPN triage, CryptoOrder lifecycle, refund flow, "stuck order" decision tree, pre-merchant-account posture (V-675).                                               |
 
 ## Workspace setup
 

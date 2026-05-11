@@ -364,6 +364,18 @@ export class OAuthService {
   async introspect(token: string): Promise<AccessToken | null> {
     return this.store.getToken(token);
   }
+
+  /**
+   * V-667.C — RFC 7009 token revocation. Per the spec, the response
+   * does not distinguish "valid token revoked" from "invalid token"
+   * — both succeed silently so third-party clients can't probe token
+   * existence by calling /revoke. The route layer always returns
+   * 200; this method does the work and may safely no-op on an
+   * unknown token.
+   */
+  async revokeToken(token: string): Promise<void> {
+    await this.store.revokeToken(token);
+  }
 }
 
 function isAllowedRedirectUri(uri: string): boolean {

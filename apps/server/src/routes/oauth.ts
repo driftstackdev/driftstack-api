@@ -56,6 +56,14 @@ const IntrospectBody = z.object({
   token: z.string().min(1),
 });
 
+// V-667.C — RFC 7009 revoke. token_type_hint is informational
+// (access_token | refresh_token); we ignore it but accept it so
+// off-the-shelf OAuth clients can post unchanged.
+const RevokeBody = z.object({
+  token: z.string().min(1),
+  token_type_hint: z.enum(['access_token', 'refresh_token']).optional(),
+});
+
 export interface RegisterOAuthRoutesDeps {
   service: OAuthService;
 }
@@ -171,6 +179,14 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
       scope: token.scope,
       exp: Math.floor(token.expires_at / 1000),
     });
+  });
+
+  // V-667.C — RFC 7009. Always 200, regardless of whether the token
+  // existed. Spec requirement: prevents probe-style enumeration.
+  app.post('/v1/oauth/revoke', async (req: FastifyRequest, reply) => {
+    const body = parseOrThrow(RevokeBody, req.body);
+    await deps.service.revokeToken(body.token);
+    return reply.code(200).send({});
   });
 }
 
