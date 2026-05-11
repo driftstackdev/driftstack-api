@@ -29,6 +29,7 @@ These read by-incident, when something specific is happening:
 | [`v295c-status-site-cf-pages.md`](v295c-status-site-cf-pages.md)                     | Status site (Cloudflare Pages) deploy, posting an incident.                                                                                                                  |
 | [`cost-monitoring.md`](cost-monitoring.md)                                           | Cost-alert triage, nightly-job ops, dispatcher reset, threshold tuning, "why doesn't this match my invoice?" script (V-673).                                                 |
 | [`crypto-payments.md`](crypto-payments.md)                                           | NowPayments IPN triage, CryptoOrder lifecycle, refund flow, "stuck order" decision tree, pre-merchant-account posture (V-675).                                               |
+| [`oauth-ops.md`](oauth-ops.md)                                                       | OAuth client registration, secret rotation, revocation, token-failure triage, security-incident workflow (V-682).                                                            |
 
 ## Workspace setup
 

@@ -81,6 +81,7 @@ import { DrizzleProfileSnapshotsRepo } from '../db/profile-snapshots-repo.js';
 import type { AccountTier } from '@driftstack/api-types';
 import { BillingService, type BillingProvider } from '../services/billing.js';
 import { CostMonitoringService } from '../services/cost-monitoring.js';
+import { UsageAggregatorFromUsageRepo } from '../services/cost-aggregator.js';
 import { DEFAULT_COST_RATES, DEFAULT_TIER_THRESHOLDS_DERIVED } from './cost-defaults.js';
 import { StripeBillingProvider } from '../services/stripe-billing-provider.js';
 import { StripeApiClient } from './stripe-api.js';
@@ -553,11 +554,12 @@ export async function createProductionDeps(
   // field; this is the same source the existing billingService
   // uses, so the cost service can't drift away from the tier the
   // customer actually pays for.
+  // V-541.H — real UsageAggregator over the V-073 usage_records
+  // ledger. Fills `sessionMinutes` from real data; other dimensions
+  // (storage, egress, email, llm) are zero placeholders until their
+  // per-account meters land (V-541.I/J/K follow-ups).
   const costMonitoringService = new CostMonitoringService({
-    aggregator: {
-      // eslint-disable-next-line @typescript-eslint/require-await
-      aggregateForAccount: async () => null,
-    },
+    aggregator: new UsageAggregatorFromUsageRepo({ repo: usageRepo }),
     rates: DEFAULT_COST_RATES,
     tierThresholds: DEFAULT_TIER_THRESHOLDS_DERIVED,
     resolveTier: async (accountId) => {
@@ -567,7 +569,7 @@ export async function createProductionDeps(
   });
   logger.info(
     { component: 'cost-monitoring' },
-    'CostMonitoringService wired with DEFAULT_COST_RATES + DEFAULT_TIER_THRESHOLDS_DERIVED (stub aggregator — V-541.H follow-up will populate real usage data)',
+    'CostMonitoringService wired with DEFAULT_COST_RATES + DEFAULT_TIER_THRESHOLDS_DERIVED (real UsageAggregator over usage_records; storage/egress/email/llm dimensions zero until V-541.I/J/K land)',
   );
 
   // Readiness checks. Postgres + Redis are required; R2 only checked
