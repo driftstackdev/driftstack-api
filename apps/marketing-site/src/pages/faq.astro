@@ -102,6 +102,22 @@ const groups: FaqGroup[] = [
         q: 'Do you store my card details?',
         a: 'No. Card details are stored by Stripe, never by Driftstack. We hold a Stripe customer ID and subscription metadata; the card number itself never touches our servers.',
       },
+      {
+        q: 'Can I pay in crypto?',
+        a: 'Yes — via NowPayments on tiers where the founder has enabled it. Open the crypto checkout from the billing dashboard, send the displayed amount in the displayed currency, and the order moves through pending → confirming → paid as on-chain confirmations land. The webhook contract is documented in our <a href="/docs/cost-monitoring" class="text-oxblood-700 underline">cost-monitoring docs</a>. Refunds for crypto follow a manual workflow — open a support ticket. Most customers use Stripe; crypto is a fallback for jurisdictions where card payments are awkward.',
+      },
+      {
+        q: 'How can I tell how much I\'ve spent this month?',
+        a: 'GET <code class="font-mono">/v1/account/cost</code> returns a per-component breakdown (compute, storage, egress, email, LLM) plus the total in integer cents. The GUI client surfaces the same data as a Cost panel. There\'s a threshold-state field — under-soft / between / over-hard — that indicates whether your usage is on track or approaching the cap configured for your tier. See <a href="/docs/cost-monitoring" class="text-oxblood-700 underline">cost-monitoring docs</a>.',
+      },
+      {
+        q: 'What if I cross my tier\'s cap?',
+        a: 'You get an email when the threshold transitions to "between-soft-and-hard" and another when it crosses "over-hard". Nothing is auto-blocked — running sessions stay running. The account team reaches out to discuss raising the cap or moving to a higher tier. We don\'t silently kill traffic to enforce a soft cap.',
+      },
+      {
+        q: 'Are spend snapshots persisted or recomputed?',
+        a: 'Recomputed on every request today. When traffic justifies caching, we move to nightly snapshots. The endpoint contract stays the same — your integration won\'t notice.',
+      },
     ],
   },
   {

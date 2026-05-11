@@ -68,7 +68,9 @@ describe('V-666 POST /v1/webhooks/nowpayments — signature verification', () =>
       payload: raw,
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ received: true });
+    // V-666.B — response shape gained `order_state` (null when no
+    // ordersService is wired, which is the case in this unit test).
+    expect(res.json()).toEqual({ received: true, order_state: null });
     await app.close();
   });
 

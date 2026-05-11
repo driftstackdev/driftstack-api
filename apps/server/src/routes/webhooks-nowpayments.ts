@@ -18,12 +18,19 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { verifyNowpaymentsSignature } from '../lib/nowpayments-signing.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 import type { Logger } from '../lib/logger.js';
+import type { CryptoOrdersService } from '../services/crypto-orders.js';
 import { registerWebhookRawBodyParser } from './_webhook-raw-body.js';
 
 export interface RegisterNowpaymentsWebhookRoutesDeps {
   /** IPN secret from the NowPayments merchant dashboard. */
   ipnSecret: string;
   logger: Logger;
+  /**
+   * V-666.B — when provided, the route forwards verified IPN updates
+   * into the crypto-orders state machine. When omitted, the route
+   * logs + acks only (W44 V-666 wire-ready posture).
+   */
+  ordersService?: CryptoOrdersService;
 }
 
 interface NowpaymentsIpnPayload {
@@ -78,18 +85,30 @@ export function registerNowpaymentsWebhookRoutes(
       throw new BadRequestError('NowPayments IPN is missing required fields.');
     }
 
-    // V-487 order-status-update flow lands when checkout pages go live.
-    // Until then we log + ack so retries don't loop.
+    // V-666.B — forward verified IPN into the order-status state
+    // machine. When ordersService is omitted (W44 wire-ready posture)
+    // the route still acks 200 + logs.
+    let orderState: string | null = null;
+    if (deps.ordersService !== undefined && typeof payload.order_id === 'string') {
+      const updated = await deps.ordersService.applyIpnStatus({
+        order_id: payload.order_id,
+        payment_id: String(payload.payment_id),
+        provider_status: payload.payment_status,
+      });
+      orderState = updated?.status ?? null;
+    }
+
     deps.logger.info(
       {
         component: 'nowpayments-webhooks',
         payment_id: payload.payment_id,
         payment_status: payload.payment_status,
         order_id: payload.order_id,
+        order_state: orderState,
       },
       'NowPayments IPN received (signature OK)',
     );
 
-    return reply.code(200).send({ received: true });
+    return reply.code(200).send({ received: true, order_state: orderState });
   });
 }

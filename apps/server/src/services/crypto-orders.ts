@@ -1,0 +1,181 @@
+// V-666.B — crypto-orders service.
+//
+// In-memory order store + state machine for the NowPayments IPN flow.
+// Customer-side `/checkout/crypto` opens an order → backend records
+// it + returns the payment address → NowPayments IPN posts status
+// updates → service transitions the order state.
+//
+// V-666.B posture: no DB persistence yet (crypto_orders table is a
+// V-666.C follow-up gated on real merchant traffic). The in-memory
+// store works for the early-customer manual-handoff cadence the
+// founder expects in the first 4-8 weeks post-merchant-account-go-live.
+
+export type CryptoOrderStatus =
+  | 'pending' // order created; awaiting payment
+  | 'confirming' // payment seen; awaiting on-chain confirmations
+  | 'paid' // confirmations received; goods unlocked
+  | 'failed' // payment timeout / refund / expired
+  | 'partial'; // amount received < expected
+
+export interface CryptoOrder {
+  /** Internal order id; the customer also sees this on the checkout page. */
+  order_id: string;
+  /** Account this order is attributable to. Null for pre-signup checkouts. */
+  account_id: string | null;
+  /** Tier being purchased (or 'trial_pack'). */
+  product: string;
+  /** Expected payment in fiat-cents. */
+  price_cents: number;
+  /** Fiat currency the price_cents are denominated in. */
+  price_currency: string;
+  /** NowPayments payment_id once the order is matched to an IPN. */
+  payment_id: string | null;
+  status: CryptoOrderStatus;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface CryptoOrdersRepo {
+  upsert(order: CryptoOrder): Promise<void>;
+  getById(orderId: string): Promise<CryptoOrder | null>;
+}
+
+export class InMemoryCryptoOrdersRepo implements CryptoOrdersRepo {
+  private readonly orders = new Map<string, CryptoOrder>();
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async upsert(order: CryptoOrder): Promise<void> {
+    this.orders.set(order.order_id, order);
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async getById(orderId: string): Promise<CryptoOrder | null> {
+    return this.orders.get(orderId) ?? null;
+  }
+}
+
+/**
+ * NowPayments payment_status values map to our internal status set.
+ * Reference:
+ *   https://documenter.getpostman.com/view/7907941/2s93JusNJt#field-payment-status
+ */
+export function mapNowpaymentsStatus(provider: string): CryptoOrderStatus | null {
+  switch (provider) {
+    case 'waiting':
+      return 'pending';
+    case 'confirming':
+    case 'sending':
+      return 'confirming';
+    case 'partially_paid':
+      return 'partial';
+    case 'finished':
+      return 'paid';
+    case 'failed':
+    case 'expired':
+    case 'refunded':
+      return 'failed';
+    default:
+      return null; // unknown provider status — caller decides what to do.
+  }
+}
+
+export interface CryptoOrdersServiceOpts {
+  repo: CryptoOrdersRepo;
+  /** Test seam — defaults to Date.now. */
+  nowFn?: () => number;
+}
+
+export class CryptoOrdersService {
+  private readonly nowFn: () => number;
+  constructor(private readonly opts: CryptoOrdersServiceOpts) {
+    this.nowFn = opts.nowFn ?? Date.now;
+  }
+
+  async create(args: {
+    order_id: string;
+    account_id: string | null;
+    product: string;
+    price_cents: number;
+    price_currency: string;
+  }): Promise<CryptoOrder> {
+    const now = this.nowFn();
+    const order: CryptoOrder = {
+      order_id: args.order_id,
+      account_id: args.account_id,
+      product: args.product,
+      price_cents: args.price_cents,
+      price_currency: args.price_currency,
+      payment_id: null,
+      status: 'pending',
+      created_at: now,
+      updated_at: now,
+    };
+    await this.opts.repo.upsert(order);
+    return order;
+  }
+
+  async getById(orderId: string): Promise<CryptoOrder | null> {
+    return this.opts.repo.getById(orderId);
+  }
+
+  /**
+   * Apply a NowPayments IPN update to the order with the given
+   * order_id. Returns the new order state, or null when the order
+   * doesn't exist (the IPN is then logged + ignored — we don't
+   * create orders from an IPN; the checkout flow does that).
+   *
+   * State transitions:
+   *   pending → confirming / partial / paid / failed
+   *   confirming → paid / failed / partial
+   *   partial → paid / failed (terminal partial doesn't auto-flip)
+   *
+   * Idempotent: receiving the same paid IPN twice is a no-op.
+   * Reverse transitions (paid → pending) are rejected — we never
+   * downgrade a paid order from an IPN, even if NowPayments retries.
+   */
+  async applyIpnStatus(args: {
+    order_id: string;
+    payment_id: string;
+    provider_status: string;
+  }): Promise<CryptoOrder | null> {
+    const order = await this.opts.repo.getById(args.order_id);
+    if (order === null) return null;
+    const mapped = mapNowpaymentsStatus(args.provider_status);
+    if (mapped === null) return order; // unknown status: leave state alone, record payment_id only.
+    if (isTerminalForward(order.status, mapped)) {
+      const updated: CryptoOrder = {
+        ...order,
+        payment_id: order.payment_id ?? args.payment_id,
+        status: mapped,
+        updated_at: this.nowFn(),
+      };
+      await this.opts.repo.upsert(updated);
+      return updated;
+    }
+    // No-op transition. Record the payment_id if we didn't have it yet.
+    if (order.payment_id === null) {
+      const updated: CryptoOrder = {
+        ...order,
+        payment_id: args.payment_id,
+        updated_at: this.nowFn(),
+      };
+      await this.opts.repo.upsert(updated);
+      return updated;
+    }
+    return order;
+  }
+}
+
+/**
+ * Allow transitions that move the order forward (towards a terminal
+ * state). Reject reverse transitions.
+ */
+function isTerminalForward(current: CryptoOrderStatus, next: CryptoOrderStatus): boolean {
+  // Same state — idempotent no-op, but caller wants the row touched
+  // (updated_at refresh).
+  if (current === next) return true;
+  // Terminal statuses don't move.
+  if (current === 'paid' || current === 'failed') return false;
+  // 'partial' is semi-terminal: only 'paid' or 'failed' overrides it.
+  if (current === 'partial') return next === 'paid' || next === 'failed';
+  // From 'pending' or 'confirming' anything except 'pending' is forward.
+  return next !== 'pending';
+}
