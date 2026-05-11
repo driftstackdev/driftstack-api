@@ -73,6 +73,13 @@ export interface OAuthStore {
   getClient(client_id: string): Promise<OAuthClient | null>;
   listClients(): Promise<readonly OAuthClient[]>;
   revokeClient(client_id: string, at: number): Promise<void>;
+  /**
+   * V-667.E — atomically swap `client_secret_hash` for a client without
+   * touching client_id or revoked_at. Existing access tokens stay
+   * valid (they're bearer-authenticated; the secret is consulted only
+   * on /token exchange).
+   */
+  rotateClientSecretHash(client_id: string, new_hash: string): Promise<void>;
   // Authorization codes
   insertCode(code: AuthorizationCode): Promise<void>;
   getCode(code: string): Promise<AuthorizationCode | null>;
@@ -99,6 +106,11 @@ export class InMemoryOAuthStore implements OAuthStore {
   // eslint-disable-next-line @typescript-eslint/require-await
   async listClients(): Promise<readonly OAuthClient[]> {
     return [...this.clients.values()];
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async rotateClientSecretHash(id: string, new_hash: string): Promise<void> {
+    const c = this.clients.get(id);
+    if (c) this.clients.set(id, { ...c, client_secret_hash: new_hash });
   }
   // eslint-disable-next-line @typescript-eslint/require-await
   async revokeClient(id: string, at: number): Promise<void> {
@@ -265,6 +277,27 @@ export class OAuthService {
 
   async revokeClient(client_id: string): Promise<void> {
     await this.store.revokeClient(client_id, this.nowFn());
+  }
+
+  /**
+   * V-667.E — rotate the client_secret in place. Returns the NEW
+   * plaintext (shown ONCE — the store keeps only the hash). The
+   * client_id stays the same so existing redirect URIs + customer
+   * consent records carry over.
+   *
+   * Errors:
+   *   - invalid_client: client_id not found OR client is revoked
+   *     (rotating a revoked client's secret would be a footgun —
+   *     better to register a fresh one).
+   */
+  async rotateClientSecret(client_id: string): Promise<{ client_secret: string }> {
+    const c = await this.store.getClient(client_id);
+    if (c === null || c.revoked_at !== null) {
+      throw new OAuthError('invalid_client', 'unknown or revoked client_id');
+    }
+    const client_secret = `oas_${randomBytes(32).toString('base64url')}`;
+    await this.store.rotateClientSecretHash(client_id, this.secretHasher(client_secret));
+    return { client_secret };
   }
 
   async authorize(args: AuthorizeArgs): Promise<AuthorizeResult> {

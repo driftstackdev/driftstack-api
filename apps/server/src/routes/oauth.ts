@@ -135,6 +135,23 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
     },
   );
 
+  // V-667.E — rotate the client_secret in place. Returns the new
+  // plaintext ONCE (the store keeps only the hash). Existing access
+  // tokens are NOT invalidated (they're bearer-authenticated; the
+  // secret is consulted only on the /token exchange).
+  app.post<{ Params: { id: string } }>(
+    '/v1/admin/oauth/clients/:id/rotate-secret',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    async (req, reply) => {
+      try {
+        const result = await deps.service.rotateClientSecret(req.params.id);
+        return reply.send(result);
+      } catch (err) {
+        throw oauthErrorToHttp(err);
+      }
+    },
+  );
+
   // ─── Public OAuth dance ───────────────────────────────────────
   app.get('/v1/oauth/authorize', async (req: FastifyRequest, reply) => {
     const query = parseOrThrow(AuthorizeQuery, req.query);
