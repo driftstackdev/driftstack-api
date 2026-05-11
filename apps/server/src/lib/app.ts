@@ -79,6 +79,7 @@ import { registerNowpaymentsWebhookRoutes } from '../routes/webhooks-nowpayments
 import { registerOAuthRoutes } from '../routes/oauth.js';
 import { OAuthService, type OAuthStore } from '../services/oauth.js';
 import { registerAdminCostRoutes } from '../routes/admin-cost.js';
+import { registerAccountCostRoutes } from '../routes/account-cost.js';
 import type { CostMonitoringService } from '../services/cost-monitoring.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
 import { registerProfileSnapshotsRoutes } from '../routes/profile-snapshots.js';
@@ -494,6 +495,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   }
   if (deps.costMonitoringService !== undefined) {
     registerAdminCostRoutes(app, { service: deps.costMonitoringService });
+    registerAccountCostRoutes(app, { service: deps.costMonitoringService });
   }
   if (deps.profilesService !== undefined) {
     registerProfileRoutes(app, { service: deps.profilesService, authRepo: deps.authRepo });

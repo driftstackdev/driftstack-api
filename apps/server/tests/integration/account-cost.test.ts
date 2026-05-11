@@ -1,0 +1,114 @@
+// V-541.D — integration tests for GET /v1/account/cost.
+//
+// Customer-facing surface mirrors the admin V-541.B service but
+// scopes to the calling account via requireAuth. Coverage: auth gate,
+// zero-usage synthetic response, populated breakdown, custom
+// billing_cycle param, malformed billing_cycle.
+
+import { afterEach, describe, expect, it } from 'vitest';
+import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+
+let fx: TestAppFixture;
+afterEach(async () => {
+  if (fx) await fx.cleanup();
+});
+
+interface CostResponse {
+  account_id: string;
+  billing_cycle: string;
+  tier: string;
+  breakdown: {
+    computeCents: number;
+    storageCents: number;
+    egressCents: number;
+    emailCents: number;
+    llmCents: number;
+    totalCents: number;
+    thresholdState: string;
+  };
+}
+
+describe('V-541.D GET /v1/account/cost', () => {
+  it('401 without auth', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({ method: 'GET', url: '/v1/account/cost' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('200 with synthetic zero breakdown for a fresh account (no usage in cycle)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/cost?billing_cycle=2026-05',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<CostResponse>();
+    expect(body.account_id).toBe(fx.accountId);
+    expect(body.billing_cycle).toBe('2026-05');
+    expect(body.breakdown.totalCents).toBe(0);
+    expect(body.breakdown.thresholdState).toBe('under-soft');
+  });
+
+  it('200 with populated breakdown when the aggregator returns usage', async () => {
+    fx = await buildTestApp();
+    fx.costUsageByAccount.set(fx.accountId, {
+      sessionMinutes: 120,
+      storageGbMonths: 10,
+      egressGb: 1,
+      emailSends: 5,
+      llmInputTokens: 1_000,
+      llmOutputTokens: 1_000,
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/cost?billing_cycle=2026-05',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<CostResponse>();
+    expect(body.breakdown.computeCents).toBe(120);
+    expect(body.breakdown.totalCents).toBeGreaterThan(0);
+  });
+
+  it('uses the current month when billing_cycle is omitted', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/cost',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<CostResponse>();
+    expect(body.billing_cycle).toMatch(/^\d{4}-\d{2}$/);
+  });
+
+  it('400 on malformed billing_cycle (not YYYY-MM)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/cost?billing_cycle=2026-5',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('does NOT include operator-tuned threshold values in the customer response', async () => {
+    fx = await buildTestApp();
+    fx.costUsageByAccount.set(fx.accountId, {
+      sessionMinutes: 120,
+      storageGbMonths: 0,
+      egressGb: 0,
+      emailSends: 0,
+      llmInputTokens: 0,
+      llmOutputTokens: 0,
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/cost?billing_cycle=2026-05',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const body = res.json<CostResponse & { thresholds?: unknown }>();
+    expect(body.thresholds).toBeUndefined();
+  });
+});

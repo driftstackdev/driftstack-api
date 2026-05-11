@@ -9,6 +9,8 @@
 import { buildApp } from '../../../src/lib/app.js';
 import type { R2 } from '../../../src/lib/r2.js';
 import { createTestLogger } from '../../../src/lib/logger.js';
+import { CostMonitoringService } from '../../../src/services/cost-monitoring.js';
+import type { UsageInputs } from '../../../src/lib/cost-estimator.js';
 import { MemoryRateLimitStore } from '../../../src/lib/memory-rate-limit-store.js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../../../src/lib/api-keys.js';
 import { MockDriver } from '../../../src/drivers/mock.js';
@@ -270,6 +272,12 @@ export interface TestAppFixture {
   /** V-202d — service handle so tests can call processTick(now) deterministically. */
   scheduledJobsService: ScheduledJobsService;
   driver: MockDriver;
+  /**
+   * V-541.D — populate to drive the in-memory cost aggregator from
+   * an integration test. Keyed on accountId; value is the usage
+   * snapshot the aggregator returns for any billing-cycle query.
+   */
+  costUsageByAccount: Map<string, UsageInputs>;
   /** Plaintext API key — pass as `Authorization: Bearer <plaintext>`. */
   plaintext: string;
   accountId: string;
@@ -779,6 +787,28 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     portalReturnUrl: 'http://localhost:5173/billing',
   });
 
+  // V-541.D — cost-monitoring service against an in-memory aggregator
+  // that tests populate via the returned `costUsageByAccount` map.
+  const costUsageByAccount = new Map<string, UsageInputs>();
+  const costMonitoringService = new CostMonitoringService({
+    aggregator: {
+      aggregateForAccount: ({ accountId }) =>
+        Promise.resolve(costUsageByAccount.get(accountId) ?? null),
+    },
+    rates: {
+      computeCentsPerMinute: 1,
+      storageCentsPerGbMonth: 2,
+      egressCentsPerGb: 5,
+      emailCentsPerSend: 1,
+      llmCentsPer1kInputTokens: 30,
+      llmCentsPer1kOutputTokens: 150,
+    },
+    resolveTier: (id) => {
+      const acc = billingRepo.getAccount(id);
+      return acc.then((a) => a?.tier ?? null);
+    },
+  });
+
   const app = await buildApp({
     logger: testLogger,
     authRepo,
@@ -812,6 +842,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     profilesService,
     profileSnapshotsService,
     billingService,
+    costMonitoringService,
     sessionRepo: sessionsRepo,
     apiKeysRepo,
     profilesRepo,
@@ -857,6 +888,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     scheduledJobsRepo,
     scheduledJobsService,
     driver,
+    costUsageByAccount,
     plaintext,
     accountId,
     apiKeyId,
