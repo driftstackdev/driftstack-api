@@ -3,6 +3,7 @@
 // V-666.J — appended tests for cancelOrder + late-IPN-after-cancel.
 // V-666.K — appended tests for expireOrder + sweepExpiredOrders.
 // V-666.M — appended tests for getReceipt.
+// V-666.N — appended tests for getStatsForAdmin.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -680,5 +681,120 @@ describe('V-666.M getReceipt', () => {
     expect(r?.status).toBe('pending');
     expect(r?.paid_at).toBeNull();
     expect(r?.payment_id).toBeNull();
+  });
+});
+
+describe('V-666.N getStatsForAdmin', () => {
+  it('returns all zero counts + empty revenue map when no orders exist', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    const stats = await svc.getStatsForAdmin();
+    expect(stats.total).toBe(0);
+    expect(stats.byStatus.pending).toBe(0);
+    expect(stats.byStatus.paid).toBe(0);
+    expect(stats.paidRevenueCents).toEqual({});
+    expect(stats.truncated).toBe(false);
+  });
+
+  it('counts orders per status + sums paid revenue per currency', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    // 3 pending, 2 paid (EUR), 1 paid (USD), 1 failed
+    await svc.create({
+      order_id: 'p1',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    await svc.create({
+      order_id: 'p2',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    await svc.create({
+      order_id: 'p3',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    await svc.create({
+      order_id: 'paid_eur_a',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'paid_eur_a',
+      payment_id: 'np',
+      provider_status: 'finished',
+    });
+    await svc.create({
+      order_id: 'paid_eur_b',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 8000,
+      price_currency: 'EUR',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'paid_eur_b',
+      payment_id: 'np',
+      provider_status: 'finished',
+    });
+    await svc.create({
+      order_id: 'paid_usd',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 5000,
+      price_currency: 'USD',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'paid_usd',
+      payment_id: 'np',
+      provider_status: 'finished',
+    });
+    await svc.create({
+      order_id: 'failed_1',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 200,
+      price_currency: 'EUR',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'failed_1',
+      payment_id: 'np',
+      provider_status: 'expired',
+    });
+
+    const stats = await svc.getStatsForAdmin();
+    expect(stats.total).toBe(7);
+    expect(stats.byStatus.pending).toBe(3);
+    expect(stats.byStatus.paid).toBe(3);
+    expect(stats.byStatus.failed).toBe(1);
+    expect(stats.byStatus.confirming).toBe(0);
+    expect(stats.byStatus.cancelled).toBe(0);
+    expect(stats.byStatus.partial).toBe(0);
+    expect(stats.paidRevenueCents).toEqual({ EUR: 10500, USD: 5000 });
+  });
+
+  it('flags truncated=true when the order count hits scanLimit', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    for (let i = 0; i < 5; i += 1) {
+      await svc.create({
+        order_id: `ord_${i.toString()}`,
+        account_id: 'a',
+        product: 'x',
+        price_cents: 100,
+        price_currency: 'EUR',
+      });
+    }
+    const stats = await svc.getStatsForAdmin({ scanLimit: 5 });
+    expect(stats.truncated).toBe(true);
+    expect(stats.scanned).toBe(5);
   });
 });

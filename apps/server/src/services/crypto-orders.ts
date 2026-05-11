@@ -208,6 +208,52 @@ export class CryptoOrdersService {
   }
 
   /**
+   * V-666.N — admin stats summary across all orders. Returns
+   * counts per status, total order count, and total paid revenue
+   * (sum of price_cents on `paid` orders) per currency. Currency-
+   * split because we accept multiple fiat currencies and can't
+   * sum across them without a conversion table.
+   *
+   * The summary scans up to `scanLimit` orders (default 10_000)
+   * and sets `truncated=true` when more orders exist beyond that
+   * window — operators reading a truncated summary know to widen
+   * the limit OR move analytics to a proper warehouse.
+   */
+  async getStatsForAdmin(opts: { scanLimit?: number } = {}): Promise<{
+    total: number;
+    byStatus: Record<CryptoOrderStatus, number>;
+    paidRevenueCents: Record<string, number>;
+    truncated: boolean;
+    scanned: number;
+  }> {
+    const scanLimit = opts.scanLimit ?? 10_000;
+    const rows = await this.opts.repo.listAll({ limit: scanLimit });
+    const byStatus: Record<CryptoOrderStatus, number> = {
+      pending: 0,
+      confirming: 0,
+      paid: 0,
+      failed: 0,
+      partial: 0,
+      cancelled: 0,
+    };
+    const paidRevenueCents: Record<string, number> = {};
+    for (const o of rows) {
+      byStatus[o.status] += 1;
+      if (o.status === 'paid') {
+        paidRevenueCents[o.price_currency] =
+          (paidRevenueCents[o.price_currency] ?? 0) + o.price_cents;
+      }
+    }
+    return {
+      total: rows.length,
+      byStatus,
+      paidRevenueCents,
+      truncated: rows.length === scanLimit,
+      scanned: rows.length,
+    };
+  }
+
+  /**
    * V-666.M — build a normalized receipt payload for an order the
    * caller owns. Returns null when the order doesn't exist OR
    * belongs to another account (404-style; no existence leak).

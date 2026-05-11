@@ -1,6 +1,7 @@
 // V-666.D — admin crypto-orders routes.
 //
 //   GET  /v1/admin/crypto-orders?account_id=acc_X&limit=N
+//   GET  /v1/admin/crypto-orders/stats                (V-666.N)
 //   GET  /v1/admin/crypto-orders/:order_id
 //   POST /v1/admin/crypto-orders/:order_id/apply-ipn  (V-666.F)
 //   POST /v1/admin/crypto-orders/sweep-expired        (V-666.L)
@@ -85,6 +86,24 @@ export function registerAdminCryptoOrdersRoutes(
         ...(limit !== undefined ? { limit } : {}),
       });
       return reply.send({ orders: orders.map(toPublic) });
+    },
+  );
+
+  // V-666.N — at-a-glance stats summary for the ops dashboard.
+  // Counts per status + paid revenue per currency. Truncated when
+  // more orders exist than the scan window (10k default).
+  app.get(
+    '/v1/admin/crypto-orders/stats',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    async (_req, reply) => {
+      const stats = await deps.service.getStatsForAdmin();
+      return reply.send({
+        total: stats.total,
+        by_status: stats.byStatus,
+        paid_revenue_cents: stats.paidRevenueCents,
+        truncated: stats.truncated,
+        scanned: stats.scanned,
+      });
     },
   );
 
