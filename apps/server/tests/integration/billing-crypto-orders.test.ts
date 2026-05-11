@@ -143,3 +143,82 @@ describe('V-666.G GET /v1/billing/crypto-orders/:order_id', () => {
     expect(body.status).toBe('pending');
   });
 });
+
+describe('V-666.J POST /v1/billing/crypto-orders/:order_id/cancel', () => {
+  it('401 without auth', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-orders/ord_x/cancel',
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('404 when the order does not exist', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-orders/ord_missing/cancel',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('404 (not 403) when the order belongs to another account', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_alien',
+      account_id: 'acc_someone_else',
+      product: 'trial_pack',
+      price_cents: 299,
+      price_currency: 'USD',
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-orders/ord_alien/cancel',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('200 + cancelled body when cancelling a pending order', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_cxl1',
+      account_id: fx.accountId,
+      product: 'trial_pack',
+      price_cents: 299,
+      price_currency: 'USD',
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-orders/ord_cxl1/cancel',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<CryptoOrderResponse>();
+    expect(body.status).toBe('cancelled');
+  });
+
+  it('409 when the order has already moved past pending', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_cxl2',
+      account_id: fx.accountId,
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    await fx.cryptoOrdersService.applyIpnStatus({
+      order_id: 'ord_cxl2',
+      payment_id: 'np_seen',
+      provider_status: 'confirming',
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-orders/ord_cxl2/cancel',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+});

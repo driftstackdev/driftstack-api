@@ -1,5 +1,6 @@
 // V-666.B — unit tests for the crypto-orders state machine.
 // V-666.I — appended tests for crypto.order.paid webhook emission.
+// V-666.J — appended tests for cancelOrder + late-IPN-after-cancel.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -377,5 +378,90 @@ describe('V-666.I crypto.order.paid webhook emission', () => {
       provider_status: 'finished',
     });
     expect(updated?.status).toBe('paid');
+  });
+});
+
+describe('V-666.J cancelOrder', () => {
+  async function seedCxl(
+    opts: {
+      status?: 'pending' | 'confirming' | 'paid' | 'failed' | 'partial';
+      account_id?: string | null;
+    } = {},
+  ): Promise<{ svc: CryptoOrdersService }> {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo, nowFn: () => 3_000 });
+    await svc.create({
+      order_id: 'ord_cxl',
+      account_id: opts.account_id === undefined ? 'acc_owner' : opts.account_id,
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    if (opts.status !== undefined && opts.status !== 'pending') {
+      const providerByStatus: Record<string, string> = {
+        confirming: 'confirming',
+        paid: 'finished',
+        failed: 'expired',
+        partial: 'partially_paid',
+      };
+      await svc.applyIpnStatus({
+        order_id: 'ord_cxl',
+        payment_id: 'np_seed',
+        provider_status: providerByStatus[opts.status] ?? 'waiting',
+      });
+    }
+    return { svc };
+  }
+
+  it('returns null when the order does not exist', async () => {
+    const { svc } = await seedCxl();
+    const r = await svc.cancelOrder({ order_id: 'ord_missing', account_id: 'acc_owner' });
+    expect(r).toBeNull();
+  });
+
+  it('returns null (not 403) for cross-account cancel', async () => {
+    const { svc } = await seedCxl();
+    const r = await svc.cancelOrder({ order_id: 'ord_cxl', account_id: 'acc_other' });
+    expect(r).toBeNull();
+  });
+
+  it('cancels a pending order + flips status to cancelled', async () => {
+    const { svc } = await seedCxl();
+    const r = await svc.cancelOrder({ order_id: 'ord_cxl', account_id: 'acc_owner' });
+    expect(r?.ok).toBe('cancelled');
+    if (r?.ok === 'cancelled') {
+      expect(r.order.status).toBe('cancelled');
+    }
+    const fetched = await svc.getById('ord_cxl');
+    expect(fetched?.status).toBe('cancelled');
+  });
+
+  it('returns not_cancellable with the order status when already confirming', async () => {
+    const { svc } = await seedCxl({ status: 'confirming' });
+    const r = await svc.cancelOrder({ order_id: 'ord_cxl', account_id: 'acc_owner' });
+    expect(r?.ok).toBe('not_cancellable');
+    if (r?.ok === 'not_cancellable') {
+      expect(r.reason).toBe('confirming');
+    }
+  });
+
+  it('returns not_cancellable when already paid', async () => {
+    const { svc } = await seedCxl({ status: 'paid' });
+    const r = await svc.cancelOrder({ order_id: 'ord_cxl', account_id: 'acc_owner' });
+    expect(r?.ok).toBe('not_cancellable');
+  });
+
+  it('a late-arriving IPN payment does NOT revive a cancelled order (terminal)', async () => {
+    const { svc } = await seedCxl();
+    await svc.cancelOrder({ order_id: 'ord_cxl', account_id: 'acc_owner' });
+    const after = await svc.applyIpnStatus({
+      order_id: 'ord_cxl',
+      payment_id: 'np_late',
+      provider_status: 'finished',
+    });
+    // Status stays cancelled; payment_id is recorded so support can
+    // reconcile the on-chain funds.
+    expect(after?.status).toBe('cancelled');
+    expect(after?.payment_id).toBe('np_late');
   });
 });

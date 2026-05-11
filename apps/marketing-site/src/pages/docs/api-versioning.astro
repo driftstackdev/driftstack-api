@@ -1,0 +1,154 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-696 — API versioning developer docs. Covers how versions are
+// expressed, what counts as a breaking change, and how deprecations
+// are communicated.
+---
+
+<BaseLayout title="API versioning — Driftstack developer docs" description="API versioning policy, breaking-change definition, and deprecation timelines for the Driftstack API.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>API versioning</h1>
+
+    <p class="lead">
+      The Driftstack API is currently at <strong>v1</strong>. This
+      page covers how versioning works, what we consider a breaking
+      change, and how deprecation timelines are communicated.
+    </p>
+
+    <h2>How versions are expressed</h2>
+    <p>
+      Every endpoint is prefixed with <code>/v1/</code>. The version
+      lives in the URL, not in a header, so callers always know
+      which contract they're hitting. Example:
+    </p>
+    <pre><code>{`POST https://api.driftstack.dev/v1/sessions
+GET  https://api.driftstack.dev/v1/profiles
+POST https://api.driftstack.dev/v1/billing/crypto-checkout`}</code></pre>
+    <p>
+      A future v2 would live at <code>/v2/</code> in parallel with
+      v1 — old clients keep working while you migrate.
+    </p>
+
+    <h2>Definition of a breaking change</h2>
+    <p>
+      <strong>Breaking</strong> changes increment the major version
+      (v1 → v2). The following are breaking:
+    </p>
+    <ul>
+      <li>Removing an endpoint.</li>
+      <li>Removing a field from a response.</li>
+      <li>Changing the type of a response field (e.g. string → number).</li>
+      <li>Renaming a field.</li>
+      <li>Adding a new <strong>required</strong> field to a request body.</li>
+      <li>Changing the meaning of an existing status code.</li>
+      <li>Tightening validation on an existing field (e.g. shrinking
+        the max length, restricting the regex).</li>
+      <li>Changing the URL path or HTTP method of an endpoint.</li>
+    </ul>
+
+    <h2>Non-breaking changes (no version bump)</h2>
+    <ul>
+      <li>Adding a new endpoint.</li>
+      <li>Adding a new field to a response.</li>
+      <li>Adding a new <strong>optional</strong> field to a request body.</li>
+      <li>Loosening validation (longer max length, broader regex).</li>
+      <li>Adding a new value to an enum field whose schema is
+        documented as open-ended (e.g. <code>status</code> may gain
+        new states over time — clients should default-handle unknown
+        values).</li>
+      <li>Adding a new event type to the webhook event stream.</li>
+      <li>Performance improvements that don't change observable
+        behaviour.</li>
+    </ul>
+    <p>
+      Build clients defensively against the "open enum" cases —
+      handle unknown <code>status</code> values gracefully rather
+      than crashing on them. The SDKs do this automatically; if you
+      handcraft a client, do the same.
+    </p>
+
+    <h2>Deprecation timeline</h2>
+    <p>
+      When we decide to deprecate something within v1 (rare —
+      we'd usually wait for v2), the timeline is:
+    </p>
+    <ol>
+      <li><strong>Day 0:</strong> Deprecation announced in the
+        <a href="/changelog">changelog</a> and via a
+        <code>Deprecation</code> response header on the affected
+        endpoint. The header includes a sunset date in RFC 5988
+        format.</li>
+      <li><strong>Day 0 → 90:</strong> Endpoint continues to work
+        unchanged. We email accounts that have called the endpoint
+        in the last 30 days at the 60-day and 30-day marks.</li>
+      <li><strong>Day 90+:</strong> Endpoint returns a non-fatal
+        <code>410 Gone</code> with a pointer to the replacement.</li>
+    </ol>
+    <p>
+      Major version transitions (v1 → v2) follow a longer schedule:
+      <strong>minimum 12 months</strong> of parallel availability,
+      with the same 60-day / 30-day email reminders.
+    </p>
+
+    <h2>Detecting the current version on a response</h2>
+    <p>
+      Every response carries an <code>X-Driftstack-API-Version</code>
+      header set to the version that served it. Useful for diagnosing
+      "is my SDK pinned to the right URL?" issues without parsing
+      the URL yourself.
+    </p>
+    <pre><code>{`HTTP/1.1 200 OK
+X-Driftstack-API-Version: v1
+Content-Type: application/json
+…`}</code></pre>
+
+    <h2>Beta endpoints</h2>
+    <p>
+      Endpoints under <code>/v1/beta/...</code> are intentionally
+      unstable — they exist for early adopters to provide feedback.
+      The breaking-change policy above <strong>does not apply</strong>
+      to beta endpoints. The endpoint's docs page calls out beta
+      status; the response header includes
+      <code>X-Driftstack-API-Stability: beta</code>.
+    </p>
+    <p>
+      Beta endpoints graduate to stable inside <code>/v1/</code>
+      (without the <code>/beta/</code> prefix) once the contract
+      settles. Graduation is announced in the changelog 30 days in
+      advance so beta callers can migrate to the stable URL.
+    </p>
+
+    <h2>What "v1" guarantees about behaviour</h2>
+    <p>
+      As long as you stay on v1, you get:
+    </p>
+    <ul>
+      <li>The same URL paths.</li>
+      <li>The same response shapes (additive fields only).</li>
+      <li>The same status-code semantics.</li>
+      <li>The same authentication scheme (Bearer API key or OAuth).</li>
+      <li>The same idempotency semantics (DELETE is idempotent,
+        POST creates new resources, PUT/PATCH are explicit
+        replacements).</li>
+    </ul>
+
+    <h2>SDK version vs API version</h2>
+    <p>
+      The <a href="/docs/sdk/installation">official SDKs</a> follow
+      semver independently of the API. SDK <code>2.x</code> targets
+      API <code>/v1/</code>; SDK <code>3.x</code> would target API
+      <code>/v2/</code>. We support the two most recent SDK major
+      versions; older versions receive critical security fixes for
+      6 months past EOL.
+    </p>
+
+    <h2>Support</h2>
+    <p>
+      Versioning, deprecation, or migration questions:
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+      Subscribe to the <a href="/changelog">changelog RSS</a> for
+      deprecation announcements.
+    </p>
+  </main>
+</BaseLayout>

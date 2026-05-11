@@ -1,15 +1,16 @@
 // V-666.G — customer-facing crypto-orders routes.
 //
-//   GET /v1/billing/crypto-orders          — list caller's own orders
-//   GET /v1/billing/crypto-orders/:id      — single order lookup
+//   GET  /v1/billing/crypto-orders             — list caller's own orders
+//   GET  /v1/billing/crypto-orders/:id         — single order lookup
+//   POST /v1/billing/crypto-orders/:id/cancel  — abandon a pending order (V-666.J)
 //
-// Both routes are scoped to the calling account. Cross-account
+// All routes are scoped to the calling account. Cross-account
 // id lookups return 404 (not 403) — we don't leak the existence of
 // orders that belong to other accounts.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { BadRequestError, NotFoundError } from '../lib/errors.js';
+import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import type { CryptoOrder, CryptoOrdersService } from '../services/crypto-orders.js';
 
 export interface RegisterCustomerCryptoOrdersRoutesDeps {
@@ -79,6 +80,33 @@ export function registerCustomerCryptoOrdersRoutes(
         throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
       }
       return reply.send(toPublic(order));
+    },
+  );
+
+  // V-666.J — cancel a pending order. Customer-facing self-service
+  // abandonment. Once any payment activity exists (confirming/partial/
+  // paid/failed) the cancel must go through support so the customer's
+  // on-chain funds can be reconciled — those statuses return 409.
+  app.post<{ Params: { order_id: string } }>(
+    '/v1/billing/crypto-orders/:order_id/cancel',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
+      const ctx = requireCtx(req);
+      const params = parseOrThrow(GetParams, req.params);
+      const result = await deps.service.cancelOrder({
+        order_id: params.order_id,
+        account_id: ctx.account.id,
+      });
+      if (result === null) {
+        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
+      }
+      if (result.ok === 'not_cancellable') {
+        throw new ConflictError(
+          `Order is in state "${result.reason}" and can no longer be cancelled. Contact support for refund / recovery.`,
+          { resource: 'crypto_order', field: 'status' },
+        );
+      }
+      return reply.send(toPublic(result.order));
     },
   );
 }

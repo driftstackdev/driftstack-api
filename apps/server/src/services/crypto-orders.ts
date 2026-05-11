@@ -15,7 +15,12 @@ export type CryptoOrderStatus =
   | 'confirming' // payment seen; awaiting on-chain confirmations
   | 'paid' // confirmations received; goods unlocked
   | 'failed' // payment timeout / refund / expired
-  | 'partial'; // amount received < expected
+  | 'partial' // amount received < expected
+  // V-666.J — customer-initiated abandonment of a pending order before
+  // any payment was received. Terminal; the IPN flow won't transition
+  // out of it (a late-arriving payment leaves the order cancelled but
+  // records the payment_id so support can reconcile).
+  | 'cancelled';
 
 export interface CryptoOrder {
   /** Internal order id; the customer also sees this on the checkout page. */
@@ -169,6 +174,40 @@ export class CryptoOrdersService {
   }
 
   /**
+   * V-666.J — customer-initiated cancel on a pending order. Only
+   * `pending` orders can be cancelled; once a payment has been seen
+   * (confirming/partial) the cancellation must go through support so
+   * the customer's on-chain funds can be reconciled.
+   *
+   * Returns { ok: 'cancelled' } on success, or { ok: 'not_cancellable',
+   * reason } when the order is already past the cancellable window.
+   * Returns null when the order doesn't exist OR doesn't belong to
+   * the supplied accountId (404-style; we don't leak existence of
+   * other accounts' orders).
+   */
+  async cancelOrder(args: {
+    order_id: string;
+    account_id: string;
+  }): Promise<
+    | { ok: 'cancelled'; order: CryptoOrder }
+    | { ok: 'not_cancellable'; reason: CryptoOrderStatus }
+    | null
+  > {
+    const order = await this.opts.repo.getById(args.order_id);
+    if (order === null || order.account_id !== args.account_id) return null;
+    if (order.status !== 'pending') {
+      return { ok: 'not_cancellable', reason: order.status };
+    }
+    const updated: CryptoOrder = {
+      ...order,
+      status: 'cancelled',
+      updated_at: this.nowFn(),
+    };
+    await this.opts.repo.upsert(updated);
+    return { ok: 'cancelled', order: updated };
+  }
+
+  /**
    * Apply a NowPayments IPN update to the order with the given
    * order_id. Returns the new order state, or null when the order
    * doesn't exist (the IPN is then logged + ignored — we don't
@@ -247,8 +286,10 @@ function isTerminalForward(current: CryptoOrderStatus, next: CryptoOrderStatus):
   // Same state — idempotent no-op, but caller wants the row touched
   // (updated_at refresh).
   if (current === next) return true;
-  // Terminal statuses don't move.
-  if (current === 'paid' || current === 'failed') return false;
+  // Terminal statuses don't move. V-666.J — 'cancelled' joins
+  // 'paid'/'failed' as terminal; a late IPN payment cannot revive
+  // an abandoned order.
+  if (current === 'paid' || current === 'failed' || current === 'cancelled') return false;
   // 'partial' is semi-terminal: only 'paid' or 'failed' overrides it.
   if (current === 'partial') return next === 'paid' || next === 'failed';
   // From 'pending' or 'confirming' anything except 'pending' is forward.
