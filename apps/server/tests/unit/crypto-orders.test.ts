@@ -4,6 +4,7 @@
 // V-666.K — appended tests for expireOrder + sweepExpiredOrders.
 // V-666.M — appended tests for getReceipt.
 // V-666.N — appended tests for getStatsForAdmin.
+// V-666.O — appended tests for getDailyBreakdownForAdmin.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -796,5 +797,112 @@ describe('V-666.N getStatsForAdmin', () => {
     const stats = await svc.getStatsForAdmin({ scanLimit: 5 });
     expect(stats.truncated).toBe(true);
     expect(stats.scanned).toBe(5);
+  });
+});
+
+describe('V-666.O getDailyBreakdownForAdmin', () => {
+  function makeServiceAt(initialNow: number): {
+    svc: CryptoOrdersService;
+    setNow: (t: number) => void;
+  } {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = initialNow;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
+    return {
+      svc,
+      setNow: (t) => {
+        now = t;
+      },
+    };
+  }
+
+  it('returns an empty rows array when no orders exist', async () => {
+    const { svc } = makeServiceAt(Date.parse('2026-05-11T12:00:00Z'));
+    const out = await svc.getDailyBreakdownForAdmin();
+    expect(out.days).toBe(7);
+    expect(out.rows).toEqual([]);
+    expect(out.truncated).toBe(false);
+  });
+
+  it('omits orders outside the days window', async () => {
+    const { svc, setNow } = makeServiceAt(Date.parse('2026-05-11T12:00:00Z'));
+    // Old order: 30 days ago.
+    setNow(Date.parse('2026-04-11T00:00:00Z'));
+    await svc.create({
+      order_id: 'old',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    // Recent order: today.
+    setNow(Date.parse('2026-05-11T12:00:00Z'));
+    await svc.create({
+      order_id: 'today',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    const out = await svc.getDailyBreakdownForAdmin({ days: 7 });
+    expect(out.rows.map((r) => r.date)).toEqual(['2026-05-11']);
+  });
+
+  it('groups by (date, status) with counts; sorts date asc + status alphabetical', async () => {
+    const { svc, setNow } = makeServiceAt(Date.parse('2026-05-11T12:00:00Z'));
+    // 2 orders on May 10, 1 paid + 1 pending.
+    setNow(Date.parse('2026-05-10T08:00:00Z'));
+    await svc.create({
+      order_id: 'p10a',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    await svc.create({
+      order_id: 'p10b',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'p10a',
+      payment_id: 'np',
+      provider_status: 'finished',
+    });
+    // 1 pending on May 11.
+    setNow(Date.parse('2026-05-11T08:00:00Z'));
+    await svc.create({
+      order_id: 'p11',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+
+    setNow(Date.parse('2026-05-11T12:00:00Z'));
+    const out = await svc.getDailyBreakdownForAdmin({ days: 7 });
+    expect(out.rows).toEqual([
+      { date: '2026-05-10', status: 'paid', count: 1 },
+      { date: '2026-05-10', status: 'pending', count: 1 },
+      { date: '2026-05-11', status: 'pending', count: 1 },
+    ]);
+  });
+
+  it('flags truncated=true when scanLimit hits the order count', async () => {
+    const { svc, setNow } = makeServiceAt(Date.parse('2026-05-11T12:00:00Z'));
+    for (let i = 0; i < 5; i += 1) {
+      await svc.create({
+        order_id: `o${i.toString()}`,
+        account_id: 'a',
+        product: 'x',
+        price_cents: 100,
+        price_currency: 'EUR',
+      });
+    }
+    setNow(Date.parse('2026-05-11T12:00:00Z'));
+    const out = await svc.getDailyBreakdownForAdmin({ days: 7, scanLimit: 5 });
+    expect(out.truncated).toBe(true);
   });
 });

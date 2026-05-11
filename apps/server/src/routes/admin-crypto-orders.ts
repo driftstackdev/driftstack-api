@@ -2,6 +2,7 @@
 //
 //   GET  /v1/admin/crypto-orders?account_id=acc_X&limit=N
 //   GET  /v1/admin/crypto-orders/stats                (V-666.N)
+//   GET  /v1/admin/crypto-orders/daily?days=N         (V-666.O)
 //   GET  /v1/admin/crypto-orders/:order_id
 //   POST /v1/admin/crypto-orders/:order_id/apply-ipn  (V-666.F)
 //   POST /v1/admin/crypto-orders/sweep-expired        (V-666.L)
@@ -45,6 +46,13 @@ const ApplyIpnBody = z.object({
 const SweepBody = z.object({
   older_than_hours: z.number().int().min(1).max(8760).optional(), // up to 1 year
   limit: z.number().int().min(1).max(500).optional(),
+});
+
+// V-666.O — daily-breakdown query. days bounded to 90 to keep the
+// O(N orders) scan affordable; longer reports should pull from a
+// warehouse, not the live in-memory repo.
+const DailyQuery = z.object({
+  days: z.string().regex(/^\d+$/).optional(),
 });
 
 function toPublic(order: CryptoOrder): Record<string, unknown> {
@@ -103,6 +111,31 @@ export function registerAdminCryptoOrdersRoutes(
         paid_revenue_cents: stats.paidRevenueCents,
         truncated: stats.truncated,
         scanned: stats.scanned,
+      });
+    },
+  );
+
+  // V-666.O — per-day breakdown for the last N UTC days (default 7,
+  // max 90). One row per (date, status) combination that had at
+  // least one order in the window.
+  app.get<{ Querystring: { days?: string } }>(
+    '/v1/admin/crypto-orders/daily',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    async (req: FastifyRequest<{ Querystring: { days?: string } }>, reply) => {
+      const query = parseOrThrow(DailyQuery, req.query);
+      let days = 7;
+      if (query.days !== undefined) {
+        const n = Number.parseInt(query.days, 10);
+        if (!Number.isInteger(n) || n < 1 || n > 90) {
+          throw new BadRequestError('days must be an integer between 1 and 90.');
+        }
+        days = n;
+      }
+      const breakdown = await deps.service.getDailyBreakdownForAdmin({ days });
+      return reply.send({
+        days: breakdown.days,
+        rows: breakdown.rows,
+        truncated: breakdown.truncated,
       });
     },
   );

@@ -1,0 +1,213 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-701 — incident response + customer-facing policy docs.
+---
+
+<BaseLayout title="Incidents & SLA — Driftstack" description="What happens during a Driftstack incident: status page, severity ladder, customer comms, and SLA credit policy.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Incidents &amp; SLA</h1>
+
+    <p class="lead">
+      This page covers what happens during a Driftstack outage: how
+      we detect, communicate, and resolve incidents, and the credit
+      policy if we miss our SLA.
+    </p>
+
+    <h2>Status page</h2>
+    <p>
+      <strong><a href="https://status.driftstack.dev">status.driftstack.dev</a></strong>
+      is the single source of truth during an incident. It pulls
+      from the same database the API uses to mark incidents, with
+      a CF Pages fallback that serves a cached snapshot if the API
+      itself is down (so the status page stays current even during
+      our worst-case outages).
+    </p>
+    <p>
+      Subscribe via the form on the page to get email updates the
+      moment a new incident is filed or resolved. Slack /
+      PagerDuty webhooks are available on Team Manual + above —
+      configure under <code>GET /v1/account/me</code> →
+      <code>incident_subscriptions</code>.
+    </p>
+
+    <h2>Severity ladder</h2>
+    <table>
+      <thead>
+        <tr><th>Severity</th><th>Definition</th><th>First update</th><th>Update cadence</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Critical</strong></td>
+          <td>Core API down across all customers, or data-loss risk.</td>
+          <td>≤ 15 min</td>
+          <td>Every 30 min until resolved.</td>
+        </tr>
+        <tr>
+          <td><strong>Major</strong></td>
+          <td>API degraded ({'>'}5% error rate) OR a critical surface
+            (auth, sessions) unavailable for a subset of customers.</td>
+          <td>≤ 30 min</td>
+          <td>Every 60 min.</td>
+        </tr>
+        <tr>
+          <td><strong>Minor</strong></td>
+          <td>Single non-critical surface (recordings playback, GUI dashboard) degraded.</td>
+          <td>≤ 60 min</td>
+          <td>At resolution.</td>
+        </tr>
+        <tr>
+          <td><strong>Maintenance</strong></td>
+          <td>Planned change with potential impact. Always announced
+            ≥48h in advance.</td>
+          <td>Pre-announced</td>
+          <td>Start + end.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Detection</h2>
+    <p>
+      Three signals trigger an incident:
+    </p>
+    <ul>
+      <li><strong>V-295b health probes:</strong> 60-second poller
+        against <code>/v1/health</code> + per-region API endpoints.
+        Three consecutive failures auto-create a Critical incident.</li>
+      <li><strong>Customer reports:</strong> emails to
+        <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>
+        and Slack channel monitoring. We acknowledge within 30 min
+        during EU business hours.</li>
+      <li><strong>Internal alerting:</strong> Sentry + cost-monitoring
+        thresholds page on-call. Anything that warrants customer
+        comms gets escalated to a public status-page entry.</li>
+    </ul>
+
+    <h2>Customer communications during an incident</h2>
+    <ol>
+      <li><strong>Status page entry filed</strong> with severity +
+        title + affected components.</li>
+      <li><strong>Email + webhook fan-out</strong> to subscribers.
+        Webhook event type is <code>incident.created</code> with the
+        same shape as <code>GET /v1/status/incidents</code>.</li>
+      <li><strong>Progress updates</strong> on the cadence above.
+        Each update fires <code>incident.updated</code>.</li>
+      <li><strong>Resolution</strong> fires <code>incident.resolved</code>
+        + a final email to subscribers carrying root-cause-summary
+        + remediation steps.</li>
+      <li><strong>Postmortem</strong> for Critical / Major incidents
+        published within 7 business days at
+        <a href="/legal/postmortems">/legal/postmortems</a>. Minor
+        incidents get an inline summary on the resolved status entry.</li>
+    </ol>
+
+    <h2>SLA + credit policy</h2>
+    <p>
+      Driftstack's SLA is on the <strong>API control plane</strong>
+      (session create + lifecycle endpoints). Recordings, dashboard,
+      and SDK distribution are best-effort.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Tier</th><th>Monthly SLA</th><th>Credit policy</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Trial Pack</td>
+          <td>None</td>
+          <td>N/A</td>
+        </tr>
+        <tr>
+          <td>Solo Manual / API Starter</td>
+          <td>99.5%</td>
+          <td>5% credit on next month if missed</td>
+        </tr>
+        <tr>
+          <td>Team Manual / API Builder</td>
+          <td>99.9%</td>
+          <td>10% credit if 99.9% missed; 25% if 99.5% missed</td>
+        </tr>
+        <tr>
+          <td>Agency Manual / API Scale</td>
+          <td>99.95%</td>
+          <td>10% / 25% / 50% bands; auto-applied to invoice</td>
+        </tr>
+        <tr>
+          <td>Enterprise</td>
+          <td>99.99% (custom)</td>
+          <td>Per-contract; can include refund + termination clauses</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Credits are <strong>auto-applied</strong> on the next billing
+      cycle for Stripe customers. Crypto customers receive an
+      equivalent tier credit (extra weeks on the current cycle)
+      — we don't refund in crypto. To dispute the calculated uptime,
+      email <a href="mailto:billing@driftstack.dev">billing@driftstack.dev</a>
+      within 30 days of the missed-SLA month.
+    </p>
+
+    <h2>What doesn't count against the SLA</h2>
+    <ul>
+      <li>Scheduled maintenance (announced ≥48h in advance).</li>
+      <li>Customer-side issues (bad API key, exceeded tier
+        concurrency cap, etc.) — those are 4xx responses, not
+        downtime.</li>
+      <li>Force majeure: regional ISP outages, upstream provider
+        failures we can't route around (e.g. a Cloudflare region
+        going dark).</li>
+      <li>Issues caused by customer-provided integrations
+        (NowPayments not reaching us due to your firewall rules).</li>
+    </ul>
+
+    <h2>Reading SLA data from the API</h2>
+    <pre><code>{`GET /v1/status/sla
+Authorization: Bearer ds_live_…
+
+→ {
+  "targets": [
+    {
+      "target": "api.driftstack.dev",
+      "uptime_pct": 99.99,
+      "total_probes": 43200,
+      "fail_count": 4,
+      "last_probe_at": "2026-05-11T13:00:00Z",
+      "last_failure_at": "2026-05-09T14:23:00Z",
+      "window_start": "2026-04-11T13:00:00Z",
+      "window_end":   "2026-05-11T13:00:00Z"
+    }
+  ]
+}`}</code></pre>
+    <p>
+      Window default is 30 days; pass <code>?window_days=7</code>
+      to widen / narrow. Per the
+      <a href="/docs/audit-log">audit log docs</a>, every status-page
+      mutation is recorded for compliance traceability.
+    </p>
+
+    <h2>Postmortems</h2>
+    <p>
+      Public postmortems for Critical + Major incidents live at
+      <a href="/legal/postmortems">/legal/postmortems</a>. Each
+      follows the same template: timeline, root cause, what we
+      changed to prevent recurrence. Postmortems are blameless and
+      detailed enough to be useful — we'd rather over-share than
+      under-share.
+    </p>
+
+    <h2>Reporting a problem</h2>
+    <ul>
+      <li><strong>Acute outage:</strong> if the status page doesn't
+        already show the incident, email
+        <a href="mailto:urgent@driftstack.dev">urgent@driftstack.dev</a>.
+        That goes straight to on-call.</li>
+      <li><strong>Non-acute bug / weird behaviour:</strong>
+        <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>
+        with a session id + timestamp.</li>
+      <li><strong>Security:</strong>
+        <a href="mailto:security@driftstack.dev">security@driftstack.dev</a>
+        — PGP available on the page.</li>
+    </ul>
+  </main>
+</BaseLayout>

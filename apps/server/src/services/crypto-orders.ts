@@ -208,6 +208,56 @@ export class CryptoOrdersService {
   }
 
   /**
+   * V-666.O — admin per-day breakdown. Counts orders created in
+   * each of the last `days` UTC dates (inclusive of today), grouped
+   * by created_at date and status. Returns one row per (date, status)
+   * combination that has at least one order; days with no orders are
+   * omitted from the response (the caller fills gaps client-side if
+   * a zero-fill chart is wanted).
+   *
+   * scanLimit caps the lookback window the same way as getStatsForAdmin
+   * to avoid blowing up on large backlogs.
+   */
+  async getDailyBreakdownForAdmin(
+    opts: {
+      days?: number;
+      scanLimit?: number;
+    } = {},
+  ): Promise<{
+    days: number;
+    rows: Array<{ date: string; status: CryptoOrderStatus; count: number }>;
+    truncated: boolean;
+  }> {
+    const days = opts.days ?? 7;
+    const scanLimit = opts.scanLimit ?? 10_000;
+    const now = this.nowFn();
+    const cutoff = now - days * 24 * 60 * 60 * 1000;
+    const rows = await this.opts.repo.listAll({ limit: scanLimit });
+    const buckets = new Map<string, number>();
+    for (const o of rows) {
+      if (o.created_at < cutoff) continue;
+      const date = new Date(o.created_at).toISOString().slice(0, 10);
+      const key = `${date}::${o.status}`;
+      buckets.set(key, (buckets.get(key) ?? 0) + 1);
+    }
+    const out: Array<{ date: string; status: CryptoOrderStatus; count: number }> = [];
+    for (const [key, count] of buckets) {
+      const [date, status] = key.split('::') as [string, CryptoOrderStatus];
+      out.push({ date, status, count });
+    }
+    // Stable sort: date asc, then status alphabetical for predictable output.
+    out.sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return a.status < b.status ? -1 : 1;
+    });
+    return {
+      days,
+      rows: out,
+      truncated: rows.length === scanLimit,
+    };
+  }
+
+  /**
    * V-666.N — admin stats summary across all orders. Returns
    * counts per status, total order count, and total paid revenue
    * (sum of price_cents on `paid` orders) per currency. Currency-
