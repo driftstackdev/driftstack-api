@@ -38,6 +38,11 @@ export interface CryptoOrder {
 export interface CryptoOrdersRepo {
   upsert(order: CryptoOrder): Promise<void>;
   getById(orderId: string): Promise<CryptoOrder | null>;
+  /**
+   * Admin / ops list. Filters by accountId when supplied; limits to
+   * `limit` rows (default 50) ordered by created_at DESC.
+   */
+  listAll(opts?: { accountId?: string; limit?: number }): Promise<CryptoOrder[]>;
 }
 
 export class InMemoryCryptoOrdersRepo implements CryptoOrdersRepo {
@@ -49,6 +54,14 @@ export class InMemoryCryptoOrdersRepo implements CryptoOrdersRepo {
   // eslint-disable-next-line @typescript-eslint/require-await
   async getById(orderId: string): Promise<CryptoOrder | null> {
     return this.orders.get(orderId) ?? null;
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async listAll(opts: { accountId?: string; limit?: number } = {}): Promise<CryptoOrder[]> {
+    const limit = opts.limit ?? 50;
+    const all = Array.from(this.orders.values());
+    const filtered =
+      opts.accountId !== undefined ? all.filter((o) => o.account_id === opts.accountId) : all;
+    return filtered.sort((a, b) => b.created_at - a.created_at).slice(0, limit);
   }
 }
 
@@ -114,6 +127,15 @@ export class CryptoOrdersService {
 
   async getById(orderId: string): Promise<CryptoOrder | null> {
     return this.opts.repo.getById(orderId);
+  }
+
+  /**
+   * V-666.D — admin-only list. Returns the most-recent `limit` orders
+   * across all customers, optionally filtered by account_id. Sort
+   * order is `created_at DESC`.
+   */
+  async listForAdmin(opts: { accountId?: string; limit?: number } = {}): Promise<CryptoOrder[]> {
+    return this.opts.repo.listAll(opts);
   }
 
   /**
