@@ -1,13 +1,13 @@
-# Wave 26-32 overnight batch report
+# Wave 26-35 overnight batch report
 
 **Date:** 2026-05-11
-**Range:** `92af6a9..7ab41c7` (8 commits, 7 waves on top of W25 closure)
+**Range:** `92af6a9..e5eaddd` (13 commits, 10 waves + 2 reports on top of W25 closure)
 **Mode:** Autopilot continuation per the W26+ overnight directive.
 
 ## What landed
 
-Continuous DO mode through the W25→W32 window. Slice count: **15
-substantive V-NNN slices** committed across 7 waves. All commits on
+Continuous DO mode through the W25→W35 window. Slice count: **18
+substantive V-NNN slices** committed across 10 waves. All commits on
 `main` except V-655 which is staged on `cleanup/v526-sanitize` per
 the V-528 privatization gate (HOLD per directive).
 
@@ -22,11 +22,16 @@ the V-528 privatization gate (HOLD per directive).
 | W30                  | `e156b69` | V-665 (Postmark email-failure categorisation)                           |
 | W31                  | `79ca1fc` | V-540.B-4 (audit-log E2E)                                               |
 | W32                  | `7ab41c7` | V-540.B-5 (email-preferences E2E) + V-664 (changelog script tests)      |
+| W33                  | `bd15df0` | V-532.D (multi-step wizard recipe; closes V-532 series)                 |
+| W34                  | `ad65bb3` | V-540.B-6 (legal documents + acceptances E2E)                           |
+| W35                  | `e5eaddd` | V-540.B-7 (account web-sessions list + revoke E2E)                      |
 
 ## Test-suite growth
 
 - **Wave 25 baseline:** 1429 / 132 files.
-- **Wave 32 close:** **1528 / 136 files** (+99 across the window).
+- **Wave 32 close:** 1528 / 136 files (+99 across W26-W32).
+- **Wave 35 close:** **1538 / 137 files** (+109 across the full window;
+  +10 from V-532.D wizard tests in W33).
 
 Breakdown of additions:
 
@@ -36,11 +41,14 @@ Breakdown of additions:
 - `apps/server/tests/unit/email.test.ts` — +13 V-665 categorisation cases.
 - `apps/gui-client/tests/unit/deep-link.test.ts` — 19 (V-534.A).
 - `scripts/tests/generate-changelog.test.ts` — 13 (V-664).
+- `packages/recipe-library/tests/wizard.test.ts` — 10 (V-532.D).
 
 E2E specs (in `tests/e2e/` — not in standard vitest scope; run via
 Playwright separately):
 
 - `account-mfa.spec.ts` (V-540.B-1, Wave 26).
+- `account-web-sessions.spec.ts` (V-540.B-7, Wave 35).
+- `legal.spec.ts` (V-540.B-6, Wave 34).
 - `account-rate-limits.spec.ts` (V-540.B-2, Wave 28).
 - `account-me.spec.ts` (V-540.B-3, Wave 29).
 - `account-audit-log.spec.ts` (V-540.B-4, Wave 31).
@@ -52,7 +60,7 @@ Playwright separately):
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `behavioural-simulation` | V-530.A (touch) + V-530.B (scroll-velocity) + V-530.C (region-aware dwell) + V-530.D (idle jitter) ✓. Multi-touch sequencing deferred (separate slice). |
 | `webrtc-streaming`       | V-531.A (frame source + encode pipeline) ✓. V-531.B real-codec wiring blocked on sister-repo Agent 1.                                                   |
-| `recipe-library`         | V-532.A (navigation) + V-532.B (login + fill-form) + V-532.C (cart + checkout) ✓. V-532.D (wizard) deferred.                                            |
+| `recipe-library`         | V-532.A (navigation) + V-532.B (login + fill-form) + V-532.C (cart + checkout) + V-532.D (wizard) ✓. **V-532 series CLOSED.**                           |
 | `recapture-automation`   | V-533.A (matrix expander) + V-533.B (atlas builder) ✓. V-533.C scheduled-job + admin route deferred.                                                    |
 | `gui-client`             | V-534.A (deep-link parser) + V-534.B (consumer refactor) ✓. V-534.C-E queued.                                                                           |
 
@@ -122,8 +130,10 @@ Unchanged from W25 status:
 
 ## Verification
 
-- `git log --oneline 92af6a9..HEAD` shows 8 commits across W26-W32.
-- `npx vitest run` at HEAD `7ab41c7` → 1528/1528 pass.
+- `git log --oneline 92af6a9..HEAD` shows 13 commits across W26-W35
+  (10 wave-impl commits + 2 reports + 1 status refresh).
+- `npx vitest run` at HEAD `e5eaddd` → 1538/1538 pass across 137
+  test files.
 - `npx tsc --noEmit` clean across workspace.
 - All commits pass V-527 commit-msg hook (V-205 attribution +
   V-211 anonymity regex).
@@ -136,7 +146,7 @@ When morning resumes:
    `84aa81c`) — 44-file V-NNN scrub + earlier founder-token
    scrub. Merge to main when satisfied; this clears the path for
    the V-528 privatization flip.
-2. Review the W26-W32 commits on main for shape / direction.
+2. Review the W26-W35 commits on main for shape / direction.
 3. Trigger V-528 privatization when ready (gated; not done
    overnight per directive).
 4. Postmark approval check — once approved, dashboards will see

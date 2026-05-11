@@ -1,11 +1,11 @@
 # Driftstack API — current status
 
 **Last updated:** 2026-05-11
-**Most recent wave:** Wave 34 (V-540.B-6 legal E2E)
+**Most recent wave:** Wave 35 (V-540.B-7 web-sessions E2E)
 **Mode:** Autopilot active. Waves 1-25 closed; Waves 26-34 landed across
 the overnight window per the W26+ directive. Team morning review point:
-`docs/internal/wave-26-32-overnight-batch-report.md` (covers W26-W32;
-W33-W34 listed below).
+`docs/internal/wave-26-35-overnight-batch-report.md` (covers W26-W35
+in full).
 
 ## W26-W34 — overnight rollup
 
