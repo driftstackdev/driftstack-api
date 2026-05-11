@@ -37,3 +37,11 @@ export {
   CHECKOUT_GENERIC,
   V532C_CHECKOUT_RECIPES,
 } from './recipes/checkout.js';
+
+// V-532.D — multi-step wizard recipe builder.
+export type { WizardStep } from './recipes/wizard.js';
+export {
+  buildWizardRecipe,
+  SIGNUP_WIZARD_GENERIC,
+  V532D_WIZARD_RECIPES,
+} from './recipes/wizard.js';
