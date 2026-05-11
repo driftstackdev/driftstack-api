@@ -374,6 +374,61 @@ describe('V-666.P GET /v1/billing/crypto-orders/:order_id/receipt.txt', () => {
   });
 });
 
+describe('V-666.U GET /v1/billing/crypto-orders/:order_id/receipt.pdf', () => {
+  it('401 without auth', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing/crypto-orders/ord_x/receipt.pdf',
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('404 on cross-account fetch', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_alien_pdf',
+      account_id: 'acc_other',
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing/crypto-orders/ord_alien_pdf/receipt.pdf',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('200 + application/pdf + Content-Disposition attachment', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_pdf',
+      account_id: fx.accountId,
+      product: 'team_manual',
+      price_cents: 8000,
+      price_currency: 'EUR',
+    });
+    await fx.cryptoOrdersService.applyIpnStatus({
+      order_id: 'ord_pdf',
+      payment_id: 'np_pdf',
+      provider_status: 'finished',
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing/crypto-orders/ord_pdf/receipt.pdf',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
+    expect(res.headers['content-disposition']).toContain('attachment');
+    expect(res.headers['content-disposition']).toContain('receipt-ord_pdf.pdf');
+    // The raw body starts with the PDF magic.
+    expect(res.rawPayload.slice(0, 8).toString('binary')).toBe('%PDF-1.4');
+  });
+});
+
 describe('V-666.Q PATCH /v1/billing/crypto-orders/:order_id (customer_note)', () => {
   it('401 without auth', async () => {
     fx = await buildTestApp();

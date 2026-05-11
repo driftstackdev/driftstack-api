@@ -6,6 +6,7 @@
 //   POST  /v1/billing/crypto-orders/:id/cancel       — abandon a pending order (V-666.J)
 //   GET   /v1/billing/crypto-orders/:id/receipt      — normalized receipt JSON (V-666.M)
 //   GET   /v1/billing/crypto-orders/:id/receipt.txt  — same receipt as text/plain (V-666.P)
+//   GET   /v1/billing/crypto-orders/:id/receipt.pdf  — same receipt as application/pdf (V-666.U)
 //
 // All routes are scoped to the calling account. Cross-account
 // id lookups return 404 (not 403) — we don't leak the existence of
@@ -14,6 +15,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
+import { buildReceiptPdfBytes } from '../lib/receipt-pdf.js';
 import type { CryptoOrder, CryptoOrdersService } from '../services/crypto-orders.js';
 
 export interface RegisterCustomerCryptoOrdersRoutesDeps {
@@ -171,6 +173,31 @@ export function registerCustomerCryptoOrdersRoutes(
       if (receipt.payment_id !== null) lines.push(`Payment id: ${receipt.payment_id}`);
       lines.push(`Created: ${receipt.created_at}`);
       return reply.type('text/plain; charset=utf-8').send(lines.join('\n') + '\n');
+    },
+  );
+
+  // V-666.U — PDF rendering of the receipt for archiving / emailing.
+  // Same access semantics as the JSON / .txt variants; cross-account
+  // requests return 404. Content-Disposition: attachment so a browser
+  // GET triggers a download with a meaningful filename.
+  app.get<{ Params: { order_id: string } }>(
+    '/v1/billing/crypto-orders/:order_id/receipt.pdf',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
+      const ctx = requireCtx(req);
+      const params = parseOrThrow(GetParams, req.params);
+      const receipt = await deps.service.getReceipt({
+        order_id: params.order_id,
+        account_id: ctx.account.id,
+      });
+      if (receipt === null) {
+        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
+      }
+      const bytes = buildReceiptPdfBytes(receipt);
+      return reply
+        .type('application/pdf')
+        .header('content-disposition', `attachment; filename="receipt-${receipt.order_id}.pdf"`)
+        .send(bytes);
     },
   );
 

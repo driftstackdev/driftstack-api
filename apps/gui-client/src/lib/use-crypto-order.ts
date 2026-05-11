@@ -14,7 +14,7 @@ export interface CryptoOrderData {
   price_cents: number;
   price_currency: string;
   payment_id: string | null;
-  status: 'pending' | 'confirming' | 'paid' | 'failed' | 'partial';
+  status: 'pending' | 'confirming' | 'paid' | 'failed' | 'partial' | 'cancelled';
   created_at: string;
   updated_at: string;
 }

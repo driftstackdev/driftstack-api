@@ -1,0 +1,173 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-706 — Go SDK quickstart. Third entry in the SDK quickstart trilogy
+// (TypeScript V-703 / Python V-704). Same skeleton, Go-idiomatic
+// examples. Pitched at backend teams running Go services that need a
+// browser leg for scrape / E2E / generate-PDF workloads.
+---
+
+<BaseLayout title="Go SDK quickstart — Driftstack" description="Drive Driftstack browser sessions from Go services: typed envelopes, context-aware cancellation, streaming events.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Go SDK quickstart</h1>
+
+    <p class="lead">
+      The <code>github.com/driftstack/driftstack-go</code> module wraps
+      the same REST surface as <a href="/docs/api-quickstart">the curl
+      quickstart</a>. Idiomatic Go: every call takes a
+      <code>context.Context</code>, returns a typed struct + error,
+      and the streaming surface is a channel.
+    </p>
+
+    <h2>1. Install</h2>
+    <pre><code>{`go get github.com/driftstack/driftstack-go@latest`}</code></pre>
+
+    <p>
+      Go ≥ 1.22 is supported. The module has zero non-stdlib runtime
+      dependencies (it speaks raw JSON over <code>net/http</code>); no
+      transitive bloat.
+    </p>
+
+    <h2>2. Construct the client</h2>
+    <pre><code>{`package main
+
+import (
+    "context"
+    "os"
+
+    "github.com/driftstack/driftstack-go"
+)
+
+func main() {
+    client, err := driftstack.NewClient(driftstack.Config{
+        APIKey: os.Getenv("DRIFTSTACK_KEY"),
+        // BaseURL defaults to https://api.driftstack.dev; override
+        // for staging or self-hosted deployments.
+    })
+    if err != nil {
+        panic(err)
+    }
+    _ = client
+}`}</code></pre>
+
+    <p>
+      The constructor does not make any network calls. Reuse one
+      client across your process — it is internally pooled via
+      <code>http.Client</code> with sensible defaults (no
+      reconfiguration needed for production traffic).
+    </p>
+
+    <h2>3. Start a session</h2>
+    <pre><code>{`session, err := client.Sessions.Start(ctx, driftstack.StartSessionRequest{
+    TargetURL:        "https://example.com",
+    ProfileArchetype: "default",
+})
+if err != nil {
+    return err
+}
+log.Println(session.ID, session.Status, session.LiveURL)`}</code></pre>
+
+    <p>
+      <code>session</code> is a strongly typed struct. The status
+      string is constrained to the lifecycle enum
+      (<code>StatusQueued</code> / <code>StatusRunning</code> /
+      <code>StatusCompleted</code> / <code>StatusFailed</code>) so
+      compile-time switches stay exhaustive.
+    </p>
+
+    <h2>4. Wait for the session to finish</h2>
+    <pre><code>{`waitCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+defer cancel()
+
+done, err := client.Sessions.WaitUntilTerminal(waitCtx, session.ID)
+if err != nil {
+    return err
+}
+if done.Status == driftstack.StatusCompleted {
+    rec, err := client.Recordings.Get(ctx, done.ID)
+    if err != nil {
+        return err
+    }
+    log.Println("Recording:", rec.PlaybackURL)
+}`}</code></pre>
+
+    <p>
+      <code>WaitUntilTerminal</code> polls every 2 seconds with
+      exponential backoff up to 10s, and respects context
+      cancellation — a parent timeout fires the cancellation through.
+      For production loads, prefer <a href="/docs/webhooks">webhooks</a>
+      over polling.
+    </p>
+
+    <h2>5. Stream live events</h2>
+    <pre><code>{`events, errs := client.Sessions.Stream(ctx, session.ID)
+for {
+    select {
+    case <-ctx.Done():
+        return ctx.Err()
+    case err := <-errs:
+        return err
+    case ev, ok := <-events:
+        if !ok {
+            return nil // channel closed = session terminal
+        }
+        if ev.Type == "navigation" {
+            log.Println("navigated to", ev.URL)
+        }
+    }
+}`}</code></pre>
+
+    <p>
+      The events channel is backed by Server-Sent Events under the
+      hood. Reconnects happen automatically with exponential backoff
+      on transient failures; permanent failures (auth, 4xx) surface
+      on the errs channel.
+    </p>
+
+    <h2>Error handling</h2>
+    <p>
+      Every SDK method returns a <code>driftstack.Error</code>
+      pointer on non-2xx responses. Use <code>errors.As</code> to
+      branch on the structured code:
+    </p>
+    <pre><code>{`var dse *driftstack.Error
+if errors.As(err, &dse) {
+    switch dse.Code {
+    case "invalid_request":
+        // user-facing validation error
+    case "rate_limited":
+        // back off and retry
+    default:
+        // log + surface
+    }
+}`}</code></pre>
+
+    <h2>Context propagation</h2>
+    <p>
+      Every method takes a <code>context.Context</code> as its first
+      argument. Cancellation cascades through the underlying HTTP
+      requests, so a parent deadline (or an HTTP request cancellation
+      in a Gin / chi / standard <code>http.Server</code> handler)
+      cleanly aborts in-flight SDK calls. No goroutine leaks even
+      under heavy concurrent load.
+    </p>
+
+    <h2>Where to go next</h2>
+    <ul>
+      <li><a href="/api-reference">Full API reference</a> — every endpoint, every field.</li>
+      <li><a href="/docs/sdk-typescript">TypeScript SDK</a> — same surface, TS-native.</li>
+      <li><a href="/docs/sdk-python">Python SDK</a> — same surface, sync + asyncio.</li>
+      <li><a href="/docs/webhooks">Webhooks</a> — avoid polling in production.</li>
+      <li><a href="/docs/cost-monitoring">Cost monitoring</a> — set
+        alerts before the bill surprises you.</li>
+      <li><a href="/docs/error-codes">Error codes</a> — the structured
+        codes <code>driftstack.Error</code> exposes.</li>
+    </ul>
+
+    <h2>Need help?</h2>
+    <p>
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+      We respond within one business day.
+    </p>
+  </main>
+</BaseLayout>
