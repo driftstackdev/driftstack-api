@@ -1,0 +1,106 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-688 — error-codes developer reference. Companion to
+// /docs/api-quickstart; lets developers grep their logs for an
+// error code + jump straight to "what does this mean / what
+// should I do."
+
+const ERRORS = [
+  // 4xx
+  { code: 'validation_error', http: 400, when: 'Request body / params failed Zod schema validation.', action: 'Fix the field listed in the response detail.' },
+  { code: 'bad_request', http: 400, when: 'A generic invariant violation (e.g. capacity ≤ 0, malformed URL).', action: 'Read the message; the field at fault is named.' },
+  { code: 'invalid_key', http: 401, when: 'API key is malformed (too short, wrong prefix) or unknown.', action: 'Confirm the key in your secret manager matches the dashboard.' },
+  { code: 'unauthorized', http: 401, when: 'Authorization header missing or malformed.', action: 'Send Authorization: Bearer ds_live_… on every request.' },
+  { code: 'forbidden', http: 403, when: 'Key is valid but lacks the required scope for this endpoint.', action: 'Mint a key with the right scope (see /docs/api-keys).' },
+  { code: 'mfa_required', http: 403, when: 'Endpoint needs a fresh MFA confirmation (15-min step-up window).', action: 'Have the user re-verify MFA from the dashboard, then retry.' },
+  { code: 'not_found', http: 404, when: 'Resource id does not exist OR you do not have access.', action: 'Verify the id; 404 is also returned for cross-account lookups.' },
+  { code: 'conflict', http: 409, when: 'State conflict (duplicate, sticky tombstone, quota cap).', action: 'Read the message — often "mint a fresh resource instead".' },
+  { code: 'concurrent_session_limit', http: 409, when: 'Account has hit its tier-bound concurrent-session cap.', action: 'Wait for a running session to finish, or upgrade the tier.' },
+  { code: 'rate_limited', http: 429, when: 'A rate-limit bucket is empty for this account.', action: 'Honour Retry-After (see /docs/rate-limits).' },
+  // 5xx
+  { code: 'internal_error', http: 500, when: 'Driftstack hit an unexpected error processing this request.', action: 'Retry with exponential backoff; if persistent, contact support.' },
+  { code: 'driver_unavailable', http: 503, when: 'Underlying browser driver is degraded or unreachable.', action: 'Retry after 30s; check status.driftstack.dev for outages.' },
+  // OAuth-specific
+  { code: 'invalid_client', http: 401, when: 'OAuth client_id unknown or revoked, or client_secret wrong.', action: 'Verify the client_id + secret. Rotate via /v1/admin/oauth/clients/:id/rotate-secret.' },
+  { code: 'invalid_grant', http: 400, when: 'OAuth code already consumed, expired, or code_verifier mismatch.', action: 'Restart the authorize flow; codes are single-use.' },
+  { code: 'invalid_scope', http: 400, when: 'OAuth authorize request asked for a scope the client cannot grant.', action: 'Request a narrower scope set.' },
+];
+---
+
+<BaseLayout title="Error codes — Driftstack developer docs" description="Every error code Driftstack returns, what it means, and what to do.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Error codes</h1>
+
+    <p class="lead">
+      Every error response from Driftstack carries a stable
+      <code>code</code> field. Use it to dispatch on error type in
+      your client code; the <code>message</code> is informational
+      and may change.
+    </p>
+
+    <h2>Response shape</h2>
+    <pre><code>{`{
+  "error": {
+    "code": "rate_limited",
+    "message": "Rate limit exceeded on bucket sessions:start.",
+    "details": { /* optional, error-specific */ }
+  }
+}`}</code></pre>
+    <p>
+      Always check <code>error.code</code>, not the HTTP status
+      alone — the same HTTP status can correspond to multiple
+      error codes (e.g. 409 covers both <code>conflict</code> and
+      <code>concurrent_session_limit</code>).
+    </p>
+
+    <h2>Reference</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>HTTP</th>
+          <th>When</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {ERRORS.map((e) => (
+          <tr>
+            <td><code>{e.code}</code></td>
+            <td>{e.http}</td>
+            <td>{e.when}</td>
+            <td>{e.action}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+
+    <h2>Stability</h2>
+    <p>
+      The <code>code</code> values listed above are part of the API
+      contract — they will not be renamed or removed without a
+      deprecation window. New codes may be added; defensive clients
+      should treat unknown codes as <code>internal_error</code>
+      (i.e. retry with backoff and surface the message to the
+      operator).
+    </p>
+
+    <h2>Status outages</h2>
+    <p>
+      For platform-level outages (everyone hits <code>503</code>),
+      check <a href="https://status.driftstack.dev">status.driftstack.dev</a>.
+      Subscribe to email notifications from the same page if you'd
+      like to be told before our dashboard refreshes.
+    </p>
+
+    <h2>Support</h2>
+    <p>
+      Persistent or surprising errors:
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+      Include the <code>X-Request-Id</code> header from the
+      response — every Driftstack response carries one, and we use
+      it to find the corresponding server logs.
+    </p>
+  </main>
+</BaseLayout>

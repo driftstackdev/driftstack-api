@@ -1,0 +1,167 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-687 — API keys developer docs. Minting, scopes, rotation,
+// revocation, what to do when one leaks.
+
+const SCOPES = [
+  { name: 'read', desc: 'Read sessions, profiles, recordings — anything safe.' },
+  { name: 'write', desc: 'Mutate sessions / profiles. Does NOT include billing.' },
+  { name: 'admin', desc: 'Account-admin operations: webhook + rate-limit-override CRUD.' },
+  { name: 'account_owner', desc: 'Read-write across the whole account, including billing.' },
+];
+
+const GRANULAR = [
+  { name: 'read:sessions', desc: 'Read session metadata + history.' },
+  { name: 'write:sessions', desc: 'Start + stop sessions.' },
+  { name: 'read:profiles', desc: 'Read browser-profile metadata.' },
+  { name: 'write:profiles', desc: 'Mutate profiles.' },
+  { name: 'read:recordings', desc: 'Fetch playback URLs for recorded sessions.' },
+  { name: 'admin:billing', desc: 'Manage billing (Stripe portal, invoices).' },
+];
+---
+
+<BaseLayout title="API keys — Driftstack developer docs" description="Minting, scopes, rotation, revocation, leak response.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>API keys</h1>
+
+    <p class="lead">
+      API keys are how your code authenticates to Driftstack. Each key
+      carries a fixed scope set; pick the narrowest scope that fits
+      the integration's purpose.
+    </p>
+
+    <h2>Minting a key</h2>
+    <p>
+      From <a href="https://app.driftstack.dev">the dashboard</a> →
+      Settings → API keys → Create. You'll see the full plaintext
+      key once — copy it now and store it in your config / secret
+      manager. We only store the hash; if you lose the plaintext,
+      revoke and mint a new one.
+    </p>
+    <p>
+      Key format: <code>ds_live_&lt;random&gt;</code>. The
+      <code>ds_live_</code> prefix is how Driftstack detects "this
+      looks like an API key" during request parsing.
+    </p>
+
+    <h2>Scopes</h2>
+    <p>
+      Each key carries one or more scopes. Driftstack offers two
+      shapes:
+    </p>
+
+    <h3>Broad scopes (most common)</h3>
+    <table>
+      <thead><tr><th>Scope</th><th>Grants</th></tr></thead>
+      <tbody>
+        {SCOPES.map((s) => (
+          <tr><td><code>{s.name}</code></td><td>{s.desc}</td></tr>
+        ))}
+      </tbody>
+    </table>
+
+    <h3>Granular scopes (verb:resource)</h3>
+    <p>
+      For tighter least-privilege integrations:
+    </p>
+    <table>
+      <thead><tr><th>Scope</th><th>Grants</th></tr></thead>
+      <tbody>
+        {GRANULAR.map((s) => (
+          <tr><td><code>{s.name}</code></td><td>{s.desc}</td></tr>
+        ))}
+      </tbody>
+    </table>
+    <p class="text-sm text-slate-500">
+      Broad scopes satisfy the corresponding granular scopes on the
+      same verb. A key with <code>read</code> can call any endpoint
+      that requires <code>read:sessions</code>, but a key with only
+      <code>read:sessions</code> cannot call endpoints that require
+      <code>read:profiles</code>.
+    </p>
+
+    <h2>Using a key</h2>
+    <p>
+      Bearer-token auth:
+    </p>
+    <pre><code>{`Authorization: Bearer ds_live_…`}</code></pre>
+    <p>
+      Every authenticated response carries rate-limit headers
+      (see <a href="/docs/rate-limits">/docs/rate-limits</a>).
+      Watch them; they'll save you a 429 down the line.
+    </p>
+
+    <h2>Rotating a key</h2>
+    <p>
+      Routine hygiene: rotate any production key at least every 90
+      days. The flow:
+    </p>
+    <ol>
+      <li>Mint a new key with the same scope set as the old one.</li>
+      <li>Deploy the new key to your environment.</li>
+      <li>Verify your production traffic is using the new key (check
+        <code>X-Api-Key-Id</code> in your logs).</li>
+      <li>Revoke the old key from the dashboard.</li>
+    </ol>
+
+    <h2>If a key leaks</h2>
+    <p>
+      Immediately revoke the key from the dashboard. Effects:
+    </p>
+    <ul>
+      <li>Subsequent requests with that key return 401.</li>
+      <li>Any in-flight session it started keeps running (sessions
+        are tied to the account, not the key). Stop the session
+        explicitly if you need it gone.</li>
+      <li>The revocation is logged in your account audit log with the
+        actor + timestamp.</li>
+    </ul>
+    <p>
+      Email <a href="mailto:security@driftstack.dev">security@driftstack.dev</a>
+      if the leak resulted in unauthorized activity — we'll help
+      audit the account.
+    </p>
+
+    <h2>How many keys should I have?</h2>
+    <ul>
+      <li><strong>One key per environment</strong> (production,
+        staging, dev). Makes rotation + revocation surgical.</li>
+      <li><strong>One key per third-party integration</strong> if
+        you're handing keys to other services. Revoking one
+        integration doesn't take out the others.</li>
+      <li>Don't share keys across team members. For human-driven
+        ad-hoc use, use the OAuth flow (see
+        <a href="/docs/oauth-apps">/docs/oauth-apps</a>) — that ties
+        access to the human's account, not a shared key.</li>
+    </ul>
+
+    <h2>API key metadata in audit logs</h2>
+    <p>
+      Every audit-log entry your account generates includes the
+      <code>actor_key_id</code> field. View the audit log at
+      <strong>Dashboard → Settings → Audit log</strong> or via
+      <code>GET /v1/account/audit-log</code>.
+    </p>
+
+    <h2>FAQ</h2>
+    <dl>
+      <dt>Can I view a key's plaintext after creation?</dt>
+      <dd>No. We only store the hash; the plaintext is shown once on
+        creation. If you lost it, revoke and mint a new one.</dd>
+      <dt>What happens if I use the same key from two regions
+        simultaneously?</dt>
+      <dd>Fine — keys aren't bound to a region. Rate limits are
+        per-account, so the two regions share the bucket budget.</dd>
+      <dt>Can I scope a key to a specific session id?</dt>
+      <dd>Not today. Per-resource scoping is on the future-features
+        list; the current granularity is verb:resource (e.g.
+        <code>read:sessions</code>).</dd>
+    </dl>
+
+    <h2>Support</h2>
+    <p>
+      Email <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+    </p>
+  </main>
+</BaseLayout>
