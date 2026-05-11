@@ -273,6 +273,141 @@ describe('createEmailService — configured', () => {
     expect(c.TextBody).toContain('https://app.driftstack.dev/select-tier');
     expect(c.TextBody).toContain('once per account');
   });
+
+  // V-553.B-1 — coverage for the 7 templates that ship behind feature
+  // flags but were missing direct send-path tests in the W43 audit.
+
+  it('billing-renewal-reminder template (V-304b)', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendBillingRenewalReminder({
+      to: 'user@example.com',
+      amountFormatted: '€199.00',
+      renewalDate: new Date('2026-06-01T12:00:00Z'),
+      portalUrl: 'https://billing.driftstack.dev/portal',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.Subject).toContain('renews in 7 days');
+    expect(c.TextBody).toContain('€199.00');
+    // renewalDate is sliced to YYYY-MM-DD in the service layer.
+    expect(c.TextBody).toContain('2026-06-01');
+    expect(c.TextBody).not.toContain('T12:00:00');
+    expect(c.HtmlBody).toContain('https://billing.driftstack.dev/portal');
+  });
+
+  it('session-success-first template (V-304a)', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendSessionSuccessFirst({
+      to: 'user@example.com',
+      sessionId: 'sess_first_001',
+      dashboardUrl: 'https://app.driftstack.dev/dashboard',
+      docsUrl: 'https://docs.driftstack.dev/quickstart',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.Subject).toContain('first session');
+    expect(c.TextBody).toContain('sess_first_001');
+    expect(c.TextBody).toContain('https://app.driftstack.dev/dashboard');
+    expect(c.TextBody).toContain('https://docs.driftstack.dev/quickstart');
+    expect(c.HtmlBody).toContain('<code>sess_first_001</code>');
+  });
+
+  it('status-subscription-confirmation template (V-295c3)', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendStatusSubscriptionConfirmation({
+      to: 'subscriber@example.com',
+      confirmLink: 'https://status.driftstack.dev/confirm/tok_xyz',
+      expiresAt: new Date('2026-05-13T00:00:00Z'),
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.Subject).toContain('Confirm');
+    expect(c.TextBody).toContain('https://status.driftstack.dev/confirm/tok_xyz');
+    expect(c.TextBody).toContain('2026-05-13');
+  });
+
+  it('status-subscription-welcome template (V-295c3)', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendStatusSubscriptionWelcome({
+      to: 'subscriber@example.com',
+      statusPageUrl: 'https://status.driftstack.dev/',
+      unsubscribeLink: 'https://status.driftstack.dev/unsubscribe/tok_unsub',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.Subject).toContain('subscribed');
+    expect(c.TextBody).toContain('https://status.driftstack.dev/');
+    expect(c.TextBody).toContain('https://status.driftstack.dev/unsubscribe/tok_unsub');
+    // No incident-specific copy in the welcome — keep it lean.
+    expect(c.TextBody).not.toContain('Incident:');
+  });
+
+  it('status-incident-created template (V-295c3-followup, kind="created")', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendStatusIncidentNotification({
+      to: 'subscriber@example.com',
+      kind: 'created',
+      title: 'Elevated 5xx on /v1/sessions',
+      severity: 'major',
+      status: 'investigating',
+      message: 'We are investigating elevated errors.',
+      incidentTime: new Date('2026-05-11T15:30:00Z'),
+      statusPageUrl: 'https://status.driftstack.dev/',
+      unsubscribeLink: 'https://status.driftstack.dev/unsubscribe/tok_unsub',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.Subject).toContain('Incident posted');
+    expect(c.TextBody).toContain('Elevated 5xx on /v1/sessions');
+    expect(c.TextBody).toContain('major');
+    expect(c.TextBody).toContain('investigating');
+    expect(c.TextBody).toContain('2026-05-11T15:30:00');
+  });
+
+  it('status-incident-resolved template (V-295c3-followup, kind="resolved")', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendStatusIncidentNotification({
+      to: 'subscriber@example.com',
+      kind: 'resolved',
+      title: 'Elevated 5xx on /v1/sessions',
+      severity: 'major',
+      status: 'resolved',
+      message: 'Root cause: upstream DNS resolver flap.',
+      incidentTime: new Date('2026-05-11T16:00:00Z'),
+      statusPageUrl: 'https://status.driftstack.dev/',
+      unsubscribeLink: 'https://status.driftstack.dev/unsubscribe/tok_unsub',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.Subject).toContain('Incident resolved');
+    expect(c.TextBody).toContain('Resolved at: 2026-05-11T16:00:00');
+    expect(c.TextBody).toContain('Root cause: upstream DNS resolver flap.');
+    // Resolved variant must NOT use the active-incident "Current status:" line.
+    expect(c.TextBody).not.toContain('Current status:');
+  });
+
+  it('team-invite template (V-298b) — role + accept link round-trip', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendTeamInvite({
+      to: 'invitee@example.com',
+      acceptLink: 'https://app.driftstack.dev/team/invite/tok_inv',
+      expiresAt: new Date('2026-05-18T12:00:00Z'),
+      role: 'admin',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.Subject).toContain('Driftstack team');
+    expect(c.TextBody).toContain('admin');
+    expect(c.TextBody).toContain('https://app.driftstack.dev/team/invite/tok_inv');
+    expect(c.TextBody).toContain('2026-05-18');
+  });
 });
 
 // V-665 — failure categorisation. Distinguishes Postmark pending-approval

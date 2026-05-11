@@ -7,23 +7,17 @@
 // `<timestamp>.<raw body>`) and rejects everything that doesn't
 // pass signature verification before reaching the dispatch layer.
 //
-// Body parsing: a route-scoped `application/json` content-type parser
-// stashes the unparsed string on `request.rawBody`. We DON'T globally
-// override Fastify's JSON parsing — only this one route needs it. The
-// stash lives on a typed augmentation of FastifyRequest below.
+// Body parsing: V-666 — the raw-body content-type parser is shared
+// across all webhook routes (Stripe + NowPayments + future) via
+// `registerWebhookRawBodyParser`. Fastify only allows ONE parser per
+// content-type, so the shared module is the only sanctioned path.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { verifyStripeSignature } from '../lib/stripe-signing.js';
 import { type StripeEvent, type StripeWebhooksService } from '../services/stripe-webhooks.js';
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 import type { Logger } from '../lib/logger.js';
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    /** Raw, unparsed JSON body — set by the Stripe webhook route's content-type parser. */
-    rawBody?: string;
-  }
-}
+import { registerWebhookRawBodyParser } from './_webhook-raw-body.js';
 
 export interface RegisterStripeWebhookRoutesDeps {
   service: StripeWebhooksService;
@@ -32,46 +26,11 @@ export interface RegisterStripeWebhookRoutesDeps {
   logger: Logger;
 }
 
-const MAX_BODY_BYTES = 1_048_576; // 1 MiB — Stripe events are usually <16 KiB; 1 MiB is generous.
-
 export function registerStripeWebhookRoutes(
   app: FastifyInstance,
   deps: RegisterStripeWebhookRoutesDeps,
 ): void {
-  // Route-scoped raw-body content-type parser. By default Fastify auto
-  // parses JSON; we register a custom parser keyed on the route URL
-  // (constraint via the `config.rawBody` option below). The parser
-  // returns the raw string AND the parsed JSON together so the handler
-  // has both — signature verification needs the bytes; dispatch needs
-  // the object.
-  app.addContentTypeParser(
-    'application/json',
-    { parseAs: 'string', bodyLimit: MAX_BODY_BYTES },
-    (req, body, done) => {
-      // Only stash + return raw body for the Stripe webhook route. For
-      // every other JSON route, do the standard parse + return parsed.
-      if (req.routeOptions.url === '/v1/webhooks/stripe') {
-        // Cast: Fastify types the parsed-as-string body as unknown; we
-        // know it's a string because of the parseAs option above.
-        const text = typeof body === 'string' ? body : '';
-        req.rawBody = text;
-        try {
-          const parsed: unknown = text.length === 0 ? {} : JSON.parse(text);
-          done(null, parsed);
-        } catch (err) {
-          done(err instanceof Error ? err : new Error(String(err)), undefined);
-        }
-        return;
-      }
-      // Non-Stripe routes: standard parse, no stash.
-      try {
-        const parsed: unknown = typeof body === 'string' && body.length > 0 ? JSON.parse(body) : {};
-        done(null, parsed);
-      } catch (err) {
-        done(err instanceof Error ? err : new Error(String(err)), undefined);
-      }
-    },
-  );
+  registerWebhookRawBodyParser(app);
 
   app.post('/v1/webhooks/stripe', async (req: FastifyRequest, reply) => {
     const sigHeader = req.headers['stripe-signature'];

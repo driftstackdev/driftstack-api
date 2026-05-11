@@ -75,6 +75,7 @@ import { registerLegalRoutes } from '../routes/legal.js';
 import { registerAuthRoutes } from '../routes/auth.js';
 import { registerAuthCliRoutes } from '../routes/auth-cli.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
+import { registerNowpaymentsWebhookRoutes } from '../routes/webhooks-nowpayments.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
 import { registerProfileSnapshotsRoutes } from '../routes/profile-snapshots.js';
 import { registerBillingRoutes } from '../routes/billing.js';
@@ -181,6 +182,13 @@ export interface AppDeps {
   stripeWebhooksService?: StripeWebhooksService;
   /** Stripe webhook signing secret (whsec_...). Required if `stripeWebhooksService` is set. */
   stripeWebhookSigningSecret?: string;
+  /**
+   * V-666 — NowPayments IPN secret. When provided, POST
+   * /v1/webhooks/nowpayments is registered with raw-body parsing +
+   * HMAC-SHA512 signature verification. Until the merchant account
+   * lands, this stays undefined and the route is not registered.
+   */
+  nowpaymentsIpnSecret?: string;
   /** V-081: profile CRUD service. Optional during scaffolding window. */
   profilesService?: ProfilesService;
   /**
@@ -406,6 +414,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerStripeWebhookRoutes(app, {
       service: deps.stripeWebhooksService,
       signingSecret: deps.stripeWebhookSigningSecret,
+      logger: deps.logger,
+    });
+  }
+  if (deps.nowpaymentsIpnSecret !== undefined && deps.nowpaymentsIpnSecret.length > 0) {
+    registerNowpaymentsWebhookRoutes(app, {
+      ipnSecret: deps.nowpaymentsIpnSecret,
       logger: deps.logger,
     });
   }
