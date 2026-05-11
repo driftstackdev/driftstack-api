@@ -21,7 +21,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ApiKeyScopeSchema } from '@driftstack/api-types';
 import { OAuthError, type OAuthService } from '../services/oauth.js';
-import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
+import { BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
 
 const RegisterClientBody = z.object({
   label: z.string().min(1).max(120),
@@ -99,6 +99,29 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
           created_at: new Date(c.created_at).toISOString(),
           revoked_at: c.revoked_at !== null ? new Date(c.revoked_at).toISOString() : null,
         })),
+      });
+    },
+  );
+
+  // V-667.D — single-client lookup for the founder admin UI. Returns
+  // 404 when the client doesn't exist, the full envelope (minus the
+  // hashed secret) when it does. Revoked clients are returned with
+  // their revoked_at populated so ops can audit "who/when revoked."
+  app.get<{ Params: { id: string } }>(
+    '/v1/admin/oauth/clients/:id',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    async (req, reply) => {
+      const c = await deps.service.getClient(req.params.id);
+      if (c === null) {
+        throw new NotFoundError(`OAuth client "${req.params.id}" not found.`);
+      }
+      return reply.send({
+        client_id: c.client_id,
+        label: c.label,
+        redirect_uris: c.redirect_uris,
+        account_id: c.account_id,
+        created_at: new Date(c.created_at).toISOString(),
+        revoked_at: c.revoked_at !== null ? new Date(c.revoked_at).toISOString() : null,
       });
     },
   );

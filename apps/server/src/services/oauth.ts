@@ -254,6 +254,15 @@ export class OAuthService {
     return this.store.listClients();
   }
 
+  /**
+   * V-667.D — admin lookup by client_id. Returns null if the client
+   * doesn't exist; routes turn that into a 404. Returns revoked
+   * clients as-is so ops can audit them.
+   */
+  async getClient(client_id: string): Promise<OAuthClient | null> {
+    return this.store.getClient(client_id);
+  }
+
   async revokeClient(client_id: string): Promise<void> {
     await this.store.revokeClient(client_id, this.nowFn());
   }
