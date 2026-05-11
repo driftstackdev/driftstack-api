@@ -142,6 +142,78 @@ interface Template {
   html: (vars: Record<string, string>) => string;
 }
 
+/**
+ * V-665 — classifying email-send failure categories.
+ *
+ * Postmark surfaces structured `{ code, statusCode, message }` errors
+ * via the `postmark` npm package. The most operationally-important
+ * distinction is "account pending approval" (the expected pre-approval
+ * state while Postmark reviews our account) vs genuine ops-attention
+ * failures (recipient bounced, rate-limited, transport broke).
+ *
+ * Reference codes (from Postmark API docs):
+ *   - 412 — Account pending approval / sender not yet verified.
+ *   - 405 — Recipient inactive (hard-bounced / spam-complained).
+ *   - 406 — Account inactive (paused / cancelled).
+ *   - 422 — Invalid email request (malformed body).
+ *   - 429 — Rate limit.
+ */
+export type EmailErrorCategory =
+  | 'pending-approval'
+  | 'inactive-recipient'
+  | 'account-inactive'
+  | 'invalid-request'
+  | 'rate-limited'
+  | 'transport'
+  | 'unknown';
+
+export function classifyEmailError(err: unknown): {
+  category: EmailErrorCategory;
+  postmarkCode: number | null;
+} {
+  if (err === null || typeof err !== 'object') {
+    return { category: 'unknown', postmarkCode: null };
+  }
+  // Postmark errors carry a `code` (numeric) and a `message` field;
+  // bypass the typed-error vs plain-object distinction by reading
+  // `code` defensively. `name` matters for transport-level errors
+  // (ECONNRESET, ETIMEDOUT, etc).
+  const e = err as { code?: unknown; message?: unknown; name?: unknown };
+  const code = typeof e.code === 'number' ? e.code : null;
+
+  if (code === 412) return { category: 'pending-approval', postmarkCode: 412 };
+  if (code === 405) return { category: 'inactive-recipient', postmarkCode: 405 };
+  if (code === 406) return { category: 'account-inactive', postmarkCode: 406 };
+  if (code === 422) return { category: 'invalid-request', postmarkCode: 422 };
+  if (code === 429) return { category: 'rate-limited', postmarkCode: 429 };
+
+  // Transport-level failures land here when Postmark itself can't be
+  // reached — connection refused, DNS, timeout, etc. The `name`
+  // discriminates the underlying socket / fetch error.
+  const name = typeof e.name === 'string' ? e.name : '';
+  const transportNames = new Set([
+    'ECONNRESET',
+    'ECONNREFUSED',
+    'ETIMEDOUT',
+    'ENOTFOUND',
+    'EHOSTUNREACH',
+    'EAI_AGAIN',
+    'FetchError',
+  ]);
+  if (transportNames.has(name)) return { category: 'transport', postmarkCode: null };
+
+  // Pattern-match the message as a last resort: Postmark's `Message`
+  // field for pending-approval errors contains a recognizable phrase,
+  // and some wrapper libraries set `code` as a string instead of a
+  // number.
+  const message = typeof e.message === 'string' ? e.message.toLowerCase() : '';
+  if (message.includes('pending approval') || message.includes('not yet approved')) {
+    return { category: 'pending-approval', postmarkCode: code };
+  }
+
+  return { category: 'unknown', postmarkCode: code };
+}
+
 const TEMPLATES = {
   'signup-verification': {
     subject: 'Verify your Driftstack account',
@@ -380,11 +452,19 @@ export function createEmailService({
       });
       logger.info({ component: 'email', template: name, to }, 'email sent');
     } catch (err) {
+      // V-665 — categorise the failure so dashboards / alerts can
+      // distinguish "Postmark account still pending approval" (the
+      // expected pre-approval state — submitted 2026-05-09, see
+      // status.md) from genuine transport / recipient / config
+      // failures that need ops attention.
+      const { category, postmarkCode } = classifyEmailError(err);
       logger.warn(
         {
           component: 'email',
           template: name,
           to,
+          category,
+          postmarkCode,
           err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
         },
         'email send failed (fire-and-forget)',

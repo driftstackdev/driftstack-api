@@ -5,7 +5,7 @@
 // do NOT throw to the caller.
 
 import { describe, expect, it, vi } from 'vitest';
-import { createEmailService } from '../../src/services/email.js';
+import { classifyEmailError, createEmailService } from '../../src/services/email.js';
 import type { PostmarkSendApi } from '../../src/services/email.js';
 import type { Logger } from '../../src/lib/logger.js';
 
@@ -272,5 +272,181 @@ describe('createEmailService — configured', () => {
     expect(c.Subject).toContain('trial pack expired');
     expect(c.TextBody).toContain('https://app.driftstack.dev/select-tier');
     expect(c.TextBody).toContain('once per account');
+  });
+});
+
+// V-665 — failure categorisation. Distinguishes Postmark pending-approval
+// (expected pre-approval state) from genuine ops failures so dashboards
+// can alert on the latter without flooding on the former.
+describe('classifyEmailError', () => {
+  it('categorises code 412 as pending-approval', () => {
+    expect(classifyEmailError({ code: 412, message: 'Account pending approval' })).toEqual({
+      category: 'pending-approval',
+      postmarkCode: 412,
+    });
+  });
+
+  it('categorises code 405 as inactive-recipient', () => {
+    expect(classifyEmailError({ code: 405 })).toEqual({
+      category: 'inactive-recipient',
+      postmarkCode: 405,
+    });
+  });
+
+  it('categorises code 406 as account-inactive', () => {
+    expect(classifyEmailError({ code: 406 })).toEqual({
+      category: 'account-inactive',
+      postmarkCode: 406,
+    });
+  });
+
+  it('categorises code 422 as invalid-request', () => {
+    expect(classifyEmailError({ code: 422 })).toEqual({
+      category: 'invalid-request',
+      postmarkCode: 422,
+    });
+  });
+
+  it('categorises code 429 as rate-limited', () => {
+    expect(classifyEmailError({ code: 429 })).toEqual({
+      category: 'rate-limited',
+      postmarkCode: 429,
+    });
+  });
+
+  it('categorises ECONNRESET as transport', () => {
+    const err = new Error('econnreset');
+    err.name = 'ECONNRESET';
+    expect(classifyEmailError(err)).toEqual({
+      category: 'transport',
+      postmarkCode: null,
+    });
+  });
+
+  it('categorises ETIMEDOUT as transport', () => {
+    const err = new Error('timeout');
+    err.name = 'ETIMEDOUT';
+    expect(classifyEmailError(err)).toEqual({
+      category: 'transport',
+      postmarkCode: null,
+    });
+  });
+
+  it('falls back to pending-approval when message contains "pending approval"', () => {
+    expect(classifyEmailError({ message: 'Account is pending approval; cannot send.' })).toEqual({
+      category: 'pending-approval',
+      postmarkCode: null,
+    });
+  });
+
+  it('categorises plain Error("postmark down") as unknown', () => {
+    expect(classifyEmailError(new Error('postmark down'))).toEqual({
+      category: 'unknown',
+      postmarkCode: null,
+    });
+  });
+
+  it('categorises null + non-object inputs as unknown', () => {
+    expect(classifyEmailError(null)).toEqual({ category: 'unknown', postmarkCode: null });
+    expect(classifyEmailError('a string')).toEqual({ category: 'unknown', postmarkCode: null });
+    expect(classifyEmailError(123)).toEqual({ category: 'unknown', postmarkCode: null });
+  });
+});
+
+describe('createEmailService — V-665 categorised failure logging', () => {
+  function makeLogger(): Logger {
+    const fns = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      fatal: vi.fn(),
+    };
+    return {
+      ...fns,
+      level: 'info',
+      silent: () => {},
+      child: () => makeLogger(),
+    } as unknown as Logger;
+  }
+
+  it('logs category=pending-approval when Postmark returns code 412', async () => {
+    const logger = makeLogger();
+    const pendingErr = Object.assign(new Error('Account pending approval.'), { code: 412 });
+    const failing: PostmarkSendApi = {
+      sendEmail: vi.fn().mockRejectedValue(pendingErr),
+    };
+    const svc = createEmailService({
+      config: {
+        apiToken: 't',
+        from: 'no-reply@driftstack.dev',
+        replyTo: 'support@driftstack.dev',
+      },
+      logger,
+      client: failing,
+    });
+    await svc.sendSignupVerification({
+      to: 'user@example.com',
+      link: 'https://x',
+      expiresAt: new Date(),
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        component: 'email',
+        category: 'pending-approval',
+        postmarkCode: 412,
+      }),
+      expect.stringContaining('email send failed'),
+    );
+  });
+
+  it('logs category=transport on ECONNRESET', async () => {
+    const logger = makeLogger();
+    const err = Object.assign(new Error('connection reset'), { name: 'ECONNRESET' });
+    const failing: PostmarkSendApi = { sendEmail: vi.fn().mockRejectedValue(err) };
+    const svc = createEmailService({
+      config: {
+        apiToken: 't',
+        from: 'no-reply@driftstack.dev',
+        replyTo: 'support@driftstack.dev',
+      },
+      logger,
+      client: failing,
+    });
+    await svc.sendSignupVerification({
+      to: 'user@example.com',
+      link: 'https://x',
+      expiresAt: new Date(),
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'transport' }),
+      expect.anything(),
+    );
+  });
+
+  it('logs category=unknown when error has no Postmark-style code', async () => {
+    const logger = makeLogger();
+    const failing: PostmarkSendApi = {
+      sendEmail: vi.fn().mockRejectedValue(new Error('something else')),
+    };
+    const svc = createEmailService({
+      config: {
+        apiToken: 't',
+        from: 'no-reply@driftstack.dev',
+        replyTo: 'support@driftstack.dev',
+      },
+      logger,
+      client: failing,
+    });
+    await svc.sendSignupVerification({
+      to: 'user@example.com',
+      link: 'https://x',
+      expiresAt: new Date(),
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'unknown' }),
+      expect.anything(),
+    );
   });
 });
