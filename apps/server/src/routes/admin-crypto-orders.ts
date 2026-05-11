@@ -204,6 +204,8 @@ export function registerAdminCryptoOrdersRoutes(
   // V-666.N — at-a-glance stats summary for the ops dashboard.
   // Counts per status + paid revenue per currency. Truncated when
   // more orders exist than the scan window (10k default).
+  // V-666.W — adds avg_time_to_paid_ms + paid_sample for the ops
+  // "how fast are customers actually paying" KPI.
   app.get(
     '/v1/admin/crypto-orders/stats',
     { preHandler: [app.requireScope('driftstack_internal_admin')] },
@@ -213,6 +215,8 @@ export function registerAdminCryptoOrdersRoutes(
         total: stats.total,
         by_status: stats.byStatus,
         paid_revenue_cents: stats.paidRevenueCents,
+        avg_time_to_paid_ms: stats.avgTimeToPaidMs,
+        paid_sample: stats.paidSample,
         truncated: stats.truncated,
         scanned: stats.scanned,
       });

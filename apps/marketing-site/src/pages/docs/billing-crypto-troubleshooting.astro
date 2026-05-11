@@ -1,0 +1,180 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-708 — practical troubleshooting page for the crypto-payments
+// flow. Companion to /docs/billing-crypto-overview (lifecycle
+// walkthrough). Aimed at customers running into a specific issue
+// after paying — pitched as "you're here because something looks
+// wrong, here's the decision tree."
+---
+
+<BaseLayout title="Crypto payments — troubleshooting — Driftstack" description="Decision tree for crypto payment problems: stuck orders, missing confirmations, network mismatches, partial payments.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Crypto payments — troubleshooting</h1>
+
+    <p class="lead">
+      You're here because something about your crypto payment looks
+      wrong. Walk through the decision tree below — it covers the
+      99% of cases support sees. If your symptom doesn't fit, jump
+      straight to <a href="mailto:support@driftstack.dev">support</a>
+      with your <code>order_id</code>.
+    </p>
+
+    <h2>Where's my order_id?</h2>
+    <p>
+      Three places, depending on how you got here:
+    </p>
+    <ul>
+      <li><strong>Dashboard</strong> — Billing → Crypto orders shows
+        every order on your account with its current state.</li>
+      <li><strong>API</strong> — <code>GET /v1/billing/crypto-orders</code>
+        returns the same list, newest first.</li>
+      <li><strong>Email</strong> — every order mint sends a
+        confirmation email with the order id in the subject line.</li>
+    </ul>
+
+    <h2>Symptom: I paid but the order is still <code>pending</code></h2>
+    <ol>
+      <li>
+        <strong>Check the block explorer first.</strong> Paste your
+        TX hash into the canonical explorer for the network you used
+        (mempool.space, etherscan, tronscan, etc). If the explorer
+        shows <strong>not yet broadcast</strong>, the issue is on
+        your wallet side — retry the send. If it shows
+        <strong>broadcast + 0 confirmations</strong>, you're just
+        waiting on the network.
+      </li>
+      <li>
+        <strong>Check the order's required confirmations.</strong>
+        Bitcoin needs 2 blocks (~20 min); Ethereum needs 12 (~3 min);
+        USDC/USDT on Tron is near-instant. The order stays at
+        <code>pending</code> until NowPayments sees enough
+        confirmations, then transitions to <code>confirming</code>,
+        then <code>paid</code>.
+      </li>
+      <li>
+        <strong>Wait at least 30 minutes.</strong> Mempool congestion
+        + RPC propagation lag can easily push a normally-fast network
+        to 15+ minutes. If you're past 30 min with a confirmed TX,
+        skip to the support escalation below.
+      </li>
+    </ol>
+
+    <h2>Symptom: my order is <code>partial</code></h2>
+    <p>
+      Means an on-chain payment arrived but the dollar-amount it
+      represents is below the invoice. Common causes:
+    </p>
+    <ul>
+      <li>The exchange rate moved between when we generated the quote and when your wallet broadcast.</li>
+      <li>Network fees were deducted on your side and we received less than the displayed amount.</li>
+      <li>You sent the wrong coin to the right address (e.g. USDC instead of USDT) and our deposit detector saw partial value.</li>
+    </ul>
+    <p>
+      Partial orders need a human. Email
+      <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>
+      with your <code>order_id</code> + the TX hash. We can:
+    </p>
+    <ul>
+      <li>Generate a top-up invoice for the difference, or</li>
+      <li>Refund the on-chain payment (you pay the network fee on the return).</li>
+    </ul>
+
+    <h2>Symptom: my order moved to <code>failed</code></h2>
+    <p>
+      <code>failed</code> means one of: NowPayments rejected the
+      payment, the order timed out (24h with no on-chain activity),
+      or the provider initiated a refund on their side. In all three
+      cases the next step is the same — open a fresh order from
+      <a href="/pricing">/pricing</a> and try again.
+    </p>
+    <p>
+      <strong>If funds left your wallet but the order is failed</strong>:
+      that's a reconciliation problem — escalate to support
+      immediately with the TX hash. NowPayments returns funds to a
+      return address on the original network; we facilitate that.
+    </p>
+
+    <h2>Symptom: I sent funds on the wrong network</h2>
+    <p>
+      USDC-ERC20 vs USDC-TRC20 is the classic landmine. The displayed
+      deposit address only works on the network shown in the checkout
+      UI. If you sent on a different network:
+    </p>
+    <ul>
+      <li><strong>EVM ↔ EVM (e.g. ERC-20 → BSC)</strong>: addresses
+        look identical but funds land at the same address on the
+        wrong chain. Often recoverable if you control the destination
+        — contact support with the TX hash.</li>
+      <li><strong>EVM → non-EVM</strong> (or vice versa): different
+        address formats; the transaction usually rejects. If it didn't,
+        the funds are stuck on the wrong chain. Recovery depends on
+        the chain.</li>
+    </ul>
+    <p>
+      We do our best to help recover wrong-network sends but cannot
+      guarantee it. Always double-check the network indicator in the
+      checkout UI before broadcasting.
+    </p>
+
+    <h2>Symptom: I can't see the deposit address anymore</h2>
+    <p>
+      The checkout page is single-use — refreshing it does not
+      re-display the address. Either:
+    </p>
+    <ul>
+      <li>Find the order in <strong>Billing → Crypto orders</strong>
+        and click it to re-open the address modal, or</li>
+      <li>Cancel the order (only possible while still
+        <code>pending</code> with no payment activity) and start
+        fresh from <a href="/pricing">/pricing</a>.</li>
+    </ul>
+
+    <h2>Symptom: I want to download a receipt</h2>
+    <p>
+      Three formats are available once an order is <code>paid</code>:
+    </p>
+    <pre><code>{`# JSON envelope (programmatic)
+curl -H "Authorization: Bearer $DRIFTSTACK_KEY" \\
+  https://api.driftstack.dev/v1/billing/crypto-orders/ORD/receipt
+
+# Plain text (cron / wget pipelines)
+curl -H "Authorization: Bearer $DRIFTSTACK_KEY" \\
+  https://api.driftstack.dev/v1/billing/crypto-orders/ORD/receipt.txt
+
+# PDF (accounting / archival)
+curl -H "Authorization: Bearer $DRIFTSTACK_KEY" \\
+  https://api.driftstack.dev/v1/billing/crypto-orders/ORD/receipt.pdf \\
+  -o receipt.pdf`}</code></pre>
+    <p>
+      The dashboard's Billing view exposes the same as a one-click
+      download.
+    </p>
+
+    <h2>Escalation: contact support</h2>
+    <p>
+      Email <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>
+      with as much of the following as possible:
+    </p>
+    <ul>
+      <li>Your account email (or account_id if you have it handy).</li>
+      <li>The <code>order_id</code> we minted at checkout.</li>
+      <li>The TX hash (any explorer link is fine).</li>
+      <li>The network you sent on (Ethereum mainnet, Tron, BSC, etc.).</li>
+      <li>A screenshot of your wallet's send confirmation if you
+        still have it.</li>
+    </ul>
+    <p>
+      Response SLA is 1 business day on the free trial + paid tiers;
+      enterprise contracts get a per-contract SLA. Most payment
+      escalations resolve same-day once we have the TX hash.
+    </p>
+
+    <h2>Related</h2>
+    <ul>
+      <li><a href="/docs/billing-crypto-overview">Crypto payments — how it works</a></li>
+      <li><a href="/docs/billing-faq">Billing FAQ</a></li>
+      <li><a href="/docs/webhooks"><code>crypto.order.paid</code> webhook</a></li>
+    </ul>
+  </main>
+</BaseLayout>

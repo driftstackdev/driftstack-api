@@ -375,6 +375,16 @@ export class CryptoOrdersService {
     total: number;
     byStatus: Record<CryptoOrderStatus, number>;
     paidRevenueCents: Record<string, number>;
+    /**
+     * V-666.W — mean elapsed time, in milliseconds, between order
+     * creation and the paid transition, averaged across every paid
+     * order in the scan window. Null when no paid orders are in
+     * scope (avoids returning 0, which would imply "instant paid"
+     * rather than "no data").
+     */
+    avgTimeToPaidMs: number | null;
+    /** V-666.W — count of paid orders used to compute avgTimeToPaidMs. */
+    paidSample: number;
     truncated: boolean;
     scanned: number;
   }> {
@@ -389,17 +399,29 @@ export class CryptoOrdersService {
       cancelled: 0,
     };
     const paidRevenueCents: Record<string, number> = {};
+    let paidElapsedSumMs = 0;
+    let paidSample = 0;
     for (const o of rows) {
       byStatus[o.status] += 1;
       if (o.status === 'paid') {
         paidRevenueCents[o.price_currency] =
           (paidRevenueCents[o.price_currency] ?? 0) + o.price_cents;
+        // V-666.W — updated_at on a paid order is the moment the IPN
+        // applied the paid transition; created_at is order mint. The
+        // difference is the customer's "time-to-pay" for that order.
+        const elapsed = o.updated_at - o.created_at;
+        if (elapsed >= 0) {
+          paidElapsedSumMs += elapsed;
+          paidSample += 1;
+        }
       }
     }
     return {
       total: rows.length,
       byStatus,
       paidRevenueCents,
+      avgTimeToPaidMs: paidSample > 0 ? Math.round(paidElapsedSumMs / paidSample) : null,
+      paidSample,
       truncated: rows.length === scanLimit,
       scanned: rows.length,
     };

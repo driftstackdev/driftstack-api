@@ -8,6 +8,7 @@
 // V-666.Q — appended tests for updateCustomerNote.
 // V-666.R — appended tests for paid-receipt email notifier.
 // V-666.T — appended tests for listForAdmin status + search filters.
+// V-666.W — appended tests for getStatsForAdmin avgTimeToPaidMs metric.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -802,6 +803,91 @@ describe('V-666.N getStatsForAdmin', () => {
     const stats = await svc.getStatsForAdmin({ scanLimit: 5 });
     expect(stats.truncated).toBe(true);
     expect(stats.scanned).toBe(5);
+  });
+
+  // V-666.W — avg time-to-paid metric tests appended to the same suite.
+  it('returns avgTimeToPaidMs=null + paidSample=0 when no paid orders exist', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await svc.create({
+      order_id: 'p_only',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    const stats = await svc.getStatsForAdmin();
+    expect(stats.avgTimeToPaidMs).toBeNull();
+    expect(stats.paidSample).toBe(0);
+  });
+
+  it('computes avgTimeToPaidMs = mean(updated_at - created_at) across paid orders', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = 1_000_000;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
+    // Order A: created at t=1_000_000, paid at t=1_000_000 + 60s.
+    await svc.create({
+      order_id: 'pa',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    now = 1_060_000;
+    await svc.applyIpnStatus({ order_id: 'pa', payment_id: 'np', provider_status: 'finished' });
+    // Order B: created at t=2_000_000, paid at t=2_000_000 + 180s.
+    now = 2_000_000;
+    await svc.create({
+      order_id: 'pb',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    now = 2_180_000;
+    await svc.applyIpnStatus({ order_id: 'pb', payment_id: 'np', provider_status: 'finished' });
+    const stats = await svc.getStatsForAdmin();
+    expect(stats.paidSample).toBe(2);
+    // Mean of 60_000 + 180_000 = 120_000ms
+    expect(stats.avgTimeToPaidMs).toBe(120_000);
+  });
+
+  it('ignores non-paid orders when computing avgTimeToPaidMs', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = 1_000;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
+    // A paid order with 30s time-to-pay.
+    await svc.create({
+      order_id: 'p_paid',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    now = 31_000;
+    await svc.applyIpnStatus({
+      order_id: 'p_paid',
+      payment_id: 'np',
+      provider_status: 'finished',
+    });
+    // A failed order that took much longer — should NOT affect the mean.
+    now = 50_000;
+    await svc.create({
+      order_id: 'p_failed',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    now = 999_000;
+    await svc.applyIpnStatus({
+      order_id: 'p_failed',
+      payment_id: 'np',
+      provider_status: 'expired',
+    });
+    const stats = await svc.getStatsForAdmin();
+    expect(stats.paidSample).toBe(1);
+    expect(stats.avgTimeToPaidMs).toBe(30_000);
   });
 });
 
