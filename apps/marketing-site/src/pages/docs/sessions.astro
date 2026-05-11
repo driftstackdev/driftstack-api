@@ -1,0 +1,182 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-690 — Sessions API developer docs. Sibling to api-quickstart;
+// this is the deeper "every field, every lifecycle event" reference
+// for the /v1/sessions surface.
+
+const LIFECYCLE = [
+  { state: 'creating', desc: 'Backend received the start request; provisioning a browser instance.' },
+  { state: 'ready', desc: 'Browser ready; the session URL is reachable.' },
+  { state: 'busy', desc: 'Session is actively running an automation step.' },
+  { state: 'destroyed', desc: 'Normal end-of-life; recording (if any) is finalised.' },
+  { state: 'errored', desc: 'Abnormal termination; check the error field for details.' },
+];
+---
+
+<BaseLayout title="Sessions API — Driftstack developer docs" description="Start, monitor, end browser sessions. Lifecycle, fields, recordings.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Sessions</h1>
+
+    <p class="lead">
+      A session is one running browser instance Driftstack manages
+      for you. This page is the reference for the
+      <code>/v1/sessions</code> surface; for the 60-second walkthrough
+      see <a href="/docs/api-quickstart">api-quickstart</a>.
+    </p>
+
+    <h2>Lifecycle</h2>
+    <table>
+      <thead><tr><th>State</th><th>What it means</th></tr></thead>
+      <tbody>
+        {LIFECYCLE.map((s) => (
+          <tr><td><code>{s.state}</code></td><td>{s.desc}</td></tr>
+        ))}
+      </tbody>
+    </table>
+    <p>
+      Transitions: <code>creating → ready → busy → destroyed</code>
+      is the happy path. <code>errored</code> is terminal; the
+      session cannot recover.
+    </p>
+
+    <h2>POST /v1/sessions</h2>
+    <pre><code>{`POST /v1/sessions
+Authorization: Bearer ds_live_…
+Content-Type: application/json
+
+{
+  "target_url": "https://example.com",
+  "profile_archetype": "default",
+  "profile_id": "prof_…",                ← optional, pin to a saved profile
+  "record": true,                         ← optional, default false
+  "metadata": { "ticket": "JIRA-1234" }   ← optional, surfaced in webhooks
+}
+
+→ 201 Created
+{
+  "session": {
+    "id": "sess_…",
+    "status": "creating",
+    "live_url": "https://app.driftstack.dev/sessions/sess_…",
+    "created_at": "2026-05-11T12:00:00.000Z"
+  }
+}`}</code></pre>
+    <p>
+      The session moves to <code>ready</code> within ~10 seconds
+      (the driver bootstrap time). Poll <code>GET /v1/sessions/:id</code>
+      or subscribe to the <code>session.completed</code> /
+      <code>session.failed</code> webhooks for status changes.
+    </p>
+
+    <h2>GET /v1/sessions/:id</h2>
+    <pre><code>{`GET /v1/sessions/sess_…
+Authorization: Bearer ds_live_…
+
+→ 200 OK
+{
+  "session": {
+    "id": "sess_…",
+    "status": "running",
+    "target_url": "https://example.com",
+    "profile_archetype": "default",
+    "live_url": "https://app.driftstack.dev/sessions/sess_…",
+    "created_at": "2026-05-11T12:00:00.000Z",
+    "ready_at": "2026-05-11T12:00:08.000Z",
+    "ended_at": null,
+    "error": null,
+    "metadata": { "ticket": "JIRA-1234" }
+  }
+}`}</code></pre>
+
+    <h2>GET /v1/sessions — list</h2>
+    <pre><code>{`GET /v1/sessions?limit=25&status=ready
+Authorization: Bearer ds_live_…
+
+→ 200 OK
+{
+  "sessions": [...],
+  "nextCursor": "cur_…"   ← null when no more pages
+}`}</code></pre>
+    <p>
+      Cursor pagination. Pass the previous response's
+      <code>nextCursor</code> as <code>?cursor=</code> on the next
+      request. Default page size 25; max 100. Filter by
+      <code>status</code> if you only want a subset (e.g.
+      <code>?status=errored</code> for failure auditing).
+    </p>
+
+    <h2>DELETE /v1/sessions/:id</h2>
+    <pre><code>{`DELETE /v1/sessions/sess_…
+Authorization: Bearer ds_live_…
+
+→ 204 No Content`}</code></pre>
+    <p>
+      Ends the session immediately. Recording is finalised; the
+      session moves to <code>destroyed</code>. Idempotent —
+      <code>DELETE</code>ing an already-destroyed session also
+      returns 204.
+    </p>
+
+    <h2>GET /v1/sessions/:id/recording</h2>
+    <p>
+      When the session was started with <code>record: true</code>,
+      a video recording is stored after the session ends. Fetch it:
+    </p>
+    <pre><code>{`GET /v1/sessions/sess_…/recording
+Authorization: Bearer ds_live_…
+
+→ 200 OK
+{
+  "playback_url": "https://r2-…/recordings/…?sig=…",
+  "expires_at": "2026-05-11T13:00:00.000Z"
+}`}</code></pre>
+    <p>
+      The URL is presigned and expires in 1 hour. Refresh by calling
+      the endpoint again. Recordings are kept for 30 days by default
+      (90 days on API Builder + above).
+    </p>
+
+    <h2>Concurrent session limits</h2>
+    <p>
+      Each tier caps the number of sessions you can have in
+      <code>creating</code> + <code>ready</code> + <code>busy</code>
+      states at once. See <a href="/docs/rate-limits">rate-limits</a>
+      for the per-tier table. Hitting the cap returns 409 Conflict
+      (not 429); wait for an existing session to finish or upgrade
+      your tier.
+    </p>
+
+    <h2>Webhooks</h2>
+    <p>
+      Subscribe to <code>session.completed</code> +
+      <code>session.failed</code> (and optionally
+      <code>session.recording_ready</code>) instead of polling. See
+      <a href="/docs/webhooks">/docs/webhooks</a> for the delivery
+      format + signature verification.
+    </p>
+
+    <h2>Profile archetypes</h2>
+    <p>
+      The <code>profile_archetype</code> parameter selects the
+      user-agent + viewport + locale preset to apply. Built-in
+      values:
+    </p>
+    <ul>
+      <li><code>default</code> — anonymous Chrome on Linux.</li>
+      <li><code>mobile_ios</code> — Safari on iOS.</li>
+      <li><code>mobile_android</code> — Chrome on Android.</li>
+      <li><code>kiosk</code> — full-screen, no chrome.</li>
+    </ul>
+    <p>
+      For consistent identity across runs (e.g. logged-in scraping),
+      mint a saved profile via <code>POST /v1/profiles</code> and
+      pass its <code>profile_id</code> instead.
+    </p>
+
+    <h2>Support</h2>
+    <p>
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+    </p>
+  </main>
+</BaseLayout>

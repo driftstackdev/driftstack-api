@@ -82,6 +82,7 @@ import type { CryptoOrdersService } from '../services/crypto-orders.js';
 import { registerOAuthRoutes } from '../routes/oauth.js';
 import { OAuthService, type OAuthStore } from '../services/oauth.js';
 import { registerAdminCostRoutes } from '../routes/admin-cost.js';
+import { registerAdminUsageRoutes } from '../routes/admin-usage.js';
 import { registerAccountCostRoutes } from '../routes/account-cost.js';
 import type { CostMonitoringService } from '../services/cost-monitoring.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
@@ -514,6 +515,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAdminCostRoutes(app, { service: deps.costMonitoringService });
     registerAccountCostRoutes(app, { service: deps.costMonitoringService });
   }
+  registerAdminUsageRoutes(app, {
+    usageService: deps.usageService,
+    accountsAdminService: deps.accountsAdminService,
+  });
   if (deps.profilesService !== undefined) {
     registerProfileRoutes(app, { service: deps.profilesService, authRepo: deps.authRepo });
     // V-312 — profile snapshots routes share the profiles service +
