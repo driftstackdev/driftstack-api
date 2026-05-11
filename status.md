@@ -1,12 +1,35 @@
 # Driftstack API — current status
 
-**Last updated:** 2026-05-10
-**Most recent wave:** Wave 25 (V-551 + V-552 + Wave 15-25 consolidation report)
-**Mode:** Autopilot active. Waves 1-18 closed; Wave 19 lands this commit;
-Waves 20-26 queued per the overnight directive. Team morning review point:
-`docs/internal/wave-15-18-overnight-batch-report.md` (5-minute scan covers
-Waves 15-18 Track E artifacts; Wave 19 work is post-batch-report and
-focuses on Track B real-impl depth + Track A coverage audit).
+**Last updated:** 2026-05-11
+**Most recent wave:** Wave 34 (V-540.B-6 legal E2E)
+**Mode:** Autopilot active. Waves 1-25 closed; Waves 26-34 landed across
+the overnight window per the W26+ directive. Team morning review point:
+`docs/internal/wave-26-32-overnight-batch-report.md` (covers W26-W32;
+W33-W34 listed below).
+
+## W26-W34 — overnight rollup
+
+17 substantive V-NNN slices on `main` across 9 waves on top of W25 close
+(`92af6a9..ad65bb3`). V-655 (V-NNN customer-surface scrub of 44 files)
+is staged on `cleanup/v526-sanitize` per the V-528 privatization HOLD.
+
+- **W26** — V-654 (agent-label re-swap) + V-534.A (gui-client deep-link
+  parser) + V-540.B-1 (account-mfa E2E) + V-655 (cleanup branch).
+- **W27** — V-534.B (deep-link parser consumer refactor) + V-532.C
+  (cart + checkout recipes).
+- **W28** — V-530.D (idle-period jitter, closes V-530 series modulo
+  multi-touch) + V-540.B-2 (account-rate-limits E2E).
+- **W29** — V-533.B (atlas builder) + V-540.B-3 (account-me E2E).
+- **W30** — V-665 (Postmark email-failure categorisation +
+  pending-approval logging).
+- **W31** — V-540.B-4 (audit-log E2E).
+- **W32** — V-540.B-5 (email-preferences E2E) + V-664 (changelog
+  script regression tests).
+- **W33** — V-532.D (multi-step wizard recipe; closes V-532 series).
+- **W34** — V-540.B-6 (legal documents + acceptances E2E).
+
+Tests: **1528/1528 green across 136 test files** at HEAD `ad65bb3`
+(was 1429 / 132 at W25 close; +99 across the window).
 
 ## Wave 20 — what landed
 
