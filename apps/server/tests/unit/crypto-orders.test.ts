@@ -1,6 +1,7 @@
 // V-666.B — unit tests for the crypto-orders state machine.
 // V-666.I — appended tests for crypto.order.paid webhook emission.
 // V-666.J — appended tests for cancelOrder + late-IPN-after-cancel.
+// V-666.K — appended tests for expireOrder + sweepExpiredOrders.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -463,5 +464,159 @@ describe('V-666.J cancelOrder', () => {
     // reconcile the on-chain funds.
     expect(after?.status).toBe('cancelled');
     expect(after?.payment_id).toBe('np_late');
+  });
+});
+
+describe('V-666.K expireOrder + sweepExpiredOrders', () => {
+  function makeService(initialNow = 1_000_000): {
+    svc: CryptoOrdersService;
+    repo: InMemoryCryptoOrdersRepo;
+    setNow: (t: number) => void;
+  } {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = initialNow;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
+    return {
+      svc,
+      repo,
+      setNow: (t: number) => {
+        now = t;
+      },
+    };
+  }
+
+  it('expireOrder returns null when the order does not exist', async () => {
+    const { svc } = makeService();
+    const r = await svc.expireOrder({ order_id: 'ord_missing', olderThanMs: 1_000 });
+    expect(r).toBeNull();
+  });
+
+  it('expireOrder returns null when the order is not pending', async () => {
+    const { svc, setNow } = makeService();
+    await svc.create({
+      order_id: 'ord_paid',
+      account_id: 'a',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'ord_paid',
+      payment_id: 'np_1',
+      provider_status: 'finished',
+    });
+    setNow(1_000_000 + 86_400_000);
+    const r = await svc.expireOrder({ order_id: 'ord_paid', olderThanMs: 60_000 });
+    expect(r).toBeNull();
+  });
+
+  it('expireOrder returns null when the order is too young', async () => {
+    const { svc, setNow } = makeService();
+    await svc.create({
+      order_id: 'ord_y',
+      account_id: 'a',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    setNow(1_000_000 + 1_000); // 1s later
+    const r = await svc.expireOrder({ order_id: 'ord_y', olderThanMs: 60_000 }); // requires 60s
+    expect(r).toBeNull();
+  });
+
+  it('expireOrder transitions a stale pending order to failed', async () => {
+    const { svc, setNow } = makeService();
+    await svc.create({
+      order_id: 'ord_old',
+      account_id: 'a',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    setNow(1_000_000 + 25 * 60 * 60 * 1000); // 25h later
+    const r = await svc.expireOrder({
+      order_id: 'ord_old',
+      olderThanMs: 24 * 60 * 60 * 1000, // 24h
+    });
+    expect(r?.status).toBe('failed');
+    const fetched = await svc.getById('ord_old');
+    expect(fetched?.status).toBe('failed');
+  });
+
+  it('sweepExpiredOrders expires only the stale pending orders', async () => {
+    const { svc, setNow } = makeService();
+    // Three pending orders, two old enough + one fresh.
+    await svc.create({
+      order_id: 'ord_stale_1',
+      account_id: 'a',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    await svc.create({
+      order_id: 'ord_stale_2',
+      account_id: 'a',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    // Fresh one created after the sweep cutoff window starts.
+    setNow(1_000_000 + 23 * 60 * 60 * 1000); // 23h after the first two
+    await svc.create({
+      order_id: 'ord_fresh',
+      account_id: 'a',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    // Move now past the 24h cutoff relative to the stale ones.
+    setNow(1_000_000 + 25 * 60 * 60 * 1000);
+    const result = await svc.sweepExpiredOrders({ olderThanMs: 24 * 60 * 60 * 1000 });
+    expect(result.expired).toBe(2);
+    expect(result.capped).toBe(false);
+    expect((await svc.getById('ord_stale_1'))?.status).toBe('failed');
+    expect((await svc.getById('ord_stale_2'))?.status).toBe('failed');
+    expect((await svc.getById('ord_fresh'))?.status).toBe('pending');
+  });
+
+  it('sweepExpiredOrders honours the limit + flags capped=true when hit', async () => {
+    const { svc, setNow } = makeService();
+    for (let i = 0; i < 5; i += 1) {
+      await svc.create({
+        order_id: `ord_${i.toString()}`,
+        account_id: 'a',
+        product: 'p',
+        price_cents: 100,
+        price_currency: 'EUR',
+      });
+    }
+    setNow(1_000_000 + 25 * 60 * 60 * 1000);
+    const result = await svc.sweepExpiredOrders({
+      olderThanMs: 24 * 60 * 60 * 1000,
+      limit: 2,
+    });
+    expect(result.expired).toBe(2);
+    expect(result.capped).toBe(true); // cron should re-run
+  });
+
+  it('sweepExpiredOrders ignores orders past pending (already terminal/in-flight)', async () => {
+    const { svc, setNow } = makeService();
+    await svc.create({
+      order_id: 'ord_p',
+      account_id: 'a',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'ord_p',
+      payment_id: 'np_x',
+      provider_status: 'confirming',
+    });
+    setNow(1_000_000 + 25 * 60 * 60 * 1000);
+    const result = await svc.sweepExpiredOrders({ olderThanMs: 24 * 60 * 60 * 1000 });
+    expect(result.expired).toBe(0);
+    expect(result.capped).toBe(false);
+    expect((await svc.getById('ord_p'))?.status).toBe('confirming');
   });
 });

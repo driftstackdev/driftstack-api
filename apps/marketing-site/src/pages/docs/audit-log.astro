@@ -1,0 +1,186 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-697 — customer audit log developer docs.
+---
+
+<BaseLayout title="Audit log — Driftstack developer docs" description="Customer-facing audit log: actions tracked, filters, retention, and team RBAC interaction.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Audit log</h1>
+
+    <p class="lead">
+      Driftstack writes an immutable audit entry for every meaningful
+      account mutation — API key mints, session lifecycle, profile
+      changes, team membership events, MFA changes, billing, more.
+      This page covers what's captured, how to query it, and how
+      long entries are kept.
+    </p>
+
+    <h2>Endpoint</h2>
+    <pre><code>{`GET /v1/account/audit
+Authorization: Bearer ds_live_…    # requires account_owner scope
+`}</code></pre>
+    <p>
+      The endpoint requires the <code>account_owner</code> scope on
+      the calling key — owners and admins (via team RBAC) only.
+      Members with read scopes get 403. See
+      <a href="/docs/api-keys">/docs/api-keys</a> for the scope ladder.
+    </p>
+
+    <h2>Response envelope</h2>
+    <pre><code>{`{
+  "items": [
+    {
+      "id": "aud_b1a2…",
+      "account_id": "acc_owner_…",
+      "actor_type": "customer",
+      "actor_account_id": "acc_owner_…",
+      "actor_key_id": "key_…",
+      "action": "api_key.minted",
+      "target_resource_id": "api_key_key_…",
+      "payload": { "name": "ci-bot", "scopes": ["read"] },
+      "ip_address": "203.0.113.42",
+      "user_agent": "DriftstackCLI/2.3.1",
+      "timestamp": "2026-05-11T13:42:00.000Z"
+    }
+  ],
+  "next_cursor": null
+}`}</code></pre>
+
+    <h2>Actions captured</h2>
+    <p>
+      A non-exhaustive list of the actions you'll see (the canonical
+      set is enforced server-side):
+    </p>
+    <ul>
+      <li><strong>Account:</strong> <code>account.email_verified</code>,
+        <code>account.login</code>, <code>account.logout</code>,
+        <code>account.password_changed</code>,
+        <code>account.mfa_enrolled</code>, <code>account.mfa_disabled</code>,
+        <code>account.recovery_code_used</code></li>
+      <li><strong>API keys:</strong> <code>api_key.minted</code>,
+        <code>api_key.revoked</code>, <code>api_key.rotated</code></li>
+      <li><strong>Sessions:</strong> <code>session.created</code>,
+        <code>session.destroyed</code></li>
+      <li><strong>Profiles:</strong> <code>profile.created</code>,
+        <code>profile.deleted</code>, <code>profile.exported</code>,
+        <code>profile.imported</code></li>
+      <li><strong>Webhooks:</strong> <code>webhook_endpoint.created</code>,
+        <code>webhook_endpoint.deleted</code>,
+        <code>webhook_delivery.replayed</code></li>
+      <li><strong>Billing:</strong> <code>subscription.tier_changed</code></li>
+      <li><strong>Team RBAC:</strong> <code>team.member_invited</code>,
+        <code>team.invite_accepted</code>, <code>team.member_removed</code></li>
+      <li><strong>Staff actions (visible to you):</strong>
+        <code>admin.refund_recorded</code>, <code>admin.support_note</code></li>
+    </ul>
+
+    <h2>Actor types</h2>
+    <p>The <code>actor_type</code> field is one of:</p>
+    <ul>
+      <li><strong><code>customer</code></strong> — action performed
+        by an authenticated API key or web session. The
+        <code>actor_account_id</code> + <code>actor_key_id</code>
+        fields identify which account / key performed it.</li>
+      <li><strong><code>system</code></strong> — automated action by
+        Driftstack infrastructure (e.g. scheduled-job triggered
+        revocation, expired-card subscription downgrade).
+        <code>actor_account_id</code>/<code>actor_key_id</code> are
+        null.</li>
+      <li><strong><code>staff</code></strong> — Driftstack staff
+        performed the action via internal admin tools. Used for
+        refund recording, support-note insertion, and exceptional
+        manual interventions. We notify the affected account by
+        email when this happens for any action that modifies state.</li>
+    </ul>
+
+    <h2>Filters</h2>
+    <p>All filters compose; combine freely with pagination cursors.</p>
+    <ul>
+      <li><strong><code>action</code></strong> — single action string.
+        Returns entries where <code>action === filter</code>.</li>
+      <li><strong><code>actor_type</code></strong> — <code>customer</code>,
+        <code>system</code>, or <code>staff</code>.</li>
+      <li><strong><code>target_resource_id</code></strong> — filter to
+        a specific resource id (e.g.
+        <code>?target_resource_id=api_key_key_xyz</code> to see every
+        action on that key).</li>
+      <li><strong><code>from</code></strong>,
+        <strong><code>to</code></strong> — ISO-8601 timestamps, inclusive.
+        <code>?from=2026-05-01T00:00:00Z&amp;to=2026-05-31T23:59:59Z</code>.</li>
+    </ul>
+    <pre><code>{`GET /v1/account/audit?action=api_key.minted&from=2026-05-01Z&to=2026-05-31Z
+Authorization: Bearer ds_live_…`}</code></pre>
+
+    <h2>Pagination</h2>
+    <p>
+      Standard cursor pagination — see <a href="/docs/pagination">/docs/pagination</a>.
+      Sort order is <code>timestamp DESC</code> with <code>id DESC</code>
+      tiebreaker, so newest entries appear first.
+    </p>
+
+    <h2>Team RBAC: whose audit log do I see?</h2>
+    <p>
+      When a team admin (not the owner) calls
+      <code>GET /v1/account/audit</code>, the server transparently
+      redirects to the <strong>owner's</strong> audit log — admins
+      see what's happening on the owner's account, including their
+      own actions and other admins'. This is the V-330b
+      <code>effectiveAccountId</code> behaviour. The caller's scope
+      is still checked on the caller's own key, so an admin without
+      the <code>account_owner</code> scope is still rejected.
+    </p>
+    <p>
+      Members (non-admin team roles) get 403 on this endpoint — they
+      can read resources on the owner's account but not the audit
+      log itself.
+    </p>
+
+    <h2>Retention</h2>
+    <table>
+      <thead><tr><th>Tier</th><th>Audit-log retention</th></tr></thead>
+      <tbody>
+        <tr><td>Trial Pack</td><td>30 days</td></tr>
+        <tr><td>Solo / API Starter</td><td>90 days</td></tr>
+        <tr><td>Team / API Builder</td><td>1 year</td></tr>
+        <tr><td>Agency / API Scale</td><td>3 years</td></tr>
+        <tr><td>Enterprise</td><td>Custom (default 7 years for compliance)</td></tr>
+      </tbody>
+    </table>
+    <p>
+      Past the retention window, entries are pruned by a nightly
+      sweep. For longer retention, export via the API regularly and
+      store copies on your side — most enterprise customers ship a
+      daily cron that calls the endpoint with
+      <code>from=yesterday&amp;to=today</code> and forwards the
+      response into their SIEM.
+    </p>
+
+    <h2>Immutability</h2>
+    <p>
+      Audit entries are <strong>append-only</strong>. There's no
+      delete or update endpoint; even staff cannot mutate existing
+      entries. If a correction is needed (e.g. a misattributed
+      action), staff append an <code>admin.support_note</code>
+      pointing at the original entry rather than editing it.
+    </p>
+
+    <h2>Webhook subscriptions for audit events</h2>
+    <p>
+      The audit log itself does <strong>not</strong> emit a per-entry
+      webhook event — that would create a feedback loop (writing a
+      webhook delivery would itself generate an audit entry).
+      Subscribe to the underlying resource webhooks instead
+      (<code>api_key.revoked</code>, <code>session.completed</code>,
+      etc.) — see <a href="/docs/webhooks">/docs/webhooks</a>.
+    </p>
+
+    <h2>Support</h2>
+    <p>
+      Compliance / audit-export questions:
+      <a href="mailto:compliance@driftstack.dev">compliance@driftstack.dev</a>.
+      Technical questions about the endpoint:
+      <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
+    </p>
+  </main>
+</BaseLayout>

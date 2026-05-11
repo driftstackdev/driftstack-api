@@ -208,6 +208,70 @@ export class CryptoOrdersService {
   }
 
   /**
+   * V-666.K — auto-expire a single pending order if it's older than
+   * `olderThanMs`. Only `pending` orders are eligible; orders that
+   * have seen any payment activity (confirming/partial/paid/failed/
+   * cancelled) are left alone — those require explicit ops handling.
+   *
+   * Maps to `failed` rather than a new status because the existing
+   * `failed` already documents "payment timeout / refund / expired"
+   * as its semantic. Returns the updated order on expiry, or null
+   * when the order doesn't exist / isn't expirable / isn't old enough.
+   */
+  async expireOrder(args: { order_id: string; olderThanMs: number }): Promise<CryptoOrder | null> {
+    const order = await this.opts.repo.getById(args.order_id);
+    if (order === null) return null;
+    if (order.status !== 'pending') return null;
+    const now = this.nowFn();
+    if (now - order.created_at < args.olderThanMs) return null;
+    const updated: CryptoOrder = {
+      ...order,
+      status: 'failed',
+      updated_at: now,
+    };
+    await this.opts.repo.upsert(updated);
+    return updated;
+  }
+
+  /**
+   * V-666.K — bulk-sweep pending orders older than `olderThanMs`,
+   * transitioning each to `failed`. Designed for a nightly cron tick.
+   *
+   * Returns `{ expired, capped }`:
+   *   - `expired` — number of orders flipped to `failed` this tick.
+   *   - `capped` — true when the sweep hit `limit` (more may remain;
+   *     the cron should re-run until `capped: false`). We can't return
+   *     an exact "remaining" without scanning the full table, which
+   *     defeats the point of the limit; `capped` is the honest signal.
+   *
+   * Limit caps the work-per-tick so a long-stuck backlog doesn't
+   * block the cron for minutes; the next tick picks up the remainder.
+   * Default limit = 500.
+   */
+  async sweepExpiredOrders(opts: {
+    olderThanMs: number;
+    limit?: number;
+  }): Promise<{ expired: number; capped: boolean }> {
+    const limit = opts.limit ?? 500;
+    const candidates = await this.opts.repo.listAll({ limit });
+    const now = this.nowFn();
+    const eligible = candidates.filter(
+      (o) => o.status === 'pending' && now - o.created_at >= opts.olderThanMs,
+    );
+    let expired = 0;
+    for (const o of eligible) {
+      const updated: CryptoOrder = {
+        ...o,
+        status: 'failed',
+        updated_at: now,
+      };
+      await this.opts.repo.upsert(updated);
+      expired += 1;
+    }
+    return { expired, capped: expired === limit };
+  }
+
+  /**
    * Apply a NowPayments IPN update to the order with the given
    * order_id. Returns the new order state, or null when the order
    * doesn't exist (the IPN is then logged + ignored — we don't
