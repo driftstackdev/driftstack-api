@@ -42,6 +42,22 @@ export interface CryptoOrder {
    * chars at the route layer. Null when unset.
    */
   customer_note: string | null;
+  /**
+   * V-666.X — admin-recorded refund intent. Set on the first
+   * requestRefund() call against a paid order; never cleared on
+   * subsequent calls. The actual on-chain refund still goes through
+   * the manual NowPayments dashboard — this field is the system-of-
+   * record for "ops promised this customer a refund." Null when no
+   * refund has been requested.
+   */
+  refund_requested_at: number | null;
+  /**
+   * V-666.X — operator-supplied reason for the refund. Capped at 500
+   * chars at the route layer. Updated by subsequent requestRefund()
+   * calls so support can amend the rationale without rotating
+   * refund_requested_at.
+   */
+  refund_reason: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -196,11 +212,51 @@ export class CryptoOrdersService {
       payment_id: null,
       status: 'pending',
       customer_note: null,
+      refund_requested_at: null,
+      refund_reason: null,
       created_at: now,
       updated_at: now,
     };
     await this.opts.repo.upsert(order);
     return order;
+  }
+
+  /**
+   * V-666.X — admin records the intent to refund a paid order. This
+   * is a system-of-record write, not an on-chain action: the actual
+   * refund goes through the NowPayments dashboard. The method
+   * preserves the first `refund_requested_at` timestamp on
+   * subsequent calls so we keep the canonical "when did this start"
+   * answer even if support amends the reason text.
+   *
+   * Returns:
+   *   - { ok: 'recorded', order } on success
+   *   - { ok: 'not_paid', currentStatus } when the order isn't in
+   *     the paid state (only paid orders can be refunded)
+   *   - null when the order doesn't exist
+   */
+  async requestRefund(args: {
+    order_id: string;
+    reason: string;
+  }): Promise<
+    | { ok: 'recorded'; order: CryptoOrder }
+    | { ok: 'not_paid'; currentStatus: CryptoOrderStatus }
+    | null
+  > {
+    const order = await this.opts.repo.getById(args.order_id);
+    if (order === null) return null;
+    if (order.status !== 'paid') {
+      return { ok: 'not_paid', currentStatus: order.status };
+    }
+    const now = this.nowFn();
+    const updated: CryptoOrder = {
+      ...order,
+      refund_requested_at: order.refund_requested_at ?? now,
+      refund_reason: args.reason,
+      updated_at: now,
+    };
+    await this.opts.repo.upsert(updated);
+    return { ok: 'recorded', order: updated };
   }
 
   /**

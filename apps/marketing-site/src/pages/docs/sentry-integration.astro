@@ -1,0 +1,181 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-709 — Sentry integration guide. Pitched at customers who already
+// run Sentry for their own services and want errors from their
+// Driftstack-driven browser sessions to land in the same project.
+// Sister page to /docs/cost-monitoring (alert configuration) and
+// /docs/webhooks (event consumption).
+---
+
+<BaseLayout title="Sentry integration — Driftstack" description="Forward errors from Driftstack browser sessions into your Sentry project: webhook fan-out, source map propagation, release tagging.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Sentry integration</h1>
+
+    <p class="lead">
+      Driftstack runs a fleet of browser sessions on your behalf;
+      this guide shows how to route the unhandled errors + script
+      failures from those sessions into your existing Sentry
+      project. The integration is webhook-driven — no SDK to install
+      on Driftstack's side.
+    </p>
+
+    <h2>The integration shape</h2>
+    <p>
+      You give us a Sentry <strong>store endpoint URL</strong> and a
+      DSN public key. We hash + forward each failed session's stack
+      trace + breadcrumb trail to that endpoint. From your side it
+      looks like any other Sentry-instrumented service — same project,
+      same release filters, same alerts.
+    </p>
+
+    <h2>Set it up</h2>
+    <ol>
+      <li>
+        <strong>Create a Sentry project (or reuse an existing one).</strong>
+        Settings → Projects → Create Project; pick "Browser
+        JavaScript" as the platform so the stack-trace handling
+        matches.
+      </li>
+      <li>
+        <strong>Copy the DSN.</strong> Format:
+        <code>https://&lt;public_key&gt;@sentry.io/&lt;project_id&gt;</code>.
+        Only the public key half is sent server-side; treat it as a
+        write-only credential.
+      </li>
+      <li>
+        <strong>Add it to Driftstack.</strong> In the dashboard,
+        Settings → Integrations → Sentry. Paste the DSN + click Save.
+        We send a probe event on save so you can verify in Sentry's
+        Issues view that we wired the right project.
+      </li>
+    </ol>
+
+    <h2>What gets forwarded</h2>
+    <p>
+      Two event types land in Sentry:
+    </p>
+    <ul>
+      <li>
+        <code>session.failed</code> with a captured stack trace.
+        The browser's <code>error</code> event handler fires inside
+        the sandbox; we capture the message + stack + the last 50
+        navigation / network / console breadcrumbs.
+      </li>
+      <li>
+        <code>script.error</code> when a customer-supplied script
+        body throws. The Driftstack session id is set as the Sentry
+        <code>tags.session_id</code> so you can drill back to the
+        live-view replay.
+      </li>
+    </ul>
+
+    <h2>Source maps</h2>
+    <p>
+      If your script body is bundled and minified, attach a source
+      map via the upload-source-map field in <code>sessions.start</code>:
+    </p>
+    <pre><code>{`await client.sessions.start({
+  target_url: 'https://example.com',
+  script: BUNDLED_SCRIPT,
+  source_map_url: 'https://your-cdn.example/bundle.js.map',
+});`}</code></pre>
+    <p>
+      We pass the URL through to Sentry's <code>store</code> endpoint
+      so Sentry's symbolicator can resolve frames against your map.
+      Self-hosted Sentry deployments work too — set the
+      <code>SENTRY_BASE_URL</code> in the integration settings.
+    </p>
+
+    <h2>Release tagging</h2>
+    <p>
+      Pass a <code>release</code> tag on <code>sessions.start</code> so
+      Sentry's "Resolved in release" tracking and regression filters
+      work:
+    </p>
+    <pre><code>{`await client.sessions.start({
+  target_url: 'https://example.com',
+  script: BUNDLED_SCRIPT,
+  release: 'my-app@2.3.1',
+});`}</code></pre>
+    <p>
+      Without it, all events land under a synthetic
+      <code>driftstack-session</code> release — usable but coarse.
+    </p>
+
+    <h2>Sampling + rate-limiting</h2>
+    <p>
+      The integration honours Sentry's per-project quota: if Sentry
+      returns a 429, we back off with exponential delay (60s, 120s,
+      240s, then capped at 5m). The session itself is not affected —
+      the error fan-out is best-effort.
+    </p>
+    <p>
+      For high-volume scrapers, configure
+      <code>sentry_sample_rate</code> in the integration settings
+      (0.0 – 1.0). Recommended: 1.0 in staging, 0.1 in production
+      until you've sized the Sentry quota.
+    </p>
+
+    <h2>What does NOT get forwarded</h2>
+    <ul>
+      <li>
+        <strong>Successful sessions.</strong> We only forward on the
+        terminal <code>failed</code> path; a flaky-but-eventually-
+        successful session doesn't fire.
+      </li>
+      <li>
+        <strong>Test sessions.</strong> Sessions started from a
+        <code>ds_test_</code> API key are excluded by default to keep
+        your Sentry quota clean during development. Override with
+        <code>sentry_forward_test_sessions=true</code> in the
+        integration settings if you want them included.
+      </li>
+      <li>
+        <strong>Network errors from the page under test.</strong>
+        Those are part of the page's own surface — instrument Sentry
+        inside your <code>target_url</code> if you care.
+      </li>
+    </ul>
+
+    <h2>Audit + debugging</h2>
+    <p>
+      Every Sentry POST we make is logged to <strong>Audit log</strong>
+      with a one-line summary (session id + Sentry event id once
+      Sentry responds 200). If you see no events arriving, check:
+    </p>
+    <ol>
+      <li>Audit log entries — confirm we attempted to send.</li>
+      <li>Sentry's <strong>Stats</strong> view — confirm Sentry
+        received + accepted (vs dropped by quota / sample rate).</li>
+      <li>Integration health row in Settings → Integrations — we mark
+        the integration <em>degraded</em> after 3 consecutive non-2xx
+        responses.</li>
+    </ol>
+
+    <h2>Disabling the integration</h2>
+    <p>
+      Settings → Integrations → Sentry → Disable. The DSN is
+      preserved (you can re-enable later); deletion clears it
+      permanently. Pending events in the retry queue are dropped on
+      disable.
+    </p>
+
+    <h2>Related</h2>
+    <ul>
+      <li><a href="/docs/webhooks">Webhooks</a> — the general-purpose
+        event-fan-out surface; Sentry is one preset destination.</li>
+      <li><a href="/docs/audit-log">Audit log</a> — where the
+        forwarder's actions land.</li>
+      <li><a href="/docs/error-codes">Error codes</a> — the structured
+        codes that prefix Sentry event titles.</li>
+    </ul>
+
+    <h2>Need help?</h2>
+    <p>
+      <a href="mailto:integrations@driftstack.dev">integrations@driftstack.dev</a>.
+      Include your Sentry organisation slug + the integration health
+      row from the dashboard.
+    </p>
+  </main>
+</BaseLayout>

@@ -9,6 +9,7 @@
 // V-666.R — appended tests for paid-receipt email notifier.
 // V-666.T — appended tests for listForAdmin status + search filters.
 // V-666.W — appended tests for getStatsForAdmin avgTimeToPaidMs metric.
+// V-666.X — appended tests for admin requestRefund.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -1324,5 +1325,103 @@ describe('V-666.T listForAdmin — status + search filters', () => {
     const svc = await seedMany();
     const list = await svc.listForAdmin({ search: '   ' });
     expect(list).toHaveLength(3);
+  });
+});
+
+describe('V-666.X requestRefund', () => {
+  async function seedPaid(opts: { id?: string; now?: number } = {}): Promise<{
+    svc: CryptoOrdersService;
+    setNow: (t: number) => void;
+  }> {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = opts.now ?? 1_000;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
+    await svc.create({
+      order_id: opts.id ?? 'ord_refund',
+      account_id: 'acc_buyer',
+      product: 'team_growth',
+      price_cents: 14900,
+      price_currency: 'EUR',
+    });
+    now += 1_000;
+    await svc.applyIpnStatus({
+      order_id: opts.id ?? 'ord_refund',
+      payment_id: 'np_x',
+      provider_status: 'finished',
+    });
+    return {
+      svc,
+      setNow: (t) => {
+        now = t;
+      },
+    };
+  }
+
+  it('records the refund_requested_at + refund_reason on a paid order', async () => {
+    const { svc, setNow } = await seedPaid();
+    setNow(99_999);
+    const result = await svc.requestRefund({
+      order_id: 'ord_refund',
+      reason: 'Charged in error',
+    });
+    expect(result).not.toBeNull();
+    if (result?.ok === 'recorded') {
+      expect(result.order.refund_requested_at).toBe(99_999);
+      expect(result.order.refund_reason).toBe('Charged in error');
+      expect(result.order.status).toBe('paid'); // status untouched
+    } else {
+      throw new Error('expected recorded');
+    }
+  });
+
+  it('preserves the initial refund_requested_at on subsequent calls + updates the reason', async () => {
+    const { svc, setNow } = await seedPaid();
+    setNow(100);
+    await svc.requestRefund({ order_id: 'ord_refund', reason: 'first reason' });
+    setNow(200);
+    const second = await svc.requestRefund({
+      order_id: 'ord_refund',
+      reason: 'amended reason',
+    });
+    if (second?.ok === 'recorded') {
+      expect(second.order.refund_requested_at).toBe(100); // unchanged
+      expect(second.order.refund_reason).toBe('amended reason');
+    } else {
+      throw new Error('expected recorded');
+    }
+  });
+
+  it('returns not_paid when the order is in any non-paid state', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await svc.create({
+      order_id: 'ord_pending',
+      account_id: 'acc',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    const result = await svc.requestRefund({
+      order_id: 'ord_pending',
+      reason: 'nope',
+    });
+    expect(result).toEqual({ ok: 'not_paid', currentStatus: 'pending' });
+  });
+
+  it('returns null when the order does not exist', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    const result = await svc.requestRefund({
+      order_id: 'ord_missing',
+      reason: 'whatever',
+    });
+    expect(result).toBeNull();
+  });
+
+  it('does not flip the order out of paid (status-machine independence)', async () => {
+    const { svc } = await seedPaid();
+    await svc.requestRefund({ order_id: 'ord_refund', reason: 'r' });
+    const fetched = await svc.getById('ord_refund');
+    expect(fetched?.status).toBe('paid');
   });
 });

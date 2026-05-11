@@ -59,6 +59,8 @@ async function seedOrders(
       payment_id: null,
       status: row.status ?? 'pending',
       customer_note: row.customer_note ?? null,
+      refund_requested_at: null,
+      refund_reason: null,
       created_at: baseNow + (row.createdOffsetMs ?? 0),
       updated_at: baseNow + (row.createdOffsetMs ?? 0),
     };
@@ -286,7 +288,7 @@ describe('V-666.V GET /v1/admin/crypto-orders.csv', () => {
     expect(res.headers['content-disposition']).toContain('crypto-orders.csv');
     const lines = res.body.split('\r\n');
     expect(lines[0]).toBe(
-      'order_id,account_id,product,price_cents,price_currency,status,payment_id,customer_note,created_at,updated_at',
+      'order_id,account_id,product,price_cents,price_currency,status,payment_id,customer_note,refund_requested_at,refund_reason,created_at,updated_at',
     );
     expect(lines[1]?.startsWith('ord_csv_b,')).toBe(true);
     expect(lines[2]?.startsWith('ord_csv_a,')).toBe(true);

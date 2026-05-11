@@ -6,6 +6,7 @@
 //   GET  /v1/admin/crypto-orders.csv                  (V-666.V)
 //   GET  /v1/admin/crypto-orders/:order_id
 //   POST /v1/admin/crypto-orders/:order_id/apply-ipn  (V-666.F)
+//   POST /v1/admin/crypto-orders/:order_id/request-refund (V-666.X)
 //   POST /v1/admin/crypto-orders/sweep-expired        (V-666.L)
 //
 // Auth: driftstack_internal_admin scope. Used by the founder dashboard
@@ -16,7 +17,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { buildCsv } from '../lib/csv.js';
-import { BadRequestError, NotFoundError } from '../lib/errors.js';
+import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import type { CryptoOrder, CryptoOrdersService } from '../services/crypto-orders.js';
 
 export interface RegisterAdminCryptoOrdersRoutesDeps {
@@ -78,10 +79,21 @@ function toPublic(order: CryptoOrder): Record<string, unknown> {
     price_currency: order.price_currency,
     payment_id: order.payment_id,
     status: order.status,
+    refund_requested_at:
+      // Defensive `!= null` so `undefined` from older repo fixtures
+      // still serialises to null rather than throwing a Date(undefined).
+      order.refund_requested_at != null ? new Date(order.refund_requested_at).toISOString() : null,
+    refund_reason: order.refund_reason ?? null,
     created_at: new Date(order.created_at).toISOString(),
     updated_at: new Date(order.updated_at).toISOString(),
   };
 }
+
+// V-666.X — admin refund-request body. Reason text is required +
+// capped at 500 chars (matches customer_note ceiling for symmetry).
+const RequestRefundBody = z.object({
+  reason: z.string().min(1).max(500),
+});
 
 export function registerAdminCryptoOrdersRoutes(
   app: FastifyInstance,
@@ -178,6 +190,8 @@ export function registerAdminCryptoOrdersRoutes(
           'status',
           'payment_id',
           'customer_note',
+          'refund_requested_at',
+          'refund_reason',
           'created_at',
           'updated_at',
         ],
@@ -190,6 +204,8 @@ export function registerAdminCryptoOrdersRoutes(
           o.status,
           o.payment_id,
           o.customer_note,
+          o.refund_requested_at !== null ? new Date(o.refund_requested_at).toISOString() : null,
+          o.refund_reason,
           new Date(o.created_at).toISOString(),
           new Date(o.updated_at).toISOString(),
         ]),
@@ -316,6 +332,43 @@ export function registerAdminCryptoOrdersRoutes(
         throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
       }
       return reply.send(toPublic(updated));
+    },
+  );
+
+  // V-666.X — admin records a refund intent for a paid order. This
+  // does not make an on-chain refund — that still goes through the
+  // NowPayments dashboard. Returns 409 when the order isn't in the
+  // paid state (only paid orders are refundable through this path;
+  // pending/failed/cancelled orders need a different remedy).
+  app.post<{
+    Params: { order_id: string };
+    Body: { reason?: string };
+  }>(
+    '/v1/admin/crypto-orders/:order_id/request-refund',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    async (
+      req: FastifyRequest<{
+        Params: { order_id: string };
+        Body: { reason?: string };
+      }>,
+      reply,
+    ) => {
+      const params = parseOrThrow(GetParams, req.params);
+      const body = parseOrThrow(RequestRefundBody, req.body);
+      const result = await deps.service.requestRefund({
+        order_id: params.order_id,
+        reason: body.reason,
+      });
+      if (result === null) {
+        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
+      }
+      if (result.ok === 'not_paid') {
+        throw new ConflictError(
+          `Order is in state "${result.currentStatus}" — only paid orders can be refunded through this endpoint.`,
+          { resource: 'crypto_order', field: 'status' },
+        );
+      }
+      return reply.send(toPublic(result.order));
     },
   );
 }
