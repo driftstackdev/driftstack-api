@@ -2,6 +2,7 @@
 // V-666.I — appended tests for crypto.order.paid webhook emission.
 // V-666.J — appended tests for cancelOrder + late-IPN-after-cancel.
 // V-666.K — appended tests for expireOrder + sweepExpiredOrders.
+// V-666.M — appended tests for getReceipt.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -618,5 +619,66 @@ describe('V-666.K expireOrder + sweepExpiredOrders', () => {
     expect(result.expired).toBe(0);
     expect(result.capped).toBe(false);
     expect((await svc.getById('ord_p'))?.status).toBe('confirming');
+  });
+});
+
+describe('V-666.M getReceipt', () => {
+  async function seedRcpt(opts: { status?: 'pending' | 'paid' } = {}): Promise<{
+    svc: CryptoOrdersService;
+  }> {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = 5_000;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
+    await svc.create({
+      order_id: 'ord_rcpt',
+      account_id: 'acc_owner',
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    if (opts.status === 'paid') {
+      now = 6_000;
+      await svc.applyIpnStatus({
+        order_id: 'ord_rcpt',
+        payment_id: 'np_paid_id',
+        provider_status: 'finished',
+      });
+    }
+    now = 7_000;
+    return { svc };
+  }
+
+  it('returns null when the order does not exist', async () => {
+    const { svc } = await seedRcpt();
+    const r = await svc.getReceipt({ order_id: 'ord_missing', account_id: 'acc_owner' });
+    expect(r).toBeNull();
+  });
+
+  it('returns null (404-style) on cross-account access', async () => {
+    const { svc } = await seedRcpt();
+    const r = await svc.getReceipt({ order_id: 'ord_rcpt', account_id: 'acc_other' });
+    expect(r).toBeNull();
+  });
+
+  it('returns the receipt with paid_at populated when status is paid', async () => {
+    const { svc } = await seedRcpt({ status: 'paid' });
+    const r = await svc.getReceipt({
+      order_id: 'ord_rcpt',
+      account_id: 'acc_owner',
+      issued_at: 9_000,
+    });
+    expect(r?.order_id).toBe('ord_rcpt');
+    expect(r?.status).toBe('paid');
+    expect(r?.payment_id).toBe('np_paid_id');
+    expect(r?.paid_at).toBe(new Date(6_000).toISOString());
+    expect(r?.issued_at).toBe(new Date(9_000).toISOString());
+  });
+
+  it('returns paid_at=null for a non-paid order (order-summary mode)', async () => {
+    const { svc } = await seedRcpt();
+    const r = await svc.getReceipt({ order_id: 'ord_rcpt', account_id: 'acc_owner' });
+    expect(r?.status).toBe('pending');
+    expect(r?.paid_at).toBeNull();
+    expect(r?.payment_id).toBeNull();
   });
 });

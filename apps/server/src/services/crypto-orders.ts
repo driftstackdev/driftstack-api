@@ -208,6 +208,43 @@ export class CryptoOrdersService {
   }
 
   /**
+   * V-666.M — build a normalized receipt payload for an order the
+   * caller owns. Returns null when the order doesn't exist OR
+   * belongs to another account (404-style; no existence leak).
+   *
+   * Works for any status, not just paid — the consuming UI gates
+   * the "download PDF" affordance on `status === 'paid'`. For non-
+   * paid orders, `payment_id` + `paid_at` are null and the receipt
+   * acts as an order summary.
+   */
+  async getReceipt(args: { order_id: string; account_id: string; issued_at?: number }): Promise<{
+    order_id: string;
+    issued_at: string;
+    status: CryptoOrderStatus;
+    product: string;
+    price_cents: number;
+    price_currency: string;
+    payment_id: string | null;
+    paid_at: string | null;
+    created_at: string;
+  } | null> {
+    const order = await this.opts.repo.getById(args.order_id);
+    if (order === null || order.account_id !== args.account_id) return null;
+    const issuedAt = args.issued_at ?? this.nowFn();
+    return {
+      order_id: order.order_id,
+      issued_at: new Date(issuedAt).toISOString(),
+      status: order.status,
+      product: order.product,
+      price_cents: order.price_cents,
+      price_currency: order.price_currency,
+      payment_id: order.payment_id,
+      paid_at: order.status === 'paid' ? new Date(order.updated_at).toISOString() : null,
+      created_at: new Date(order.created_at).toISOString(),
+    };
+  }
+
+  /**
    * V-666.K — auto-expire a single pending order if it's older than
    * `olderThanMs`. Only `pending` orders are eligible; orders that
    * have seen any payment activity (confirming/partial/paid/failed/

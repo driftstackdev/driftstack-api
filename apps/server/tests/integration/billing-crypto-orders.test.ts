@@ -222,3 +222,75 @@ describe('V-666.J POST /v1/billing/crypto-orders/:order_id/cancel', () => {
     expect(res.statusCode).toBe(409);
   });
 });
+
+describe('V-666.M GET /v1/billing/crypto-orders/:order_id/receipt', () => {
+  it('401 without auth', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing/crypto-orders/ord_x/receipt',
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('404 when the order does not exist', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing/crypto-orders/ord_missing/receipt',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('404 (not 403) on cross-account receipt fetch', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_other',
+      account_id: 'acc_someone_else',
+      product: 'trial_pack',
+      price_cents: 299,
+      price_currency: 'USD',
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing/crypto-orders/ord_other/receipt',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('200 + receipt body for a paid order owned by the caller', async () => {
+    fx = await buildTestApp();
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_paid_rcpt',
+      account_id: fx.accountId,
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    await fx.cryptoOrdersService.applyIpnStatus({
+      order_id: 'ord_paid_rcpt',
+      payment_id: 'np_rcpt_42',
+      provider_status: 'finished',
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing/crypto-orders/ord_paid_rcpt/receipt',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{
+      order_id: string;
+      status: string;
+      payment_id: string | null;
+      paid_at: string | null;
+      issued_at: string;
+    }>();
+    expect(body.order_id).toBe('ord_paid_rcpt');
+    expect(body.status).toBe('paid');
+    expect(body.payment_id).toBe('np_rcpt_42');
+    expect(body.paid_at).not.toBeNull();
+    expect(body.issued_at).toBeTruthy();
+  });
+});

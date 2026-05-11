@@ -1,7 +1,8 @@
 // V-534.X — unit tests for CryptoOrdersHistoryView.
+// V-534.Z — extended for per-row cancel button.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { CryptoOrderData } from '../../src/lib/use-crypto-order';
 
 interface MockSettings {
@@ -122,5 +123,77 @@ describe('V-534.X CryptoOrdersHistoryView', () => {
     render(<CryptoOrdersHistoryView />);
     const button = screen.getByRole('button', { name: /loading/i });
     expect((button as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe('V-534.Z CryptoOrdersHistoryView — cancel button', () => {
+  it('shows a Cancel button only for pending rows', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              orders: [
+                sample({ order_id: 'ord_pending', status: 'pending' }),
+                sample({ order_id: 'ord_paid', status: 'paid' }),
+              ],
+            }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersHistoryView />);
+    await waitFor(() => {
+      expect(screen.getByText('ord_pending')).toBeTruthy();
+    });
+    expect(screen.getByRole('button', { name: /Cancel order ord_pending/i })).toBeTruthy();
+    // Paid row should NOT have a Cancel button.
+    expect(screen.queryByRole('button', { name: /Cancel order ord_paid/i })).toBeNull();
+  });
+
+  it('clicking Cancel POSTs to the cancel endpoint + refreshes on success', async () => {
+    let listResponse = {
+      orders: [sample({ order_id: 'ord_clickme', status: 'pending' as const })],
+    };
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET';
+      if (typeof url === 'string' && url.endsWith('/cancel') && method === 'POST') {
+        listResponse = {
+          orders: [sample({ order_id: 'ord_clickme', status: 'cancelled' as const })],
+        };
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              order_id: 'ord_clickme',
+              status: 'cancelled',
+            }),
+        } as unknown as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(listResponse),
+      } as unknown as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<CryptoOrdersHistoryView />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Cancel order ord_clickme/i })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Cancel order ord_clickme/i }));
+    // After cancel resolves + refetch fires, the badge should flip.
+    await waitFor(() => {
+      expect(screen.getByText(/Cancelled/i)).toBeTruthy();
+    });
+    // Cancel POST was issued.
+    const cancelCalls = fetchMock.mock.calls.filter(
+      ([url, init]) =>
+        typeof url === 'string' && url.endsWith('/cancel') && init?.method === 'POST',
+    );
+    expect(cancelCalls.length).toBe(1);
   });
 });

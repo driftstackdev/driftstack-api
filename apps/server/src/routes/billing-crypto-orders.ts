@@ -1,8 +1,9 @@
 // V-666.G — customer-facing crypto-orders routes.
 //
-//   GET  /v1/billing/crypto-orders             — list caller's own orders
-//   GET  /v1/billing/crypto-orders/:id         — single order lookup
-//   POST /v1/billing/crypto-orders/:id/cancel  — abandon a pending order (V-666.J)
+//   GET  /v1/billing/crypto-orders              — list caller's own orders
+//   GET  /v1/billing/crypto-orders/:id          — single order lookup
+//   POST /v1/billing/crypto-orders/:id/cancel   — abandon a pending order (V-666.J)
+//   GET  /v1/billing/crypto-orders/:id/receipt  — normalized receipt payload (V-666.M)
 //
 // All routes are scoped to the calling account. Cross-account
 // id lookups return 404 (not 403) — we don't leak the existence of
@@ -80,6 +81,26 @@ export function registerCustomerCryptoOrdersRoutes(
         throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
       }
       return reply.send(toPublic(order));
+    },
+  );
+
+  // V-666.M — return a normalized receipt payload for an order the
+  // caller owns. Works for any status; consuming UI gates "Download
+  // PDF" / "Email me" affordances on `status === 'paid'`.
+  app.get<{ Params: { order_id: string } }>(
+    '/v1/billing/crypto-orders/:order_id/receipt',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
+      const ctx = requireCtx(req);
+      const params = parseOrThrow(GetParams, req.params);
+      const receipt = await deps.service.getReceipt({
+        order_id: params.order_id,
+        account_id: ctx.account.id,
+      });
+      if (receipt === null) {
+        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
+      }
+      return reply.send(receipt);
     },
   );
 
