@@ -1,7 +1,9 @@
 // V-666.D — admin crypto-orders routes.
 //
-//   GET /v1/admin/crypto-orders?account_id=acc_X&limit=N
-//   GET /v1/admin/crypto-orders/:order_id
+//   GET  /v1/admin/crypto-orders?account_id=acc_X&limit=N
+//   GET  /v1/admin/crypto-orders/:order_id
+//   POST /v1/admin/crypto-orders/:order_id/apply-ipn  (V-666.F)
+//   POST /v1/admin/crypto-orders/sweep-expired        (V-666.L)
 //
 // Auth: driftstack_internal_admin scope. Used by the founder dashboard
 // + support ops to look up the order behind a customer's
@@ -34,6 +36,14 @@ const GetParams = z.object({
 const ApplyIpnBody = z.object({
   provider_status: z.string().min(1),
   payment_id: z.string().min(1),
+});
+
+// V-666.L — admin sweep-trigger body. olderThanHours defaults to 24h
+// (matching the typical NowPayments payment window); limit defaults
+// to 500 (matching the service's own per-tick cap).
+const SweepBody = z.object({
+  older_than_hours: z.number().int().min(1).max(8760).optional(), // up to 1 year
+  limit: z.number().int().min(1).max(500).optional(),
 });
 
 function toPublic(order: CryptoOrder): Record<string, unknown> {
@@ -88,6 +98,33 @@ export function registerAdminCryptoOrdersRoutes(
         throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
       }
       return reply.send(toPublic(order));
+    },
+  );
+
+  // V-666.L — on-demand sweep of stale pending orders. Idempotent —
+  // ops can invoke any time without side effects on non-eligible
+  // orders. Returns the count expired this tick + a `capped` flag
+  // signalling whether more remain (caller re-runs until capped:
+  // false). Nightly cron lands separately when scheduled-jobs picks
+  // this up.
+  app.post<{
+    Body: { older_than_hours?: number; limit?: number };
+  }>(
+    '/v1/admin/crypto-orders/sweep-expired',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    async (req: FastifyRequest<{ Body: { older_than_hours?: number; limit?: number } }>, reply) => {
+      const body = parseOrThrow(SweepBody, req.body ?? {});
+      const olderThanHours = body.older_than_hours ?? 24;
+      const olderThanMs = olderThanHours * 60 * 60 * 1000;
+      const result = await deps.service.sweepExpiredOrders({
+        olderThanMs,
+        ...(body.limit !== undefined ? { limit: body.limit } : {}),
+      });
+      return reply.send({
+        expired: result.expired,
+        capped: result.capped,
+        older_than_hours: olderThanHours,
+      });
     },
   );
 

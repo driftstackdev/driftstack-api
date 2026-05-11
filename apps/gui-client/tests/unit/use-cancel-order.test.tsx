@@ -1,0 +1,173 @@
+// V-534.Y — unit tests for useCancelOrder.
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
+
+interface MockSettings {
+  settings: { apiKey: string | null; baseUrl: string };
+}
+const useSettingsMock = vi.fn<() => MockSettings>();
+vi.mock('../../src/lib/SettingsContext', () => ({
+  useSettings: () => useSettingsMock(),
+}));
+
+const { useCancelOrder } = await import('../../src/lib/use-cancel-order');
+
+beforeEach(() => {
+  useSettingsMock.mockReturnValue({
+    settings: { apiKey: 'sk_test', baseUrl: 'https://api.driftstack.dev' },
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
+
+describe('V-534.Y useCancelOrder — starting state', () => {
+  it('starts idle and does not fetch on mount', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useCancelOrder());
+    expect(result.current.state.kind).toBe('idle');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('V-534.Y useCancelOrder — happy path', () => {
+  it('transitions submitting → succeeded with the returned order', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            order_id: 'ord_x',
+            product: 'solo_manual',
+            price_cents: 2500,
+            price_currency: 'EUR',
+            payment_id: null,
+            status: 'cancelled',
+            created_at: '2026-05-11T10:00:00.000Z',
+            updated_at: '2026-05-11T10:05:00.000Z',
+          }),
+      } as unknown as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useCancelOrder());
+    await act(async () => {
+      await result.current.cancel('ord_x');
+    });
+    await waitFor(() => expect(result.current.state.kind).toBe('succeeded'));
+    if (result.current.state.kind === 'succeeded') {
+      expect(result.current.state.order.order_id).toBe('ord_x');
+      expect(result.current.state.order.status).toBe('cancelled');
+    }
+  });
+
+  it('POSTs to /v1/billing/crypto-orders/:id/cancel with bearer auth', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ order_id: 'ord_x', status: 'cancelled' }),
+      } as unknown as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useCancelOrder());
+    await act(async () => {
+      await result.current.cancel('ord_x');
+    });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
+      'https://api.driftstack.dev/v1/billing/crypto-orders/ord_x/cancel',
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.method).toBe('POST');
+    expect((init?.headers as Record<string, string>).authorization).toBe('Bearer sk_test');
+  });
+});
+
+describe('V-534.Y useCancelOrder — error paths', () => {
+  it('failed with status=0 when no API key is configured', async () => {
+    useSettingsMock.mockReturnValue({
+      settings: { apiKey: null, baseUrl: 'https://api.driftstack.dev' },
+    });
+    const { result } = renderHook(() => useCancelOrder());
+    await act(async () => {
+      await result.current.cancel('ord_x');
+    });
+    expect(result.current.state.kind).toBe('failed');
+    if (result.current.state.kind === 'failed') {
+      expect(result.current.state.status).toBe(0);
+    }
+  });
+
+  it('surfaces the server detail on 409 (already past cancellable window)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 409,
+          json: () =>
+            Promise.resolve({
+              detail: 'Order is in state "confirming" and can no longer be cancelled.',
+            }),
+        } as unknown as Response),
+      ),
+    );
+    const { result } = renderHook(() => useCancelOrder());
+    await act(async () => {
+      await result.current.cancel('ord_x');
+    });
+    if (result.current.state.kind === 'failed') {
+      expect(result.current.state.status).toBe(409);
+      expect(result.current.state.message).toMatch(/confirming/);
+    }
+  });
+
+  it('falls back to "HTTP <status>" when no detail body is parseable', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: false,
+          status: 500,
+          json: () => Promise.reject(new Error('not json')),
+        } as unknown as Response),
+      ),
+    );
+    const { result } = renderHook(() => useCancelOrder());
+    await act(async () => {
+      await result.current.cancel('ord_x');
+    });
+    if (result.current.state.kind === 'failed') {
+      expect(result.current.state.status).toBe(500);
+      expect(result.current.state.message).toBe('HTTP 500');
+    }
+  });
+});
+
+describe('V-534.Y useCancelOrder — reset', () => {
+  it('returns the hook to idle after a succeeded run', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ order_id: 'ord_x', status: 'cancelled' }),
+        } as unknown as Response),
+      ),
+    );
+    const { result } = renderHook(() => useCancelOrder());
+    await act(async () => {
+      await result.current.cancel('ord_x');
+    });
+    expect(result.current.state.kind).toBe('succeeded');
+    act(() => {
+      result.current.reset();
+    });
+    expect(result.current.state.kind).toBe('idle');
+  });
+});

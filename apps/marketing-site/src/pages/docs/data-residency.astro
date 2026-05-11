@@ -1,0 +1,191 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-698 — data-residency docs page. Covers where customer data
+// physically lives, what counts as customer data, and the region-
+// preference field on accounts (V-298b).
+---
+
+<BaseLayout title="Data residency — Driftstack" description="Where Driftstack stores customer data, the region preference, and what crosses regions.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Data residency</h1>
+
+    <p class="lead">
+      This page covers where your data physically lives, what counts
+      as "customer data" for residency purposes, and how the
+      <code>region</code> account preference shapes routing.
+    </p>
+
+    <h2>The short answer</h2>
+    <ul>
+      <li>Driftstack runs <strong>primarily in the EU</strong>
+        (Hetzner Falkenstein / Nuremberg).</li>
+      <li>Customer-facing API endpoints are served from the same
+        EU region today; multi-region routing is on the roadmap.</li>
+      <li>You can <strong>set a region preference</strong> on your
+        account (<code>us</code>, <code>eu</code>, or <code>apac</code>)
+        via <code>PATCH /v1/account/me</code>. It's currently
+        informational — region routing will honour it once we have
+        non-EU PoPs.</li>
+      <li>Object storage (R2) is geo-replicated across Cloudflare's
+        EU + US regions; presigned URL access is location-agnostic.</li>
+    </ul>
+
+    <h2>What counts as customer data</h2>
+    <table>
+      <thead>
+        <tr><th>Category</th><th>Stored where</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Account row (email, tier, slug, region pref, MFA secret)</td>
+          <td>Postgres (Neon, EU)</td>
+          <td>MFA secret AES-256 encrypted with <code>MFA_ENCRYPTION_KEY</code></td>
+        </tr>
+        <tr>
+          <td>API keys (hashed)</td>
+          <td>Postgres (Neon, EU)</td>
+          <td>scrypt logN=15; plaintext never stored</td>
+        </tr>
+        <tr>
+          <td>Sessions metadata</td>
+          <td>Postgres (Neon, EU)</td>
+          <td>Lifecycle rows + events; no payload</td>
+        </tr>
+        <tr>
+          <td>Profile metadata</td>
+          <td>Postgres (Neon, EU)</td>
+          <td>Name, archetype, description only</td>
+        </tr>
+        <tr>
+          <td>Profile state blob (cookies, localStorage)</td>
+          <td>WebKit driver layer, EU host</td>
+          <td>Per-profile encrypted file on disk</td>
+        </tr>
+        <tr>
+          <td>Session recordings (WebM)</td>
+          <td>R2 (Cloudflare, EU + US replication)</td>
+          <td>Object-level S3-SSE; presigned URLs 1h TTL</td>
+        </tr>
+        <tr>
+          <td>Audit log entries</td>
+          <td>Postgres (Neon, EU)</td>
+          <td>Append-only; tier-dependent retention</td>
+        </tr>
+        <tr>
+          <td>Webhook deliveries</td>
+          <td>Postgres (Neon, EU)</td>
+          <td>Payload + response excerpt; 7-day retention</td>
+        </tr>
+        <tr>
+          <td>Stripe customer / payment data</td>
+          <td>Stripe (US)</td>
+          <td>We never see card numbers. Stripe customer_id is the linkage.</td>
+        </tr>
+        <tr>
+          <td>NowPayments order metadata</td>
+          <td>NowPayments (EU, Estonia)</td>
+          <td>We see payment_id + status only; on-chain data stays on-chain.</td>
+        </tr>
+        <tr>
+          <td>Cache (Redis)</td>
+          <td>Upstash (EU)</td>
+          <td>Auth cache, rate-limit counters, MFA-challenge tokens — all
+            short-lived (≤5 min TTL).</td>
+        </tr>
+        <tr>
+          <td>Sentry error events</td>
+          <td>Sentry (US, sentry.io)</td>
+          <td>Code-level errors with redacted body fields. PII filter
+            strips emails before send.</td>
+        </tr>
+        <tr>
+          <td>Email delivery (transactional)</td>
+          <td>Postmark (US)</td>
+          <td>Recipient address + template payload only.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>What never leaves the EU</h2>
+    <ul>
+      <li>Database content (Postgres, Neon EU).</li>
+      <li>Cache content (Redis, Upstash EU).</li>
+      <li>Profile state blobs on the driver host (EU).</li>
+      <li>Session-execution traffic between the API server, the
+        browser driver, and the customer's target URL.</li>
+    </ul>
+
+    <h2>What does leave the EU</h2>
+    <ul>
+      <li><strong>Recordings via R2:</strong> Cloudflare replicates
+        across regions to minimise playback latency. If you require
+        strict EU-only storage for recordings, contact us — we can
+        configure your account with single-region (EU-only) R2.</li>
+      <li><strong>Sentry error reports:</strong> code-path errors
+        include stack traces + redacted request bodies. We never
+        send raw API keys, session secrets, or customer-supplied
+        URLs to Sentry — the PII filter strips them.</li>
+      <li><strong>Stripe billing data:</strong> Stripe processes
+        cards in the US per their own posture. The payment-card
+        industry compliance contract is between you and Stripe;
+        we only hold the customer_id linkage.</li>
+      <li><strong>Email delivery:</strong> Postmark queues
+        transactional emails in the US. We send recipient address +
+        template id only — the email body is generated server-side
+        from non-PII template variables.</li>
+    </ul>
+
+    <h2>The <code>region</code> account preference (V-298b)</h2>
+    <p>
+      Set on the account via <code>PATCH /v1/account/me</code>:
+    </p>
+    <pre><code>{`PATCH /v1/account/me
+Authorization: Bearer ds_live_…
+{ "region": "eu" }`}</code></pre>
+    <p>
+      Accepted values: <code>us</code>, <code>eu</code>,
+      <code>apac</code>, or <code>null</code> (unset).
+    </p>
+    <p>
+      <strong>Today:</strong> the field is informational. We surface
+      it on the account-me response and use it as a tag in our
+      observability stack so we can prioritise where to add PoPs.
+    </p>
+    <p>
+      <strong>Roadmap:</strong> once additional PoPs exist (planned
+      for US + APAC in 2026), API routing will land sessions for
+      <code>region: us</code> accounts on US infrastructure, and
+      <code>region: apac</code> on APAC. The account row will still
+      live in the EU primary; sessions + recordings will live in the
+      preferred region.
+    </p>
+
+    <h2>GDPR / DSAR / right-to-erasure</h2>
+    <p>
+      Customer accounts can be deleted on request. We hold a
+      30-day grace period for accidental delete recovery, after
+      which the account row + all linked resources (sessions,
+      profiles, recordings, audit log, webhook deliveries) are
+      purged. Stripe + NowPayments customer references are removed
+      from our side; their own retention policies govern what they
+      keep beyond that.
+    </p>
+    <p>
+      Data subject access requests:
+      <a href="mailto:privacy@driftstack.dev">privacy@driftstack.dev</a>.
+    </p>
+
+    <h2>Subprocessor list</h2>
+    <p>
+      Up-to-date subprocessor list with regions, purpose, and DPA
+      links: <a href="/legal/subprocessors">/legal/subprocessors</a>.
+    </p>
+
+    <h2>Support</h2>
+    <p>
+      Residency / compliance questions:
+      <a href="mailto:compliance@driftstack.dev">compliance@driftstack.dev</a>.
+    </p>
+  </main>
+</BaseLayout>
