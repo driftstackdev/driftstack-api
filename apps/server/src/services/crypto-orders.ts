@@ -235,9 +235,44 @@ export class CryptoOrdersService {
    * V-666.D — admin-only list. Returns the most-recent `limit` orders
    * across all customers, optionally filtered by account_id. Sort
    * order is `created_at DESC`.
+   *
+   * V-666.T — extends with optional status filter + free-text search
+   * across order_id / product / customer_note. Filters apply in-service
+   * post-fetch; the repo scan window is bumped to `scanLimit` (default
+   * 1_000) so a narrow filter on a large backlog still returns enough
+   * rows. The DB-backed repo (V-666.C) will push the filters to SQL.
    */
-  async listForAdmin(opts: { accountId?: string; limit?: number } = {}): Promise<CryptoOrder[]> {
-    return this.opts.repo.listAll(opts);
+  async listForAdmin(
+    opts: {
+      accountId?: string;
+      limit?: number;
+      status?: CryptoOrderStatus;
+      search?: string;
+      scanLimit?: number;
+    } = {},
+  ): Promise<CryptoOrder[]> {
+    const limit = opts.limit ?? 50;
+    const scanLimit = opts.scanLimit ?? 1_000;
+    const rawScanLimit = opts.status !== undefined || opts.search !== undefined ? scanLimit : limit;
+    const raw = await this.opts.repo.listAll({
+      ...(opts.accountId !== undefined ? { accountId: opts.accountId } : {}),
+      limit: rawScanLimit,
+    });
+    const needle = opts.search?.toLowerCase().trim();
+    const filtered = raw.filter((o) => {
+      if (opts.status !== undefined && o.status !== opts.status) return false;
+      if (needle !== undefined && needle.length > 0) {
+        const hay =
+          o.order_id.toLowerCase() +
+          '|' +
+          o.product.toLowerCase() +
+          '|' +
+          (o.customer_note?.toLowerCase() ?? '');
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
+    });
+    return filtered.slice(0, limit);
   }
 
   /**

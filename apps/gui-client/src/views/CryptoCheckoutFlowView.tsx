@@ -14,6 +14,7 @@
 import { useState } from 'react';
 import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { formatCents } from '../lib/crypto-format';
 import { useCryptoCheckout } from '../lib/use-crypto-checkout';
 import { useCryptoOrder } from '../lib/use-crypto-order';
 import { useCryptoQuote } from '../lib/use-crypto-quote';
@@ -30,10 +31,6 @@ const SUPPORTED_PRODUCTS = [
   'api_builder',
   'api_scale',
 ] as const;
-
-function formatCents(cents: number, currency: string): string {
-  return `${(cents / 100).toFixed(2)} ${currency}`;
-}
 
 export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.Element {
   const [product, setProduct] = useState<string>(props.defaultProduct);

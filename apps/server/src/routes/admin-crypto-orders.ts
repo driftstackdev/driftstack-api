@@ -24,6 +24,9 @@ export interface RegisterAdminCryptoOrdersRoutesDeps {
 const ListQuery = z.object({
   account_id: z.string().min(1).optional(),
   limit: z.string().regex(/^\d+$/).optional(),
+  // V-666.T — admin search/filter knobs.
+  status: z.enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled']).optional(),
+  search: z.string().min(1).max(200).optional(),
 });
 
 const GetParams = z.object({
@@ -73,11 +76,25 @@ export function registerAdminCryptoOrdersRoutes(
   app: FastifyInstance,
   deps: RegisterAdminCryptoOrdersRoutesDeps,
 ): void {
-  app.get<{ Querystring: { account_id?: string; limit?: string } }>(
+  app.get<{
+    Querystring: {
+      account_id?: string;
+      limit?: string;
+      status?: string;
+      search?: string;
+    };
+  }>(
     '/v1/admin/crypto-orders',
     { preHandler: [app.requireScope('driftstack_internal_admin')] },
     async (
-      req: FastifyRequest<{ Querystring: { account_id?: string; limit?: string } }>,
+      req: FastifyRequest<{
+        Querystring: {
+          account_id?: string;
+          limit?: string;
+          status?: string;
+          search?: string;
+        };
+      }>,
       reply,
     ) => {
       const query = parseOrThrow(ListQuery, req.query);
@@ -92,6 +109,8 @@ export function registerAdminCryptoOrdersRoutes(
       const orders = await deps.service.listForAdmin({
         ...(query.account_id !== undefined ? { accountId: query.account_id } : {}),
         ...(limit !== undefined ? { limit } : {}),
+        ...(query.status !== undefined ? { status: query.status } : {}),
+        ...(query.search !== undefined ? { search: query.search } : {}),
       });
       return reply.send({ orders: orders.map(toPublic) });
     },

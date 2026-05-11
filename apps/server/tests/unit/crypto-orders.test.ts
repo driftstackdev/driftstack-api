@@ -7,6 +7,7 @@
 // V-666.O — appended tests for getDailyBreakdownForAdmin.
 // V-666.Q — appended tests for updateCustomerNote.
 // V-666.R — appended tests for paid-receipt email notifier.
+// V-666.T — appended tests for listForAdmin status + search filters.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -1125,5 +1126,117 @@ describe('V-666.R paid-receipt email notifier', () => {
     expect(emailCalls).toHaveLength(1);
     expect(webhookCalls).toHaveLength(1);
     expect(webhookCalls[0]?.eventType).toBe('crypto.order.paid');
+  });
+});
+
+describe('V-666.T listForAdmin — status + search filters', () => {
+  async function seedMany(): Promise<CryptoOrdersService> {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let t = 1_000;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => t });
+    await svc.create({
+      order_id: 'ord_alpha',
+      account_id: 'acc_one',
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
+    });
+    t = 2_000;
+    await svc.create({
+      order_id: 'ord_beta',
+      account_id: 'acc_two',
+      product: 'team_growth',
+      price_cents: 14900,
+      price_currency: 'EUR',
+    });
+    t = 3_000;
+    await svc.create({
+      order_id: 'ord_gamma',
+      account_id: 'acc_one',
+      product: 'team_growth',
+      price_cents: 14900,
+      price_currency: 'EUR',
+    });
+    // mark one paid
+    t = 4_000;
+    await svc.applyIpnStatus({
+      order_id: 'ord_beta',
+      payment_id: 'np_b',
+      provider_status: 'finished',
+    });
+    // mark one cancelled
+    t = 5_000;
+    await svc.cancelOrder({ order_id: 'ord_alpha', account_id: 'acc_one' });
+    // attach a note to ord_gamma
+    t = 6_000;
+    await svc.updateCustomerNote({
+      order_id: 'ord_gamma',
+      account_id: 'acc_one',
+      customer_note: 'PO-12345 quarterly renewal',
+    });
+    return svc;
+  }
+
+  it('returns all orders newest-first when no filters supplied', async () => {
+    const svc = await seedMany();
+    const list = await svc.listForAdmin();
+    expect(list.map((o) => o.order_id)).toEqual(['ord_gamma', 'ord_beta', 'ord_alpha']);
+  });
+
+  it('filters by status=paid', async () => {
+    const svc = await seedMany();
+    const list = await svc.listForAdmin({ status: 'paid' });
+    expect(list.map((o) => o.order_id)).toEqual(['ord_beta']);
+  });
+
+  it('filters by status=cancelled', async () => {
+    const svc = await seedMany();
+    const list = await svc.listForAdmin({ status: 'cancelled' });
+    expect(list.map((o) => o.order_id)).toEqual(['ord_alpha']);
+  });
+
+  it('searches order_id substring (case-insensitive)', async () => {
+    const svc = await seedMany();
+    const list = await svc.listForAdmin({ search: 'GAMMA' });
+    expect(list.map((o) => o.order_id)).toEqual(['ord_gamma']);
+  });
+
+  it('searches product substring', async () => {
+    const svc = await seedMany();
+    const list = await svc.listForAdmin({ search: 'team_growth' });
+    expect(list.map((o) => o.order_id).sort()).toEqual(['ord_beta', 'ord_gamma']);
+  });
+
+  it('searches customer_note substring', async () => {
+    const svc = await seedMany();
+    const list = await svc.listForAdmin({ search: 'po-12345' });
+    expect(list.map((o) => o.order_id)).toEqual(['ord_gamma']);
+  });
+
+  it('combines status + search (AND)', async () => {
+    const svc = await seedMany();
+    const list = await svc.listForAdmin({ status: 'paid', search: 'team_growth' });
+    expect(list.map((o) => o.order_id)).toEqual(['ord_beta']);
+    const empty = await svc.listForAdmin({ status: 'paid', search: 'solo_manual' });
+    expect(empty).toEqual([]);
+  });
+
+  it('honours accountId + filters together', async () => {
+    const svc = await seedMany();
+    const list = await svc.listForAdmin({ accountId: 'acc_one', status: 'cancelled' });
+    expect(list.map((o) => o.order_id)).toEqual(['ord_alpha']);
+  });
+
+  it('applies limit AFTER filtering (returns up to N matching rows)', async () => {
+    const svc = await seedMany();
+    const list = await svc.listForAdmin({ search: 'team_growth', limit: 1 });
+    expect(list).toHaveLength(1);
+    expect(list[0]?.order_id).toBe('ord_gamma'); // newest-first
+  });
+
+  it('treats empty search string as no filter', async () => {
+    const svc = await seedMany();
+    const list = await svc.listForAdmin({ search: '   ' });
+    expect(list).toHaveLength(3);
   });
 });

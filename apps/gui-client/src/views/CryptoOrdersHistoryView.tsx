@@ -12,22 +12,10 @@
 import { useEffect, useState } from 'react';
 import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { formatCents, formatRelative } from '../lib/crypto-format';
 import { useCancelOrder } from '../lib/use-cancel-order';
 import { useCryptoOrdersList } from '../lib/use-crypto-orders-list';
 import { CryptoOrderDetailView } from './CryptoOrderDetailView';
-
-function formatCents(cents: number, currency: string): string {
-  return `${(cents / 100).toFixed(2)} ${currency}`;
-}
-
-function formatRelative(iso: string): string {
-  const then = new Date(iso).getTime();
-  const ago = Date.now() - then;
-  if (ago < 60_000) return 'just now';
-  if (ago < 60 * 60_000) return `${Math.floor(ago / 60_000).toString()}m ago`;
-  if (ago < 24 * 60 * 60_000) return `${Math.floor(ago / (60 * 60_000)).toString()}h ago`;
-  return `${Math.floor(ago / (24 * 60 * 60_000)).toString()}d ago`;
-}
 
 export function CryptoOrdersHistoryView(): JSX.Element {
   const { state, refetch } = useCryptoOrdersList();

@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { formatCents } from '../lib/crypto-format';
 import {
   formatReceiptForClipboard,
   useCryptoReceipt,
@@ -16,10 +17,6 @@ import {
 interface CryptoReceiptViewProps {
   /** The order id to render. Pass null to show the empty state. */
   orderId: string | null;
-}
-
-function formatCents(cents: number, currency: string): string {
-  return `${(cents / 100).toFixed(2)} ${currency}`;
 }
 
 function ReceiptBody({ data }: { data: CryptoReceiptData }): JSX.Element {
