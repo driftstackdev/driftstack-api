@@ -48,7 +48,7 @@ certbot / Let's Encrypt at the origin layer for v1.0.
 ## Sub-processor map
 
 The `.env` files reference only credentials for sub-processors enumerated
-in [DPA Annex 3](../apps/marketing-site/src/pages/legal/dpa.astro):
+in [DPA Annex 3](../apps/marketing-site/src/pages/legal/dpa.md):
 
 - **Hetzner Cloud** (Nuremberg NBG1 / Falkenstein FSN1) — VM compute.
 - **Neon** (Frankfurt eu-central-1) — managed Postgres 17.
@@ -68,5 +68,4 @@ the matching DPA + sub-processors.json update.
   committed via base64 in `DEPLOY_DOTENV_BASE64` GitHub secret.
 - **LIVE-mode secrets** (Stripe `sk_live_`, post-KvK) are written via
   SSH directly to `/opt/driftstack/api/.env` on the host. They never
-  pass through the agent's chat history or pull-request artifacts. See
-  [memory: Stripe credential handling](../docs/internal/credential-handling.md).
+  pass through the agent's chat history or pull-request artifacts.
