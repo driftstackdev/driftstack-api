@@ -1,0 +1,161 @@
+// W419.C — drift guard for apps/server/src/routes/admin-force-actions.ts.
+// V-100 admin force-actions — destroy session + revoke API key. Both
+// bypass usual ownership check (admin-scope only) + write
+// admin_audit_log row before responding (D-025). Idempotent on
+// already-destroyed/already-revoked. D-020 auth-cache invalidation on
+// key revoke. Drift here either drops idempotency (re-destroys a
+// destroyed session = double driver call) or drops D-020 cache
+// invalidation (revoked key keeps working until cache TTL).
+//
+//   • V-100 framing pinned: 2 routes (destroy session + revoke API
+//     key); ownership-check bypass (admin scope only); D-025 audit-
+//     write before response is NOT best-effort.
+//   • Defense-in-depth scope check: preHandler app.requireScope +
+//     in-handler requireScope helper.
+//   • ForceActionBodySchema: zod reason 1..500 optional; whole body
+//     optional.
+//   • clientIp helper: X-Forwarded-For first-element OR request.ip
+//     ?? null.
+//   • withAudit wrapper: takes args object with targetAccountId +
+//     targetResourceId + inputPayload + perform thunk; dual-write
+//     success + error.
+//   • Idempotency: already-destroyed session OR already-revoked key
+//     → still record audit with { ...inputPayload, idempotent: true }
+//     + return existing destroyedAt/revokedAt.
+//   • Session destroy: driver.destroy + repo.updateSessionStatus +
+//     recordEvent {force:true, by_admin:true, reason?}.
+//   • API key revoke: D-020 auth-cache invalidation; cache failure
+//     non-fatal (swallow).
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', () => {
+  const body = read(LIB);
+
+  it('V-100 framing pinned: 2 routes — destroy session + revoke API key; admin-scope-only ownership bypass; D-025 audit-write-before-response NOT best-effort', () => {
+    expect(body).toMatch(/V-100: admin force-actions on customer resources\./);
+    expect(body).toMatch(
+      /POST \/v1\/admin\/sessions\/:id\/destroy\s+— force-destroy a customer session/,
+    );
+    expect(body).toMatch(
+      /POST \/v1\/admin\/api-keys\/:id\/revoke\s+— force-revoke a customer API key/,
+    );
+    expect(body).toMatch(
+      /These bypass the usual ownership check \(admin scope only\)\. Both\s*\n?\s*\/\/\s*write an admin_audit_log row before responding \(D-025: audit-write\s*\n?\s*\/\/\s*before response is not best-effort\)\./,
+    );
+  });
+
+  it('Defense-in-depth scope: preHandler app.requireScope + in-handler requireScope helper invocation in BOTH routes', () => {
+    expect(body).toMatch(
+      /\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\), app\.rateLimit\('global'\)\] \},/,
+    );
+    const matches = body.match(/requireScope\(ctx, 'driftstack_internal_admin'\);/g);
+    expect(matches?.length).toBe(2);
+  });
+
+  it('ForceActionBodySchema: zod reason 1..500 optional + whole body optional', () => {
+    expect(body).toMatch(
+      /const ForceActionBodySchema = z\s*\n?\s*\.object\(\{\s*\n?\s*reason: z\.string\(\)\.min\(1\)\.max\(500\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.optional\(\);/,
+    );
+  });
+
+  it('clientIp helper: X-Forwarded-For first-element split + ?? null fallback to request.ip', () => {
+    expect(body).toMatch(
+      /function clientIp\(request: FastifyRequest\): string \| null \{\s*\n?\s*const xff = request\.headers\['x-forwarded-for'\];\s*\n?\s*if \(typeof xff === 'string' && xff\.length > 0\) \{\s*\n?\s*const first = xff\.split\(','\)\[0\]\?\.trim\(\);\s*\n?\s*if \(first\) return first;\s*\n?\s*\}\s*\n?\s*return request\.ip \?\? null;/,
+    );
+  });
+
+  it('AdminForceActionsRoutesOptions: sessionRepo + apiKeysRepo + driver + audit + authCache (nullable)', () => {
+    expect(body).toMatch(
+      /export interface AdminForceActionsRoutesOptions \{\s*\n?\s*sessionRepo: SessionRepo;\s*\n?\s*apiKeysRepo: ApiKeysRepo;\s*\n?\s*driver: Driver;\s*\n?\s*audit: AdminAuditService;\s*\n?\s*authCache: AuthCache \| null;\s*\n?\s*\}/,
+    );
+  });
+
+  it('withAudit wrapper: D-025 success + error dual-write; targetAccountId/targetResourceId/inputPayload/perform thunk; err.name lowercase /error$/ strip', () => {
+    expect(body).toMatch(/Wrap a force-action with audit-on-success \+ audit-on-error per D-025\./);
+    expect(body).toMatch(
+      /async function withAudit<T>\(\s*\n?\s*request: FastifyRequest,\s*\n?\s*action: AdminAuditAction,\s*\n?\s*args: \{\s*\n?\s*targetAccountId: string \| null;\s*\n?\s*targetResourceId: string;\s*\n?\s*inputPayload: Record<string, unknown>;\s*\n?\s*perform: \(\) => Promise<T>;\s*\n?\s*\},\s*\n?\s*\): Promise<T> \{/,
+    );
+    expect(body).toMatch(
+      /const code =\s*\n?\s*err instanceof Error && err\.name \? err\.name\.toLowerCase\(\)\.replace\(\/error\$\/, ''\) : 'unknown';/,
+    );
+  });
+
+  it("Session destroy idempotency: status === 'destroyed' → audit with idempotent:true + return existing destroyed_at", () => {
+    expect(body).toMatch(
+      /\/\/ Admin destroy is idempotent — already-destroyed session returns the\s*\n?\s*\/\/ same shape without re-firing the driver \/ repo writes\./,
+    );
+    expect(body).toMatch(
+      /if \(session\.status === 'destroyed'\) \{\s*\n?\s*await audit\.record\(\{\s*\n?\s*adminAccountId: ctx\.account\.id,\s*\n?\s*adminKeyId: ctx\.apiKey\.id,\s*\n?\s*action: 'session\.destroyed_by_admin',\s*\n?\s*targetAccountId,\s*\n?\s*targetResourceId: sessionId,\s*\n?\s*inputPayload: \{ \.\.\.inputPayload, idempotent: true \},\s*\n?\s*result: 'success',\s*\n?\s*ipAddress: clientIp\(request\),\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(
+      /return \{\s*\n?\s*id: `ses_\$\{session\.id\}`,\s*\n?\s*status: 'destroyed',\s*\n?\s*destroyed_at: session\.destroyedAt\?\.toISOString\(\) \?\? null,\s*\n?\s*\};/,
+    );
+  });
+
+  it("Session destroy fresh path: driver.destroy + repo.updateSessionStatus + recordEvent type='destroyed' payload {force:true, by_admin:true, reason?}", () => {
+    expect(body).toMatch(
+      /await withAudit\(request, 'session\.destroyed_by_admin', \{\s*\n?\s*targetAccountId,\s*\n?\s*targetResourceId: sessionId,\s*\n?\s*inputPayload,\s*\n?\s*perform: async \(\) => \{\s*\n?\s*await driver\.destroy\(session\.driverSessionId\);\s*\n?\s*await sessionRepo\.updateSessionStatus\(session\.id, 'destroyed', \{ destroyedAt \}\);\s*\n?\s*await sessionRepo\.recordEvent\(\{\s*\n?\s*sessionId: session\.id,\s*\n?\s*type: 'destroyed',\s*\n?\s*payload: \{ force: true, by_admin: true, \.\.\.\(reason !== undefined \? \{ reason \} : \{\}\) \},\s*\n?\s*durationMs: null,\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('API key revoke idempotency: revokedAt !== null → audit with idempotent:true + return existing revoked_at ISO', () => {
+    expect(body).toMatch(
+      /if \(key\.revokedAt !== null\) \{\s*\n?\s*await audit\.record\(\{[\s\S]+?action: 'api_key\.revoked_by_admin',[\s\S]+?inputPayload: \{ \.\.\.inputPayload, idempotent: true \},/,
+    );
+    expect(body).toMatch(
+      /return \{ id: `key_\$\{key\.id\}`, revoked_at: key\.revokedAt\.toISOString\(\) \};/,
+    );
+  });
+
+  it('D-020 cache invalidation on key revoke: authCache.invalidateKey(key.id); failure non-fatal (swallow); pattern rationale comment', () => {
+    expect(body).toMatch(
+      /\/\/ Invalidate any cached AccountContext entries for this key\s*\n?\s*\/\/ so the next auth read sees the revocation immediately\s*\n?\s*\/\/ \(D-020 cache invalidation pattern\)\./,
+    );
+    expect(body).toMatch(
+      /if \(authCache !== null\) \{\s*\n?\s*try \{\s*\n?\s*await authCache\.invalidateKey\(key\.id\);\s*\n?\s*\} catch \{\s*\n?\s*\/\* cache failure non-fatal \*\/\s*\n?\s*\}\s*\n?\s*\}/,
+    );
+  });
+
+  it("404 NotFoundError on session-not-found OR key-not-found (uses uuidFromPrefixedId 'ses'|'key' for params)", () => {
+    expect(body).toMatch(/const sessionId = uuidFromPrefixedId\(request\.params\.id, 'ses'\);/);
+    expect(body).toMatch(/const keyId = uuidFromPrefixedId\(request\.params\.id, 'key'\);/);
+    expect(body).toMatch(
+      /if \(!session\) throw new NotFoundError\(`Session "\$\{sessionId\}" not found\.`\);/,
+    );
+    expect(body).toMatch(
+      /if \(!key\) throw new NotFoundError\(`API key "\$\{keyId\}" not found\.`\);/,
+    );
+  });
+
+  it('imports: FastifyInstance/FastifyRequest + zod + AdminAuditService/Action + SessionRepo + ApiKeysRepo + Driver + AuthCache + BadRequestError/NotFoundError + requireScope helper', () => {
+    expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
+    expect(body).toMatch(/import \{ z \} from 'zod';/);
+    expect(body).toMatch(
+      /import type \{ AdminAuditService, AdminAuditAction \} from '\.\.\/services\/admin-audit\.js';/,
+    );
+    expect(body).toMatch(/import type \{ SessionRepo \} from '\.\.\/services\/sessions\.js';/);
+    expect(body).toMatch(/import type \{ ApiKeysRepo \} from '\.\.\/services\/api-keys\.js';/);
+    expect(body).toMatch(/import type \{ Driver \} from '\.\.\/drivers\/types\.js';/);
+    expect(body).toMatch(/import type \{ AuthCache \} from '\.\.\/services\/auth-cache\.js';/);
+    expect(body).toMatch(
+      /import \{ BadRequestError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,
+    );
+    expect(body).toMatch(/import \{ requireScope \} from '\.\.\/lib\/errors-helpers\.js';/);
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});

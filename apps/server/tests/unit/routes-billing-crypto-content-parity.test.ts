@@ -1,0 +1,157 @@
+// W419.B — drift guard for apps/server/src/routes/billing-crypto.ts.
+// V-666.C customer-facing crypto-checkout. POST /v1/billing/
+// crypto-checkout mints CryptoOrder. V-666.AO Idempotency-Key for
+// 24h replay window. V-666.AQ replay-info-log + V-666.AR body-
+// fingerprint-mismatch warn. Drift here either breaks idempotency
+// replay (double-charges customer) or drops the fingerprint-mismatch
+// warn (silent accidental key reuse).
+//
+//   • V-666.C framing pinned: stub provider posture until
+//     NowPayments merchant + NOWPAYMENTS_API_KEY land; pay_address
+//     null + provider 'stub' until V-666.D follow-up.
+//   • V-666.AO framing pinned: Idempotency-Key 24h-window dup
+//     returns original order; Idempotent-Replayed: 1 header on
+//     replays.
+//   • V-666.AQ framing pinned: replay info-log (event=
+//     'crypto_checkout_idempotency_replay') answers "is my checkout
+//     button double-firing" without polling counters endpoint.
+//     Fresh writes don't log — request-completed log already
+//     captures them.
+//   • V-666.AR framing pinned: body-fingerprint mismatch warn-log
+//     (event='crypto_checkout_idempotency_body_mismatch'); contract
+//     still replays.
+//   • SUPPORTED_PRODUCTS allowlist: trial_pack + solo_manual +
+//     solo_automated + team_growth + team_scale + api_starter +
+//     api_pro (as const 7-tuple).
+//   • CreateCryptoCheckoutSchema: zod product enum + price_cents
+//     int positive max 1_000_000 + price_currency 3-letter
+//     uppercase ISO regex.
+//   • newOrderId: 12 random hex chars (randomBytes(6)) + ord_ prefix.
+//   • IdempotencyHeader discriminated union: absent | valid | invalid;
+//     trim + 1..255 ASCII printable [\x21-\x7e] regex.
+//   • Reply 201: order_id/product/price/status + stub provider/
+//     payment_address null/pay_currency null + created_at ISO.
+//   • Auth: requireAuth + rateLimit('global').
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () => {
+  const body = read(LIB);
+
+  it('V-666.C framing pinned: POST /v1/billing/crypto-checkout mints CryptoOrder; stub provider until NowPayments merchant + NOWPAYMENTS_API_KEY land', () => {
+    expect(body).toMatch(/V-666\.C — customer-facing crypto-checkout route\./);
+    expect(body).toMatch(/POST \/v1\/billing\/crypto-checkout/);
+    expect(body).toMatch(
+      /Customers on the `\/checkout\/crypto` page hit this to mint a new\s*\n?\s*\/\/\s*CryptoOrder\. The response carries an order_id \+ a stubbed payment\s*\n?\s*\/\/\s*context: until the founder lands a NowPayments merchant account \+\s*\n?\s*\/\/\s*`NOWPAYMENTS_API_KEY`, we cannot call NowPayments's\s*\n?\s*\/\/\s*`POST \/v1\/payment` to mint a real `pay_address`\. The route therefore\s*\n?\s*\/\/\s*returns `payment_address: null` and `provider: 'stub'` — the front\s*\n?\s*\/\/\s*end shows a "set up by support" notice in that posture\./,
+    );
+  });
+
+  it('V-666.AO Idempotency-Key framing pinned: 24h window replay returns original order verbatim; Idempotent-Replayed:1 header distinguishes retry-success from fresh create', () => {
+    expect(body).toMatch(
+      /V-666\.AO — when the caller sends an `Idempotency-Key` header, the\s*\n?\s*\/\/\s*route hands the key to service\.createIdempotent\(\); duplicate keys\s*\n?\s*\/\/\s*within the 24h window return the original order verbatim\. The\s*\n?\s*\/\/\s*response carries an `Idempotent-Replayed: 1` header on replays so\s*\n?\s*\/\/\s*clients can distinguish a retry-success from a fresh create\./,
+    );
+    expect(body).toMatch(/void reply\.header\('Idempotent-Replayed', '1'\);/);
+  });
+
+  it('V-666.AQ replay info-log framing pinned: answers "double-firing button" without polling endpoint; fresh writes don\'t log (request-completed log already captures)', () => {
+    expect(body).toMatch(
+      /V-666\.AQ — replays fire a structured info log \(`event:\s*\n?\s*\/\/\s*'crypto_checkout_idempotency_replay'`\)\. Aggregated, the log line\s*\n?\s*\/\/\s*answers "is my checkout button double-firing" without depending on\s*\n?\s*\/\/\s*the polling counters endpoint\. Fresh writes don't log — they're\s*\n?\s*\/\/\s*already captured by the existing request-completed log\./,
+    );
+    expect(body).toMatch(/event: 'crypto_checkout_idempotency_replay',/);
+  });
+
+  it('V-666.AR body-fingerprint mismatch warn-log framing pinned: contract still replays; warn surfaces accidental key reuse for ops', () => {
+    expect(body).toMatch(
+      /V-666\.AR — replays whose body fingerprint differs from the stored\s*\n?\s*\/\/\s*one fire an additional warn log \(`event:\s*\n?\s*\/\/\s*'crypto_checkout_idempotency_body_mismatch'`\)\. The contract still\s*\n?\s*\/\/\s*replays — the warn surfaces accidental key reuse for ops to see\./,
+    );
+    expect(body).toMatch(/event: 'crypto_checkout_idempotency_body_mismatch',/);
+    expect(body).toMatch(/'idempotency-key replayed with a different request body',/);
+  });
+
+  it('SUPPORTED_PRODUCTS as const 7-tuple: trial_pack + solo_manual + solo_automated + team_growth + team_scale + api_starter + api_pro', () => {
+    expect(body).toMatch(
+      /const SUPPORTED_PRODUCTS = \[\s*\n?\s*'trial_pack',\s*\n?\s*'solo_manual',\s*\n?\s*'solo_automated',\s*\n?\s*'team_growth',\s*\n?\s*'team_scale',\s*\n?\s*'api_starter',\s*\n?\s*'api_pro',\s*\n?\s*\] as const;/,
+    );
+  });
+
+  it('CreateCryptoCheckoutSchema: zod enum product + price_cents int positive max 1_000_000 + price_currency 3-letter uppercase ISO regex', () => {
+    expect(body).toMatch(
+      /const CreateCryptoCheckoutSchema = z\.object\(\{\s*\n?\s*product: z\.enum\(SUPPORTED_PRODUCTS\),\s*\n?\s*price_cents: z\.number\(\)\.int\(\)\.positive\(\)\.max\(1_000_000\),\s*\n?\s*price_currency: z\s*\n?\s*\.string\(\)\s*\n?\s*\.length\(3\)\s*\n?\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/, 'price_currency must be a 3-letter uppercase ISO code'\),\s*\n?\s*\}\);/,
+    );
+  });
+
+  it("newOrderId: ord_ prefix + randomBytes(6).toString('hex') = 12 hex chars; banner-fit rationale", () => {
+    expect(body).toMatch(
+      /\* Generate a public order id\. 12 random hex chars is enough entropy\s*\n?\s*\*\s*for the in-memory store \+ the customer-facing URL while staying\s*\n?\s*\*\s*short enough to fit on a checkout page banner without wrapping\./,
+    );
+    expect(body).toMatch(
+      /function newOrderId\(\): string \{\s*\n?\s*return `ord_\$\{randomBytes\(6\)\.toString\('hex'\)\}`;/,
+    );
+  });
+
+  it('IdempotencyHeader discriminated union: absent | valid (trimmed <=255 ASCII printable [\\x21-\\x7e]) | invalid', () => {
+    expect(body).toMatch(
+      /type IdempotencyHeader = \{ kind: 'absent' \} \| \{ kind: 'valid'; key: string \} \| \{ kind: 'invalid' \};/,
+    );
+    expect(body).toMatch(
+      /function readIdempotencyKey\(req: FastifyRequest\): IdempotencyHeader \{\s*\n?\s*const raw = req\.headers\['idempotency-key'\];\s*\n?\s*if \(raw === undefined\) return \{ kind: 'absent' \};\s*\n?\s*const value = Array\.isArray\(raw\) \? raw\[0\] : raw;\s*\n?\s*if \(value === undefined\) return \{ kind: 'absent' \};\s*\n?\s*const trimmed = value\.trim\(\);\s*\n?\s*if \(trimmed\.length === 0\) return \{ kind: 'absent' \};\s*\n?\s*if \(trimmed\.length > 255\) return \{ kind: 'invalid' \};\s*\n?\s*if \(!\/\^\[\\x21-\\x7e\]\+\$\/\.test\(trimmed\)\) return \{ kind: 'invalid' \};\s*\n?\s*return \{ kind: 'valid', key: trimmed \};/,
+    );
+  });
+
+  it('Idempotency invalid → 400 ValidationError "Idempotency-Key must be 1-255 ASCII chars (no whitespace)."', () => {
+    expect(body).toMatch(
+      /if \(idempotency\.kind === 'invalid'\) \{\s*\n?\s*throw new ValidationError\(\{\s*\n?\s*fieldErrors: \{\},\s*\n?\s*formErrors: \['Idempotency-Key must be 1-255 ASCII chars \(no whitespace\)\.'\],\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('Service dispatch branch: idempotency valid → createIdempotent (idempotency_key + bodyFingerprintMismatch return); else → create (fresh)', () => {
+    expect(body).toMatch(
+      /if \(idempotency\.kind === 'valid'\) \{\s*\n?\s*const result = await deps\.service\.createIdempotent\(\{\s*\n?\s*idempotency_key: idempotency\.key,\s*\n?\s*order_id: newOrderId\(\),\s*\n?\s*account_id: ctx\.account\.id,\s*\n?\s*product: parsed\.data\.product,\s*\n?\s*price_cents: parsed\.data\.price_cents,\s*\n?\s*price_currency: parsed\.data\.price_currency,\s*\n?\s*\}\);\s*\n?\s*order = result\.order;\s*\n?\s*replayed = result\.replayed;\s*\n?\s*bodyFingerprintMismatch = result\.bodyFingerprintMismatch;/,
+    );
+    expect(body).toMatch(
+      /\} else \{\s*\n?\s*order = await deps\.service\.create\(\{\s*\n?\s*order_id: newOrderId\(\),\s*\n?\s*account_id: ctx\.account\.id,\s*\n?\s*product: parsed\.data\.product,\s*\n?\s*price_cents: parsed\.data\.price_cents,\s*\n?\s*price_currency: parsed\.data\.price_currency,\s*\n?\s*\}\);/,
+    );
+  });
+
+  it("Reply 201: order_id + product + price + status + V-666.D follow-up stub posture (provider:'stub' + payment_address:null + pay_currency:null) + created_at ISO", () => {
+    expect(body).toMatch(
+      /return reply\.code\(201\)\.send\(\{\s*\n?\s*order_id: order\.order_id,\s*\n?\s*product: order\.product,\s*\n?\s*price_cents: order\.price_cents,\s*\n?\s*price_currency: order\.price_currency,\s*\n?\s*status: order\.status,/,
+    );
+    expect(body).toMatch(
+      /\/\/ V-666\.D follow-up will populate these via the NowPayments\s*\n?\s*\/\/ create-payment call\. Stub posture: caller renders a\s*\n?\s*\/\/ "contact support" message\./,
+    );
+    expect(body).toMatch(/provider: 'stub',/);
+    expect(body).toMatch(/payment_address: null,/);
+    expect(body).toMatch(/pay_currency: null,/);
+    expect(body).toMatch(/created_at: new Date\(order\.created_at\)\.toISOString\(\),/);
+  });
+
+  it("Auth posture: requireAuth + rateLimit('global')", () => {
+    expect(body).toMatch(/\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/);
+  });
+
+  it('imports: FastifyInstance/FastifyRequest + zod + randomBytes from node:crypto + CryptoOrdersService + ValidationError', () => {
+    expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
+    expect(body).toMatch(/import \{ z \} from 'zod';/);
+    expect(body).toMatch(/import \{ randomBytes \} from 'node:crypto';/);
+    expect(body).toMatch(
+      /import type \{ CryptoOrdersService \} from '\.\.\/services\/crypto-orders\.js';/,
+    );
+    expect(body).toMatch(/import \{ ValidationError \} from '\.\.\/lib\/errors\.js';/);
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
