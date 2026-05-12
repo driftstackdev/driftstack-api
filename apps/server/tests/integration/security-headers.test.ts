@@ -67,4 +67,19 @@ describe('V-664 security headers — error responses also carry headers', () => 
     expect(res.headers['x-content-type-options']).toBe('nosniff');
     expect(res.headers['referrer-policy']).toBe('no-referrer');
   });
+
+  it('V-666.BS — no-store, private also applies to 401 from /v1/account/*', async () => {
+    fx = await buildTestApp();
+    // No Authorization header → 401 from requireAuth on /v1/account/me.
+    const res = await fx.app.inject({ method: 'GET', url: '/v1/account/me' });
+    expect(res.statusCode).toBe(401);
+    expect(res.headers['cache-control']).toBe('no-store, private');
+  });
+
+  it('V-666.BT — no-store, private also applies to 401 from /v1/admin/*', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({ method: 'GET', url: '/v1/admin/crypto-orders' });
+    expect(res.statusCode).toBe(401);
+    expect(res.headers['cache-control']).toBe('no-store, private');
+  });
 });

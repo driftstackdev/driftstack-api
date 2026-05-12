@@ -185,4 +185,20 @@ describe('rateLimitConsume (service)', () => {
     expect(r.allowed).toBe(true);
     expect(r.remaining).toBe(59); // free global capacity 60 - cost 1
   });
+
+  it('W199 surfaces capacity + refillPerSecond so the middleware can set x-ratelimit-limit + x-ratelimit-reset', async () => {
+    // The middleware emits the documented `x-ratelimit-limit` and
+    // `x-ratelimit-reset` headers from these two fields. If a future
+    // refactor drops them off the service result, the middleware
+    // silently stops emitting headers customers may depend on.
+    const store = new MemoryRateLimitStore();
+    const r = await rateLimitConsume(store, {
+      accountId: 'acc-1',
+      tier: 'solo_manual',
+      bucketKey: 'global',
+      now: 1000,
+    });
+    expect(r.capacity).toBe(120); // matches TIER_RATE_LIMIT_DEFAULTS.solo_manual.global
+    expect(r.refillPerSecond).toBe(2);
+  });
 });

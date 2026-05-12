@@ -9,11 +9,19 @@
 // V-666.R — appended tests for paid-receipt email notifier.
 // V-666.T — appended tests for listForAdmin status + search filters.
 // V-666.W — appended tests for getStatsForAdmin avgTimeToPaidMs metric.
-// V-666.X — appended tests for admin requestRefund.
-// V-666.Y — appended tests for admin cancelRefundRequest.
 // V-666.AA — appended tests for admin setInternalNote.
-// V-666.AB — appended tests for getStatsForAdmin refund-pending metrics.
 // V-666.AC — appended tests for getPendingAgeHistogram.
+// V-666.AE — appended tests for getStatsForAdmin per-product revenue.
+// V-666.AM — appended tests for listForAdminPage cursor pagination.
+// V-666.AN — appended tests for crypto.order.failed webhook emission.
+//            Existing V-666.I "does NOT fire when transitioning to failed"
+//            test was tightened to assert no crypto.order.paid (the AN
+//            event does intentionally fire on that path).
+// V-666.AO — appended tests for createIdempotent (Idempotency-Key replay).
+// V-666.AP — appended tests for getIdempotencyMetrics counters.
+// V-666.AR — appended tests for body-fingerprint mismatch tracking.
+// V-666.AS — appended tests for listForAdminPage payment_id filter.
+// V-666.AT — appended tests for the append-only event log.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -22,6 +30,7 @@ import {
   type CryptoOrderPaidEmailNotifier,
   type CryptoOrderWebhookEmitter,
   InMemoryCryptoOrdersRepo,
+  encodeCursor,
   mapNowpaymentsStatus,
 } from '../../src/services/crypto-orders.js';
 
@@ -350,7 +359,7 @@ describe('V-666.I crypto.order.paid webhook emission', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it('does NOT fire when transitioning to failed (not a paid event)', async () => {
+  it('does NOT fire crypto.order.paid when transitioning to failed', async () => {
     const { emitter, calls } = makeEmitter();
     const { svc } = await seed({ emitter });
     await svc.applyIpnStatus({
@@ -358,7 +367,7 @@ describe('V-666.I crypto.order.paid webhook emission', () => {
       payment_id: 'np_x',
       provider_status: 'failed',
     });
-    expect(calls).toHaveLength(0);
+    expect(calls.filter((c) => c.eventType === 'crypto.order.paid')).toHaveLength(0);
   });
 
   it('does NOT fire when the order has a null account_id (pre-signup checkout)', async () => {
@@ -1330,189 +1339,37 @@ describe('V-666.T listForAdmin — status + search filters', () => {
     const list = await svc.listForAdmin({ search: '   ' });
     expect(list).toHaveLength(3);
   });
-});
 
-describe('V-666.X requestRefund', () => {
-  async function seedPaid(opts: { id?: string; now?: number } = {}): Promise<{
-    svc: CryptoOrdersService;
-    setNow: (t: number) => void;
-  }> {
-    const repo = new InMemoryCryptoOrdersRepo();
-    let now = opts.now ?? 1_000;
-    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
-    await svc.create({
-      order_id: opts.id ?? 'ord_refund',
-      account_id: 'acc_buyer',
-      product: 'team_growth',
-      price_cents: 14900,
-      price_currency: 'EUR',
-    });
-    now += 1_000;
-    await svc.applyIpnStatus({
-      order_id: opts.id ?? 'ord_refund',
-      payment_id: 'np_x',
-      provider_status: 'finished',
-    });
-    return {
-      svc,
-      setNow: (t) => {
-        now = t;
-      },
-    };
-  }
-
-  it('records the refund_requested_at + refund_reason on a paid order', async () => {
-    const { svc, setNow } = await seedPaid();
-    setNow(99_999);
-    const result = await svc.requestRefund({
-      order_id: 'ord_refund',
-      reason: 'Charged in error',
-    });
-    expect(result).not.toBeNull();
-    if (result?.ok === 'recorded') {
-      expect(result.order.refund_requested_at).toBe(99_999);
-      expect(result.order.refund_reason).toBe('Charged in error');
-      expect(result.order.status).toBe('paid'); // status untouched
-    } else {
-      throw new Error('expected recorded');
-    }
+  it('V-666.BX createdAfter is inclusive of >=', async () => {
+    // Seed orders at t=1000, t=2000, t=3000. createdAfter:2000 keeps
+    // ord_beta + ord_gamma; createdAfter:2001 keeps only ord_gamma.
+    const svc = await seedMany();
+    const incList = await svc.listForAdmin({ createdAfter: 2_000 });
+    expect(incList.map((o) => o.order_id).sort()).toEqual(['ord_beta', 'ord_gamma']);
+    const excList = await svc.listForAdmin({ createdAfter: 2_001 });
+    expect(excList.map((o) => o.order_id)).toEqual(['ord_gamma']);
   });
 
-  it('preserves the initial refund_requested_at on subsequent calls + updates the reason', async () => {
-    const { svc, setNow } = await seedPaid();
-    setNow(100);
-    await svc.requestRefund({ order_id: 'ord_refund', reason: 'first reason' });
-    setNow(200);
-    const second = await svc.requestRefund({
-      order_id: 'ord_refund',
-      reason: 'amended reason',
-    });
-    if (second?.ok === 'recorded') {
-      expect(second.order.refund_requested_at).toBe(100); // unchanged
-      expect(second.order.refund_reason).toBe('amended reason');
-    } else {
-      throw new Error('expected recorded');
-    }
+  it('V-666.BX createdBefore is exclusive of <', async () => {
+    const svc = await seedMany();
+    const list = await svc.listForAdmin({ createdBefore: 2_000 });
+    expect(list.map((o) => o.order_id)).toEqual(['ord_alpha']);
   });
 
-  it('returns not_paid when the order is in any non-paid state', async () => {
-    const repo = new InMemoryCryptoOrdersRepo();
-    const svc = new CryptoOrdersService({ repo });
-    await svc.create({
-      order_id: 'ord_pending',
-      account_id: 'acc',
-      product: 'x',
-      price_cents: 100,
-      price_currency: 'EUR',
-    });
-    const result = await svc.requestRefund({
-      order_id: 'ord_pending',
-      reason: 'nope',
-    });
-    expect(result).toEqual({ ok: 'not_paid', currentStatus: 'pending' });
+  it('V-666.BX createdAfter + createdBefore compose into a window', async () => {
+    const svc = await seedMany();
+    const list = await svc.listForAdmin({ createdAfter: 1_500, createdBefore: 2_500 });
+    expect(list.map((o) => o.order_id)).toEqual(['ord_beta']);
   });
 
-  it('returns null when the order does not exist', async () => {
-    const repo = new InMemoryCryptoOrdersRepo();
-    const svc = new CryptoOrdersService({ repo });
-    const result = await svc.requestRefund({
-      order_id: 'ord_missing',
-      reason: 'whatever',
+  it('V-666.BX date-range composes with status filter', async () => {
+    const svc = await seedMany();
+    const list = await svc.listForAdmin({
+      status: 'cancelled',
+      createdAfter: 0,
+      createdBefore: 5_000,
     });
-    expect(result).toBeNull();
-  });
-
-  it('does not flip the order out of paid (status-machine independence)', async () => {
-    const { svc } = await seedPaid();
-    await svc.requestRefund({ order_id: 'ord_refund', reason: 'r' });
-    const fetched = await svc.getById('ord_refund');
-    expect(fetched?.status).toBe('paid');
-  });
-});
-
-describe('V-666.Y cancelRefundRequest', () => {
-  async function seedRefunded(opts: { now?: number } = {}): Promise<{
-    svc: CryptoOrdersService;
-    setNow: (t: number) => void;
-  }> {
-    const repo = new InMemoryCryptoOrdersRepo();
-    let now = opts.now ?? 1_000;
-    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
-    await svc.create({
-      order_id: 'ord_y',
-      account_id: 'acc',
-      product: 'team_growth',
-      price_cents: 14900,
-      price_currency: 'EUR',
-    });
-    now += 1_000;
-    await svc.applyIpnStatus({
-      order_id: 'ord_y',
-      payment_id: 'np_x',
-      provider_status: 'finished',
-    });
-    now += 1_000;
-    await svc.requestRefund({ order_id: 'ord_y', reason: 'first take' });
-    return {
-      svc,
-      setNow: (t) => {
-        now = t;
-      },
-    };
-  }
-
-  it('clears refund_requested_at + refund_reason on an order with a prior refund', async () => {
-    const { svc, setNow } = await seedRefunded();
-    setNow(99_999);
-    const result = await svc.cancelRefundRequest({ order_id: 'ord_y' });
-    expect(result?.ok).toBe('cleared');
-    if (result?.ok === 'cleared') {
-      expect(result.order.refund_requested_at).toBeNull();
-      expect(result.order.refund_reason).toBeNull();
-      expect(result.order.updated_at).toBe(99_999);
-      expect(result.order.status).toBe('paid'); // status untouched
-    }
-  });
-
-  it('returns ok:noop when no refund was previously recorded', async () => {
-    const repo = new InMemoryCryptoOrdersRepo();
-    const svc = new CryptoOrdersService({ repo });
-    await svc.create({
-      order_id: 'ord_clean',
-      account_id: 'acc',
-      product: 'x',
-      price_cents: 100,
-      price_currency: 'EUR',
-    });
-    await svc.applyIpnStatus({
-      order_id: 'ord_clean',
-      payment_id: 'np',
-      provider_status: 'finished',
-    });
-    const result = await svc.cancelRefundRequest({ order_id: 'ord_clean' });
-    expect(result).toEqual({ ok: 'noop' });
-  });
-
-  it('is idempotent across multiple calls', async () => {
-    const { svc } = await seedRefunded();
-    const first = await svc.cancelRefundRequest({ order_id: 'ord_y' });
-    expect(first?.ok).toBe('cleared');
-    const second = await svc.cancelRefundRequest({ order_id: 'ord_y' });
-    expect(second).toEqual({ ok: 'noop' });
-  });
-
-  it('returns null when the order does not exist', async () => {
-    const repo = new InMemoryCryptoOrdersRepo();
-    const svc = new CryptoOrdersService({ repo });
-    const result = await svc.cancelRefundRequest({ order_id: 'ord_missing' });
-    expect(result).toBeNull();
-  });
-
-  it('does not change the order status', async () => {
-    const { svc } = await seedRefunded();
-    await svc.cancelRefundRequest({ order_id: 'ord_y' });
-    const fetched = await svc.getById('ord_y');
-    expect(fetched?.status).toBe('paid');
+    expect(list.map((o) => o.order_id)).toEqual(['ord_alpha']);
   });
 });
 
@@ -1627,97 +1484,6 @@ describe('V-666.AA setInternalNote', () => {
     });
     expect(r?.customer_note).toBe('PO-9999');
     expect(r?.internal_note).toBe('support note');
-  });
-});
-
-describe('V-666.AB getStatsForAdmin — refund-pending metrics', () => {
-  async function seedMixed(): Promise<CryptoOrdersService> {
-    const repo = new InMemoryCryptoOrdersRepo();
-    let now = 1_000;
-    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
-    // Paid + refund-pending in EUR.
-    await svc.create({
-      order_id: 'ord_r1',
-      account_id: 'acc',
-      product: 'team_growth',
-      price_cents: 14900,
-      price_currency: 'EUR',
-    });
-    now = 2_000;
-    await svc.applyIpnStatus({ order_id: 'ord_r1', payment_id: 'np', provider_status: 'finished' });
-    now = 3_000;
-    await svc.requestRefund({ order_id: 'ord_r1', reason: 'chargeback risk' });
-    // Paid + refund-pending in USD.
-    now = 4_000;
-    await svc.create({
-      order_id: 'ord_r2',
-      account_id: 'acc',
-      product: 'api_starter',
-      price_cents: 5000,
-      price_currency: 'USD',
-    });
-    now = 5_000;
-    await svc.applyIpnStatus({ order_id: 'ord_r2', payment_id: 'np', provider_status: 'finished' });
-    now = 6_000;
-    await svc.requestRefund({ order_id: 'ord_r2', reason: 'duplicate' });
-    // Paid without refund.
-    now = 7_000;
-    await svc.create({
-      order_id: 'ord_clean',
-      account_id: 'acc',
-      product: 'team_growth',
-      price_cents: 14900,
-      price_currency: 'EUR',
-    });
-    now = 8_000;
-    await svc.applyIpnStatus({
-      order_id: 'ord_clean',
-      payment_id: 'np',
-      provider_status: 'finished',
-    });
-    // Pending order — should not appear in refund-pending count.
-    now = 9_000;
-    await svc.create({
-      order_id: 'ord_pending',
-      account_id: 'acc',
-      product: 'solo_manual',
-      price_cents: 2500,
-      price_currency: 'EUR',
-    });
-    return svc;
-  }
-
-  it('counts refund-pending orders + sums their price_cents by currency', async () => {
-    const svc = await seedMixed();
-    const stats = await svc.getStatsForAdmin();
-    expect(stats.refundPendingCount).toBe(2);
-    expect(stats.refundPendingCents).toEqual({ EUR: 14900, USD: 5000 });
-  });
-
-  it('refundPendingCount=0 + refundPendingCents={} when no refunds are pending', async () => {
-    const repo = new InMemoryCryptoOrdersRepo();
-    const svc = new CryptoOrdersService({ repo });
-    await svc.create({
-      order_id: 'ord_p',
-      account_id: 'acc',
-      product: 'x',
-      price_cents: 100,
-      price_currency: 'EUR',
-    });
-    await svc.applyIpnStatus({ order_id: 'ord_p', payment_id: 'np', provider_status: 'finished' });
-    const stats = await svc.getStatsForAdmin();
-    expect(stats.refundPendingCount).toBe(0);
-    expect(stats.refundPendingCents).toEqual({});
-  });
-
-  it('cancelling a refund request decrements the pending count on the next snapshot', async () => {
-    const svc = await seedMixed();
-    const before = await svc.getStatsForAdmin();
-    expect(before.refundPendingCount).toBe(2);
-    await svc.cancelRefundRequest({ order_id: 'ord_r1' });
-    const after = await svc.getStatsForAdmin();
-    expect(after.refundPendingCount).toBe(1);
-    expect(after.refundPendingCents).toEqual({ USD: 5000 });
   });
 });
 
@@ -1851,5 +1617,935 @@ describe('V-666.AC getPendingAgeHistogram', () => {
     const histo = await svc.getPendingAgeHistogram();
     expect(histo.buckets.h6_to_24h).toBe(0);
     expect(histo.buckets.over_24h).toBe(1);
+  });
+});
+
+describe('V-666.AE getStatsForAdmin — per-product revenue', () => {
+  async function seedPaid(
+    rows: Array<{
+      order_id: string;
+      product: string;
+      price_cents: number;
+      price_currency?: string;
+      status?: 'paid' | 'pending' | 'failed';
+    }>,
+  ): Promise<CryptoOrdersService> {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    for (const r of rows) {
+      await svc.create({
+        order_id: r.order_id,
+        account_id: 'acc',
+        product: r.product,
+        price_cents: r.price_cents,
+        price_currency: r.price_currency ?? 'EUR',
+      });
+      if ((r.status ?? 'paid') === 'paid') {
+        await svc.applyIpnStatus({
+          order_id: r.order_id,
+          payment_id: 'np',
+          provider_status: 'finished',
+        });
+      } else if (r.status === 'failed') {
+        await svc.applyIpnStatus({
+          order_id: r.order_id,
+          payment_id: 'np',
+          provider_status: 'failed',
+        });
+      }
+    }
+    return svc;
+  }
+
+  it('returns empty maps when no paid orders exist', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await svc.create({
+      order_id: 'ord_p',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 14900,
+      price_currency: 'EUR',
+    });
+    const stats = await svc.getStatsForAdmin();
+    expect(stats.paidRevenueByProduct).toEqual({});
+    expect(stats.paidCountByProduct).toEqual({});
+  });
+
+  it('aggregates revenue + count keyed by product (single product)', async () => {
+    const svc = await seedPaid([
+      { order_id: 'a', product: 'team_growth', price_cents: 14900 },
+      { order_id: 'b', product: 'team_growth', price_cents: 14900 },
+      { order_id: 'c', product: 'team_growth', price_cents: 14900 },
+    ]);
+    const stats = await svc.getStatsForAdmin();
+    expect(stats.paidRevenueByProduct).toEqual({ team_growth: { EUR: 14900 * 3 } });
+    expect(stats.paidCountByProduct).toEqual({ team_growth: 3 });
+  });
+
+  it('breaks down by product across multiple products + currencies', async () => {
+    const svc = await seedPaid([
+      { order_id: 'tg_eur', product: 'team_growth', price_cents: 14900, price_currency: 'EUR' },
+      { order_id: 'tg_usd', product: 'team_growth', price_cents: 16000, price_currency: 'USD' },
+      { order_id: 'api1', product: 'api_starter', price_cents: 5000, price_currency: 'EUR' },
+      { order_id: 'api2', product: 'api_starter', price_cents: 5000, price_currency: 'EUR' },
+      { order_id: 'solo', product: 'solo_manual', price_cents: 2500, price_currency: 'EUR' },
+    ]);
+    const stats = await svc.getStatsForAdmin();
+    expect(stats.paidRevenueByProduct).toEqual({
+      team_growth: { EUR: 14900, USD: 16000 },
+      api_starter: { EUR: 10000 },
+      solo_manual: { EUR: 2500 },
+    });
+    expect(stats.paidCountByProduct).toEqual({
+      team_growth: 2,
+      api_starter: 2,
+      solo_manual: 1,
+    });
+  });
+
+  it('ignores non-paid orders (pending + failed do not contribute)', async () => {
+    const svc = await seedPaid([
+      { order_id: 'paid', product: 'team_growth', price_cents: 14900, status: 'paid' },
+      { order_id: 'pending', product: 'team_growth', price_cents: 14900, status: 'pending' },
+      { order_id: 'failed', product: 'api_starter', price_cents: 5000, status: 'failed' },
+    ]);
+    const stats = await svc.getStatsForAdmin();
+    expect(stats.paidRevenueByProduct).toEqual({ team_growth: { EUR: 14900 } });
+    expect(stats.paidCountByProduct).toEqual({ team_growth: 1 });
+  });
+});
+
+describe('V-666.AM listForAdminPage — cursor pagination', () => {
+  async function seedOrders(count: number): Promise<CryptoOrdersService> {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = 1_000;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
+    for (let i = 0; i < count; i += 1) {
+      // Pad so created_at is monotonic + unique across the seed.
+      now = 1_000 + i;
+      await svc.create({
+        order_id: `ord_${i.toString().padStart(3, '0')}`,
+        account_id: 'acc',
+        product: 'team_growth',
+        price_cents: 14900,
+        price_currency: 'EUR',
+      });
+    }
+    return svc;
+  }
+
+  it('returns nextCursor when more rows exist', async () => {
+    const svc = await seedOrders(20);
+    const page = await svc.listForAdminPage({ limit: 5 });
+    expect(page.orders).toHaveLength(5);
+    expect(page.nextCursor).not.toBeNull();
+    // Sort is created_at DESC + id ASC tiebreaker; with monotonic
+    // timestamps, the newest 5 are ord_019..ord_015.
+    expect(page.orders.map((o) => o.order_id)).toEqual([
+      'ord_019',
+      'ord_018',
+      'ord_017',
+      'ord_016',
+      'ord_015',
+    ]);
+  });
+
+  it('nextCursor is null on the final page', async () => {
+    const svc = await seedOrders(3);
+    const page = await svc.listForAdminPage({ limit: 5 });
+    expect(page.orders).toHaveLength(3);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it('round-trips through cursor to fetch the next page exactly once', async () => {
+    const svc = await seedOrders(12);
+    // Seed = ord_000..ord_011. Sort newest first → ord_011 first.
+    const p1 = await svc.listForAdminPage({ limit: 5 });
+    expect(p1.orders.map((o) => o.order_id)).toEqual([
+      'ord_011',
+      'ord_010',
+      'ord_009',
+      'ord_008',
+      'ord_007',
+    ]);
+    expect(p1.nextCursor).not.toBeNull();
+    if (p1.nextCursor === null) return;
+    const p2 = await svc.listForAdminPage({ limit: 5, cursor: p1.nextCursor });
+    expect(p2.orders.map((o) => o.order_id)).toEqual([
+      'ord_006',
+      'ord_005',
+      'ord_004',
+      'ord_003',
+      'ord_002',
+    ]);
+    expect(p2.nextCursor).not.toBeNull();
+    if (p2.nextCursor === null) return;
+    const p3 = await svc.listForAdminPage({ limit: 5, cursor: p2.nextCursor });
+    expect(p3.orders.map((o) => o.order_id)).toEqual(['ord_001', 'ord_000']);
+    expect(p3.nextCursor).toBeNull();
+  });
+
+  it('respects status filter across pages', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = 1_000;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
+    for (let i = 0; i < 10; i += 1) {
+      now = 1_000 + i;
+      await svc.create({
+        order_id: `ord_${i.toString()}`,
+        account_id: 'acc',
+        product: 'team_growth',
+        price_cents: 14900,
+        price_currency: 'EUR',
+      });
+      if (i % 2 === 0) {
+        await svc.applyIpnStatus({
+          order_id: `ord_${i.toString()}`,
+          payment_id: 'np',
+          provider_status: 'finished',
+        });
+      }
+    }
+    const p1 = await svc.listForAdminPage({ status: 'paid', limit: 3 });
+    expect(p1.orders.map((o) => o.order_id)).toEqual(['ord_8', 'ord_6', 'ord_4']);
+    expect(p1.nextCursor).not.toBeNull();
+  });
+
+  it('returns empty page + null cursor on a malformed cursor', async () => {
+    const svc = await seedOrders(5);
+    const page = await svc.listForAdminPage({ cursor: 'not-a-real-cursor' });
+    expect(page.orders).toEqual([]);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it('returns empty page when the cursor anchor is past the scan window', async () => {
+    const svc = await seedOrders(5);
+    // Construct a cursor pointing at a row that doesn't exist.
+    const fakeCursor = encodeCursor({ ts: 99_999_999, id: 'ord_missing' });
+    const page = await svc.listForAdminPage({ cursor: fakeCursor });
+    expect(page.orders).toEqual([]);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it('listForAdmin (legacy) still returns just the first-page orders', async () => {
+    const svc = await seedOrders(7);
+    const rows = await svc.listForAdmin({ limit: 3 });
+    expect(rows.map((o) => o.order_id)).toEqual(['ord_006', 'ord_005', 'ord_004']);
+  });
+});
+
+describe('V-666.AN crypto.order.failed webhook emission', () => {
+  function makeMockEmitter(): {
+    emitter: CryptoOrderWebhookEmitter;
+    calls: Array<{
+      accountId: string;
+      eventType: string;
+      data: Record<string, unknown>;
+    }>;
+  } {
+    const calls: Array<{
+      accountId: string;
+      eventType: string;
+      data: Record<string, unknown>;
+    }> = [];
+    const emitter: CryptoOrderWebhookEmitter = {
+      // eslint-disable-next-line @typescript-eslint/require-await
+      enqueueEvent: async (accountId, eventType, data) => {
+        calls.push({ accountId, eventType, data });
+        return 1;
+      },
+    };
+    return { emitter, calls };
+  }
+
+  it('fires when the IPN transitions pending → failed', async () => {
+    const { emitter, calls } = makeMockEmitter();
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo, webhooks: emitter, nowFn: () => 5_000 });
+    await svc.create({
+      order_id: 'ord_f',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 14900,
+      price_currency: 'EUR',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'ord_f',
+      payment_id: 'np_x',
+      provider_status: 'expired',
+    });
+    const failedCall = calls.find((c) => c.eventType === 'crypto.order.failed');
+    expect(failedCall).toBeDefined();
+    if (!failedCall) return;
+    expect(failedCall.accountId).toBe('acc');
+    expect(failedCall.data).toMatchObject({
+      order_id: 'ord_f',
+      product: 'team_growth',
+      price_cents: 14900,
+      price_currency: 'EUR',
+      reason: 'ipn',
+      payment_id: 'np_x',
+    });
+  });
+
+  it('does NOT fire when applyIpnStatus is called on an already-failed order', async () => {
+    const { emitter, calls } = makeMockEmitter();
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo, webhooks: emitter });
+    await svc.create({
+      order_id: 'ord_f',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 14900,
+      price_currency: 'EUR',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'ord_f',
+      payment_id: 'np',
+      provider_status: 'expired',
+    });
+    const baselineFailed = calls.filter((c) => c.eventType === 'crypto.order.failed').length;
+    // A re-deliver of the same IPN is a no-op + must not re-emit.
+    await svc.applyIpnStatus({
+      order_id: 'ord_f',
+      payment_id: 'np',
+      provider_status: 'expired',
+    });
+    const afterFailed = calls.filter((c) => c.eventType === 'crypto.order.failed').length;
+    expect(afterFailed).toBe(baselineFailed);
+  });
+
+  it('fires reason:expired on expireOrder', async () => {
+    const { emitter, calls } = makeMockEmitter();
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = 1_000;
+    const svc = new CryptoOrdersService({ repo, webhooks: emitter, nowFn: () => now });
+    await svc.create({
+      order_id: 'ord_exp',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    now = 10_000_000;
+    const expired = await svc.expireOrder({ order_id: 'ord_exp', olderThanMs: 60_000 });
+    expect(expired?.status).toBe('failed');
+    const call = calls.find((c) => c.eventType === 'crypto.order.failed');
+    expect(call?.data).toMatchObject({ reason: 'expired', order_id: 'ord_exp' });
+  });
+
+  it('fires reason:swept once per swept order', async () => {
+    const { emitter, calls } = makeMockEmitter();
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = 1_000;
+    const svc = new CryptoOrdersService({ repo, webhooks: emitter, nowFn: () => now });
+    for (let i = 0; i < 3; i += 1) {
+      await svc.create({
+        order_id: `ord_sw_${i.toString()}`,
+        account_id: 'acc',
+        product: 'p',
+        price_cents: 100,
+        price_currency: 'EUR',
+      });
+    }
+    now = 10_000_000;
+    const result = await svc.sweepExpiredOrders({ olderThanMs: 60_000 });
+    expect(result.expired).toBe(3);
+    const failed = calls.filter((c) => c.eventType === 'crypto.order.failed');
+    expect(failed).toHaveLength(3);
+    for (const c of failed) {
+      expect(c.data).toMatchObject({ reason: 'swept' });
+    }
+  });
+
+  it('does not emit when account_id is null', async () => {
+    const { emitter, calls } = makeMockEmitter();
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo, webhooks: emitter });
+    await svc.create({
+      order_id: 'ord_anon',
+      account_id: null,
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'ord_anon',
+      payment_id: 'np',
+      provider_status: 'failed',
+    });
+    expect(calls.filter((c) => c.eventType === 'crypto.order.failed')).toHaveLength(0);
+  });
+
+  it('does not emit when no webhooks emitter is wired', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await svc.create({
+      order_id: 'ord_no_e',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    const r = await svc.applyIpnStatus({
+      order_id: 'ord_no_e',
+      payment_id: 'np',
+      provider_status: 'expired',
+    });
+    expect(r?.status).toBe('failed');
+  });
+
+  it('swallows emitter errors — return value is unaffected', async () => {
+    const failingEmitter: CryptoOrderWebhookEmitter = {
+      // eslint-disable-next-line @typescript-eslint/require-await
+      enqueueEvent: async () => {
+        throw new Error('boom');
+      },
+    };
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo, webhooks: failingEmitter });
+    await svc.create({
+      order_id: 'ord_fail',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    const r = await svc.applyIpnStatus({
+      order_id: 'ord_fail',
+      payment_id: 'np',
+      provider_status: 'expired',
+    });
+    expect(r?.status).toBe('failed');
+  });
+});
+
+describe('V-666.AO createIdempotent', () => {
+  function makeSvc(nowFn?: () => number): {
+    svc: CryptoOrdersService;
+    repo: InMemoryCryptoOrdersRepo;
+  } {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo, nowFn });
+    return { svc, repo };
+  }
+
+  it('mints a fresh order on first call', async () => {
+    const { svc } = makeSvc();
+    const r = await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 4900,
+      price_currency: 'USD',
+    });
+    expect(r.replayed).toBe(false);
+    expect(r.order.order_id).toBe('ord_a');
+    expect(r.order.status).toBe('pending');
+  });
+
+  it('replays the original order on a second call with the same key', async () => {
+    const { svc } = makeSvc();
+    const first = await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 4900,
+      price_currency: 'USD',
+    });
+    const second = await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_b', // ignored — replay should return ord_a
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 4900,
+      price_currency: 'USD',
+    });
+    expect(second.replayed).toBe(true);
+    expect(second.order.order_id).toBe(first.order.order_id);
+    expect(second.order.created_at).toBe(first.order.created_at);
+  });
+
+  it('scopes keys per account — same key from a different account mints a new order', async () => {
+    const { svc } = makeSvc();
+    const r1 = await svc.createIdempotent({
+      idempotency_key: 'shared',
+      order_id: 'ord_a',
+      account_id: 'acc_one',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    const r2 = await svc.createIdempotent({
+      idempotency_key: 'shared',
+      order_id: 'ord_b',
+      account_id: 'acc_two',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    expect(r1.replayed).toBe(false);
+    expect(r2.replayed).toBe(false);
+    expect(r2.order.order_id).not.toBe(r1.order.order_id);
+  });
+
+  it('scopes anonymous (account_id null) callers under a shared _anon bucket', async () => {
+    const { svc } = makeSvc();
+    const r1 = await svc.createIdempotent({
+      idempotency_key: 'anon-key',
+      order_id: 'ord_a',
+      account_id: null,
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    const r2 = await svc.createIdempotent({
+      idempotency_key: 'anon-key',
+      order_id: 'ord_b',
+      account_id: null,
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    expect(r2.replayed).toBe(true);
+    expect(r2.order.order_id).toBe(r1.order.order_id);
+  });
+
+  it('expires the key after 24h — replay window is bounded', async () => {
+    let now = 1_700_000_000_000;
+    const { svc } = makeSvc(() => now);
+    const r1 = await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    // Jump forward 24h + 1ms so the record is past TTL.
+    now += 24 * 60 * 60 * 1000 + 1;
+    const r2 = await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_b',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    expect(r2.replayed).toBe(false);
+    expect(r2.order.order_id).not.toBe(r1.order.order_id);
+  });
+
+  it('keeps the key within the 24h window — replay still hits', async () => {
+    let now = 1_700_000_000_000;
+    const { svc } = makeSvc(() => now);
+    const r1 = await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    // 23h59m later — still inside the window.
+    now += 23 * 60 * 60 * 1000 + 59 * 60 * 1000;
+    const r2 = await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_b',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    expect(r2.replayed).toBe(true);
+    expect(r2.order.order_id).toBe(r1.order.order_id);
+  });
+
+  it('treats a key whose cached order no longer exists in the repo as fresh', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    // Manually evict the row from the repo (simulating a hypothetical
+    // future GC pass). The next call should not return null/undefined;
+    // it should mint a new order under the same key.
+    (repo as unknown as { orders: Map<string, unknown> }).orders.delete('ord_a');
+    const r2 = await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_b',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    expect(r2.replayed).toBe(false);
+    expect(r2.order.order_id).toBe('ord_b');
+  });
+});
+
+describe('V-666.AP getIdempotencyMetrics', () => {
+  it('starts at zero', () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    expect(svc.getIdempotencyMetrics()).toEqual({ replays: 0, firstWrites: 0, bodyMismatches: 0 });
+  });
+
+  it('increments firstWrites on a fresh key', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    expect(svc.getIdempotencyMetrics()).toEqual({ replays: 0, firstWrites: 1, bodyMismatches: 0 });
+  });
+
+  it('increments replays on a duplicate key', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_b',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    expect(svc.getIdempotencyMetrics()).toEqual({ replays: 1, firstWrites: 1, bodyMismatches: 0 });
+  });
+
+  it('does not increment on plain create()', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await svc.create({
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    expect(svc.getIdempotencyMetrics()).toEqual({ replays: 0, firstWrites: 0, bodyMismatches: 0 });
+  });
+});
+
+describe('V-666.AR createIdempotent body-fingerprint check', () => {
+  it('returns bodyFingerprintMismatch: false on the first write', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    const r = await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 4900,
+      price_currency: 'USD',
+    });
+    expect(r.bodyFingerprintMismatch).toBe(false);
+  });
+
+  it('returns bodyFingerprintMismatch: false on a replay with identical body', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    const args = {
+      idempotency_key: 'k1',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 4900,
+      price_currency: 'USD',
+    };
+    await svc.createIdempotent({ ...args, order_id: 'ord_a' });
+    const r = await svc.createIdempotent({ ...args, order_id: 'ord_b' });
+    expect(r.replayed).toBe(true);
+    expect(r.bodyFingerprintMismatch).toBe(false);
+  });
+
+  it('returns bodyFingerprintMismatch: true when the price changes', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 4900,
+      price_currency: 'USD',
+    });
+    const r = await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_b',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 9900, // distinct intent — different price
+      price_currency: 'USD',
+    });
+    expect(r.replayed).toBe(true);
+    expect(r.bodyFingerprintMismatch).toBe(true);
+    // Contract is still replay: we return the original order.
+    expect(r.order.price_cents).toBe(4900);
+    expect(svc.getIdempotencyMetrics().bodyMismatches).toBe(1);
+  });
+
+  it('returns bodyFingerprintMismatch: true when the product changes', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 4900,
+      price_currency: 'USD',
+    });
+    const r = await svc.createIdempotent({
+      idempotency_key: 'k1',
+      order_id: 'ord_b',
+      account_id: 'acc',
+      product: 'team_scale',
+      price_cents: 4900,
+      price_currency: 'USD',
+    });
+    expect(r.bodyFingerprintMismatch).toBe(true);
+  });
+});
+
+describe('V-666.AS listForAdminPage payment_id filter', () => {
+  async function seedRows(svc: CryptoOrdersService): Promise<void> {
+    await svc.create({
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    await svc.create({
+      order_id: 'ord_b',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 200,
+      price_currency: 'USD',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'ord_a',
+      payment_id: 'np_aaa',
+      provider_status: 'finished',
+    });
+    await svc.applyIpnStatus({
+      order_id: 'ord_b',
+      payment_id: 'np_bbb',
+      provider_status: 'finished',
+    });
+  }
+
+  it('exact-match returns only the row with the matching payment_id', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await seedRows(svc);
+    const page = await svc.listForAdminPage({ paymentId: 'np_aaa' });
+    expect(page.orders.map((o) => o.order_id)).toEqual(['ord_a']);
+  });
+
+  it('non-matching payment_id returns empty', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await seedRows(svc);
+    const page = await svc.listForAdminPage({ paymentId: 'np_does_not_exist' });
+    expect(page.orders).toHaveLength(0);
+  });
+
+  it('skips orders whose payment_id is still null', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await svc.create({
+      order_id: 'ord_pending',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    const page = await svc.listForAdminPage({ paymentId: 'np_aaa' });
+    expect(page.orders).toHaveLength(0);
+  });
+
+  it('combines with status filter (AND semantics)', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await seedRows(svc);
+    // np_aaa is paid; status:pending filter should return nothing.
+    const page = await svc.listForAdminPage({ paymentId: 'np_aaa', status: 'pending' });
+    expect(page.orders).toHaveLength(0);
+  });
+
+  it('trims whitespace + ignores empty string', async () => {
+    const repo = new InMemoryCryptoOrdersRepo();
+    const svc = new CryptoOrdersService({ repo });
+    await seedRows(svc);
+    const trimmed = await svc.listForAdminPage({ paymentId: '  np_aaa  ' });
+    expect(trimmed.orders.map((o) => o.order_id)).toEqual(['ord_a']);
+    const empty = await svc.listForAdminPage({ paymentId: '' });
+    // Empty string is a no-op; both rows come back.
+    expect(empty.orders.map((o) => o.order_id).sort()).toEqual(['ord_a', 'ord_b']);
+  });
+});
+
+describe('V-666.AT order event log', () => {
+  function svc(): { svc: CryptoOrdersService; repo: InMemoryCryptoOrdersRepo } {
+    const repo = new InMemoryCryptoOrdersRepo();
+    return { svc: new CryptoOrdersService({ repo }), repo };
+  }
+
+  it('create() seeds a single pending event', async () => {
+    const { svc: s } = svc();
+    const order = await s.create({
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    expect(order.events).toHaveLength(1);
+    expect(order.events[0]).toMatchObject({ status: 'pending', source: 'create' });
+  });
+
+  it('applyIpnStatus appends an ipn event on a real transition', async () => {
+    const { svc: s } = svc();
+    await s.create({
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    const updated = await s.applyIpnStatus({
+      order_id: 'ord_a',
+      payment_id: 'np_1',
+      provider_status: 'finished',
+    });
+    expect(updated?.events.map((e) => e.status)).toEqual(['pending', 'paid']);
+    expect(updated?.events[1]?.source).toBe('ipn');
+  });
+
+  it('applyIpnStatus does NOT append an event on a same-state refresh', async () => {
+    const { svc: s } = svc();
+    await s.create({
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    await s.applyIpnStatus({
+      order_id: 'ord_a',
+      payment_id: 'np_1',
+      provider_status: 'finished',
+    });
+    const updated = await s.applyIpnStatus({
+      order_id: 'ord_a',
+      payment_id: 'np_1',
+      provider_status: 'finished',
+    });
+    expect(updated?.events.map((e) => e.status)).toEqual(['pending', 'paid']);
+  });
+
+  it('cancelOrder appends a cancel event', async () => {
+    const { svc: s } = svc();
+    await s.create({
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    const r = await s.cancelOrder({ order_id: 'ord_a', account_id: 'acc' });
+    if (r === null || r.ok !== 'cancelled') throw new Error('expected cancellation');
+    expect(r.order.events.map((e) => ({ status: e.status, source: e.source }))).toEqual([
+      { status: 'pending', source: 'create' },
+      { status: 'cancelled', source: 'cancel' },
+    ]);
+  });
+
+  it('expireOrder appends an expired event', async () => {
+    let now = 1_700_000_000_000;
+    const repo = new InMemoryCryptoOrdersRepo();
+    const s = new CryptoOrdersService({ repo, nowFn: () => now });
+    await s.create({
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    now += 60 * 60 * 1000 + 1; // past 1h cutoff
+    const updated = await s.expireOrder({ order_id: 'ord_a', olderThanMs: 60 * 60 * 1000 });
+    expect(updated?.events.map((e) => e.source)).toEqual(['create', 'expired']);
+  });
+
+  it('sweepExpiredOrders appends a swept event per-row', async () => {
+    let now = 1_700_000_000_000;
+    const repo = new InMemoryCryptoOrdersRepo();
+    const s = new CryptoOrdersService({ repo, nowFn: () => now });
+    await s.create({
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    await s.create({
+      order_id: 'ord_b',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    now += 25 * 60 * 60 * 1000; // > 24h
+    await s.sweepExpiredOrders({ olderThanMs: 24 * 60 * 60 * 1000 });
+    const a = await s.getById('ord_a');
+    const b = await s.getById('ord_b');
+    expect(a?.events.map((e) => e.source)).toEqual(['create', 'swept']);
+    expect(b?.events.map((e) => e.source)).toEqual(['create', 'swept']);
+  });
+
+  it('getOrderEvents returns null for unknown order ids', async () => {
+    const { svc: s } = svc();
+    expect(await s.getOrderEvents('ord_nope')).toBeNull();
+  });
+
+  it('getOrderEvents returns the full append-only timeline', async () => {
+    const { svc: s } = svc();
+    await s.create({
+      order_id: 'ord_a',
+      account_id: 'acc',
+      product: 'p',
+      price_cents: 100,
+      price_currency: 'USD',
+    });
+    await s.applyIpnStatus({
+      order_id: 'ord_a',
+      payment_id: 'np_1',
+      provider_status: 'finished',
+    });
+    const events = await s.getOrderEvents('ord_a');
+    expect(events?.map((e) => `${e.source}:${e.status}`)).toEqual(['create:pending', 'ipn:paid']);
   });
 });

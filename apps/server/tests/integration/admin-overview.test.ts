@@ -23,6 +23,17 @@ interface OverviewResponse {
 }
 
 describe('GET /v1/admin/overview', () => {
+  it('V-666.BT — sets Cache-Control: no-store, private', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/overview',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store, private');
+  });
+
   it('returns 200 with accounts + webhooks aggregate counts', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     await seedAdditionalAccount(fx, {

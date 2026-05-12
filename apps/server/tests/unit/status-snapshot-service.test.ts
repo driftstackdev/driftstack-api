@@ -33,7 +33,7 @@ function makeR2(): {
     },
     presignPut: () => Promise.resolve('stub'),
     presignGet: () => Promise.resolve('stub'),
-    deleteObject: () => Promise.resolve(),
+    bucket: 'stub-bucket',
   };
   return { r2, puts };
 }

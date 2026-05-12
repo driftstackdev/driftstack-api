@@ -66,7 +66,21 @@ export function ipRateLimit(
       now: Date.now(),
     });
 
+    // W200 — full RateLimit-header set documented at /docs/rate-limits.
+    // Mirrors the account-keyed middleware (W199). `bucket` here is the
+    // configured prefix; consumers shouldn't depend on the IP suffix
+    // being visible in the header (we expose only the prefix to avoid
+    // leaking the resolved IP through the response).
+    const nowSec = Math.floor(Date.now() / 1000);
+    const tokensNeededForFull = cfg.capacity - result.remaining;
+    const secondsToFull =
+      tokensNeededForFull > 0 && cfg.refillPerSecond > 0
+        ? Math.ceil(tokensNeededForFull / cfg.refillPerSecond)
+        : 0;
+    reply.header('x-ratelimit-bucket', cfg.bucketPrefix);
+    reply.header('x-ratelimit-limit', cfg.capacity.toString());
     reply.header('x-ratelimit-remaining', Math.floor(result.remaining).toString());
+    reply.header('x-ratelimit-reset', (nowSec + secondsToFull).toString());
 
     if (!result.allowed) {
       const retryAfterSec = Math.max(1, Math.ceil(result.retryAfterMs / 1000));

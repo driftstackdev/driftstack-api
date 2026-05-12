@@ -36,6 +36,17 @@ const auth = (fixture: TestAppFixture): { authorization: string } => ({
 });
 
 describe('GET /v1/account/me', () => {
+  it('V-666.BS — sets Cache-Control: no-store, private', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store, private');
+  });
+
   it('200 returns identity + tier + zero usage on a freshly-seeded account', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const res = await fx.app.inject({

@@ -87,6 +87,28 @@ describe('OpenAPI spec generation', () => {
         '/v1/billing/checkout-session',
         '/v1/billing/portal-session',
         '/v1/billing/trial-pack',
+        // V-666 — crypto-orders surface (V-666.AX)
+        '/v1/billing/crypto-checkout',
+        '/v1/billing/crypto-checkout/quote',
+        '/v1/billing/crypto-orders',
+        '/v1/billing/crypto-orders/{order_id}',
+        '/v1/billing/crypto-orders/{order_id}/cancel',
+        // V-666.AZ — receipts
+        '/v1/billing/crypto-orders/{order_id}/receipt',
+        '/v1/billing/crypto-orders/{order_id}/receipt.pdf',
+        '/v1/billing/crypto-orders/{order_id}/receipt.txt',
+        // V-666.AY — admin crypto-orders surface
+        '/v1/admin/crypto-orders',
+        '/v1/admin/crypto-orders.csv',
+        '/v1/admin/crypto-orders/daily',
+        '/v1/admin/crypto-orders/idempotency-metrics',
+        '/v1/admin/crypto-orders/pending-age',
+        '/v1/admin/crypto-orders/sweep-expired',
+        '/v1/admin/crypto-orders/stats',
+        '/v1/admin/crypto-orders/{order_id}',
+        '/v1/admin/crypto-orders/{order_id}/apply-ipn',
+        '/v1/admin/crypto-orders/{order_id}/events',
+        '/v1/admin/crypto-orders/{order_id}/internal-note',
         // V-401 — core auth surface
         '/v1/auth/login',
         '/v1/auth/logout',
@@ -213,6 +235,34 @@ describe('OpenAPI HTTP routes', () => {
     expect(res.headers['content-type']).toMatch(/application\/json/);
     const body = res.json<Record<string, unknown>>();
     expect(body.openapi).toBe('3.1.0');
+  });
+
+  it('V-666.AX crypto endpoints carry the crypto + billing tags', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const cryptoPaths = [
+      '/v1/billing/crypto-checkout',
+      '/v1/billing/crypto-orders',
+      '/v1/billing/crypto-orders/{order_id}',
+      '/v1/billing/crypto-orders/{order_id}/cancel',
+    ];
+    for (const p of cryptoPaths) {
+      const methods = spec.paths?.[p] as Record<string, { tags?: string[] }> | undefined;
+      expect(methods).toBeDefined();
+      for (const op of Object.values(methods ?? {})) {
+        expect(op.tags).toContain('crypto');
+        expect(op.tags).toContain('billing');
+      }
+    }
+  });
+
+  it('V-666.AX crypto-checkout response carries the documented field shape', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const op = spec.paths?.['/v1/billing/crypto-checkout'] as
+      | Record<string, { responses?: Record<string, unknown> }>
+      | undefined;
+    expect(op?.post?.responses?.['201']).toBeDefined();
   });
 
   it('GET /docs serves the Scalar UI HTML (after trailing-slash redirect)', async () => {

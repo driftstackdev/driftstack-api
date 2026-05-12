@@ -45,9 +45,8 @@ async function seed(
       payment_id: null,
       status: row.status ?? 'pending',
       customer_note: null,
-      refund_requested_at: null,
-      refund_reason: null,
       internal_note: null,
+      events: [{ status: row.status ?? 'pending', at: ts, source: 'create' }],
       created_at: ts,
       updated_at: ts,
     });

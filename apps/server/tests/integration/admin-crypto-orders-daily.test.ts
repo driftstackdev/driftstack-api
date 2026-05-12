@@ -19,6 +19,7 @@ async function seedAt(
   fx: TestAppFixture,
   args: { order_id: string; createdAt: Date; status?: CryptoOrder['status'] },
 ): Promise<void> {
+  const ts = args.createdAt.getTime();
   const order: CryptoOrder = {
     order_id: args.order_id,
     account_id: fx.accountId,
@@ -27,8 +28,11 @@ async function seedAt(
     price_currency: 'EUR',
     payment_id: null,
     status: args.status ?? 'pending',
-    created_at: args.createdAt.getTime(),
-    updated_at: args.createdAt.getTime(),
+    customer_note: null,
+    internal_note: null,
+    events: [{ status: args.status ?? 'pending', at: ts, source: 'create' }],
+    created_at: ts,
+    updated_at: ts,
   };
   await fx.cryptoOrdersRepo.upsert(order);
 }

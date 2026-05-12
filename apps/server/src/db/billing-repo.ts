@@ -39,8 +39,11 @@ function toSubscription(r: typeof subscriptions.$inferSelect): SubscriptionMirro
   };
 }
 
+// W197 — only the `db` handle is read; narrow the dependency to make
+// e2e fixtures composable without the full Database envelope
+// (`{ client, db, close }`).
 export class DrizzleBillingRepo implements BillingRepo {
-  constructor(private readonly database: Database) {}
+  constructor(private readonly database: Pick<Database, 'db'>) {}
 
   async getAccount(accountId: string): Promise<BillingAccountSnapshot | null> {
     const [row] = await this.database.db

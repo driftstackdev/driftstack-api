@@ -147,7 +147,10 @@ function makeIncidents(
   };
   const service: IncidentsService = {
     create: (input: CreateIncidentInput) => {
-      state.creates.push({ title: input.title, autoProbeTarget: input.autoProbeTarget });
+      state.creates.push({
+        title: input.title,
+        autoProbeTarget: input.autoProbeTarget ?? null,
+      });
       openIncident = fakeIncident;
       return Promise.resolve({ incident: fakeIncident, update: fakeUpdate });
     },

@@ -362,7 +362,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       'stripe-signature',
       'x-nowpayments-sig',
     ],
-    exposedHeaders: ['x-request-id', 'x-ratelimit-remaining', 'retry-after'],
+    exposedHeaders: [
+      'x-request-id',
+      // W199 — full RateLimit-header set documented at /docs/rate-limits.
+      'x-ratelimit-bucket',
+      'x-ratelimit-limit',
+      'x-ratelimit-remaining',
+      'x-ratelimit-reset',
+      'retry-after',
+    ],
     // Cache preflight responses for 10 minutes — reduces CORS preflight
     // round-trips for the SDK + dashboard without delaying policy
     // changes excessively (deploy frequency is daily-ish; 10 min is
@@ -391,6 +399,38 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(rateLimitPlugin, { store: deps.rateLimitStore });
 
   registerErrorHandler(app);
+
+  // V-666.BS — stamp Cache-Control: no-store, private on every
+  // /v1/account/* response. These routes return caller-private
+  // data (profile, audit log, costs, MFA enrollment, sessions,
+  // rate-limit usage). Even though every request is auth-gated,
+  // the explicit header is defense-in-depth: it prevents shared /
+  // proxy caches from holding onto private payloads, and forbids
+  // browser back/forward cache from serving stale state after a
+  // logout. Mirrors the V-666.BE pattern on /v1/admin/crypto-orders.
+  //
+  // V-666.BT — same rationale broadened to every /v1/admin/* route.
+  // Admin views are live operational state (account lookups, audit
+  // log, webhook deliveries, sweep counts, idempotency metrics);
+  // none of it should ever be cached. The crypto-orders route used
+  // to register its own hook; folded in here so every admin
+  // endpoint inherits the header uniformly.
+  // V-666.BW — broadened again to cover /v1/billing/*. Billing
+  // state, crypto checkouts, and crypto-order envelopes are all
+  // caller-private dynamic state. Some routes already set the
+  // header explicitly; the broader hook makes it the default so
+  // a future endpoint can't accidentally omit it.
+  app.addHook('onSend', (req, reply, _payload, done) => {
+    if (
+      req.url.startsWith('/v1/account/') ||
+      req.url.startsWith('/v1/admin/') ||
+      req.url.startsWith('/v1/billing/') ||
+      req.url === '/v1/billing'
+    ) {
+      void reply.header('cache-control', 'no-store, private');
+    }
+    done();
+  });
 
   registerSessionRoutes(app, { service: deps.sessionsService, authRepo: deps.authRepo });
   registerAdminRoutes(app, {

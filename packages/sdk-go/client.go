@@ -39,6 +39,8 @@ type Client struct {
 	Profiles         *ProfilesResource
 	ProfileSnapshots *ProfileSnapshotsResource
 	Billing          *BillingResource
+	// V-666 — crypto-checkout / crypto-orders.
+	CryptoOrders     *CryptoOrdersResource
 	Auth             *AuthResource
 	Account          *AccountResource
 	// V-353b / V-448 — MFA enrollment management.
@@ -106,6 +108,7 @@ func New(apiKey string, opts ...Option) *Client {
 	c.Profiles = &ProfilesResource{client: c}
 	c.ProfileSnapshots = &ProfileSnapshotsResource{client: c}
 	c.Billing = &BillingResource{client: c}
+	c.CryptoOrders = &CryptoOrdersResource{client: c}
 	c.Auth = &AuthResource{client: c}
 	c.Account = &AccountResource{client: c}
 	c.Mfa = &MfaResource{client: c}
@@ -142,6 +145,10 @@ type requestOptions struct {
 	query  url.Values
 	body   any // marshalled to JSON when non-nil
 	out    any // pointer the JSON response is decoded into; pass nil for 204.
+	// headers are extra request headers merged on top of the auth +
+	// User-Agent + Content-Type defaults. Resource methods use this
+	// for one-shot needs like Idempotency-Key (V-666.AO).
+	headers map[string]string
 }
 
 // do executes a single request with retry. Returns nil on success
@@ -179,6 +186,9 @@ func (c *Client) doOnce(ctx context.Context, opts requestOptions) error {
 	req.Header.Set("User-Agent", c.userAgent())
 	if opts.body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	for k, v := range opts.headers {
+		req.Header.Set(k, v)
 	}
 
 	resp, err := c.http.Do(req)

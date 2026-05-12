@@ -10,6 +10,8 @@
 // store works for the early-customer manual-handoff cadence the
 // founder expects in the first 4-8 weeks post-merchant-account-go-live.
 
+import { createHash as nodeCreateHash } from 'node:crypto';
+
 export type CryptoOrderStatus =
   | 'pending' // order created; awaiting payment
   | 'confirming' // payment seen; awaiting on-chain confirmations
@@ -21,6 +23,28 @@ export type CryptoOrderStatus =
   // out of it (a late-arriving payment leaves the order cancelled but
   // records the payment_id so support can reconcile).
   | 'cancelled';
+
+/**
+ * V-666.AT — append-only state-transition event. Each entry records
+ * the status the order moved to + the source of that transition.
+ * The list grows on every state change; we never mutate or remove
+ * prior entries. Used by support to reconstruct an order's history
+ * without grepping logs.
+ */
+export interface CryptoOrderEvent {
+  /** Status the order entered. */
+  status: CryptoOrderStatus;
+  /** Server timestamp (ms since epoch) of the transition. */
+  at: number;
+  /**
+   * What drove the transition. 'create' for the initial pending,
+   * 'ipn' for NowPayments IPNs (including admin-replayed IPNs),
+   * 'cancel' for customer-initiated cancellation, 'expired' for
+   * customer-side expiry on the cancel endpoint, 'swept' for an
+   * admin background sweep.
+   */
+  source: 'create' | 'ipn' | 'cancel' | 'expired' | 'swept';
+}
 
 export interface CryptoOrder {
   /** Internal order id; the customer also sees this on the checkout page. */
@@ -43,22 +67,6 @@ export interface CryptoOrder {
    */
   customer_note: string | null;
   /**
-   * V-666.X — admin-recorded refund intent. Set on the first
-   * requestRefund() call against a paid order; never cleared on
-   * subsequent calls. The actual on-chain refund still goes through
-   * the manual NowPayments dashboard — this field is the system-of-
-   * record for "ops promised this customer a refund." Null when no
-   * refund has been requested.
-   */
-  refund_requested_at: number | null;
-  /**
-   * V-666.X — operator-supplied reason for the refund. Capped at 500
-   * chars at the route layer. Updated by subsequent requestRefund()
-   * calls so support can amend the rationale without rotating
-   * refund_requested_at.
-   */
-  refund_reason: string | null;
-  /**
    * V-666.AA — admin-only internal note attached to the order. Used
    * by ops to record context that should NOT be visible to the
    * customer (e.g. "VIP account, manual outreach", "fraud signal,
@@ -67,6 +75,14 @@ export interface CryptoOrder {
    * support runbooks tend to be more verbose. Null when unset.
    */
   internal_note: string | null;
+  /**
+   * V-666.AT — append-only event log. Ordered oldest → newest. The
+   * first entry is always the create event; subsequent entries
+   * record each state transition. We keep the list on the order
+   * envelope so a single getById fetches both current state + full
+   * history.
+   */
+  events: CryptoOrderEvent[];
   created_at: number;
   updated_at: number;
 }
@@ -99,6 +115,56 @@ export class InMemoryCryptoOrdersRepo implements CryptoOrdersRepo {
       opts.accountId !== undefined ? all.filter((o) => o.account_id === opts.accountId) : all;
     return filtered.sort((a, b) => b.created_at - a.created_at).slice(0, limit);
   }
+}
+
+/**
+ * V-666.AM — opaque cursor codec used by listForAdminPage. Encodes
+ * the (created_at, order_id) pair of the last row in the current
+ * page so the next call resumes immediately after it. Exposed for
+ * testing; production code paths treat cursors as opaque strings.
+ */
+export interface CryptoOrderCursor {
+  ts: number;
+  id: string;
+}
+
+export function encodeCursor(cur: CryptoOrderCursor): string {
+  const json = JSON.stringify(cur);
+  return Buffer.from(json, 'utf8').toString('base64url');
+}
+
+export function decodeCursor(token: string): CryptoOrderCursor | null {
+  try {
+    const json = Buffer.from(token, 'base64url').toString('utf8');
+    const parsed = JSON.parse(json) as unknown;
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    const obj = parsed as Record<string, unknown>;
+    if (typeof obj.ts !== 'number' || typeof obj.id !== 'string') return null;
+    return { ts: obj.ts, id: obj.id };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * V-666.AR — body fingerprint for an idempotency-key request. Hashed
+ * over the structured args (not the raw request body) so trivial
+ * differences like whitespace don't trigger a false mismatch. SHA-256
+ * → hex; not collision-resistant against an adversarial caller, but
+ * the threat model here is "accidental key reuse," not "deliberate
+ * forgery."
+ */
+export function idempotencyBodyFingerprint(args: {
+  product: string;
+  price_cents: number;
+  price_currency: string;
+}): string {
+  const normalised = JSON.stringify({
+    product: args.product,
+    price_cents: args.price_cents,
+    price_currency: args.price_currency,
+  });
+  return nodeCreateHash('sha256').update(normalised).digest('hex');
 }
 
 /**
@@ -171,7 +237,13 @@ export interface CryptoOrdersServiceOpts {
 export interface CryptoOrderWebhookEmitter {
   enqueueEvent: (
     accountId: string,
-    eventType: 'crypto.order.paid',
+    // V-666.AN — adds 'crypto.order.failed' alongside 'crypto.order.paid'.
+    // Fires on the pending/confirming/partial → failed terminal
+    // transition (whether via IPN, expireOrder, or sweepExpiredOrders).
+    // Same decoupled posture: the emitter accepts the literal event
+    // type even though the `webhook_event_type` enum doesn't yet
+    // carry it; prod wire-up (task #72) adds the enum value.
+    eventType: 'crypto.order.paid' | 'crypto.order.failed',
     data: Record<string, unknown>,
   ) => Promise<number>;
 }
@@ -221,9 +293,8 @@ export class CryptoOrdersService {
       payment_id: null,
       status: 'pending',
       customer_note: null,
-      refund_requested_at: null,
-      refund_reason: null,
       internal_note: null,
+      events: [{ status: 'pending', at: now, source: 'create' }],
       created_at: now,
       updated_at: now,
     };
@@ -232,50 +303,105 @@ export class CryptoOrdersService {
   }
 
   /**
-   * V-666.X — admin records the intent to refund a paid order. This
-   * is a system-of-record write, not an on-chain action: the actual
-   * refund goes through the NowPayments dashboard. The method
-   * preserves the first `refund_requested_at` timestamp on
-   * subsequent calls so we keep the canonical "when did this start"
-   * answer even if support amends the reason text.
+   * V-666.AO — idempotency-key wrapper around create(). Callers that
+   * supply an Idempotency-Key on POST /v1/billing/crypto-checkout get
+   * the original order back on retries instead of minting a new one.
    *
-   * Returns:
-   *   - { ok: 'recorded', order } on success
-   *   - { ok: 'not_paid', currentStatus } when the order isn't in
-   *     the paid state (only paid orders can be refunded)
-   *   - null when the order doesn't exist
+   * The key is scoped per-account (or the literal '_anon' for
+   * pre-signup checkouts) so colliding keys across customers don't
+   * leak one customer's order to another. Records are pruned 24h
+   * after they were first stored — long enough that customer retries
+   * over a network blip succeed, short enough that the keyspace
+   * doesn't grow unbounded under sustained traffic.
+   *
+   * Returns { order, replayed }. `replayed: true` means the supplied
+   * key matched a prior order and the cached order is returned
+   * verbatim; the caller can use this to set a response header
+   * (`Idempotent-Replayed: 1`).
    */
-  async requestRefund(args: {
+  async createIdempotent(args: {
+    idempotency_key: string;
     order_id: string;
-    reason: string;
-  }): Promise<
-    | { ok: 'recorded'; order: CryptoOrder }
-    | { ok: 'not_paid'; currentStatus: CryptoOrderStatus }
-    | null
-  > {
-    const order = await this.opts.repo.getById(args.order_id);
-    if (order === null) return null;
-    if (order.status !== 'paid') {
-      return { ok: 'not_paid', currentStatus: order.status };
-    }
+    account_id: string | null;
+    product: string;
+    price_cents: number;
+    price_currency: string;
+  }): Promise<{ order: CryptoOrder; replayed: boolean; bodyFingerprintMismatch: boolean }> {
     const now = this.nowFn();
-    const updated: CryptoOrder = {
-      ...order,
-      refund_requested_at: order.refund_requested_at ?? now,
-      refund_reason: args.reason,
-      updated_at: now,
+    this.pruneIdempotency(now);
+    const scopeKey = `${args.account_id ?? '_anon'}:${args.idempotency_key}`;
+    const fingerprint = idempotencyBodyFingerprint(args);
+    const cached = this.idempotencyKeys.get(scopeKey);
+    if (cached !== undefined) {
+      const existing = await this.opts.repo.getById(cached.order_id);
+      if (existing !== null) {
+        this.idempotentReplays += 1;
+        const mismatch = cached.fingerprint !== fingerprint;
+        if (mismatch) this.idempotentBodyMismatches += 1;
+        return { order: existing, replayed: true, bodyFingerprintMismatch: mismatch };
+      }
+      // Cached row was somehow evicted from the repo; treat as fresh.
+      this.idempotencyKeys.delete(scopeKey);
+    }
+    const order = await this.create({
+      order_id: args.order_id,
+      account_id: args.account_id,
+      product: args.product,
+      price_cents: args.price_cents,
+      price_currency: args.price_currency,
+    });
+    this.idempotencyKeys.set(scopeKey, {
+      order_id: order.order_id,
+      recorded_at: now,
+      fingerprint,
+    });
+    this.idempotentFirstWrites += 1;
+    return { order, replayed: false, bodyFingerprintMismatch: false };
+  }
+
+  private readonly idempotencyKeys = new Map<
+    string,
+    { order_id: string; recorded_at: number; fingerprint: string }
+  >();
+  private static readonly IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+  /** V-666.AP — count of replay hits since process start. */
+  private idempotentReplays = 0;
+  /** V-666.AP — count of fresh creates via createIdempotent since process start. */
+  private idempotentFirstWrites = 0;
+  /** V-666.AR — count of replays where the request body differed from the stored fingerprint. */
+  private idempotentBodyMismatches = 0;
+
+  /**
+   * V-666.AP — snapshot of the idempotency counters. Exposed as a
+   * separate method (rather than baked into getStatsForAdmin) so
+   * that fast-firing metrics scrapers don't pay the full scan cost.
+   *
+   * V-666.AR — adds bodyMismatches (count of replays where the
+   * request body fingerprint differed from the stored one — i.e.
+   * the client accidentally reused a key across distinct intents).
+   */
+  getIdempotencyMetrics(): { replays: number; firstWrites: number; bodyMismatches: number } {
+    return {
+      replays: this.idempotentReplays,
+      firstWrites: this.idempotentFirstWrites,
+      bodyMismatches: this.idempotentBodyMismatches,
     };
-    await this.opts.repo.upsert(updated);
-    return { ok: 'recorded', order: updated };
+  }
+
+  private pruneIdempotency(now: number): void {
+    const cutoff = now - CryptoOrdersService.IDEMPOTENCY_TTL_MS;
+    for (const [k, v] of this.idempotencyKeys) {
+      if (v.recorded_at < cutoff) this.idempotencyKeys.delete(k);
+    }
   }
 
   /**
    * V-666.AA — admin sets / updates / clears the internal note on
-   * an order. Works on every status (unlike requestRefund which is
-   * paid-only) since ops may want to record context on a pending
-   * order ("customer reached out about wallet network mistake") just
-   * as much as on a paid one. Empty string normalises to null so
-   * "clearing" the note is the same code path as "unset".
+   * an order. Works on every status since ops may want to record
+   * context on a pending order ("customer reached out about wallet
+   * network mistake") just as much as on a paid one. Empty string
+   * normalises to null so "clearing" the note is the same code path
+   * as "unset".
    *
    * Returns the updated order, or null when the order doesn't exist.
    */
@@ -294,36 +420,6 @@ export class CryptoOrdersService {
     };
     await this.opts.repo.upsert(updated);
     return updated;
-  }
-
-  /**
-   * V-666.Y — admin clears a previously-recorded refund request.
-   * Used when the customer reconsiders or ops determines the refund
-   * was raised in error. Both refund_requested_at + refund_reason
-   * are reset to null. Idempotent: calling on an order with no
-   * existing refund returns ok:'noop' so ops scripts don't need to
-   * check first.
-   *
-   * Returns:
-   *   - { ok: 'cleared', order } when a refund was previously set
-   *     and is now cleared
-   *   - { ok: 'noop' } when no refund had been requested
-   *   - null when the order doesn't exist
-   */
-  async cancelRefundRequest(args: {
-    order_id: string;
-  }): Promise<{ ok: 'cleared'; order: CryptoOrder } | { ok: 'noop' } | null> {
-    const order = await this.opts.repo.getById(args.order_id);
-    if (order === null) return null;
-    if (order.refund_requested_at === null) return { ok: 'noop' };
-    const updated: CryptoOrder = {
-      ...order,
-      refund_requested_at: null,
-      refund_reason: null,
-      updated_at: this.nowFn(),
-    };
-    await this.opts.repo.upsert(updated);
-    return { ok: 'cleared', order: updated };
   }
 
   /**
@@ -355,6 +451,20 @@ export class CryptoOrdersService {
   }
 
   /**
+   * V-666.AT — admin reverse-history lookup. Returns the order's
+   * append-only event log, or null when the order doesn't exist.
+   * Called from the admin detail surface; customer-facing surface
+   * can derive the same list from the order envelope returned by
+   * `GET /v1/billing/crypto-orders/:id` if we surface `events` there
+   * in a follow-up.
+   */
+  async getOrderEvents(orderId: string): Promise<CryptoOrderEvent[] | null> {
+    const order = await this.opts.repo.getById(orderId);
+    if (order === null) return null;
+    return order.events;
+  }
+
+  /**
    * V-666.D — admin-only list. Returns the most-recent `limit` orders
    * across all customers, optionally filtered by account_id. Sort
    * order is `created_at DESC`.
@@ -371,19 +481,84 @@ export class CryptoOrdersService {
       limit?: number;
       status?: CryptoOrderStatus;
       search?: string;
+      // V-666.AS — exact-match filter on payment_id (reverse-lookup
+      // from a NowPayments id). Same semantics as listForAdminPage.
+      paymentId?: string;
       scanLimit?: number;
+      // V-666.BX — half-open created_at window. Either bound may be
+      // omitted; passing both gives a windowed scan.
+      createdAfter?: number;
+      createdBefore?: number;
     } = {},
   ): Promise<CryptoOrder[]> {
+    const result = await this.listForAdminPage(opts);
+    return result.orders;
+  }
+
+  /**
+   * V-666.AM — paginated admin list. Same filter set as listForAdmin,
+   * plus a `cursor` opaque token that resumes the scan from the next
+   * row after the cursor's target. Sort order is `created_at DESC`
+   * with `order_id` as the tiebreaker; the cursor encodes both so
+   * pagination is stable across ties in created_at.
+   *
+   * Returns `{ orders, nextCursor }` where `nextCursor` is non-null
+   * iff there is at least one more matching row beyond the returned
+   * page. The cursor is base64url-encoded JSON of
+   * `{ ts: created_at, id: order_id }`. A consumer treats it as
+   * opaque — internal callers can decode for debugging but should
+   * not parse it in production code paths.
+   */
+  async listForAdminPage(
+    opts: {
+      accountId?: string;
+      limit?: number;
+      status?: CryptoOrderStatus;
+      search?: string;
+      /**
+       * V-666.AS — exact-match filter on payment_id. Used by support
+       * to reverse-look-up a Driftstack order from a NowPayments
+       * payment id the customer sent over. Distinct from `search`
+       * (which is fuzzy across order_id / product / customer_note)
+       * so the lookup is unambiguous + cheap.
+       */
+      paymentId?: string;
+      cursor?: string;
+      scanLimit?: number;
+      /**
+       * V-666.BX — date-range filter on created_at (epoch ms).
+       * Both bounds are half-open: createdAfter is inclusive of
+       * `>=` and createdBefore is exclusive of `<`. Either can be
+       * omitted; passing both gives a windowed scan.
+       */
+      createdAfter?: number;
+      createdBefore?: number;
+    } = {},
+  ): Promise<{ orders: CryptoOrder[]; nextCursor: string | null }> {
     const limit = opts.limit ?? 50;
     const scanLimit = opts.scanLimit ?? 1_000;
-    const rawScanLimit = opts.status !== undefined || opts.search !== undefined ? scanLimit : limit;
+    const narrowingFilter =
+      opts.status !== undefined ||
+      opts.search !== undefined ||
+      opts.paymentId !== undefined ||
+      opts.createdAfter !== undefined ||
+      opts.createdBefore !== undefined;
+    // Pagination math: filters or an active cursor need the full scan
+    // window (we may reject many rows or need to seek past the cursor
+    // anchor). The unfiltered first-page case asks the repo for one
+    // extra row so we can tell whether a next page exists.
+    const repoLimit = narrowingFilter || opts.cursor !== undefined ? scanLimit : limit + 1;
     const raw = await this.opts.repo.listAll({
       ...(opts.accountId !== undefined ? { accountId: opts.accountId } : {}),
-      limit: rawScanLimit,
+      limit: repoLimit,
     });
     const needle = opts.search?.toLowerCase().trim();
+    const paymentIdNeedle = opts.paymentId?.trim();
     const filtered = raw.filter((o) => {
       if (opts.status !== undefined && o.status !== opts.status) return false;
+      if (paymentIdNeedle !== undefined && paymentIdNeedle.length > 0) {
+        if (o.payment_id !== paymentIdNeedle) return false;
+      }
       if (needle !== undefined && needle.length > 0) {
         const hay =
           o.order_id.toLowerCase() +
@@ -393,9 +568,51 @@ export class CryptoOrdersService {
           (o.customer_note?.toLowerCase() ?? '');
         if (!hay.includes(needle)) return false;
       }
+      if (opts.createdAfter !== undefined && o.created_at < opts.createdAfter) return false;
+      if (opts.createdBefore !== undefined && o.created_at >= opts.createdBefore) return false;
       return true;
     });
-    return filtered.slice(0, limit);
+    // Stable sort: created_at DESC, order_id ASC as tiebreaker. The
+    // repo already returns created_at DESC but doesn't pin the tie
+    // resolution, so we redo it deterministically here.
+    filtered.sort((a, b) =>
+      a.created_at !== b.created_at
+        ? b.created_at - a.created_at
+        : a.order_id < b.order_id
+          ? -1
+          : a.order_id > b.order_id
+            ? 1
+            : 0,
+    );
+    let startIdx = 0;
+    if (opts.cursor !== undefined && opts.cursor.length > 0) {
+      const decoded = decodeCursor(opts.cursor);
+      if (decoded === null) {
+        // Malformed cursor — caller's bug. Surface to the route as a
+        // 400-able condition by returning an empty page; the route
+        // layer can validate stricter if it wants to 400 explicitly.
+        return { orders: [], nextCursor: null };
+      }
+      const anchorIdx = filtered.findIndex(
+        (o) => o.created_at === decoded.ts && o.order_id === decoded.id,
+      );
+      // If we can't find the anchor row in the scan window, behave
+      // conservatively and return an empty page rather than guessing.
+      // Callers detect "ran off the end" by getting an empty page
+      // with nextCursor:null and stop iterating.
+      if (anchorIdx === -1) {
+        return { orders: [], nextCursor: null };
+      }
+      startIdx = anchorIdx + 1;
+    }
+    const page = filtered.slice(startIdx, startIdx + limit);
+    const hasMore = filtered.length > startIdx + limit;
+    const last = page[page.length - 1];
+    const nextCursor =
+      hasMore && last !== undefined
+        ? encodeCursor({ ts: last.created_at, id: last.order_id })
+        : null;
+    return { orders: page, nextCursor };
   }
 
   /**
@@ -423,10 +640,12 @@ export class CryptoOrdersService {
     if (order.status !== 'pending') {
       return { ok: 'not_cancellable', reason: order.status };
     }
+    const now = this.nowFn();
     const updated: CryptoOrder = {
       ...order,
       status: 'cancelled',
-      updated_at: this.nowFn(),
+      events: [...order.events, { status: 'cancelled', at: now, source: 'cancel' }],
+      updated_at: now,
     };
     await this.opts.repo.upsert(updated);
     return { ok: 'cancelled', order: updated };
@@ -509,19 +728,17 @@ export class CryptoOrdersService {
     /** V-666.W — count of paid orders used to compute avgTimeToPaidMs. */
     paidSample: number;
     /**
-     * V-666.AB — count of paid orders with a refund_requested_at
-     * timestamp set (i.e. the operator has asked for a refund but
-     * the on-chain refund hasn't been confirmed yet). Useful for the
-     * "how many refunds are in flight" ops question.
+     * V-666.AE — paid revenue keyed by product. Inner map is per-
+     * currency, matching paidRevenueCents. Used for the
+     * "which tiers are actually converting" KPI on the ops dashboard.
      */
-    refundPendingCount: number;
+    paidRevenueByProduct: Record<string, Record<string, number>>;
     /**
-     * V-666.AB — sum of `price_cents` across the refund-pending
-     * orders, broken down by currency. Mirrors paidRevenueCents
-     * shape so the dashboard can display them side-by-side without
-     * extra plumbing.
+     * V-666.AE — count of paid orders per product. Pairs with
+     * paidRevenueByProduct so the consumer can compute ARPU by tier
+     * without re-scanning.
      */
-    refundPendingCents: Record<string, number>;
+    paidCountByProduct: Record<string, number>;
     truncated: boolean;
     scanned: number;
   }> {
@@ -536,15 +753,21 @@ export class CryptoOrdersService {
       cancelled: 0,
     };
     const paidRevenueCents: Record<string, number> = {};
-    const refundPendingCents: Record<string, number> = {};
+    const paidRevenueByProduct: Record<string, Record<string, number>> = {};
+    const paidCountByProduct: Record<string, number> = {};
     let paidElapsedSumMs = 0;
     let paidSample = 0;
-    let refundPendingCount = 0;
     for (const o of rows) {
       byStatus[o.status] += 1;
       if (o.status === 'paid') {
         paidRevenueCents[o.price_currency] =
           (paidRevenueCents[o.price_currency] ?? 0) + o.price_cents;
+        // V-666.AE — per-product revenue. Inner map keyed by currency
+        // so we don't conflate EUR + USD totals.
+        const productMap = paidRevenueByProduct[o.product] ?? {};
+        productMap[o.price_currency] = (productMap[o.price_currency] ?? 0) + o.price_cents;
+        paidRevenueByProduct[o.product] = productMap;
+        paidCountByProduct[o.product] = (paidCountByProduct[o.product] ?? 0) + 1;
         // V-666.W — updated_at on a paid order is the moment the IPN
         // applied the paid transition; created_at is order mint. The
         // difference is the customer's "time-to-pay" for that order.
@@ -554,15 +777,6 @@ export class CryptoOrdersService {
           paidSample += 1;
         }
       }
-      // V-666.AB — a refund is "pending" while refund_requested_at
-      // is set. The order may technically be in any status (we don't
-      // gate the field, only the requestRefund route does), but in
-      // practice only paid orders ever get it set today.
-      if (o.refund_requested_at !== null) {
-        refundPendingCount += 1;
-        refundPendingCents[o.price_currency] =
-          (refundPendingCents[o.price_currency] ?? 0) + o.price_cents;
-      }
     }
     return {
       total: rows.length,
@@ -570,8 +784,8 @@ export class CryptoOrdersService {
       paidRevenueCents,
       avgTimeToPaidMs: paidSample > 0 ? Math.round(paidElapsedSumMs / paidSample) : null,
       paidSample,
-      refundPendingCount,
-      refundPendingCents,
+      paidRevenueByProduct,
+      paidCountByProduct,
       truncated: rows.length === scanLimit,
       scanned: rows.length,
     };
@@ -690,9 +904,12 @@ export class CryptoOrdersService {
     const updated: CryptoOrder = {
       ...order,
       status: 'failed',
+      events: [...order.events, { status: 'failed', at: now, source: 'expired' }],
       updated_at: now,
     };
     await this.opts.repo.upsert(updated);
+    // V-666.AN — fire crypto.order.failed on the expire transition.
+    await this.emitFailedTransition(updated, 'expired');
     return updated;
   }
 
@@ -726,9 +943,15 @@ export class CryptoOrdersService {
       const updated: CryptoOrder = {
         ...o,
         status: 'failed',
+        events: [...o.events, { status: 'failed', at: now, source: 'swept' }],
         updated_at: now,
       };
       await this.opts.repo.upsert(updated);
+      // V-666.AN — fire crypto.order.failed for each swept order.
+      // Per-row emission rather than a single batch event so a
+      // customer who paid mid-sweep sees the transition the same
+      // way as a single expireOrder call.
+      await this.emitFailedTransition(updated, 'swept');
       expired += 1;
     }
     return { expired, capped: expired === limit };
@@ -759,13 +982,30 @@ export class CryptoOrdersService {
     const mapped = mapNowpaymentsStatus(args.provider_status);
     if (mapped === null) return order; // unknown status: leave state alone, record payment_id only.
     if (isTerminalForward(order.status, mapped)) {
+      const now = this.nowFn();
+      // V-666.AT — only append an event when the status actually
+      // changes; a repeat IPN that's a same-state refresh updates
+      // the row's updated_at without bloating the event log.
+      const events =
+        order.status === mapped
+          ? order.events
+          : [...order.events, { status: mapped, at: now, source: 'ipn' as const }];
       const updated: CryptoOrder = {
         ...order,
         payment_id: order.payment_id ?? args.payment_id,
         status: mapped,
-        updated_at: this.nowFn(),
+        events,
+        updated_at: now,
       };
       await this.opts.repo.upsert(updated);
+      // V-666.AN — fire crypto.order.failed on the IPN-driven
+      // pending/confirming/partial → failed transition. The
+      // prior-status check skips the (rejected) failed→failed retry
+      // case isTerminalForward would otherwise treat as a no-op
+      // refresh.
+      if (order.status !== 'failed' && mapped === 'failed') {
+        await this.emitFailedTransition(updated, 'ipn');
+      }
       // V-666.I — fire crypto.order.paid when transitioning INTO the
       // paid state. Skipped when the order was already paid (re-deliver
       // of the same IPN). Skipped when no emitter is wired. Best-effort:
@@ -817,6 +1057,40 @@ export class CryptoOrdersService {
       return updated;
     }
     return order;
+  }
+
+  /**
+   * V-666.AN — fire crypto.order.failed when an order transitions
+   * INTO the failed state. Shared by the three failed-transition
+   * paths (applyIpnStatus, expireOrder, sweepExpiredOrders). The
+   * `reason` parameter distinguishes the call site for the consumer:
+   *   - 'ipn'        — NowPayments reported failed/expired/refunded
+   *   - 'expired'    — operator-triggered expire on a single order
+   *   - 'swept'      — bulk nightly sweep of stale pending orders
+   *
+   * Best-effort emission, mirrors the V-666.I pattern: a webhook
+   * failure is swallowed so the IPN ack / cron tick stays 200.
+   */
+  private async emitFailedTransition(
+    order: CryptoOrder,
+    reason: 'ipn' | 'expired' | 'swept',
+  ): Promise<void> {
+    if (order.account_id === null) return;
+    if (this.opts.webhooks === undefined) return;
+    const failedAtIso = new Date(order.updated_at).toISOString();
+    try {
+      await this.opts.webhooks.enqueueEvent(order.account_id, 'crypto.order.failed', {
+        order_id: order.order_id,
+        product: order.product,
+        price_cents: order.price_cents,
+        price_currency: order.price_currency,
+        payment_id: order.payment_id,
+        reason,
+        failed_at: failedAtIso,
+      });
+    } catch {
+      /* swallow */
+    }
   }
 }
 

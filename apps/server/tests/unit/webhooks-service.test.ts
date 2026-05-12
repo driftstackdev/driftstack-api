@@ -335,7 +335,7 @@ describe('V-553.B-14 WebhooksService.listWithCounts', () => {
       ['wh_1', { delivered: 5, failed: 1, dlq: 0 }],
     ]);
     (
-      repo as { deliveryCountsByEndpoint: () => Promise<typeof countsMap> }
+      repo as unknown as { deliveryCountsByEndpoint: () => Promise<typeof countsMap> }
     ).deliveryCountsByEndpoint = vi.fn(() => Promise.resolve(countsMap));
     const svc = new WebhooksService(repo);
     const result = await svc.listWithCounts(ctxWith(['read']));

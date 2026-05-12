@@ -65,6 +65,19 @@ export interface ConsumeResult {
   retryAfterMs: number;
 }
 
+// W199 — capacity + reset hints surfaced to the middleware so customer
+// rate-limit headers (`x-ratelimit-limit`, `x-ratelimit-reset`,
+// `x-ratelimit-bucket`) match the contract documented at
+// `/docs/rate-limits`. ConsumeResult stays minimal so the
+// RateLimitStore interface doesn't grow; the middleware composes the
+// extra fields here from the cached bucket config.
+export interface ConsumeResultWithBucket extends ConsumeResult {
+  /** Maximum bucket size (capacity). The bucket can never hold more than this. */
+  capacity: number;
+  /** Refill rate used for this consume call (tokens/sec). */
+  refillPerSecond: number;
+}
+
 export interface RateLimitStore {
   consume(opts: ConsumeOpts): Promise<ConsumeResult>;
 }
@@ -89,15 +102,16 @@ export interface RateLimitInput {
 export async function rateLimitConsume(
   store: RateLimitStore,
   input: RateLimitInput,
-): Promise<ConsumeResult> {
+): Promise<ConsumeResultWithBucket> {
   const cfg = effectiveBucketConfig(input);
-  return store.consume({
+  const result = await store.consume({
     key: storeKey(input.accountId, input.bucketKey),
     capacity: cfg.capacity,
     refillPerSecond: cfg.refillPerSecond,
     cost: input.cost ?? 1,
     now: input.now ?? Date.now(),
   });
+  return { ...result, capacity: cfg.capacity, refillPerSecond: cfg.refillPerSecond };
 }
 
 /**

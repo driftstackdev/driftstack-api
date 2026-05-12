@@ -14,6 +14,23 @@
 // `NowpaymentsClient.createPayment(...)` call slots in between
 // `service.create()` and the response, populating `payment_address`
 // + `pay_currency`.
+//
+// V-666.AO — when the caller sends an `Idempotency-Key` header, the
+// route hands the key to service.createIdempotent(); duplicate keys
+// within the 24h window return the original order verbatim. The
+// response carries an `Idempotent-Replayed: 1` header on replays so
+// clients can distinguish a retry-success from a fresh create.
+//
+// V-666.AQ — replays fire a structured info log (`event:
+// 'crypto_checkout_idempotency_replay'`). Aggregated, the log line
+// answers "is my checkout button double-firing" without depending on
+// the polling counters endpoint. Fresh writes don't log — they're
+// already captured by the existing request-completed log.
+//
+// V-666.AR — replays whose body fingerprint differs from the stored
+// one fire an additional warn log (`event:
+// 'crypto_checkout_idempotency_body_mismatch'`). The contract still
+// replays — the warn surfaces accidental key reuse for ops to see.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -58,6 +75,25 @@ function newOrderId(): string {
   return `ord_${randomBytes(6).toString('hex')}`;
 }
 
+type IdempotencyHeader = { kind: 'absent' } | { kind: 'valid'; key: string } | { kind: 'invalid' };
+
+/**
+ * Reads `Idempotency-Key` off the request. Returns a discriminated
+ * union: absent (no header / empty), valid (trimmed ASCII <=255),
+ * or invalid (rule violation; the route turns that into a 400).
+ */
+function readIdempotencyKey(req: FastifyRequest): IdempotencyHeader {
+  const raw = req.headers['idempotency-key'];
+  if (raw === undefined) return { kind: 'absent' };
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (value === undefined) return { kind: 'absent' };
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return { kind: 'absent' };
+  if (trimmed.length > 255) return { kind: 'invalid' };
+  if (!/^[\x21-\x7e]+$/.test(trimmed)) return { kind: 'invalid' };
+  return { kind: 'valid', key: trimmed };
+}
+
 export function registerCryptoCheckoutRoutes(
   app: FastifyInstance,
   deps: CryptoCheckoutRoutesDeps,
@@ -70,13 +106,64 @@ export function registerCryptoCheckoutRoutes(
       const parsed = CreateCryptoCheckoutSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
-      const order = await deps.service.create({
-        order_id: newOrderId(),
-        account_id: ctx.account.id,
-        product: parsed.data.product,
-        price_cents: parsed.data.price_cents,
-        price_currency: parsed.data.price_currency,
-      });
+      const idempotency = readIdempotencyKey(req);
+      if (idempotency.kind === 'invalid') {
+        throw new ValidationError({
+          fieldErrors: {},
+          formErrors: ['Idempotency-Key must be 1-255 ASCII chars (no whitespace).'],
+        });
+      }
+
+      let order;
+      let replayed = false;
+      let bodyFingerprintMismatch = false;
+      if (idempotency.kind === 'valid') {
+        const result = await deps.service.createIdempotent({
+          idempotency_key: idempotency.key,
+          order_id: newOrderId(),
+          account_id: ctx.account.id,
+          product: parsed.data.product,
+          price_cents: parsed.data.price_cents,
+          price_currency: parsed.data.price_currency,
+        });
+        order = result.order;
+        replayed = result.replayed;
+        bodyFingerprintMismatch = result.bodyFingerprintMismatch;
+      } else {
+        order = await deps.service.create({
+          order_id: newOrderId(),
+          account_id: ctx.account.id,
+          product: parsed.data.product,
+          price_cents: parsed.data.price_cents,
+          price_currency: parsed.data.price_currency,
+        });
+      }
+
+      if (replayed) {
+        void reply.header('Idempotent-Replayed', '1');
+        req.log.info(
+          {
+            event: 'crypto_checkout_idempotency_replay',
+            account_id: ctx.account.id,
+            order_id: order.order_id,
+            product: order.product,
+          },
+          'crypto checkout replayed via idempotency key',
+        );
+        if (bodyFingerprintMismatch) {
+          req.log.warn(
+            {
+              event: 'crypto_checkout_idempotency_body_mismatch',
+              account_id: ctx.account.id,
+              order_id: order.order_id,
+              attempted_product: parsed.data.product,
+              attempted_price_cents: parsed.data.price_cents,
+              attempted_price_currency: parsed.data.price_currency,
+            },
+            'idempotency-key replayed with a different request body',
+          );
+        }
+      }
 
       return reply.code(201).send({
         order_id: order.order_id,

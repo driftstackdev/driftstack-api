@@ -24,6 +24,7 @@ async function seedStale(
   const now = Date.now();
   const offset = hoursAgo * 60 * 60 * 1000;
   for (let i = 0; i < count; i += 1) {
+    const ts = now - offset;
     const order: CryptoOrder = {
       order_id: `ord_stale_${i.toString()}`,
       account_id: fx.accountId,
@@ -32,8 +33,11 @@ async function seedStale(
       price_currency: 'EUR',
       payment_id: null,
       status: opts.status ?? 'pending',
-      created_at: now - offset,
-      updated_at: now - offset,
+      customer_note: null,
+      internal_note: null,
+      events: [{ status: opts.status ?? 'pending', at: ts, source: 'create' }],
+      created_at: ts,
+      updated_at: ts,
     };
     await fx.cryptoOrdersRepo.upsert(order);
   }

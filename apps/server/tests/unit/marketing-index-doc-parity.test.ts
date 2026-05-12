@@ -1,0 +1,64 @@
+// W246.D — drift-guard for the marketing-site homepage (/). Previous
+// revision asserted "customer-controlled egress" + a SOCKS5 /
+// WireGuard / OpenVPN proxy.config block as a live differentiator;
+// the server has no egress config impl. Aligned with W238 / W245.D /
+// W246.A / W246.C.
+
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const REPO = join(__dirname, '..', '..', '..', '..');
+const DOC_PATH = join(REPO, 'apps', 'marketing-site', 'src', 'pages', 'index.astro');
+const SERVER_SRC = join(REPO, 'apps', 'server', 'src');
+
+function read(): string {
+  return readFileSync(DOC_PATH, 'utf8');
+}
+
+function serverSourceMatches(re: RegExp): boolean {
+  function walk(dir: string): boolean {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (walk(p)) return true;
+      } else if (entry.name.endsWith('.ts')) {
+        if (re.test(readFileSync(p, 'utf8'))) return true;
+      }
+    }
+    return false;
+  }
+  return walk(SERVER_SRC);
+}
+
+describe('W246.D marketing-site /index doc parity', () => {
+  const doc = read();
+
+  it('does not assert customer-controlled egress as a current differentiator', () => {
+    const hasEgressImpl = serverSourceMatches(/customerEgress|egress_config|proxyUrl|SOCKS5/i);
+    if (!hasEgressImpl) {
+      // Forbidden headline / claim.
+      expect(doc).not.toMatch(/EU-resident, customer-controlled egress/);
+      // The fake "proxy.config — your egress, your routes" code block must be gone.
+      expect(doc).not.toMatch(/proxy\.config — your egress, your routes/);
+      // Roadmap framing must be present.
+      expect(doc).toMatch(/Customer-configurable egress[\s\S]*?roadmap/i);
+    }
+  });
+
+  it('keeps EU-residency truthful (compute / database / object storage)', () => {
+    expect(doc).toMatch(/EU-resident infrastructure/);
+    expect(doc).toMatch(/EU jurisdiction/);
+  });
+
+  it('does not claim "never sees destination URL" as a control-plane property', () => {
+    // We do log session events (navigated, interacted) with URL metadata,
+    // so the absolute "never sees destination URL" overclaim was inaccurate.
+    expect(doc).not.toMatch(/never sees destination URL/);
+  });
+
+  it('still links to the trust + sub-processors surface', () => {
+    expect(doc).toMatch(/\/trust\/sub-processors/);
+    expect(doc).toMatch(/\/trust\/security-overview/);
+  });
+});

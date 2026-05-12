@@ -1,6 +1,7 @@
 // V-666.N — integration tests for GET /v1/admin/crypto-orders/stats.
 // V-666.W — extended with avg_time_to_paid_ms coverage.
-// V-666.AB — extended with refund_pending_count + refund_pending_cents coverage.
+// V-666.AE — extended with paid_revenue_by_product + paid_count_by_product.
+// V-666.AP — extended with idempotency-metrics route coverage.
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
@@ -16,8 +17,8 @@ interface StatsResponse {
   paid_revenue_cents: Record<string, number>;
   avg_time_to_paid_ms: number | null;
   paid_sample: number;
-  refund_pending_count: number;
-  refund_pending_cents: Record<string, number>;
+  paid_revenue_by_product: Record<string, Record<string, number>>;
+  paid_count_by_product: Record<string, number>;
   truncated: boolean;
   scanned: number;
 }
@@ -50,8 +51,8 @@ describe('V-666.N GET /v1/admin/crypto-orders/stats', () => {
     expect(body.paid_revenue_cents).toEqual({});
     expect(body.avg_time_to_paid_ms).toBeNull();
     expect(body.paid_sample).toBe(0);
-    expect(body.refund_pending_count).toBe(0);
-    expect(body.refund_pending_cents).toEqual({});
+    expect(body.paid_revenue_by_product).toEqual({});
+    expect(body.paid_count_by_product).toEqual({});
   });
 
   it('counts orders per status + sums paid revenue per currency', async () => {
@@ -114,38 +115,53 @@ describe('V-666.N GET /v1/admin/crypto-orders/stats', () => {
     expect(body.avg_time_to_paid_ms).not.toBeNull();
   });
 
-  it('refund_pending_count + refund_pending_cents reflect outstanding refund intents (V-666.AB)', async () => {
+  it('paid_revenue_by_product + paid_count_by_product break down paid revenue per tier (V-666.AE)', async () => {
     fx = await buildTestApp({
       scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
     });
-    // Two paid orders, one with a pending refund.
     await fx.cryptoOrdersService.create({
-      order_id: 'ord_refund_eur',
+      order_id: 'ord_tg_a',
       account_id: fx.accountId,
       product: 'team_growth',
       price_cents: 14900,
       price_currency: 'EUR',
     });
     await fx.cryptoOrdersService.applyIpnStatus({
-      order_id: 'ord_refund_eur',
-      payment_id: 'np_a',
+      order_id: 'ord_tg_a',
+      payment_id: 'np_tg_a',
       provider_status: 'finished',
     });
-    await fx.cryptoOrdersService.requestRefund({
-      order_id: 'ord_refund_eur',
-      reason: 'duplicate payment',
-    });
     await fx.cryptoOrdersService.create({
-      order_id: 'ord_clean',
+      order_id: 'ord_tg_b',
       account_id: fx.accountId,
-      product: 'api_starter',
-      price_cents: 5000,
+      product: 'team_growth',
+      price_cents: 16000,
       price_currency: 'USD',
     });
     await fx.cryptoOrdersService.applyIpnStatus({
-      order_id: 'ord_clean',
-      payment_id: 'np_b',
+      order_id: 'ord_tg_b',
+      payment_id: 'np_tg_b',
       provider_status: 'finished',
+    });
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_api',
+      account_id: fx.accountId,
+      product: 'api_starter',
+      price_cents: 5000,
+      price_currency: 'EUR',
+    });
+    await fx.cryptoOrdersService.applyIpnStatus({
+      order_id: 'ord_api',
+      payment_id: 'np_api',
+      provider_status: 'finished',
+    });
+    // Pending order — must not contribute to the per-product totals.
+    await fx.cryptoOrdersService.create({
+      order_id: 'ord_pending',
+      account_id: fx.accountId,
+      product: 'solo_manual',
+      price_cents: 2500,
+      price_currency: 'EUR',
     });
     const res = await fx.app.inject({
       method: 'GET',
@@ -154,7 +170,101 @@ describe('V-666.N GET /v1/admin/crypto-orders/stats', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<StatsResponse>();
-    expect(body.refund_pending_count).toBe(1);
-    expect(body.refund_pending_cents).toEqual({ EUR: 14900 });
+    expect(body.paid_revenue_by_product).toEqual({
+      team_growth: { EUR: 14900, USD: 16000 },
+      api_starter: { EUR: 5000 },
+    });
+    expect(body.paid_count_by_product).toEqual({
+      team_growth: 2,
+      api_starter: 1,
+    });
+  });
+});
+
+describe('V-666.AP GET /v1/admin/crypto-orders/idempotency-metrics', () => {
+  it('403 without admin scope', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/crypto-orders/idempotency-metrics',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('zero counts on a fresh app', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/crypto-orders/idempotency-metrics',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ replays: 0, first_writes: 0, body_mismatches: 0 });
+  });
+
+  it('reflects first-write + replay after checkout calls', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    const headers = {
+      authorization: `Bearer ${fx.plaintext}`,
+      'idempotency-key': 'metrics-key',
+    };
+    const payload = { product: 'trial_pack', price_cents: 299, price_currency: 'USD' };
+    // First call: first_writes += 1.
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers,
+      payload,
+    });
+    // Second call (same key): replays += 1.
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers,
+      payload,
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/crypto-orders/idempotency-metrics',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.json()).toEqual({ replays: 1, first_writes: 1, body_mismatches: 0 });
+  });
+
+  it('V-666.AR increments body_mismatches when the replayed body differs', async () => {
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'admin', 'driftstack_internal_admin'],
+    });
+    const headers = {
+      authorization: `Bearer ${fx.plaintext}`,
+      'idempotency-key': 'reused-key',
+    };
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers,
+      payload: { product: 'team_growth', price_cents: 4900, price_currency: 'USD' },
+    });
+    // Same key, different price — intent mismatch.
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers,
+      payload: { product: 'team_growth', price_cents: 9900, price_currency: 'USD' },
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/crypto-orders/idempotency-metrics',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const body = res.json<{ replays: number; first_writes: number; body_mismatches: number }>();
+    expect(body.replays).toBe(1);
+    expect(body.first_writes).toBe(1);
+    expect(body.body_mismatches).toBe(1);
   });
 });

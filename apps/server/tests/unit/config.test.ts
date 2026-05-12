@@ -87,4 +87,85 @@ describe('loadConfig', () => {
     });
     expect(cfg.r2).toBeNull();
   });
+
+  it('V-079.B derives authFlowUrls from DASHBOARD_ORIGIN when per-URL vars are missing', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+    });
+    expect(cfg.authFlowUrls.verifyEmail).toBe('https://app.driftstack.dev/verify-email');
+    expect(cfg.authFlowUrls.magicLink).toBe('https://app.driftstack.dev/auth/magic-link');
+    expect(cfg.authFlowUrls.passwordReset).toBe('https://app.driftstack.dev/reset-password');
+  });
+
+  it('V-079.B per-URL env var wins over DASHBOARD_ORIGIN derivation', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+      AUTH_VERIFY_EMAIL_URL: 'https://custom.example/verify',
+    });
+    expect(cfg.authFlowUrls.verifyEmail).toBe('https://custom.example/verify');
+    expect(cfg.authFlowUrls.magicLink).toBe('https://app.driftstack.dev/auth/magic-link');
+  });
+
+  it('V-079.B fails fast in production when an auth URL still points at localhost', () => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+        REDIS_URL: 'redis://localhost:6379',
+        NODE_ENV: 'production',
+        // No DASHBOARD_ORIGIN and no per-URL overrides → would fall back to localhost.
+        AUTH_VERIFY_EMAIL_URL: 'http://localhost:5173/auth/verify-email',
+      }),
+    ).toThrow(/localhost/);
+  });
+
+  it('V-079.B fails fast in production when DASHBOARD_ORIGIN is unset', () => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+        REDIS_URL: 'redis://localhost:6379',
+        NODE_ENV: 'production',
+        // No DASHBOARD_ORIGIN at all → zod falls back to localhost.
+      }),
+    ).toThrow(/DASHBOARD_ORIGIN/);
+  });
+
+  it('V-079.B production boot succeeds when DASHBOARD_ORIGIN resolves to a real host', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      NODE_ENV: 'production',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+    });
+    expect(cfg.authFlowUrls.verifyEmail).toBe('https://app.driftstack.dev/verify-email');
+  });
+
+  it('W190 strips trailing slash from DASHBOARD_ORIGIN so `${dashboardOrigin}/billing` is clean', () => {
+    // Operator pastes the env var with a trailing slash. Without the
+    // schema-level strip, every URL built via template literals would
+    // pick up a stray double slash (e.g. https://app.…//billing). The
+    // V-079.B auth-flow URL derivation has its own strip; this guard
+    // covers every OTHER consumer of `config.dashboardOrigin`.
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.dev/',
+    });
+    expect(cfg.dashboardOrigin).toBe('https://app.driftstack.dev');
+    // Auth-flow derivation already handled the strip — sanity check
+    // that both layers agree.
+    expect(cfg.authFlowUrls.verifyEmail).toBe('https://app.driftstack.dev/verify-email');
+  });
+
+  it('W190 collapses multiple trailing slashes on DASHBOARD_ORIGIN', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.dev///',
+    });
+    expect(cfg.dashboardOrigin).toBe('https://app.driftstack.dev');
+  });
 });

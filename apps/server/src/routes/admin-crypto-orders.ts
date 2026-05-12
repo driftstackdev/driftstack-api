@@ -7,8 +7,6 @@
 //   GET  /v1/admin/crypto-orders.csv                  (V-666.V)
 //   GET  /v1/admin/crypto-orders/:order_id
 //   POST /v1/admin/crypto-orders/:order_id/apply-ipn  (V-666.F)
-//   POST /v1/admin/crypto-orders/:order_id/request-refund (V-666.X)
-//   POST /v1/admin/crypto-orders/:order_id/cancel-refund-request (V-666.Y)
 //   PATCH /v1/admin/crypto-orders/:order_id/internal-note (V-666.AA)
 //   POST /v1/admin/crypto-orders/sweep-expired        (V-666.L)
 //
@@ -20,7 +18,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { buildCsv } from '../lib/csv.js';
-import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
+import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import type { CryptoOrder, CryptoOrdersService } from '../services/crypto-orders.js';
 
 export interface RegisterAdminCryptoOrdersRoutesDeps {
@@ -33,6 +31,17 @@ const ListQuery = z.object({
   // V-666.T — admin search/filter knobs.
   status: z.enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled']).optional(),
   search: z.string().min(1).max(200).optional(),
+  // V-666.AS — exact-match payment_id filter. Capped at 128 so abuse
+  // can't bloat the query log; real NowPayments ids are ~20 chars.
+  payment_id: z.string().min(1).max(128).optional(),
+  // V-666.AM — opaque cursor returned by a prior page's
+  // `next_cursor`. Length-bounded to keep abusive callers honest.
+  cursor: z.string().min(1).max(512).optional(),
+  // V-666.BY — half-open created_at window. Same shape as the
+  // customer endpoint (V-666.BX). Useful for the operator answering
+  // "show me all the paid orders between March 1 and April 1".
+  created_after: z.string().datetime().optional(),
+  created_before: z.string().datetime().optional(),
 });
 
 const GetParams = z.object({
@@ -71,6 +80,9 @@ const CsvQuery = z.object({
   limit: z.string().regex(/^\d+$/).optional(),
   status: z.enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled']).optional(),
   search: z.string().min(1).max(200).optional(),
+  // V-666.BY — date-range filter; same shape as the JSON list.
+  created_after: z.string().datetime().optional(),
+  created_before: z.string().datetime().optional(),
 });
 
 function toPublic(order: CryptoOrder): Record<string, unknown> {
@@ -83,26 +95,14 @@ function toPublic(order: CryptoOrder): Record<string, unknown> {
     payment_id: order.payment_id,
     status: order.status,
     customer_note: order.customer_note ?? null,
-    refund_requested_at:
-      // Defensive `!= null` so `undefined` from older repo fixtures
-      // still serialises to null rather than throwing a Date(undefined).
-      order.refund_requested_at != null ? new Date(order.refund_requested_at).toISOString() : null,
-    refund_reason: order.refund_reason ?? null,
-    // V-666.AA — admin-only field; nullish-coalesce mirrors the
-    // defensive posture on refund_reason so older repo fixtures
-    // serialise cleanly even before they round-trip through the
-    // service's create() path.
+    // V-666.AA — admin-only field; nullish-coalesce keeps older repo
+    // fixtures serialising cleanly even before they round-trip through
+    // the service's create() path.
     internal_note: order.internal_note ?? null,
     created_at: new Date(order.created_at).toISOString(),
     updated_at: new Date(order.updated_at).toISOString(),
   };
 }
-
-// V-666.X — admin refund-request body. Reason text is required +
-// capped at 500 chars (matches customer_note ceiling for symmetry).
-const RequestRefundBody = z.object({
-  reason: z.string().min(1).max(500),
-});
 
 // V-666.AA — admin internal-note body. Empty string normalises to
 // null at the service layer; 2000-char ceiling is twice the
@@ -115,12 +115,21 @@ export function registerAdminCryptoOrdersRoutes(
   app: FastifyInstance,
   deps: RegisterAdminCryptoOrdersRoutesDeps,
 ): void {
+  // V-666.BE — Cache-Control: no-store, private on admin crypto
+  // responses. Used to live as a route-local onSend hook; promoted
+  // to an app-level hook on /v1/admin/* in V-666.BT so every admin
+  // endpoint (accounts, audit, sessions, webhooks, etc.) inherits
+  // the same defense-in-depth header.
   app.get<{
     Querystring: {
       account_id?: string;
       limit?: string;
       status?: string;
       search?: string;
+      payment_id?: string;
+      cursor?: string;
+      created_after?: string;
+      created_before?: string;
     };
   }>(
     '/v1/admin/crypto-orders',
@@ -132,6 +141,10 @@ export function registerAdminCryptoOrdersRoutes(
           limit?: string;
           status?: string;
           search?: string;
+          payment_id?: string;
+          cursor?: string;
+          created_after?: string;
+          created_before?: string;
         };
       }>,
       reply,
@@ -145,13 +158,32 @@ export function registerAdminCryptoOrdersRoutes(
         }
         limit = n;
       }
-      const orders = await deps.service.listForAdmin({
+      const createdAfter =
+        query.created_after !== undefined ? new Date(query.created_after).getTime() : undefined;
+      const createdBefore =
+        query.created_before !== undefined ? new Date(query.created_before).getTime() : undefined;
+      // V-666.BZ — same inverted-window guard as the customer route.
+      if (
+        createdAfter !== undefined &&
+        createdBefore !== undefined &&
+        createdBefore <= createdAfter
+      ) {
+        throw new BadRequestError('created_before must be strictly greater than created_after.');
+      }
+      const page = await deps.service.listForAdminPage({
         ...(query.account_id !== undefined ? { accountId: query.account_id } : {}),
         ...(limit !== undefined ? { limit } : {}),
         ...(query.status !== undefined ? { status: query.status } : {}),
         ...(query.search !== undefined ? { search: query.search } : {}),
+        ...(query.payment_id !== undefined ? { paymentId: query.payment_id } : {}),
+        ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
+        ...(createdAfter !== undefined ? { createdAfter } : {}),
+        ...(createdBefore !== undefined ? { createdBefore } : {}),
       });
-      return reply.send({ orders: orders.map(toPublic) });
+      return reply.send({
+        orders: page.orders.map(toPublic),
+        next_cursor: page.nextCursor,
+      });
     },
   );
 
@@ -166,6 +198,8 @@ export function registerAdminCryptoOrdersRoutes(
       limit?: string;
       status?: string;
       search?: string;
+      created_after?: string;
+      created_before?: string;
     };
   }>(
     '/v1/admin/crypto-orders.csv',
@@ -177,6 +211,8 @@ export function registerAdminCryptoOrdersRoutes(
           limit?: string;
           status?: string;
           search?: string;
+          created_after?: string;
+          created_before?: string;
         };
       }>,
       reply,
@@ -190,11 +226,24 @@ export function registerAdminCryptoOrdersRoutes(
         }
         limit = n;
       }
+      const createdAfter =
+        query.created_after !== undefined ? new Date(query.created_after).getTime() : undefined;
+      const createdBefore =
+        query.created_before !== undefined ? new Date(query.created_before).getTime() : undefined;
+      if (
+        createdAfter !== undefined &&
+        createdBefore !== undefined &&
+        createdBefore <= createdAfter
+      ) {
+        throw new BadRequestError('created_before must be strictly greater than created_after.');
+      }
       const orders = await deps.service.listForAdmin({
         ...(query.account_id !== undefined ? { accountId: query.account_id } : {}),
         limit,
         ...(query.status !== undefined ? { status: query.status } : {}),
         ...(query.search !== undefined ? { search: query.search } : {}),
+        ...(createdAfter !== undefined ? { createdAfter } : {}),
+        ...(createdBefore !== undefined ? { createdBefore } : {}),
       });
       const csv = buildCsv({
         header: [
@@ -206,8 +255,6 @@ export function registerAdminCryptoOrdersRoutes(
           'status',
           'payment_id',
           'customer_note',
-          'refund_requested_at',
-          'refund_reason',
           'internal_note',
           'created_at',
           'updated_at',
@@ -221,9 +268,7 @@ export function registerAdminCryptoOrdersRoutes(
           o.status,
           o.payment_id,
           o.customer_note,
-          o.refund_requested_at !== null ? new Date(o.refund_requested_at).toISOString() : null,
-          o.refund_reason,
-          o.internal_note,
+          o.internal_note ?? null,
           new Date(o.created_at).toISOString(),
           new Date(o.updated_at).toISOString(),
         ]),
@@ -240,8 +285,8 @@ export function registerAdminCryptoOrdersRoutes(
   // more orders exist than the scan window (10k default).
   // V-666.W — adds avg_time_to_paid_ms + paid_sample for the ops
   // "how fast are customers actually paying" KPI.
-  // V-666.AB — adds refund_pending_count + refund_pending_cents for
-  // the "how many refunds are in flight" ops view.
+  // V-666.AE — adds paid_revenue_by_product + paid_count_by_product
+  // for the "which tiers are converting" KPI.
   app.get(
     '/v1/admin/crypto-orders/stats',
     { preHandler: [app.requireScope('driftstack_internal_admin')] },
@@ -253,10 +298,31 @@ export function registerAdminCryptoOrdersRoutes(
         paid_revenue_cents: stats.paidRevenueCents,
         avg_time_to_paid_ms: stats.avgTimeToPaidMs,
         paid_sample: stats.paidSample,
-        refund_pending_count: stats.refundPendingCount,
-        refund_pending_cents: stats.refundPendingCents,
+        paid_revenue_by_product: stats.paidRevenueByProduct,
+        paid_count_by_product: stats.paidCountByProduct,
         truncated: stats.truncated,
         scanned: stats.scanned,
+      });
+    },
+  );
+
+  // V-666.AP — idempotency-key counters. Cheap to scrape (no full-
+  // table walk) — useful for noticing when retries spike (often a
+  // client-side bug or a network-blip rate). Auth gated to the
+  // internal admin scope same as the rest of this surface.
+  app.get(
+    '/v1/admin/crypto-orders/idempotency-metrics',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    (_req, reply) => {
+      const m = deps.service.getIdempotencyMetrics();
+      return reply.send({
+        replays: m.replays,
+        first_writes: m.firstWrites,
+        // V-666.AR — body-fingerprint mismatch count. Trending non-
+        // zero signals a client that's reusing keys across distinct
+        // intents (often a hardcoded constant where a generated UUID
+        // belongs).
+        body_mismatches: m.bodyMismatches,
       });
     },
   );
@@ -314,6 +380,31 @@ export function registerAdminCryptoOrdersRoutes(
         throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
       }
       return reply.send(toPublic(order));
+    },
+  );
+
+  // V-666.AT — order events timeline. Returns the order's append-
+  // only event log oldest-first. The customer-facing surface
+  // doesn't expose this yet; the admin drawer is the first
+  // consumer. Each event carries the destination status, the
+  // server timestamp, and the source ('create' / 'ipn' / 'cancel'
+  // / 'expired' / 'swept').
+  app.get<{ Params: { order_id: string } }>(
+    '/v1/admin/crypto-orders/:order_id/events',
+    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
+      const params = parseOrThrow(GetParams, req.params);
+      const events = await deps.service.getOrderEvents(params.order_id);
+      if (events === null) {
+        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
+      }
+      return reply.send({
+        events: events.map((e) => ({
+          status: e.status,
+          at: new Date(e.at).toISOString(),
+          source: e.source,
+        })),
+      });
     },
   );
 
@@ -375,43 +466,6 @@ export function registerAdminCryptoOrdersRoutes(
     },
   );
 
-  // V-666.X — admin records a refund intent for a paid order. This
-  // does not make an on-chain refund — that still goes through the
-  // NowPayments dashboard. Returns 409 when the order isn't in the
-  // paid state (only paid orders are refundable through this path;
-  // pending/failed/cancelled orders need a different remedy).
-  app.post<{
-    Params: { order_id: string };
-    Body: { reason?: string };
-  }>(
-    '/v1/admin/crypto-orders/:order_id/request-refund',
-    { preHandler: [app.requireScope('driftstack_internal_admin')] },
-    async (
-      req: FastifyRequest<{
-        Params: { order_id: string };
-        Body: { reason?: string };
-      }>,
-      reply,
-    ) => {
-      const params = parseOrThrow(GetParams, req.params);
-      const body = parseOrThrow(RequestRefundBody, req.body);
-      const result = await deps.service.requestRefund({
-        order_id: params.order_id,
-        reason: body.reason,
-      });
-      if (result === null) {
-        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
-      }
-      if (result.ok === 'not_paid') {
-        throw new ConflictError(
-          `Order is in state "${result.currentStatus}" — only paid orders can be refunded through this endpoint.`,
-          { resource: 'crypto_order', field: 'status' },
-        );
-      }
-      return reply.send(toPublic(result.order));
-    },
-  );
-
   // V-666.AA — admin sets / clears the internal-note field on an
   // order. PATCH semantics: send { internal_note: "..." } to set,
   // { internal_note: null } or { internal_note: "" } to clear.
@@ -438,32 +492,6 @@ export function registerAdminCryptoOrdersRoutes(
         throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
       }
       return reply.send(toPublic(updated));
-    },
-  );
-
-  // V-666.Y — admin clears a previously-recorded refund request.
-  // Idempotent: returns 200 even when no refund was outstanding
-  // (the response includes a `noop: true` flag so the dashboard can
-  // distinguish "cleared something" from "nothing to clear").
-  app.post<{ Params: { order_id: string } }>(
-    '/v1/admin/crypto-orders/:order_id/cancel-refund-request',
-    { preHandler: [app.requireScope('driftstack_internal_admin')] },
-    async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
-      const params = parseOrThrow(GetParams, req.params);
-      const result = await deps.service.cancelRefundRequest({
-        order_id: params.order_id,
-      });
-      if (result === null) {
-        throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
-      }
-      if (result.ok === 'noop') {
-        const order = await deps.service.getById(params.order_id);
-        if (order === null) {
-          throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
-        }
-        return reply.send({ ...toPublic(order), noop: true });
-      }
-      return reply.send({ ...toPublic(result.order), noop: false });
     },
   );
 }

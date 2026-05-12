@@ -96,10 +96,16 @@ const ConfigSchema = z.object({
   // single-use token gets appended as `?token=<...>` to each. Defaults
   // are dev-friendly localhost URLs; production sets these to the real
   // dashboard origin.
+  // V-079.B/C — dashboard route paths. The customer-dashboard
+  // (apps/customer-dashboard) serves these at top-level:
+  //   /verify-email, /reset-password
+  // Magic-link doesn't have a dashboard page yet so the default
+  // path is left under /auth/ as a placeholder; consumers wiring
+  // magic-link should set AUTH_MAGIC_LINK_URL explicitly.
   authFlowUrls: z.object({
-    verifyEmail: z.string().url().default('http://localhost:5173/auth/verify-email'),
+    verifyEmail: z.string().url().default('http://localhost:5173/verify-email'),
     magicLink: z.string().url().default('http://localhost:5173/auth/magic-link'),
-    passwordReset: z.string().url().default('http://localhost:5173/auth/password-reset'),
+    passwordReset: z.string().url().default('http://localhost:5173/reset-password'),
     /**
      * When true, signup / magic-link / password-reset responses include
      * a `debug_token` field containing the plaintext token. ENABLE ONLY
@@ -113,7 +119,15 @@ const ConfigSchema = z.object({
    * browser_url returned by /v1/auth/cli-authorize/initiate so the
    * GUI's deep link points at the right host (dev / staging / prod).
    */
-  dashboardOrigin: z.string().url().default('http://localhost:5173'),
+  // W190 — strip any trailing slash so consumers can safely do
+  // `${dashboardOrigin}/billing` etc. without producing `https://…//billing`.
+  // The zod schema is the single normalisation point; cli-authorize.ts
+  // and the other call sites no longer need to re-strip.
+  dashboardOrigin: z
+    .string()
+    .url()
+    .default('http://localhost:5173')
+    .transform((s) => s.replace(/\/+$/, '')),
   /**
    * V-353b — base64-encoded 32-byte AES-256-GCM key used to encrypt
    * TOTP secrets at rest. When unset, /v1/account/mfa/* routes are
@@ -172,6 +186,70 @@ function readR2Config(env: NodeJS.ProcessEnv): R2Config | null {
     bucketPublic,
     endpointUrl,
   };
+}
+
+/**
+ * V-079.B — derive the three auth-flow URLs from a single
+ * `DASHBOARD_ORIGIN` env var when the per-URL overrides aren't set.
+ *
+ * Why: deploys that only set `DASHBOARD_ORIGIN=https://app.…` would
+ * previously still emit verify-email / magic-link / password-reset
+ * URLs pointing at `http://localhost:5173` (the zod default for the
+ * per-URL fields). Real customers received emails with broken links.
+ *
+ * Resolution order for each URL:
+ *   1. explicit per-URL env var (AUTH_VERIFY_EMAIL_URL etc.)
+ *   2. DASHBOARD_ORIGIN + the conventional path
+ *   3. dev-friendly localhost default (final fallback, dev-only)
+ *
+ * In production, any resolved URL still pointing at localhost is a
+ * misconfiguration — the boot-time guard at the bottom rejects it
+ * rather than letting customers receive broken links again.
+ */
+function deriveAuthFlowUrls(env: NodeJS.ProcessEnv): {
+  verifyEmail?: string;
+  magicLink?: string;
+  passwordReset?: string;
+  exposeDebugToken?: string;
+} {
+  const origin = env.DASHBOARD_ORIGIN?.replace(/\/+$/, '');
+  const fromOrigin = (path: string): string | undefined =>
+    origin !== undefined && origin.length > 0 ? `${origin}${path}` : undefined;
+  const resolved = {
+    // V-079.C — paths match the customer-dashboard's actual file-based
+    // routes (`/verify-email`, `/reset-password`). The previous
+    // `/auth/<flow>` paths landed on 404s because no such pages
+    // existed; the bug surfaced in a real customer's verify-email
+    // when Postmark approval landed (2026-05-12).
+    verifyEmail: env.AUTH_VERIFY_EMAIL_URL ?? fromOrigin('/verify-email'),
+    magicLink: env.AUTH_MAGIC_LINK_URL ?? fromOrigin('/auth/magic-link'),
+    passwordReset: env.AUTH_PASSWORD_RESET_URL ?? fromOrigin('/reset-password'),
+    exposeDebugToken: env.AUTH_EXPOSE_DEBUG_TOKEN,
+  };
+  if (env.NODE_ENV === 'production') {
+    for (const [name, value] of Object.entries({
+      DASHBOARD_ORIGIN: env.DASHBOARD_ORIGIN,
+      AUTH_VERIFY_EMAIL_URL: resolved.verifyEmail,
+      AUTH_MAGIC_LINK_URL: resolved.magicLink,
+      AUTH_PASSWORD_RESET_URL: resolved.passwordReset,
+    })) {
+      if (value !== undefined && /\blocalhost\b/.test(value)) {
+        throw new Error(
+          `Refusing to boot: ${name} resolves to a localhost URL ("${value}") in production. ` +
+            `Set DASHBOARD_ORIGIN (or the per-URL env var) to the customer-facing dashboard origin.`,
+        );
+      }
+    }
+    // Reject the "no DASHBOARD_ORIGIN at all" case too — the zod
+    // default would otherwise land on the localhost fallback and the
+    // CLI-authorize browser URL (cli-authorize.ts) would point there.
+    if (env.DASHBOARD_ORIGIN === undefined || env.DASHBOARD_ORIGIN.length === 0) {
+      throw new Error(
+        'Refusing to boot: DASHBOARD_ORIGIN must be set in production (drives auth-flow URLs + CLI-authorize browser URL).',
+      );
+    }
+  }
+  return resolved;
 }
 
 function readPostmarkConfig(env: NodeJS.ProcessEnv): PostmarkConfig | null {
@@ -269,12 +347,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
               : {}),
           }
         : undefined,
-    authFlowUrls: {
-      verifyEmail: env.AUTH_VERIFY_EMAIL_URL,
-      magicLink: env.AUTH_MAGIC_LINK_URL,
-      passwordReset: env.AUTH_PASSWORD_RESET_URL,
-      exposeDebugToken: env.AUTH_EXPOSE_DEBUG_TOKEN,
-    },
+    authFlowUrls: deriveAuthFlowUrls(env),
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,
     // V-487 — NowPayments scaffold. All fields optional; presence of

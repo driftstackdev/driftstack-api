@@ -239,6 +239,17 @@ describe('GET /v1/billing', () => {
     expect(body.trial_pack.redeemed).toBe(false);
   });
 
+  it('V-666.BW sets Cache-Control: no-store, private', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/billing',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store, private');
+  });
+
   it('reflects an active trial-pack purchase', async () => {
     fx = await buildTestApp();
     fx.billingRepo.applyTrialPackPurchase(fx.accountId, {

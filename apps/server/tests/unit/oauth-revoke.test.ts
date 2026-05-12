@@ -7,7 +7,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createHash } from 'node:crypto';
-import { InMemoryOAuthStore, OAuthService, type OAuthStore } from '../../src/services/oauth.js';
+import { InMemoryOAuthStore, OAuthService } from '../../src/services/oauth.js';
 import { registerOAuthRoutes } from '../../src/routes/oauth.js';
 import { registerErrorHandler } from '../../src/middleware/error-handler.js';
 
@@ -82,10 +82,14 @@ describe('V-667.C OAuthService.revokeToken — service layer', () => {
 
   it('forwards to the store.revokeToken hook (spy-based)', async () => {
     const revokeSpy = vi.fn(() => Promise.resolve());
-    const store: OAuthStore = {
-      ...new InMemoryOAuthStore(),
-      revokeToken: revokeSpy,
-    };
+    // Object spread skips class-prototype methods (only own properties
+    // are enumerated), so spreading `new InMemoryOAuthStore()` would
+    // drop every method except instance fields. Use the instance
+    // directly, then shadow `revokeToken` via Object.assign so the
+    // spy intercepts the call without TS treating it as a missing
+    // implementation.
+    const store = new InMemoryOAuthStore();
+    Object.assign(store, { revokeToken: revokeSpy });
     const svc = new OAuthService(store);
     await svc.revokeToken('opaque-token');
     expect(revokeSpy).toHaveBeenCalledWith('opaque-token');

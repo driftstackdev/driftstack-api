@@ -34,10 +34,30 @@ import {
   ListProfilesResponseSchema,
   ProfileSchema,
   UpdateProfileRequestSchema,
+  AdminApplyIpnRequestSchema,
+  AdminCryptoDailyBreakdownResponseSchema,
+  AdminCryptoOrderEnvelopeSchema,
+  AdminCryptoOrderEventsResponseSchema,
+  AdminCryptoPendingAgeResponseSchema,
+  AdminCryptoStatsResponseSchema,
+  AdminIdempotencyMetricsResponseSchema,
+  AdminListCryptoOrdersResponseSchema,
+  AdminSweepExpiredRequestSchema,
+  AdminSweepExpiredResponseSchema,
+  AdminUpdateInternalNoteRequestSchema,
+  CryptoQuoteRequestSchema,
+  CryptoQuoteResponseSchema,
+  CancelCryptoOrderResponseSchema,
+  CryptoOrderReceiptSchema,
   CreateCheckoutSessionRequestSchema,
   CreateCheckoutSessionResponseSchema,
+  CreateCryptoCheckoutRequestSchema,
+  CreateCryptoCheckoutResponseSchema,
   CreatePortalSessionResponseSchema,
+  CryptoOrderEnvelopeSchema,
   GetBillingStateResponseSchema,
+  ListCryptoOrdersResponseSchema,
+  UpdateCryptoOrderNoteRequestSchema,
   LoginRequestSchema,
   LoginResponseUnionSchema,
   LogoutRequestSchema,
@@ -1952,6 +1972,448 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Subscription row + trial-pack credit/expiry/redemption state.',
         content: { 'application/json': { schema: GetBillingStateResponseSchema } },
       },
+      ...errors4xx,
+    },
+  });
+
+  // ── V-666 — crypto-orders surface. Crypto payments are non-refundable.
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/billing/crypto-checkout/quote',
+    summary: 'Preview a crypto-checkout price without minting an order',
+    tags: ['billing', 'crypto'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: CryptoQuoteRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Fiat-cents price + crypto pay-range (stub until NowPayments lands).',
+        content: { 'application/json': { schema: CryptoQuoteResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/billing/crypto-checkout',
+    summary: 'Mint a new crypto-payment order',
+    tags: ['billing', 'crypto'],
+    security: auth,
+    request: {
+      headers: z.object({
+        'idempotency-key': z
+          .string()
+          .max(255)
+          .optional()
+          .describe(
+            'Optional client-supplied idempotency key. Duplicate POSTs with the same key within 24h replay the original order. See /docs/idempotency-keys.',
+          ),
+      }),
+      body: { content: { 'application/json': { schema: CreateCryptoCheckoutRequestSchema } } },
+    },
+    responses: {
+      201: {
+        description:
+          'Order minted; response carries payment context for the customer. On a replayed key, the response also sets `Idempotent-Replayed: 1`.',
+        content: { 'application/json': { schema: CreateCryptoCheckoutResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/billing/crypto-orders',
+    summary: "List the caller account's crypto orders (newest first)",
+    tags: ['billing', 'crypto'],
+    security: auth,
+    request: {
+      query: z.object({
+        limit: z
+          .string()
+          .regex(/^\d+$/)
+          .optional()
+          .describe('Page size (1-100). Defaults to server-side 50.'),
+        // V-666.BR — single-value status filter; mirrors admin list.
+        status: z
+          .enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled'])
+          .optional()
+          .describe('If set, only orders matching this status are returned.'),
+        // V-666.BU — forward cursor; opaque base64url token from a
+        // prior page's next_cursor.
+        cursor: z
+          .string()
+          .min(1)
+          .optional()
+          .describe('Opaque cursor from a prior page. Iterate until null.'),
+        // V-666.BX — half-open date-range filter on created_at.
+        created_after: z
+          .string()
+          .datetime()
+          .optional()
+          .describe('Lower bound (inclusive). ISO 8601 timestamp.'),
+        created_before: z
+          .string()
+          .datetime()
+          .optional()
+          .describe('Upper bound (exclusive). ISO 8601 timestamp.'),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'Order list scoped to the calling account.',
+        content: { 'application/json': { schema: ListCryptoOrdersResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/billing/crypto-orders/{order_id}',
+    summary: 'Read a single crypto order owned by the calling account',
+    tags: ['billing', 'crypto'],
+    security: auth,
+    request: {
+      params: z.object({ order_id: z.string().describe('Order id (ord_<hex>).') }),
+    },
+    responses: {
+      200: {
+        description: 'Order envelope.',
+        content: { 'application/json': { schema: CryptoOrderEnvelopeSchema } },
+      },
+      404: { description: 'No such order owned by this account.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'patch',
+    path: '/v1/billing/crypto-orders/{order_id}',
+    summary: 'Update the customer-facing free-text note on an order',
+    tags: ['billing', 'crypto'],
+    security: auth,
+    request: {
+      params: z.object({ order_id: z.string() }),
+      body: { content: { 'application/json': { schema: UpdateCryptoOrderNoteRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Updated order envelope.',
+        content: { 'application/json': { schema: CryptoOrderEnvelopeSchema } },
+      },
+      404: { description: 'No such order.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/billing/crypto-orders/{order_id}/receipt',
+    summary: 'Read the JSON receipt for an order owned by the calling account',
+    tags: ['billing', 'crypto'],
+    security: auth,
+    request: {
+      params: z.object({ order_id: z.string() }),
+    },
+    responses: {
+      200: {
+        description: 'Normalised receipt payload (status, paid_at, amounts).',
+        content: { 'application/json': { schema: CryptoOrderReceiptSchema } },
+      },
+      404: { description: 'No such order.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/billing/crypto-orders/{order_id}/receipt.txt',
+    summary: 'Same receipt rendered as text/plain for curl/wget pipelines',
+    tags: ['billing', 'crypto'],
+    security: auth,
+    request: {
+      params: z.object({ order_id: z.string() }),
+    },
+    responses: {
+      200: {
+        description: 'Text receipt; same fields as the JSON variant.',
+        content: {
+          'text/plain': {
+            schema: z.string().describe('Plain-text receipt, one field per line.'),
+          },
+        },
+      },
+      404: { description: 'No such order.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/billing/crypto-orders/{order_id}/receipt.pdf',
+    summary: 'PDF rendering of the receipt with Content-Disposition: attachment',
+    tags: ['billing', 'crypto'],
+    security: auth,
+    request: {
+      params: z.object({ order_id: z.string() }),
+    },
+    responses: {
+      200: {
+        description: 'PDF bytes; the route also sets a meaningful filename.',
+        content: {
+          'application/pdf': {
+            schema: z.string().describe('Binary PDF body. base64 only on display.'),
+          },
+        },
+      },
+      404: { description: 'No such order.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/billing/crypto-orders/{order_id}/cancel',
+    summary: 'Cancel a pending crypto order (self-service abandonment)',
+    tags: ['billing', 'crypto'],
+    security: auth,
+    request: {
+      params: z.object({ order_id: z.string() }),
+    },
+    responses: {
+      200: {
+        description: 'Order cancelled; envelope returned with status: cancelled.',
+        content: { 'application/json': { schema: CancelCryptoOrderResponseSchema } },
+      },
+      404: { description: 'No such order.', content: problemContent },
+      409: {
+        description: 'Order has moved past pending and cannot be cancelled self-service.',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
+  // ── V-666.AY — admin crypto-orders surface. Requires the
+  // `driftstack_internal_admin` scope; otherwise the route returns 403.
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/crypto-orders',
+    summary: 'List crypto orders across all accounts (admin)',
+    tags: ['admin', 'crypto'],
+    security: auth,
+    request: {
+      query: z.object({
+        account_id: z.string().optional(),
+        status: z
+          .enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled'])
+          .optional(),
+        search: z.string().optional(),
+        payment_id: z.string().optional().describe('Exact-match reverse lookup.'),
+        limit: z.string().optional(),
+        cursor: z.string().optional().describe('Opaque cursor from a prior page.'),
+        created_after: z
+          .string()
+          .datetime()
+          .optional()
+          .describe('Lower bound (inclusive). ISO 8601 timestamp.'),
+        created_before: z
+          .string()
+          .datetime()
+          .optional()
+          .describe('Upper bound (exclusive). ISO 8601 timestamp.'),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'Paginated order list with next_cursor.',
+        content: { 'application/json': { schema: AdminListCryptoOrdersResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/crypto-orders/{order_id}',
+    summary: 'Read a single crypto order (admin envelope includes internal_note)',
+    tags: ['admin', 'crypto'],
+    security: auth,
+    request: {
+      params: z.object({ order_id: z.string() }),
+    },
+    responses: {
+      200: {
+        description: 'Admin order envelope.',
+        content: { 'application/json': { schema: AdminCryptoOrderEnvelopeSchema } },
+      },
+      404: { description: 'No such order.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/crypto-orders/{order_id}/events',
+    summary: "Read an order's append-only state-transition timeline",
+    tags: ['admin', 'crypto'],
+    security: auth,
+    request: {
+      params: z.object({ order_id: z.string() }),
+    },
+    responses: {
+      200: {
+        description: 'Order events oldest-first.',
+        content: { 'application/json': { schema: AdminCryptoOrderEventsResponseSchema } },
+      },
+      404: { description: 'No such order.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'patch',
+    path: '/v1/admin/crypto-orders/{order_id}/internal-note',
+    summary: 'Set or clear the admin-only internal note on an order',
+    tags: ['admin', 'crypto'],
+    security: auth,
+    request: {
+      params: z.object({ order_id: z.string() }),
+      body: {
+        content: { 'application/json': { schema: AdminUpdateInternalNoteRequestSchema } },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Order envelope with the updated internal_note.',
+        content: { 'application/json': { schema: AdminCryptoOrderEnvelopeSchema } },
+      },
+      404: { description: 'No such order.', content: problemContent },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/crypto-orders/sweep-expired',
+    summary: 'Sweep stale pending orders to failed (idempotent)',
+    tags: ['admin', 'crypto'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: AdminSweepExpiredRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Count of orders swept this tick + a capped flag.',
+        content: { 'application/json': { schema: AdminSweepExpiredResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/crypto-orders/stats',
+    summary: 'At-a-glance KPI snapshot for the ops dashboard',
+    tags: ['admin', 'crypto'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Counts per status + paid revenue + time-to-paid metrics.',
+        content: { 'application/json': { schema: AdminCryptoStatsResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/crypto-orders/daily',
+    summary: 'Per-(date, status) counts for the last N days (max 90)',
+    tags: ['admin', 'crypto'],
+    security: auth,
+    request: {
+      query: z.object({
+        days: z.string().optional().describe('Defaults to 30; max 90.'),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'Sparse rows; zero-fill is the caller responsibility.',
+        content: {
+          'application/json': { schema: AdminCryptoDailyBreakdownResponseSchema },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/crypto-orders/pending-age',
+    summary: 'Histogram of pending-order ages (1h / 1-6h / 6-24h / >24h)',
+    tags: ['admin', 'crypto'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Bucketed counts + total currently pending.',
+        content: {
+          'application/json': { schema: AdminCryptoPendingAgeResponseSchema },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/crypto-orders/idempotency-metrics',
+    summary: 'Idempotency-key counters (replays / first_writes / body mismatches)',
+    tags: ['admin', 'crypto'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Process-lifetime counters; cheap to scrape.',
+        content: {
+          'application/json': { schema: AdminIdempotencyMetricsResponseSchema },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/crypto-orders.csv',
+    summary: 'CSV export of crypto orders matching the supplied filters (max 1000 rows)',
+    tags: ['admin', 'crypto'],
+    security: auth,
+    request: {
+      query: z.object({
+        account_id: z.string().optional(),
+        status: z
+          .enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled'])
+          .optional(),
+        search: z.string().optional(),
+        limit: z.string().optional(),
+        created_after: z.string().datetime().optional(),
+        created_before: z.string().datetime().optional(),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'CSV body. First row is the header.',
+        content: {
+          'text/csv': {
+            schema: z.string().describe('RFC 4180 CSV; UTF-8 no BOM.'),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/admin/crypto-orders/{order_id}/apply-ipn',
+    summary: 'Manually apply a NowPayments IPN to an order (ops escape hatch)',
+    tags: ['admin', 'crypto'],
+    security: auth,
+    request: {
+      params: z.object({ order_id: z.string() }),
+      body: { content: { 'application/json': { schema: AdminApplyIpnRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Order envelope with the transitioned status.',
+        content: { 'application/json': { schema: AdminCryptoOrderEnvelopeSchema } },
+      },
+      404: { description: 'No such order.', content: problemContent },
       ...errors4xx,
     },
   });

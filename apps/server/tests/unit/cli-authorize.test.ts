@@ -75,7 +75,7 @@ describe('V-553.B-2 CliAuthorizeService — bind', () => {
       state: 'st_' + 'a'.repeat(20),
       account_id: 'acc_1',
       api_key_plaintext: 'sk_test_plain_v553',
-      scopes: ['sessions:write'],
+      scopes: ['write:sessions'],
     });
     expect(r.account_id).toBe('acc_1');
     // Exchange should now return the plaintext.

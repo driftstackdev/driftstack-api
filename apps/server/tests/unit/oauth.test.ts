@@ -75,10 +75,10 @@ describe('V-667 OAuthService — authorize', () => {
       state: 'st_random',
       code_challenge: challenge,
       code_challenge_method: 'S256',
-      scope: ['sessions:read'],
+      scope: ['read:sessions'],
     });
     expect(r.authorization_id).toMatch(/^oaa_/);
-    expect(r.scope).toEqual(['sessions:read']);
+    expect(r.scope).toEqual(['read:sessions']);
     expect(r.state).toBe('st_random');
   });
 
@@ -149,7 +149,7 @@ describe('V-667 OAuthService — approveAuthorization + exchangeCode (full happy
       state: 'st_test',
       code_challenge: challenge,
       code_challenge_method: 'S256',
-      scope: ['sessions:read', 'sessions:write'],
+      scope: ['read:sessions', 'write:sessions'],
     });
     const approval = await svc.approveAuthorization({
       authorization_id: auth.authorization_id,
@@ -168,7 +168,7 @@ describe('V-667 OAuthService — approveAuthorization + exchangeCode (full happy
     expect(token.access_token).toMatch(/^oat_/);
     expect(token.token_type).toBe('Bearer');
     expect(token.expires_in).toBe(3600);
-    expect(token.scope).toEqual(['sessions:read', 'sessions:write']);
+    expect(token.scope).toEqual(['read:sessions', 'write:sessions']);
 
     const intro = await svc.introspect(token.access_token);
     expect(intro?.account_id).toBe('acc_test_001');
@@ -196,7 +196,7 @@ describe('V-667 OAuthService — exchangeCode rejection paths', () => {
       state: 'st',
       code_challenge: challenge,
       code_challenge_method: 'S256',
-      scope: ['sessions:read'],
+      scope: ['read:sessions'],
     });
     const approval = await svc.approveAuthorization({
       authorization_id: auth.authorization_id,

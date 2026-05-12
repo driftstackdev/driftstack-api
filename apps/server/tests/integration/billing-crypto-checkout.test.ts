@@ -3,9 +3,14 @@
 // Coverage: auth gate, happy path (201 + persisted order), input
 // validation (bad product, bad currency, missing price), and that the
 // minted order_id round-trips through the V-666.B IPN state machine.
+// V-666.AO — appended tests for Idempotency-Key header.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import {
+  buildTestApp,
+  seedAdditionalAccount,
+  type TestAppFixture,
+} from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
 afterEach(async () => {
@@ -92,6 +97,133 @@ describe('V-666.C POST /v1/billing/crypto-checkout', () => {
       payload: { product: 'solo_manual', price_cents: 0, price_currency: 'USD' },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('V-666.AO replays the same order on a duplicate Idempotency-Key', async () => {
+    fx = await buildTestApp();
+    const headers = {
+      authorization: `Bearer ${fx.plaintext}`,
+      'idempotency-key': 'client-retry-abc',
+    };
+    const payload = { product: 'trial_pack', price_cents: 299, price_currency: 'USD' };
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers,
+      payload,
+    });
+    expect(first.statusCode).toBe(201);
+    expect(first.headers['idempotent-replayed']).toBeUndefined();
+    const firstBody = first.json<CryptoCheckoutResponse>();
+
+    const second = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers,
+      payload,
+    });
+    expect(second.statusCode).toBe(201);
+    expect(second.headers['idempotent-replayed']).toBe('1');
+    const secondBody = second.json<CryptoCheckoutResponse>();
+    expect(secondBody.order_id).toBe(firstBody.order_id);
+    expect(secondBody.created_at).toBe(firstBody.created_at);
+  });
+
+  it('V-666.AO different Idempotency-Keys mint different orders', async () => {
+    fx = await buildTestApp();
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const payload = { product: 'trial_pack', price_cents: 299, price_currency: 'USD' };
+    const a = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers: { ...auth, 'idempotency-key': 'key-a' },
+      payload,
+    });
+    const b = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers: { ...auth, 'idempotency-key': 'key-b' },
+      payload,
+    });
+    expect(a.json<CryptoCheckoutResponse>().order_id).not.toBe(
+      b.json<CryptoCheckoutResponse>().order_id,
+    );
+  });
+
+  it('V-666.AO 400 on whitespace / oversize idempotency key', async () => {
+    fx = await buildTestApp();
+    const oversize = 'x'.repeat(256);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': oversize,
+      },
+      payload: { product: 'trial_pack', price_cents: 299, price_currency: 'USD' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('V-666.AO Idempotency-Key collisions across accounts mint independent orders', async () => {
+    fx = await buildTestApp();
+    // Second account, fresh API key — but the same Idempotency-Key.
+    const second = await seedAdditionalAccount(fx);
+    const payload = { product: 'trial_pack', price_cents: 299, price_currency: 'USD' };
+    const sharedKey = 'colliding-customer-retry';
+    const a = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': sharedKey },
+      payload,
+    });
+    expect(a.statusCode).toBe(201);
+    expect(a.headers['idempotent-replayed']).toBeUndefined();
+    const b = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers: { authorization: `Bearer ${second.plaintext}`, 'idempotency-key': sharedKey },
+      payload,
+    });
+    expect(b.statusCode).toBe(201);
+    // Critical: account B must NOT see account A's order. Different
+    // order ids; no replay header.
+    expect(b.headers['idempotent-replayed']).toBeUndefined();
+    expect(b.json<CryptoCheckoutResponse>().order_id).not.toBe(
+      a.json<CryptoCheckoutResponse>().order_id,
+    );
+    // Account A's second call with the same key still replays its own order.
+    const aReplay = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': sharedKey },
+      payload,
+    });
+    expect(aReplay.headers['idempotent-replayed']).toBe('1');
+    expect(aReplay.json<CryptoCheckoutResponse>().order_id).toBe(
+      a.json<CryptoCheckoutResponse>().order_id,
+    );
+  });
+
+  it('V-666.AO missing header still mints fresh on every call', async () => {
+    fx = await buildTestApp();
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const payload = { product: 'trial_pack', price_cents: 299, price_currency: 'USD' };
+    const a = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers: auth,
+      payload,
+    });
+    const b = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers: auth,
+      payload,
+    });
+    expect(a.json<CryptoCheckoutResponse>().order_id).not.toBe(
+      b.json<CryptoCheckoutResponse>().order_id,
+    );
   });
 
   it('minted order flows through V-666.B applyIpnStatus → paid', async () => {

@@ -8,6 +8,17 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.crypto_orders.*`** + async mirror (V-666 Python parity) —
+  customer-facing crypto-checkout surface: `quote(body)`,
+  `create_checkout(body, *, idempotency_key=None)`, `list(*, limit,
+status, cursor, created_after, created_before)`, `iterate(...)`,
+  `get(order_id)`, `update_note(order_id, body)`, `cancel(order_id)`,
+  `receipt(order_id)`. The `Idempotency-Key` header is forwarded
+  through `create_checkout` so retries don't mint duplicate orders.
+  `iterate(...)` is the recommended way to walk every order — cursor
+  handoff is managed internally; pass `status` / `created_after` /
+  `created_before` to narrow the walk. Crypto payments are
+  non-refundable; consult the support team for disputes.
 - **`client.webhooks.send_test(webhook_id)`** + async mirror
   (V-463 / V-356) — synthetic `test.ping` delivery; bypasses
   subscription. Returns `{delivery_id, event_id, event_type}`.

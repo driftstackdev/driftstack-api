@@ -10,6 +10,7 @@ import { WebhooksResource } from './resources/webhooks.js';
 import { ProfilesResource } from './resources/profiles.js';
 import { ProfileSnapshotsResource } from './resources/profile-snapshots.js';
 import { BillingResource } from './resources/billing.js';
+import { CryptoOrdersResource } from './resources/crypto-orders.js';
 import { AuthResource } from './resources/auth.js';
 import { AccountResource } from './resources/account.js';
 import { AuditLogResource } from './resources/audit-log.js';
@@ -43,6 +44,8 @@ export class Driftstack {
   /** V-312 — immutable point-in-time profile snapshots. */
   readonly profileSnapshots: ProfileSnapshotsResource;
   readonly billing: BillingResource;
+  /** V-666 — crypto-payment orders (customer surface). */
+  readonly cryptoOrders: CryptoOrdersResource;
   readonly auth: AuthResource;
   readonly account: AccountResource;
   /** V-353b — MFA enrollment management. Pairs with `auth.mfaChallenge` + `auth.mfaStepUp`. */
@@ -79,6 +82,7 @@ export class Driftstack {
     this.profiles = new ProfilesResource(this.http);
     this.profileSnapshots = new ProfileSnapshotsResource(this.http);
     this.billing = new BillingResource(this.http);
+    this.cryptoOrders = new CryptoOrdersResource(this.http);
     this.auth = new AuthResource(this.http);
     this.account = new AccountResource(this.http);
     this.mfa = new MfaResource(this.http);

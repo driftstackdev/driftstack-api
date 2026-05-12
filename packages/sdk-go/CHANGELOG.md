@@ -8,6 +8,20 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.CryptoOrders.*`** (V-666 Go parity) — customer-facing
+  crypto-checkout surface: `Quote`, `CreateCheckout` (with
+  `*CreateCheckoutOptions{IdempotencyKey}` for V-666.AO header
+  forwarding), `List` (with `*ListCryptoOrdersOptions{Limit, Status,
+Cursor, CreatedAfter, CreatedBefore}`), `Iterate` (visit callback
+  walks every cursor page — return `false` to stop early), `Get`,
+  `UpdateNote`, `Cancel`, `Receipt`. New `ListCryptoOrdersResponse`
+  struct exposes `Orders` + `NextCursor`. Returned envelopes are
+  `map[string]any` pending an OpenAPI codegen pass. Crypto payments
+  are non-refundable; cancellation only works while pending.
+- **`requestOptions.headers`** (internal) — resource methods can now
+  attach extra request headers (used today by
+  `CryptoOrders.CreateCheckout` for `Idempotency-Key`). Behaviour is
+  unchanged for every existing resource that doesn't opt in.
 - **`client.Webhooks.SendTest(ctx, webhookID)`** (V-463 / V-356) —
   send a synthetic `test.ping` delivery; bypasses subscription. Returns
   `*SendTestWebhookResponse` with the synthetic delivery id.

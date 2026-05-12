@@ -24,11 +24,33 @@ export interface RegisterCustomerCryptoOrdersRoutesDeps {
 
 const ListQuery = z.object({
   limit: z.string().regex(/^\d+$/).optional(),
+  // V-666.BR — single-value status filter on the customer list.
+  // Mirrors the admin endpoint so customer-side dashboards can
+  // narrow their history view (e.g. "show only paid orders")
+  // without paging through the full result set.
+  status: z.enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled']).optional(),
+  // V-666.BU — cursor for forward pagination. Opaque base64url
+  // encoding of `{ts, id}`; consumers treat it as a token. The
+  // service layer encodes/decodes it.
+  cursor: z.string().min(1).optional(),
+  // V-666.BX — half-open date-range filter on created_at. Both
+  // bounds accept ISO 8601 timestamps. created_after is inclusive,
+  // created_before is exclusive.
+  created_after: z.string().datetime().optional(),
+  created_before: z.string().datetime().optional(),
 });
 
 const GetParams = z.object({
   order_id: z.string().min(1),
 });
+
+// V-666.AV — customer-facing pay-window hint. Pending orders carry
+// an `expires_at` ISO timestamp set to `created_at + PAY_WINDOW_MS`
+// so the UI can render a countdown without computing locally. The
+// hint is purely informational — actual expiry is enforced by the
+// admin sweep + the customer cancel endpoint, which both consult
+// their own thresholds. Non-pending orders carry expires_at: null.
+const PAY_WINDOW_MS = 60 * 60 * 1000;
 
 function toPublic(order: CryptoOrder): Record<string, unknown> {
   return {
@@ -39,6 +61,20 @@ function toPublic(order: CryptoOrder): Record<string, unknown> {
     payment_id: order.payment_id,
     status: order.status,
     customer_note: order.customer_note ?? null,
+    // V-666.AU — customer-facing event timeline. Same shape as the
+    // admin /events endpoint (V-666.AT) but inlined on the
+    // envelope so the order-detail GET is a single round trip.
+    // Excludes the 'swept' source from the customer's view —
+    // admin sweep is an internal lifecycle event the customer
+    // doesn't need to see; we surface it as a regular 'expired'
+    // from their perspective.
+    events: order.events.map((e) => ({
+      status: e.status,
+      at: new Date(e.at).toISOString(),
+      source: e.source === 'swept' ? 'expired' : e.source,
+    })),
+    expires_at:
+      order.status === 'pending' ? new Date(order.created_at + PAY_WINDOW_MS).toISOString() : null,
     created_at: new Date(order.created_at).toISOString(),
     updated_at: new Date(order.updated_at).toISOString(),
   };
@@ -57,10 +93,29 @@ export function registerCustomerCryptoOrdersRoutes(
   app: FastifyInstance,
   deps: RegisterCustomerCryptoOrdersRoutesDeps,
 ): void {
-  app.get<{ Querystring: { limit?: string } }>(
+  app.get<{
+    Querystring: {
+      limit?: string;
+      status?: string;
+      cursor?: string;
+      created_after?: string;
+      created_before?: string;
+    };
+  }>(
     '/v1/billing/crypto-orders',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
-    async (req: FastifyRequest<{ Querystring: { limit?: string } }>, reply) => {
+    async (
+      req: FastifyRequest<{
+        Querystring: {
+          limit?: string;
+          status?: string;
+          cursor?: string;
+          created_after?: string;
+          created_before?: string;
+        };
+      }>,
+      reply,
+    ) => {
       const ctx = requireCtx(req);
       const query = parseOrThrow(ListQuery, req.query);
       let limit: number | undefined;
@@ -71,11 +126,41 @@ export function registerCustomerCryptoOrdersRoutes(
         }
         limit = n;
       }
-      const orders = await deps.service.listForAdmin({
+      // V-666.BU — cursor pagination. The service produces a
+      // next_cursor when there's at least one more matching row
+      // beyond the returned page; null otherwise. Consumers loop
+      // until they get null.
+      const createdAfter =
+        query.created_after !== undefined ? new Date(query.created_after).getTime() : undefined;
+      const createdBefore =
+        query.created_before !== undefined ? new Date(query.created_before).getTime() : undefined;
+      // V-666.BZ — reject obviously-wrong windows (before <= after).
+      // The empty result was previously silent, which masked common
+      // bugs (swapped args, missing tz suffix).
+      if (
+        createdAfter !== undefined &&
+        createdBefore !== undefined &&
+        createdBefore <= createdAfter
+      ) {
+        throw new BadRequestError('created_before must be strictly greater than created_after.');
+      }
+      const page = await deps.service.listForAdminPage({
         accountId: ctx.account.id,
         ...(limit !== undefined ? { limit } : {}),
+        ...(query.status !== undefined ? { status: query.status } : {}),
+        ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
+        ...(createdAfter !== undefined ? { createdAfter } : {}),
+        ...(createdBefore !== undefined ? { createdBefore } : {}),
       });
-      return reply.send({ orders: orders.map(toPublic) });
+      // V-666.AW — order state changes constantly between mints + IPNs;
+      // shared / proxy caches must never serve stale state. `private`
+      // additionally signals that even browser caches shouldn't share
+      // the response across users on the same machine.
+      void reply.header('cache-control', 'no-store, private');
+      return reply.send({
+        orders: page.orders.map(toPublic),
+        next_cursor: page.nextCursor,
+      });
     },
   );
 
@@ -89,6 +174,10 @@ export function registerCustomerCryptoOrdersRoutes(
       if (order === null || order.account_id !== ctx.account.id) {
         throw new NotFoundError(`No crypto order with id "${params.order_id}".`);
       }
+      // V-666.AW — same no-store, private rationale: status flips
+      // mid-checkout (pending → confirming → paid) and we never want
+      // a cached pending response to mask a paid IPN.
+      void reply.header('cache-control', 'no-store, private');
       return reply.send(toPublic(order));
     },
   );
@@ -220,7 +309,7 @@ export function registerCustomerCryptoOrdersRoutes(
       }
       if (result.ok === 'not_cancellable') {
         throw new ConflictError(
-          `Order is in state "${result.reason}" and can no longer be cancelled. Contact support for refund / recovery.`,
+          `Order is in state "${result.reason}" and can no longer be cancelled. Crypto payments are non-refundable; contact support if you need to discuss reconciliation.`,
           { resource: 'crypto_order', field: 'status' },
         );
       }

@@ -26,6 +26,12 @@ export interface RequestOptions {
   retry?: RetryConfig;
   /** Per-request timeout override (ms). */
   timeoutMs?: number;
+  /**
+   * Extra request headers. Merged on top of the defaults (authorization,
+   * user-agent, content-type); callers can override but should avoid
+   * touching `authorization`.
+   */
+  headers?: Record<string, string>;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -48,6 +54,7 @@ export class HttpClient {
             authorization: `Bearer ${this.config.apiKey}`,
             'user-agent': 'driftstack-sdk-typescript/0.0.1',
             ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}),
+            ...opts.headers,
           },
           ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
           signal: controller.signal,

@@ -226,9 +226,13 @@ export async function createProductionDeps(
     emailPreferencesService,
     logger,
     {
+      // V-057.E — both URLs derive from config so dev / staging /
+      // production all get the right host without per-env literals
+      // here. Same single-source-of-truth as the auth-flow URLs
+      // (V-079.B): set DASHBOARD_ORIGIN once per env.
       docsBaseUrl: 'https://driftstack.dev/docs',
-      billingPortalUrl: config.stripe?.portalReturnUrl ?? 'https://app.driftstack.dev/billing',
-      dashboardUrl: 'https://app.driftstack.dev',
+      billingPortalUrl: config.stripe?.portalReturnUrl ?? `${config.dashboardOrigin}/billing`,
+      dashboardUrl: config.dashboardOrigin,
     },
     accountAuditService, // V-202b — required for tier_changed audit emit
   );
@@ -288,7 +292,12 @@ export async function createProductionDeps(
   // path itself does NOT yet honor team membership (V-298d) — invites
   // can be sent + accepted, but membership grants no implicit
   // permissions on the owner's resources until V-298d.
-  const dashboardBaseUrl = process.env.PUBLIC_DASHBOARD_URL ?? 'https://app.driftstack.dev';
+  // V-057.E — sourced from `config.dashboardOrigin`, which is driven
+  // by `DASHBOARD_ORIGIN` and prod-guarded against localhost. The
+  // legacy `PUBLIC_DASHBOARD_URL` env var was redundant once
+  // `DASHBOARD_ORIGIN` became the single source of truth and is no
+  // longer read here.
+  const dashboardBaseUrl = config.dashboardOrigin;
   const teamMembersRepo = new DrizzleTeamMembersRepo(dbHandle);
   const teamMembersService = new TeamMembersService(
     teamMembersRepo,
@@ -529,9 +538,12 @@ export async function createProductionDeps(
     billingService = new BillingService(billingRepo, billingProvider, {
       tierPrices: config.stripe.tierPrices,
       trialPackPriceId: config.stripe.trialPackPriceId,
-      defaultSuccessUrl: config.stripe.successUrl ?? 'https://app.driftstack.dev/billing/success',
-      defaultCancelUrl: config.stripe.cancelUrl ?? 'https://app.driftstack.dev/billing/cancel',
-      portalReturnUrl: config.stripe.portalReturnUrl ?? 'https://app.driftstack.dev/billing',
+      // V-057.E — derived from DASHBOARD_ORIGIN-driven config
+      // instead of a per-env literal, same pattern as the email
+      // URLs above. Explicit STRIPE_*_URL env vars still win.
+      defaultSuccessUrl: config.stripe.successUrl ?? `${config.dashboardOrigin}/billing/success`,
+      defaultCancelUrl: config.stripe.cancelUrl ?? `${config.dashboardOrigin}/billing/cancel`,
+      portalReturnUrl: config.stripe.portalReturnUrl ?? `${config.dashboardOrigin}/billing`,
     });
     logger.info({ component: 'billing' }, 'BillingService wired with StripeBillingProvider');
   } else {
