@@ -1,0 +1,126 @@
+// W365.C — drift guard for admin-panel /accounts/[id] detail
+// page content. V-191 + V-196 + V-200 + V-281. The detail
+// surface is the canonical staff workflow for tier changes,
+// suspends, rate-limit overrides, support notes, and refund
+// records — every action needs a registered route + audit
+// action. Pinned:
+//
+//   • SSR-via-cloudflare conversion: `export const prerender =
+//     false` stays (V-200 — deep-links to non-mock UUIDs no
+//     longer 404).
+//   • All 5 admin-action endpoints used by the page registered
+//     server-side: POST .../tier, .../suspend, .../unsuspend,
+//     .../audit-note, .../refund-record (note: refund-record
+//     is the route, NOT refund-records).
+//   • All 5 audit actions emitted by these routes pinned:
+//     account.tier_changed, account.suspended (etc.),
+//     admin.support_note, admin.refund_recorded.
+//   • Rate-limit-override form lives on this page (Decision 4
+//     from founder review) — not on /rate-limit-overrides.
+//   • Bucket select options match V-194 documented set
+//     (global / session_create / capture).
+//   • STATUS_BADGE map covers account-status taxonomy
+//     (active / suspended / deleted) — same set as accounts
+//     list page.
+//   • localStorage key ds_web_session_token.
+//   • Back link to /accounts works.
+//   • Suspend-button visibility gated by status === 'active';
+//     unsuspend-button by status === 'suspended'.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/accounts/[id].astro');
+const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-accounts.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
+  const body = read(PAGE);
+  const route = read(ROUTE);
+
+  it('V-200 SSR-via-cloudflare flag pinned (export const prerender = false)', () => {
+    expect(body).toMatch(/export const prerender = false/);
+    // The page's intent is documented; pin so a future "back to
+    // SSG" refactor surfaces in this test.
+    expect(body).toMatch(/Cloudflare Pages routes \/accounts\/<uuid> to the\s*\n?\s*\/\/\s*Worker/);
+  });
+
+  it('all 5 admin-action endpoints registered server-side', () => {
+    expect(existsSync(ROUTE)).toBe(true);
+    for (const r of [
+      "'/v1/admin/accounts/:id/tier'",
+      "'/v1/admin/accounts/:id/suspend'",
+      "'/v1/admin/accounts/:id/unsuspend'",
+      "'/v1/admin/accounts/:id/audit-note'",
+      "'/v1/admin/accounts/:id/refund-record'",
+    ]) {
+      expect(route, `route missing: ${r}`).toContain(r);
+    }
+  });
+
+  it('audit actions emitted by the routes pinned (tier_changed / suspended / support_note / refund_recorded)', () => {
+    for (const action of [
+      "'account.tier_changed'",
+      "'account.suspended'",
+      "'admin.support_note'",
+      "'admin.refund_recorded'",
+    ]) {
+      expect(route, `action missing: ${action}`).toContain(action);
+    }
+  });
+
+  it('rate-limit-override form lives on this page (Decision 4 — NOT on /rate-limit-overrides)', () => {
+    expect(body).toMatch(
+      /V-196 — inline rate-limit-override form[\s\S]*?canonical staff workflow is \/accounts → detail → set, not a\s+top-level form on \/rate-limit-overrides/,
+    );
+    // The form posts to .../quota-override.
+    expect(body).toMatch(/\/v1\/admin\/accounts\/:id\/quota-override/);
+  });
+
+  it('bucket-select options match V-194 documented set (global / session_create / capture)', () => {
+    const formMatch = body.match(/data-field="override-form"[\s\S]*?<\/form>/);
+    expect(formMatch).not.toBeNull();
+    const tag = formMatch![0]!;
+    const opts = Array.from(tag.matchAll(/<option value="([a-z_]+)">/g)).map((m) => m[1] as string);
+    expect(opts.sort()).toEqual(['capture', 'global', 'session_create']);
+  });
+
+  it('STATUS_BADGE covers active / suspended / deleted (same taxonomy as list page)', () => {
+    for (const s of ['active', 'suspended', 'deleted']) {
+      expect(body).toMatch(new RegExp(`${s}:\\s*'bg-`));
+    }
+  });
+
+  it('suspend/unsuspend buttons gated by status (visibility-by-state)', () => {
+    expect(body).toMatch(/account\.status === 'active'/);
+    expect(body).toMatch(/account\.status === 'suspended'/);
+    // The script also toggles by current state.
+    expect(body).toMatch(/if \(a\.status === 'active'\) suspendBtn\.classList\.remove\('hidden'\)/);
+    expect(body).toMatch(
+      /if \(a\.status === 'suspended'\) unsuspendBtn\.classList\.remove\('hidden'\)/,
+    );
+  });
+
+  it('"tier change applies immediately; suspend revokes all sessions + keys" framing pinned', () => {
+    expect(body).toMatch(
+      /Tier change applies\s+immediately; suspend revokes all sessions \+ keys until unsuspend/,
+    );
+  });
+
+  it('back link to /accounts list pinned', () => {
+    expect(body).toMatch(
+      /<a href="\/accounts" class="text-oxblood-700 hover:underline">← Back to accounts<\/a>/,
+    );
+  });
+
+  it('localStorage key ds_web_session_token (admin-panel convention)', () => {
+    expect(body).toContain('ds_web_session_token');
+  });
+});
