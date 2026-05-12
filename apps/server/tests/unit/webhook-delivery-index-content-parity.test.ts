@@ -1,0 +1,71 @@
+// W450.A — drift guard for packages/webhook-delivery/src/index.ts.
+// @driftstack/webhook-delivery public surface barrel. Drift here
+// either drops a public export (consumers in apps/server +
+// packages/webhook-delivery in-memory test deps get a compile-time
+// break when the symbol disappears mid-refactor) or accidentally
+// re-exports an internal-only helper (widens the public API surface,
+// locks us into supporting a name that should never have been
+// stable).
+//
+//   • header framing pinned.
+//   • 7 type-only re-exports from ./types.js (DeliveryAttempt + Config
+//     + Endpoint + Payload + Record + Status + DlqEntry).
+//   • 7 interface re-exports from ./interfaces.js (DeliveryQueue +
+//     DlqManager + EnqueueDeliveryOpts + ListDeliveriesOpts +
+//     ListDeliveriesPage + RequeueDlqOpts + WebhookDeliveryService).
+//   • MockDlqManager + MockWebhookDeliveryService from ./mock.js
+//     (value exports only).
+//   • in-memory exports: BACKOFF_MS_BY_ATTEMPT + DEFAULT_MAX_ATTEMPTS +
+//     DEFAULT_TIMEOUT_MS + InMemoryDlqManager + InMemoryWebhook-
+//     DeliveryService + createInMemoryWebhookDelivery + signPayload
+//     (values) + 3 type-only InMemoryWebhookDelivery{Deps,Handles} +
+//     ProcessTickResult.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'packages/webhook-delivery/src/index.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W450.A packages/webhook-delivery/src/index.ts content parity', () => {
+  const body = read(LIB);
+
+  it("header framing pinned: '@driftstack/webhook-delivery public surface.'", () => {
+    expect(body).toMatch(/\/\/ @driftstack\/webhook-delivery public surface\./);
+  });
+
+  it('7 type-only re-exports from ./types.js (DeliveryAttempt + DeliveryConfig + DeliveryEndpoint + DeliveryPayload + DeliveryRecord + DeliveryStatus + DlqEntry)', () => {
+    expect(body).toMatch(
+      /export type \{\s*\n?\s*DeliveryAttempt,\s*\n?\s*DeliveryConfig,\s*\n?\s*DeliveryEndpoint,\s*\n?\s*DeliveryPayload,\s*\n?\s*DeliveryRecord,\s*\n?\s*DeliveryStatus,\s*\n?\s*DlqEntry,\s*\n?\s*\} from '\.\/types\.js';/,
+    );
+  });
+
+  it('7 interface re-exports from ./interfaces.js (DeliveryQueue + DlqManager + EnqueueDeliveryOpts + ListDeliveriesOpts + ListDeliveriesPage + RequeueDlqOpts + WebhookDeliveryService)', () => {
+    expect(body).toMatch(
+      /export type \{\s*\n?\s*DeliveryQueue,\s*\n?\s*DlqManager,\s*\n?\s*EnqueueDeliveryOpts,\s*\n?\s*ListDeliveriesOpts,\s*\n?\s*ListDeliveriesPage,\s*\n?\s*RequeueDlqOpts,\s*\n?\s*WebhookDeliveryService,\s*\n?\s*\} from '\.\/interfaces\.js';/,
+    );
+  });
+
+  it('Mock exports from ./mock.js: MockDlqManager + MockWebhookDeliveryService (value exports only)', () => {
+    expect(body).toMatch(
+      /export \{ MockDlqManager, MockWebhookDeliveryService \} from '\.\/mock\.js';/,
+    );
+  });
+
+  it('in-memory barrel: BACKOFF_MS_BY_ATTEMPT + DEFAULT_MAX_ATTEMPTS + DEFAULT_TIMEOUT_MS constants + InMemoryDlqManager + InMemoryWebhookDeliveryService + createInMemoryWebhookDelivery + signPayload value exports + 3 type-only InMemoryWebhookDelivery{Deps,Handles} + ProcessTickResult', () => {
+    expect(body).toMatch(
+      /export \{\s*\n?\s*BACKOFF_MS_BY_ATTEMPT,\s*\n?\s*DEFAULT_MAX_ATTEMPTS,\s*\n?\s*DEFAULT_TIMEOUT_MS,\s*\n?\s*InMemoryDlqManager,\s*\n?\s*InMemoryWebhookDeliveryService,\s*\n?\s*createInMemoryWebhookDelivery,\s*\n?\s*signPayload,\s*\n?\s*type InMemoryWebhookDeliveryDeps,\s*\n?\s*type InMemoryWebhookDeliveryHandles,\s*\n?\s*type ProcessTickResult,\s*\n?\s*\} from '\.\/in-memory\.js';/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
