@@ -1,0 +1,126 @@
+// W381.A — drift guard for marketing-site LegalLayout.astro. This
+// layout wraps every legal markdown page (terms / privacy / dpa /
+// aup / refunds / sub-processors / vulnerability-disclosure). A
+// drift here affects all 7 docs simultaneously, so the layout
+// surface is high-leverage.
+//
+//   • Wraps BaseLayout (inherits canonical/OG meta).
+//   • Frontmatter-or-prop title/description resolution + "Legal"
+//     fallback / "Driftstack legal documents." fallback.
+//   • Hero strip with mono-uppercase "Legal" chip + H1 from props.
+//   • Prose styling: prose-h1:hidden (load-bearing — the markdown
+//     H1 is rendered, hero H1 carries the title), oxblood-700
+//     prose-a, slate-100 prose-code, slate-900 prose-pre.
+//   • 5-link "Other legal documents" nav at the bottom: Terms /
+//     Privacy / DPA / AUP / Sub-processors — load-bearing per-doc
+//     navigation customers rely on.
+//   • aria-label="Other legal documents" for the secondary nav.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LAYOUT = resolve(REPO_ROOT, 'apps/marketing-site/src/layouts/LegalLayout.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W381.A marketing-site LegalLayout.astro content parity', () => {
+  const body = read(LAYOUT);
+
+  it('imports + wraps BaseLayout (inherits canonical/OG meta from base)', () => {
+    expect(body).toMatch(/import BaseLayout from '\.\/BaseLayout\.astro';/);
+    expect(body).toMatch(/<BaseLayout title=\{title\} description=\{description\}>/);
+  });
+
+  it('Props interface: title required + optional description + optional frontmatter passthrough', () => {
+    expect(body).toMatch(/interface Props \{/);
+    expect(body).toMatch(/title: string;/);
+    expect(body).toMatch(/description\?: string;/);
+    expect(body).toMatch(/frontmatter\?: \{ title\?: string; description\?: string \};/);
+  });
+
+  it('title resolution: prop → frontmatter → "Legal" fallback', () => {
+    expect(body).toMatch(
+      /const title = Astro\.props\.title \?\? frontmatter\?\.title \?\? 'Legal';/,
+    );
+  });
+
+  it('description resolution: prop → frontmatter → "Driftstack legal documents." fallback', () => {
+    expect(body).toMatch(
+      /const description =\s*\n?\s*Astro\.props\.description \?\?\s*\n?\s*frontmatter\?\.description \?\?\s*\n?\s*'Driftstack legal documents\.';/,
+    );
+  });
+
+  it('5 legalLinks entries pinned in canonical order (Terms / Privacy / DPA / AUP / Sub-processors)', () => {
+    const block = body.match(/const legalLinks = \[([\s\S]+?)\];/);
+    expect(block).not.toBeNull();
+    const entries = Array.from(block![1]!.matchAll(/\{ href: '([^']+)', label: '([^']+)' \}/g)).map(
+      (m) => ({ href: m[1], label: m[2] }),
+    );
+    expect(entries).toEqual([
+      { href: '/legal/terms', label: 'Terms of Service' },
+      { href: '/legal/privacy', label: 'Privacy Policy' },
+      { href: '/legal/dpa', label: 'Data Processing Agreement' },
+      { href: '/legal/aup', label: 'Acceptable Use Policy' },
+      { href: '/trust/sub-processors', label: 'Sub-processors' },
+    ]);
+  });
+
+  it('hero strip: mono-uppercase "Legal" chip + H1 from {title}', () => {
+    expect(body).toMatch(
+      /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Legal<\/p>/,
+    );
+    expect(body).toMatch(
+      /<h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">\s*\n?\s*\{title\}\s*\n?\s*<\/h1>/,
+    );
+  });
+
+  it('prose-h1:hidden treatment (load-bearing: hero carries the title, markdown H1 hidden)', () => {
+    expect(body).toMatch(/prose-h1:hidden/);
+  });
+
+  it('prose link styling: oxblood-700 + hover-underline (no underline default)', () => {
+    expect(body).toMatch(/prose-a:text-oxblood-700 prose-a:no-underline hover:prose-a:underline/);
+  });
+
+  it('prose code styling: slate-100 background + mono + rounded + no before/after pseudo-content', () => {
+    expect(body).toMatch(
+      /prose-code:rounded prose-code:bg-slate-100 prose-code:px-1\.5 prose-code:py-0\.5 prose-code:font-mono prose-code:text-sm prose-code:before:content-none prose-code:after:content-none/,
+    );
+  });
+
+  it('prose pre styling: slate-900 background + slate-100 text (dark code blocks)', () => {
+    expect(body).toMatch(/prose-pre:bg-slate-900 prose-pre:text-slate-100/);
+  });
+
+  it('aria-label="Other legal documents" + "Other legal documents" heading', () => {
+    expect(body).toMatch(/aria-label="Other legal documents"/);
+    expect(body).toMatch(
+      /<p class="font-mono text-xs uppercase tracking-widest text-slate-500">\s*\n?\s*Other legal documents\s*\n?\s*<\/p>/,
+    );
+  });
+
+  it('secondary nav renders 2-column grid + oxblood-700 hover-underline links', () => {
+    expect(body).toMatch(/grid gap-1 sm:grid-cols-2/);
+    expect(body).toMatch(/text-sm text-oxblood-700 hover:underline/);
+    expect(body).toMatch(/legalLinks\.map\(\(l\)/);
+  });
+
+  it('renders <slot /> within prose article (markdown content insertion point)', () => {
+    expect(body).toMatch(/<slot \/>/);
+  });
+
+  it('all 5 legalLinks destinations exist as files (no dangling hrefs)', () => {
+    const dir = resolve(REPO_ROOT, 'apps/marketing-site/src/pages');
+    expect(existsSync(resolve(dir, 'legal/terms.md'))).toBe(true);
+    expect(existsSync(resolve(dir, 'legal/privacy.md'))).toBe(true);
+    expect(existsSync(resolve(dir, 'legal/dpa.md'))).toBe(true);
+    expect(existsSync(resolve(dir, 'legal/aup.md'))).toBe(true);
+    expect(existsSync(resolve(dir, 'trust/sub-processors.astro'))).toBe(true);
+  });
+});
