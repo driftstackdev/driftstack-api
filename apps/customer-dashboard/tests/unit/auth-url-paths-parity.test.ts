@@ -41,10 +41,8 @@ describe('V-079.C auth-flow URL ↔ dashboard route parity', () => {
     expect(existsSync(page), `dashboard page missing: ${page}`).toBe(true);
   });
 
-  // magicLink is documented as a not-yet-shipped flow — no
-  // dashboard page exists, so we skip the parity check here. When
-  // the magic-link page lands, drop the .skip.
-  it.skip('magicLink URL points to an existing dashboard page', () => {
+  // #190 — magic-link dashboard page lives at /auth/magic-link.
+  it('magicLink URL points to an existing dashboard page', () => {
     const page = pathToPage(cfg.authFlowUrls.magicLink);
     expect(existsSync(page), `dashboard page missing: ${page}`).toBe(true);
   });

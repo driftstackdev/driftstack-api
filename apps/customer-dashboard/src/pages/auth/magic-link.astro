@@ -1,0 +1,139 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+
+// #190 — magic-link consume page. Pairs with the V-079 backend route
+// `POST /v1/auth/magic-link/consume`.
+//
+// Flow:
+//   1. User requests a magic-link on /login (forgot-password style).
+//   2. Email arrives; clicking the link lands here with ?token=…
+//   3. This page POSTs `{ token }` to the backend.
+//   4. Server returns a fresh web session on success; page writes
+//      `ds_web_session_token` to localStorage and redirects to /
+//      (or ?next= if the original entry round-tripped one).
+//   5. Token is one-shot — second use returns 400.
+//
+// The form is rendered as a fallback for the rare case where a mail
+// client mangles the link (drops the query string), so the user can
+// paste the token manually.
+
+import { resolveApiBaseUrl } from '../../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
+---
+
+<DashboardLayout title="Magic link" withSidebar={false}>
+  <div class="mx-auto max-w-md px-6 py-16" data-page="magic-link">
+    <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Signing you in…</h1>
+    <p class="mt-3 text-sm text-slate-600" data-field="intro">
+      Verifying your magic-link token. One moment.
+    </p>
+
+    <div
+      data-banner
+      class="mt-6 hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      role="status"
+    >
+    </div>
+
+    <form data-form="magic-link" class="mt-8 hidden space-y-4" data-state="fallback">
+      <p class="text-sm text-slate-600">
+        We couldn't find a token in the URL. Paste the one from your magic-link email below
+        (everything after <code>?token=</code>):
+      </p>
+      <div>
+        <label class="block text-sm font-medium text-slate-700" for="magic-link-token">
+          Magic-link token
+        </label>
+        <input
+          id="magic-link-token"
+          name="token"
+          type="text"
+          required
+          autocomplete="one-time-code"
+          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-sm"
+        />
+      </div>
+      <button type="submit" class="btn-primary w-full">Sign in</button>
+    </form>
+
+    <p class="mt-6 text-xs text-slate-500">
+      Link expired? Request a fresh one from the
+      <a href="/login" class="text-oxblood-700 underline">login page</a>.
+    </p>
+  </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="magic-link"]');
+      if (!root) return;
+      const intro = root.querySelector('[data-field="intro"]');
+      const banner = root.querySelector('[data-banner]');
+      const form = root.querySelector('[data-form="magic-link"]');
+      const tokenInput = root.querySelector('#magic-link-token');
+
+      function showBanner(text) {
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+
+      function showFallbackForm(prefill) {
+        if (intro)
+          intro.textContent =
+            "Couldn't find a token in the URL. Paste it from your email to sign in.";
+        if (form) form.classList.remove('hidden');
+        if (prefill && tokenInput) tokenInput.value = prefill;
+      }
+
+      function submitToken(token) {
+        banner.classList.add('hidden');
+        if (intro) intro.textContent = 'Signing you in…';
+
+        fetch(apiBaseUrl + '/v1/auth/magic-link/consume', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ token: token }),
+          credentials: 'include',
+        })
+          .then((r) =>
+            r.ok
+              ? r.json()
+              : r
+                  .json()
+                  .catch(() => ({}))
+                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+          )
+          .then((body) => {
+            const session = body.session || {};
+            if (session.token) {
+              localStorage.setItem('ds_web_session_token', session.token);
+            }
+            const params = new URLSearchParams(window.location.search);
+            const next = params.get('next');
+            window.location.href = next ? next : '/';
+          })
+          .catch((err) => {
+            showFallbackForm(token);
+            showBanner(err && err.message ? err.message : 'Magic-link sign-in failed.');
+          });
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const linkToken = params.get('token');
+
+      if (linkToken && linkToken.length > 0) {
+        submitToken(linkToken);
+      } else {
+        showFallbackForm(null);
+      }
+
+      if (form) {
+        form.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          const fd = new FormData(form);
+          const token = fd.get('token');
+          if (typeof token === 'string' && token.length > 0) submitToken(token);
+        });
+      }
+    })();
+  </script>
+</DashboardLayout>

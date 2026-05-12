@@ -97,11 +97,10 @@ const ConfigSchema = z.object({
   // are dev-friendly localhost URLs; production sets these to the real
   // dashboard origin.
   // V-079.B/C — dashboard route paths. The customer-dashboard
-  // (apps/customer-dashboard) serves these at top-level:
-  //   /verify-email, /reset-password
-  // Magic-link doesn't have a dashboard page yet so the default
-  // path is left under /auth/ as a placeholder; consumers wiring
-  // magic-link should set AUTH_MAGIC_LINK_URL explicitly.
+  // (apps/customer-dashboard) serves these at:
+  //   /verify-email, /reset-password, /auth/magic-link
+  // Cross-app parity is pinned by
+  // apps/customer-dashboard/tests/unit/auth-url-paths-parity.test.ts.
   authFlowUrls: z.object({
     verifyEmail: z.string().url().default('http://localhost:5173/verify-email'),
     magicLink: z.string().url().default('http://localhost:5173/auth/magic-link'),
