@@ -1,0 +1,149 @@
+// W368.A — drift guard for marketing-site /faq page content.
+// V-500. Existing tests cover tier-cap + trial-pack subset
+// parity + coverage baseline; this guard pins the structural
+// shape and the load-bearing answers a buyer reads before
+// signing:
+//
+//   • 9 FAQ groups present, in canonical order. A future "drop
+//     a group" change should require a deliberate decision, not
+//     a drive-by.
+//   • Trial-pack mechanics: $2.99 / 16h / $0.18/hr / 299¢
+//     credit / 14-day expiry / once-per-account / 402 on
+//     exhaustion.
+//   • Concurrent-cap ladder (Solo Manual = 1 / Team Manual = 3
+//     / Agency Manual = 8 / API Starter = 2 / Builder = 8 /
+//     Scale = 24 / Enterprise = custom).
+//   • 429 + RFC 7807 problem-detail on cap reached.
+//   • Annual billing 20% off / 30-day cancel-before-renewal.
+//   • Cancel → 90d "suspended" + DPA retention archive.
+//   • Card details never touch Driftstack servers (Stripe only).
+//   • "What if Driftstack goes away" two-protection answer
+//     (data portability + source escrow).
+//   • AUP link to /legal/aup + bot/fraud prohibitions.
+//   • Support SLA ladder: 48h Starter → 1h Enterprise.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/faq.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W368.A marketing-site /faq page content parity', () => {
+  const body = read(PAGE);
+
+  it('9 FAQ groups present in canonical order', () => {
+    const expected = [
+      "title: 'Pricing model'",
+      "title: 'Trial pack'",
+      "title: 'Tiers + upgrades'",
+      "title: 'Billing + payments'",
+      "title: 'Bundled LLM + BYOK'",
+      "title: 'EU stack + compliance'",
+      "title: 'Architecture + sessions'",
+      "title: 'Migrating from another vendor'",
+      "title: 'Acceptable use'",
+    ];
+    let lastIdx = -1;
+    for (const t of expected) {
+      const idx = body.indexOf(t);
+      expect(idx, `group missing or out of order: ${t}`).toBeGreaterThan(lastIdx);
+      lastIdx = idx;
+    }
+    // Support group exists too (10th total).
+    expect(body).toContain("title: 'Support + reliability'");
+  });
+
+  it('trial-pack mechanics pinned: $2.99 / 16h / $0.18/hr / 299¢ / 14-day', () => {
+    expect(body).toMatch(/About 16 hours of session time/);
+    expect(body).toMatch(/credits 299¢ to your account/);
+    expect(body).toMatch(/sessions decrement at \$0\.18 per concurrent-hour/);
+    expect(body).toMatch(/Unused credit expires 14 days after purchase/);
+    expect(body).toMatch(/once per account, no reset on downgrade or churn/);
+    // 402 on exhaustion.
+    expect(body).toMatch(/return 402 Payment Required/);
+  });
+
+  it('concurrent-cap ladder pinned exactly (Solo=1 / Team=3 / Agency=8 / Starter=2 / Builder=8 / Scale=24)', () => {
+    expect(body).toMatch(
+      /Solo Manual = 1 concurrent \/ Team Manual = 3 \/ Agency Manual = 8 \/ API Starter = 2 \/ API Builder = 8 \/ API Scale = 24 \/ Enterprise = custom/,
+    );
+  });
+
+  it('cap-reached behavior: 429 + RFC 7807 problem-detail + in-flight not interrupted', () => {
+    expect(body).toMatch(/HTTP 429 \+ a structured RFC 7807 problem-detail/);
+    expect(body).toMatch(/Existing in-flight sessions are not interrupted/);
+  });
+
+  it('annual billing pinned: 20% off / Stripe proration / 30-day cancel-before-renewal', () => {
+    expect(body).toMatch(/billed up front for 12 months at 20% off the monthly equivalent/);
+    expect(body).toMatch(/prorated automatically by Stripe/);
+    expect(body).toMatch(/auto-renew unless cancelled at least 30 days before renewal/);
+  });
+
+  it('cancel posture: 90d "suspended" + DPA retention archive (no immediate delete)', () => {
+    expect(body).toMatch(
+      /account stays in a "suspended" state with recordings and audit logs intact for 90 days/,
+    );
+    expect(body).toMatch(/archived per the DPA retention schedule/);
+  });
+
+  it('"Card details never touch Driftstack servers" Stripe-PCI claim pinned', () => {
+    // Load-bearing trust claim.
+    expect(body).toMatch(/Card details are stored by Stripe, never by Driftstack/);
+    expect(body).toMatch(/the card number itself never touches our servers/);
+  });
+
+  it('"What if Driftstack goes away" two-protection answer pinned (portability + escrow)', () => {
+    expect(body).toMatch(/Data portability:/);
+    expect(body).toMatch(/Self-hosted SKU:/);
+    expect(body).toMatch(/source escrow agreement releases the WebKit fork \+ control-plane code/);
+  });
+
+  it('AUP link to /legal/aup + explicit prohibition list pinned (CSAM / fraud / sneaker bots)', () => {
+    expect(body).toMatch(/href="\/legal\/aup"/);
+    // Note: source-file literal escapes the apostrophe (`don\'t`)
+    // because the FAQ entry strings are single-quoted JS literals.
+    expect(body).toMatch(/We don\\?'t allow attacks on third-party systems/);
+    expect(body).toMatch(/fraud \(ad fraud, fake-account creation, payment fraud\)/);
+    expect(body).toMatch(/CSAM or other illegal content/);
+    expect(body).toMatch(/sneaker bots \/ ticket bots/);
+  });
+
+  it('support SLA ladder pinned: 48h Starter → 24h Solo → 12h Builder → 4h Scale → 1h Enterprise', () => {
+    expect(body).toMatch(
+      /48h Starter, 24h Solo, 12h Builder \+ Slack Connect, 4h Scale \+ Slack Connect, 1h Enterprise \+ dedicated CSM/,
+    );
+  });
+
+  it('uptime SLA ladder pinned: 99% Starter/Solo → 99.5% Builder/Scale → 99.9% Enterprise', () => {
+    expect(body).toMatch(/99% Starter \/ Solo, 99\.5% Builder \/ Scale, 99\.9% Enterprise/);
+  });
+
+  it('BYOK secret-handling claim pinned (envelope encryption + in-memory at exec)', () => {
+    expect(body).toMatch(
+      /encrypted at rest with envelope encryption, decrypted in-memory only at session execution time, and never logged/,
+    );
+  });
+
+  it('Enterprise pricing floor pinned: from $4,000/mo on annual contracts only', () => {
+    expect(body).toMatch(/from \$4,000\/mo on annual contracts only/);
+  });
+
+  it('cross-links resolve: /legal/aup + /legal/dpa + /trust/sub-processors + /comparison + /roadmap', () => {
+    for (const path of [
+      'apps/marketing-site/src/pages/legal/aup.md',
+      'apps/marketing-site/src/pages/legal/dpa.md',
+      'apps/marketing-site/src/pages/comparison.astro',
+      'apps/marketing-site/src/pages/roadmap.astro',
+    ]) {
+      expect(existsSync(resolve(REPO_ROOT, path)), `cross-linked path missing: ${path}`).toBe(true);
+    }
+  });
+});
