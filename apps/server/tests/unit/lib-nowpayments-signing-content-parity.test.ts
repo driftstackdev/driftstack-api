@@ -1,0 +1,143 @@
+// W387.C — drift guard for apps/server/src/lib/nowpayments-signing.
+// ts. V-487 NowPayments IPN verifier referenced by /trust/security-
+// overview ("NowPayments: V-487 HMAC-SHA512 on canonical-keyed JSON
+// + shared raw-body parser"). Behavioural tests cover round-
+// tripping; this guard pins the security-relevant protocol +
+// canonicalisation claims.
+//
+//   • V-487 framing pinned.
+//   • HMAC-SHA512 on canonical-keyed JSON (NOT raw bytes — keys
+//     sorted lexicographically before signing).
+//   • x-nowpayments-sig header convention (hex HMAC-SHA512).
+//   • Fall through to raw-body HMAC when not a JSON object
+//     (robust against either provider behaviour).
+//   • timingSafeEqual constant-time compare.
+//   • False-on-malformed-input posture (NOT throwing — caller can
+//     return 401 uniformly).
+//   • SHA-512 64-byte hex digest length check.
+//   • Recursive sortKeys helper for nested objects.
+//   • Scaffold-not-wired-yet framing pinned (501 stub at billing-
+//     crypto route).
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/lib/nowpayments-signing.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W387.C apps/server/src/lib/nowpayments-signing.ts content parity', () => {
+  const body = read(LIB);
+
+  it('V-487 framing + HMAC-SHA512 algorithm pinned', () => {
+    expect(body).toMatch(
+      /V-487 — NowPayments IPN \(Instant Payment Notification\) signature\s*\n?\s*\/\/\s*verifier\. NowPayments signs every webhook payload with HMAC-SHA512/,
+    );
+  });
+
+  it('x-nowpayments-sig header format pinned (hex HMAC-SHA512 of the body)', () => {
+    expect(body).toMatch(
+      /Header format:\s*\n?\s*\/\/\s*x-nowpayments-sig: <hex HMAC-SHA512 of the body>/,
+    );
+  });
+
+  it('raw-body framing: no JSON re-stringify, order-sensitive on JSON-serialised body', () => {
+    expect(body).toMatch(
+      /Body must be the raw bytes received — no JSON re-stringify \(the\s*\n?\s*\/\/\s*signature is order-sensitive on the JSON-serialised body NowPayments\s*\n?\s*\/\/\s*sent us\)/,
+    );
+    expect(body).toMatch(
+      /Fastify exposes the raw buffer via `request\.rawBody` when\s*\n?\s*\/\/\s*the route opts in/,
+    );
+  });
+
+  it('NowPayments postman docs URL pinned in JSDoc', () => {
+    expect(body).toMatch(/https:\/\/documenter\.getpostman\.com\/view\/7907941\/2s93JusNJt/);
+  });
+
+  it('Scaffold-not-wired framing pinned (501 stub at billing-crypto route)', () => {
+    expect(body).toMatch(
+      /scaffolding for the V-487 NowPayments\s*\n?\s*\/\/\s*scaffold: the verifier is implemented and tested, but there is no\s*\n?\s*\/\/\s*route consuming it yet/,
+    );
+    expect(body).toMatch(
+      /When the route stub at\s*\n?\s*\/\/\s*`apps\/server\/src\/routes\/billing-crypto\.ts` flips from 501 to live/,
+    );
+  });
+
+  it('VerifyNowpaymentsSignatureOpts: 3 fields (body / secret / signature)', () => {
+    expect(body).toMatch(/body: string \| Buffer;/);
+    expect(body).toMatch(/secret: string;/);
+    expect(body).toMatch(/signature: string;/);
+    expect(body).toMatch(/Hex-encoded signature from the `x-nowpayments-sig` header/);
+  });
+
+  it('verifyNowpaymentsSignature: returns false (not throws) on malformed input + constant-time compare', () => {
+    expect(body).toMatch(/Constant-time comparison via \{@link timingSafeEqual\}\./);
+    expect(body).toMatch(/Returns false \(rather than throwing\) on:/);
+    expect(body).toMatch(/- empty body or empty secret or empty signature/);
+    expect(body).toMatch(/- signature is not valid hex/);
+    expect(body).toMatch(
+      /- hex-decoded signature has a length mismatch with the expected\s*\n?\s*\*\s*SHA-512 digest \(64 bytes\)/,
+    );
+  });
+
+  it('verifyNowpaymentsSignature: explicit body/secret/signature truthiness gate', () => {
+    expect(body).toMatch(
+      /if \(!opts\.body \|\| !opts\.secret \|\| !opts\.signature\) return false;/,
+    );
+  });
+
+  it('canonicalizeJsonObject framing: sort keys lexicographically at every level', () => {
+    expect(body).toMatch(
+      /Sort the parsed JSON body's keys lexicographically before signing —\s*\n?\s*\/\/\s*NowPayments' IPN signing protocol mandates this canonicalisation/,
+    );
+    expect(body).toMatch(
+      /NowPayments signs the body with sorted keys; failing to canonicalise\s*\n?\s*\*\s*before HMAC produces a mismatch even with a correct secret/,
+    );
+  });
+
+  it('canonicalizeJsonObject: returns null when not a JSON object (falls through to raw-body HMAC)', () => {
+    expect(body).toMatch(
+      /if \(parsed === null \|\| typeof parsed !== 'object' \|\| Array\.isArray\(parsed\)\) \{\s*\n?\s*return null;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /we fall through to raw-body HMAC so the verifier is robust\s*\n?\s*\/\/\s*against either provider behaviour/,
+    );
+    expect(body).toMatch(/const canonical = canonicalizeJsonObject\(bodyStr\) \?\? bodyStr;/);
+  });
+
+  it('sortKeys: recursive (handles arrays + nested objects)', () => {
+    expect(body).toMatch(/function sortKeys\(value: unknown\): unknown/);
+    expect(body).toMatch(/if \(Array\.isArray\(value\)\) return value\.map\(sortKeys\);/);
+    expect(body).toMatch(
+      /for \(const key of Object\.keys\(obj\)\.sort\(\)\) \{\s*\n?\s*out\[key\] = sortKeys\(obj\[key\]\);/,
+    );
+  });
+
+  it('HMAC-SHA512 + Buffer.from(hex) hex-decode with try/catch (returns false on invalid hex)', () => {
+    expect(body).toMatch(
+      /const expected = createHmac\('sha512', opts\.secret\)\.update\(canonical\)\.digest\(\);/,
+    );
+    expect(body).toMatch(
+      /try \{\s*\n?\s*received = Buffer\.from\(opts\.signature, 'hex'\);\s*\n?\s*\} catch \{\s*\n?\s*return false;\s*\n?\s*\}/,
+    );
+  });
+
+  it('length-mismatch pre-check before timingSafeEqual (defends against truncation)', () => {
+    expect(body).toMatch(/if \(received\.length !== expected\.length\) return false;/);
+    expect(body).toMatch(/return timingSafeEqual\(received, expected\);/);
+  });
+
+  it('imports: createHmac + timingSafeEqual from node:crypto only', () => {
+    expect(body).toMatch(/import \{ createHmac, timingSafeEqual \} from 'node:crypto';/);
+  });
+
+  it('file exists at canonical path referenced by /trust/security-overview', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
