@@ -1,0 +1,152 @@
+// W418.B — drift guard for apps/server/src/routes/auth-cli.ts.
+// V-266 Browser-OAuth-style CLI/GUI activation. 3 endpoints (initiate
+// public + bind auth-required + exchange public). Drift here either
+// breaks the bind-failure revoke compensation (plaintext leaks if the
+// bind fails AND the just-minted key isn't revoked) or breaks
+// CliAuthorizeError → HTTP error mapping (clients can't distinguish
+// state mismatch from expired code).
+//
+//   • V-266 framing pinned: initiate (CLI/GUI starts) + bind
+//     (dashboard binds the code, auth required) + exchange (CLI/GUI
+//     polls for issued key).
+//   • Default key shape: DEFAULT_KEY_NAME='Desktop client' +
+//     DEFAULT_SCOPES=['account_owner'].
+//   • Schemas sourced from @driftstack/api-types: Initiate/Bind/
+//     Exchange request schemas + ApiKeyScope type.
+//   • Bind compensation: revoke just-minted key on CliAuthorizeError
+//     (best-effort; revoked-in-DB on revoke failure is the safe
+//     direction — key stays revoked).
+//   • account_id stamped as `acc_${ctx.account.id}` template.
+//   • CliAuthorizeError → HTTP map: state_mismatch+already_bound+
+//     invalid_code → 400 BadRequestError; not_found+expired → 404
+//     NotFoundError.
+//   • Auth posture: initiate + exchange = public (no preHandler);
+//     bind = requireAuth + rateLimit('global').
+//   • ValidationError on zod safeParse fail (parsed.error.flatten()).
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/routes/auth-cli.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W418.B apps/server/src/routes/auth-cli.ts content parity', () => {
+  const body = read(LIB);
+
+  it('V-266 framing pinned: 3 routes — initiate (public) + bind (auth required, dashboard) + exchange (public, CLI polls)', () => {
+    expect(body).toMatch(/V-266 — Browser-OAuth-style activation flow for CLI \/ GUI clients\./);
+    expect(body).toMatch(
+      /POST \/v1\/auth\/cli-authorize\/initiate\s+— public; CLI\/GUI starts the flow/,
+    );
+    expect(body).toMatch(
+      /POST \/v1\/auth\/cli-authorize\/bind\s+— auth required; dashboard binds the code/,
+    );
+    expect(body).toMatch(
+      /POST \/v1\/auth\/cli-authorize\/exchange\s+— public; CLI\/GUI polls for the issued key/,
+    );
+  });
+
+  it('Bind framing pinned: requires authenticated account (dashboard web session); mints API key on that account; hands plaintext to CLI via exchange', () => {
+    expect(body).toMatch(
+      /The bind endpoint requires an authenticated account \(typically via\s*\n?\s*\/\/\s*the dashboard's web session\)\. It mints an API key on that account\s*\n?\s*\/\/\s*and hands the plaintext to the CLI\/GUI via the exchange endpoint\./,
+    );
+  });
+
+  it("Defaults: DEFAULT_KEY_NAME='Desktop client' + DEFAULT_SCOPES=['account_owner']", () => {
+    expect(body).toMatch(/const DEFAULT_KEY_NAME = 'Desktop client';/);
+    expect(body).toMatch(/const DEFAULT_SCOPES: ApiKeyScope\[\] = \['account_owner'\];/);
+  });
+
+  it('Schemas + types from @driftstack/api-types: Initiate/Bind/Exchange + ApiKeyScope (SDK mirror)', () => {
+    expect(body).toMatch(
+      /import \{\s*\n?\s*CliAuthorizeBindRequestSchema,\s*\n?\s*CliAuthorizeExchangeRequestSchema,\s*\n?\s*CliAuthorizeInitiateRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
+    );
+    expect(body).toMatch(/import type \{ ApiKeyScope \} from '@driftstack\/api-types';/);
+  });
+
+  it('Initiate: public (no preHandler); cliAuthorizeService.initiate; returns code + browser_url + expires_at ISO', () => {
+    expect(body).toMatch(
+      /app\.post\('\/v1\/auth\/cli-authorize\/initiate', async \(req\) => \{\s*\n?\s*const parsed = CliAuthorizeInitiateRequestSchema\.safeParse\(req\.body\);\s*\n?\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);/,
+    );
+    expect(body).toMatch(
+      /const result = await cliAuthorizeService\.initiate\(\{\s*\n?\s*state: parsed\.data\.state,\s*\n?\s*client_label: parsed\.data\.client_label \?\? null,\s*\n?\s*\}\);\s*\n?\s*return \{\s*\n?\s*code: result\.code,\s*\n?\s*browser_url: result\.browser_url,\s*\n?\s*expires_at: result\.expires_at\.toISOString\(\),\s*\n?\s*\};/,
+    );
+  });
+
+  it("Bind: requireAuth + rateLimit('global'); apiKeysService.create with DEFAULT_KEY_NAME + scopes + expiresAt:null; account_id stamped as acc_<uuid>", () => {
+    expect(body).toMatch(
+      /app\.post\(\s*\n?\s*'\/v1\/auth\/cli-authorize\/bind',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
+    );
+    expect(body).toMatch(/const scopes = parsed\.data\.scopes \?\? DEFAULT_SCOPES;/);
+    expect(body).toMatch(
+      /const created = await apiKeysService\.create\(ctx, \{\s*\n?\s*name: DEFAULT_KEY_NAME,\s*\n?\s*scopes,\s*\n?\s*expiresAt: null,\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(/account_id: `acc_\$\{ctx\.account\.id\}`,/);
+    expect(body).toMatch(/api_key_plaintext: created\.plaintext,/);
+  });
+
+  it('Bind compensation pinned: revoke just-minted key on CliAuthorizeError; best-effort with safe-direction rationale on revoke failure', () => {
+    expect(body).toMatch(
+      /\/\/ Revoke the just-minted key — the bind failed, so the\s*\n?\s*\/\/ plaintext we created above can't reach a client\. Best-effort;\s*\n?\s*\/\/ the key remains in the DB as `revoked` if revoke fails for\s*\n?\s*\/\/ any reason, which is the safe direction\./,
+    );
+    expect(body).toMatch(
+      /try \{\s*\n?\s*await apiKeysService\.revoke\(ctx, created\.row\.id\);\s*\n?\s*\} catch \{\s*\n?\s*\/\* swallow \*\/\s*\n?\s*\}\s*\n?\s*throw mapCliAuthorizeError\(err\);/,
+    );
+  });
+
+  it('Bind success reply: { ok: true as const, account_id, expires_at ISO }', () => {
+    expect(body).toMatch(
+      /return \{\s*\n?\s*ok: true as const,\s*\n?\s*account_id: result\.account_id,\s*\n?\s*expires_at: result\.expires_at\.toISOString\(\),\s*\n?\s*\};/,
+    );
+  });
+
+  it('Exchange: public; cliAuthorizeService.exchange dispatch; pass-through result; CliAuthorizeError → HTTP map', () => {
+    expect(body).toMatch(
+      /app\.post\('\/v1\/auth\/cli-authorize\/exchange', async \(req\) => \{[\s\S]+?const result = await cliAuthorizeService\.exchange\(\{\s*\n?\s*code: parsed\.data\.code,\s*\n?\s*state: parsed\.data\.state,\s*\n?\s*\}\);\s*\n?\s*return result;[\s\S]+?if \(err instanceof CliAuthorizeError\) throw mapCliAuthorizeError\(err\);/,
+    );
+  });
+
+  it('mapCliAuthorizeError: state_mismatch+already_bound+invalid_code → 400; not_found+expired → 404; exhaustive switch over union', () => {
+    expect(body).toMatch(/function mapCliAuthorizeError\(err: CliAuthorizeError\): Error \{/);
+    expect(body).toMatch(
+      /case 'state_mismatch':\s*\n?\s*return new BadRequestError\('State parameter does not match\.'\);/,
+    );
+    expect(body).toMatch(
+      /case 'already_bound':\s*\n?\s*return new BadRequestError\('Authorization code has already been bound\.'\);/,
+    );
+    expect(body).toMatch(
+      /case 'not_found':\s*\n?\s*case 'expired':\s*\n?\s*return new NotFoundError\('Authorization code not found or expired\.'\);/,
+    );
+    expect(body).toMatch(
+      /case 'invalid_code':\s*\n?\s*return new BadRequestError\('Authorization code is invalid\.'\);/,
+    );
+  });
+
+  it('AuthCliRoutesDeps: cliAuthorizeService + apiKeysService', () => {
+    expect(body).toMatch(
+      /export interface AuthCliRoutesDeps \{\s*\n?\s*cliAuthorizeService: CliAuthorizeService;\s*\n?\s*apiKeysService: ApiKeysService;\s*\n?\s*\}/,
+    );
+  });
+
+  it('imports: FastifyInstance + ApiKeysService + CliAuthorizeError/Service + BadRequestError/NotFoundError/ValidationError', () => {
+    expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
+    expect(body).toMatch(/import type \{ ApiKeysService \} from '\.\.\/services\/api-keys\.js';/);
+    expect(body).toMatch(
+      /import \{ CliAuthorizeError, type CliAuthorizeService \} from '\.\.\/services\/cli-authorize\.js';/,
+    );
+    expect(body).toMatch(
+      /import \{ BadRequestError, NotFoundError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
