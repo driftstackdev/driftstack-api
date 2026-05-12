@@ -1,0 +1,94 @@
+// W440.B — drift guard for apps/server/src/lib/redis-rate-limit-store.ts.
+// Production Redis-backed atomic token bucket. Drift here either
+// reads tokens outside the Lua atomicity envelope (concurrent
+// callers race) or drops the divide-by-zero guard on refill_per_sec
+// (one trial-pack-style fractional rate triggers a Lua arithmetic
+// error and the bucket stops consuming).
+//
+//   • Lua atomicity framing pinned: read → refill → subtract iff
+//     sufficient → write — whole script runs as single Redis EVAL
+//     so concurrent callers cannot race.
+//   • TTL = (capacity / refill_rate) seconds + 60s slack to clean
+//     up idle keys.
+//   • math.max(refill_per_sec, 0.0001) divide-by-zero guard (trial-
+//     pack 1/60 fractional refill survives).
+//   • Lua return: [allowedFlag, remaining, retryAfterMs] tuple.
+//   • HMSET 'tokens' + 'last_ms' fields; EXPIRE on every call.
+//   • EVAL with 1 key + 4 ARGV (capacity, refillPerSecond, cost, now).
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/lib/redis-rate-limit-store.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W440.B apps/server/src/lib/redis-rate-limit-store.ts content parity', () => {
+  const body = read(LIB);
+
+  it('header framing pinned: Lua script is source of truth for atomicity — read current (tokens, lastRefillMs) → refill based on elapsed + refill rate → subtract cost iff sufficient → write new with TTL = full-refill time + slack; whole script runs as single Redis EVAL so concurrent callers cannot race', () => {
+    expect(body).toMatch(/\/\/ Redis-backed atomic token bucket\./);
+    expect(body).toMatch(
+      /\/\/ The Lua script is the source of truth for atomicity:\s*\n?\s*\/\/\s*- read current \(tokens, lastRefillMs\)\s*\n?\s*\/\/\s*- refill based on elapsed time and refill rate\s*\n?\s*\/\/\s*- subtract cost iff sufficient\s*\n?\s*\/\/\s*- write new \(tokens, lastRefillMs\) with TTL = full-refill time \+ slack\s*\n?\s*\/\/ The whole script runs as a single Redis command \(EVAL\), so concurrent\s*\n?\s*\/\/ callers cannot race\./,
+    );
+  });
+
+  it('imports: Redis type from ioredis + ConsumeOpts/ConsumeResult/RateLimitStore from services/rate-limit.js', () => {
+    expect(body).toMatch(/import type \{ Redis \} from 'ioredis';/);
+    expect(body).toMatch(
+      /import type \{ ConsumeOpts, ConsumeResult, RateLimitStore \} from '\.\.\/services\/rate-limit\.js';/,
+    );
+  });
+
+  it('Lua KEYS[1] + ARGV[1..4] decode (capacity / refill_per_sec / cost / now_ms via tonumber)', () => {
+    expect(body).toMatch(
+      /local key = KEYS\[1\]\s*\n?\s*local capacity = tonumber\(ARGV\[1\]\)\s*\n?\s*local refill_per_sec = tonumber\(ARGV\[2\]\)\s*\n?\s*local cost = tonumber\(ARGV\[3\]\)\s*\n?\s*local now_ms = tonumber\(ARGV\[4\]\)/,
+    );
+  });
+
+  it('Lua HMGET tokens + last_ms; first-touch initialize to capacity + now_ms when tokens nil', () => {
+    expect(body).toMatch(
+      /local data = redis\.call\('HMGET', key, 'tokens', 'last_ms'\)\s*\n?\s*local tokens = tonumber\(data\[1\]\)\s*\n?\s*local last_ms = tonumber\(data\[2\]\)\s*\n?\s*\n?\s*if tokens == nil then\s*\n?\s*tokens = capacity\s*\n?\s*last_ms = now_ms\s*\n?\s*end/,
+    );
+  });
+
+  it('Lua elapsed clamp via math.max(0, ...); refilled clamp via math.min(capacity, ...)', () => {
+    expect(body).toMatch(
+      /local elapsed = math\.max\(0, \(now_ms - last_ms\) \/ 1000\)\s*\n?\s*local refilled = math\.min\(capacity, tokens \+ elapsed \* refill_per_sec\)/,
+    );
+  });
+
+  it('Lua sufficient branch: HMSET tokens=remaining + last_ms=now_ms; TTL = ceil(capacity / max(refill, 0.0001)) + 60s slack divide-by-zero guard; return {1, remaining, 0}', () => {
+    expect(body).toMatch(
+      /if refilled >= cost then\s*\n?\s*local remaining = refilled - cost\s*\n?\s*redis\.call\('HMSET', key, 'tokens', remaining, 'last_ms', now_ms\)\s*\n?\s*-- TTL = \(capacity \/ refill_rate\) seconds \+ 60s slack\s*\n?\s*local ttl = math\.ceil\(capacity \/ math\.max\(refill_per_sec, 0\.0001\)\) \+ 60\s*\n?\s*redis\.call\('EXPIRE', key, ttl\)\s*\n?\s*return \{1, remaining, 0\}\s*\n?\s*end/,
+    );
+  });
+
+  it('Lua insufficient branch: retry_after_ms = ceil((deficit / max(refill,0.0001))*1000); HMSET partial refill + EXPIRE; return {0, refilled, retry_after_ms}', () => {
+    expect(body).toMatch(
+      /local deficit = cost - refilled\s*\n?\s*local retry_after_ms = math\.ceil\(\(deficit \/ math\.max\(refill_per_sec, 0\.0001\)\) \* 1000\)\s*\n?\s*redis\.call\('HMSET', key, 'tokens', refilled, 'last_ms', now_ms\)\s*\n?\s*local ttl = math\.ceil\(capacity \/ math\.max\(refill_per_sec, 0\.0001\)\) \+ 60\s*\n?\s*redis\.call\('EXPIRE', key, ttl\)\s*\n?\s*return \{0, refilled, retry_after_ms\}/,
+    );
+  });
+
+  it('RedisRateLimitStore class: constructor(private readonly redis: Redis); consume() destructures [allowedFlag, remaining, retryAfterMs] = result; allowed: allowedFlag === 1', () => {
+    expect(body).toMatch(
+      /export class RedisRateLimitStore implements RateLimitStore \{\s*\n?\s*constructor\(private readonly redis: Redis\) \{\}/,
+    );
+    expect(body).toMatch(
+      /const result = \(await this\.redis\.eval\(\s*\n?\s*LUA,\s*\n?\s*1,\s*\n?\s*opts\.key,\s*\n?\s*opts\.capacity\.toString\(\),\s*\n?\s*opts\.refillPerSecond\.toString\(\),\s*\n?\s*opts\.cost\.toString\(\),\s*\n?\s*opts\.now\.toString\(\),\s*\n?\s*\)\) as \[number, number, number\];/,
+    );
+    expect(body).toMatch(
+      /const \[allowedFlag, remaining, retryAfterMs\] = result;\s*\n?\s*return \{\s*\n?\s*allowed: allowedFlag === 1,\s*\n?\s*remaining,\s*\n?\s*retryAfterMs,\s*\n?\s*\};/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
