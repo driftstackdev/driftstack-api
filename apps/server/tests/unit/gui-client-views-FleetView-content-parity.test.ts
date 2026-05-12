@@ -1,0 +1,124 @@
+// W482.C — drift guard for apps/gui-client/src/views/FleetView.tsx.
+// V-346 Fleet view. Drift here either drops the 'local-only
+// registry, no server-side fleet management' framing
+// (architectural intent silently shifts to a server-managed
+// fleet and the founder ends up coupling the GUI to a feature
+// that doesn't exist) or breaks the window.confirm destroy
+// guard (clicking Remove drops the fleet member without a
+// chance to abort — accidental delete with no undo).
+//
+//   • V-346 framing pinned: 'Fleet view. Lists Mac mini fleet
+//     members the founder has declared locally; pings each
+//     member's /version on demand.' + 'Local-only registry
+//     (tauri-plugin-store). The fleet is the founder's choice
+//     of API server URLs to ping; no server-side fleet
+//     management.' + V-244 placeholder replacement framing.
+//   • FormState 4-field (draft + errors + editingId + visible);
+//     EMPTY_DRAFT base + EMPTY_DRAFT_FORM at module bottom.
+//   • Delegation to fleet-members lib: addFleetMember /
+//     listFleetMembers / pingFleetMember / removeFleetMember /
+//     updateFleetMember / validateDraft.
+//   • Ping-all: Promise.all + per-member ping with 'pending'
+//     intermediate state.
+//   • sort by label localeCompare.
+//   • window.confirm destroy guard with `Remove "${label}"
+//     from the fleet?` prompt.
+//   • Per-member display: ok-pill with durationMs / unreachable
+//     pill + error message; driver + playwrightBrowser + version
+//     line.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/gui-client/src/views/FleetView.tsx');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W482.C apps/gui-client/src/views/FleetView.tsx content parity', () => {
+  const body = read(LIB);
+
+  it("V-346 framing pinned: 'V-346 — Fleet view. Lists Mac mini fleet members the founder has declared locally; pings each member's /version on demand to surface reachability + driver mode + version.' + local-only-registry framing 'Local-only registry (tauri-plugin-store). The fleet is the founder's choice of API server URLs to ping; no server-side fleet management. Each member is a (label, baseUrl) pair.' + V-244 placeholder replacement note", () => {
+    expect(body).toMatch(
+      /\/\/ V-346 — Fleet view\. Lists Mac mini fleet members the founder has\s*\n?\s*\/\/ declared locally; pings each member's \/version on demand to surface\s*\n?\s*\/\/ reachability \+ driver mode \+ version\./,
+    );
+    expect(body).toMatch(
+      /\/\/ Local-only registry \(tauri-plugin-store\)\. The fleet is the\s*\n?\s*\/\/ founder's choice of API server URLs to ping; no server-side fleet\s*\n?\s*\/\/ management\. Each member is a \(label, baseUrl\) pair\./,
+    );
+    expect(body).toMatch(
+      /\/\/ This view replaces the V-244 NotYet placeholder for the\s*\n?\s*\/\/ "Cluster → Mac mini fleet" sidebar entry\./,
+    );
+  });
+
+  it("FormState 4-field (draft: FleetMemberDraft + errors + editingId nullable + visible boolean); EMPTY_DRAFT module constant {label:'', baseUrl:'', notes: null}; EMPTY_DRAFT_FORM at module bottom for the reset-after-submit path", () => {
+    expect(body).toMatch(
+      /interface FormState \{\s*\n?\s*draft: FleetMemberDraft;\s*\n?\s*errors: DraftValidation\['errors'\];\s*\n?\s*editingId: string \| null;\s*\n?\s*visible: boolean;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /const EMPTY_DRAFT: FleetMemberDraft = \{\s*\n?\s*label: '',\s*\n?\s*baseUrl: '',\s*\n?\s*notes: null,\s*\n?\s*\};/,
+    );
+    expect(body).toMatch(
+      /const EMPTY_DRAFT_FORM: FormState = \{\s*\n?\s*draft: EMPTY_DRAFT,\s*\n?\s*errors: \{\},\s*\n?\s*editingId: null,\s*\n?\s*visible: false,\s*\n?\s*\};/,
+    );
+  });
+
+  it('Lib delegation: listFleetMembers + addFleetMember + updateFleetMember + removeFleetMember + pingFleetMember + validateDraft imports from ../lib/fleet-members; refresh = useCallback wrapping listFleetMembers + setMembers + setLoading(false); ping useCallback sets pings[id]=pending then sets final result', () => {
+    expect(body).toMatch(
+      /import \{\s*\n?\s*addFleetMember,\s*\n?\s*listFleetMembers,\s*\n?\s*pingFleetMember,\s*\n?\s*removeFleetMember,\s*\n?\s*updateFleetMember,\s*\n?\s*validateDraft,/,
+    );
+    expect(body).toMatch(
+      /const refresh = useCallback\(async \(\) => \{\s*\n?\s*const all = await listFleetMembers\(\);\s*\n?\s*setMembers\(all\);\s*\n?\s*setLoading\(false\);\s*\n?\s*\}, \[\]\);/,
+    );
+    expect(body).toMatch(
+      /const ping = useCallback\(async \(member: FleetMember\) => \{\s*\n?\s*setPings\(\(prev\) => \(\{ \.\.\.prev, \[member\.id\]: 'pending' \}\)\);\s*\n?\s*const result = await pingFleetMember\(member\);\s*\n?\s*setPings\(\(prev\) => \(\{ \.\.\.prev, \[member\.id\]: result \}\)\);\s*\n?\s*\}, \[\]\);/,
+    );
+  });
+
+  it('Ping-all uses Promise.all (parallel pings, not sequential — fleet of 10 minis pings concurrently); sort = useMemo with label localeCompare ascending — pinned so the list stays alphabetically sortable and parallel-pinged', () => {
+    expect(body).toMatch(
+      /const pingAll = useCallback\(async \(\) => \{\s*\n?\s*await Promise\.all\(members\.map\(\(m\) => ping\(m\)\)\);\s*\n?\s*\}, \[members, ping\]\);/,
+    );
+    expect(body).toMatch(
+      /const sorted = useMemo\(\s*\n?\s*\(\) => \[\.\.\.members\]\.sort\(\(a, b\) => a\.label\.localeCompare\(b\.label\)\),\s*\n?\s*\[members\],\s*\n?\s*\);/,
+    );
+  });
+
+  it("Form lifecycle: startCreate / startEdit both setTimeout 0 focus to first input via formRef.current?.querySelector('input')?.focus(); submitForm: validateDraft + setForm errors if !ok + addFleetMember or updateFleetMember + reset via setForm({...EMPTY_DRAFT_FORM}) + refresh()", () => {
+    expect(body).toMatch(
+      /setTimeout\(\(\) => formRef\.current\?\.querySelector\('input'\)\?\.focus\(\), 0\);/,
+    );
+    expect(body).toMatch(
+      /async function submitForm\(\): Promise<void> \{\s*\n?\s*const v = validateDraft\(form\.draft\);\s*\n?\s*if \(!v\.ok\) \{\s*\n?\s*setForm\(\{ \.\.\.form, errors: v\.errors \}\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*if \(form\.editingId\) \{\s*\n?\s*await updateFleetMember\(form\.editingId, form\.draft\);\s*\n?\s*\} else \{\s*\n?\s*await addFleetMember\(form\.draft\);\s*\n?\s*\}\s*\n?\s*setForm\(\{ \.\.\.EMPTY_DRAFT_FORM \}\);\s*\n?\s*await refresh\(\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('destroy guard: window.confirm(`Remove "${member.label}" from the fleet?`) early-return if !confirmed + then removeFleetMember + clean up pings[id] entry (delete) + refresh() — pinned so accidental Remove clicks have an abort path with no recoverable trash bin', () => {
+    expect(body).toMatch(
+      /async function destroy\(member: FleetMember\): Promise<void> \{\s*\n?\s*if \(!window\.confirm\(`Remove "\$\{member\.label\}" from the fleet\?`\)\) return;\s*\n?\s*await removeFleetMember\(member\.id\);\s*\n?\s*setPings\(\(prev\) => \{\s*\n?\s*const next = \{ \.\.\.prev \};\s*\n?\s*delete next\[member\.id\];\s*\n?\s*return next;\s*\n?\s*\}\);\s*\n?\s*await refresh\(\);\s*\n?\s*\}/,
+    );
+  });
+
+  it("Per-member ping display: 'pinging…' intermediate / ok pill 'ok · {durationMs}ms' in status-ready / unreachable pill in status-error; driver+playwrightBrowser+version conditional line with `(${playwrightBrowser})` suffix when present + ` · v${version}` suffix when present + driver ?? 'unknown' fallback", () => {
+    expect(body).toMatch(
+      /\{p === 'pending' && <span className="text-2xs text-ink-muted">pinging…<\/span>\}\s*\n?\s*\{p && p !== 'pending' && p\.ok && \(\s*\n?\s*<span className="rounded-full bg-status-ready\/20 px-2 py-0\.5 text-2xs font-medium uppercase tracking-wide text-status-ready">\s*\n?\s*ok · \{p\.durationMs\}ms\s*\n?\s*<\/span>\s*\n?\s*\)\}\s*\n?\s*\{p && p !== 'pending' && !p\.ok && \(\s*\n?\s*<span className="rounded-full bg-status-error\/20 px-2 py-0\.5 text-2xs font-medium uppercase tracking-wide text-status-error">\s*\n?\s*unreachable\s*\n?\s*<\/span>\s*\n?\s*\)\}/,
+    );
+    expect(body).toMatch(
+      /driver: <span className="mono">\{p\.driver \?\? 'unknown'\}<\/span>\s*\n?\s*\{p\.playwrightBrowser \? ` \(\$\{p\.playwrightBrowser\}\)` : ''\}\s*\n?\s*\{p\.version \? ` · v\$\{p\.version\}` : ''\}/,
+    );
+  });
+
+  it('Field subcomponent: section-label + children + error?: optional inline status-error message — pinned so the form-field convention stays consistent (no inline error-message duplication)', () => {
+    expect(body).toMatch(
+      /function Field\(\{\s*\n?\s*label,\s*\n?\s*error,\s*\n?\s*children,\s*\n?\s*\}: \{\s*\n?\s*label: string;\s*\n?\s*error: string \| undefined;\s*\n?\s*children: React\.ReactNode;\s*\n?\s*\}\): JSX\.Element \{\s*\n?\s*return \(\s*\n?\s*<label className="flex flex-col gap-1\.5">\s*\n?\s*<span className="section-label">\{label\}<\/span>\s*\n?\s*\{children\}\s*\n?\s*\{error !== undefined && <span className="text-2xs text-status-error">\{error\}<\/span>\}/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
