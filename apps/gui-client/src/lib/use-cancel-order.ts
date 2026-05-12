@@ -7,6 +7,7 @@
 // the same hook instance can be reused across multiple orders.
 
 import { useCallback, useState } from 'react';
+import { readApiErrorMessage } from './api-errors';
 import { useSettings } from './SettingsContext';
 import type { CryptoOrderData } from './use-crypto-order';
 
@@ -48,16 +49,12 @@ export function useCancelOrder(): UseCancelOrderResult {
           },
         });
         if (!res.ok) {
-          let detail = `HTTP ${res.status.toString()}`;
-          try {
-            const body = (await res.json()) as { detail?: string };
-            if (typeof body.detail === 'string' && body.detail.length > 0) {
-              detail = body.detail;
-            }
-          } catch {
-            /* keep the HTTP status fallback */
-          }
-          setState({ kind: 'failed', orderId, status: res.status, message: detail });
+          setState({
+            kind: 'failed',
+            orderId,
+            status: res.status,
+            message: await readApiErrorMessage(res),
+          });
           return;
         }
         const body = (await res.json()) as CryptoOrderData;

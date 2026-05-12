@@ -5,7 +5,8 @@ import { MOCK_INCIDENTS } from '../../data/mocks.ts';
 // V-338 — incident form is now wired to POST /v1/admin/incidents.
 // SSG renders MOCK_INCIDENTS as the initial fallback; the inline
 // script below replaces with live data on mount + handles the form.
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 
 function fmtIso(iso: string): string {
   return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';

@@ -17,18 +17,20 @@ endpoint reference.
 
 ## Concurrency
 
-Each tier caps simultaneously-active sessions:
+Each tier caps simultaneously-active sessions. Values match the
+shared `TIER_CONCURRENT_SESSION_LIMITS` constant in
+`@driftstack/api-types`:
 
-| Tier          | Concurrent sessions |
-| ------------- | ------------------: |
-| Trial pack    |                   1 |
-| Solo manual   |                   1 |
-| Team manual   |                   3 |
-| Agency manual |                  10 |
-| API starter   |                   2 |
-| API builder   |                   5 |
-| API scale     |                  20 |
-| Enterprise    |              custom |
+| Tier            | Concurrent sessions |
+| --------------- | ------------------: |
+| `trial_pack`    |                   1 |
+| `solo_manual`   |                   1 |
+| `team_manual`   |                   3 |
+| `agency_manual` |                   8 |
+| `api_starter`   |                   2 |
+| `api_builder`   |                   8 |
+| `api_scale`     |                  24 |
+| `enterprise`    |                  32 |
 
 Hitting the cap on `POST /v1/sessions` returns `429 Too Many
 Requests` with a `Retry-After` header. Sessions auto-destroy after
@@ -113,7 +115,10 @@ Cursor-paginated, newest-first. Optional `status` filter.
 
 ## Get one
 
-`GET /v1/sessions/:id` — single session.
+`GET /v1/sessions/:id/state` — single session's current state. There
+is no separate metadata-only path today; session metadata travels
+alongside the live state response. See [Get state](#get-state) below
+for the response shape.
 
 ## Navigate
 

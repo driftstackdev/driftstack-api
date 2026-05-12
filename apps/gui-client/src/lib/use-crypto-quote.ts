@@ -7,6 +7,7 @@
 // want to gate the request behind a button.
 
 import { useCallback, useEffect, useState } from 'react';
+import { readApiErrorMessage } from './api-errors';
 import { useSettings } from './SettingsContext';
 
 export interface CryptoQuoteData {
@@ -71,7 +72,7 @@ export function useCryptoQuote(opts: UseCryptoQuoteOpts): UseCryptoQuoteResult {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        setState({ kind: 'error', message: `HTTP ${res.status.toString()}` });
+        setState({ kind: 'error', message: await readApiErrorMessage(res) });
         return;
       }
       const parsed = (await res.json()) as CryptoQuoteData;

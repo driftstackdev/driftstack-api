@@ -135,18 +135,19 @@ for _, b := range series.Buckets {
 
 ## Quota / tier caps
 
-The locked tier table lives in [pricing planning file 127](https://github.com/driftstackdev/driftstack-api/blob/main/docs/architecture/v294-feature-catalog.md). Snapshot:
+The locked tier table is driven by `TIER_CONCURRENT_SESSION_LIMITS`
+and `PROFILES_PER_TIER` in `@driftstack/api-types`. Snapshot:
 
-| Tier          | Concurrent sessions | Profiles | Session minutes / month |
-| ------------- | ------------------: | -------: | ----------------------: |
-| Trial pack    |                   1 |        1 |                      30 |
-| Solo manual   |                   1 |        5 |                     600 |
-| Team manual   |                   3 |       50 |                   6,000 |
-| Agency manual |                  10 |      200 |                  24,000 |
-| API starter   |                   2 |       10 |                   6,000 |
-| API builder   |                   5 |       25 |                  50,000 |
-| API scale     |                  20 |      100 |                 250,000 |
-| Enterprise    |              custom |   custom |                  custom |
+| Tier            | Concurrent sessions | Profiles | Session minutes / month |
+| --------------- | ------------------: | -------: | ----------------------: |
+| `trial_pack`    |                   1 |        1 |                      30 |
+| `solo_manual`   |                   1 |       10 |                     600 |
+| `team_manual`   |                   3 |       50 |                   6,000 |
+| `agency_manual` |                   8 |      200 |                  24,000 |
+| `api_starter`   |                   2 |       25 |                   6,000 |
+| `api_builder`   |                   8 |      100 |                  50,000 |
+| `api_scale`     |                  24 |      500 |                 250,000 |
+| `enterprise`    |                  32 |   custom |                  custom |
 
 Crossing the soft cap doesn't cut off the API — it triggers a
 billing-overage flag and (per ADR-004) Stripe overage billing at

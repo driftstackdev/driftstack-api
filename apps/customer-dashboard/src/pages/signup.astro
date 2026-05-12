@@ -7,7 +7,8 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 // Flow: signup → verify-email → welcome → select-tier → first-session.
 // Each page uses localStorage.ds_web_session_token for cross-page state.
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="Sign up" withSidebar={false}>

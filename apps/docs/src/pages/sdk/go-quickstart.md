@@ -18,12 +18,12 @@ session. For the multi-language overview see the [combined quickstart](/quicksta
 ## 1. Install
 
 ```bash
-go get github.com/driftstackdev/driftstack-go
+go get github.com/driftstackdev/driftstack-api/packages/sdk-go
 ```
 
-> The Go SDK is alpha until the first registry tag lands. Pin to a
+> The Go SDK is alpha until the first tagged release lands. Pin to a
 > specific commit during the alpha by running
-> `go get github.com/driftstackdev/driftstack-go@<sha>`.
+> `go get github.com/driftstackdev/driftstack-api/packages/sdk-go@<sha>`.
 
 ## 2. Configure the client
 
@@ -35,7 +35,7 @@ import (
     "log"
     "os"
 
-    driftstack "github.com/driftstackdev/driftstack-go"
+    driftstack "github.com/driftstackdev/driftstack-api/packages/sdk-go"
 )
 
 func main() {
@@ -72,7 +72,7 @@ import (
     "log"
     "os"
 
-    driftstack "github.com/driftstackdev/driftstack-go"
+    driftstack "github.com/driftstackdev/driftstack-api/packages/sdk-go"
 )
 
 func main() {
@@ -110,59 +110,67 @@ func main() {
 
 ## 4. Error handling
 
-Errors implement the `*driftstack.APIError` type, which carries
-both HTTP-level metadata and the parsed RFC 9457 Problem Details:
+Each problem-type maps to a typed error class. Match with
+`errors.As` for the granular case, or `errors.Is` against a sentinel
+for category-only matching:
 
 ```go
 import (
     "errors"
     "log"
+    "time"
 )
 
 if _, err := client.Sessions.Create(ctx, req); err != nil {
-    var apiErr *driftstack.APIError
-    if errors.As(err, &apiErr) {
-        switch {
-        case apiErr.Status == 429 && apiErr.Problem.Type == "/tier-limit":
-            log.Printf("cap reached: %s", apiErr.Problem.Detail)
-        case apiErr.Status == 401:
-            log.Print("bad API key")
-        default:
-            log.Printf("driftstack error: %+v", apiErr.Problem)
-        }
-        log.Printf("request id: %s", apiErr.RequestID)
-    } else {
+    var rl *driftstack.RateLimitError
+    var cl *driftstack.ConcurrencyLimitError
+    var qe *driftstack.QuotaExceededError
+    switch {
+    case errors.As(err, &rl):
+        time.Sleep(time.Duration(rl.RetryAfterSeconds) * time.Second)
+        // … retry
+    case errors.As(err, &cl):
+        log.Printf("concurrent cap reached (%d/%d)", cl.CurrentSessions, cl.Limit)
+    case errors.As(err, &qe):
+        log.Printf("tier limit reached (current=%d/limit=%d)", qe.Current, qe.Limit)
+    case errors.Is(err, driftstack.ErrAuth):
+        log.Print("bad API key")
+    default:
         log.Fatal(err) // Network / parse / unrecoverable.
     }
 }
 ```
 
-The SDK retries idempotent GETs on 5xx + network errors with
-exponential backoff (max 3 attempts, jittered). Mutating writes
-only retry when an [idempotency key](/api/idempotency/) is supplied
-via the request struct's `IdempotencyKey` field (when present).
+The full mapping from problem-type to Go error class lives at
+[/reference/errors](/reference/errors/). For low-level cases the
+errors also satisfy `errors.As` to a shared payload carrying
+`.Status`, `.ProblemType`, and a `.Problem map[string]any` with the
+unmapped extension fields.
 
 ## 5. Webhooks (optional)
 
 ```go
-import "github.com/driftstackdev/driftstack-go"
+import driftstack "github.com/driftstackdev/driftstack-api/packages/sdk-go"
 
-ok := driftstack.VerifyWebhookSignature(driftstack.VerifyWebhookSignatureInput{
-    Body:       rawBody,
-    Header:     r.Header.Get("X-Driftstack-Signature"),
-    HeaderPrev: r.Header.Get("X-Driftstack-Signature-Prev"),
-    Secret:     os.Getenv("DRIFTSTACK_WEBHOOK_SECRET"),
-})
+ok := driftstack.VerifyWebhookSignature(
+    rawBody,
+    r.Header.Get("X-Driftstack-Signature"),
+    os.Getenv("DRIFTSTACK_WEBHOOK_SECRET"),
+    driftstack.VerifyWebhookOptions{
+        HeaderPrev: r.Header.Get("X-Driftstack-Signature-Prev"),
+    },
+)
 if !ok {
     http.Error(w, "invalid signature", http.StatusUnauthorized)
     return
 }
 ```
 
-`HeaderPrev` is set by the API during a 24h
-[signing-secret rotation grace window](/webhooks/signature-rotation/);
-verifier accepts either header so deliveries don't drop while you
-roll the new secret across your verifier infra.
+`HeaderPrev` is set by the API during the 24h signing-secret
+rotation grace window — see
+[`/webhooks/endpoints`](/webhooks/endpoints/) for the rotate-secret
+endpoint. Verifier accepts either header so deliveries don't drop
+while you roll the new secret across your verifier infra.
 
 ## Next steps
 

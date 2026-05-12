@@ -60,7 +60,7 @@ console.log(session.id, session.created_at);
 
 **Returns** a `Session` with `id`, `archetype`, `state`, `label`, `metadata`, `created_at`. The `id` is the handle for every subsequent call.
 
-**Tier check:** if you're at your concurrent cap, the call returns `429`. If your tier's profile cap blocks profile binding, `402 profile_cap_reached`. If your account is suspended, `403 forbidden`.
+**Tier check:** if you're at your concurrent cap, the call returns `429 concurrency-limit`. If your tier's profile cap is reached on a profile-binding flow, `429 tier-limit`. If your account is suspended, `403 forbidden`.
 
 ## Drive: navigate, interact, wait
 
@@ -130,23 +130,24 @@ To keep a session alive during a slow workflow, periodically call any method —
 
 Every error returned by the session endpoints conforms to the [problem+json shape](/api/) with a `type` URL identifying the error class:
 
-- `429 Too Many Requests` — concurrent cap reached. `Retry-After` header tells you when slots free up.
-- `402 Payment Required` — trial-pack credit exhausted (`trial_pack_exhausted`) or profile cap reached (`profile_cap_reached`).
+- `429 Too Many Requests` (`https://errors.driftstack.dev/rate-limited`) — global / per-bucket rate limit exceeded. `Retry-After` carries the wait time.
+- `429 Too Many Requests` (`https://errors.driftstack.dev/concurrency-limit`) — concurrent-session cap reached. Wait for an active session to finish.
+- `429 Too Many Requests` (`https://errors.driftstack.dev/tier-limit`) — a tier-derived cap (e.g. profile count) is reached.
 - `404 Not Found` — session ID doesn't exist (or already destroyed and TTL-evicted).
 - `409 Conflict` — operation invalid for the current state (e.g. `navigate` after destroy).
-- `503 Service Unavailable` — fleet at capacity beyond your account's cap (rare; surfaces during regional fleet incidents).
+- `410 Gone` (`https://errors.driftstack.dev/session-destroyed`) — operating on a session that has already been destroyed.
+- `502 Bad Gateway` / `503 Service Unavailable` — driver-side error (`driver-error` / `driver-not-integrated` / `feature-unavailable`).
 
-The SDKs map these to typed error classes — catch `RateLimitError`, `ConcurrencyLimitError`, `PaymentRequiredError`, etc.
+The SDKs map these to typed error classes — catch `RateLimitError`, `ConcurrencyLimitError`, `TierLimitError`, `SessionDestroyedError`, `DriverError`, etc. The full mapping lives at [/reference/errors](/reference/errors).
 
 ## Session events on the webhook bus
 
-If you've configured a webhook endpoint, every state transition fires an event:
+If you've configured a webhook endpoint, terminal session events fire on the bus:
 
-- `session.created`
-- `session.destroyed` (with `reason`: `customer_destroyed`, `idle_timeout`, `fleet_evicted`)
-- `session.error` (runtime crash; auto-destroyed)
+- `session.completed` — session destroyed cleanly (customer-driven destroy or clean idle-timeout shutdown).
+- `session.failed` — session terminated due to a runtime / driver error.
 
-See the [webhook events catalog](/webhooks/events/) for full payload shapes and signature verification.
+Intermediate state transitions (e.g. a hypothetical `session.created`) are not on the bus today — the create + destroy round-trip is fast enough that polling `sessions.getState` covers in-flight needs. See the [webhook events catalog](/webhooks/events/) for full payload shapes and signature verification.
 
 ## Notes
 

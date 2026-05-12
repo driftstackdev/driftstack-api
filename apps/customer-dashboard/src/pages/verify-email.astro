@@ -4,13 +4,14 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 // V-184a — onboarding step 2. Consume verification token, store
 // resulting web-session token in localStorage, redirect to /welcome.
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="Verify email" withSidebar={false}>
   <div class="mx-auto max-w-md px-6 py-16" data-page="verify-email">
     <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Verify your email</h1>
-    <p class="mt-3 text-sm text-slate-600">
+    <p class="mt-3 text-sm text-slate-600" data-field="intro">
       We sent a verification token to <span data-field="email" class="font-mono">your email</span>.
       Paste it below to activate your account.
     </p>
@@ -56,20 +57,32 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
 
       const email = sessionStorage.getItem('ds_signup_email');
       if (email && emailEl) emailEl.textContent = email;
-      // Pre-fill debug_token from signup response in test/dev mode.
+      // V-184a.B — when the user clicks the link in the verify
+      // email, the token is already in `?token=…`. Pre-fill the
+      // form + auto-submit so they don't have to paste it. The
+      // form stays visible as a fallback for the rare case where
+      // a recipient mail client mangles the link or the page is
+      // hit without the query param.
+      const params = new URLSearchParams(window.location.search);
+      const linkToken = params.get('token');
+      // Pre-fill debug_token from signup response in test/dev mode
+      // (kept for back-compat — the URL token wins when both
+      // are present).
       const debugToken = sessionStorage.getItem('ds_debug_verify_token');
-      if (debugToken && tokenInput) tokenInput.value = debugToken;
+      const prefill = linkToken ?? debugToken;
+      if (prefill && tokenInput) tokenInput.value = prefill;
+      if (linkToken) {
+        const intro = root.querySelector('[data-field="intro"]');
+        if (intro) intro.textContent = 'Verifying your email — one moment…';
+      }
 
       function showBanner(text) {
         banner.textContent = text;
         banner.classList.remove('hidden');
       }
 
-      form.addEventListener('submit', (ev) => {
-        ev.preventDefault();
+      function submitToken(token) {
         banner.classList.add('hidden');
-        const fd = new FormData(form);
-        const token = fd.get('token');
 
         fetch(apiBaseUrl + '/v1/auth/verify-email', {
           method: 'POST',
@@ -102,7 +115,21 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           .catch((err) => {
             showBanner(err && err.message ? err.message : 'Verification failed.');
           });
+      }
+
+      form.addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(form);
+        const token = fd.get('token');
+        if (typeof token === 'string' && token.length > 0) submitToken(token);
       });
+
+      // V-184a.B — auto-submit when the link in the email carried
+      // the token. The form stays mounted so failures show the
+      // banner + the user can correct or paste manually.
+      if (linkToken && linkToken.length > 0) {
+        submitToken(linkToken);
+      }
     })();
   </script>
 </DashboardLayout>

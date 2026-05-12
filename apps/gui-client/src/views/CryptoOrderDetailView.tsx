@@ -1,5 +1,9 @@
 // V-534.AD — single-order detail view.
 // V-534.AF — body now rendered via CryptoOrderSummaryCard.
+// V-534.BE — renders the V-666.AU events timeline inline below the
+//            summary card so the customer can see when the order
+//            transitioned states (useful for proving payment in
+//            support tickets).
 //
 // Combines useCryptoOrder (poll), useCancelOrder (V-534.Y), and
 // CryptoReceiptView (V-534.AB) on one page. Cancel is only offered
@@ -8,11 +12,34 @@
 // once the order reaches paid; before that we surface the polling
 // status so the user knows we're waiting for on-chain confirmation.
 
+import { CryptoOrderStatusBadge } from '../components/CryptoOrderStatusBadge';
 import { CryptoOrderSummaryCard } from '../components/CryptoOrderSummaryCard';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { useCancelOrder } from '../lib/use-cancel-order';
-import { useCryptoOrder } from '../lib/use-crypto-order';
+import { useCryptoOrder, type CryptoOrderEvent } from '../lib/use-crypto-order';
 import { CryptoReceiptView } from './CryptoReceiptView';
+
+function EventsTimeline({ events }: { events: CryptoOrderEvent[] }): JSX.Element {
+  if (events.length === 0) {
+    return <p className="text-sm text-ink-secondary">No events recorded yet.</p>;
+  }
+  return (
+    <ol aria-label="Order events timeline" className="flex flex-col gap-1 text-sm">
+      {events.map((e, i) => (
+        <li
+          key={`${e.at}-${i.toString()}`}
+          className="flex items-center justify-between gap-2 rounded border border-surface-divider bg-surface-inset px-2 py-1"
+        >
+          <span className="flex items-center gap-2">
+            <CryptoOrderStatusBadge status={e.status} size="sm" />
+            <span className="text-xs text-ink-secondary">via {e.source}</span>
+          </span>
+          <span className="font-mono text-xs text-ink-secondary">{e.at}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 export interface CryptoOrderDetailViewProps {
   /** The order id to display. Pass null for the empty state. */
@@ -82,6 +109,12 @@ export function CryptoOrderDetailView(props: CryptoOrderDetailViewProps): JSX.El
   return (
     <div className="flex flex-col gap-4">
       <CryptoOrderSummaryCard order={order} footer={footer} />
+      {order.events !== undefined && order.events.length > 0 && (
+        <section aria-label="Timeline" className="flex flex-col gap-2">
+          <h4 className="text-xs uppercase text-ink-secondary">Timeline</h4>
+          <EventsTimeline events={order.events} />
+        </section>
+      )}
       {isPaid && <CryptoReceiptView orderId={order.order_id} />}
     </div>
   );

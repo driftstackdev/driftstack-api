@@ -33,7 +33,7 @@ Response (200):
 {
   "data": [
     {
-      "document_key": "terms",
+      "document_key": "tos",
       "title": "Terms of Service",
       "version": "2026.05",
       "effective_date": "2026-05-01",
@@ -132,7 +132,7 @@ Request:
 
 ```json
 {
-  "document_key": "terms",
+  "document_key": "tos",
   "version": "2026.05",
   "content_hash": "8f4a…(sha256 hex)…7e2b"
 }
@@ -144,7 +144,7 @@ Response (201):
 {
   "id": "lacc_<uuid>",
   "account_id": "acc_<uuid>",
-  "document_key": "terms",
+  "document_key": "tos",
   "version": "2026.05",
   "content_hash": "8f4a…7e2b",
   "accepted_at": "2026-05-10T18:00:00Z"
@@ -182,5 +182,5 @@ Required scope: `write` or `account_owner`.
 
 Routes: `apps/server/src/routes/legal.ts`. Service:
 `apps/server/src/services/legal.ts`. Repo:
-`apps/server/src/db/legal-acceptances-repo.ts`. Catalog
-configuration: `apps/server/src/config/legal-catalog.ts`.
+`apps/server/src/db/legal-repo.ts`. Catalog
+configuration: `apps/server/src/services/legal-catalog.ts`.

@@ -17,24 +17,28 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </p>
 
     <h2>Endpoint</h2>
-    <pre><code>{`GET /v1/account/audit
-Authorization: Bearer ds_live_…    # requires account_owner scope
+    <pre><code>{`GET /v1/account/audit-log
+Authorization: Bearer ds_live_…
 `}</code></pre>
     <p>
-      The endpoint requires the <code>account_owner</code> scope on
-      the calling key — owners and admins (via team RBAC) only.
-      Members with read scopes get 403. See
-      <a href="/docs/api-keys">/docs/api-keys</a> for the scope ladder.
+      The endpoint is reachable with any authenticated key — there
+      is no per-scope gate on read. Each caller sees only their own
+      account's entries (or the team owner's entries when the call
+      passes <code>X-Driftstack-Account</code>; see <em>Team RBAC</em>
+      below). For a CSV / JSON dump of the whole window, use
+      <code>GET /v1/account/audit-log/export?format=csv</code> (10,000-row
+      ceiling, signalled by <code>x-driftstack-export-truncated</code>
+      on the response).
     </p>
 
     <h2>Response envelope</h2>
     <pre><code>{`{
-  "items": [
+  "data": [
     {
-      "id": "aud_b1a2…",
-      "account_id": "acc_owner_…",
+      "id": "b1a2c3d4-…-uuid",
+      "account_id": "acc_…",
       "actor_type": "customer",
-      "actor_account_id": "acc_owner_…",
+      "actor_account_id": "acc_…",
       "actor_key_id": "key_…",
       "action": "api_key.minted",
       "target_resource_id": "api_key_key_…",
@@ -46,6 +50,11 @@ Authorization: Bearer ds_live_…    # requires account_owner scope
   ],
   "next_cursor": null
 }`}</code></pre>
+    <p>
+      Entry ids are raw UUIDs (no <code>aud_</code> prefix). The
+      response envelope uses <code>data</code> and
+      <code>next_cursor</code> — there is no <code>items</code> field.
+    </p>
 
     <h2>Actions captured</h2>
     <p>
@@ -109,7 +118,7 @@ Authorization: Bearer ds_live_…    # requires account_owner scope
         <strong><code>to</code></strong> — ISO-8601 timestamps, inclusive.
         <code>?from=2026-05-01T00:00:00Z&amp;to=2026-05-31T23:59:59Z</code>.</li>
     </ul>
-    <pre><code>{`GET /v1/account/audit?action=api_key.minted&from=2026-05-01Z&to=2026-05-31Z
+    <pre><code>{`GET /v1/account/audit-log?action=api_key.minted&from=2026-05-01Z&to=2026-05-31Z
 Authorization: Bearer ds_live_…`}</code></pre>
 
     <h2>Pagination</h2>
@@ -121,19 +130,18 @@ Authorization: Bearer ds_live_…`}</code></pre>
 
     <h2>Team RBAC: whose audit log do I see?</h2>
     <p>
-      When a team admin (not the owner) calls
-      <code>GET /v1/account/audit</code>, the server transparently
-      redirects to the <strong>owner's</strong> audit log — admins
-      see what's happening on the owner's account, including their
-      own actions and other admins'. This is the V-330b
-      <code>effectiveAccountId</code> behaviour. The caller's scope
-      is still checked on the caller's own key, so an admin without
-      the <code>account_owner</code> scope is still rejected.
+      When a team member calls
+      <code>GET /v1/account/audit-log</code> with the
+      <code>X-Driftstack-Account: acc_&lt;owner-uuid&gt;</code>
+      header, the server returns the <strong>owner's</strong> audit
+      log — both <code>member</code> and <code>admin</code> team
+      roles are read-allowed on this surface (V-330b
+      <code>effectiveAccountId</code> behaviour). Without the
+      header, callers see their own account's entries.
     </p>
     <p>
-      Members (non-admin team roles) get 403 on this endpoint — they
-      can read resources on the owner's account but not the audit
-      log itself.
+      The same effective-account header gate applies to
+      <code>/v1/account/audit-log/export</code>.
     </p>
 
     <h2>Retention</h2>

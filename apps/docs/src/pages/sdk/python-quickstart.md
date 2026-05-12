@@ -103,8 +103,8 @@ asyncio.run(main())
 ## 4. Error handling
 
 The SDK raises typed exceptions for server errors. Catch
-`DriftstackError` and inspect `.status` (HTTP) or `.problem.type`
-(RFC 9457):
+`DriftstackError` and inspect `.status` (HTTP) or `.problem_type`
+(RFC 9457). Other RFC 9457 fields are on the parsed `.problem` dict:
 
 ```python
 from driftstack.errors import DriftstackError
@@ -112,23 +112,19 @@ from driftstack.errors import DriftstackError
 try:
     client.sessions.create({"label": "demo"})
 except DriftstackError as err:
-    if err.status == 429 and err.problem.type.endswith("/tier-limit"):
+    if err.status == 429 and (err.problem_type or "").endswith("/tier-limit"):
         # Concurrent-session cap reached. Wait + retry, or upgrade.
-        print("cap reached:", err.problem.detail)
+        print("cap reached:", err.problem.get("detail"))
     elif err.status == 401:
         print("bad API key")
     else:
-        print("driftstack error:", err.problem)
+        print("driftstack error:", err.problem_type, err.problem)
 ```
 
-`err.request_id` carries the `x-request-id` header from the failing
-response; include it in support tickets.
-
-The SDK retries idempotent GETs on 5xx + network errors with
-exponential backoff (max 3 attempts, jittered). Mutating writes
-(POST / PATCH / DELETE) only retry when an
-[idempotency key](/api/idempotency/) is supplied via the
-`idempotency_key=` argument.
+For granular handling, catch the subclass directly
+(`RateLimitError`, `ConcurrencyLimitError`, `TierLimitError`,
+`SessionDestroyedError`, …). The full mapping lives at
+[/reference/errors](/reference/errors/).
 
 ## 5. Webhooks (optional)
 
@@ -145,10 +141,11 @@ if not ok:
     return Response("invalid signature", status_code=401)
 ```
 
-`header_prev` is set by the API during a 24h
-[signing-secret rotation grace window](/webhooks/signature-rotation/);
-verify accepting either keeps deliveries flowing while you roll the
-new secret across your verifier infra.
+`header_prev` is set by the API during the 24h signing-secret
+rotation grace window — see
+[`/webhooks/endpoints`](/webhooks/endpoints/) for the rotate-secret
+endpoint. Verify accepting either keeps deliveries flowing while
+you roll the new secret across your verifier infra.
 
 ## Next steps
 
@@ -156,8 +153,6 @@ new secret across your verifier infra.
   states, idle timeouts, reconnect semantics.
 - [Profile management](/guides/profile-management/) — persistent
   identity slots that survive across sessions.
-- [Async patterns](/sdk/async-patterns/) — concurrency idioms with
-  the async client.
 - [Webhook event catalog](/webhooks/events/) — every event the
   platform can push.
 - [Error catalogue](/sdk/error-handling/) — every problem-type you

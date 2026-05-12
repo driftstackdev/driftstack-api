@@ -1,0 +1,161 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// W187 — Python SDK reference for the crypto-orders surface.
+// Companion to /docs/sdk-python (the general Python SDK quickstart).
+// Crypto payments are non-refundable.
+---
+
+<BaseLayout title="Python SDK — crypto orders — Driftstack" description="Driftstack Python SDK methods for the crypto-payments surface: quote, checkout, list, get, update note, cancel, receipt — sync and async parity.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Python SDK — crypto orders</h1>
+
+    <p class="lead">
+      The <code>client.crypto_orders</code> resource wraps every
+      customer-facing endpoint on the V-666 surface from both
+      <code>Driftstack</code> (sync) and <code>AsyncDriftstack</code>
+      (asyncio). Admin endpoints are not exposed; integrators that need
+      them call the REST surface directly.
+    </p>
+
+    <h2>Quote</h2>
+    <pre><code>{`from driftstack import Driftstack
+
+client = Driftstack(api_key="ds_live_…")
+quote = client.crypto_orders.quote({"product": "solo_manual"})
+print(quote["price_cents"], quote["price_currency"])`}</code></pre>
+
+    <h2>Mint a checkout</h2>
+    <p>
+      Always pair the call with an <code>idempotency_key</code> so
+      accidental double-submits don't mint duplicate orders. The SDK
+      forwards it as the <code>Idempotency-Key</code> header; on a
+      duplicate key within the 24h window the server returns the
+      original order.
+    </p>
+    <pre><code>{`import uuid
+
+key = str(uuid.uuid4())
+order = client.crypto_orders.create_checkout(
+    {"product": "team_manual", "price_cents": 4900, "price_currency": "USD"},
+    idempotency_key=key,
+)
+print(order["order_id"], order["payment_address"])`}</code></pre>
+
+    <h2>List + drill down</h2>
+    <pre><code>{`# Newest-first; defaults to limit=50.
+page = client.crypto_orders.list()
+for o in page["orders"]:
+    print(o["order_id"], o["status"], o["expires_at"])
+
+# Narrow to a single status server-side (V-666.BR).
+paid = client.crypto_orders.list(status="paid", limit=25)
+
+single = client.crypto_orders.get("ord_abc123def456")
+print(single["events"])  # V-666.AU timeline`}</code></pre>
+    <p>
+      <code>status</code> accepts <code>pending</code>,
+      <code>confirming</code>, <code>paid</code>, <code>failed</code>,
+      <code>partial</code>, or <code>cancelled</code>. Unknown values
+      return a 400. <code>limit</code> is clamped to 1..=100.
+    </p>
+
+    <h2>Pagination — prefer <code>iterate()</code></h2>
+    <p>
+      The <code>iterate()</code> helper walks every page until the
+      server stops emitting a <code>next_cursor</code>. Cursor handoff
+      is managed internally — <strong>do not</strong> pass
+      <code>cursor=</code> to <code>iterate()</code> (use
+      <code>list()</code> for an explicit page).
+    </p>
+    <pre><code>{`# Recommended: stream every paid order from the last 7d.
+from datetime import datetime, timedelta, timezone
+
+since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+
+for order in client.crypto_orders.iterate(
+    status="paid",
+    created_after=since,
+    limit=100,
+):
+    print(order["order_id"])
+
+# Or drive the cursor by hand:
+cursor = None
+while True:
+    page = client.crypto_orders.list(status="paid", cursor=cursor)
+    for o in page["orders"]:
+        print(o["order_id"])
+    cursor = page.get("next_cursor")
+    if cursor is None:
+        break`}</code></pre>
+
+    <h2>Async parity</h2>
+    <p>
+      Every method on <code>client.crypto_orders</code> mirrors onto
+      <code>AsyncDriftstack</code> with <code>async def</code>;
+      <code>iterate()</code> returns an
+      <code>AsyncIterator[dict]</code> that you walk with
+      <code>async for</code>:
+    </p>
+    <pre><code>{`from driftstack import AsyncDriftstack
+
+async def main():
+    async with AsyncDriftstack(api_key="ds_live_…") as client:
+        async for order in client.crypto_orders.iterate(status="paid"):
+            print(order["order_id"])`}</code></pre>
+
+    <h2>Update the customer note</h2>
+    <pre><code>{`client.crypto_orders.update_note("ord_abc", {"customer_note": "PO-9921"})`}</code></pre>
+
+    <h2>Cancel a pending order</h2>
+    <pre><code>{`from driftstack.errors import DriftstackError
+
+try:
+    client.crypto_orders.cancel("ord_abc")
+except DriftstackError as err:
+    # 409: order has moved past pending; cancellation is no longer self-service.
+    # 404: order doesn't exist or belongs to another account.
+    print(err.status, err.title)`}</code></pre>
+    <p>
+      Crypto payments are non-refundable. Cancelling a pending order
+      halts its pay window; cancelling a paid order is not supported
+      — past billing periods stay billed. See
+      <a href="/legal/refunds">/legal/refunds</a>.
+    </p>
+
+    <h2>Fetch the receipt</h2>
+    <pre><code>{`receipt = client.crypto_orders.receipt("ord_abc")
+print(receipt["paid_at"], receipt["price_cents"])`}</code></pre>
+
+    <h2>Listening for settlement</h2>
+    <p>
+      <code>crypto.order.paid</code> / <code>crypto.order.failed</code>
+      events are emitted server-side but not yet subscribable — see
+      <a href="/docs/webhooks-crypto-events">/docs/webhooks-crypto-events</a>
+      for the roadmap status. Until they graduate, poll
+      <code>client.crypto_orders.get(order_id)</code> until
+      <code>status</code> transitions to <code>paid</code> or
+      <code>failed</code>. The Python SDK ships
+      <code>verify_webhook_signature</code> for the (already-live)
+      session + quota + api-key webhook event types.
+    </p>
+
+    <h2>End-to-end example</h2>
+    <p>
+      A runnable end-to-end walkthrough ships with the SDK as
+      <code>packages/sdk-python/examples/crypto_checkout.py</code>.
+      Run with <code>DRIFTSTACK_API_KEY=... python examples/crypto_checkout.py</code>.
+    </p>
+
+    <h2>Related</h2>
+    <ul>
+      <li><a href="/docs/sdk-python">Python SDK quickstart</a></li>
+      <li><a href="/docs/sdk-typescript-crypto-orders">TypeScript SDK crypto orders</a></li>
+      <li><a href="/docs/billing-crypto-integration-guide">Integration guide</a></li>
+      <li><a href="/docs/idempotency-keys">Idempotency keys</a></li>
+      <li><a href="/docs/webhooks-crypto-events">Crypto webhook events</a></li>
+      <li><a href="/docs/crypto-orders-polling-vs-webhooks">Polling vs webhooks</a></li>
+    </ul>
+  </main>
+</BaseLayout>

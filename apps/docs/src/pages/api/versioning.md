@@ -6,9 +6,9 @@ description: Driftstack API versioning policy — additive vs breaking changes, 
 
 # API versioning strategy
 
-V-220 — versioning policy for the HTTP API surface (`/v1/*`,
-eventually `/v2/*`). Distinct from the SDK versioning policy at
-`docs/architecture/sdk-versioning.md` (V-177): SDKs version
+Versioning policy for the HTTP API surface (`/v1/*`, eventually
+`/v2/*`). Distinct from the SDK versioning policy at
+[`docs.driftstack.dev/sdk/versioning`](/sdk/versioning): SDKs version
 independently of the API; this doc covers the API endpoint contract.
 
 ## TL;DR
@@ -117,9 +117,8 @@ When `/v2/*` does ship, expect:
   a new event type IS technically breaking for strictly-typed
   consumers. We mitigate via the SDK passthrough pattern +
   documented "we may send unknown event types; ignore + continue"
-  (the catalog of all event types lives at `docs/api/webhook-events.md`
-  per V-203, and the system-design rationale at
-  `docs/architecture/webhook-system-design.md`). Customers are
+  (the catalog of all event types lives at
+  `docs.driftstack.dev/webhooks/events`). Customers are
   encouraged to subscribe with explicit `events: [...]` arrays so the
   server only ever sends event types the customer already opted into.
   New event types are then additive at the wire level; subscription is
@@ -166,7 +165,9 @@ When `/v2/*` does ship, expect:
 
 ## Related
 
-- SDK versioning policy: `docs/architecture/sdk-versioning.md` (V-177).
-- OpenAPI spec generation: `apps/server/src/lib/openapi.ts`.
-- Locked tech-stack: `AGENTS.md` (Zod single-source-of-truth).
-- Webhook event catalog: `docs/api/webhook-events.md` (V-203).
+- Webhook event catalog: [`docs.driftstack.dev/webhooks/events`](/webhooks/events).
+- Rate-limit policy: [`docs.driftstack.dev/reference/rate-limits`](/reference/rate-limits).
+- Error handling: [`docs.driftstack.dev/sdk/error-handling`](/sdk/error-handling).
+- OpenAPI spec is served at `/openapi.json` on the live API host
+  (`api.driftstack.dev/openapi.json`) and rendered as a browsable
+  reference by Scalar UI at `api.driftstack.dev/docs`.

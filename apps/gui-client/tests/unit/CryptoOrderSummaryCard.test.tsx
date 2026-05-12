@@ -1,4 +1,5 @@
 // V-534.AF — unit tests for CryptoOrderSummaryCard.
+// V-534.BF — appended tests for V-666.AV expires_at countdown.
 
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -48,5 +49,51 @@ describe('V-534.AF CryptoOrderSummaryCard', () => {
     // The footer wrapper is a top-level `<div class="mt-4">`; absent ⇒ no
     // button descendants and no element matching that class chain.
     expect(container.querySelector('button')).toBeNull();
+  });
+});
+
+describe('V-534.BF CryptoOrderSummaryCard — expires_at countdown', () => {
+  it('renders "Pay by" row with a remaining-minutes hint on pending orders', () => {
+    const expiresAt = '2026-05-11T11:00:00.000Z';
+    const nowMs = new Date('2026-05-11T10:15:00.000Z').getTime(); // 45m to go
+    render(
+      <CryptoOrderSummaryCard order={makeOrder({ expires_at: expiresAt })} nowFn={() => nowMs} />,
+    );
+    expect(screen.getByText('Pay by')).toBeTruthy();
+    expect(screen.getByText(expiresAt)).toBeTruthy();
+    expect(screen.getByText(/45m remaining/i)).toBeTruthy();
+  });
+
+  it('formats hours + minutes when more than an hour remains', () => {
+    const expiresAt = '2026-05-11T12:30:00.000Z';
+    const nowMs = new Date('2026-05-11T10:00:00.000Z').getTime(); // 2h 30m
+    render(
+      <CryptoOrderSummaryCard order={makeOrder({ expires_at: expiresAt })} nowFn={() => nowMs} />,
+    );
+    expect(screen.getByText(/2h 30m remaining/i)).toBeTruthy();
+  });
+
+  it('reports "pay window elapsed" when expires_at is in the past', () => {
+    const expiresAt = '2026-05-11T09:00:00.000Z';
+    const nowMs = new Date('2026-05-11T10:00:00.000Z').getTime();
+    render(
+      <CryptoOrderSummaryCard order={makeOrder({ expires_at: expiresAt })} nowFn={() => nowMs} />,
+    );
+    expect(screen.getByText(/pay window elapsed/i)).toBeTruthy();
+  });
+
+  it('does NOT render Pay by row when status is not pending', () => {
+    render(<CryptoOrderSummaryCard order={makeOrder({ status: 'paid', expires_at: null })} />);
+    expect(screen.queryByText('Pay by')).toBeNull();
+  });
+
+  it('does NOT render Pay by row when expires_at is null', () => {
+    render(<CryptoOrderSummaryCard order={makeOrder({ expires_at: null })} />);
+    expect(screen.queryByText('Pay by')).toBeNull();
+  });
+
+  it('does NOT render Pay by row when expires_at is undefined (older server)', () => {
+    render(<CryptoOrderSummaryCard order={makeOrder()} />);
+    expect(screen.queryByText('Pay by')).toBeNull();
   });
 });

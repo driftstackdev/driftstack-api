@@ -100,16 +100,17 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   ┌──────────────────┐                       ┌──────────────────────┐
   │  Mac fleet       │ ◀──── secure ───────▶ │  Control plane       │
   │  (M4 / Studio /  │       channel         │  (license, API keys, │
-  │   multi-node)    │       (mTLS)          │   session metadata)  │
+  │   multi-node)    │       (HTTPS)         │   session metadata)  │
   └──────────────────┘                       └──────────────────────┘
         │
-        │  WebKit sessions, customer-controlled egress
+        │  WebKit sessions exit via your network
         ▼
   ┌──────────────────┐
-  │  Customer-owned  │
-  │  proxies         │
-  │  (SOCKS5 / WG /  │
-  │   OpenVPN)       │
+  │  Your network    │
+  │  egress          │
+  │  (DC / VPN /     │
+  │   roadmap: BYO   │
+  │   SOCKS5 / WG)   │
   └──────────────────┘`}</pre>
       </div>
 

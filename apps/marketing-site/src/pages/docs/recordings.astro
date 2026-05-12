@@ -1,147 +1,94 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
-// V-692 — recordings developer docs. Companion to /docs/sessions
-// (which mentions recordings briefly); this is the deeper look at
-// the recording lifecycle + format + retention.
+// V-692 — recordings developer docs. Recordings are on the roadmap
+// (V-540 work-in-progress) but NOT yet exposed via the public API
+// today: there is no /v1/sessions/:id/recording endpoint, no
+// `record: true` body field on POST /v1/sessions, and no
+// `session.recording_ready` webhook event.
+//
+// W217.A — accuracy pass: the previous revision of this page
+// documented all three as live. This rewrite reflects reality and
+// is pinned by apps/server/tests/unit/recordings-doc-parity.test.ts
+// to fail if the page silently regrows fictional claims.
 ---
 
-<BaseLayout title="Recordings — Driftstack developer docs" description="Session recordings — format, retention, playback URLs, redaction.">
+<BaseLayout title="Recordings (roadmap) — Driftstack developer docs" description="Session recordings: status, planned shape, what to do today.">
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
     <h1>Recordings</h1>
 
     <p class="lead">
-      Driftstack can record every session as a video for later
-      playback. This page covers the format, retention, playback
-      URL semantics, and redaction options.
+      Session recordings are on the <a href="/roadmap">roadmap</a>
+      under V-540 but not yet exposed via the public API.
+      <strong>No endpoint, webhook event, or request body field
+      currently triggers recording today.</strong> This page describes
+      the planned shape so customers building toward it can budget
+      for the integration.
     </p>
 
-    <h2>Opt-in per session</h2>
-    <p>
-      Recordings are <strong>off by default</strong> — set
-      <code>record: true</code> on
-      <code>POST /v1/sessions</code> to enable. Storage costs apply
-      (~€0.015/GB-month at R2 list); a typical 10-minute session is
-      ~30 MB compressed.
-    </p>
+    <div class="rounded-md border border-amber-300 bg-amber-50 p-4 not-prose">
+      <p class="m-0 text-sm text-amber-900">
+        <strong>Heads up:</strong> sending
+        <code class="font-mono">"record": true</code> on
+        <code class="font-mono">POST /v1/sessions</code> today is a
+        no-op — the server silently strips unrecognised fields. Don't
+        rely on recordings landing until V-540 ships.
+      </p>
+    </div>
 
-    <h2>Format</h2>
+    <h2>What's planned</h2>
     <ul>
-      <li><strong>Container:</strong> WebM (VP9 video, no audio).</li>
-      <li><strong>Resolution:</strong> matches the session's
-        viewport (1280×800 default, 1440×900 if the profile
-        overrides).</li>
-      <li><strong>Frame rate:</strong> 30 fps.</li>
-      <li><strong>Bitrate:</strong> adaptive; ~500 kbps typical.</li>
+      <li><strong>Opt-in per session</strong> via a new
+        <code>record: true</code> request body field on
+        <code>POST /v1/sessions</code>. Default off.</li>
+      <li><strong>Container:</strong> WebM (VP9 video, no audio),
+        matching the session viewport, ~30 fps, ~500 kbps.</li>
+      <li><strong>Retrieval</strong> via a new
+        <code>GET /v1/sessions/:id/recording</code> endpoint
+        returning a presigned R2 URL.</li>
+      <li><strong>Webhook</strong> via a new
+        <code>session.recording_ready</code> event type added to the
+        <code>webhook_event_type</code> enum.</li>
+      <li><strong>Retention</strong> tier-dependent (sketch: 7d Trial
+        Pack, 30d Solo / API Starter, 90d Team / API Builder, 180d
+        Agency / API Scale, custom Enterprise). Final values land
+        with V-540.</li>
+      <li><strong>Redaction</strong> for sensitive inputs — also
+        planned post-V-540.</li>
     </ul>
-    <p>
-      We expose the WebM as-is — no transcoding. Most modern
-      browsers play it natively; for offline analysis, ffmpeg can
-      convert to MP4 in seconds (<code>ffmpeg -i in.webm -c:v
-      libx264 -crf 23 out.mp4</code>).
-    </p>
 
-    <h2>GET /v1/sessions/:id/recording</h2>
-    <pre><code>{`GET /v1/sessions/sess_…/recording
-Authorization: Bearer ds_live_…
-
-→ 200 OK
-{
-  "playback_url": "https://r2-…/recordings/sess_…/recording.webm?sig=…",
-  "expires_at": "2026-05-11T13:00:00.000Z",
-  "size_bytes": 31457280,
-  "duration_ms": 600000
-}`}</code></pre>
+    <h2>What works today</h2>
     <p>
-      <code>playback_url</code> is presigned and expires in
-      <strong>1 hour</strong>. Cache the URL on your side if you're
-      embedding it in a UI, but refresh by calling the endpoint
-      again before the TTL.
+      Until recordings ship, drive your own observation pipeline
+      from inside the session lifecycle:
     </p>
-    <p>
-      Recordings are not available immediately on session end — the
-      WebM finalisation takes a few seconds. The endpoint returns
-      404 with <code>code: "recording_not_ready"</code> until then;
-      retry with exponential backoff.
-    </p>
-
-    <h2>Retention</h2>
-    <table>
-      <thead><tr><th>Tier</th><th>Recording retention</th></tr></thead>
-      <tbody>
-        <tr><td>Trial Pack</td><td>7 days</td></tr>
-        <tr><td>Solo Manual / API Starter</td><td>30 days</td></tr>
-        <tr><td>Team Manual / API Builder</td><td>90 days</td></tr>
-        <tr><td>Agency Manual / API Scale</td><td>180 days</td></tr>
-        <tr><td>Enterprise</td><td>Custom (default 180 days)</td></tr>
-      </tbody>
-    </table>
-    <p>
-      After retention expires, the recording is deleted from R2 and
-      the endpoint returns <code>recording_expired</code>. Customer-
-      initiated DELETE of a session is immediate.
-    </p>
-
-    <h2>session.recording_ready webhook</h2>
-    <p>
-      Subscribe to the <code>session.recording_ready</code> event
-      type if your pipeline kicks off downstream processing as
-      soon as the recording lands:
-    </p>
-    <pre><code>{`POST /v1/webhooks
-{
-  "url": "https://yourapp.com/driftstack-webhook",
-  "events": ["session.recording_ready"]
-}
-
-// When fired, the payload carries:
-{
-  "id": "evt_…",
-  "type": "session.recording_ready",
-  "data": {
-    "session_id": "sess_…",
-    "playback_url": "https://r2-…/…?sig=…",
-    "expires_at": "...",
-    "size_bytes": 31457280
-  }
-}`}</code></pre>
-    <p>
-      The playback URL in the webhook payload is presigned + valid
-      for 24 hours from the webhook fire. Past 24h you must call
-      the GET endpoint to refresh.
-    </p>
-
-    <h2>Redaction (V-540 follow-up)</h2>
-    <p>
-      Field-level redaction during recording (e.g. blacking out
-      password inputs) is a planned feature. Today the recording
-      captures everything visible in the browser viewport — assume
-      anything on-screen during the session is in the recording.
-      Don't record sessions that involve sensitive data without
-      redaction in place.
-    </p>
-
-    <h2>Storage cost</h2>
-    <p>
-      Recording bytes count against the cost-monitoring egress meter
-      (see <a href="/docs/cost-monitoring">/docs/cost-monitoring</a>).
-      Frequent playback of large recordings can move your cost
-      bands; the dashboard's billing-cost view shows the breakdown.
-    </p>
-
-    <h2>Privacy posture</h2>
     <ul>
-      <li>Recordings stored in R2 with at-rest encryption (S3-SSE).</li>
-      <li>Presigned URLs are bearer tokens — anyone with the URL
-        can play within the 1-hour TTL. Don't paste them into
-        public channels.</li>
-      <li>Customer-deleted sessions purge the recording immediately;
-        retention-expired recordings are purged by the daily R2
-        lifecycle policy.</li>
+      <li><a href="/docs/sessions">Sessions API</a> —
+        <code>POST /v1/sessions/:id/capture</code> with
+        <code>{`{ "kind": "screenshot" }`}</code>,
+        <code>"dom_snapshot"</code>, or <code>"pdf"</code> returns
+        inline base64 bytes you can persist on your side.</li>
+      <li>The <a href="/docs/webhooks#event-types">webhook event
+        types</a> available today —
+        <code>session.completed</code>, <code>session.failed</code>,
+        <code>quota.warning_80pct</code>,
+        <code>quota.exceeded</code>, <code>api_key.revoked</code> —
+        plus the <code>test.ping</code> synthetic for endpoint
+        verification.</li>
     </ul>
+
+    <h2>How to be notified when recordings ship</h2>
+    <p>
+      Subscribe to the <a href="/changelog">API changelog</a> RSS
+      or <a href="/docs/status-subscriptions">status-page
+      subscriptions</a>; the V-540 rollout will land as an entry on
+      both, along with the new endpoint + event type appearing on
+      <a href="/api-reference">/api-reference</a>.
+    </p>
 
     <h2>Support</h2>
     <p>
+      Questions about timing or what to build toward in the meantime:
       <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
     </p>
   </main>

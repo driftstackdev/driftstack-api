@@ -155,4 +155,24 @@ describe('V-534.W useCryptoOrdersList — manual mode', () => {
     await waitFor(() => expect(result.current.state.kind).toBe('ready'));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('V-534.BV surfaces problem+json detail on 400', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 400,
+        json: () =>
+          Promise.resolve({
+            title: 'Bad Request',
+            detail: 'created_before must be strictly greater than created_after.',
+          }),
+      } as unknown as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useCryptoOrdersList());
+    await waitFor(() => expect(result.current.state.kind).toBe('error'));
+    if (result.current.state.kind === 'error') {
+      expect(result.current.state.message).toContain('created_before must be strictly greater');
+    }
+  });
 });

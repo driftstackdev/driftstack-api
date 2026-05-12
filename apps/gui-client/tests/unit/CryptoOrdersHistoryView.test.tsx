@@ -1,6 +1,8 @@
 // V-534.X — unit tests for CryptoOrdersHistoryView.
 // V-534.Z — extended for per-row cancel button.
 // V-534.AE — extended for row-selection → detail-view side panel.
+// V-534.BG — extended for "Expires soon" pill on pending rows near
+//            their pay-window deadline.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -59,6 +61,136 @@ describe('V-534.X CryptoOrdersHistoryView', () => {
     });
   });
 
+  it('V-534.BT — Load more button appears when next_cursor is non-null and appends rows', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    let call = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => {
+        call++;
+        if (call === 1) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                orders: [
+                  {
+                    order_id: 'ord_p1',
+                    product: 'solo_manual',
+                    price_cents: 1499,
+                    price_currency: 'USD',
+                    payment_id: null,
+                    status: 'paid',
+                    created_at: '2026-05-11T00:00:00Z',
+                    updated_at: '2026-05-11T00:00:00Z',
+                  },
+                ],
+                next_cursor: 'cur_x',
+              }),
+          } as unknown as Response);
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              orders: [
+                {
+                  order_id: 'ord_p2',
+                  product: 'solo_manual',
+                  price_cents: 1499,
+                  price_currency: 'USD',
+                  payment_id: null,
+                  status: 'paid',
+                  created_at: '2026-05-10T00:00:00Z',
+                  updated_at: '2026-05-10T00:00:00Z',
+                },
+              ],
+              next_cursor: null,
+            }),
+        } as unknown as Response);
+      }),
+    );
+    render(<CryptoOrdersHistoryView />);
+    await waitFor(() => {
+      expect(screen.getByText('ord_p1')).toBeTruthy();
+    });
+    const btn = screen.getByText('Load more');
+    fireEvent.click(btn);
+    await waitFor(() => {
+      expect(screen.getByText('ord_p2')).toBeTruthy();
+    });
+    // First page still present (we appended, not replaced).
+    expect(screen.getByText('ord_p1')).toBeTruthy();
+    // Button gone now that next_cursor is null.
+    expect(screen.queryByText('Load more')).toBeNull();
+  });
+
+  it('V-534.BS — auto-refreshes while any visible order is pending', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            orders: [
+              {
+                order_id: 'ord_pending_auto',
+                product: 'solo_manual',
+                price_cents: 1499,
+                price_currency: 'USD',
+                payment_id: null,
+                status: 'pending',
+                created_at: '2026-05-12T12:00:00Z',
+                updated_at: '2026-05-12T12:00:00Z',
+              },
+            ],
+          }),
+      } as unknown as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<CryptoOrdersHistoryView pendingRefreshMs={50} />);
+    await waitFor(() => {
+      expect(screen.getByText('ord_pending_auto')).toBeTruthy();
+    });
+    const before = fetchMock.mock.calls.length;
+    await waitFor(
+      () => {
+        expect(fetchMock.mock.calls.length).toBeGreaterThan(before);
+      },
+      { timeout: 500 },
+    );
+  });
+
+  it('V-534.BR — empty state names the filter + offers Clear filter when status filter is active', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ orders: [] }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersHistoryView />);
+    await waitFor(() => {
+      expect(screen.getByText(/No crypto orders yet/i)).toBeTruthy();
+    });
+    const select = screen.getByLabelText('Filter by status');
+    fireEvent.change(select, { target: { value: 'paid' } });
+    await waitFor(() => {
+      expect(screen.getByText(/No orders with status/)).toBeTruthy();
+    });
+    expect(screen.getByText('Clear filter')).toBeTruthy();
+    fireEvent.click(screen.getByText('Clear filter'));
+    await waitFor(() => {
+      expect(screen.getByText(/No crypto orders yet/i)).toBeTruthy();
+    });
+  });
+
   it('renders one row per order with status badges + formatted price', async () => {
     vi.stubGlobal(
       'fetch',
@@ -88,8 +220,11 @@ describe('V-534.X CryptoOrdersHistoryView', () => {
     });
     expect(screen.getByText('25.00 EUR')).toBeTruthy();
     expect(screen.getByText('80.00 EUR')).toBeTruthy();
-    // The status-badge label for paid is "Paid".
-    expect(screen.getByText('Paid')).toBeTruthy();
+    // The status-badge label for paid is "Paid" — scope to the
+    // table so we don't accidentally match the V-534.BQ status
+    // filter dropdown option.
+    const table = screen.getByRole('table');
+    expect(table.textContent).toContain('Paid');
     expect(screen.getByText('Awaiting payment')).toBeTruthy();
   });
 
@@ -186,6 +321,9 @@ describe('V-534.Z CryptoOrdersHistoryView — cancel button', () => {
       expect(screen.getByRole('button', { name: /Cancel order ord_clickme/i })).toBeTruthy();
     });
     fireEvent.click(screen.getByRole('button', { name: /Cancel order ord_clickme/i }));
+    // V-534.BJ — confirm modal opens; cancel fires only after explicit confirm.
+    const confirmBtn = await waitFor(() => screen.getByRole('button', { name: /Confirm cancel/i }));
+    fireEvent.click(confirmBtn);
     // After cancel resolves + refetch fires, the badge should flip.
     await waitFor(() => {
       expect(screen.getByText(/Cancelled/i)).toBeTruthy();
@@ -299,7 +437,188 @@ describe('V-534.AE CryptoOrdersHistoryView — row selection opens detail', () =
     );
     fireEvent.click(btn);
     // Row stays unselected (we stopped propagation on the cancel click).
-    const row = screen.getByText('ord_cancel').closest('tr');
-    expect(row?.getAttribute('aria-selected')).toBe('false');
+    // V-534.BJ — the modal also contains the order_id text, so scope to <table>.
+    const tableRow = screen.getByRole('table').querySelector('tr[aria-selected]');
+    expect(tableRow?.getAttribute('aria-selected')).toBe('false');
+  });
+});
+
+describe('V-534.BJ CryptoOrdersHistoryView — cancel confirmation modal', () => {
+  it('V-534.BK pressing Escape closes the modal', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            orders: [sample({ order_id: 'ord_esc', status: 'pending' })],
+          }),
+      } as unknown as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<CryptoOrdersHistoryView />);
+    const btn = await waitFor(() => screen.getByRole('button', { name: /Cancel order ord_esc/i }));
+    fireEvent.click(btn);
+    expect(screen.getByRole('dialog', { name: /Confirm order cancellation/i })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: /Confirm order cancellation/i })).toBeNull();
+  });
+
+  it('V-534.BK focuses the Keep order button when the modal opens', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            orders: [sample({ order_id: 'ord_focus', status: 'pending' })],
+          }),
+      } as unknown as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<CryptoOrdersHistoryView />);
+    const btn = await waitFor(() =>
+      screen.getByRole('button', { name: /Cancel order ord_focus/i }),
+    );
+    fireEvent.click(btn);
+    const keepBtn = await waitFor(() => screen.getByRole('button', { name: /Keep order/i }));
+    expect(document.activeElement).toBe(keepBtn);
+  });
+
+  it('clicking Cancel opens a confirm modal; clicking Keep order closes it without firing', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            orders: [sample({ order_id: 'ord_confirm', status: 'pending' })],
+          }),
+      } as unknown as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<CryptoOrdersHistoryView />);
+    const btn = await waitFor(() =>
+      screen.getByRole('button', { name: /Cancel order ord_confirm/i }),
+    );
+    fireEvent.click(btn);
+    const dialog = screen.getByRole('dialog', { name: /Confirm order cancellation/i });
+    expect(dialog).toBeTruthy();
+    expect(dialog.textContent).toContain('non-refundable');
+    fireEvent.click(screen.getByRole('button', { name: /Keep order/i }));
+    expect(screen.queryByRole('dialog', { name: /Confirm order cancellation/i })).toBeNull();
+    // No POST issued.
+    const cancelCalls = fetchMock.mock.calls.filter((call) => {
+      const url = call[0] as string;
+      const init = call[1] as RequestInit | undefined;
+      return typeof url === 'string' && url.endsWith('/cancel') && init?.method === 'POST';
+    });
+    expect(cancelCalls.length).toBe(0);
+  });
+});
+
+describe('V-534.BG CryptoOrdersHistoryView — Expires soon pill', () => {
+  it('renders the pill when a pending order has < 15 minutes left', async () => {
+    const nowMs = new Date('2026-05-11T10:00:00.000Z').getTime();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              orders: [
+                sample({
+                  order_id: 'ord_close',
+                  status: 'pending',
+                  expires_at: '2026-05-11T10:10:00.000Z', // 10m to go
+                }),
+              ],
+            }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersHistoryView nowFn={() => nowMs} />);
+    await waitFor(() => screen.getByText('ord_close'));
+    expect(screen.getByLabelText('Expires soon')).toBeTruthy();
+  });
+
+  it('does NOT render the pill when more than 15 minutes remain', async () => {
+    const nowMs = new Date('2026-05-11T10:00:00.000Z').getTime();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              orders: [
+                sample({
+                  order_id: 'ord_far',
+                  status: 'pending',
+                  expires_at: '2026-05-11T10:45:00.000Z', // 45m to go
+                }),
+              ],
+            }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersHistoryView nowFn={() => nowMs} />);
+    await waitFor(() => screen.getByText('ord_far'));
+    expect(screen.queryByLabelText('Expires soon')).toBeNull();
+  });
+
+  it('does NOT render the pill when status is not pending', async () => {
+    const nowMs = new Date('2026-05-11T10:00:00.000Z').getTime();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              orders: [
+                sample({
+                  order_id: 'ord_paid',
+                  status: 'paid',
+                  expires_at: null,
+                }),
+              ],
+            }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersHistoryView nowFn={() => nowMs} />);
+    await waitFor(() => screen.getByText('ord_paid'));
+    expect(screen.queryByLabelText('Expires soon')).toBeNull();
+  });
+
+  it('does NOT render the pill when expires_at is already in the past (treated as elapsed)', async () => {
+    const nowMs = new Date('2026-05-11T10:00:00.000Z').getTime();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              orders: [
+                sample({
+                  order_id: 'ord_gone',
+                  status: 'pending',
+                  expires_at: '2026-05-11T09:30:00.000Z',
+                }),
+              ],
+            }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersHistoryView nowFn={() => nowMs} />);
+    await waitFor(() => screen.getByText('ord_gone'));
+    expect(screen.queryByLabelText('Expires soon')).toBeNull();
   });
 });

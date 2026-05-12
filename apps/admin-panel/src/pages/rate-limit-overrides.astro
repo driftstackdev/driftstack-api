@@ -13,7 +13,7 @@ interface MockOverride {
   id: string;
   accountId: string;
   accountEmail: string;
-  bucketKey: 'global' | 'session_create' | 'capture';
+  bucketKey: 'global' | 'sessions:create';
   capacity: number;
   refillPerSecond: number;
   expiresAt: string | null;
@@ -39,8 +39,7 @@ const MOCK_OVERRIDES: MockOverride[] = [
 
 const BUCKET_LABEL: Record<string, string> = {
   global: 'Global',
-  session_create: 'Session create',
-  capture: 'Capture',
+  'sessions:create': 'Sessions: create',
 };
 
 function fmtIso(iso: string | null): string {
@@ -48,7 +47,8 @@ function fmtIso(iso: string | null): string {
   return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
 }
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <AdminLayout title="Rate-limit overrides">
@@ -168,8 +168,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
 
       const BUCKET_LABEL = {
         global: 'Global',
-        session_create: 'Session create',
-        capture: 'Capture',
+        'sessions:create': 'Sessions: create',
       };
 
       function showBanner(text) {

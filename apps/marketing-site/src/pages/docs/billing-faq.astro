@@ -17,12 +17,14 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <h2>How does the trial work?</h2>
     <p>
-      Every new account starts on the <strong>Trial Pack</strong>: a
-      14-day window with 50 session-minutes included, capped at 2
-      concurrent sessions. No card is required to start. API keys
-      minted on a trial account use the <code>ds_test_…</code>
-      prefix; they continue to work after the trial ends but cannot
-      open new sessions without an upgrade.
+      Every new account starts on the <strong>Trial Pack</strong>:
+      a metered evaluation tier capped at <strong>1 concurrent
+      session</strong> and <strong>1 profile</strong>. No card is
+      required to start. All API keys — trial or paid — use the
+      <code>ds_live_…</code> prefix; there is no separate
+      <code>ds_test_</code> namespace today. Trial keys continue to
+      authenticate after the trial expires but the account is
+      downgraded to a read-only state until you pick a paid tier.
     </p>
 
     <h2>How does upgrading to a paid tier work?</h2>
@@ -59,11 +61,13 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       our side (extended outage, billing error).
     </p>
     <p>
-      Crypto payments: <strong>no refunds</strong> are issued in
-      crypto. If a billing error occurred and a refund is due, we
-      issue a tier credit equal to the affected amount instead.
-      Crypto transactions are final on-chain and on-chain reversal is
-      not something we can perform.
+      Crypto payments: <strong>non-refundable.</strong> Once a
+      crypto payment settles on-chain it is committed for the
+      billing period it covers. You can cancel anytime —
+      cancellation stops future billing periods — but the current
+      period is not refunded. If a failed-delivery scenario occurs
+      (you paid but the entitlement didn't unlock), we re-provision
+      the entitlement; we don't send the crypto back.
     </p>
 
     <h2>Why do crypto payments take longer to confirm?</h2>

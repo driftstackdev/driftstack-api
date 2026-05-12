@@ -8,6 +8,7 @@
 // follow-up).
 
 import { useCallback, useEffect, useState } from 'react';
+import { readApiErrorMessage } from './api-errors';
 import { useSettings } from './SettingsContext';
 
 export interface AccountMeData {
@@ -56,7 +57,7 @@ export function useAccountMe(opts: UseAccountMeOpts = {}): UseAccountMeResult {
         },
       });
       if (!res.ok) {
-        setState({ kind: 'error', message: `HTTP ${res.status.toString()}` });
+        setState({ kind: 'error', message: await readApiErrorMessage(res) });
         return;
       }
       const body = (await res.json()) as AccountMeData;

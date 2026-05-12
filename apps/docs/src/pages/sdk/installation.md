@@ -46,6 +46,7 @@ const client = new Driftstack({
 ```ts
 client.sessions.create(body?);
 client.sessions.list(query?);
+client.sessions.iterate(opts?);
 client.sessions.navigate(id, body);
 client.sessions.interact(id, body);
 client.sessions.wait(id, body);
@@ -58,31 +59,39 @@ client.profiles.list(query?);
 client.profiles.get(id);
 client.profiles.delete(id);
 
+client.profileSnapshots.capture(profileId, body?);
+client.profileSnapshots.listForProfile(profileId, query?);
+client.profileSnapshots.list(query?);
+client.profileSnapshots.iterate(opts?);
+client.profileSnapshots.get(snapshotId);
+client.profileSnapshots.restore(snapshotId, body?);
+client.profileSnapshots.delete(snapshotId);
+
 client.apiKeys.create(body); // requires admin scope
 client.apiKeys.list();
-client.apiKeys.rotate(id); // V-296: 24-hour grace on prior key
+client.apiKeys.rotate(id); // 24-hour grace on prior key
 client.apiKeys.revoke(id); // requires admin scope
 
 client.webhooks.create(body);
 client.webhooks.list();
 client.webhooks.get(id);
-client.webhooks.update(id, body); // V-464 partial update
+client.webhooks.update(id, body); // partial update
 client.webhooks.delete(id);
 client.webhooks.listDeliveries(webhookId, query?);
 client.webhooks.iterateDeliveries(webhookId, opts?);
-client.webhooks.replayDelivery(deliveryId); // V-307
-client.webhooks.rotateSecret(id); // V-359 24h grace dual-sign
-client.webhooks.sendTest(id); // V-356 synthetic test.ping
+client.webhooks.replayDelivery(deliveryId);
+client.webhooks.rotateSecret(id); // 24h grace dual-sign
+client.webhooks.sendTest(id); // synthetic test.ping
 
-client.auth.cliAuthorizeInitiate(body); // V-460 CLI/GUI activation
+client.auth.cliAuthorizeInitiate(body); // CLI/GUI activation
 client.auth.cliAuthorizeBind(body);
 client.auth.cliAuthorizeExchange(body);
-client.auth.mfaChallenge(body); // V-353d login MFA exchange
-client.auth.mfaStepUp(body); // V-353e step-up freshness
+client.auth.mfaChallenge(body); // login MFA exchange
+client.auth.mfaStepUp(body); // step-up freshness
 
 client.auditLog.list(query?);
 client.auditLog.iterate(opts?);
-client.auditLog.export(); // V-462 GDPR Article 20 JSON
+client.auditLog.export(); // GDPR Article 20 JSON
 
 client.legal.documents();
 client.legal.required();
@@ -94,11 +103,28 @@ client.mfa.verify(body);
 client.mfa.disable();
 client.mfa.regenerateRecoveryCodes();
 
-client.team.invite(email, opts?); // V-298
+client.team.invite(email, opts?);
 client.team.listMembers();
 client.team.listInvites();
 client.team.acceptInvite(token);
 client.team.removeMember(membershipId);
+
+client.emailPreferences.list();
+client.emailPreferences.set(body);
+client.emailPreferences.optIn(category);
+client.emailPreferences.optOut(category);
+
+client.billing.getState();
+client.billing.createCheckoutSession(body);
+client.billing.startTrialPack(body?);
+client.billing.createPortalSession();
+
+client.cryptoOrders.quote(body);
+client.cryptoOrders.createCheckout(body);
+client.cryptoOrders.list(query?);
+client.cryptoOrders.get(orderId);
+client.cryptoOrders.cancel(orderId);
+client.cryptoOrders.receipt(orderId);
 
 client.usage.current();
 client.account.me();
@@ -176,7 +202,7 @@ Inputs accept either a Pydantic model OR a plain `dict`. Outputs are typed Pydan
 go get github.com/driftstackdev/driftstack-api/packages/sdk-go
 ```
 
-**Requirements:** Go 1.21+ (any version supporting `errors.As` and `context.Cancel*` patterns).
+**Requirements:** Go 1.22+ (the toolchain floor declared in `go.mod`).
 
 **Configure:**
 

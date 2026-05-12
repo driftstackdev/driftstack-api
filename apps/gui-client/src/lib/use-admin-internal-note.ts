@@ -7,6 +7,7 @@
 // service normalises both to null).
 
 import { useCallback, useState } from 'react';
+import { readApiErrorMessage } from './api-errors';
 import { useSettings } from './SettingsContext';
 import type { AdminCryptoOrder } from './use-admin-crypto-orders-list';
 
@@ -50,16 +51,12 @@ export function useAdminInternalNote(): UseAdminInternalNoteResult {
           body: JSON.stringify({ internal_note: internalNote }),
         });
         if (!res.ok) {
-          let detail = `HTTP ${res.status.toString()}`;
-          try {
-            const errBody = (await res.json()) as { detail?: string };
-            if (typeof errBody.detail === 'string' && errBody.detail.length > 0) {
-              detail = errBody.detail;
-            }
-          } catch {
-            /* keep the HTTP-status fallback */
-          }
-          setState({ kind: 'failed', orderId, status: res.status, message: detail });
+          setState({
+            kind: 'failed',
+            orderId,
+            status: res.status,
+            message: await readApiErrorMessage(res),
+          });
           return;
         }
         const order = (await res.json()) as AdminCryptoOrder;

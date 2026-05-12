@@ -3,7 +3,8 @@
 // Surfaces the /v1/admin/crypto-orders/stats response (V-666.N +
 // V-666.W) as a compact at-a-glance card: total orders, per-status
 // counts, paid revenue per currency, and the avg time-to-paid KPI.
-// Pure read-only; no actions.
+// V-534.AP — adds per-product revenue + ARPU breakdown using the
+// V-666.AE fields. Pure read-only; no actions.
 
 import { formatCents } from '../lib/crypto-format';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -54,8 +55,16 @@ export function CryptoOrdersStatsCard(): JSX.Element {
 
   const { data } = state;
   const revenueEntries = Object.entries(data.paid_revenue_cents);
-  const refundPendingEntries = Object.entries(data.refund_pending_cents ?? {});
-  const refundPendingCount = data.refund_pending_count ?? 0;
+  // V-534.AP — sort product rows by total cents desc so the highest-
+  // grossing tier is first. Multi-currency totals are summed for the
+  // sort key only; display preserves each currency separately.
+  const productRows = Object.entries(data.paid_revenue_by_product ?? {})
+    .map(([product, byCurrency]) => {
+      const total = Object.values(byCurrency).reduce((a, b) => a + b, 0);
+      const count = data.paid_count_by_product?.[product] ?? 0;
+      return { product, byCurrency, total, count };
+    })
+    .sort((a, b) => b.total - a.total);
 
   return (
     <section
@@ -73,7 +82,7 @@ export function CryptoOrdersStatsCard(): JSX.Element {
         </button>
       </header>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div>
           <p className="text-xs uppercase text-ink-secondary">Total orders</p>
           <p className="text-xl font-semibold">{data.total}</p>
@@ -90,16 +99,6 @@ export function CryptoOrdersStatsCard(): JSX.Element {
           <p className="text-xs uppercase text-ink-secondary">Avg time-to-pay</p>
           <p className="text-xl font-semibold">
             {data.avg_time_to_paid_ms !== null ? formatDurationMs(data.avg_time_to_paid_ms) : '—'}
-          </p>
-        </div>
-        <div>
-          <p className="text-xs uppercase text-ink-secondary">Refund pending</p>
-          <p
-            className={`text-xl font-semibold ${
-              refundPendingCount > 0 ? 'text-status-warning' : ''
-            }`}
-          >
-            {refundPendingCount}
           </p>
         </div>
       </div>
@@ -131,16 +130,37 @@ export function CryptoOrdersStatsCard(): JSX.Element {
         )}
       </div>
 
-      {refundPendingEntries.length > 0 && (
-        <div>
-          <p className="mb-1 text-xs uppercase text-ink-secondary">Refund pending value</p>
-          <ul className="flex flex-wrap gap-3 text-sm">
-            {refundPendingEntries.map(([currency, cents]) => (
-              <li key={currency} className="font-mono text-status-warning">
-                {formatCents(cents, currency)}
-              </li>
-            ))}
-          </ul>
+      {productRows.length > 0 && (
+        <div data-testid="paid-by-product">
+          <p className="mb-1 text-xs uppercase text-ink-secondary">Paid by product</p>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase text-ink-secondary">
+              <tr>
+                <th className="py-1 pr-3 font-medium">Product</th>
+                <th className="py-1 pr-3 font-medium">Count</th>
+                <th className="py-1 font-medium">Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              {productRows.map((row) => (
+                <tr
+                  key={row.product}
+                  className="border-t border-surface-divider"
+                  data-testid={`product-row-${row.product}`}
+                >
+                  <td className="py-1 pr-3 font-mono text-xs">{row.product}</td>
+                  <td className="py-1 pr-3 tabular-nums">{row.count}</td>
+                  <td className="py-1">
+                    <span className="flex flex-wrap gap-2 font-mono text-xs">
+                      {Object.entries(row.byCurrency).map(([currency, cents]) => (
+                        <span key={currency}>{formatCents(cents, currency)}</span>
+                      ))}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

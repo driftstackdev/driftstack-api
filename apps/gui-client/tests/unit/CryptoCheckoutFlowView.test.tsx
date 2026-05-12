@@ -52,6 +52,7 @@ function setupFetch(opts: {
       return Promise.resolve({
         ok: true,
         status: 201,
+        headers: new Headers(),
         json: () =>
           Promise.resolve(
             opts.onCheckout?.() ?? {

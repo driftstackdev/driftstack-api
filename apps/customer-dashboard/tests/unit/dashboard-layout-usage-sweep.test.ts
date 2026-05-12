@@ -1,0 +1,56 @@
+// W274.D — drift guard for customer-dashboard layout usage. Every
+// page under apps/customer-dashboard/src/pages must use the shared
+// DashboardLayout — no ad-hoc inline <html> roots or alternate
+// layouts. Catches the drift class where a new page is scaffolded
+// from scratch and skips the shared shell (which loses the auth
+// gate, footer, header nav, and consistent CSP).
+
+import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGES = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages');
+
+function walk(dir: string, out: string[] = []): string[] {
+  if (!existsSync(dir)) return out;
+  for (const entry of readdirSync(dir)) {
+    const full = resolve(dir, entry);
+    const st = statSync(full);
+    if (st.isDirectory()) walk(full, out);
+    else out.push(full);
+  }
+  return out;
+}
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+const pages = walk(PAGES).filter((f) => /\.astro$/.test(f));
+
+describe('W274.D customer-dashboard DashboardLayout usage sweep', () => {
+  it('every customer-dashboard page imports DashboardLayout', () => {
+    const offenders: string[] = [];
+    for (const f of pages) {
+      const body = read(f);
+      if (!/import\s+DashboardLayout\s+from\s+['"][^'"]*DashboardLayout\.astro['"]/.test(body)) {
+        offenders.push(f.slice(REPO_ROOT.length + 1));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('no customer-dashboard page declares its own <html> root', () => {
+    const offenders: string[] = [];
+    for (const f of pages) {
+      const body = read(f);
+      if (/<html[\s>]/.test(body)) {
+        offenders.push(f.slice(REPO_ROOT.length + 1));
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

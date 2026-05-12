@@ -1,22 +1,31 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
-// V-705 — migration guide for teams coming from Browserless. Companion
-// to V-700 (Puppeteer/Playwright). Browserless is the closest commercial
-// peer to Driftstack; this page calls out where the surfaces converge
-// and where they diverge so an evaluating team can scope their port.
+// V-705 — migration guide for teams coming from Browserless.
+//
+// W228.A — accuracy pass. The previous revision claimed:
+//   - client.sessions.start({target_url, script}) — start() doesn't exist
+//   - script body field on session create — not part of the schema
+//   - client.sessions.waitUntilTerminal() / getResult() — don't exist
+//   - profile_id body field on session create — not part of the schema
+//   - "recordings work by default" — recordings aren't shipped (V-540)
+// All of those have been removed in favour of the real action-based
+// surface (navigate/interact/wait/capture). Watched by
+// apps/server/tests/unit/migration-from-browserless-doc-parity.test.ts.
 ---
 
-<BaseLayout title="Migrate from Browserless — Driftstack" description="A field guide for porting a Browserless workload onto Driftstack: surface mapping, session lifecycle, recordings, and tier picks.">
+<BaseLayout title="Migrate from Browserless — Driftstack" description="A field guide for porting a Browserless workload onto Driftstack: surface mapping, session lifecycle, profiles, and tier picks.">
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
     <h1>Migrate from Browserless</h1>
 
     <p class="lead">
       You have an existing Browserless deployment (cloud or
-      self-hosted) and want to evaluate Driftstack. This page maps the
-      two surfaces so you can scope the port without surprises.
-      Spoiler: the easy bits port in an afternoon, the recording +
-      profile bits are where Driftstack earns its keep.
+      self-hosted) and want to evaluate Driftstack. This page maps
+      the two surfaces so you can scope the port without surprises.
+      Driftstack is action-based, not script-passthrough: every
+      browser step is an HTTP call, and there is no
+      <code>/function</code> equivalent that runs arbitrary JS
+      server-side.
     </p>
 
     <h2>Surface comparison</h2>
@@ -27,23 +36,35 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <tbody>
         <tr>
           <td>Connect to <code>wss://chrome.browserless.io?token=…</code> + run Puppeteer/Playwright over CDP</td>
-          <td>POST <code>/v1/sessions</code> with a target URL; Driftstack drives the browser server-side</td>
+          <td>POST <code>/v1/sessions</code> to create a session,
+            then drive it with action endpoints
+            (<code>navigate</code>, <code>interact</code>,
+            <code>wait</code>, <code>capture</code>). No CDP
+            passthrough.</td>
         </tr>
         <tr>
           <td><code>/function</code> endpoint (post a JS body, get JSON back)</td>
-          <td>POST <code>/v1/sessions</code> with a <code>script</code> body (V-318); same shape, persisted log</td>
+          <td>No direct equivalent. Express the steps as discrete
+            actions; if you need a richer extraction primitive,
+            email us.</td>
         </tr>
         <tr>
           <td><code>/screenshot</code> + <code>/pdf</code></td>
-          <td>Session output artefacts; URLs are tier-retained + presigned</td>
+          <td><code>POST /v1/sessions/:id/capture</code> with
+            <code>kind=screenshot</code>, <code>dom_snapshot</code>,
+            or <code>pdf</code>. Returns inline base64 bytes — no
+            presigned URL.</td>
         </tr>
         <tr>
           <td>Concurrency-limit token (manual)</td>
-          <td>Tier-driven concurrency cap, surfaced as queue feedback (V-220)</td>
+          <td>Tier-driven concurrency cap; over-cap returns
+            <code>429</code> with the
+            <code>concurrency-limit</code> RFC 7807 type.</td>
         </tr>
         <tr>
           <td>Stealth plugin / fingerprint flags</td>
-          <td>Profile archetypes (V-281) + per-account fingerprint state</td>
+          <td>Profile archetypes (V-281) + per-account fingerprint
+            state.</td>
         </tr>
       </tbody>
     </table>
@@ -52,8 +73,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <p>
       Most Browserless integrations consist of a Puppeteer script
       pointed at <code>wss://chrome.browserless.io</code> instead of
-      <code>puppeteer.launch()</code>. In Driftstack you push the
-      script up:
+      <code>puppeteer.launch()</code>. In Driftstack you express the
+      same flow as discrete actions:
     </p>
 
     <pre><code>{`// Browserless style
@@ -69,99 +90,109 @@ return title;`}</code></pre>
     <pre><code>{`// Driftstack equivalent (TypeScript SDK)
 import { Driftstack } from '@driftstack/sdk';
 
-const client = new Driftstack({ apiKey: process.env.DRIFTSTACK_KEY! });
-const { session } = await client.sessions.start({
-  target_url: 'https://example.com',
-  script: \`
-    return await page.title();
-  \`,
-});
-const done = await client.sessions.waitUntilTerminal(session.id);
-const result = await client.sessions.getResult(done.id);
-console.log(result.return_value);`}</code></pre>
+const client = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY! });
+
+const session = await client.sessions.create({ archetype: 'default' });
+await client.sessions.navigate(session.id, { url: 'https://example.com' });
+const state = await client.sessions.getState(session.id);
+// state.url is the resolved URL, state.title is the page title.
+const title = state.title;
+await client.sessions.destroy(session.id);
+console.log(title);`}</code></pre>
 
     <p>
-      The <code>script</code> body runs inside a sandboxed Node context
-      with <code>page</code> already in scope. The <code>return</code>
-      value is captured + JSON-serialised, mirroring Browserless's
-      <code>/function</code> contract.
+      No server-side JS. Each step is an HTTP round-trip, so a
+      typical login + scrape is a handful of POSTs followed by a
+      <code>GET /v1/sessions/&lt;id&gt;/state</code>.
     </p>
 
     <h2>Profile persistence: the differentiator</h2>
     <p>
       Browserless gives you a fresh browser per request unless you
-      manage your own cookie jar. Driftstack profiles (V-312) persist
-      cookies / localStorage / IndexedDB on the server, encrypted at
-      rest. Pass the same <code>profile_id</code> to multiple sessions
-      and you stay signed in:
+      manage your own cookie jar. Driftstack profiles (V-312)
+      persist cookies / localStorage / IndexedDB on the server in
+      the WebKit driver layer. Mint a profile via the Profiles API
+      and pin its archetype; future sessions can share its state via
+      a snapshot-restore flow (the customer-facing API does not pin
+      a profile to a specific session at create time today — see
+      <a href="/docs/profiles">/docs/profiles</a> for the current
+      shape).
     </p>
 
-    <pre><code>{`const { profile } = await client.profiles.create({
+    <pre><code>{`const profile = await client.profiles.create({
+  name: 'evergreen-scraper',
   archetype: 'default',
-  label: 'evergreen-scraper',
 });
 
-// First session: log in.
-await client.sessions.start({
-  profile_id: profile.id,
-  target_url: 'https://example.com/login',
-  script: \`
-    await page.fill('#email', 'bot@you.dev');
-    await page.fill('#password', process.env.SCRAPE_PWD!);
-    await page.click('button[type=submit]');
-    await page.waitForNavigation();
-  \`,
+// Drive a login flow.
+const s = await client.sessions.create({ archetype: 'default' });
+await client.sessions.navigate(s.id, { url: 'https://example.com/login' });
+await client.sessions.interact(s.id, {
+  action: 'type', selector: '#email', value: 'bot@you.dev',
 });
+// …
+await client.sessions.destroy(s.id);
 
-// Second session (minutes/hours later): use the persisted cookies.
-await client.sessions.start({
-  profile_id: profile.id,
-  target_url: 'https://example.com/dashboard',
-  script: \`
-    return await page.evaluate(() => document.title);
-  \`,
+// Capture the post-login state into the profile for replay later.
+await client.profiles.captureSnapshot(profile.id, {
+  label: 'logged-in-baseline',
 });`}</code></pre>
 
-    <h2>Recordings: free upgrade</h2>
+    <h2>Recordings</h2>
     <p>
-      Browserless gives you a one-frame PDF or PNG. Every Driftstack
-      session can record full-fidelity WebM by default; retention is
-      tier-dependent. The playback URL is presigned + valid for an
-      hour, so debugging a flaky scrape is one
-      <code>recordings.get()</code> call.
+      Browserless gives you a one-frame PDF or PNG. Driftstack
+      session recordings are on the
+      <a href="/docs/recordings">roadmap</a> (V-540) but not shipped
+      today. Until they land, drive observation with per-step
+      <code>capture</code> calls.
     </p>
 
     <h2>Tier picks for typical Browserless workloads</h2>
     <ul>
-      <li><strong>Light scraping (≤ 5 concurrent, ≤ 10k req/mo)</strong> — <a href="/pricing">api_starter</a>.</li>
-      <li><strong>Mid-volume scrapers</strong> — api_builder (50 concurrent, 100k/mo). The price ceiling roughly tracks Browserless's per-hour billing once you cross 1k req/day.</li>
-      <li><strong>QA / E2E test infrastructure</strong> — api_scale (250 concurrent, 1M/mo). Plays nicely with parallel CI.</li>
+      <li><strong>Light scraping (≤ 5 concurrent)</strong> — <a href="/pricing">api_starter</a>.</li>
+      <li><strong>Mid-volume scrapers</strong> — api_builder.</li>
+      <li><strong>QA / E2E test infrastructure</strong> — api_scale.</li>
     </ul>
 
     <h2>Things Driftstack does NOT do</h2>
     <ul>
-      <li>Raw WebSocket / CDP passthrough. The script body is the
-        contract; arbitrary CDP messages are blocked on purpose to
-        keep the per-request cost predictable.</li>
+      <li>Raw WebSocket / CDP passthrough. The action endpoints are
+        the contract; arbitrary CDP messages are blocked on purpose
+        to keep the per-request cost predictable.</li>
+      <li>Server-side JS execution. There is no
+        <code>/function</code>-style endpoint; express your flow as
+        actions or do the extraction client-side off the
+        <code>state</code> response.</li>
       <li>Self-hosted on-prem. Cloud only today.</li>
-      <li>Browser type selection. WebKit only. Chrome + Firefox are on
-        the roadmap (see <a href="/docs/api-versioning">API versioning</a>).</li>
+      <li>Browser type selection. WebKit only. Chrome + Firefox are
+        on the roadmap.</li>
+      <li>Session recordings — see
+        <a href="/docs/recordings">/docs/recordings</a> for status.</li>
     </ul>
 
     <h2>Migration checklist</h2>
     <ol>
-      <li>Inventory your existing Browserless calls — count <code>/function</code> vs <code>/screenshot</code> vs raw CDP.</li>
-      <li>If raw CDP &gt; 10% of calls: get in touch before you start; some workloads aren't a fit yet.</li>
-      <li>Port one job. The <a href="/docs/sdk-typescript">TypeScript SDK</a> or <a href="/docs/sdk-python">Python SDK</a> takes a couple of hours per job.</li>
-      <li>Set up <a href="/docs/webhooks">webhooks</a> for session-completed events — replace your polling loops.</li>
-      <li>Wire <a href="/docs/cost-monitoring">cost monitoring</a> alerts before flipping production traffic.</li>
+      <li>Inventory your existing Browserless calls — count
+        <code>/function</code> vs <code>/screenshot</code> vs raw
+        CDP.</li>
+      <li>If <code>/function</code> bodies do non-trivial JS
+        evaluation or raw CDP &gt; 10% of calls: get in touch
+        before starting; the action-based surface may not cover
+        you yet.</li>
+      <li>Port one job. The <a href="/docs/sdk-typescript">TypeScript
+        SDK</a> or <a href="/docs/sdk-python">Python SDK</a> takes
+        a couple of hours per job.</li>
+      <li>Set up <a href="/docs/webhooks">webhooks</a> for
+        session-completed events — replace your polling loops.</li>
+      <li>Wire <a href="/docs/cost-monitoring">cost monitoring</a>
+        alerts before flipping production traffic.</li>
     </ol>
 
     <h2>Need help porting?</h2>
     <p>
       <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
-      Bring your <code>/function</code> bodies; we'll quote a tier +
-      give you a credit to try it.
+      Bring your <code>/function</code> bodies; we'll scope a tier
+      + grant a credit to try it.
     </p>
   </main>
 </BaseLayout>

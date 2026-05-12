@@ -43,15 +43,15 @@ RPS for a default-cost call is the `refill` column.
 
 ## What happens when you hit the cap
 
-The API returns HTTP 429 with an RFC 9457 problem-details body:
+The API returns HTTP 429 with an RFC 7807 problem-details body
+(`application/problem+json`):
 
 ```json
 {
-  "type": "https://api.driftstack.dev/errors/rate-limit-exceeded",
-  "title": "Rate limit exceeded",
+  "type": "https://errors.driftstack.dev/rate-limited",
+  "title": "Too Many Requests",
   "status": 429,
   "detail": "Rate limit for \"global\" exceeded for tier \"api_starter\".",
-  "bucket": "global",
   "retry_after_seconds": 12
 }
 ```

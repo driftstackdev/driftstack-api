@@ -1,0 +1,131 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-718 — admin CSV export reference. Documents the contract for
+// GET /v1/admin/crypto-orders.csv (V-666.AC). The endpoint already
+// exists and is referenced from the API changelog; this page is the
+// per-column reference that auditors / customers integrating the
+// admin surface link out to.
+---
+
+<BaseLayout title="Admin CSV export — Driftstack" description="Reference for the Driftstack admin crypto-orders CSV export: filters, columns, and limits.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Admin CSV export</h1>
+
+    <p class="lead">
+      The Driftstack admin API exposes a CSV export of crypto orders
+      for bookkeeping, finance reconciliation, and audit. This page
+      documents the request shape, the column contract, and the
+      practical limits.
+    </p>
+
+    <h2>Endpoint</h2>
+    <pre><code>GET /v1/admin/crypto-orders.csv
+Authorization: Bearer $ADMIN_KEY
+Accept: text/csv</code></pre>
+    <p>
+      Requires an API key with the
+      <code>driftstack_internal_admin</code> scope. A key without
+      that scope receives <code>403 Forbidden</code>.
+    </p>
+
+    <h2>Filters</h2>
+    <p>
+      The CSV endpoint accepts the same filter query params as the
+      JSON list endpoint:
+    </p>
+    <ul>
+      <li><code>status</code> — one of
+        <code>pending</code>, <code>confirming</code>, <code>paid</code>,
+        <code>failed</code>, <code>partial</code>, <code>cancelled</code>.</li>
+      <li><code>search</code> — free-text match across
+        <code>order_id</code>, <code>product</code>, and
+        <code>customer_note</code>.</li>
+      <li><code>account_id</code> — restrict to one account.</li>
+      <li><code>created_after</code> / <code>created_before</code> —
+        ISO-8601 date-range filter (V-666.BY).
+        <code>created_before</code> must be strictly greater than
+        <code>created_after</code>; otherwise 400.</li>
+      <li><code>limit</code> — integer 1–1000. Defaults to 1000.</li>
+    </ul>
+    <p>
+      Filters compose with AND semantics. Omitting them all returns
+      every order the caller's scope can see, up to <code>limit</code>.
+    </p>
+
+    <h2>Columns</h2>
+    <p>
+      The first row is a header row; subsequent rows are one order
+      per row in the order documented below. The header is stable —
+      new columns are appended to the right; existing columns are
+      not removed or reordered without a deprecation window.
+    </p>
+    <ol>
+      <li><code>order_id</code> — Driftstack order ID
+        (<code>ord_*</code>).</li>
+      <li><code>account_id</code> — owning account, or empty for
+        pre-signup checkouts.</li>
+      <li><code>product</code> — SKU paid for.</li>
+      <li><code>price_cents</code> — fiat-equivalent price at order
+        creation, in minor units.</li>
+      <li><code>price_currency</code> — three-letter currency
+        (e.g. <code>USD</code>, <code>EUR</code>).</li>
+      <li><code>status</code> — terminal or in-flight status.</li>
+      <li><code>payment_id</code> — NowPayments invoice ID, empty
+        if no IPN has hit.</li>
+      <li><code>customer_note</code> — customer-supplied note,
+        empty if unset.</li>
+      <li><code>internal_note</code> — admin-only ops note, empty
+        if unset.</li>
+      <li><code>created_at</code> — ISO-8601 UTC timestamp.</li>
+      <li><code>updated_at</code> — ISO-8601 UTC timestamp of the
+        last state transition.</li>
+    </ol>
+
+    <h2>Quoting + encoding</h2>
+    <p>
+      The exporter follows RFC 4180:
+    </p>
+    <ul>
+      <li>Fields containing <code>,</code>, <code>"</code>, or
+        a newline are wrapped in double quotes; embedded
+        <code>"</code> is doubled (<code>""</code>).</li>
+      <li>Line terminator is <code>\r\n</code>.</li>
+      <li>Encoding is UTF-8 with no BOM. Spreadsheet apps that
+        default to Latin-1 should import explicitly as UTF-8 to
+        preserve non-ASCII characters in <code>customer_note</code>
+        / <code>internal_note</code>.</li>
+    </ul>
+
+    <h2>Limits</h2>
+    <p>
+      The CSV endpoint exports up to <strong>1000 rows</strong> per
+      request. If the filtered scan would return more than 1000
+      rows, the export is truncated to the most-recently-updated
+      1000 and a warning header is set:
+    </p>
+    <pre><code>X-Driftstack-Export-Truncated: 1</code></pre>
+    <p>
+      For full-history exports beyond 1000 rows, walk the
+      <a href="/docs/admin-api-pagination">cursor-paginated JSON
+      list</a> and stream rows yourself; the CSV endpoint is a
+      convenience for ad-hoc reconciliation, not a bulk-export
+      channel.
+    </p>
+
+    <h2>GUI download</h2>
+    <p>
+      The admin GUI (<code>Crypto orders (admin)</code> view) has a
+      <strong>Download CSV</strong> button that calls this endpoint
+      with whatever <code>status</code> and <code>search</code>
+      filters are currently active. The button mints a blob URL
+      client-side so the download honours the Bearer auth header.
+    </p>
+
+    <h2>Related</h2>
+    <ul>
+      <li><a href="/docs/admin-api-pagination">Admin API pagination</a></li>
+      <li><a href="/docs/api-changelog">API changelog</a></li>
+    </ul>
+  </main>
+</BaseLayout>

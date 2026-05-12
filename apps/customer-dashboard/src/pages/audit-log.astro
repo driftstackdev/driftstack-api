@@ -5,7 +5,8 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 // V-297 — added export (CSV / JSON) for GDPR Article 20 portability.
 // V-354 — filter dropdown + load-more pagination.
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 
 const ACTION_LABEL: Record<string, string> = {
   'account.email_verified': 'Email verified',
@@ -23,6 +24,9 @@ const ACTION_LABEL: Record<string, string> = {
   'session.destroyed': 'Session destroyed',
   'profile.created': 'Profile created',
   'profile.deleted': 'Profile deleted',
+  // V-480 — profile import/export audit entries.
+  'profile.exported': 'Profile exported',
+  'profile.imported': 'Profile imported',
   'subscription.tier_changed': 'Subscription changed',
   'webhook_endpoint.created': 'Webhook created',
   'webhook_endpoint.updated': 'Webhook updated',
@@ -64,6 +68,9 @@ const FILTER_OPTIONS = [
   // the filter is shared.
   { value: 'profile.created', label: 'Profiles created (incl. clones / snapshot restores)' },
   { value: 'profile.deleted', label: 'Profiles deleted' },
+  // V-480 — profile import/export audit entries.
+  { value: 'profile.exported', label: 'Profiles exported' },
+  { value: 'profile.imported', label: 'Profiles imported' },
   { value: 'subscription.tier_changed', label: 'Subscription changes' },
   { value: 'webhook_endpoint.created', label: 'Webhooks created' },
   { value: 'webhook_endpoint.updated', label: 'Webhooks updated' },

@@ -44,7 +44,7 @@ driftstack --version
     <p>It will:</p>
     <ol>
       <li>Mint a one-time activation code via
-        <code>POST /v1/cli/authorize/initiate</code>.</li>
+        <code>POST /v1/auth/cli-authorize/initiate</code>.</li>
       <li>Print a browser URL like
         <code>https://app.driftstack.dev/cli/authorize?code=…&amp;state=…</code>.</li>
       <li>Open the URL in your default browser (or you copy-paste it
@@ -52,7 +52,7 @@ driftstack --version
       <li>You sign in to the dashboard + click "Authorize this CLI".
         The dashboard binds the code to your account + a fresh API
         key with the scopes you select on the confirmation screen.</li>
-      <li>The CLI polls <code>POST /v1/cli/authorize/exchange</code>
+      <li>The CLI polls <code>POST /v1/auth/cli-authorize/exchange</code>
         and once the binding lands, stores the plaintext API key in
         the OS keyring (macOS Keychain / Linux libsecret / Windows
         Credential Manager).</li>

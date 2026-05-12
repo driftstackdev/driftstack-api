@@ -16,19 +16,25 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </p>
 
     <h2>Concurrent-session caps</h2>
+    <p>
+      Caps below match <code>TIER_CONCURRENT_SESSION_LIMITS</code> in
+      <code>@driftstack/api-types</code>; the server reads from the
+      same constant. Numbers are deliberately conservative — Driftstack
+      bills per-session, not per-call.
+    </p>
     <table>
       <thead>
         <tr><th>Tier</th><th>Cap</th><th>Notes</th></tr>
       </thead>
       <tbody>
-        <tr><td>Trial Pack</td><td>2</td><td>Hard cap; resets on cycle.</td></tr>
-        <tr><td>Solo Manual</td><td>5</td><td></td></tr>
-        <tr><td>API Starter</td><td>10</td><td></td></tr>
-        <tr><td>Team Manual</td><td>20</td><td>Shared across the team.</td></tr>
-        <tr><td>API Builder</td><td>40</td><td></td></tr>
-        <tr><td>Agency Manual</td><td>100</td><td>Shared across the agency.</td></tr>
-        <tr><td>API Scale</td><td>250</td><td></td></tr>
-        <tr><td>Enterprise</td><td>Custom</td><td>Default 500, can be raised via contract.</td></tr>
+        <tr><td><code>trial_pack</code></td><td>1</td><td>Single-session evaluation tier.</td></tr>
+        <tr><td><code>solo_manual</code></td><td>1</td><td>Manual operator workflow.</td></tr>
+        <tr><td><code>team_manual</code></td><td>3</td><td>Shared across the team.</td></tr>
+        <tr><td><code>agency_manual</code></td><td>8</td><td>Shared across the agency.</td></tr>
+        <tr><td><code>api_starter</code></td><td>2</td><td></td></tr>
+        <tr><td><code>api_builder</code></td><td>8</td><td></td></tr>
+        <tr><td><code>api_scale</code></td><td>24</td><td></td></tr>
+        <tr><td><code>enterprise</code></td><td>32</td><td>Contract path can raise this further.</td></tr>
       </tbody>
     </table>
     <p>
@@ -49,15 +55,12 @@ Retry-After: 15
 Content-Type: application/problem+json
 
 {
-  "type": "https://errors.driftstack.dev/concurrency-limit-reached",
-  "title": "Too Many Requests",
+  "type": "https://errors.driftstack.dev/concurrency-limit",
+  "title": "Concurrent session limit reached",
   "status": 429,
-  "detail": "Tier 'team_manual' caps concurrent sessions at 20; you have 20 open.",
-  "extensions": {
-    "code": "concurrency_limit_reached",
-    "limit": 20,
-    "current": 20
-  }
+  "detail": "Account already has 20 active sessions; tier permits 20.",
+  "current_sessions": 20,
+  "limit": 20
 }`}</code></pre>
     <p>
       The <code>Retry-After</code> header is a hint, not a contract —
@@ -69,8 +72,9 @@ Content-Type: application/problem+json
 
     <h2>The canonical client backoff loop</h2>
     <p>
-      Treat <code>concurrency_limit_reached</code> as the
-      back-pressure signal. The right shape:
+      Switch on the RFC 7807 <code>type</code> URI — clients should
+      dispatch on the stable problem-type, not on title or detail
+      strings:
     </p>
     <pre><code>{`async function createSessionWithBackoff(client, opts) {
   const maxAttempts = 5;
@@ -79,7 +83,7 @@ Content-Type: application/problem+json
     try {
       return await client.sessions.create(opts);
     } catch (err) {
-      if (err.code !== 'concurrency_limit_reached') throw err;
+      if (err.type !== 'https://errors.driftstack.dev/concurrency-limit') throw err;
       const retryAfter = (err.retryAfterSeconds ?? delay / 1000) * 1000;
       await sleep(retryAfter);
       delay = Math.min(delay * 2, 60_000);   // exponential cap at 60s
@@ -111,29 +115,6 @@ Content-Type: application/problem+json
       shouldn't have to evict pooled sessions.
     </p>
 
-    <h2>Profile concurrency</h2>
-    <p>
-      A profile can only be in <strong>one active session at a
-      time</strong>. Trying to open a second session against an
-      already-bound profile returns:
-    </p>
-    <pre><code>{`HTTP/1.1 409 Conflict
-{
-  "type": "https://errors.driftstack.dev/profile-locked",
-  "title": "Conflict",
-  "status": 409,
-  "extensions": {
-    "code": "profile_locked",
-    "profile_id": "prof_...",
-    "blocking_session_id": "ses_..."
-  }
-}`}</code></pre>
-    <p>
-      Resolution: either wait for the other session to release the
-      profile (it auto-releases on session destroy), or destroy the
-      blocking session yourself if it's yours.
-    </p>
-
     <h2>Rate limits vs. concurrency limits</h2>
     <p>
       These are <strong>separate</strong> systems:
@@ -148,10 +129,10 @@ Content-Type: application/problem+json
     </ul>
     <p>
       Both surface as 429s but with different
-      <code>extensions.code</code> values
-      (<code>rate_limit_exceeded</code> vs.
-      <code>concurrency_limit_reached</code>) so clients can
-      handle them differently.
+      <code>type</code> URIs
+      (<code>.../rate-limited</code> vs.
+      <code>.../concurrency-limit</code>) so clients can dispatch on
+      the stable problem-type.
     </p>
 
     <h2>Raising the cap</h2>
@@ -168,8 +149,9 @@ Content-Type: application/problem+json
     <h2>Observability</h2>
     <p>
       Track your own concurrency from the dashboard or via
-      <code>GET /v1/account/me</code> (the response includes a
-      <code>current_concurrent_sessions</code> field). For per-day
+      <code>GET /v1/account/me</code> (the response includes
+      <code>concurrent_session_active</code> alongside
+      <code>concurrent_session_cap</code>). For per-day
       patterns, the
       <a href="/docs/audit-log">audit log</a> carries
       <code>session.created</code> + <code>session.destroyed</code>

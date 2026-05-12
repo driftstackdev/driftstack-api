@@ -11,8 +11,9 @@ session. For the multi-language overview see the [combined quickstart](/quicksta
 
 ## Prerequisites
 
-- Node.js 20+ (Node 22 LTS recommended; the SDK is built and tested
-  against the same toolchain Driftstack runs in production).
+- Node.js 18+ (Node 22 LTS recommended; the SDK declares
+  `engines.node: ">=18"` and is built / tested against the same
+  toolchain Driftstack runs in production).
 - A Driftstack API key. Mint one at
   [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys);
   the plaintext is shown once on creation.
@@ -83,8 +84,8 @@ main().catch((err) => {
 ## 4. Error handling
 
 The SDK surfaces server-shape errors as typed exceptions. Match on
-`err.status` for HTTP semantics or `err.problem.type` for the
-RFC 9457 Problem Details URL:
+`err.status` for HTTP semantics or `err.type` for the RFC 9457
+Problem Details URL:
 
 ```ts
 import { DriftstackError } from '@driftstack/sdk';
@@ -93,13 +94,13 @@ try {
   await client.sessions.create({ label: 'demo' });
 } catch (err) {
   if (err instanceof DriftstackError) {
-    if (err.status === 429 && err.problem.type.endsWith('/tier-limit')) {
+    if (err.status === 429 && err.type.endsWith('/tier-limit')) {
       // Concurrent-session cap exceeded. Wait + retry, or upgrade tier.
-      console.error('cap reached:', err.problem.detail);
+      console.error('cap reached:', err.detail);
     } else if (err.status === 401) {
       console.error('bad API key');
     } else {
-      console.error('driftstack error:', err.problem);
+      console.error('driftstack error:', err.type, err.detail);
     }
   } else {
     throw err;
@@ -107,8 +108,9 @@ try {
 }
 ```
 
-Every error response carries `x-request-id`; the SDK exposes it via
-`err.requestId` for support tickets.
+Errors also carry typed `kind` (`'rate_limited'`, `'tier_limit'`, …)
+and `extensions` (e.g. `RateLimitError.retryAfterSeconds`) for
+fine-grained switching without string parsing.
 
 ## 5. Webhooks (optional)
 
@@ -126,9 +128,11 @@ const ok = await verifyWebhookSignature({
 if (!ok) return res.status(401).send('invalid signature');
 ```
 
-`headerPrev` is set by the API during a [signing-secret rotation
-grace window](/webhooks/signature-rotation/) — accept either header
-during the 24h overlap and your verifier won't drop deliveries.
+`headerPrev` is set by the API during the 24h signing-secret
+rotation grace window — see
+[`/webhooks/endpoints`](/webhooks/endpoints/) for the rotate-secret
+endpoint. Accept either header during the overlap and your verifier
+won't drop deliveries.
 
 ## Next steps
 

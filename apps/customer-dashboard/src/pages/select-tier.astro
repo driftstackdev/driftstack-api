@@ -17,7 +17,8 @@ import {
 // V-501 — disabled-while-pending guards on checkout buttons; copy
 // micro-polish (cancel-anytime line, clearer "what changes" framing).
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 
 // Tier 1 placeholder list — V-184b will replace with rich comparison
 // surface. Pulled from api-types so values stay aligned with backend.

@@ -11,7 +11,8 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 // rest. Render is client-side so the dashboard server stays static
 // (Astro's hybrid mode is intentionally avoided here).
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="Overview">

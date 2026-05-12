@@ -1,0 +1,83 @@
+// W347.C — drift guard for the admin /index overview page.
+// Pins:
+//
+//   • GET /v1/admin/overview is registered server-side.
+//   • Recent-activity list pulls /v1/admin/audit-log?limit=5.
+//   • The Open-leads tile is honest about its mock-only status
+//     (no leads endpoint yet) — pin the disclaimer copy so a
+//     future "polish pass" can't quietly drop it.
+//   • Four tile data-fields exist: active-accounts /
+//     suspended-accounts / dlq-depth (Open leads is mock-only,
+//     no data-field hook). Active/suspended tile values come from
+//     filtering MOCK_ACCOUNTS by AccountStatusSchema values.
+//   • Recent-audit list links to the full /audit-log page.
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { AccountStatusSchema } from '@driftstack/api-types';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/index.astro');
+const OVERVIEW_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-overview.ts');
+const AUDIT_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-audit-log.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W347.C admin /index overview parity', () => {
+  const page = read(PAGE);
+  const overview = read(OVERVIEW_ROUTE);
+  const auditLog = read(AUDIT_ROUTE);
+
+  it('page hits GET /v1/admin/overview + server registers it', () => {
+    expect(page).toMatch(/\/v1\/admin\/overview/);
+    expect(overview).toContain("'/v1/admin/overview'");
+  });
+
+  it('recent-activity list hits /v1/admin/audit-log?limit=5', () => {
+    expect(page).toMatch(/\/v1\/admin\/audit-log\?[^'"`]*limit=5/);
+    expect(auditLog).toContain("'/v1/admin/audit-log'");
+  });
+
+  it('four overview tiles render (active / suspended / open leads / DLQ depth)', () => {
+    expect(page).toMatch(/data-field="active-accounts"/);
+    expect(page).toMatch(/data-field="suspended-accounts"/);
+    expect(page).toMatch(/data-field="dlq-depth"/);
+    // Open leads is mock-only — no data-field hook by design.
+    expect(page).toMatch(/Open leads/);
+  });
+
+  it('Open-leads tile carries the "mock — leads endpoint TBD" disclaimer', () => {
+    // Honesty cue. Catches a future polish pass that drops the
+    // disclaimer without wiring the live endpoint.
+    expect(page).toMatch(/mock — leads endpoint TBD/);
+  });
+
+  it('active/suspended tiles filter MOCK_ACCOUNTS by canonical AccountStatusSchema values', () => {
+    expect(page).toMatch(/MOCK_ACCOUNTS\.filter\(\(a\) => a\.status === 'active'\)/);
+    expect(page).toMatch(/MOCK_ACCOUNTS\.filter\(\(a\) => a\.status === 'suspended'\)/);
+    const statuses = new Set<string>(
+      (AccountStatusSchema._def as { values: readonly string[] }).values,
+    );
+    expect(statuses.has('active')).toBe(true);
+    expect(statuses.has('suspended')).toBe(true);
+  });
+
+  it('"See full log" CTA targets /audit-log', () => {
+    expect(page).toMatch(/href="\/audit-log"[^>]*>[\s\S]{0,80}See full log/);
+  });
+
+  it('staff-only framing is preserved in the page header', () => {
+    expect(page).toMatch(/Driftstack admin · staff-only/);
+  });
+
+  it('result badge colour: emerald for success, red for non-success', () => {
+    expect(page).toMatch(
+      /entry\.result === 'success'\s*\?\s*'bg-emerald-50 text-emerald-700'\s*:\s*'bg-red-50 text-red-700'/,
+    );
+  });
+});

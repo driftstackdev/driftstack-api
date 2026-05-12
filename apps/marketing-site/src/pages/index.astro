@@ -161,31 +161,37 @@ await session.destroy();`}</code></pre>
             class="mt-4 max-w-2xl text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl"
             style="letter-spacing: -0.02em;"
           >
-            EU-resident, customer-controlled egress.
+            EU-resident infrastructure.
           </h2>
           <p class="mt-6 max-w-prose text-base text-slate-600">
-            Customer data hosted in the EU — compute, database, object storage.
-            Session traffic exits through <strong class="text-slate-900">your</strong>
-            network egress (the proxies and VPNs you configure to reach target
-            sites), not ours. We never see your destination URLs. Session
-            execution may run in supported regions outside the EU under SCCs
-            and the EU-US Data Privacy Framework. Full sub-processor list at
+            Customer data hosted in the EU — compute, database, and object
+            storage all in the EU jurisdiction. The control plane stores
+            session metadata only; we never store destination response
+            bodies. Session execution may run in supported regions outside
+            the EU under SCCs and the EU-US Data Privacy Framework — full
+            sub-processor list at
             <a href="/trust/sub-processors" class="text-oxblood-700 underline"
               >/trust/sub-processors</a
             >.
           </p>
+          <p class="mt-4 max-w-prose text-base text-slate-600">
+            Customer-configurable egress (SOCKS5 / WireGuard / OpenVPN)
+            is on the roadmap — see
+            <a href="/trust/security-overview" class="text-oxblood-700 underline"
+              >/trust/security-overview</a
+            >
+            for the live posture.
+          </p>
         </div>
         <div class="md:col-span-2">
           <div class="rounded-lg border border-slate-200 bg-slate-900 p-5 font-mono text-xs leading-6 text-slate-200">
-            <span class="text-slate-500"># proxy.config — your egress, your routes</span><br />
-            <span class="text-oxblood-300">→</span> SOCKS5 with UDP ASSOCIATE<br />
-            <span class="text-oxblood-300">→</span> WireGuard<br />
-            <span class="text-oxblood-300">→</span> OpenVPN<br />
-            <br />
             <span class="text-slate-500"># Driftstack control plane</span><br />
-            <span class="text-oxblood-300">→</span> never sees destination URL<br />
-            <span class="text-oxblood-300">→</span> never sees response bodies<br />
-            <span class="text-oxblood-300">→</span> only orchestrates session
+            <span class="text-oxblood-300">→</span> stores session metadata only<br />
+            <span class="text-oxblood-300">→</span> never stores response bodies<br />
+            <span class="text-oxblood-300">→</span> EU-jurisdiction object storage<br />
+            <br />
+            <span class="text-slate-500"># Roadmap — customer-configurable egress</span><br />
+            <span class="text-slate-500">→ SOCKS5 / WireGuard / OpenVPN (not shipped)</span>
           </div>
         </div>
       </div>

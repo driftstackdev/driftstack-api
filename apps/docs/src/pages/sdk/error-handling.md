@@ -18,22 +18,27 @@ server's OpenAPI 3.1 spec).
 
 ## Hierarchy
 
-| Server problem URI                    | TS class                       | Python exception               | Go type                         | Retryable |
+Server problem-type URIs live under the stable
+`https://errors.driftstack.dev/<slug>` host and are pinned by
+`PROBLEM_TYPES` in `@driftstack/api-types`. Dispatch on the slug,
+not on HTTP status.
+
+| Server problem-type slug              | TS class                       | Python exception               | Go type                         | Retryable |
 | ------------------------------------- | ------------------------------ | ------------------------------ | ------------------------------- | --------- |
-| `/problems/auth/invalid`              | `AuthError`                    | `AuthError`                    | `*AuthError` (`ErrAuth`)        | no        |
-| `/problems/auth/expired`              | `AuthError`                    | `AuthError`                    | `*AuthError` (`ErrAuth`)        | no        |
-| `/problems/auth/revoked`              | `AuthError`                    | `AuthError`                    | `*AuthError` (`ErrAuth`)        | no        |
-| `/problems/forbidden`                 | `ForbiddenError`               | `ForbiddenError`               | `*ForbiddenError`               | no        |
-| `/problems/validation`                | `ValidationError`              | `ValidationError`              | `*ValidationError`              | no        |
-| `/problems/not-found`                 | `NotFoundError`                | `NotFoundError`                | `*NotFoundError`                | no        |
-| `/problems/conflict`                  | `ConflictError`                | `ConflictError`                | `*ConflictError`                | no        |
-| `/problems/rate-limit`                | `RateLimitError`               | `RateLimitError`               | `*RateLimitError`               | yes       |
-| `/problems/concurrency-limit`         | `ConcurrencyLimitError`        | `ConcurrencyLimitError`        | `*ConcurrencyLimitError`        | no        |
-| `/problems/quota-exceeded`            | `QuotaExceededError`           | `QuotaExceededError`           | `*QuotaExceededError`           | no        |
-| `/problems/legal-acceptance-required` | `LegalAcceptanceRequiredError` | `LegalAcceptanceRequiredError` | `*LegalAcceptanceRequiredError` | no        |
-| `/problems/driver/not-integrated`     | `DriverError`                  | `DriverError`                  | `*DriverError`                  | no        |
-| `/problems/driver/timeout`            | `SessionTimeoutError`          | `SessionTimeoutError`          | `*SessionTimeoutError`          | no        |
-| `/problems/session/destroyed`         | `SessionDestroyedError`        | `SessionDestroyedError`        | `*SessionDestroyedError`        | no        |
+| `invalid-key`                         | `AuthError`                    | `AuthError`                    | `*AuthError` (`ErrAuth`)        | no        |
+| `expired-key`                         | `AuthError`                    | `AuthError`                    | `*AuthError` (`ErrAuth`)        | no        |
+| `revoked-key`                         | `AuthError`                    | `AuthError`                    | `*AuthError` (`ErrAuth`)        | no        |
+| `forbidden`                           | `ForbiddenError`               | `ForbiddenError`               | `*ForbiddenError`               | no        |
+| `validation-failed`                   | `ValidationError`              | `ValidationError`              | `*ValidationError`              | no        |
+| `not-found`                           | `NotFoundError`                | `NotFoundError`                | `*NotFoundError`                | no        |
+| `conflict`                            | `ConflictError`                | `ConflictError`                | `*ConflictError`                | no        |
+| `rate-limited`                        | `RateLimitError`               | `RateLimitError`               | `*RateLimitError`               | yes       |
+| `concurrency-limit`                   | `ConcurrencyLimitError`        | `ConcurrencyLimitError`        | `*ConcurrencyLimitError`        | no        |
+| `tier-limit`                          | `QuotaExceededError`           | `QuotaExceededError`           | `*QuotaExceededError`           | no        |
+| `legal-acceptance-required`           | `LegalAcceptanceRequiredError` | `LegalAcceptanceRequiredError` | `*LegalAcceptanceRequiredError` | no        |
+| `driver-not-integrated`               | `DriverError`                  | `DriverError`                  | `*DriverError`                  | no        |
+| `session-timeout`                     | `SessionTimeoutError`          | `SessionTimeoutError`          | `*SessionTimeoutError`          | no        |
+| `session-destroyed`                   | `SessionDestroyedError`        | `SessionDestroyedError`        | `*SessionDestroyedError`        | no        |
 | transport (network / parse / timeout) | `TransportError`               | `TransportError`               | `*TransportError`               | yes       |
 
 All extend `DriftstackError` (TS) / `DriftstackError` (Python) /

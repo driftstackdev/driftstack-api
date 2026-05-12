@@ -20,7 +20,8 @@ import DashboardLayout from '../../layouts/DashboardLayout.astro';
 // session converts a CLI authorization code into a GUI-paired API key.
 // The plaintext key never traverses this page.
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="Authorize desktop client" withSidebar={false}>

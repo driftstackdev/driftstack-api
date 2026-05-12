@@ -14,7 +14,8 @@ if (!incident) {
 }
 
 // V-344 — apiBaseUrl exposed to inline script for live form wiring.
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 
 function fmtIso(iso: string): string {
   return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';

@@ -21,16 +21,20 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </p>
 
     <h2>Tier-by-tier availability targets</h2>
+    <p>
+      Tier ids below match the <code>AccountTier</code> enum the API
+      uses; see <code>GET /v1/account/me</code>.
+    </p>
     <table>
       <thead>
         <tr><th>Tier</th><th>Monthly target</th><th>Max allowed downtime / month</th></tr>
       </thead>
       <tbody>
-        <tr><td>Trial / api_starter</td><td>—</td><td>(no SLA — best effort)</td></tr>
-        <tr><td>solo_manual / solo_automated</td><td>99.5%</td><td>~3h 40m</td></tr>
-        <tr><td>team_manual / team_growth</td><td>99.9%</td><td>~43m</td></tr>
-        <tr><td>api_builder / api_scale</td><td>99.95%</td><td>~21m</td></tr>
-        <tr><td>agency_manual / enterprise</td><td>99.99% (per addendum)</td><td>~4m</td></tr>
+        <tr><td><code>trial_pack</code> / <code>api_starter</code></td><td>—</td><td>(no SLA — best effort)</td></tr>
+        <tr><td><code>solo_manual</code></td><td>99.5%</td><td>~3h 40m</td></tr>
+        <tr><td><code>team_manual</code> / <code>api_builder</code></td><td>99.9%</td><td>~43m</td></tr>
+        <tr><td><code>agency_manual</code> / <code>api_scale</code></td><td>99.95%</td><td>~21m</td></tr>
+        <tr><td><code>enterprise</code></td><td>99.99% (per addendum)</td><td>~4m</td></tr>
       </tbody>
     </table>
     <p>

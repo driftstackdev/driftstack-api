@@ -21,7 +21,8 @@ const pathname = Astro.url.pathname;
 // script. Per existing pages: localStorage uses `ds_web_session_token`
 // for the bearer (V-141), and we add `ds_act_as_account` for the
 // optional team-owner override.
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 
 const navItems = [
   { href: '/', label: 'Overview' },
@@ -273,12 +274,17 @@ const navItems = [
           class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4 text-xs text-slate-500"
         >
           <span>Driftstack</span>
+          {/* W211 — these pages live on the marketing-site at
+              driftstack.dev, not on the dashboard's own
+              app.driftstack.dev origin. Absolute URLs are required;
+              relative paths would 404 against the Cloudflare Pages
+              project that serves the dashboard. */}
           <nav class="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <a href="/legal/privacy" class="hover:text-oxblood-700">Privacy</a>
-            <a href="/legal/terms" class="hover:text-oxblood-700">Terms</a>
-            <a href="/legal/dpa" class="hover:text-oxblood-700">DPA</a>
-            <a href="/legal/aup" class="hover:text-oxblood-700">AUP</a>
-            <a href="/trust/sub-processors" class="hover:text-oxblood-700">Sub-processors</a>
+            <a href="https://driftstack.dev/legal/privacy" class="hover:text-oxblood-700">Privacy</a>
+            <a href="https://driftstack.dev/legal/terms" class="hover:text-oxblood-700">Terms</a>
+            <a href="https://driftstack.dev/legal/dpa" class="hover:text-oxblood-700">DPA</a>
+            <a href="https://driftstack.dev/legal/aup" class="hover:text-oxblood-700">AUP</a>
+            <a href="https://driftstack.dev/trust/sub-processors" class="hover:text-oxblood-700">Sub-processors</a>
           </nav>
         </div>
       </footer>

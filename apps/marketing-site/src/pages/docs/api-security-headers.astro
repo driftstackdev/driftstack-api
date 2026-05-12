@@ -1,0 +1,154 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-712.C — public reference for the security-relevant response
+// headers Driftstack's API sets. Security reviewers + integrators
+// ask for this regularly; gathering it on one page is faster than
+// answering individually.
+---
+
+<BaseLayout
+  title="API security headers — Driftstack"
+  description="Reference for the security-relevant response headers Driftstack's HTTP API sets: HSTS, CORS, no-store, X-Content-Type-Options, and more."
+>
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>API security headers</h1>
+
+    <p class="lead">
+      Driftstack's HTTP API sets a fixed, reviewable set of security
+      headers on every response. This page documents what they are
+      and why, so security reviewers don't have to derive it from a
+      production capture.
+    </p>
+
+    <h2>Always-on transport headers</h2>
+    <table>
+      <thead><tr><th>Header</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>Strict-Transport-Security</code></td>
+          <td><code>max-age=63072000; includeSubDomains; preload</code></td>
+          <td>
+            2-year HSTS, eligible for the browser preload list.
+            Closes first-visit downgrade attacks before TLS upgrade
+            kicks in.
+          </td>
+        </tr>
+        <tr>
+          <td><code>X-Content-Type-Options</code></td>
+          <td><code>nosniff</code></td>
+          <td>Browsers must not infer MIME types from content.</td>
+        </tr>
+        <tr>
+          <td><code>X-Frame-Options</code></td>
+          <td><code>SAMEORIGIN</code></td>
+          <td>
+            Driftstack ships no embeddable UI; framing is
+            disallowed by default.
+          </td>
+        </tr>
+        <tr>
+          <td><code>Referrer-Policy</code></td>
+          <td><code>no-referrer</code></td>
+          <td>No referrer leakage to third parties.</td>
+        </tr>
+        <tr>
+          <td><code>X-DNS-Prefetch-Control</code></td>
+          <td><code>off</code></td>
+          <td>Disables speculative DNS for embedded URLs.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Cache-Control posture</h2>
+    <table>
+      <thead><tr><th>Path</th><th>Cache-Control</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>/v1/account/*</code> (V-666.BS)</td>
+          <td><code>no-store, private</code></td>
+        </tr>
+        <tr>
+          <td><code>/v1/admin/*</code> (V-666.BT)</td>
+          <td><code>no-store, private</code></td>
+        </tr>
+        <tr>
+          <td><code>/v1/billing/*</code> (V-666.BW)</td>
+          <td><code>no-store, private</code></td>
+        </tr>
+        <tr>
+          <td><code>/v1/status</code> (public)</td>
+          <td><code>public, max-age=30</code></td>
+        </tr>
+        <tr>
+          <td><code>/v1/status/stream</code> (SSE)</td>
+          <td><code>no-cache, no-transform</code></td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Endpoints under <code>/v1/account/*</code>,
+      <code>/v1/admin/*</code>, and <code>/v1/billing/*</code> return
+      caller-private dynamic state. They are auth-gated at the
+      request layer; the <code>no-store, private</code> header is
+      defense-in-depth so shared / proxy caches can't hold onto
+      private payloads and browser back-forward cache can't serve
+      stale state after logout.
+    </p>
+
+    <h2>CORS</h2>
+    <p>
+      The API uses an explicit allow-list of origins; SDK consumers
+      can call from any origin because the SDK ships
+      <code>Authorization: Bearer …</code> and never relies on
+      browser-cookie auth. Pre-flight responses cache for 10 minutes.
+      <code>credentials: true</code> is required only by the
+      Driftstack customer dashboard's cookie-based session
+      (Article-13 auth).
+    </p>
+    <pre><code>{`Access-Control-Allow-Origin: <reflected allow-list match>
+Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+Access-Control-Allow-Headers: authorization, content-type, x-request-id, stripe-signature, x-nowpayments-sig
+Access-Control-Expose-Headers: x-request-id, x-ratelimit-bucket, x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset, retry-after
+Access-Control-Max-Age: 600
+Access-Control-Allow-Credentials: true`}</code></pre>
+
+    <h2>Cross-Origin resource policy</h2>
+    <p>
+      <code>Cross-Origin-Resource-Policy: cross-origin</code> is set
+      explicitly. The default helmet value
+      (<code>same-origin</code>) would block legitimate SDK calls
+      from third-party origins because the CORS layer is our
+      boundary, not CORP.
+    </p>
+
+    <h2>What we don't set</h2>
+    <ul>
+      <li>
+        <strong>Content-Security-Policy.</strong> Driftstack serves
+        no HTML — every endpoint returns JSON, plain text, CSV, or
+        PDF. CSP would be a no-op.
+      </li>
+      <li>
+        <strong>Cross-Origin-Embedder-Policy.</strong> Same logic —
+        no embeddable surfaces.
+      </li>
+      <li>
+        <strong>Cookie security flags.</strong> The public REST API
+        is bearer-auth only. The dashboard's Article-13 cookie sets
+        <code>Secure; HttpOnly; SameSite=Lax</code>; that's
+        documented separately.
+      </li>
+    </ul>
+
+    <h2>Reporting a finding</h2>
+    <p>
+      Send disclosures to
+      <a href="mailto:security@driftstack.dev">security@driftstack.dev</a>.
+      PGP key on
+      <a href="https://driftstack.dev/.well-known/security.txt">security.txt</a>.
+      Our policy + bounty range is on the
+      <a href="/legal/vulnerability-disclosure">vulnerability-disclosure policy</a>.
+    </p>
+  </main>
+</BaseLayout>

@@ -6,30 +6,28 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // returned on every response, what to do when 429ed, and how to
 // request an override.
 
+// W198 — values mirror the live `TIER_RATE_LIMIT_DEFAULTS` table in
+// `packages/api-types/src/common.ts`. Each bucket has a capacity
+// (burst size) and a refill rate; the columns show "burst / sustained
+// per minute" so customers can size both at a glance. The bucket set
+// is intentionally small today — only `global` and `sessions:create`
+// are enforced server-side.
 const BUCKETS = [
   {
     name: 'global',
-    desc: 'Default bucket for unclassified writes.',
-    soloCapacity: '300 req/min',
-    apiBuilder: '3,000 req/min',
+    desc: 'Every authenticated request increments this bucket. The default rate-limit catch-all.',
+    soloBurst: '120 burst',
+    soloSustained: '120 req/min',
+    apiBuilderBurst: '1,800 burst',
+    apiBuilderSustained: '1,800 req/min',
   },
   {
-    name: 'sessions:start',
-    desc: 'POST /v1/sessions — burst-sensitive.',
-    soloCapacity: '60 req/min',
-    apiBuilder: '600 req/min',
-  },
-  {
-    name: 'sessions:read',
-    desc: 'GET /v1/sessions/* — generous because polling is common.',
-    soloCapacity: '600 req/min',
-    apiBuilder: '6,000 req/min',
-  },
-  {
-    name: 'profiles:write',
-    desc: 'POST/PATCH /v1/profiles — usage is bursty around setup.',
-    soloCapacity: '120 req/min',
-    apiBuilder: '1,200 req/min',
+    name: 'sessions:create',
+    desc: 'POST /v1/sessions — burst-sensitive; throttled tighter than `global` to keep one customer from saturating the fleet.',
+    soloBurst: '10 burst',
+    soloSustained: '2 req/min',
+    apiBuilderBurst: '60 burst',
+    apiBuilderSustained: '60 req/min',
   },
 ];
 ---
@@ -59,6 +57,12 @@ const BUCKETS = [
     </p>
 
     <h2>Bucket reference</h2>
+    <p>
+      Two buckets are enforced today: <code>global</code> (every
+      authenticated request) and <code>sessions:create</code> (POST
+      /v1/sessions). Burst is the maximum bucket capacity; sustained
+      throughput is the refill rate.
+    </p>
     <table>
       <thead>
         <tr>
@@ -72,8 +76,8 @@ const BUCKETS = [
         {BUCKETS.map((b) => (
           <tr>
             <td><code>{b.name}</code></td>
-            <td class="font-mono">{b.soloCapacity}</td>
-            <td class="font-mono">{b.apiBuilder}</td>
+            <td class="font-mono">{b.soloBurst} · {b.soloSustained}</td>
+            <td class="font-mono">{b.apiBuilderBurst} · {b.apiBuilderSustained}</td>
             <td>{b.desc}</td>
           </tr>
         ))}
@@ -97,7 +101,7 @@ const BUCKETS = [
         <tr><td><code>X-RateLimit-Limit</code></td><td>The bucket capacity (tokens).</td></tr>
         <tr><td><code>X-RateLimit-Remaining</code></td><td>Tokens left after this request.</td></tr>
         <tr><td><code>X-RateLimit-Reset</code></td><td>Unix seconds when the bucket will be full again.</td></tr>
-        <tr><td><code>X-RateLimit-Bucket</code></td><td>The bucket name (e.g. <code>sessions:start</code>).</td></tr>
+        <tr><td><code>X-RateLimit-Bucket</code></td><td>The bucket name (e.g. <code>sessions:create</code>).</td></tr>
       </tbody>
     </table>
     <p>
@@ -108,18 +112,28 @@ const BUCKETS = [
     </p>
 
     <h2>When you hit a 429</h2>
+    <p>
+      The body follows RFC 7807 (<code>application/problem+json</code>) —
+      flat keys, no <code>error</code> envelope. The <code>type</code>
+      URI dereferences to the long-form explanation; the
+      <code>retry_after_seconds</code> extension carries the same value
+      as the <code>Retry-After</code> header for clients that prefer to
+      read it from the body.
+    </p>
     <pre><code>{`HTTP/1.1 429 Too Many Requests
 Retry-After: 12
-X-RateLimit-Bucket: sessions:start
-Content-Type: application/json
+X-RateLimit-Bucket: sessions:create
+X-RateLimit-Limit: 10
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1715472012
+Content-Type: application/problem+json
 
 {
-  "error": {
-    "code": "rate_limited",
-    "message": "Rate limit exceeded on bucket sessions:start. Retry after 12 seconds.",
-    "bucket": "sessions:start",
-    "retry_after_seconds": 12
-  }
+  "type": "https://errors.driftstack.dev/rate-limited",
+  "title": "Too Many Requests",
+  "status": 429,
+  "detail": "Rate limit for \\"sessions:create\\" exceeded for tier \\"solo_manual\\".",
+  "retry_after_seconds": 12
 }`}</code></pre>
     <p>
       Your client should:
@@ -138,19 +152,18 @@ Content-Type: application/json
     <h2>Concurrent sessions</h2>
     <p>
       Separate from per-bucket request rate, your tier caps the
-      number of <em>concurrently running</em> sessions:
+      number of <em>concurrently running</em> sessions. The caps
+      mirror <code>TIER_CONCURRENT_SESSION_LIMITS</code> exactly;
+      see <a href="/docs/concurrency">/docs/concurrency</a> for the
+      authoritative table + backoff guidance.
     </p>
-    <ul>
-      <li>Solo Manual: 1 concurrent</li>
-      <li>Team Manual: 5 concurrent</li>
-      <li>Agency Manual: 25 concurrent</li>
-      <li>API Starter: 10 concurrent</li>
-      <li>API Builder: 50 concurrent</li>
-      <li>API Scale: 250 concurrent</li>
-    </ul>
     <p>
-      Exceeding the concurrency cap returns 409 Conflict (not 429);
-      wait for an existing session to finish before starting another.
+      Exceeding the concurrency cap returns
+      <strong>429 Too Many Requests</strong> with the
+      <code>https://errors.driftstack.dev/concurrency-limit</code>
+      problem-type — distinct from rate-limit 429s, which use the
+      <code>https://errors.driftstack.dev/rate-limited</code> type.
+      Dispatch on the <code>type</code> URI, not the status code.
     </p>
 
     <h2>Requesting a temporary override</h2>

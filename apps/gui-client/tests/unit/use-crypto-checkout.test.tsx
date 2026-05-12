@@ -1,4 +1,6 @@
 // V-534.J — unit tests for useCryptoCheckout.
+// V-534.AY — appended tests for Idempotency-Key auto-send.
+// V-534.AZ — appended tests for the Idempotent-Replayed header parsing.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
@@ -52,6 +54,7 @@ describe('V-534.J useCryptoCheckout.start — happy path', () => {
         Promise.resolve({
           ok: true,
           status: 201,
+          headers: new Headers(),
           json: () => Promise.resolve(SAMPLE),
         } as unknown as Response),
       ),
@@ -68,6 +71,8 @@ describe('V-534.J useCryptoCheckout.start — happy path', () => {
     if (result.current.state.kind === 'ready') {
       expect(result.current.state.order.order_id).toBe('ord_abc123def456');
       expect(result.current.state.order.provider).toBe('stub');
+      // V-534.AZ — no Idempotent-Replayed header was set, so replayed defaults to false.
+      expect(result.current.state.replayed).toBe(false);
     }
   });
 
@@ -76,6 +81,7 @@ describe('V-534.J useCryptoCheckout.start — happy path', () => {
       Promise.resolve({
         ok: true,
         status: 201,
+        headers: new Headers(),
         json: () => Promise.resolve(SAMPLE),
       } as unknown as Response),
     );
@@ -167,6 +173,151 @@ describe('V-534.J useCryptoCheckout.start — error paths', () => {
   });
 });
 
+describe('V-534.AY useCryptoCheckout — Idempotency-Key', () => {
+  it('sends an Idempotency-Key header on start()', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 201,
+        headers: new Headers(),
+        json: () => Promise.resolve(SAMPLE),
+      } as unknown as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useCryptoCheckout());
+    await act(async () => {
+      await result.current.start({
+        product: 'trial_pack',
+        price_cents: 299,
+        price_currency: 'USD',
+      });
+    });
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const headers = init?.headers as Record<string, string>;
+    expect(headers['idempotency-key']).toBeTruthy();
+    expect(headers['idempotency-key'].length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('reuses the same Idempotency-Key across retries without reset()', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 201,
+        headers: new Headers(),
+        json: () => Promise.resolve(SAMPLE),
+      } as unknown as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useCryptoCheckout());
+    await act(async () => {
+      await result.current.start({
+        product: 'trial_pack',
+        price_cents: 299,
+        price_currency: 'USD',
+      });
+      await result.current.start({
+        product: 'trial_pack',
+        price_cents: 299,
+        price_currency: 'USD',
+      });
+    });
+    const headersA = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
+    const headersB = fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>;
+    expect(headersA['idempotency-key']).toBe(headersB['idempotency-key']);
+  });
+
+  it('rotates the Idempotency-Key on reset()', async () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 201,
+        headers: new Headers(),
+        json: () => Promise.resolve(SAMPLE),
+      } as unknown as Response),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() => useCryptoCheckout());
+    await act(async () => {
+      await result.current.start({
+        product: 'trial_pack',
+        price_cents: 299,
+        price_currency: 'USD',
+      });
+    });
+    act(() => {
+      result.current.reset();
+    });
+    await act(async () => {
+      await result.current.start({
+        product: 'trial_pack',
+        price_cents: 299,
+        price_currency: 'USD',
+      });
+    });
+    const keyA = (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)[
+      'idempotency-key'
+    ];
+    const keyB = (fetchMock.mock.calls[1]?.[1]?.headers as Record<string, string>)[
+      'idempotency-key'
+    ];
+    expect(keyA).not.toBe(keyB);
+  });
+});
+
+describe('V-534.AZ useCryptoCheckout — Idempotent-Replayed header', () => {
+  it('sets replayed: true when the response header is "1"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 201,
+          headers: new Headers({ 'idempotent-replayed': '1' }),
+          json: () => Promise.resolve(SAMPLE),
+        } as unknown as Response),
+      ),
+    );
+    const { result } = renderHook(() => useCryptoCheckout());
+    await act(async () => {
+      await result.current.start({
+        product: 'trial_pack',
+        price_cents: 299,
+        price_currency: 'USD',
+      });
+    });
+    await waitFor(() => expect(result.current.state.kind).toBe('ready'));
+    if (result.current.state.kind === 'ready') {
+      expect(result.current.state.replayed).toBe(true);
+    }
+  });
+
+  it('replayed defaults to false when the header is missing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: () => Promise.resolve(SAMPLE),
+        } as unknown as Response),
+      ),
+    );
+    const { result } = renderHook(() => useCryptoCheckout());
+    await act(async () => {
+      await result.current.start({
+        product: 'trial_pack',
+        price_cents: 299,
+        price_currency: 'USD',
+      });
+    });
+    await waitFor(() => expect(result.current.state.kind).toBe('ready'));
+    if (result.current.state.kind === 'ready') {
+      expect(result.current.state.replayed).toBe(false);
+    }
+  });
+});
+
 describe('V-534.J useCryptoCheckout.reset', () => {
   it('returns the hook to idle from any state', async () => {
     vi.stubGlobal(
@@ -175,6 +326,7 @@ describe('V-534.J useCryptoCheckout.reset', () => {
         Promise.resolve({
           ok: true,
           status: 201,
+          headers: new Headers(),
           json: () => Promise.resolve(SAMPLE),
         } as unknown as Response),
       ),

@@ -39,24 +39,27 @@ There are three categories of scopes, in order of breadth:
 | `driftstack_internal_admin` | account-control | `/v1/admin/*` — list all accounts, suspend account, change tier, force-actions. Driftstack staff.       |
 | `gui_control`               | special         | Manual-control plane (`tap_at`, `type_focused`). Self-hosted GUI workflow only (locked-decision L-001). |
 | `read:sessions`             | granular        | Read sessions endpoints only.                                                                           |
-| `read:profiles`             | granular        | Read profiles endpoints only.                                                                           |
-| `read:webhooks`             | granular        | Read webhook endpoints only.                                                                            |
-| `read:audit-log`            | granular        | Read audit log only.                                                                                    |
 | `write:sessions`            | granular        | Read + create + delete sessions.                                                                        |
+| `read:profiles`             | granular        | Read profiles endpoints only.                                                                           |
 | `write:profiles`            | granular        | Read + create + delete profiles.                                                                        |
-| `write:webhooks`            | granular        | Read + create + delete webhook endpoints.                                                               |
-| `admin:sessions`            | granular        | All admin operations on sessions (account-owner-equivalent for that resource).                          |
 | `admin:profiles`            | granular        | All admin operations on profiles.                                                                       |
+| `read:webhooks`             | granular        | Read webhook endpoints only.                                                                            |
+| `write:webhooks`            | granular        | Read + create + delete webhook endpoints.                                                               |
 | `admin:webhooks`            | granular        | All admin operations on webhooks.                                                                       |
+| `read:api-keys`             | granular        | Read API keys list / metadata only.                                                                     |
 | `admin:api-keys`            | granular        | All admin operations on API keys (mint + revoke). Implies `account_owner` for the keys subtree.         |
+| `read:billing`              | granular        | Read billing state + invoice / subscription metadata only.                                              |
+| `admin:billing`             | granular        | All admin operations on billing (start trial, change subscription, manage portal).                      |
+| `read:audit`                | granular        | Read account audit log only.                                                                            |
 
 ## V-481 broad-satisfies-granular rule
 
 A key with a broad scope **satisfies** any granular scope on
 the same verb:
 
-- A key with `read` satisfies `read:sessions`,
-  `read:profiles`, `read:webhooks`, `read:audit-log`.
+- A key with `read` satisfies every `read:*` granular scope
+  (`read:sessions`, `read:profiles`, `read:webhooks`,
+  `read:api-keys`, `read:billing`, `read:audit`).
 - A key with `write` satisfies any `write:*`.
 - A key with `admin` (or `account_owner`) satisfies any
   `admin:*`.
@@ -67,7 +70,7 @@ point of granular scoping; a `read:sessions` key can only
 ever read sessions, not profiles or webhooks.
 
 ```text
-key with: read              → can do: read, read:sessions, read:profiles, read:webhooks, read:audit-log
+key with: read              → can do: read, plus every read:* (read:sessions, read:profiles, read:webhooks, read:api-keys, read:billing, read:audit)
 key with: read:sessions     → can do: read:sessions  (only)
 key with: write             → can do: read, write, plus any read:*/write:*
 key with: account_owner     → can do: read, write, plus any read:*/write:*/admin:*
@@ -79,7 +82,7 @@ The API returns HTTP 403 with an RFC 9457 problem-details body:
 
 ```json
 {
-  "type": "https://api.driftstack.dev/errors/forbidden",
+  "type": "https://errors.driftstack.dev/forbidden",
   "title": "Forbidden",
   "status": 403,
   "detail": "This action requires the \"write:sessions\" scope."
@@ -99,7 +102,7 @@ When you mint a key from the dashboard or via
   No access to profiles, webhooks, or billing.
 - **Production application:** `read` + `write`. Excludes
   account-management surfaces.
-- **Backup automation:** `read` + `read:audit-log`.
+- **Backup automation:** `read` + `read:audit`.
 - **Webhook signing-only key:** mint a key with NO scopes.
   The key authenticates the webhook signature but cannot
   call any `/v1/*` endpoint. (This is the recommended

@@ -1,4 +1,10 @@
 // V-534.AB — Crypto receipt view.
+// V-534.BM — adds a "Download PDF" button that fetches
+//            /receipt.pdf (V-666.U) as a blob + triggers an anchor
+//            click. The endpoint is auth-gated, so a plain link
+//            wouldn't work.
+// V-534.BN — adds a sibling "Download .txt" button for the
+//            plain-text variant (V-666.P).
 //
 // Renders a receipt for a specific order id using useCryptoReceipt
 // (V-534.AA). Includes a "Copy to clipboard" button that uses
@@ -13,6 +19,7 @@ import {
   useCryptoReceipt,
   type CryptoReceiptData,
 } from '../lib/use-crypto-receipt';
+import { useReceiptPdfDownload } from '../lib/use-receipt-pdf-download';
 
 interface CryptoReceiptViewProps {
   /** The order id to render. Pass null to show the empty state. */
@@ -21,6 +28,7 @@ interface CryptoReceiptViewProps {
 
 function ReceiptBody({ data }: { data: CryptoReceiptData }): JSX.Element {
   const [copied, setCopied] = useState(false);
+  const pdf = useReceiptPdfDownload();
   const onCopy = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(formatReceiptForClipboard(data));
@@ -36,14 +44,38 @@ function ReceiptBody({ data }: { data: CryptoReceiptData }): JSX.Element {
     <div className="flex flex-col gap-4 rounded-md border border-surface-divider bg-surface-inset p-4">
       <header className="flex items-center justify-between">
         <h3 className="text-base font-semibold">Receipt</h3>
-        <button
-          type="button"
-          onClick={() => void onCopy()}
-          className="rounded border border-surface-divider px-2 py-1 text-xs font-medium hover:bg-surface-base"
-        >
-          {copied ? 'Copied' : 'Copy to clipboard'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void pdf.download(data.order_id, 'pdf')}
+            disabled={pdf.state.kind === 'downloading'}
+            className="rounded border border-surface-divider px-2 py-1 text-xs font-medium hover:bg-surface-base disabled:opacity-50"
+          >
+            {pdf.state.kind === 'downloading' ? 'Downloading…' : 'Download PDF'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void pdf.download(data.order_id, 'txt')}
+            disabled={pdf.state.kind === 'downloading'}
+            className="rounded border border-surface-divider px-2 py-1 text-xs font-medium hover:bg-surface-base disabled:opacity-50"
+          >
+            {pdf.state.kind === 'downloading' ? 'Downloading…' : 'Download .txt'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void onCopy()}
+            className="rounded border border-surface-divider px-2 py-1 text-xs font-medium hover:bg-surface-base"
+          >
+            {copied ? 'Copied' : 'Copy to clipboard'}
+          </button>
+        </div>
       </header>
+      {pdf.state.kind === 'failed' && (
+        <ErrorBanner
+          message={`PDF download failed: ${pdf.state.message}`}
+          onDismiss={() => pdf.reset()}
+        />
+      )}
       <dl className="grid grid-cols-2 gap-y-1 text-sm">
         <dt className="text-ink-secondary">Order</dt>
         <dd className="font-mono text-xs">{data.order_id}</dd>

@@ -1,0 +1,142 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-722 — TypeScript SDK reference for the crypto-orders surface.
+// Companion to /docs/sdk-typescript (the general SDK quickstart).
+// Crypto payments are non-refundable.
+---
+
+<BaseLayout title="SDK — crypto orders — Driftstack" description="Typed TypeScript SDK methods for the Driftstack crypto-payments surface: quote, checkout, list, get, update note, cancel, receipt.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>SDK — crypto orders</h1>
+
+    <p class="lead">
+      The <code>client.cryptoOrders</code> resource wraps every
+      customer-facing endpoint on the V-666 surface with full type
+      safety. Admin endpoints are not exposed; integrators that need
+      them call the REST surface directly.
+    </p>
+
+    <h2>Quote</h2>
+    <p>
+      Preview a tier's fiat-cents price (and the crypto pay range,
+      once NowPayments is wired up) without minting an order:
+    </p>
+    <pre><code>{`const quote = await client.cryptoOrders.quote({ product: 'solo_manual' });
+console.log(quote.price_cents, quote.price_currency);`}</code></pre>
+
+    <h2>Mint a checkout</h2>
+    <p>
+      Always pair the call with an <code>idempotencyKey</code> so
+      accidental double-submits don't mint duplicate orders:
+    </p>
+    <pre><code>{`const key = crypto.randomUUID();
+const order = await client.cryptoOrders.createCheckout(
+  { product: 'team_manual', price_cents: 4900, price_currency: 'USD' },
+  { idempotencyKey: key },
+);
+console.log(order.order_id, order.payment_address);`}</code></pre>
+    <p>
+      On a duplicate key within the 24h window, the SDK returns the
+      original order — same <code>order_id</code>, same
+      <code>created_at</code>. See
+      <a href="/docs/idempotency-keys">/docs/idempotency-keys</a>.
+    </p>
+
+    <h2>List + drill down</h2>
+    <pre><code>{`const { orders } = await client.cryptoOrders.list();
+for (const o of orders) {
+  console.log(o.order_id, o.status, o.expires_at);
+}
+
+// V-666.BR — narrow to a single status server-side.
+const { orders: paid } = await client.cryptoOrders.list({
+  status: 'paid',
+  limit: 25,
+});
+
+const single = await client.cryptoOrders.get('ord_abc123def456');
+console.log(single.events); // V-666.AU timeline`}</code></pre>
+    <p>
+      <code>status</code> accepts <code>pending</code>,
+      <code>confirming</code>, <code>paid</code>, <code>failed</code>,
+      <code>partial</code>, or <code>cancelled</code>. Unknown values
+      return a 400 from the server. <code>limit</code> is clamped to
+      <code>1..=100</code>; the default is 50.
+    </p>
+
+    <h2>Pagination</h2>
+    <pre><code>{`// V-666.BU — explicit cursor paging.
+let cursor: string | undefined;
+while (true) {
+  const page = await client.cryptoOrders.list({ status: 'paid', cursor });
+  for (const o of page.orders) console.log(o.order_id);
+  if (!page.next_cursor) break;
+  cursor = page.next_cursor;
+}
+
+// Or use the async iterator helper:
+for await (const o of client.cryptoOrders.listAll({ status: 'paid' })) {
+  console.log(o.order_id);
+}`}</code></pre>
+
+    <h2>Update the customer note</h2>
+    <pre><code>{`await client.cryptoOrders.updateNote('ord_abc', {
+  customer_note: 'PO-9921',
+});`}</code></pre>
+
+    <h2>Cancel a pending order</h2>
+    <pre><code>{`try {
+  await client.cryptoOrders.cancel('ord_abc');
+} catch (err) {
+  // 409: order has moved past pending; cancellation is no longer self-service.
+  // 404: order doesn't exist or belongs to another account.
+}`}</code></pre>
+    <p>
+      Crypto payments are non-refundable. Cancelling a pending
+      order halts its pay window; cancelling a paid order is not
+      supported — past billing periods stay billed. See
+      <a href="/legal/refunds">/legal/refunds</a>.
+    </p>
+
+    <h2>Fetch the receipt</h2>
+    <p>
+      The JSON receipt is the canonical machine-readable artefact.
+      For PDF / text variants, hit the corresponding REST endpoint
+      directly:
+    </p>
+    <pre><code>{`const receipt = await client.cryptoOrders.receipt('ord_abc');
+console.log(receipt.paid_at, receipt.price_cents);`}</code></pre>
+
+    <h2>Listening for settlement</h2>
+    <p>
+      <code>crypto.order.paid</code> / <code>crypto.order.failed</code>
+      events are emitted server-side but not yet subscribable — see
+      <a href="/docs/webhooks-crypto-events">/docs/webhooks-crypto-events</a>
+      for the roadmap status. Until they graduate, poll
+      <code>client.cryptoOrders.get(order_id)</code> until
+      <code>status</code> transitions to <code>paid</code> or
+      <code>failed</code>. The SDK also ships
+      <code>verifyWebhookSignature</code> for the (already-live)
+      session + quota + api-key webhook event types.
+    </p>
+
+    <h2>End-to-end example</h2>
+    <p>
+      A runnable end-to-end walkthrough — quote, idempotent checkout,
+      update note, fetch receipt, cursor-iterate paid orders — ships
+      with the SDK as <code>packages/sdk-typescript/examples/crypto-checkout.ts</code>.
+      Run with <code>DRIFTSTACK_API_KEY=... npx tsx examples/crypto-checkout.ts</code>.
+    </p>
+
+    <h2>Related</h2>
+    <ul>
+      <li><a href="/docs/sdk-typescript">TypeScript SDK quickstart</a></li>
+      <li><a href="/docs/sdk-python-crypto-orders">Python SDK crypto orders</a></li>
+      <li><a href="/docs/sdk-go-crypto-orders">Go SDK crypto orders</a></li>
+      <li><a href="/docs/billing-crypto-integration-guide">Integration guide</a></li>
+      <li><a href="/docs/idempotency-keys">Idempotency keys</a></li>
+      <li><a href="/docs/webhooks-crypto-events">Crypto webhook events</a></li>
+    </ul>
+  </main>
+</BaseLayout>

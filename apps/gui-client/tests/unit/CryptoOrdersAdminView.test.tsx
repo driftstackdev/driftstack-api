@@ -1,5 +1,4 @@
 // V-534.AG — unit tests for CryptoOrdersAdminView.
-// V-534.AK — extended for refund-request action button + confirmation modal.
 // V-534.AL — extended for internal-note editor.
 // V-534.AM — extended for row-click → detail-drawer wiring.
 
@@ -143,223 +142,6 @@ describe('V-534.AG CryptoOrdersAdminView', () => {
     render(<CryptoOrdersAdminView />);
     await waitFor(() => {
       expect(screen.getByText(/No orders match/i)).toBeTruthy();
-    });
-  });
-});
-
-describe('V-534.AK CryptoOrdersAdminView — refund-request action', () => {
-  it('shows the "Request refund" button only for paid orders without an outstanding refund', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () =>
-            Promise.resolve({
-              orders: [
-                makeOrder({ order_id: 'ord_paid', status: 'paid' }),
-                makeOrder({ order_id: 'ord_pending', status: 'pending' }),
-              ],
-            }),
-        } as unknown as Response),
-      ),
-    );
-    render(<CryptoOrdersAdminView />);
-    await waitFor(() => {
-      expect(screen.getByText('ord_paid')).toBeTruthy();
-    });
-    const buttons = screen.getAllByRole('button', { name: /Request refund/i });
-    expect(buttons).toHaveLength(1);
-  });
-
-  it('shows the "Refund pending" pill + Clear button when refund_requested_at is set', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () =>
-            Promise.resolve({
-              orders: [
-                makeOrder({
-                  order_id: 'ord_refunding',
-                  status: 'paid',
-                  refund_requested_at: '2026-05-11T10:00:00.000Z',
-                  refund_reason: 'duplicate payment',
-                }),
-              ],
-            }),
-        } as unknown as Response),
-      ),
-    );
-    render(<CryptoOrdersAdminView />);
-    await waitFor(() => {
-      expect(screen.getByText(/Refund pending/i)).toBeTruthy();
-    });
-    expect(
-      screen.getByRole('button', { name: /Cancel refund request for ord_refunding/i }),
-    ).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Request refund/i })).toBeNull();
-  });
-
-  it('clicking "Request refund" opens the confirmation modal with the order_id', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () =>
-            Promise.resolve({
-              orders: [makeOrder({ order_id: 'ord_paid', status: 'paid' })],
-            }),
-        } as unknown as Response),
-      ),
-    );
-    render(<CryptoOrdersAdminView />);
-    const btn = await waitFor(() => screen.getByRole('button', { name: /Request refund/i }));
-    fireEvent.click(btn);
-    const dialog = screen.getByRole('dialog', { name: /Confirm refund request/i });
-    expect(dialog).toBeTruthy();
-    expect(dialog.textContent).toContain('ord_paid');
-  });
-
-  it('Confirm refund button is disabled until a reason is entered', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () =>
-            Promise.resolve({
-              orders: [makeOrder({ order_id: 'ord_paid', status: 'paid' })],
-            }),
-        } as unknown as Response),
-      ),
-    );
-    render(<CryptoOrdersAdminView />);
-    const btn = await waitFor(() => screen.getByRole('button', { name: /Request refund/i }));
-    fireEvent.click(btn);
-    const confirm = screen.getByRole('button', { name: /Confirm refund/i });
-    expect((confirm as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText(/Reason/i), {
-      target: { value: 'Customer charged in error' },
-    });
-    expect((confirm as HTMLButtonElement).disabled).toBe(false);
-  });
-
-  it('Cancel button closes the modal without firing a request', async () => {
-    const fetchMock = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
-            orders: [makeOrder({ order_id: 'ord_paid', status: 'paid' })],
-          }),
-      } as unknown as Response),
-    );
-    vi.stubGlobal('fetch', fetchMock);
-    render(<CryptoOrdersAdminView />);
-    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Request refund/i })));
-    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
-    fireEvent.click(cancelBtn);
-    expect(screen.queryByRole('dialog')).toBeNull();
-    const postCalls = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST');
-    expect(postCalls).toHaveLength(0);
-  });
-
-  it('Confirm refund POSTs to /request-refund with the reason', async () => {
-    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-      const method = init?.method ?? 'GET';
-      if (method === 'POST' && url.endsWith('/request-refund')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () =>
-            Promise.resolve(
-              makeOrder({
-                order_id: 'ord_paid',
-                status: 'paid',
-                refund_requested_at: '2026-05-11T10:00:00.000Z',
-                refund_reason: 'Duplicate payment',
-              }),
-            ),
-        } as unknown as Response);
-      }
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
-            orders: [makeOrder({ order_id: 'ord_paid', status: 'paid' })],
-          }),
-      } as unknown as Response);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    render(<CryptoOrdersAdminView />);
-    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Request refund/i })));
-    fireEvent.change(screen.getByLabelText(/Reason/i), {
-      target: { value: 'Duplicate payment' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /Confirm refund/i }));
-    await waitFor(() => {
-      const refundCalls = fetchMock.mock.calls.filter(
-        ([u, init]) =>
-          typeof u === 'string' && u.endsWith('/request-refund') && init?.method === 'POST',
-      );
-      expect(refundCalls.length).toBeGreaterThan(0);
-      const body = JSON.parse((refundCalls[0]?.[1] as RequestInit).body as string) as {
-        reason: string;
-      };
-      expect(body.reason).toBe('Duplicate payment');
-    });
-  });
-
-  it('Clear refund fires POST /cancel-refund-request', async () => {
-    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-      const method = init?.method ?? 'GET';
-      if (method === 'POST' && url.endsWith('/cancel-refund-request')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: () => Promise.resolve(makeOrder({ order_id: 'ord_r', status: 'paid' })),
-        } as unknown as Response);
-      }
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () =>
-          Promise.resolve({
-            orders: [
-              makeOrder({
-                order_id: 'ord_r',
-                status: 'paid',
-                refund_requested_at: '2026-05-11T10:00:00.000Z',
-                refund_reason: 'something',
-              }),
-            ],
-          }),
-      } as unknown as Response);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    render(<CryptoOrdersAdminView />);
-    const btn = await waitFor(() =>
-      screen.getByRole('button', { name: /Cancel refund request for ord_r/i }),
-    );
-    fireEvent.click(btn);
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(
-          ([u, init]) =>
-            typeof u === 'string' &&
-            u.endsWith('/cancel-refund-request') &&
-            init?.method === 'POST',
-        ),
-      ).toBe(true);
     });
   });
 });
@@ -546,6 +328,50 @@ describe('V-534.AL CryptoOrdersAdminView — internal note editor', () => {
     expect(screen.queryByRole('dialog', { name: /Edit internal note/i })).toBeNull();
     const patchCalls = fetchMock.mock.calls.filter(([, init]) => init?.method === 'PATCH');
     expect(patchCalls).toHaveLength(0);
+  });
+});
+
+describe('V-534.BL CryptoOrdersAdminView — internal-note modal a11y', () => {
+  it('pressing Escape closes the note modal', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ orders: [makeOrder({ order_id: 'ord_esc' })] }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersAdminView />);
+    fireEvent.click(
+      await waitFor(() => screen.getByRole('button', { name: /Edit internal note for ord_esc/i })),
+    );
+    expect(screen.getByRole('dialog', { name: /Edit internal note/i })).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: /Edit internal note/i })).toBeNull();
+  });
+
+  it('opens with the textarea focused', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ orders: [makeOrder({ order_id: 'ord_focus' })] }),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrdersAdminView />);
+    fireEvent.click(
+      await waitFor(() =>
+        screen.getByRole('button', { name: /Edit internal note for ord_focus/i }),
+      ),
+    );
+    const dialog = screen.getByRole('dialog', { name: /Edit internal note/i });
+    const textarea = dialog.querySelector('textarea');
+    expect(document.activeElement).toBe(textarea);
   });
 });
 

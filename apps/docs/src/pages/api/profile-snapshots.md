@@ -47,8 +47,8 @@ Response (201):
 
 ```json
 {
-  "id": "snap_<uuid>",
-  "profile_id": "profile_<uuid>",
+  "id": "psnap_<uuid>",
+  "profile_id": "prof_<uuid>",
   "name": "post-login-known-good",
   "captured_at": "2026-05-10T18:00:00Z",
   "size_bytes": 482133
@@ -76,8 +76,8 @@ Response (200):
 {
   "data": [
     {
-      "id": "snap_<uuid>",
-      "profile_id": "profile_<uuid>",
+      "id": "psnap_<uuid>",
+      "profile_id": "prof_<uuid>",
       "name": "post-login-known-good",
       "captured_at": "2026-05-10T18:00:00Z",
       "size_bytes": 482133
@@ -106,8 +106,8 @@ Response (200):
 {
   "data": [
     {
-      "id": "snap_<uuid>",
-      "profile_id": "profile_<uuid>",
+      "id": "psnap_<uuid>",
+      "profile_id": "prof_<uuid>",
       "profile_name": "main-account",
       "name": "post-login-known-good",
       "captured_at": "2026-05-10T18:00:00Z",
@@ -135,8 +135,8 @@ Response (200):
 
 ```json
 {
-  "id": "snap_<uuid>",
-  "profile_id": "profile_<uuid>",
+  "id": "psnap_<uuid>",
+  "profile_id": "prof_<uuid>",
   "name": "post-login-known-good",
   "captured_at": "2026-05-10T18:00:00Z",
   "size_bytes": 482133
@@ -165,7 +165,7 @@ Response (201):
 
 ```json
 {
-  "id": "profile_<uuid>",
+  "id": "prof_<uuid>",
   "name": "main-account-rolled-back",
   "archetype": "iphone16pro_ios18_7_safari26_4",
   "description": null,

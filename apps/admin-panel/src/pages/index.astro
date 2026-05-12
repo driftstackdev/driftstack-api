@@ -15,7 +15,8 @@ const activeAccounts = MOCK_ACCOUNTS.filter((a) => a.status === 'active');
 const suspendedAccounts = MOCK_ACCOUNTS.filter((a) => a.status === 'suspended');
 const recentAudits = MOCK_AUDIT_LOG.slice(0, 5);
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <AdminLayout title="Overview">

@@ -4,6 +4,7 @@
 // only — requires the `driftstack_internal_admin` scope.
 
 import { useCallback, useEffect, useState } from 'react';
+import { readApiErrorMessage } from './api-errors';
 import { useSettings } from './SettingsContext';
 
 export type AdminCryptoStatsStatus =
@@ -20,10 +21,10 @@ export interface AdminCryptoStatsData {
   paid_revenue_cents: Record<string, number>;
   avg_time_to_paid_ms: number | null;
   paid_sample: number;
-  /** V-666.AB — count of paid orders with an outstanding refund intent. */
-  refund_pending_count?: number;
-  /** V-666.AB — price_cents sum by currency across refund-pending orders. */
-  refund_pending_cents?: Record<string, number>;
+  /** V-666.AE — paid revenue keyed by product → currency → cents. */
+  paid_revenue_by_product?: Record<string, Record<string, number>>;
+  /** V-666.AE — paid-order count keyed by product. */
+  paid_count_by_product?: Record<string, number>;
   truncated: boolean;
   scanned: number;
 }
@@ -66,7 +67,7 @@ export function useAdminCryptoStats(opts: UseAdminCryptoStatsOpts = {}): UseAdmi
         },
       });
       if (!res.ok) {
-        setState({ kind: 'error', message: `HTTP ${res.status.toString()}` });
+        setState({ kind: 'error', message: await readApiErrorMessage(res) });
         return;
       }
       const body = (await res.json()) as AdminCryptoStatsData;

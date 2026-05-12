@@ -7,7 +7,8 @@ import { LOCKED_ARCHETYPE_DISPLAY_LABEL } from '@driftstack/api-types';
 // "view your first capture" CTA) lands in V-184b draft.
 // V-501 — disabled-while-pending guard + clearer status copy.
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="First session" withSidebar={false}>

@@ -40,7 +40,7 @@ pnpm add @driftstack/sdk`}</code></pre>
     <pre><code>{`import { Driftstack } from '@driftstack/sdk';
 
 const client = new Driftstack({
-  apiKey: process.env.DRIFTSTACK_KEY!,
+  apiKey: process.env.DRIFTSTACK_API_KEY!,
   // baseUrl defaults to https://api.driftstack.dev; override for
   // self-hosted deployments or staging.
 });`}</code></pre>
@@ -52,64 +52,79 @@ const client = new Driftstack({
     </p>
 
     <h2>3. Start a session</h2>
-    <pre><code>{`const { session } = await client.sessions.start({
-  target_url: 'https://example.com',
-  profile_archetype: 'default',
+    <pre><code>{`const session = await client.sessions.create({
+  archetype: 'default',
+  purpose: 'production_customer',
+  label: 'demo',
 });
 
-console.log(session.id, session.status, session.live_url);`}</code></pre>
+console.log(session.id, session.status, session.archetype);`}</code></pre>
 
     <p>
-      The return type is fully discriminated — TypeScript narrows
-      <code>session.status</code> through the lifecycle (
-      <code>queued</code> → <code>running</code> → <code>completed</code>
-      / <code>failed</code>).
+      The return is a flat <code>Session</code> object (no envelope).
+      TypeScript narrows <code>session.status</code> through the
+      lifecycle (<code>creating</code> → <code>ready</code> →
+      <code>busy</code> → <code>destroyed</code> /
+      <code>errored</code>). The session creation call does NOT take
+      a target URL — drive the session to a URL with
+      <code>client.sessions.navigate()</code>:
+    </p>
+    <pre><code>{`await client.sessions.navigate(session.id, {
+  url: 'https://example.com',
+});`}</code></pre>
+
+    <h2>4. Poll the session until it terminates</h2>
+    <p>
+      There is no built-in <code>waitUntil</code> helper — drive the
+      lifecycle with the methods that fit your workflow
+      (<code>navigate</code>, <code>interact</code>,
+      <code>wait</code>, <code>capture</code>), then either call
+      <code>destroy</code> when you're done or poll
+      <code>list</code> / fetch by id to observe terminal status:
+    </p>
+    <pre><code>{`// Drive the session.
+await client.sessions.navigate(session.id, { url: 'https://example.com' });
+await client.sessions.wait(session.id, { kind: 'time', duration_ms: 1000 });
+const png = await client.sessions.capture(session.id, { kind: 'screenshot' });
+console.log('Captured', png.byte_size, 'bytes');
+
+// Clean up — destroy is idempotent.
+await client.sessions.destroy(session.id);`}</code></pre>
+    <p>
+      For long-running batch workloads, prefer webhooks
+      (see <a href="/docs/webhooks">webhooks</a>) so you don't pay
+      for idle polling.
     </p>
 
-    <h2>4. Wait for the session to finish</h2>
-    <pre><code>{`const done = await client.sessions.waitUntilTerminal(session.id, {
-  timeoutMs: 120_000,
-});
-
-if (done.status === 'completed') {
-  const { playback_url } = await client.recordings.get(done.id);
-  console.log('Recording:', playback_url);
+    <h2>5. Paginate over historical sessions</h2>
+    <pre><code>{`for await (const s of client.sessions.iterate({ limit: 50 })) {
+  if (s.status === 'destroyed') console.log(s.id);
 }`}</code></pre>
-
     <p>
-      <code>waitUntilTerminal</code> polls every 2 seconds with
-      exponential backoff up to 10s. For production workloads, prefer
-      webhooks (see <a href="/docs/webhooks">webhooks</a>) so you're
-      not paying for idle polling.
-    </p>
-
-    <h2>5. Stream live events</h2>
-    <pre><code>{`for await (const event of client.sessions.stream(session.id)) {
-  if (event.type === 'navigation') {
-    console.log('navigated to', event.url);
-  }
-}`}</code></pre>
-
-    <p>
-      The async-iterator is backed by Server-Sent Events. It
-      reconnects automatically with exponential backoff on transient
-      failures and closes when the session terminates.
+      <code>iterate</code> walks cursor pages transparently and
+      stops when the server returns
+      <code>next_cursor: null</code>. The single-page form is
+      <code>client.sessions.list({`{ limit, cursor }`})</code>.
     </p>
 
     <h2>Error handling</h2>
     <p>
       Every SDK method throws a typed <code>DriftstackError</code> on
-      non-2xx responses. The error carries <code>status</code>,
-      <code>code</code>, and <code>detail</code> so you can branch on
-      structured causes:
+      non-2xx responses. The error carries <code>kind</code>
+      (discriminator, narrow with <code>===</code>),
+      <code>status</code>, <code>type</code> (the RFC 7807 URI),
+      <code>detail</code>, and any extension fields from the problem
+      response. Switch on <code>kind</code> for clean type-narrowing:
     </p>
     <pre><code>{`import { DriftstackError } from '@driftstack/sdk';
 
 try {
-  await client.sessions.start({ target_url: 'not-a-url' });
+  await client.sessions.create({ archetype: 'definitely-not-a-real-archetype' as never });
 } catch (err) {
-  if (err instanceof DriftstackError && err.code === 'invalid_request') {
-    // user-facing validation error
+  if (err instanceof DriftstackError && err.kind === 'validation') {
+    // ValidationError subclass — \`err.issues\` lists per-field problems
+  } else if (err instanceof DriftstackError && err.kind === 'rate_limited') {
+    // RateLimitedError subclass — \`err.retryAfterSeconds\` is set
   } else {
     throw err;
   }
@@ -126,11 +141,13 @@ try {
     <h2>Where to go next</h2>
     <ul>
       <li><a href="/api-reference">Full API reference</a> — every endpoint, every field.</li>
+      <li><a href="/docs/sdk-typescript-crypto-orders">SDK — crypto orders</a>
+        — typed examples for the V-666 surface.</li>
       <li><a href="/docs/webhooks">Webhooks</a> — avoid polling in production.</li>
       <li><a href="/docs/cost-monitoring">Cost monitoring</a> — set
         alerts before the bill surprises you.</li>
-      <li><a href="/docs/error-codes">Error codes</a> — the structured
-        codes <code>DriftstackError</code> exposes.</li>
+      <li><a href="/docs/error-codes">Error codes</a> — the stable
+        RFC 7807 type URIs the SDK's typed errors carry.</li>
     </ul>
 
     <h2>Need help?</h2>

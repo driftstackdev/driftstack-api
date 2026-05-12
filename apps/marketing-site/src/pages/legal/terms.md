@@ -10,10 +10,10 @@ description: The master commercial agreement between Driftstack B.V. and Custome
 
 These Terms of Service ("**ToS**") govern Customer's access to and
 use of the Service offered by Driftstack. Capitalised terms are
-defined in [`definitions.md`](definitions.md). The
-[Privacy Policy](privacy-policy.md), the
+defined in Section 2 (Defined terms) below. The
+[Privacy Policy](privacy.md), the
 [Data Processing Agreement](dpa.md), and the
-[Acceptable Use Policy](acceptable-use-policy.md) are incorporated
+[Acceptable Use Policy](aup.md) are incorporated
 by reference and form part of the agreement between the Parties.
 
 The Service is provided to **business customers** only. The Service
@@ -35,9 +35,9 @@ takes effect on the Effective Date of the most recent Acceptance.
 
 ## 2. Defined terms
 
-Capitalised terms in this ToS have the meanings set out in
-[`definitions.md`](definitions.md). If a term is capitalised here but
-not defined in `definitions.md`, the term carries its plain English
+Capitalised terms in this ToS have the meanings set out in this
+Section 2. If a term is capitalised elsewhere in these Terms but
+not defined in this Section, the term carries its plain English
 meaning.
 
 ## 3. The Service
@@ -97,7 +97,7 @@ interacts with through the Service. The Service is general-purpose
 infrastructure; Driftstack does not pre-clear specific use cases.
 
 5.2 **AUP compliance.** Customer complies with the
-[Acceptable Use Policy](acceptable-use-policy.md), which is part of
+[Acceptable Use Policy](aup.md), which is part of
 this agreement.
 
 5.3 **Customer-Connected Services.** The Service relies on
@@ -262,6 +262,17 @@ Resolution).
 mandated by law. Driftstack may, at its discretion, issue pro-rated
 refunds for service failures attributable to Driftstack.
 
+8.7.1 **Crypto payments are non-refundable.** Subscriptions paid via
+crypto (NowPayments) are non-refundable in all cases, including but
+not limited to buyer's remorse, accidental over-payment, and price
+movement between order and any potential refund. Customer may cancel
+the Subscription at any time — cancellation stops future billing
+periods — but the current billing period is not refunded.
+Driftstack's sole obligation under this clause is to honour the
+service entitlement through the end of the current paid period.
+Card refund mechanics (8.7, above) do not apply to crypto-paid
+Subscriptions.
+
 8.8 **Tier changes.** Customer may upgrade or downgrade tiers at any
 time through the Service. Upgrades take effect immediately and are
 pro-rated against the current billing cycle. Downgrades take effect
@@ -294,7 +305,7 @@ obligations.
 ## 10. Data + privacy
 
 10.1 **Privacy Policy.** Driftstack's processing of Personal Data as
-**Controller** is governed by the [Privacy Policy](privacy-policy.md).
+**Controller** is governed by the [Privacy Policy](privacy.md).
 
 10.2 **DPA.** Driftstack's processing of Personal Data as
 **Processor** on Customer's behalf is governed by the

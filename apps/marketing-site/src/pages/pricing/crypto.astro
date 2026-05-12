@@ -13,14 +13,37 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // customer actually experiences today (not the future state) so the
 // page doesn't promise a flow we can't deliver.
 
-const SUPPORTED_TIERS = [
-  { id: 'trial_pack', label: 'Trial pack ($2.99)' },
-  { id: 'solo_manual', label: 'Solo Manual ($25/mo)' },
-  { id: 'team_manual', label: 'Team Manual ($80/mo)' },
-  { id: 'agency_manual', label: 'Agency Manual ($300/mo)' },
-  { id: 'api_starter', label: 'API Starter ($50/mo)' },
-  { id: 'api_builder', label: 'API Builder ($250/mo)' },
+// W247.C — labels derived from API_TIERS (single source of truth in
+// marketing-site/src/data/pricing.ts). Hard-coded prices here drifted
+// against the canonical table; deriving keeps both layers in lockstep.
+import { API_TIERS } from '../../data/pricing.ts';
+
+function fmtPriceLabel(monthlyUsd: number | null, oneTime?: boolean): string {
+  if (monthlyUsd === null) return 'custom';
+  const price = monthlyUsd % 1 === 0
+    ? `$${monthlyUsd.toLocaleString('en-US')}`
+    : `$${monthlyUsd.toFixed(2)}`;
+  return oneTime ? `${price}, one-time` : `${price}/mo`;
+}
+
+const CRYPTO_PAYABLE_TIER_IDS = [
+  'trial_pack',
+  'solo_manual',
+  'team_manual',
+  'agency_manual',
+  'api_starter',
+  'api_builder',
+  'api_scale',
 ];
+
+const SUPPORTED_TIERS = CRYPTO_PAYABLE_TIER_IDS.map((id) => {
+  const t = API_TIERS.find((row) => row.id === id);
+  if (!t) throw new Error(`Crypto-supported tier not found in API_TIERS: ${id}`);
+  return {
+    id: t.id,
+    label: `${t.name} (${fmtPriceLabel(t.monthlyUsd, t.oneTime)})`,
+  };
+});
 
 const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'USDC (Polygon)'];
 ---
@@ -51,9 +74,9 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
     </ul>
     <p class="text-sm text-slate-500">
       The price you see at checkout is quoted in USD; the equivalent
-      crypto amount is locked in for 20 minutes from the quote. If you
-      pay outside that window, the order auto-cancels and you can mint
-      a new one.
+      crypto amount is locked in for 1 hour from order creation. If
+      you pay outside that window, the order auto-cancels and you can
+      mint a new one.
     </p>
 
     <h2>Confirmation timing</h2>
@@ -83,27 +106,44 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
         to the new tier.</li>
     </ol>
 
+    <p class="rounded-md border border-status-warning/40 bg-status-warning/15 p-3 text-sm">
+      <strong>Crypto payments are non-refundable.</strong> You may
+      cancel anytime — cancellation stops future billing periods —
+      but the current billing period is not refunded. See
+      <a href="/legal/refunds">refund policy</a> for the full rules.
+    </p>
+
     <h2>If something goes wrong</h2>
     <ul>
       <li><strong>Underpayment</strong> — if the transfer is short of
         the quoted amount, the order moves to <code>partial</code>;
-        support follows up within one business day to either refund or
-        accept a top-up.</li>
+        support follows up within one business day to confirm a
+        top-up. Crypto payments are non-refundable, so partial
+        underpayments are resolved by topping up rather than by
+        sending the customer's existing crypto back.</li>
       <li><strong>Late payment</strong> — transfers received after the
-        20-minute quote window land on an expired order. Support
-        manually reconciles these; expect a one-business-day delay.</li>
+        1-hour pay-window land on an expired order. Support manually
+        reconciles these; expect a one-business-day delay.</li>
       <li><strong>Wrong currency</strong> — sending an unsupported
         asset to the deposit address means the funds are not recovered
         automatically. Email <a href="mailto:support@driftstack.dev">support@driftstack.dev</a> with the
         transaction hash; we'll do what we can on a best-effort basis.</li>
     </ul>
 
-    <h2>Refunds</h2>
+    <h2>Refunds + cancellation</h2>
     <p>
-      Crypto refunds are processed in the same asset we received,
-      back to a forwarding address you supply. Net of network fees.
-      Refund eligibility follows the same terms as our card refunds
-      (see <a href="/legal/refunds">refund policy</a>).
+      <strong>Crypto payments are non-refundable.</strong> Once a
+      crypto payment settles on-chain, it is committed for the
+      billing period it covers. You can cancel your subscription at
+      any time — cancellation stops the next billing period's
+      payment request — but the current period is not pro-rated or
+      refunded. This is the standard B2B SaaS posture; the rationale
+      is in <a href="/legal/refunds">/legal/refunds</a>.
+    </p>
+    <p>
+      If you need a refund mechanism, our card-billing path (Stripe)
+      is the right channel; card refunds follow the standard rules
+      in the refund policy.
     </p>
 
     <h2>Tax + accounting</h2>

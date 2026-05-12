@@ -2,6 +2,13 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
 // V-701 — incident response + customer-facing policy docs.
+//
+// Pinned by tests/unit/incident-policy-doc-parity.test.ts. Major fixes
+// vs. prior revision: removed fictional `incident_subscriptions` account
+// field, removed claim that `incident.*` are subscribable webhook
+// events (they aren't — they're admin-audit / SSE-broadcast events),
+// fixed /v1/status/sla response shape (camelCase, `data:` envelope),
+// removed fictional `?window_days` query param.
 ---
 
 <BaseLayout title="Incidents & SLA — Driftstack" description="What happens during a Driftstack incident: status page, severity ladder, customer comms, and SLA credit policy.">
@@ -17,18 +24,14 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>Status page</h2>
     <p>
       <strong><a href="https://status.driftstack.dev">status.driftstack.dev</a></strong>
-      is the single source of truth during an incident. It pulls
-      from the same database the API uses to mark incidents, with
-      a CF Pages fallback that serves a cached snapshot if the API
-      itself is down (so the status page stays current even during
-      our worst-case outages).
-    </p>
-    <p>
-      Subscribe via the form on the page to get email updates the
-      moment a new incident is filed or resolved. Slack /
-      PagerDuty webhooks are available on Team Manual + above —
-      configure under <code>GET /v1/account/me</code> →
-      <code>incident_subscriptions</code>.
+      is the single source of truth during an incident. The same
+      data the status page renders is also published via
+      <code>GET /v1/status</code> (overall + per-component status)
+      and <code>GET /v1/status/incidents</code> (recent / live
+      incidents). To get notified by email when an incident is
+      filed or resolved, subscribe via
+      <code>POST /v1/status/subscribe</code> — see
+      <a href="/docs/status-subscriptions">/docs/status-subscriptions</a>.
     </p>
 
     <h2>Severity ladder</h2>
@@ -52,7 +55,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         </tr>
         <tr>
           <td><strong>Minor</strong></td>
-          <td>Single non-critical surface (recordings playback, GUI dashboard) degraded.</td>
+          <td>Single non-critical surface (dashboard, an SDK build pipeline) degraded.</td>
           <td>≤ 60 min</td>
           <td>At resolution.</td>
         </tr>
@@ -87,113 +90,78 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <ol>
       <li><strong>Status page entry filed</strong> with severity +
         title + affected components.</li>
-      <li><strong>Email + webhook fan-out</strong> to subscribers.
-        Webhook event type is <code>incident.created</code> with the
-        same shape as <code>GET /v1/status/incidents</code>.</li>
+      <li><strong>Email fan-out</strong> to confirmed
+        <code>/v1/status/subscribe</code> subscribers.</li>
       <li><strong>Progress updates</strong> on the cadence above.
-        Each update fires <code>incident.updated</code>.</li>
-      <li><strong>Resolution</strong> fires <code>incident.resolved</code>
-        + a final email to subscribers carrying root-cause-summary
-        + remediation steps.</li>
+        Each update appends to the incident's timeline (visible via
+        <code>GET /v1/status/incidents</code>).</li>
+      <li><strong>Resolution</strong> marks the incident resolved and
+        triggers a final email to subscribers with a root-cause
+        summary + remediation steps.</li>
       <li><strong>Postmortem</strong> for Critical / Major incidents
-        published within 7 business days at
-        <a href="/legal/postmortems">/legal/postmortems</a>. Minor
+        published within 7 business days on the
+        <a href="https://status.driftstack.dev">public status page</a>
+        as a permanent entry under the resolved incident. Minor
         incidents get an inline summary on the resolved status entry.</li>
     </ol>
+    <p>
+      <strong>Note:</strong> <code>incident.created</code> /
+      <code>incident.updated</code> / <code>incident.resolved</code>
+      are admin-audit / internal SSE event types — they are not yet
+      in <code>SubscribableWebhookEventTypeSchema</code>, so they
+      can't be the target of a <code>POST /v1/webhooks</code>
+      subscription. Email subscription is the customer-facing
+      notification path today.
+    </p>
 
     <h2>SLA + credit policy</h2>
     <p>
       Driftstack's SLA is on the <strong>API control plane</strong>
-      (session create + lifecycle endpoints). Recordings, dashboard,
-      and SDK distribution are best-effort.
+      (session create + lifecycle endpoints). The dashboard, SDK
+      distribution, and any features marked roadmap in
+      <a href="/docs/api-versioning">/docs/api-versioning</a> are
+      best-effort.
     </p>
-    <table>
-      <thead>
-        <tr><th>Tier</th><th>Monthly SLA</th><th>Credit policy</th></tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Trial Pack</td>
-          <td>None</td>
-          <td>N/A</td>
-        </tr>
-        <tr>
-          <td>Solo Manual / API Starter</td>
-          <td>99.5%</td>
-          <td>5% credit on next month if missed</td>
-        </tr>
-        <tr>
-          <td>Team Manual / API Builder</td>
-          <td>99.9%</td>
-          <td>10% credit if 99.9% missed; 25% if 99.5% missed</td>
-        </tr>
-        <tr>
-          <td>Agency Manual / API Scale</td>
-          <td>99.95%</td>
-          <td>10% / 25% / 50% bands; auto-applied to invoice</td>
-        </tr>
-        <tr>
-          <td>Enterprise</td>
-          <td>99.99% (custom)</td>
-          <td>Per-contract; can include refund + termination clauses</td>
-        </tr>
-      </tbody>
-    </table>
     <p>
-      Credits are <strong>auto-applied</strong> on the next billing
-      cycle for Stripe customers. Crypto customers receive an
-      equivalent tier credit (extra weeks on the current cycle)
-      — we don't refund in crypto. To dispute the calculated uptime,
-      email <a href="mailto:billing@driftstack.dev">billing@driftstack.dev</a>
-      within 30 days of the missed-SLA month.
+      Tier-by-tier SLA targets, the windowing methodology, the
+      credit bands, and the dispute process all live in
+      <a href="/docs/sla-policy">/docs/sla-policy</a> — that is the
+      authoritative reference. Tier identifiers used there match
+      the <code>AccountTier</code> enum exactly.
     </p>
-
-    <h2>What doesn't count against the SLA</h2>
-    <ul>
-      <li>Scheduled maintenance (announced ≥48h in advance).</li>
-      <li>Customer-side issues (bad API key, exceeded tier
-        concurrency cap, etc.) — those are 4xx responses, not
-        downtime.</li>
-      <li>Force majeure: regional ISP outages, upstream provider
-        failures we can't route around (e.g. a Cloudflare region
-        going dark).</li>
-      <li>Issues caused by customer-provided integrations
-        (NowPayments not reaching us due to your firewall rules).</li>
-    </ul>
 
     <h2>Reading SLA data from the API</h2>
     <pre><code>{`GET /v1/status/sla
-Authorization: Bearer ds_live_…
 
 → {
-  "targets": [
+  "data": [
     {
       "target": "api.driftstack.dev",
-      "uptime_pct": 99.99,
-      "total_probes": 43200,
-      "fail_count": 4,
-      "last_probe_at": "2026-05-11T13:00:00Z",
-      "last_failure_at": "2026-05-09T14:23:00Z",
-      "window_start": "2026-04-11T13:00:00Z",
-      "window_end":   "2026-05-11T13:00:00Z"
+      "uptimePct": 99.99,
+      "totalProbes": 43200,
+      "okCount": 43196,
+      "failCount": 4,
+      "lastProbeAt": "2026-05-11T13:00:00Z",
+      "lastFailureAt": "2026-05-09T14:23:00Z",
+      "windowStart": "2026-04-11T13:00:00Z",
+      "windowEnd": "2026-05-11T13:00:00Z"
     }
   ]
 }`}</code></pre>
     <p>
-      Window default is 30 days; pass <code>?window_days=7</code>
-      to widen / narrow. Per the
-      <a href="/docs/audit-log">audit log docs</a>, every status-page
-      mutation is recorded for compliance traceability.
+      No auth — status surface is public. Window is a fixed rolling
+      30 days. Field names are camelCase (the SLA report serialises
+      its internal model directly).
     </p>
 
     <h2>Postmortems</h2>
     <p>
-      Public postmortems for Critical + Major incidents live at
-      <a href="/legal/postmortems">/legal/postmortems</a>. Each
-      follows the same template: timeline, root cause, what we
-      changed to prevent recurrence. Postmortems are blameless and
-      detailed enough to be useful — we'd rather over-share than
-      under-share.
+      Public postmortems for Critical + Major incidents live on the
+      <a href="https://status.driftstack.dev">public status page</a>,
+      attached to the resolved incident entry. Each follows the same
+      template: timeline, root cause, what we changed to prevent
+      recurrence. Postmortems are blameless and detailed enough to be
+      useful — we'd rather over-share than under-share.
     </p>
 
     <h2>Reporting a problem</h2>
@@ -207,7 +175,17 @@ Authorization: Bearer ds_live_…
         with a session id + timestamp.</li>
       <li><strong>Security:</strong>
         <a href="mailto:security@driftstack.dev">security@driftstack.dev</a>
-        — PGP available on the page.</li>
+        — PGP available on the page. See also
+        <a href="/docs/api-security-headers">/docs/api-security-headers</a>
+        for the response-header reference reviewers ask about.</li>
+    </ul>
+
+    <h2>Related</h2>
+    <ul>
+      <li><a href="/docs/sla-policy">SLA policy (authoritative tier targets + credit bands)</a></li>
+      <li><a href="/docs/status-subscriptions">Status email subscriptions</a></li>
+      <li><a href="/docs/webhooks">Webhook signing + retries (for the events that are subscribable today)</a></li>
+      <li><a href="https://status.driftstack.dev">Status page</a></li>
     </ul>
   </main>
 </BaseLayout>

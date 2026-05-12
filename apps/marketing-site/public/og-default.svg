@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <rect width="1200" height="630" fill="#0f172a"/>
+  <rect x="60" y="60" width="120" height="120" rx="22" fill="#722F37"/>
+  <text x="120" y="143" text-anchor="middle" fill="#ffffff" font-family="Georgia, 'Times New Roman', serif" font-size="78" font-weight="700">D</text>
+  <text x="60" y="280" fill="#f8fafc" font-family="ui-monospace, 'SF Mono', Consolas, monospace" font-size="64" font-weight="600">Driftstack</text>
+  <text x="60" y="360" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="44" font-weight="500">iPhone Safari sessions, on demand.</text>
+  <text x="60" y="420" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="32" font-weight="400">Premium fingerprint fidelity for the device that matters.</text>
+  <text x="60" y="560" fill="#64748b" font-family="ui-monospace, 'SF Mono', Consolas, monospace" font-size="24" font-weight="400">driftstack.dev</text>
+</svg>

@@ -1,0 +1,21 @@
+// V-534.BV — shared helper for surfacing the server's problem+json
+// detail in GUI error states. The Driftstack API returns RFC 7807
+// problem+json bodies on 4xx; without this helper, hooks would
+// surface only "HTTP 400" which is unhelpful.
+
+/**
+ * Best-effort parse a fetch Response's body into a human-readable
+ * error message. Tries problem+json (.detail then .title) first,
+ * falls back to "HTTP <status>" if the body isn't JSON or doesn't
+ * carry either field.
+ */
+export async function readApiErrorMessage(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { detail?: unknown; title?: unknown };
+    if (typeof body.detail === 'string' && body.detail.length > 0) return body.detail;
+    if (typeof body.title === 'string' && body.title.length > 0) return body.title;
+  } catch {
+    /* body wasn't JSON; fall through */
+  }
+  return `HTTP ${res.status.toString()}`;
+}

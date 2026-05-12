@@ -25,26 +25,34 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <ul>
       <li>
         <strong>At rest:</strong> All customer data in Postgres is on
-        encrypted volumes (AES-256). API keys, OAuth client secrets,
-        and MFA seeds are stored as SHA-256 hashes — the plaintext is
-        only ever shown once, at mint time.
+        encrypted volumes (managed by Neon). API key plaintext is
+        <strong>never</strong> stored — keys are hashed with
+        <code>scrypt</code> (logN=15) at mint time. OAuth client
+        secrets are similarly hashed before storage. MFA seeds are
+        AES-256 encrypted with a key from the
+        <code>MFA_ENCRYPTION_KEY</code> env, never written in
+        plaintext.
       </li>
       <li>
         <strong>In transit:</strong> TLS 1.2+ enforced on every
-        public endpoint. HSTS preload-listed for
-        <code>driftstack.dev</code> and subdomains.
+        public endpoint. HSTS is set with
+        <code>max-age=63072000; includeSubDomains; preload</code> —
+        see <a href="/docs/api-security-headers">API security headers</a>
+        for the full set.
       </li>
       <li>
-        <strong>Recordings:</strong> WebM files land in Cloudflare R2
-        with server-side encryption. Playback URLs are presigned and
-        expire in 1 hour; the underlying object is never publicly
-        listable.
+        <strong>Object storage:</strong> Customer-generated artefacts
+        that land in Cloudflare R2 use server-side encryption (S3-SSE);
+        underlying objects are never publicly listable. Session
+        recordings are a roadmap item — see
+        <a href="/docs/recordings">/docs/recordings</a> for status.
       </li>
       <li>
-        <strong>Profile state:</strong> Browser cookies, localStorage,
-        and IndexedDB persisted per profile are encrypted at the
-        application layer with a per-account key (V-312); the raw
-        Postgres column never holds plaintext.
+        <strong>Profile state:</strong> Per-profile browser state
+        (cookies, localStorage, IndexedDB) lives in the WebKit driver
+        layer as per-profile encrypted files on disk (EU host). The
+        Postgres profile row holds metadata only — name, archetype,
+        description.
       </li>
     </ul>
 
@@ -78,43 +86,55 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>Network + infrastructure</h2>
     <ul>
       <li>
-        Stateless API services in three regions (EU, US-East,
-        AP-South). Customer traffic is GeoDNS-routed to the nearest
-        region; cross-region failover is automatic for the API +
-        dashboard surfaces.
-      </li>
-      <li>
-        Postgres clusters per region with continuous WAL archiving to
-        R2; 7-day point-in-time recovery is the default. Enterprise
-        contracts can negotiate longer windows.
-      </li>
-      <li>
-        No customer data is ever copied across regions without a
-        customer-driven request. See
+        Driftstack runs <strong>primarily in the EU</strong> (Hetzner
+        Falkenstein / Nuremberg). Customer-facing API endpoints are
+        served from the EU region today; multi-region routing is on
+        the roadmap. See
         <a href="/docs/data-residency">/docs/data-residency</a> for
-        the residency policy.
+        the region-preference account field and the planned PoP
+        expansion.
       </li>
       <li>
-        WAF + rate-limiting in front of every public endpoint. DDoS
-        absorption is handled at the CDN edge.
+        Postgres is managed by Neon (EU) with point-in-time recovery.
+        Object storage (R2) is geo-replicated across Cloudflare's
+        EU + US regions; presigned access is location-agnostic.
+      </li>
+      <li>
+        Customer data egress to non-EU regions is restricted to the
+        subprocessors enumerated below and on the
+        <a href="/legal/sub-processors">sub-processor list</a>. See
+        <a href="/docs/data-residency">/docs/data-residency</a> for
+        the per-category breakdown.
+      </li>
+      <li>
+        Rate-limiting is enforced application-side via token buckets
+        (per-account + per-IP); see
+        <a href="/docs/rate-limits">/docs/rate-limits</a> for the
+        bucket model. DDoS absorption is handled at the CDN edge.
       </li>
     </ul>
 
     <h2>Browser sandbox</h2>
     <ul>
       <li>
-        Customer-supplied <code>script</code> bodies run in a
-        sandboxed Node context with no filesystem, network, or
-        process API. Only the <code>page</code> automation surface +
-        <code>console</code> are exposed. CPU + wall-clock budgets
-        are enforced per session.
+        Driftstack does not execute customer-supplied script bodies
+        server-side — the API surface is action-based
+        (<code>navigate</code> / <code>interact</code> /
+        <code>wait</code> / <code>capture</code>). Arbitrary script
+        eval is intentionally not exposed.
       </li>
       <li>
-        Each session is one isolated browser instance backed by an
-        ephemeral disk slice; cross-session state never bleeds. The
-        only persistence path is the customer-managed
-        <strong>profile</strong> mechanism (which we encrypt — see
-        above).
+        Each session is one isolated WebKit instance backed by an
+        ephemeral context; cross-session state never bleeds.
+        Persistence between sessions only happens via the
+        customer-managed <strong>profile</strong> mechanism
+        (encrypted browser state on the driver host, EU).
+      </li>
+      <li>
+        Concurrent-session caps per tier act as the primary
+        cost-control + abuse-mitigation primitive; exceeding the cap
+        returns <code>429</code> with the
+        <code>concurrency-limit</code> RFC 7807 type.
       </li>
     </ul>
 

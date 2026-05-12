@@ -35,7 +35,7 @@ uv add driftstack`}</code></pre>
     <pre><code>{`import os
 from driftstack import Driftstack
 
-client = Driftstack(api_key=os.environ["DRIFTSTACK_KEY"])
+client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
 # base_url kwarg overrides the default https://api.driftstack.dev
 # for staging or self-hosted deployments.`}</code></pre>
 
@@ -46,64 +46,82 @@ client = Driftstack(api_key=os.environ["DRIFTSTACK_KEY"])
     </p>
 
     <h2>3. Start a session</h2>
-    <pre><code>{`session = client.sessions.start(
-    target_url="https://example.com",
-    profile_archetype="default",
-)
-print(session.id, session.status, session.live_url)`}</code></pre>
+    <pre><code>{`session = client.sessions.create({
+    "archetype": "default",
+    "purpose": "production_customer",
+    "label": "demo",
+})
+print(session["id"], session["status"], session["archetype"])`}</code></pre>
 
     <p>
-      <code>session</code> is a <code>pydantic</code> model. Access
-      fields by attribute (<code>session.id</code>); the model raises
-      <code>ValidationError</code> if the API ever returns an
-      unexpected shape, so misconfigured deployments surface loudly.
+      The session-create call does not take a target URL. Drive the
+      session to a URL with
+      <code>client.sessions.navigate(session_id, {`{"url": "https://example.com"}`})</code>.
+      Session ids are prefixed <code>ses_</code>.
     </p>
 
-    <h2>4. Wait for the session to finish</h2>
-    <pre><code>{`done = client.sessions.wait_until_terminal(session.id, timeout_seconds=120)
-if done.status == "completed":
-    recording = client.recordings.get(done.id)
-    print("Recording:", recording.playback_url)`}</code></pre>
-
+    <h2>4. Drive and finish the session</h2>
     <p>
-      <code>wait_until_terminal</code> polls every 2 seconds with
-      exponential backoff up to 10s. For production loads, prefer
-      <a href="/docs/webhooks">webhooks</a> over polling.
+      There is no built-in &ldquo;wait until terminal&rdquo; helper —
+      drive the session with the methods that fit your workflow
+      (<code>navigate</code>, <code>interact</code>,
+      <code>wait</code>, <code>capture</code>), then
+      <code>destroy</code> when done. The <code>wait</code> method
+      blocks on a server-side condition (selector, URL, time):
+    </p>
+    <pre><code>{`client.sessions.navigate(session["id"], {"url": "https://example.com"})
+client.sessions.wait(session["id"], {"kind": "time", "duration_ms": 1000})
+shot = client.sessions.capture(session["id"], {"kind": "screenshot"})
+print("captured", shot["byte_size"], "bytes")
+client.sessions.destroy(session["id"])  # idempotent`}</code></pre>
+    <p>
+      For batch workloads where you don't need to drive the session
+      moment-to-moment, prefer <a href="/docs/webhooks">webhooks</a>
+      over polling.
     </p>
 
-    <h2>5. Stream live events (asyncio)</h2>
-    <pre><code>{`import asyncio
+    <h2>5. Paginate over historical sessions</h2>
+    <pre><code>{`# Sync — lazy iterator over cursor pages.
+for s in client.sessions.iterate(limit=50):
+    if s["status"] == "destroyed":
+        print(s["id"])
+
+# Async — same shape with AsyncDriftstack.
+import asyncio
 from driftstack import AsyncDriftstack
 
-async def watch(session_id: str) -> None:
-    async with AsyncDriftstack(api_key=os.environ["DRIFTSTACK_KEY"]) as client:
-        async for event in client.sessions.stream(session_id):
-            if event.type == "navigation":
-                print("navigated to", event.url)
+async def main() -> None:
+    async with AsyncDriftstack(api_key=os.environ["DRIFTSTACK_API_KEY"]) as ac:
+        async for s in ac.sessions.iterate(limit=50):
+            print(s["id"])
 
-asyncio.run(watch("sess_..."))`}</code></pre>
-
+asyncio.run(main())`}</code></pre>
     <p>
-      The async iterator is backed by Server-Sent Events. It
-      auto-reconnects on transient failures and closes cleanly when
-      the session terminates.
+      <code>iterate</code> walks every cursor page and stops on
+      <code>next_cursor: null</code>. The single-page form is
+      <code>client.sessions.list({`{"limit": ..., "cursor": ...}`})</code>.
     </p>
 
     <h2>Error handling</h2>
     <p>
-      Every SDK method raises <code>DriftstackError</code> on non-2xx
-      responses. The exception carries <code>status</code>,
-      <code>code</code>, and <code>detail</code> so you can branch on
-      structured causes:
+      Every SDK method raises a <code>DriftstackError</code> subclass
+      on non-2xx responses. The exception carries
+      <code>status</code>, <code>problem_type</code> (the RFC 7807
+      URI), <code>message</code>, and <code>problem</code> (the full
+      parsed problem dict, e.g. <code>exc.problem["retry_after_seconds"]</code>).
+      Branch on the subclass for clean dispatch:
     </p>
     <pre><code>{`from driftstack import DriftstackError
+from driftstack.errors import RateLimitError, ValidationError
 
 try:
-    client.sessions.start(target_url="not-a-url")
-except DriftstackError as exc:
-    if exc.code == "invalid_request":
-        # user-facing validation error
-        ...
+    client.sessions.create({"archetype": "definitely-not-a-real-archetype"})
+except ValidationError as exc:
+    # per-field issues live on exc.problem
+    ...
+except RateLimitError as exc:
+    # exc.problem["retry_after_seconds"] is set
+    ...
     else:
         raise`}</code></pre>
 
@@ -119,12 +137,13 @@ except DriftstackError as exc:
     <h2>Where to go next</h2>
     <ul>
       <li><a href="/api-reference">Full API reference</a> — every endpoint, every field.</li>
+      <li><a href="/docs/sdk-python-crypto-orders">Crypto orders</a> — V-666 customer-facing crypto-checkout surface.</li>
       <li><a href="/docs/sdk-typescript">TypeScript SDK</a> — same surface, TS-native.</li>
       <li><a href="/docs/webhooks">Webhooks</a> — avoid polling in production.</li>
       <li><a href="/docs/cost-monitoring">Cost monitoring</a> — set
         alerts before the bill surprises you.</li>
-      <li><a href="/docs/error-codes">Error codes</a> — the structured
-        codes <code>DriftstackError</code> exposes.</li>
+      <li><a href="/docs/error-codes">Error codes</a> — the stable
+        RFC 7807 type URIs the SDK's exception subclasses carry.</li>
     </ul>
 
     <h2>Need help?</h2>

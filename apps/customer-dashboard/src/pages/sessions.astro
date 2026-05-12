@@ -45,7 +45,8 @@ const recentClosedSessions = MOCK_SESSIONS.filter(
   (s) => s.status === 'destroyed' || s.status === 'errored',
 );
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
 ---
 

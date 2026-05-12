@@ -22,6 +22,375 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>2026-05</h2>
     <ul>
       <li>
+        <strong>Auth — derivation paths match dashboard routes.</strong>
+        V-079.C: the DASHBOARD_ORIGIN-derived defaults now land on
+        the customer-dashboard's real file-based routes
+        (<code>/verify-email</code>, <code>/reset-password</code>)
+        instead of the previous <code>/auth/&lt;flow&gt;</code> paths
+        that 404'd. Sister fix to V-079.B.
+      </li>
+      <li>
+        <strong>Dashboard — auto-verify on the verify-email page.</strong>
+        V-184a.B: when the user clicks the verification link in
+        their email, the dashboard now reads
+        <code>?token=…</code> from the URL and submits it
+        automatically — previously the user was asked to copy + paste
+        the token they'd just clicked. The form stays mounted as a
+        fallback (token absent / mail client mangled the link).
+      </li>
+      <li>
+        <strong>Server — runtime URLs centralized on DASHBOARD_ORIGIN.</strong>
+        V-057.E: lifecycle emails, team-invite emails, and Stripe
+        success/cancel/portal defaults now all source from
+        <code>config.dashboardOrigin</code>. Removes scattered
+        <code>https://app.driftstack.dev</code> literals + the
+        legacy <code>PUBLIC_DASHBOARD_URL</code> env var.
+      </li>
+      <li>
+        <strong>Docs — Emails reference page.</strong>
+        New <a href="/docs/emails-reference">/docs/emails-reference</a>
+        listing every template Driftstack sends (verify, magic-link,
+        password-reset, payment receipt/failure, status notifications,
+        weekly digest), each tagged transactional vs notification,
+        with the API endpoints for preference management.
+      </li>
+      <li>
+        <strong>Auth — DASHBOARD_ORIGIN now drives email link URLs.</strong>
+        V-079.B: a single <code>DASHBOARD_ORIGIN</code> env var
+        derives the three auth-flow email URLs (verify-email,
+        magic-link, password-reset). Production boot now refuses
+        to start if any URL still resolves to <code>localhost</code>
+        — fixes the case where a real customer received a
+        verification email with a localhost link.
+      </li>
+      <li>
+        <strong>Docs — API security headers reference.</strong>
+        New page at
+        <a href="/docs/api-security-headers">/docs/api-security-headers</a>
+        listing the HSTS, Cache-Control, CORS, CORP, and helmet
+        defaults we set. Useful for security reviewers and
+        integrators auditing the response surface.
+      </li>
+      <li>
+        <strong>GUI — Reset filters button.</strong>
+        Both the customer history view and admin orders view now
+        show a "Reset filters" button when any filter is active.
+        Clicking clears every active filter in one go.
+      </li>
+      <li>
+        <strong>GUI — problem+json detail across all crypto hooks.</strong>
+        Extended the 4xx detail surfacing to all customer +
+        admin-crypto hooks (15 total). Removed the inline detail-
+        parsing code from <code>useCancelOrder</code> +
+        <code>useAdminInternalNote</code> in favour of the shared
+        helper.
+      </li>
+      <li>
+        <strong>GUI — surface server problem+json detail on 4xx.</strong>
+        Customer-facing hooks now read the RFC 7807
+        <code>detail</code> field from 4xx responses, so the user
+        sees the server-provided message instead of just
+        "HTTP 400". Wired into the order list + PDF / .txt receipt
+        download hooks.
+      </li>
+      <li>
+        <strong>API — date-window validation.</strong>
+        An inverted window
+        (<code>created_before &lt;= created_after</code>) now returns
+        400 instead of silently returning an empty list. Catches the
+        common swapped-args bug.
+      </li>
+      <li>
+        <strong>GUI — customer date-range filter UI.</strong>
+        The customer history view now has From/To date inputs next
+        to the existing status dropdown. Wires directly into the
+        server <code>created_after</code> / <code>created_before</code>
+        query params.
+      </li>
+      <li>
+        <strong>GUI — Load more on customer history view.</strong>
+        The customer history view now exposes the server's
+        <code>next_cursor</code> as a "Load more" button at the
+        bottom of the table. Auto-refresh pauses once the user
+        loads beyond the first page so appended rows don't get
+        clobbered.
+      </li>
+      <li>
+        <strong>API — admin CSV export accepts date range.</strong>
+        <code>GET /v1/admin/crypto-orders.csv</code> now respects
+        <code>created_after</code> / <code>created_before</code>.
+        The admin GUI's CSV button automatically picks up the
+        date inputs from the orders view.
+      </li>
+      <li>
+        <strong>GUI — admin date-range filter UI.</strong>
+        The admin orders view now has From/To date inputs next to
+        the existing status / search / payment-id filters. Wires
+        directly into the new server <code>created_after</code> /
+        <code>created_before</code> query params.
+      </li>
+      <li>
+        <strong>API — date-range filter on admin order list.</strong>
+        <code>GET /v1/admin/crypto-orders</code> now accepts the
+        same <code>created_after</code> / <code>created_before</code>
+        ISO 8601 window. Combine with <code>status</code> and
+        <code>cursor</code> to scope reconciliation scans.
+      </li>
+      <li>
+        <strong>API — date-range filter on customer order list.</strong>
+        <code>GET /v1/billing/crypto-orders</code> now accepts
+        <code>?created_after=</code> (inclusive) and
+        <code>?created_before=</code> (exclusive), both ISO 8601
+        timestamps. Composes with <code>status</code> and
+        <code>cursor</code> for backfill scans. The SDK exposes
+        the same fields on <code>list()</code> /
+        <code>listAll()</code>.
+      </li>
+      <li>
+        <strong>Security — <code>/v1/billing/*</code> no-store.</strong>
+        Promotes the no-store header to cover all of
+        <code>/v1/billing/*</code> (billing state, crypto checkout,
+        order envelopes, receipts, etc.). Defense-in-depth so a
+        future endpoint can't accidentally omit it.
+      </li>
+      <li>
+        <strong>Docs — polling vs webhooks for crypto orders.</strong>
+        New page at
+        <a href="/docs/crypto-orders-polling-vs-webhooks">/docs/crypto-orders-polling-vs-webhooks</a>
+        covering when to use each, recommended hybrid pattern, and
+        cadence guidance. Closes a frequently-asked integrator
+        question.
+      </li>
+      <li>
+        <strong>SDK — <code>cryptoOrders.listAll()</code> iterator.</strong>
+        Async generator that walks every page until
+        <code>next_cursor</code> is null. Accepts the same options
+        as <code>list()</code> minus <code>cursor</code>; callers
+        can <code>break</code> early.
+      </li>
+      <li>
+        <strong>API — customer order list cursor pagination.</strong>
+        <code>GET /v1/billing/crypto-orders</code> now returns a
+        <code>next_cursor</code> alongside <code>orders</code> and
+        accepts a <code>?cursor=</code> query param. Mirrors the
+        admin endpoint. The SDK's
+        <code>client.cryptoOrders.list()</code> accepts the new
+        <code>cursor</code> option; loop until
+        <code>response.next_cursor</code> is null.
+      </li>
+      <li>
+        <strong>api-types — <code>ListCryptoOrdersQuery</code> exported.</strong>
+        <code>@driftstack/api-types</code> now ships a Zod schema +
+        type for the customer list query, mirroring the server's
+        accepted parameters. The TypeScript SDK reuses it so its
+        <code>list()</code> options stay in lockstep with the
+        server-side enum.
+      </li>
+      <li>
+        <strong>GUI — auto-refresh history view on pending.</strong>
+        The customer history view now polls
+        <code>GET /v1/billing/crypto-orders</code> every 60s while
+        any visible order is still <code>pending</code>. Polling
+        stops as soon as everything settles so stale tabs don't
+        keep hitting the API.
+      </li>
+      <li>
+        <strong>Security — <code>/v1/admin/*</code> no-store (broadened).</strong>
+        The existing no-store header on
+        <code>/v1/admin/crypto-orders</code> was promoted to an
+        app-level hook covering all <code>/v1/admin/*</code>
+        responses (accounts, audit, sessions, webhooks, etc.).
+        Admin data is operational and caller-private — no caching
+        anywhere.
+      </li>
+      <li>
+        <strong>Security — <code>/v1/account/*</code> no-store.</strong>
+        Every response under <code>/v1/account/*</code> (profile,
+        audit, cost, MFA, sessions, rate-limits) now stamps
+        <code>Cache-Control: no-store, private</code>. Defense-in-
+        depth against shared/proxy caches and browser back-forward
+        cache holding caller-private data after logout. Mirrors the
+        existing <code>/v1/admin/crypto-orders</code> hook.
+      </li>
+      <li>
+        <strong>SDK — <code>list({status,limit})</code>.</strong>
+        <code>@driftstack/sdk-typescript</code>'s
+        <code>client.cryptoOrders.list()</code> now accepts an
+        optional <code>{ status, limit }</code> object that maps to
+        the new server-side query params. Existing zero-arg callers
+        continue to work unchanged.
+      </li>
+      <li>
+        <strong>OpenAPI — customer list <code>?status=</code> + <code>?limit=</code> documented.</strong>
+        The customer list endpoint's <code>status</code> and
+        <code>limit</code> query parameters now appear in the spec
+        with their enum values. Codegen clients pick up the typed
+        filter automatically on regeneration.
+      </li>
+      <li>
+        <strong>API — customer order list <code>?status=</code> filter.</strong>
+        <code>GET /v1/billing/crypto-orders</code> now accepts a
+        single-value <code>status</code> query (one of pending /
+        confirming / paid / failed / partial / cancelled). Unknown
+        values return 400. The GUI history view exposes this as a
+        dropdown next to Refresh.
+      </li>
+      <li>
+        <strong>GUI — receipt PDF + .txt download.</strong>
+        The customer-facing receipt view now has both a
+        <strong>Download PDF</strong> and a <strong>Download .txt</strong>
+        button. They blob-fetch
+        <code>/v1/billing/crypto-orders/:id/receipt.{pdf,txt}</code>
+        with the Bearer token attached and synthesize an anchor
+        click — the endpoints are auth-gated, so a plain link
+        wouldn't work.
+      </li>
+      <li>
+        <strong>SDK — typed CryptoOrders resource.</strong>
+        <code>@driftstack/sdk-typescript</code> ships a
+        <code>client.cryptoOrders</code> resource with
+        <code>quote</code>, <code>createCheckout</code> (with
+        optional <code>idempotencyKey</code>), <code>list</code>,
+        <code>get</code>, <code>updateNote</code>,
+        <code>cancel</code>, and <code>receipt</code>.
+      </li>
+      <li>
+        <strong>OpenAPI — full crypto surface documented.</strong>
+        Quote, daily, pending-age, idempotency-metrics, CSV
+        export, and admin apply-ipn endpoints are now in the spec.
+        Combined with V-666.AX/AY/AZ the entire crypto surface
+        (customer + admin) is machine-readable.
+      </li>
+      <li>
+        <strong>OpenAPI — receipt endpoints documented.</strong>
+        <code>/receipt</code> (JSON), <code>/receipt.txt</code>, and
+        <code>/receipt.pdf</code> now appear in the spec with the
+        appropriate <code>application/json</code> /
+        <code>text/plain</code> / <code>application/pdf</code>
+        response content types.
+      </li>
+      <li>
+        <strong>OpenAPI — admin crypto endpoints documented.</strong>
+        The six core admin crypto endpoints (list, get, events,
+        internal-note, sweep, stats) now appear in the spec under
+        <code>admin</code> + <code>crypto</code> tags. Ops
+        integrators can codegen from <code>/openapi.json</code>
+        instead of hand-rolling clients.
+      </li>
+      <li>
+        <strong>OpenAPI — crypto endpoints documented.</strong>
+        The five customer-facing crypto endpoints (checkout, list,
+        get-one, update-note, cancel) now appear in
+        <code>/openapi.json</code> and on the Scalar UI at
+        <code>/docs</code>. Tagged with <code>billing</code> +
+        <code>crypto</code> for filtering.
+      </li>
+      <li>
+        <strong>Customer — no-store cache headers on order endpoints.</strong>
+        <code>GET /v1/billing/crypto-orders</code> and
+        <code>GET /v1/billing/crypto-orders/:id</code> now set
+        <code>Cache-Control: no-store, private</code>. Order state
+        flips mid-checkout (pending → confirming → paid), so
+        nothing should cache the response. Defensive: requests are
+        already auth-gated.
+      </li>
+      <li>
+        <strong>Customer — pay-window hint on pending orders.</strong>
+        <code>GET /v1/billing/crypto-orders/:id</code> now returns
+        an <code>expires_at</code> ISO timestamp on pending
+        envelopes, set to <code>created_at + 60 minutes</code>.
+        Null on non-pending orders. Informational only — actual
+        expiry is enforced by the admin sweep + the customer
+        cancel endpoint.
+      </li>
+      <li>
+        <strong>Customer — order events on the detail envelope.</strong>
+        <code>GET /v1/billing/crypto-orders/:id</code> now returns
+        an <code>events</code> array on the envelope with the
+        order's append-only state-transition log. Same shape as
+        the admin endpoint added below; the customer-facing view
+        rewrites the internal <code>swept</code> source to
+        <code>expired</code>. Backward-compatible — older callers
+        that ignore unknown fields continue to work.
+      </li>
+      <li>
+        <strong>Admin — order events timeline.</strong>
+        <code>GET /v1/admin/crypto-orders/:id/events</code> returns
+        the order's append-only state-transition log. Each event
+        carries the destination <code>status</code>, an ISO-8601
+        <code>at</code> timestamp, and a <code>source</code> tag of
+        one of <code>create</code> / <code>ipn</code> /
+        <code>cancel</code> / <code>expired</code> /
+        <code>swept</code>. Rendered inline on the admin detail
+        drawer.
+      </li>
+      <li>
+        <strong>Admin — payment_id exact-match filter.</strong>
+        <code>GET /v1/admin/crypto-orders</code> accepts a
+        <code>payment_id</code> query param for exact-match
+        reverse lookup from a NowPayments payment id. Used by
+        support to find a Driftstack order when the customer only
+        has the provider-side identifier.
+      </li>
+      <li>
+        <strong>Idempotency-key body-fingerprint check.</strong>
+        Replays whose request body fingerprint differs from the
+        stored one increment a new <code>body_mismatches</code>
+        counter and fire a structured warn log. The contract is
+        unchanged (still replays the original order). See
+        <a href="/docs/idempotency-keys">/docs/idempotency-keys</a>.
+      </li>
+      <li>
+        <strong>Ops runbook.</strong>
+        Added
+        <a href="/docs/crypto-orders-ops-runbook">/docs/crypto-orders-ops-runbook</a>
+        — the support workflow for stuck orders, duplicate-charge
+        claims, and reconciliation.
+      </li>
+      <li>
+        <strong>Admin — idempotency-key telemetry.</strong>
+        <code>GET /v1/admin/crypto-orders/idempotency-metrics</code>
+        returns process-lifetime counters
+        (<code>replays</code> + <code>first_writes</code>) for the
+        checkout idempotency cache. Useful for spotting client-side
+        retry storms.
+      </li>
+      <li>
+        <strong>Integration guide.</strong>
+        Added
+        <a href="/docs/billing-crypto-integration-guide">/docs/billing-crypto-integration-guide</a>
+        — end-to-end walkthrough that stitches checkout, webhooks,
+        idempotency, and receipts together.
+      </li>
+      <li>
+        <strong>Idempotency-Key on crypto checkout.</strong>
+        <code>POST /v1/billing/crypto-checkout</code> now honours an
+        <code>Idempotency-Key</code> request header. Duplicate
+        requests within 24 hours return the original order with an
+        <code>Idempotent-Replayed: 1</code> response header. See
+        <a href="/docs/idempotency-keys">/docs/idempotency-keys</a>.
+      </li>
+      <li>
+        <strong>Events — <code>crypto.order.failed</code> emitted server-side.</strong>
+        Now emitted when an order transitions to <code>failed</code>
+        (via IPN, expiry sweep, or admin sweep) with a
+        <code>reason</code> tag of <code>ipn</code>,
+        <code>expired</code>, or <code>swept</code>. Idempotent —
+        re-running a sweep over already-failed orders does not
+        re-emit. Customer subscription is roadmap; this event isn't
+        in <code>SubscribableWebhookEventTypeSchema</code> yet (see
+        <a href="/docs/webhooks-crypto-events">/docs/webhooks-crypto-events</a>).
+      </li>
+      <li>
+        <strong>Admin CSV export — reference doc.</strong>
+        <code>GET /v1/admin/crypto-orders.csv</code> is now
+        documented at
+        <a href="/docs/admin-csv-export">/docs/admin-csv-export</a>
+        with the per-column contract + truncation header
+        (<code>X-Driftstack-Export-Truncated</code>). The endpoint
+        itself was added in 2026-04; the doc page is new.
+      </li>
+      <li>
         <strong>Crypto orders — PDF receipts.</strong>
         <code>GET /v1/billing/crypto-orders/:id/receipt.pdf</code>
         joins the existing <code>.txt</code> + JSON receipt variants.
@@ -43,24 +412,30 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <li>
         <strong>Crypto orders — admin stats KPIs.</strong>
         <code>GET /v1/admin/crypto-orders/stats</code> response gains
-        <code>avg_time_to_paid_ms</code> + <code>paid_sample</code>
-        and (later in the month) <code>refund_pending_count</code> +
-        <code>refund_pending_cents</code>. Existing fields are
-        unchanged.
+        <code>avg_time_to_paid_ms</code> + <code>paid_sample</code>.
+        Existing fields are unchanged.
       </li>
       <li>
-        <strong>Crypto orders — admin refund flow.</strong> New admin-
-        only routes for recording refund intent +
-        clearing the intent + setting an admin-only internal note:
-        <code>POST .../request-refund</code>,
-        <code>POST .../cancel-refund-request</code>,
-        <code>PATCH .../internal-note</code>.
+        <strong>Crypto orders — admin internal note.</strong>
+        <code>PATCH /v1/admin/crypto-orders/:id/internal-note</code>
+        sets/clears an admin-only note on an order (never visible to
+        the customer).
       </li>
       <li>
-        <strong>Webhooks — <code>crypto.order.paid</code>.</strong>
-        Now fires alongside the existing webhook surface when an order
-        transitions to paid (account-scoped, single-fire, idempotent
-        re-deliver of the same IPN doesn't re-fire).
+        <strong>Admin list — cursor pagination.</strong>
+        <code>GET /v1/admin/crypto-orders</code> now returns
+        <code>next_cursor</code> alongside <code>orders</code>;
+        callers walk pages by passing the previous response's
+        cursor on the <code>?cursor=</code> query string. See
+        <a href="/docs/admin-api-pagination">/docs/admin-api-pagination</a>.
+      </li>
+      <li>
+        <strong>Events — <code>crypto.order.paid</code> emitted server-side.</strong>
+        Emitted when an order transitions to paid (account-scoped,
+        single-fire, idempotent re-deliver of the same IPN doesn't
+        re-emit). Customer subscription is roadmap; this event isn't
+        in <code>SubscribableWebhookEventTypeSchema</code> yet — see
+        <a href="/docs/webhooks-crypto-events">/docs/webhooks-crypto-events</a>.
       </li>
     </ul>
 
@@ -106,9 +481,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </p>
     <ul>
       <li>New endpoints + new optional fields ship without bumping the version.</li>
-      <li>Removing a field or changing its type requires a 6-month
-        sunset window with a <code>Deprecation</code> + <code>Sunset</code>
-        response header from the moment the deprecation lands.</li>
+      <li>Removing a field or changing its type requires the 90-day
+        deprecation window documented in
+        <a href="/docs/api-versioning">/docs/api-versioning</a>, with
+        a <code>Deprecation</code> response header (RFC 5988) carrying
+        the sunset date from the moment the deprecation lands.</li>
       <li>Major-version bumps (next is v2) ship in lock-step with
         published migration notes and at least 12 months of v1 support.</li>
     </ul>

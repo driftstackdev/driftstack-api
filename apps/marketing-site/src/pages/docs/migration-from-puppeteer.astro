@@ -59,14 +59,15 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         </tr>
         <tr>
           <td><code>page.evaluate</code></td>
-          <td><code>POST /v1/sessions/:id/state</code> returns the
+          <td><code>GET /v1/sessions/:id/state</code> returns the
             current DOM + URL + cookies snapshot. Arbitrary script
             eval is intentionally not exposed.</td>
         </tr>
         <tr>
           <td><code>page.screenshot()</code></td>
           <td><code>POST /v1/sessions/:id/capture</code> with
-            <code>type=screenshot</code>.</td>
+            <code>kind=screenshot</code>. Returns inline base64
+            bytes (no presigned URL).</td>
         </tr>
         <tr>
           <td><code>browser.close()</code></td>
@@ -75,7 +76,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <tr>
           <td>Userdata-dir (<code>--user-data-dir=...</code>)</td>
           <td>Profile resource (<code>POST /v1/profiles</code>).
-            Bind a session to a profile to inherit cookies/localStorage.</td>
+            Profiles bind cookies / localStorage / IndexedDB to a
+            named archetype; sessions inherit the binding when they
+            run against the profile.</td>
         </tr>
         <tr>
           <td>Saving + loading session.json</td>
@@ -85,8 +88,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         </tr>
         <tr>
           <td><code>browser.tracing.start({ path })</code> / video record</td>
-          <td>Set <code>record: true</code> on session create. Pull
-            via <code>GET /v1/sessions/:id/recording</code>.</td>
+          <td>Roadmap — see
+            <a href="/docs/recordings">/docs/recordings</a>. Until
+            recordings ship, drive observation with per-step
+            <code>capture</code> screenshots / DOM snapshots.</td>
         </tr>
         <tr>
           <td>Test parallelism via shards</td>
@@ -111,8 +116,8 @@ await browser.close();`}</code></pre>
 
     <p><strong>Driftstack (curl):</strong></p>
     <pre><code>{`POST /v1/sessions
-  { "profile_id": "prof_…", "label": "qa-login" }
-  → { "id": "ses_…", "status": "ready" }
+  { "archetype": "default", "label": "qa-login" }
+  → 201 Created   { "id": "ses_…", "status": "creating", … }
 
 POST /v1/sessions/ses_…/navigate
   { "url": "https://app.example.com/login" }
@@ -125,9 +130,9 @@ POST /v1/sessions/ses_…/interact
   { "action": "click", "selector": "button[type=submit]" }
 
 POST /v1/sessions/ses_…/wait
-  { "strategy": "selector", "selector": "#dashboard", "timeout_ms": 10000 }
+  { "kind": "selector", "selector": "#dashboard", "timeout_ms": 10000 }
 
-POST /v1/sessions/ses_…/state
+GET /v1/sessions/ses_…/state
   → { "html": "…", "url": "…", "cookies": [...] }
 
 DELETE /v1/sessions/ses_…`}</code></pre>
@@ -185,14 +190,14 @@ DELETE /v1/sessions/ses_…`}</code></pre>
 const client = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY! });
 
 const session = await client.sessions.create({
-  profileId: 'prof_…',
+  archetype: 'default',
   label: 'qa-login',
 });
-await client.sessions.navigate(session.id, 'https://app.example.com/login');
+await client.sessions.navigate(session.id, { url: 'https://app.example.com/login' });
 await client.sessions.interact(session.id, { action: 'type', selector: '#email', value: 'user@x.com' });
 await client.sessions.interact(session.id, { action: 'click', selector: 'button[type=submit]' });
-await client.sessions.wait(session.id, { strategy: 'selector', selector: '#dashboard', timeoutMs: 10000 });
-const state = await client.sessions.state(session.id);
+await client.sessions.wait(session.id, { kind: 'selector', selector: '#dashboard', timeout_ms: 10000 });
+const state = await client.sessions.getState(session.id);
 await client.sessions.destroy(session.id);`}</code></pre>
 
     <h2>Common gotchas</h2>

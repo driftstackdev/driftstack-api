@@ -9,7 +9,7 @@ interface Props {
   pathname?: string;
   /**
    * Optional per-page social-card image (absolute URL or `/`-rooted
-   * path). Defaults to the site-wide `/og-default.png` when not
+   * path). Defaults to the site-wide `/og-default.svg` when not
    * supplied. Pages that want a custom card pass it explicitly.
    */
   ogImage?: string;
@@ -32,10 +32,10 @@ const fullTitle = title === 'Driftstack' ? title : `${title} · Driftstack`;
 const canonical = new URL(pathname, Astro.site).toString();
 // Resolve OG image to an absolute URL so social crawlers can fetch it
 // without the path-resolution headaches some platforms have with
-// relative paths. Defaults to /og-default.png at the site root —
+// relative paths. Defaults to /og-default.svg at the site root —
 // Cloudflare Pages serves anything in apps/marketing-site/public/
 // at the root when build runs.
-const ogImageUrl = new URL(ogImage ?? '/og-default.png', Astro.site).toString();
+const ogImageUrl = new URL(ogImage ?? '/og-default.svg', Astro.site).toString();
 ---
 
 <!doctype html>

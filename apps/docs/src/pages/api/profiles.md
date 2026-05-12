@@ -22,18 +22,19 @@ through this API.
 
 Each tier limits the maximum number of profiles per account.
 Crossing the cap on `POST /v1/profiles` (or
-`POST /v1/profiles/:id/clone`) returns `429 Tier limit`:
+`POST /v1/profiles/:id/clone`) returns `429 Tier limit`. Values
+mirror `PROFILES_PER_TIER` in `@driftstack/api-types`:
 
-| Tier          | Profiles cap |
-| ------------- | -----------: |
-| Trial pack    |            1 |
-| Solo manual   |            5 |
-| Team manual   |           50 |
-| Agency manual |          200 |
-| API starter   |           10 |
-| API builder   |           25 |
-| API scale     |          100 |
-| Enterprise    |       custom |
+| Tier            | Profiles cap |
+| --------------- | -----------: |
+| `trial_pack`    |            1 |
+| `solo_manual`   |           10 |
+| `team_manual`   |           50 |
+| `agency_manual` |          200 |
+| `api_starter`   |           25 |
+| `api_builder`   |          100 |
+| `api_scale`     |          500 |
+| `enterprise`    |       custom |
 
 The cap on enterprise tier is negotiated; the API returns
 `profile_cap: null` on `/v1/account/me` for enterprise customers.

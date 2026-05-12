@@ -9,11 +9,11 @@ description: Article 28 GDPR processor terms for Customer Data, Session content,
 **Version:** 1.0 · **Effective:** 2026-05-07
 
 This Data Processing Agreement ("**DPA**") forms part of the
-[Terms of Service](terms-of-service.md) between Driftstack B.V. (the
+[Terms of Service](terms.md) between Driftstack B.V. (the
 "**Processor**" or "**Driftstack**") and Customer (the "**Controller**"
 or "**Customer**"). It governs the Processing of Personal Data by
 Driftstack on Customer's behalf in the course of providing the
-Service. Capitalised terms are defined in [`definitions.md`](definitions.md).
+Service. Capitalised terms are defined in the [Terms of Service](terms.md).
 
 This DPA is structured to satisfy Article 28(3) GDPR. To the extent
 applicable to a Customer's processing in another jurisdiction (UK
@@ -351,7 +351,7 @@ international transfer.
 ## 11. Retention summary (cross-reference)
 
 The retention periods applicable to data Processed under this DPA
-are set out in Section 9 of the [Privacy Policy](privacy-policy.md#9-retention) and apply equally here. Notably:
+are set out in Section 9 of the [Privacy Policy](privacy.md#9-retention) and apply equally here. Notably:
 
 - Session Recordings: Customer-controlled (1–365 days, default 30).
 - Customer-Provided Secrets: deleted within 30 days of Account
@@ -488,21 +488,23 @@ Driftstack personnel are restricted and audited.
 
 ## Annex 3 — Sub-processors
 
-The same list as in [Privacy Policy Section 7](privacy-policy.md#7-sub-processors) applies, summarised here for convenience:
+The same list as in [Privacy Policy Section 7](privacy.md#7-sub-processors) applies, summarised here for convenience:
 
-| Sub-processor                             | Role                                     | Location                          | Transfer mechanism                      |
-| ----------------------------------------- | ---------------------------------------- | --------------------------------- | --------------------------------------- |
-| MacStadium, Inc.                          | Mac mini fleet hosting                   | US, California                    | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| Stripe Payments Europe Ltd                | Payment processing (EEA/UK/CH Customers) | Ireland                           | EEA-internal                            |
-| Stripe, Inc.                              | Payment processing (non-EEA Customers)   | US, Delaware                      | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| Anthropic, PBC (conditional, opt-in only) | Bundled-LLM AI agent                     | US, Delaware                      | 2021 SCCs Module 3 + EU-US DPF (verify) |
-| Moneybird B.V.                            | Accounting + invoicing                   | Netherlands                       | EEA-internal                            |
-| Hetzner Online GmbH                       | Control-plane hosting (VM)               | Germany                           | EEA-internal                            |
-| Neon, Inc.                                | Managed Postgres                         | US (corp); EU Frankfurt (data)    | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| Upstash, Inc.                             | Managed Redis                            | US (corp); EU Frankfurt (data)    | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| Cloudflare, Inc.                          | DNS / CDN / edge / R2 / Pages            | US (corp); EU jurisdiction (data) | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| Postmark (ActiveCampaign LLC)             | Transactional email                      | US                                | 2021 SCCs Module 2 + EU-US DPF (verify) |
-| Sentry (Functional Software, Inc.)        | Error tracking                           | US (corp); EU region (data)       | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Sub-processor                             | Role                                     | Location                              | Transfer mechanism                      |
+| ----------------------------------------- | ---------------------------------------- | ------------------------------------- | --------------------------------------- |
+| MacStadium, Inc.                          | Mac mini fleet hosting                   | US, California                        | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Stripe Payments Europe Ltd                | Payment processing (EEA/UK/CH Customers) | Ireland                               | EEA-internal                            |
+| Stripe, Inc.                              | Payment processing (non-EEA Customers)   | US, Delaware                          | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Anthropic, PBC (conditional, opt-in only) | Bundled-LLM AI agent                     | US, Delaware                          | 2021 SCCs Module 3 + EU-US DPF (verify) |
+| Moneybird B.V.                            | Accounting + invoicing                   | Netherlands                           | EEA-internal                            |
+| Hetzner Online GmbH                       | Control-plane hosting (VM)               | Germany                               | EEA-internal                            |
+| Neon, Inc.                                | Managed Postgres                         | US (corp); EU Frankfurt (data)        | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Upstash, Inc.                             | Managed Redis                            | US (corp); EU Frankfurt (data)        | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Cloudflare, Inc.                          | DNS / CDN / edge / R2 / Pages            | US (corp); EU jurisdiction (data)     | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Postmark (ActiveCampaign LLC)             | Transactional email                      | US                                    | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| Sentry (Functional Software, Inc.)        | Error tracking                           | US (corp); EU region (data)           | 2021 SCCs Module 2 + EU-US DPF (verify) |
+| NowPayments OÜ (conditional, opt-in only) | Cryptocurrency payment processing        | Estonia, EU                           | EEA-internal                            |
+| LiveKit (conditional, opt-in only)        | WebRTC live-session signaling / media    | US (regional endpoints; EU preferred) | 2021 SCCs Module 2 + EU-US DPF (verify) |
 
 The list as published in the Privacy Policy is the authoritative
 list for the avoidance of doubt; this Annex is a convenience copy.

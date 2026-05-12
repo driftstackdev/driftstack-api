@@ -1,0 +1,106 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-723 — public reference for the status-page email subscription
+// flow (V-295c3 server-side, V-459 OpenAPI). Pitched at customers
+// who want to know about incidents before they notice them.
+---
+
+<BaseLayout title="Status page subscriptions — Driftstack" description="Subscribe to Driftstack incident notifications by email. Double opt-in; one-click unsubscribe.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Status page subscriptions</h1>
+
+    <p class="lead">
+      Driftstack's public status page at
+      <a href="https://status.driftstack.dev">status.driftstack.dev</a>
+      announces incidents in real time. To get notified by email
+      when something breaks (and when it's resolved), subscribe.
+    </p>
+
+    <h2>From the status page</h2>
+    <p>
+      The easiest path: open
+      <a href="https://status.driftstack.dev">status.driftstack.dev</a>,
+      enter your email in the "Subscribe to updates" box, and click
+      Subscribe. We send a confirmation email; click the link in
+      that email and you're subscribed.
+    </p>
+
+    <h2>From the API</h2>
+    <p>
+      The same subscribe / confirm / unsubscribe flow is exposed
+      programmatically — useful if you're embedding status into
+      your own internal tooling or onboarding automation.
+    </p>
+
+    <h3>Subscribe</h3>
+    <pre><code>POST /v1/status/subscribe
+Content-Type: application/json
+
+{ "email": "ops@yourcompany.example" }</code></pre>
+    <p>
+      Returns <code>202 Accepted</code> with a generic
+      "confirmation email sent" message. We deliberately return the
+      same shape whether or not the email was already subscribed —
+      this avoids leaking whether a given address is on the list.
+    </p>
+
+    <h3>Confirm</h3>
+    <p>
+      The confirmation email contains a tokenised link:
+    </p>
+    <pre><code>GET /v1/status/subscribe/confirm?token=…</code></pre>
+    <p>
+      Returns <code>200</code> on success. Confirmation tokens are
+      single-use and expire <strong>24 hours</strong> after the
+      subscribe POST. Subscribers who miss the window can re-submit
+      <code>POST /v1/status/subscribe</code> to mint a fresh
+      confirmation email.
+    </p>
+
+    <h3>Unsubscribe</h3>
+    <p>
+      Every notification email carries a one-click unsubscribe
+      link:
+    </p>
+    <pre><code>GET /v1/status/subscribe/unsubscribe?token=…</code></pre>
+    <p>
+      Unsubscribe tokens never expire; subscribers can revoke at
+      any time.
+    </p>
+
+    <h2>Rate limits</h2>
+    <p>
+      The public subscribe endpoint is IP-rate-limited to 3
+      requests/minute to discourage email-flood abuse. Confirmation
+      and unsubscribe inherit the same bucket. None of these
+      endpoints require authentication.
+    </p>
+
+    <h2>What we send</h2>
+    <ul>
+      <li><strong>Incident opened</strong> — when ops creates a new
+        incident on the status page.</li>
+      <li><strong>Status update</strong> — when ops posts a new
+        update on a live incident (e.g.
+        <em>"Investigating"</em> → <em>"Identified"</em>).</li>
+      <li><strong>Incident resolved</strong> — when ops moves the
+        incident to resolved.</li>
+      <li><strong>Post-mortem published</strong> — for incidents
+        meeting our
+        <a href="/docs/incident-policy">incident policy</a>
+        threshold, the post-mortem link is emailed when published.</li>
+    </ul>
+    <p>
+      We do not send marketing email to status subscribers.
+      Period.
+    </p>
+
+    <h2>Related</h2>
+    <ul>
+      <li><a href="/docs/incident-policy">Incident policy</a></li>
+      <li><a href="/docs/sla-policy">SLA policy</a></li>
+      <li><a href="/api-reference">API reference</a></li>
+    </ul>
+  </main>
+</BaseLayout>

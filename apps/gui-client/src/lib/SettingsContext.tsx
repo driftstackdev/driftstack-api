@@ -28,7 +28,7 @@ interface SettingsContextValue {
   update: (next: Partial<DriftstackSettings>) => Promise<void>;
 }
 
-const SettingsContext = createContext<SettingsContextValue | null>(null);
+export const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }): JSX.Element {
   const [settings, setSettings] = useState<DriftstackSettings>(DEFAULT_SETTINGS);

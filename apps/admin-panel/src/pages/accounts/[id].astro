@@ -46,7 +46,8 @@ const STATUS_BADGE: Record<string, string> = {
   deleted: 'bg-slate-100 text-slate-600',
 };
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 const accountId = account.id;
 ---
 

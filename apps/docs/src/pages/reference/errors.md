@@ -144,8 +144,8 @@ prompt the customer first.
 ## Source of truth
 
 The full problem-type list lives in
-`apps/server/src/lib/problem-types.ts`. SDK error classes are
-mirrored at:
+`packages/api-types/src/problem.ts` (`PROBLEM_TYPES`). SDK error
+classes are mirrored at:
 
 - `packages/sdk-typescript/src/errors.ts`
 - `packages/sdk-python/src/driftstack/errors.py`

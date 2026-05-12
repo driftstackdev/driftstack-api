@@ -95,14 +95,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         </tr>
         <tr>
           <td>Sentry error events</td>
-          <td>Sentry (US, sentry.io)</td>
+          <td>Sentry EU (ingest.de.sentry.io)</td>
           <td>Code-level errors with redacted body fields. PII filter
             strips emails before send.</td>
         </tr>
         <tr>
           <td>Email delivery (transactional)</td>
-          <td>Postmark (US)</td>
-          <td>Recipient address + template payload only.</td>
+          <td>Postmark (EU sending region)</td>
+          <td>Recipient address + template payload only. See
+            <a href="/trust/sub-processors">/trust/sub-processors</a>
+            for the transfer-mechanism breakdown.</td>
         </tr>
       </tbody>
     </table>
@@ -122,18 +124,21 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         across regions to minimise playback latency. If you require
         strict EU-only storage for recordings, contact us — we can
         configure your account with single-region (EU-only) R2.</li>
-      <li><strong>Sentry error reports:</strong> code-path errors
-        include stack traces + redacted request bodies. We never
-        send raw API keys, session secrets, or customer-supplied
-        URLs to Sentry — the PII filter strips them.</li>
-      <li><strong>Stripe billing data:</strong> Stripe processes
-        cards in the US per their own posture. The payment-card
-        industry compliance contract is between you and Stripe;
-        we only hold the customer_id linkage.</li>
-      <li><strong>Email delivery:</strong> Postmark queues
-        transactional emails in the US. We send recipient address +
-        template id only — the email body is generated server-side
-        from non-PII template variables.</li>
+      <li><strong>Stripe billing data:</strong> Stripe Payments
+        Europe Ltd (Ireland) is the contracted entity. The PCI-DSS
+        compliance contract is between you and Stripe; we only hold
+        the customer_id linkage. Stripe may onward-transfer to
+        sub-processors under SCCs + EU-US DPF — see
+        <a href="/trust/sub-processors">/trust/sub-processors</a>.</li>
+      <li><strong>Anthropic (bundled-LLM only):</strong> the
+        bundled-LLM agent is opt-in. When enabled, prompts +
+        completions traverse Anthropic (US) under SCCs + EU-US DPF.
+        BYOK accounts bypass this entirely.</li>
+      <li><strong>MacStadium (session execution):</strong> the
+        iPhone Safari driver fleet runs on MacStadium hardware
+        (US). Session-execution traffic between the API server and
+        the driver fleet uses Driftstack-managed VPN tunnels;
+        contractual transfer is via SCCs + EU-US DPF.</li>
     </ul>
 
     <h2>The <code>region</code> account preference (V-298b)</h2>
@@ -179,7 +184,7 @@ Authorization: Bearer ds_live_…
     <h2>Subprocessor list</h2>
     <p>
       Up-to-date subprocessor list with regions, purpose, and DPA
-      links: <a href="/legal/subprocessors">/legal/subprocessors</a>.
+      links: <a href="/legal/sub-processors">/legal/sub-processors</a>.
     </p>
 
     <h2>Support</h2>

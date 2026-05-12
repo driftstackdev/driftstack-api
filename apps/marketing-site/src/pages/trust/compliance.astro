@@ -254,11 +254,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <ul class="mt-4 max-w-prose list-inside list-disc space-y-2 text-slate-600">
         <li>
           <span class="font-medium text-slate-900">Customer-facing audit log</span> —
-          retained for 90 days, surfaced via the dashboard +
-          <a
-            href="https://docs.driftstack.dev/api/audit"
-            class="text-oxblood-700 underline">/v1/account/audit</a
-          >. Includes every action the customer's account took (API
+          retained per the customer's tier (see
+          <a href="/docs/audit-log" class="text-oxblood-700 underline"
+            >/docs/audit-log</a>),
+          surfaced via the dashboard +
+          <code class="font-mono">GET /v1/account/audit-log</code>.
+          Includes every action the customer's account took (API
           key mints, profile creates, billing changes).
         </li>
         <li>

@@ -1,4 +1,5 @@
 // V-534.AD — unit tests for CryptoOrderDetailView.
+// V-534.BE — appended tests for the inline events timeline.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -172,6 +173,48 @@ describe('V-534.AD CryptoOrderDetailView', () => {
       const gets = calls.filter((c) => c.method === 'GET');
       expect(gets.length).toBeGreaterThanOrEqual(2);
     });
+  });
+
+  it('V-534.BE renders the events timeline when the envelope carries events', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve(
+              orderPayload({
+                events: [
+                  { status: 'pending', at: '2026-05-11T09:00:00.000Z', source: 'create' },
+                  { status: 'confirming', at: '2026-05-11T09:05:00.000Z', source: 'ipn' },
+                ],
+              }),
+            ),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrderDetailView orderId="ord_42" />);
+    const timeline = await waitFor(() => screen.getByLabelText('Order events timeline'));
+    expect(timeline.textContent).toContain('via create');
+    expect(timeline.textContent).toContain('via ipn');
+    expect(timeline.textContent).toContain('2026-05-11T09:00:00.000Z');
+  });
+
+  it('V-534.BE hides the timeline section when events is absent on the wire', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(orderPayload()), // no events field
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrderDetailView orderId="ord_42" />);
+    await waitFor(() => screen.getByText('ord_42'));
+    expect(screen.queryByLabelText('Order events timeline')).toBeNull();
   });
 
   it('surfaces the error banner on HTTP failure', async () => {

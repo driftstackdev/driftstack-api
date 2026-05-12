@@ -1,0 +1,126 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-717 — admin-API pagination reference. Documents the cursor
+// convention introduced by V-666.AM on /v1/admin/crypto-orders.
+// Customers (or auditors) reading this either to integrate the
+// admin surface or to confirm the contract is stable.
+---
+
+<BaseLayout title="Admin API pagination — Driftstack" description="Cursor-based pagination on the Driftstack admin API: how next_cursor works, when to stop, and the contract guarantees.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Admin API pagination</h1>
+
+    <p class="lead">
+      The Driftstack admin API uses <strong>cursor-based pagination</strong>
+      on list endpoints. A cursor is an opaque, server-issued token
+      that resumes the scan immediately after the last row of the
+      previous page. This page documents the contract.
+    </p>
+
+    <h2>Why cursors and not offsets</h2>
+    <p>
+      Offset pagination (<code>?page=2</code>) is convenient but breaks
+      when rows are inserted or removed between page requests:
+      callers can skip rows or see duplicates. The admin surface
+      lists rows ordered by <code>created_at DESC</code> with
+      <code>order_id</code> as the tiebreaker; new orders arrive at
+      the front of the list constantly. A cursor anchored to the
+      last seen <code>(created_at, order_id)</code> pair gives a
+      stable walk across the list even while new rows are being
+      added.
+    </p>
+
+    <h2>The contract</h2>
+    <p>
+      A list response looks like:
+    </p>
+    <pre><code>{
+  "orders": [ ...up to `limit` rows... ],
+  "next_cursor": "eyJ0cyI6MTcwMDAwMDAwMCwiaWQiOiJvcmRfYWJjIn0"
+}</code></pre>
+    <ul>
+      <li><code>orders</code> contains up to <code>limit</code> rows
+      from the page (default <code>limit=50</code>; max
+      <code>200</code> on this endpoint).</li>
+      <li><code>next_cursor</code> is a string when at least one more
+      row exists beyond the page; <code>null</code> when the page
+      reaches the end of the list.</li>
+    </ul>
+
+    <h2>The walk loop</h2>
+    <pre><code>let cursor = null;
+const all = [];
+do {{
+  const params = new URLSearchParams({{ limit: '50' }});
+  if (cursor) params.set('cursor', cursor);
+  const res = await fetch(`/v1/admin/crypto-orders?$&#123;params&#125;`, {{
+    headers: {{ authorization: `Bearer $ADMIN_KEY` }}
+  }});
+  const body = await res.json();
+  all.push(...body.orders);
+  cursor = body.next_cursor;
+}} while (cursor !== null);</code></pre>
+    <p>
+      Stop when <code>next_cursor</code> is <code>null</code>. Do not
+      try to parse the cursor — its internal shape is not part of
+      the contract and may change between releases. Treat it as
+      opaque bytes.
+    </p>
+
+    <h2>Combining with filters</h2>
+    <p>
+      Pagination composes with the existing filter parameters
+      (<code>status</code>, <code>search</code>,
+      <code>account_id</code>). Send the same filter values on every
+      page request; the server applies them before walking past the
+      cursor anchor. Changing a filter mid-walk is undefined —
+      always start a fresh walk (drop the cursor) when filters
+      change.
+    </p>
+
+    <h2>Cursor lifetime</h2>
+    <p>
+      Cursors are not signed and do not expire on a timer; the
+      server treats them as the literal
+      <code>(created_at, order_id)</code> pair to seek past. A
+      cursor remains useful as long as the row it anchors to is
+      still in the scan window (default 1000 rows on filtered
+      queries, 51 rows on the unfiltered first page — the
+      <code>limit + 1</code> overflow probe).
+    </p>
+    <p>
+      If you walk slowly enough that the anchor row falls out of
+      the window, the server returns an empty page with
+      <code>next_cursor: null</code>. The caller should treat that
+      as "end of walk" and restart from the front if a full scan is
+      still needed.
+    </p>
+
+    <h2>Validation errors</h2>
+    <ul>
+      <li>A cursor longer than 512 characters returns
+      <code>400 Bad Request</code>.</li>
+      <li>A malformed cursor (not valid base64url JSON of
+      <code>&#123;ts, id&#125;</code>) returns an empty page with
+      <code>next_cursor: null</code>; the server prefers a benign
+      empty result over surfacing decode internals.</li>
+    </ul>
+
+    <h2>Other endpoints</h2>
+    <p>
+      The cursor convention will roll out to other admin list
+      endpoints over time. Each endpoint's documentation will note
+      whether it returns <code>next_cursor</code>; assume an
+      endpoint does NOT paginate until its documentation lists the
+      field.
+    </p>
+
+    <h2>Related</h2>
+    <ul>
+      <li><a href="/docs/admin-api">Admin API overview</a></li>
+      <li><a href="/docs/admin-csv-export">Admin CSV export</a></li>
+      <li><a href="/docs/api-changelog">API changelog</a></li>
+    </ul>
+  </main>
+</BaseLayout>

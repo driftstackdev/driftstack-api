@@ -6,6 +6,7 @@
 // from SettingsContext until an SDK client.sessions.list() lands.
 
 import { useCallback, useEffect, useState } from 'react';
+import { readApiErrorMessage } from './api-errors';
 import { useSettings } from './SettingsContext';
 
 export interface SessionListItem {
@@ -63,7 +64,7 @@ export function useSessionsList(opts: UseSessionsListOpts = {}): UseSessionsList
         },
       });
       if (!res.ok) {
-        setState({ kind: 'error', message: `HTTP ${res.status.toString()}` });
+        setState({ kind: 'error', message: await readApiErrorMessage(res) });
         return;
       }
       const body = (await res.json()) as SessionsListResponse;

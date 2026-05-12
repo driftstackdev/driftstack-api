@@ -100,7 +100,10 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
             <li>POST /v1/webhooks</li>
             <li>GET /v1/webhooks</li>
             <li>GET /v1/webhooks/:id</li>
+            <li>PATCH /v1/webhooks/:id</li>
             <li>DELETE /v1/webhooks/:id</li>
+            <li>POST /v1/webhooks/:id/rotate-secret</li>
+            <li>POST /v1/webhooks/:id/test</li>
             <li>GET /v1/webhooks/:id/deliveries</li>
             <li>POST /v1/webhook-deliveries/:id/replay</li>
           </ul>
@@ -135,6 +138,23 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
 
         <div class="rounded-lg border border-slate-200 bg-white p-6">
           <h3 class="font-mono text-sm uppercase tracking-widest text-oxblood-700">
+            Billing — crypto orders
+          </h3>
+          <ul class="mt-3 space-y-2 font-mono text-xs text-slate-700">
+            <li>POST /v1/billing/crypto-checkout</li>
+            <li>POST /v1/billing/crypto-checkout/quote</li>
+            <li>GET /v1/billing/crypto-orders</li>
+            <li>GET /v1/billing/crypto-orders/:id</li>
+            <li>PATCH /v1/billing/crypto-orders/:id</li>
+            <li>POST /v1/billing/crypto-orders/:id/cancel</li>
+            <li>GET /v1/billing/crypto-orders/:id/receipt</li>
+            <li>GET /v1/billing/crypto-orders/:id/receipt.txt</li>
+            <li>GET /v1/billing/crypto-orders/:id/receipt.pdf</li>
+          </ul>
+        </div>
+
+        <div class="rounded-lg border border-slate-200 bg-white p-6">
+          <h3 class="font-mono text-sm uppercase tracking-widest text-oxblood-700">
             Status
           </h3>
           <ul class="mt-3 space-y-2 font-mono text-xs text-slate-700">
@@ -156,8 +176,10 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
             <li>POST /v1/auth/login</li>
             <li>POST /v1/auth/logout</li>
             <li>POST /v1/auth/verify-email</li>
-            <li>POST /v1/auth/magic-link</li>
-            <li>POST /v1/auth/password-reset</li>
+            <li>POST /v1/auth/magic-link/request</li>
+            <li>POST /v1/auth/magic-link/consume</li>
+            <li>POST /v1/auth/password-reset/request</li>
+            <li>POST /v1/auth/password-reset/confirm</li>
             <li>POST /v1/auth/refresh</li>
           </ul>
         </div>
@@ -167,8 +189,8 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
             Billing
           </h3>
           <ul class="mt-3 space-y-2 font-mono text-xs text-slate-700">
-            <li>POST /v1/billing/checkout</li>
-            <li>POST /v1/billing/portal</li>
+            <li>POST /v1/billing/checkout-session</li>
+            <li>POST /v1/billing/portal-session</li>
             <li>POST /v1/billing/trial-pack</li>
             <li>GET /v1/billing</li>
           </ul>
@@ -359,7 +381,7 @@ os.WriteFile("out.png", data, 0644)</code></pre>
               <td class="py-2 pr-4">401</td>
               <td class="py-2 pr-4">errors.driftstack.dev/unauthorized</td>
               <td class="py-2 pr-4 font-sans">API key missing, malformed, or revoked.</td>
-              <td class="py-2">UnauthorizedError</td>
+              <td class="py-2">AuthError</td>
             </tr>
             <tr class="border-b border-slate-200">
               <td class="py-2 pr-4">404</td>
@@ -380,28 +402,34 @@ os.WriteFile("out.png", data, 0644)</code></pre>
               <td class="py-2">SessionDestroyedError</td>
             </tr>
             <tr class="border-b border-slate-200">
-              <td class="py-2 pr-4">422</td>
+              <td class="py-2 pr-4">429</td>
               <td class="py-2 pr-4">errors.driftstack.dev/tier-limit</td>
-              <td class="py-2 pr-4 font-sans">Account hit a tier cap (concurrent, profile count).</td>
+              <td class="py-2 pr-4 font-sans">Account hit a tier cap (profile count, api-keys per account).</td>
               <td class="py-2">TierLimitError</td>
             </tr>
             <tr class="border-b border-slate-200">
               <td class="py-2 pr-4">429</td>
               <td class="py-2 pr-4">errors.driftstack.dev/rate-limited</td>
               <td class="py-2 pr-4 font-sans">Per-account rate limit; <code>retry-after</code> header carries seconds.</td>
-              <td class="py-2">RateLimitedError <em class="font-sans not-italic text-slate-500">(retryable)</em></td>
+              <td class="py-2">RateLimitError <em class="font-sans not-italic text-slate-500">(retryable)</em></td>
+            </tr>
+            <tr class="border-b border-slate-200">
+              <td class="py-2 pr-4">429</td>
+              <td class="py-2 pr-4">errors.driftstack.dev/concurrency-limit</td>
+              <td class="py-2 pr-4 font-sans">Account hit its tier-bound concurrent-session cap.</td>
+              <td class="py-2">ConcurrencyLimitError</td>
             </tr>
             <tr class="border-b border-slate-200">
               <td class="py-2 pr-4">500</td>
               <td class="py-2 pr-4">errors.driftstack.dev/internal</td>
               <td class="py-2 pr-4 font-sans">Server-side fault. Logged + alerted.</td>
-              <td class="py-2">InternalError <em class="font-sans not-italic text-slate-500">(retryable)</em></td>
+              <td class="py-2">DriftstackError (kind: <code>internal</code>) <em class="font-sans not-italic text-slate-500">(retryable)</em></td>
             </tr>
             <tr>
               <td class="py-2 pr-4">503</td>
-              <td class="py-2 pr-4">errors.driftstack.dev/transport</td>
-              <td class="py-2 pr-4 font-sans">Sub-processor down; safe to retry with backoff.</td>
-              <td class="py-2">TransportError <em class="font-sans not-italic text-slate-500">(retryable)</em></td>
+              <td class="py-2 pr-4">errors.driftstack.dev/feature-unavailable</td>
+              <td class="py-2 pr-4 font-sans">Feature disabled at deploy time (e.g. avatar upload without R2 bucket).</td>
+              <td class="py-2">FeatureUnavailableError <em class="font-sans not-italic text-slate-500">(NOT retryable)</em></td>
             </tr>
           </tbody>
         </table>

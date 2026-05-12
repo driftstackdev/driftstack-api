@@ -4,16 +4,20 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // V-691 — profiles developer docs. Companion to /docs/sessions;
 // covers the saved-profile lifecycle for customers running
 // repeatable, identity-bound automations.
+//
+// W216.A — accuracy pass: pinned against publicProfile in
+// apps/server/src/routes/profiles.ts, ProfileSchema +
+// CreateProfileRequestSchema + UpdateProfileRequestSchema in
+// packages/api-types/src/profiles.ts, and PROFILES_PER_TIER in
+// packages/api-types/src/common.ts. Watched by
+// apps/server/tests/unit/profiles-doc-parity.test.ts.
 
 const SAMPLE_PROFILE = `{
   "id": "prof_…",
   "name": "us-east-sales-bot",
-  "archetype": "default",
-  "user_agent": "Mozilla/5.0 (X11; Linux x86_64) ...",
-  "viewport": { "width": 1280, "height": 800 },
-  "locale": "en-US",
-  "timezone": "America/New_York",
-  "cookies_persisted": true,
+  "archetype": "iphone16pro_ios18_7_safari26_4",
+  "description": "Sales-team account for east-coast scraping.",
+  "last_used_at": "2026-05-11T12:00:00.000Z",
   "created_at": "2026-05-01T00:00:00.000Z",
   "updated_at": "2026-05-11T12:00:00.000Z"
 }`;
@@ -24,27 +28,31 @@ const SAMPLE_PROFILE = `{
     <h1>Profiles</h1>
 
     <p class="lead">
-      A profile is a saved browser identity — user agent, viewport,
-      locale, timezone, persisted cookies. Sessions can either run
-      ad-hoc (with a built-in archetype) or be pinned to a saved
-      profile for consistent identity across runs.
+      A profile is a reusable, named handle to a stable browser
+      identity (archetype + persisted browser state). The
+      control-plane stores only the metadata you see in the
+      <code>/v1/profiles</code> responses; per-profile cookies,
+      localStorage, and IndexedDB live in the WebKit driver layer.
+      Snapshot them with <code>POST /v1/profiles/:id/snapshots</code>
+      and restore later via
+      <code>POST /v1/profile-snapshots/:id/restore</code>.
     </p>
 
     <h2>When to use a profile</h2>
     <ul>
       <li><strong>Authenticated scraping.</strong> The site requires
-        login; you want the session to carry over so each run doesn't
-        need to re-authenticate.</li>
+        login; you want each session to carry over cookies + storage
+        without re-authenticating.</li>
       <li><strong>A/B-tested rendering.</strong> The site personalises
-        based on cookies; you want to consistently see the same
-        variant across runs.</li>
-      <li><strong>Geographic + locale fidelity.</strong> You're
-        automating against a region-locked feature and need the
-        browser fingerprint to match.</li>
+        based on cookies; you want each run to see the same variant.</li>
+      <li><strong>Archetype pinning.</strong> You want to lock the
+        browser fingerprint (UA / viewport / timezone / locale) to a
+        specific Driftstack-managed archetype slug across runs.</li>
     </ul>
     <p>
       If your automation doesn't care about identity continuity, skip
-      profiles and let sessions use the default archetype.
+      profiles and let sessions run with the account's default
+      archetype.
     </p>
 
     <h2>POST /v1/profiles — mint</h2>
@@ -54,19 +62,20 @@ Content-Type: application/json
 
 {
   "name": "us-east-sales-bot",
-  "archetype": "default",                 ← starting point
-  "viewport": { "width": 1280, "height": 800 },
-  "locale": "en-US",
-  "timezone": "America/New_York",
-  "cookies_persisted": true               ← keep cookies across sessions
+  "archetype": "iphone16pro_ios18_7_safari26_4",   ← optional, defaults server-side
+  "description": "Sales-team account for east-coast scraping."
 }
 
 → 201 Created
 ${SAMPLE_PROFILE}`}</code></pre>
     <p>
-      <code>archetype</code> selects the base preset (see
-      <a href="/docs/sessions">the sessions docs</a> for the list).
-      Subsequent fields override the archetype's defaults.
+      The response is a flat profile object — no envelope. Profile
+      ids are prefixed <code>prof_</code>. The <code>archetype</code>
+      field is a lowercase slug (3–120 chars) identifying a
+      Driftstack-managed device profile; the server applies the
+      account's locked archetype if you omit it. Browser state
+      (cookies, localStorage, etc.) is created on first use and is
+      not part of the create request.
     </p>
 
     <h2>GET /v1/profiles — list</h2>
@@ -75,9 +84,16 @@ Authorization: Bearer ds_live_…
 
 → 200 OK
 {
-  "profiles": [...],
-  "nextCursor": "cur_…"
+  "data": [ /* Profile objects */ ],
+  "has_more": true,
+  "next_cursor": "eyJ0aWQiOi…"   ← null when no more pages
 }`}</code></pre>
+    <p>
+      Cursor pagination. Default page size <strong>50</strong>; max
+      <strong>100</strong>. Pass the previous response's
+      <code>next_cursor</code> as <code>?cursor=</code> on the next
+      request.
+    </p>
 
     <h2>GET /v1/profiles/:id</h2>
     <pre><code>{`GET /v1/profiles/prof_…
@@ -93,16 +109,17 @@ Content-Type: application/json
 
 {
   "name": "us-east-sales-bot-v2",
-  "viewport": { "width": 1440, "height": 900 }
+  "description": "Renamed after the 2026-05 reorg."
 }
 
 → 200 OK
 ${SAMPLE_PROFILE}`}</code></pre>
     <p>
-      Only the fields you supply are updated. The
-      <code>cookies_persisted</code> flag is sticky — you cannot flip
-      it back to <code>false</code> after a session has written
-      cookies; you'd need to delete + re-mint the profile.
+      Only <code>name</code> and <code>description</code> are
+      patchable. To change the archetype, clone the profile via
+      <code>POST /v1/profiles/:id/clone</code> and discard the old
+      one (the archetype is set at create time and pins the device
+      identity for the life of the profile).
     </p>
 
     <h2>DELETE /v1/profiles/:id</h2>
@@ -111,50 +128,89 @@ Authorization: Bearer ds_live_…
 
 → 204 No Content`}</code></pre>
     <p>
-      Persisted cookies + storage state are deleted. In-flight
-      sessions that started with this profile keep running but
-      can't be pinned to it again. Idempotent: a second DELETE on
-      the same id returns 204.
+      The profile + its persisted browser state are removed.
+      In-flight sessions that started with this profile keep running
+      but can't be pinned to it again. Idempotent: a second DELETE
+      on the same id returns 204.
     </p>
 
-    <h2>Snapshot history (V-312)</h2>
+    <h2>Snapshots (V-312)</h2>
     <p>
-      Profile snapshots record the cookies + storage state at the
-      end of each session that used the profile. Customers can
-      restore a previous snapshot if the current state is broken
-      (e.g. the site logged the profile out):
+      Profile snapshots are immutable point-in-time copies of the
+      profile + its browser state. Customers can restore a snapshot
+      into a fresh profile if the current state is broken (e.g. the
+      site logged the profile out):
     </p>
-    <pre><code>{`GET /v1/profiles/prof_…/snapshots
+    <pre><code>{`# Capture
+POST /v1/profiles/prof_…/snapshots
 Authorization: Bearer ds_live_…
+Content-Type: application/json
 
-→ {
-  "snapshots": [
-    { "id": "snap_…", "captured_at": "2026-05-11T11:00:00.000Z" },
-    ...
-  ]
+{ "label": "before-2026-05-12-relogin", "description": "Last-known-good." }
+
+→ 201 Created
+{
+  "id": "psnap_…",
+  "parent_profile_id": "prof_…",
+  "label": "before-2026-05-12-relogin",
+  "description": "Last-known-good.",
+  "parent_archetype": "iphone16pro_ios18_7_safari26_4",
+  "parent_name": "us-east-sales-bot",
+  "captured_at": "2026-05-12T12:00:00.000Z",
+  "created_at": "2026-05-12T12:00:00.000Z"
 }
 
-POST /v1/profiles/prof_…/snapshots/snap_…/restore
-→ 200 OK { "restored": true }`}</code></pre>
+# List per profile (cursor-paginated; same shape as /v1/profiles)
+GET /v1/profiles/prof_…/snapshots
+
+# Restore into a NEW profile (the source snapshot is immutable)
+POST /v1/profile-snapshots/psnap_…/restore
+Authorization: Bearer ds_live_…
+Content-Type: application/json
+
+{ "name": "us-east-sales-bot-restored" }
+
+→ 200 OK   ← returns the newly minted profile object`}</code></pre>
     <p>
-      Snapshots are kept for 30 days. Older snapshots are pruned
-      automatically.
+      Snapshot ids are prefixed <code>psnap_</code>. The
+      restore endpoint lives under <code>/v1/profile-snapshots</code>,
+      not under <code>/v1/profiles/&lt;parent&gt;/snapshots</code>.
+      Each restore creates a fresh profile; the snapshot itself is
+      immutable.
     </p>
 
     <h2>Privacy + retention</h2>
     <ul>
-      <li>Cookies + storage state stored in encrypted form at rest.</li>
-      <li>Profile + snapshots deleted on account deletion + 30 days
-        after the most recent customer-initiated DELETE.</li>
-      <li>No identifying customer data is included in the profile
-        fingerprint — the browser fingerprint is what you configure.</li>
+      <li>Cookies + storage state are stored in encrypted form at
+        rest in the driver layer.</li>
+      <li>Profile metadata + snapshot rows are deleted on account
+        deletion + per the documented retention policy.</li>
+      <li>No identifying customer data is embedded in the profile
+        record — the only customer-supplied fields are
+        <code>name</code> and <code>description</code>.</li>
     </ul>
 
     <h2>Limits</h2>
     <p>
-      Max profiles per account: 50 (Solo Manual / API Starter), 250
-      (Team Manual / API Builder), 1000 (API Scale). Need more?
-      Email <a href="mailto:support@driftstack.dev">support</a>.
+      Profile cap by tier (per
+      <code>PROFILES_PER_TIER</code>):
+    </p>
+    <table>
+      <thead><tr><th>Tier</th><th>Profile cap</th></tr></thead>
+      <tbody>
+        <tr><td>Trial Pack</td><td>1</td></tr>
+        <tr><td>Solo Manual</td><td>10</td></tr>
+        <tr><td>Team Manual</td><td>50</td></tr>
+        <tr><td>Agency Manual</td><td>200</td></tr>
+        <tr><td>API Starter</td><td>25</td></tr>
+        <tr><td>API Builder</td><td>100</td></tr>
+        <tr><td>API Scale</td><td>500</td></tr>
+        <tr><td>Enterprise</td><td>custom</td></tr>
+      </tbody>
+    </table>
+    <p>
+      Need more? Email
+      <a href="mailto:support@driftstack.dev">support</a>.
     </p>
 
     <h2>Support</h2>

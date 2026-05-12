@@ -1,0 +1,119 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-719 — idempotency-keys reference. Documents the
+// Idempotency-Key header introduced by V-666.AO on
+// POST /v1/billing/crypto-checkout. The page is also reachable
+// from the API changelog + the billing-crypto integration guide.
+---
+
+<BaseLayout title="Idempotency keys — Driftstack" description="Idempotency-Key header on the Driftstack API: how it deduplicates retried POSTs and prevents double-charges from racing clients.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Idempotency keys</h1>
+
+    <p class="lead">
+      Network requests fail. Mobile keyboards double-tap submit
+      buttons. A retry-on-timeout that re-sends a POST can mint a
+      second order the customer never wanted. The Driftstack API
+      uses the standard <code>Idempotency-Key</code> request header
+      to make safe-to-retry mutations actually safe.
+    </p>
+
+    <h2>How it works</h2>
+    <p>
+      Send a unique opaque token on the
+      <code>Idempotency-Key</code> request header. The first request
+      with a new token is processed normally. Any subsequent request
+      to the same endpoint with the same token, scoped to the same
+      caller, returns the original response verbatim — same body,
+      same <code>Location</code>, same minted IDs.
+    </p>
+    <pre><code>POST /v1/billing/crypto-checkout
+Authorization: Bearer $KEY
+Idempotency-Key: 7b3f2e0c-1b6a-4cf3-aa6d-9c2c1f8a1b22
+Content-Type: application/json
+
+{
+  "product": "team_manual",
+  "price_cents": 4900,
+  "price_currency": "USD"
+}</code></pre>
+    <p>
+      When the response is a replay (i.e. the server is returning a
+      previously-minted result rather than performing the work
+      again), it sets:
+    </p>
+    <pre><code>Idempotent-Replayed: 1</code></pre>
+    <p>
+      Most clients can ignore this header; it's useful for analytics
+      and for debugging "why does my dashboard show this order
+      twice".
+    </p>
+
+    <h2>Where it applies</h2>
+    <ul>
+      <li><code>POST /v1/billing/crypto-checkout</code> — mints a
+        crypto order. Without the header, two racing clicks mint two
+        orders; with the header, the second click returns the first
+        order.</li>
+    </ul>
+    <p>
+      Future write endpoints will adopt the same convention; this
+      page will enumerate them. <strong>Read-only</strong> endpoints
+      do not consult the header.
+    </p>
+
+    <h2>Choosing a key</h2>
+    <ul>
+      <li>Use any opaque string up to 255 ASCII characters
+        (no whitespace). UUIDv4 is the canonical choice and what
+        Driftstack's own GUI client mints.</li>
+      <li>Generate one per <em>intent</em>, not per request. If a
+        single submit button could be clicked twice, all retries of
+        that submit use the same key.</li>
+      <li>Don't include user data in the key — keys appear in
+        server logs.</li>
+    </ul>
+
+    <h2>Scope + lifetime</h2>
+    <ul>
+      <li>Keys are scoped <strong>per account</strong>. Two
+        different accounts sending the literal string
+        <code>k1</code> get two independent orders.</li>
+      <li>The dedupe window is <strong>24 hours</strong> from the
+        first sighting. After that the key is forgotten; reusing it
+        mints a fresh order.</li>
+      <li>Pre-signup checkouts (no account_id) share a single
+        anonymous bucket. Don't rely on uniqueness there if your
+        client is one of many anonymous callers.</li>
+    </ul>
+
+    <h2>Errors</h2>
+    <ul>
+      <li>A key longer than 255 characters returns
+        <code>400 Bad Request</code>.</li>
+      <li>A key containing whitespace returns
+        <code>400 Bad Request</code>.</li>
+      <li>A missing header is not an error — the endpoint behaves
+        as if idempotency were not requested.</li>
+    </ul>
+    <p>
+      We do <strong>not reject</strong> replays where the request
+      body differs from the original — if you send <code>k1</code>
+      with price_cents=4900 first, then <code>k1</code> with
+      price_cents=9900, you still get the original 4900-cent order
+      back. The server records the mismatch (V-666.AR) and surfaces
+      it as <code>body_mismatches</code> on the admin
+      <code>GET /v1/admin/crypto-orders/idempotency-metrics</code>
+      counter, so support can spot client bugs where a key is being
+      reused across intents. Mint a fresh key per intent and this
+      is a non-issue.
+    </p>
+
+    <h2>Related</h2>
+    <ul>
+      <li><a href="/docs/api-changelog">API changelog</a></li>
+      <li><a href="/docs/billing-crypto-overview">Crypto payments</a></li>
+    </ul>
+  </main>
+</BaseLayout>

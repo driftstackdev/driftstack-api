@@ -6,7 +6,15 @@
 // can pass `pollIntervalMs` to override the default cadence.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { readApiErrorMessage } from './api-errors';
 import { useSettings } from './SettingsContext';
+
+export interface CryptoOrderEvent {
+  status: 'pending' | 'confirming' | 'paid' | 'failed' | 'partial' | 'cancelled';
+  at: string;
+  /** V-666.AU — customer-facing source tag. 'swept' is mapped to 'expired' server-side. */
+  source: 'create' | 'ipn' | 'cancel' | 'expired';
+}
 
 export interface CryptoOrderData {
   order_id: string;
@@ -15,6 +23,12 @@ export interface CryptoOrderData {
   price_currency: string;
   payment_id: string | null;
   status: 'pending' | 'confirming' | 'paid' | 'failed' | 'partial' | 'cancelled';
+  /** V-666.AU — append-only state-transition timeline. Optional on
+   *  the wire so older server builds still parse. */
+  events?: CryptoOrderEvent[];
+  /** V-666.AV — informational pay-window deadline (ISO 8601). Set
+   *  for pending orders; null otherwise. */
+  expires_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -69,7 +83,7 @@ export function useCryptoOrder(
         },
       });
       if (!res.ok) {
-        setState({ kind: 'error', message: `HTTP ${res.status.toString()}` });
+        setState({ kind: 'error', message: await readApiErrorMessage(res) });
         return;
       }
       const body = (await res.json()) as CryptoOrderData;

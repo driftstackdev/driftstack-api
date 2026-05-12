@@ -17,8 +17,9 @@ import { MOCK_USAGE_SUMMARY } from '../data/mocks.ts';
 //   5. Fetch fails (network / 401 / 5xx) → small banner
 //      "Couldn't load live usage. Showing preview data." Mock stays.
 //
-// Config: PUBLIC_API_BASE_URL (Astro public env). Defaults to
-// `http://localhost:3000` for local dev, overridden in production.
+// Config: PUBLIC_API_BASE_URL (Astro public env). See
+// `src/lib/api-base-url.ts` — dev falls back to localhost:3000;
+// prod builds fail fast when the env var is unset (W192).
 //
 // Today usage_records writers aren't wired (V-014/V-015 amendment),
 // so /v1/usage + /v1/usage/series return zeros for everyone. The
@@ -28,7 +29,8 @@ function fmtIsoDay(iso: string): string {
   return new Date(iso).toISOString().slice(0, 10);
 }
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 
 // Mock 30-day series for sparklines. Real source: /v1/usage with
 // daily aggregation. Generated deterministically (no Math.random)

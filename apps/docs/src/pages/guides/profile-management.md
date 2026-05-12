@@ -12,7 +12,7 @@ If a session doesn't bind a profile, it starts ephemeral — fresh cookies, fres
 
 ## Tier limits
 
-Each tier has a profile cap, enforced at `POST /v1/profiles` creation time. Exceeding the cap returns `402` with a `profile_cap_reached` body and an upgrade link.
+Each tier has a profile cap, enforced at `POST /v1/profiles` creation time. Exceeding the cap returns `429` with an RFC 9457 `https://errors.driftstack.dev/tier-limit` problem body — the `detail` string names the tier and the cap.
 
 | Tier          | Profile cap |
 | ------------- | ----------- |
@@ -65,7 +65,7 @@ The response is the full `Profile`:
 
 ```json
 {
-  "id": "prf_01HV...",
+  "id": "prof_01HV...",
   "name": "shopper-account-1",
   "archetype": "iphone16pro_ios18_7_safari26_4",
   "description": "Returning-visitor profile for the shopping flow",
@@ -93,7 +93,7 @@ The `last_used_at` field updates every time a session binds to the profile (once
 `GET /v1/profiles/:id`:
 
 ```ts
-const profile = await client.profiles.get('prf_01HV...');
+const profile = await client.profiles.get('prof_01HV...');
 ```
 
 ## Bind a session to a profile
@@ -111,7 +111,7 @@ In the meantime, profiles still serve as long-lived archetype anchors for the da
 `DELETE /v1/profiles/:id`. Permanent — storage state is wiped.
 
 ```ts
-await client.profiles.delete('prf_01HV...');
+await client.profiles.delete('prof_01HV...');
 ```
 
 If a session is currently bound to the profile, the deletion blocks until the session ends (or returns `409 Conflict` if you set `force=false`, the default).
@@ -122,10 +122,10 @@ If a session is currently bound to the profile, the deletion blocks until the se
 
 ```ts
 // Auto-derived "(copy)" / "(copy 2)" / ... naming.
-const copy = await client.profiles.clone('prf_01HV...');
+const copy = await client.profiles.clone('prof_01HV...');
 
 // Or pass an explicit name.
-const named = await client.profiles.clone('prf_01HV...', { name: 'staging-mirror' });
+const named = await client.profiles.clone('prof_01HV...', { name: 'staging-mirror' });
 ```
 
 Tier-cap + name-conflict are checked the same way as `create`: 429 if your tier limit would be exceeded, 409 on explicit-name collision, 404 if the source profile isn't yours or doesn't exist. The audit-log entry for the new profile carries `payload.cloned_from: "profile_<uuid>"` (the internal `profile_` prefix; see [audit-log payload reference](/api/audit-log/#payload-reference-v-399) for the format).
@@ -137,7 +137,7 @@ A snapshot is a frozen copy of a profile. The parent profile keeps evolving — 
 **Capture.** `POST /v1/profiles/:id/snapshots`.
 
 ```ts
-const snap = await client.profileSnapshots.capture('prf_01HV...', {
+const snap = await client.profileSnapshots.capture('prof_01HV...', {
   label: 'before-iOS-26',
   description: 'pre-rollout reference', // optional
 });
@@ -148,7 +148,7 @@ const snap = await client.profileSnapshots.capture('prf_01HV...', {
 **List.** Per-profile or cross-account.
 
 ```ts
-const perProfile = await client.profileSnapshots.listForProfile('prf_01HV...');
+const perProfile = await client.profileSnapshots.listForProfile('prof_01HV...');
 const everySnapshot = await client.profileSnapshots.list();
 
 // Iterate every snapshot in your account, walking cursor pages.

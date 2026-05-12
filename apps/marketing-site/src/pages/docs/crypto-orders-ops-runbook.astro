@@ -1,0 +1,161 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// V-721 — ops runbook for the crypto-orders surface. Internal-
+// facing page (linked from /docs/admin-api) that walks support
+// through the common drill-downs: a stuck order, a duplicate
+// charge claim, a customer asking why their order is failed.
+//
+// Customer-facing? Yes — the page lives on the public docs site
+// rather than the internal wiki. Reasoning: founder wants the
+// support runbook to be auditable by customers, since the
+// non-refundable policy means every ops decision is consequential.
+---
+
+<BaseLayout title="Crypto orders — ops runbook — Driftstack" description="Internal ops runbook for the Driftstack crypto-orders surface: stuck orders, duplicate charge claims, status reconciliation.">
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
+    <h1>Crypto orders — ops runbook</h1>
+
+    <p class="lead">
+      This page documents the support workflow for the crypto-
+      payments surface. It's published publicly because the
+      <a href="/legal/refunds">non-refundable policy</a> means every
+      decision support takes is consequential, and customers
+      deserve to read the same playbook the support team follows.
+    </p>
+
+    <h2>"Here's a NowPayments payment id — what order is that?"</h2>
+    <p>
+      The fastest reverse-lookup path: the admin list endpoint
+      accepts an exact-match <code>payment_id</code> query param.
+    </p>
+    <pre><code>GET /v1/admin/crypto-orders?payment_id=np_abc123
+Authorization: Bearer $ADMIN_KEY</code></pre>
+    <p>
+      Returns the (at most one) matching order. Available in the
+      admin GUI as the "Payment ID" filter input next to the search
+      box. Distinct from the fuzzy <code>search</code> param (which
+      walks order_id / product / customer_note) so the lookup is
+      O(scan) but unambiguous.
+    </p>
+
+    <h2>"My order is stuck in pending"</h2>
+    <ol>
+      <li>Pull the order:
+        <code>GET /v1/admin/crypto-orders/:id</code> as an admin
+        key.</li>
+      <li>Check the age. Pay windows are ~60 minutes. Orders past
+        that without an IPN are candidates for sweep
+        (<code>POST /v1/admin/crypto-orders/sweep-expired</code>).</li>
+      <li>If the customer says they paid, ask for the chain +
+        tx-hash. Cross-reference against NowPayments's dashboard.
+        If the payment landed but the IPN never fired, manually
+        replay the IPN:
+        <code>POST /v1/admin/crypto-orders/:id/apply-ipn</code> with
+        the recorded <code>payment_id</code> +
+        <code>provider_status: 'finished'</code>.</li>
+      <li>If the payment never landed, sweep the order to
+        <code>failed</code> and explain the pay window.</li>
+    </ol>
+
+    <h2>"I see two charges on my card"</h2>
+    <p>
+      Crypto orders don't touch cards — that's the Stripe surface.
+      Confirm whether the duplicate is crypto-vs-crypto (likely
+      double-click → handled by V-666.AO idempotency keys) or
+      crypto-vs-Stripe (handle on the Stripe side). For two crypto
+      orders on the same customer/product:
+    </p>
+    <ol>
+      <li>Confirm both order ids exist + are both
+        <code>paid</code>.</li>
+      <li>Check the <code>idempotency-metrics</code> endpoint —
+        does the <code>replays</code> count match what you'd expect
+        from this customer's flow?</li>
+      <li>If both orders truly settled, this is a customer-side
+        bug (their integration sent two distinct Idempotency-Keys
+        for what they intended as one intent). Crypto is non-
+        refundable; the resolution is to credit the customer's
+        next billing cycle, not refund.</li>
+    </ol>
+
+    <h2>"What happened to this order, in order?"</h2>
+    <p>
+      Pull the timeline:
+    </p>
+    <pre><code>GET /v1/admin/crypto-orders/:id/events
+Authorization: Bearer $ADMIN_KEY</code></pre>
+    <p>
+      Returns the order's append-only event log oldest-first. Each
+      event carries the destination status, an ISO-8601 timestamp,
+      and a <code>source</code> tag — <code>create</code>,
+      <code>ipn</code>, <code>cancel</code>, <code>expired</code>,
+      or <code>swept</code>. Same timeline is rendered inline on
+      the admin detail drawer.
+    </p>
+
+    <h2>"Why is my order failed?"</h2>
+    <p>
+      Look at the order's <code>payment_id</code> + the most
+      recent IPN payload. The internal status transitions to
+      <code>failed</code> in three cases:
+    </p>
+    <ul>
+      <li>NowPayments reported a terminal failure
+        (<code>failed</code> / <code>expired</code> /
+        <code>refunded</code>). The IPN payload tells you which.</li>
+      <li>The order's pay window elapsed and the customer-facing
+        <code>cancel</code> endpoint marked it expired.</li>
+      <li>An admin sweep retired a long-pending order.</li>
+    </ul>
+    <p>
+      Server-side, the <code>crypto.order.failed</code> event
+      emitted by these transitions carries a <code>reason</code>
+      field with one of <code>ipn</code> / <code>expired</code> /
+      <code>swept</code>. This event is not yet customer-
+      subscribable (not in
+      <code>SubscribableWebhookEventTypeSchema</code>); see
+      <a href="/docs/webhooks-crypto-events">/docs/webhooks-crypto-events</a>
+      for graduation status. Ops can read the same source via the
+      <code>/events</code> endpoint above today.
+    </p>
+
+    <h2>"How do I bulk-export today's orders for reconciliation?"</h2>
+    <p>
+      Use <a href="/docs/admin-csv-export">/docs/admin-csv-export</a>
+      from the admin GUI, or hit the CSV endpoint directly. For
+      anything beyond 1000 rows, walk the cursor-paginated
+      JSON list (<a href="/docs/admin-api-pagination">cursor docs</a>).
+    </p>
+    <p>
+      V-666.BY: scope the export to a date window with
+      <code>?created_after</code> + <code>?created_before</code>
+      (ISO 8601). Both work on the JSON list, the CSV endpoint, and
+      the admin GUI's From/To inputs. Combine with
+      <code>?status=paid</code> for a nightly paid-only reconcile.
+    </p>
+    <pre><code>{`GET /v1/admin/crypto-orders.csv?status=paid&created_after=2026-05-01T00:00:00Z&created_before=2026-05-12T00:00:00Z
+Authorization: Bearer ds_admin_…`}</code></pre>
+
+    <h2>"A customer's idempotency-key is misbehaving"</h2>
+    <p>
+      Check the <code>body_mismatches</code> counter on
+      <code>/v1/admin/crypto-orders/idempotency-metrics</code>. A
+      non-zero number means at least one client is reusing keys
+      across distinct intents — usually a hardcoded constant where
+      a generated UUID belongs. The structured warn log
+      (<code>event: 'crypto_checkout_idempotency_body_mismatch'</code>)
+      carries the account id; grep for the offending integration.
+    </p>
+
+    <h2>Related</h2>
+    <ul>
+      <li><a href="/docs/admin-api">Admin API overview</a></li>
+      <li><a href="/docs/admin-api-pagination">Admin API pagination</a></li>
+      <li><a href="/docs/admin-csv-export">Admin CSV export</a></li>
+      <li><a href="/docs/idempotency-keys">Idempotency keys</a></li>
+      <li><a href="/docs/billing-crypto-integration-guide">Integration guide</a></li>
+      <li><a href="/legal/refunds">Non-refundable policy</a></li>
+    </ul>
+  </main>
+</BaseLayout>

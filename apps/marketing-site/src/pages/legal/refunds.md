@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/LegalLayout.astro
 title: Refund Policy
-description: Refund eligibility, timing, card + crypto refund mechanics, prorated downgrades, and the SLA-credit relationship.
+description: Refund eligibility, timing, card refund mechanics, the non-refundable posture on crypto payments, prorated downgrades, and the SLA-credit relationship.
 ---
 
 # Driftstack — Refund Policy
@@ -47,7 +47,7 @@ We do **not** issue refunds in these scenarios:
 - Usage that exceeded customer expectations (e.g. LLM-bundled
   spend). We surface estimated cost in the [billing dashboard](/docs/cost-monitoring)
   so you can shape usage before the next cycle.
-- Trial Pack credit not consumed within its 30-day window. The
+- Trial Pack credit not consumed within its 14-day window. The
   credit forfeits at expiry; the Trial Pack itself is non-refundable.
 
 ## How refunds work — card payments (Stripe)
@@ -61,27 +61,44 @@ We do **not** issue refunds in these scenarios:
 4. Your account is debited the refunded portion if you have an
    active Subscription affected by the refund.
 
-## How refunds work — crypto payments (NowPayments)
+## Crypto payments are non-refundable
 
-Crypto refunds carry mechanical differences from card refunds and
-deserve their own walkthrough:
+**Crypto payments at Driftstack are non-refundable.** Once a crypto
+payment settles on-chain it is committed for the billing period it
+covers. This is the standard B2B SaaS posture; the rationale is:
 
-1. You request the refund via support, supplying a forwarding
-   address in the same asset you paid in (e.g. paid in BTC → BTC
-   forwarding address). Cross-asset refunds (paid in BTC, refund in
-   USD) are not supported — we don't run a foreign-exchange desk.
-2. The founder issues the refund in NowPayments to the forwarding
-   address. NowPayments broadcasts the on-chain refund transfer.
-3. Once the refund transfer receives the asset's required
-   confirmations, your account is debited the refunded portion and
-   the order's status flips to `failed`. NowPayments charges a
-   network fee for the refund transfer — that fee is netted out of
-   the refunded amount.
-4. Refund amount calculation: we refund the **USD-denominated price
-   at order time**, not the realised crypto amount. If the asset
-   moved in price between order and refund, that delta is not part
-   of the refund (we are not in the business of speculation arbitrage,
-   in either direction).
+- **Settlement irreversibility.** Crypto transfers are final once
+  the network confirms them. We have no operational lever to claw
+  back a confirmed payment, only to send a fresh outbound transfer
+  — which introduces price-movement risk for both parties and
+  network-fee waste.
+- **Fraud + abuse asymmetry.** Card refunds rely on the issuer to
+  reverse a charge if the cardholder disputes; that escalation path
+  doesn't exist for crypto. Allowing crypto refunds at customer
+  request would create a one-way return-policy attack surface.
+- **Operational simplicity.** A non-refundable crypto policy keeps
+  the support pipeline narrow + lets us price the crypto path
+  competitively (we don't carry a refund-loss reserve into the unit
+  economics).
+
+What this means practically:
+
+1. You can **cancel** your subscription anytime through the standard
+   self-serve flow. Cancellation stops the next billing period's
+   payment-request mint; it does not refund the current period.
+2. The current billing period continues to be honoured until its end
+   — you retain full access to the tier you paid for.
+3. If you accidentally pay twice for the same period, that is a
+   reconciliation question — contact support; we'll credit the
+   duplicate against your next renewal rather than refund it
+   on-chain.
+4. If a payment lands but the service fails to provision (scenario
+   1, "failed delivery"), the **service-failure remedy applies**:
+   we re-provision the entitlement, no refund mechanics needed.
+
+If your situation needs an actual cash refund, please pay via card
+(Stripe) — card refunds follow the standard mechanics documented in
+the section above.
 
 For more on the crypto-payment lifecycle, see [`/pricing/crypto`](/pricing/crypto).
 

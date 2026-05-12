@@ -1,5 +1,5 @@
 // V-534.AI — unit tests for CryptoOrdersStatsCard.
-// V-666.AB — extended for refund-pending count + value display.
+// V-534.AP — extended for paid-by-product breakdown.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -221,8 +221,8 @@ describe('V-534.AI CryptoOrdersStatsCard', () => {
   });
 });
 
-describe('V-666.AB CryptoOrdersStatsCard — refund-pending metrics', () => {
-  it('shows refund-pending count of 0 when none are pending', async () => {
+describe('V-534.AP CryptoOrdersStatsCard — paid-by-product breakdown', () => {
+  it('renders a row per product with count + per-currency revenue', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>
@@ -232,8 +232,11 @@ describe('V-666.AB CryptoOrdersStatsCard — refund-pending metrics', () => {
           json: () =>
             Promise.resolve(
               makeStats({
-                refund_pending_count: 0,
-                refund_pending_cents: {},
+                paid_revenue_by_product: {
+                  team_growth: { EUR: 14900, USD: 16000 },
+                  api_starter: { EUR: 5000 },
+                },
+                paid_count_by_product: { team_growth: 2, api_starter: 1 },
               }),
             ),
         } as unknown as Response),
@@ -241,13 +244,19 @@ describe('V-666.AB CryptoOrdersStatsCard — refund-pending metrics', () => {
     );
     render(<CryptoOrdersStatsCard />);
     await waitFor(() => {
-      expect(screen.getByText('Refund pending')).toBeTruthy();
+      expect(screen.getByTestId('paid-by-product')).toBeTruthy();
     });
-    // The "Refund pending value" block should not render when empty.
-    expect(screen.queryByText('Refund pending value')).toBeNull();
+    const tg = screen.getByTestId('product-row-team_growth');
+    expect(tg.textContent).toContain('team_growth');
+    expect(tg.textContent).toContain('2');
+    expect(tg.textContent).toContain('149.00 EUR');
+    expect(tg.textContent).toContain('160.00 USD');
+    const api = screen.getByTestId('product-row-api_starter');
+    expect(api.textContent).toContain('1');
+    expect(api.textContent).toContain('50.00 EUR');
   });
 
-  it('renders the refund-pending count + currency breakdown', async () => {
+  it('sorts product rows by total revenue desc (multi-currency summed)', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>
@@ -257,8 +266,12 @@ describe('V-666.AB CryptoOrdersStatsCard — refund-pending metrics', () => {
           json: () =>
             Promise.resolve(
               makeStats({
-                refund_pending_count: 2,
-                refund_pending_cents: { EUR: 14900, USD: 5000 },
+                paid_revenue_by_product: {
+                  small: { EUR: 1000 },
+                  big: { EUR: 50000 },
+                  medium: { EUR: 10000 },
+                },
+                paid_count_by_product: { small: 1, big: 1, medium: 1 },
               }),
             ),
         } as unknown as Response),
@@ -266,36 +279,35 @@ describe('V-666.AB CryptoOrdersStatsCard — refund-pending metrics', () => {
     );
     render(<CryptoOrdersStatsCard />);
     await waitFor(() => {
-      expect(screen.getByText('Refund pending value')).toBeTruthy();
+      expect(screen.getByTestId('paid-by-product')).toBeTruthy();
     });
-    expect(screen.getByText('149.00 EUR')).toBeTruthy();
-    expect(screen.getByText('50.00 USD')).toBeTruthy();
-    // The "Refund pending" KPI cell shows the count (2).
-    const refundPendingLabel = screen.getByText('Refund pending');
-    expect(refundPendingLabel.nextElementSibling?.textContent).toBe('2');
+    const rows = screen.getAllByTestId(/product-row-/);
+    expect(rows[0]?.getAttribute('data-testid')).toBe('product-row-big');
+    expect(rows[1]?.getAttribute('data-testid')).toBe('product-row-medium');
+    expect(rows[2]?.getAttribute('data-testid')).toBe('product-row-small');
   });
 
-  it('tolerates an older API response without the refund-pending fields', async () => {
+  it('omits the breakdown block when no products have paid orders', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>
         Promise.resolve({
           ok: true,
           status: 200,
-          json: () => {
-            const base = makeStats();
-            delete base.refund_pending_count;
-            delete base.refund_pending_cents;
-            return Promise.resolve(base);
-          },
+          json: () =>
+            Promise.resolve(
+              makeStats({
+                paid_revenue_by_product: {},
+                paid_count_by_product: {},
+              }),
+            ),
         } as unknown as Response),
       ),
     );
     render(<CryptoOrdersStatsCard />);
     await waitFor(() => {
-      expect(screen.getByText('Refund pending')).toBeTruthy();
+      expect(screen.getByText('Total orders')).toBeTruthy();
     });
-    // Defaults to 0 in the count + omits the breakdown block.
-    expect(screen.queryByText('Refund pending value')).toBeNull();
+    expect(screen.queryByTestId('paid-by-product')).toBeNull();
   });
 });

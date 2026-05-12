@@ -17,8 +17,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       the <code>driftstack_internal_admin</code> scope. It exists for
       our founder + support team to look up customer orders, apply
       manual recoveries when an external provider misbehaves, and
-      record refund intents. This page documents what it can do — so
-      a customer doing security review can verify the scope.
+      attach internal-only operator notes. This page documents what
+      it can do — so a customer doing security review can verify the
+      scope.
     </p>
 
     <h2>The scope</h2>
@@ -42,10 +43,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         admin-impersonation path.
       </li>
       <li>
-        Trigger an on-chain crypto refund. The admin
-        <code>request-refund</code> endpoint <strong>records the
-        intent</strong> only; the actual refund goes through the
-        NowPayments dashboard as a separate manual step.
+        Issue a crypto refund. Crypto payments are non-refundable
+        by policy; there is no admin endpoint that initiates a
+        crypto-side reversal. See
+        <a href="/legal/refunds">/legal/refunds</a> for the binding
+        rules. Stripe refund handling is unchanged and runs through
+        the Stripe dashboard with audit-only records on our side.
       </li>
       <li>
         Charge a customer. Stripe + NowPayments are the only
@@ -62,35 +65,49 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <tbody>
         <tr>
           <td><code>GET /v1/admin/crypto-orders</code></td>
-          <td>Cross-account list with status + free-text-search filters.</td>
+          <td>
+            Cross-account list. Filters: <code>status</code>,
+            <code>search</code>, <code>payment_id</code>,
+            <code>account_id</code>, <code>created_after</code> /
+            <code>created_before</code> (V-666.BY). Cursor-paginated
+            via <code>next_cursor</code> (V-666.AM).
+          </td>
         </tr>
         <tr>
           <td><code>GET /v1/admin/crypto-orders.csv</code></td>
-          <td>Same filters, CSV export (up to 1000 rows / call).</td>
+          <td>Same filter set, CSV export (up to 1000 rows / call).</td>
         </tr>
         <tr>
           <td><code>GET /v1/admin/crypto-orders/stats</code></td>
           <td>Per-status counts, paid revenue by currency, avg time-to-paid.</td>
         </tr>
         <tr>
+          <td><code>GET /v1/admin/crypto-orders/idempotency-metrics</code></td>
+          <td>Counters for first-write vs replay vs body-mismatch on the customer checkout endpoint (V-666.AP / V-666.AR).</td>
+        </tr>
+        <tr>
+          <td><code>GET /v1/admin/crypto-orders/pending-age</code></td>
+          <td>Histogram of how long current pending orders have been pending — surfaces stuck flows.</td>
+        </tr>
+        <tr>
           <td><code>GET /v1/admin/crypto-orders/daily?days=N</code></td>
           <td>Per-day breakdown of (date, status, count) for charts.</td>
         </tr>
         <tr>
-          <td><code>GET /v1/admin/crypto-orders/:id</code></td>
-          <td>Single-order lookup with full envelope including refund fields.</td>
+          <td><code>GET /v1/admin/crypto-orders/:order_id</code></td>
+          <td>Single-order lookup with the full envelope (including internal note).</td>
         </tr>
         <tr>
-          <td><code>POST /v1/admin/crypto-orders/:id/apply-ipn</code></td>
+          <td><code>GET /v1/admin/crypto-orders/:order_id/events</code></td>
+          <td>Per-order event stream (state transitions + admin actions, append-only).</td>
+        </tr>
+        <tr>
+          <td><code>POST /v1/admin/crypto-orders/:order_id/apply-ipn</code></td>
           <td>Manually replay a missed NowPayments IPN. Forward-only state machine.</td>
         </tr>
         <tr>
-          <td><code>POST /v1/admin/crypto-orders/:id/request-refund</code></td>
-          <td>Record a refund intent on a paid order. Does not move funds.</td>
-        </tr>
-        <tr>
-          <td><code>POST /v1/admin/crypto-orders/:id/cancel-refund-request</code></td>
-          <td>Clear a previously recorded refund intent. Idempotent.</td>
+          <td><code>PATCH /v1/admin/crypto-orders/:order_id/internal-note</code></td>
+          <td>Set / clear the admin-only internal note on an order.</td>
         </tr>
         <tr>
           <td><code>POST /v1/admin/crypto-orders/sweep-expired</code></td>

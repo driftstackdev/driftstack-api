@@ -1,9 +1,32 @@
 // V-534.AM — unit tests for CryptoOrderAdminDetailDrawer.
-// V-534.AN — extended for inline action callbacks.
+// V-534.AN — extended for inline edit-note callback.
+// V-534.BD — extended for the event-timeline section.
+//
+// Crypto payments are non-refundable. The drawer carries no refund
+// surface; tests verify only the read-only envelope + the edit-note
+// action.
 
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { CryptoOrderAdminDetailDrawer } from '../../src/components/CryptoOrderAdminDetailDrawer';
+
+// V-534.BD — mock the events hook before importing the drawer.
+interface MockEventsState {
+  kind: 'idle' | 'loading' | 'ready' | 'error';
+  events?: Array<{ status: string; at: string; source: string }>;
+  message?: string;
+}
+const eventsMock: { state: MockEventsState } = vi.hoisted(() => ({
+  state: { kind: 'ready' as const, events: [] },
+}));
+vi.mock('../../src/lib/use-admin-order-events', () => ({
+  useAdminOrderEvents: () => ({
+    state: eventsMock.state,
+    refetch: () => Promise.resolve(),
+  }),
+}));
+
+const { CryptoOrderAdminDetailDrawer } =
+  await import('../../src/components/CryptoOrderAdminDetailDrawer');
 import type { AdminCryptoOrder } from '../../src/lib/use-admin-crypto-orders-list';
 
 function makeOrder(overrides: Partial<AdminCryptoOrder> = {}): AdminCryptoOrder {
@@ -16,8 +39,6 @@ function makeOrder(overrides: Partial<AdminCryptoOrder> = {}): AdminCryptoOrder 
     payment_id: null,
     status: 'paid',
     customer_note: null,
-    refund_requested_at: null,
-    refund_reason: null,
     internal_note: null,
     created_at: '2026-05-11T09:00:00.000Z',
     updated_at: '2026-05-11T09:30:00.000Z',
@@ -36,26 +57,6 @@ describe('V-534.AM CryptoOrderAdminDetailDrawer', () => {
     expect(screen.getByText('149.00 EUR')).toBeTruthy();
     expect(screen.getByText('np_42')).toBeTruthy();
     expect(screen.getByText('2026-05-11T09:00:00.000Z')).toBeTruthy();
-  });
-
-  it('shows the "Refund pending" pill + refund detail when refund_requested_at is set', () => {
-    render(
-      <CryptoOrderAdminDetailDrawer
-        order={makeOrder({
-          refund_requested_at: '2026-05-11T10:00:00.000Z',
-          refund_reason: 'duplicate payment',
-        })}
-        onClose={vi.fn()}
-      />,
-    );
-    expect(screen.getByText(/Refund pending/i)).toBeTruthy();
-    expect(screen.getByText('2026-05-11T10:00:00.000Z')).toBeTruthy();
-    expect(screen.getByText('duplicate payment')).toBeTruthy();
-  });
-
-  it('shows the "No refund recorded" placeholder when no refund is outstanding', () => {
-    render(<CryptoOrderAdminDetailDrawer order={makeOrder()} onClose={vi.fn()} />);
-    expect(screen.getByText('No refund recorded.')).toBeTruthy();
   });
 
   it('renders customer_note + internal_note when both are present', () => {
@@ -91,10 +92,9 @@ describe('V-534.AM CryptoOrderAdminDetailDrawer', () => {
   });
 });
 
-describe('V-534.AN CryptoOrderAdminDetailDrawer — inline actions', () => {
+describe('V-534.AN CryptoOrderAdminDetailDrawer — inline edit-note action', () => {
   it('does NOT render any action button when callbacks are omitted', () => {
     render(<CryptoOrderAdminDetailDrawer order={makeOrder()} onClose={vi.fn()} />);
-    // The only button present should be Close.
     const buttons = screen.getAllByRole('button');
     expect(buttons).toHaveLength(1);
     expect(buttons[0]?.textContent).toBe('Close');
@@ -126,58 +126,36 @@ describe('V-534.AN CryptoOrderAdminDetailDrawer — inline actions', () => {
     expect(screen.getByRole('button', { name: /Edit note/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Add note/i })).toBeNull();
   });
+});
 
-  it('renders "Request refund" only for paid orders with no outstanding refund', () => {
-    const onRequestRefund = vi.fn();
-    const { rerender } = render(
-      <CryptoOrderAdminDetailDrawer
-        order={makeOrder({ status: 'pending' })}
-        onClose={vi.fn()}
-        onRequestRefund={onRequestRefund}
-      />,
-    );
-    expect(screen.queryByRole('button', { name: /Request refund/i })).toBeNull();
-    rerender(
-      <CryptoOrderAdminDetailDrawer
-        order={makeOrder({ status: 'paid' })}
-        onClose={vi.fn()}
-        onRequestRefund={onRequestRefund}
-      />,
-    );
-    expect(screen.getByRole('button', { name: /Request refund/i })).toBeTruthy();
+describe('V-534.BD CryptoOrderAdminDetailDrawer — events timeline', () => {
+  it('renders the timeline section with create + ipn rows', () => {
+    eventsMock.state = {
+      kind: 'ready',
+      events: [
+        { status: 'pending', at: '2026-05-11T10:00:00.000Z', source: 'create' },
+        { status: 'paid', at: '2026-05-11T10:30:00.000Z', source: 'ipn' },
+      ],
+    };
+    render(<CryptoOrderAdminDetailDrawer order={makeOrder()} onClose={vi.fn()} />);
+    const timeline = screen.getByLabelText('Order events timeline');
+    expect(timeline).toBeTruthy();
+    expect(timeline.textContent).toContain('via create');
+    expect(timeline.textContent).toContain('via ipn');
+    expect(timeline.textContent).toContain('2026-05-11T10:00:00.000Z');
   });
 
-  it('renders "Clear refund" only when refund_requested_at is set + fires the callback', () => {
-    const onCancelRefund = vi.fn();
-    render(
-      <CryptoOrderAdminDetailDrawer
-        order={makeOrder({
-          refund_requested_at: '2026-05-11T10:00:00.000Z',
-          refund_reason: 'duplicate',
-        })}
-        onClose={vi.fn()}
-        onCancelRefund={onCancelRefund}
-      />,
+  it('renders a loading message while the fetch is in flight', () => {
+    eventsMock.state = { kind: 'loading' };
+    render(<CryptoOrderAdminDetailDrawer order={makeOrder()} onClose={vi.fn()} />);
+    expect(screen.getByLabelText('Order events timeline').textContent).toContain(
+      'Loading timeline',
     );
-    const btn = screen.getByRole('button', { name: 'Clear refund' });
-    fireEvent.click(btn);
-    expect(onCancelRefund).toHaveBeenCalledTimes(1);
   });
 
-  it('hides "Request refund" when a refund is already outstanding (even on paid orders)', () => {
-    render(
-      <CryptoOrderAdminDetailDrawer
-        order={makeOrder({
-          status: 'paid',
-          refund_requested_at: '2026-05-11T10:00:00.000Z',
-          refund_reason: 'r',
-        })}
-        onClose={vi.fn()}
-        onRequestRefund={vi.fn()}
-        onCancelRefund={vi.fn()}
-      />,
-    );
-    expect(screen.queryByRole('button', { name: /Request refund/i })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Clear refund' })).toBeTruthy();
+  it('renders an inline error when the events fetch fails', () => {
+    eventsMock.state = { kind: 'error', message: 'HTTP 404' };
+    render(<CryptoOrderAdminDetailDrawer order={makeOrder()} onClose={vi.fn()} />);
+    expect(screen.getByLabelText('Order events timeline').textContent).toContain('HTTP 404');
   });
 });

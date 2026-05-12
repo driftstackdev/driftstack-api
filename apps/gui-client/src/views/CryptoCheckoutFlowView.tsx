@@ -116,6 +116,14 @@ export function CryptoCheckoutFlowView(props: CryptoCheckoutFlowViewProps): JSX.
             <div>
               Order id: <span className="font-mono text-xs">{checkout.state.order.order_id}</span>
             </div>
+            {checkout.state.replayed && (
+              <div
+                role="status"
+                className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary"
+              >
+                Restored from your earlier attempt (no duplicate order minted).
+              </div>
+            )}
             {checkout.state.order.payment_address !== null && (
               <div>
                 Send to:{' '}

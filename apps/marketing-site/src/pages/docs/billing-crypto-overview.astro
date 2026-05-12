@@ -61,7 +61,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <tr>
           <td><code>partial</code></td>
           <td>An on-chain payment arrived but the amount is below the invoice. Common when the exchange rate moved between quote + payment.</td>
-          <td>Contact support — we can top-up-invoice or refund.</td>
+          <td>Contact support — we'll arrange a top-up. Crypto payments are non-refundable, so partials are resolved by completing the payment, not by sending it back.</td>
         </tr>
         <tr>
           <td><code>paid</code></td>
@@ -113,13 +113,15 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h3>4. Order moves to paid</h3>
     <p>
       Your tier upgrade is applied the moment the order transitions
-      to <code>paid</code>. We also fire two side effects:
+      to <code>paid</code>. A receipt email is sent to the account
+      address. A server-side <code>crypto.order.paid</code> event is
+      emitted but is not yet on the subscribable webhook event list —
+      see
+      <a href="/docs/webhooks-crypto-events">/docs/webhooks-crypto-events</a>
+      and poll
+      <code>GET /v1/billing/crypto-orders/&lt;order_id&gt;</code> in
+      the meantime.
     </p>
-    <ul>
-      <li>The <code>crypto.order.paid</code> webhook event (if you
-        have webhooks configured) so your systems know the upgrade is live.</li>
-      <li>A receipt email to the account address.</li>
-    </ul>
 
     <h3>5. Download a receipt</h3>
     <p>
@@ -148,21 +150,23 @@ GET /v1/billing/crypto-orders/:id/receipt.pdf`}</code></pre>
         waiting for the confirmation threshold. Wait the documented
         block count.</li>
       <li><strong><code>partial</code> state.</strong> Open a support
-        ticket; we can manually top-up or refund.</li>
+        ticket; we'll arrange a top-up. Crypto payments are
+        non-refundable, so partials are resolved by completing the
+        payment, not by sending the existing crypto back.</li>
       <li><strong>Stuck more than 24 hours.</strong> The order will
         auto-transition to <code>failed</code>; open a new order or
         contact support for reconciliation.</li>
     </ul>
 
-    <h2>Refunds</h2>
+    <h2>Refunds + cancellation</h2>
     <p>
-      Crypto refunds are operationally heavier than card refunds
-      because we need a return address on the same network and we
-      eat the on-chain fees. We honour refund requests within 7 days
-      of payment for any reason, with the customer covering the
-      network fee on the return transaction. Email
-      <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>
-      with your order id + return address.
+      <strong>Crypto payments at Driftstack are non-refundable.</strong>
+      You may cancel your subscription at any time — cancellation
+      stops future billing periods — but the current billing period
+      is not refunded. See <a href="/legal/refunds">/legal/refunds</a>
+      for the full policy. If you specifically need a cash-refund
+      mechanism, the card-billing path (Stripe) is the right
+      channel.
     </p>
 
     <h2>Tax + invoicing</h2>
@@ -174,11 +178,21 @@ GET /v1/billing/crypto-orders/:id/receipt.pdf`}</code></pre>
 
     <h2>Related docs</h2>
     <ul>
+      <li><a href="/docs/billing-crypto-integration-guide">Crypto
+        payments — integration guide</a> — end-to-end walkthrough
+        for an engineer integrating against the API.</li>
       <li><a href="/pricing">Pricing</a> — tier comparison.</li>
       <li><a href="/docs/billing-faq">Billing FAQ</a> — proration,
         trial → paid, card-vs-crypto.</li>
-      <li><a href="/docs/webhooks">Webhooks</a> — listen for
-        <code>crypto.order.paid</code>.</li>
+      <li><a href="/docs/webhooks-crypto-events">Crypto webhook
+        events</a> — payload reference for
+        <code>crypto.order.paid</code> and
+        <code>crypto.order.failed</code>.</li>
+      <li><a href="/docs/crypto-orders-polling-vs-webhooks">Polling
+        vs webhooks</a> — choosing between push and pull for state
+        changes, plus the recommended hybrid pattern.</li>
+      <li><a href="/docs/idempotency-keys">Idempotency keys</a> —
+        safe retries on checkout.</li>
       <li><a href="/docs/api-quickstart">API quickstart</a> — get
         an API key once your order is paid.</li>
     </ul>

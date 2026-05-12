@@ -1,64 +1,96 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
-// V-688 — error-codes developer reference. Companion to
-// /docs/api-quickstart; lets developers grep their logs for an
-// error code + jump straight to "what does this mean / what
-// should I do."
+// V-688 / W203 — error-codes developer reference. Lets developers
+// grep logs for a problem-type URI + jump straight to "what does this
+// mean / what should I do."
+//
+// W203 rewrote this doc to match reality: every Driftstack error
+// response is RFC 7807 (`application/problem+json`) with a flat
+// shape — `type` URI + `title` + `status` + `detail` + extension
+// keys at the top level. The previous version of this page advertised
+// a fictional `{ "error": { "code": ..., "message": ... } }` envelope
+// and a `code` field that the server doesn't emit; clients dispatching
+// on `error.code` would have hit `undefined` on every error path.
 
 const ERRORS = [
   // 4xx
-  { code: 'validation_error', http: 400, when: 'Request body / params failed Zod schema validation.', action: 'Fix the field listed in the response detail.' },
-  { code: 'bad_request', http: 400, when: 'A generic invariant violation (e.g. capacity ≤ 0, malformed URL).', action: 'Read the message; the field at fault is named.' },
-  { code: 'invalid_key', http: 401, when: 'API key is malformed (too short, wrong prefix) or unknown.', action: 'Confirm the key in your secret manager matches the dashboard.' },
-  { code: 'unauthorized', http: 401, when: 'Authorization header missing or malformed.', action: 'Send Authorization: Bearer ds_live_… on every request.' },
-  { code: 'forbidden', http: 403, when: 'Key is valid but lacks the required scope for this endpoint.', action: 'Mint a key with the right scope (see /docs/api-keys).' },
-  { code: 'mfa_required', http: 403, when: 'Endpoint needs a fresh MFA confirmation (15-min step-up window).', action: 'Have the user re-verify MFA from the dashboard, then retry.' },
-  { code: 'not_found', http: 404, when: 'Resource id does not exist OR you do not have access.', action: 'Verify the id; 404 is also returned for cross-account lookups.' },
-  { code: 'conflict', http: 409, when: 'State conflict (duplicate, sticky tombstone, quota cap).', action: 'Read the message — often "mint a fresh resource instead".' },
-  { code: 'concurrent_session_limit', http: 409, when: 'Account has hit its tier-bound concurrent-session cap.', action: 'Wait for a running session to finish, or upgrade the tier.' },
-  { code: 'rate_limited', http: 429, when: 'A rate-limit bucket is empty for this account.', action: 'Honour Retry-After (see /docs/rate-limits).' },
+  { uri: 'bad-request', http: 400, when: 'Generic invariant violation (e.g. capacity ≤ 0, malformed URL).', action: 'Read `detail`; the field at fault is named.' },
+  { uri: 'validation-failed', http: 400, when: 'Request body / params failed Zod schema validation.', action: 'Fix the field listed in the response detail.' },
+  { uri: 'unauthorized', http: 401, when: 'Authorization header missing or malformed.', action: 'Send `Authorization: Bearer ds_live_…` on every request.' },
+  { uri: 'invalid-key', http: 401, when: 'API key is malformed (wrong prefix) or unknown.', action: 'Confirm the key in your secret manager matches the dashboard.' },
+  { uri: 'revoked-key', http: 401, when: 'API key was revoked (manually or via rotation grace expiry).', action: 'Mint a new key from the dashboard.' },
+  { uri: 'expired-key', http: 401, when: 'API key passed its `expires_at` (set by rotation).', action: 'Roll to the post-rotation key; old key auto-expires after the 24h grace window.' },
+  { uri: 'invalid-auth-token', http: 401, when: 'Signup-verification / password-reset / magic-link token was malformed, consumed, or expired.', action: 'Request a fresh token via the dashboard.' },
+  { uri: 'email-not-verified', http: 401, when: 'Login attempted before the user verified their signup email.', action: 'Click the verify link in the welcome email (or resend it from /forgot-password).' },
+  { uri: 'invalid-credentials', http: 401, when: 'Login failed (wrong password) OR account does not exist — both surface the same shape on purpose (no enumeration).', action: 'Verify credentials; do not retry-loop.' },
+  { uri: 'forbidden', http: 403, when: 'Key is valid but lacks the required scope for this endpoint.', action: 'Mint a key with the right scope (see /docs/api-keys).' },
+  { uri: 'mfa-step-up-required', http: 403, when: 'Endpoint requires a fresh MFA step-up confirmation. Extension `requires_mfa_step_up: true`.', action: 'POST a 6-digit code to /v1/auth/mfa/step-up, then retry the original request.' },
+  { uri: 'legal-acceptance-required', http: 403, when: 'A new ToS / Privacy revision hasn\'t been accepted by the calling account.', action: 'POST to /v1/account/legal/accept with the current revision id.' },
+  { uri: 'not-found', http: 404, when: 'Resource id does not exist OR you do not have access (both surface as 404; no enumeration).', action: 'Verify the id; cross-account lookups return 404 by design.' },
+  { uri: 'conflict', http: 409, when: 'State conflict (duplicate, sticky tombstone, idempotency-key replay with different body).', action: 'Read `detail` — often "mint a fresh resource instead".' },
+  { uri: 'concurrency-limit', http: 429, when: 'Account has hit its tier-bound concurrent-session cap. Extensions `current_sessions` + `limit`.', action: 'Wait for a running session to finish, or upgrade the tier. See /docs/concurrency.' },
+  { uri: 'tier-limit', http: 429, when: 'Tier cap reached on a non-session resource (e.g. profile count, API keys per account).', action: 'Upgrade tier or delete unused resources.' },
+  { uri: 'rate-limited', http: 429, when: 'A rate-limit bucket is empty. Extension `retry_after_seconds`; same value as `Retry-After` header.', action: 'Honour Retry-After. See /docs/rate-limits.' },
+  // Session lifecycle
+  { uri: 'session-destroyed', http: 409, when: 'Tried to operate on a session that\'s already been destroyed.', action: 'Treat the session as gone; create a new one.' },
+  { uri: 'session-timeout', http: 408, when: 'A blocking session operation (e.g. wait-for-selector) ran past its timeout.', action: 'Increase the timeout if legitimate, or address the upstream slowness.' },
   // 5xx
-  { code: 'internal_error', http: 500, when: 'Driftstack hit an unexpected error processing this request.', action: 'Retry with exponential backoff; if persistent, contact support.' },
-  { code: 'driver_unavailable', http: 503, when: 'Underlying browser driver is degraded or unreachable.', action: 'Retry after 30s; check status.driftstack.dev for outages.' },
-  // OAuth-specific
-  { code: 'invalid_client', http: 401, when: 'OAuth client_id unknown or revoked, or client_secret wrong.', action: 'Verify the client_id + secret. Rotate via /v1/admin/oauth/clients/:id/rotate-secret.' },
-  { code: 'invalid_grant', http: 400, when: 'OAuth code already consumed, expired, or code_verifier mismatch.', action: 'Restart the authorize flow; codes are single-use.' },
-  { code: 'invalid_scope', http: 400, when: 'OAuth authorize request asked for a scope the client cannot grant.', action: 'Request a narrower scope set.' },
+  { uri: 'internal', http: 500, when: 'Driftstack hit an unexpected error processing the request.', action: 'Retry with exponential backoff. If persistent, email support with X-Request-Id.' },
+  { uri: 'driver-error', http: 502, when: 'The underlying browser driver returned a structured failure.', action: 'See `detail` for the driver-side cause. Often retryable.' },
+  { uri: 'driver-not-integrated', http: 501, when: 'Endpoint hit a driver path that hasn\'t been wired up yet.', action: 'Not retryable; contact support if a documented path lands here.' },
+  { uri: 'feature-unavailable', http: 503, when: 'Feature explicitly disabled at deploy time (e.g. R2 bucket unconfigured for avatar upload).', action: 'Not retryable; the operator must wire the missing dependency.' },
+  // Pre-auth
+  { uri: 'email-already-registered', http: 409, when: 'Signup attempted for an email that already has an account.', action: 'Direct the user to /login or to the password-reset flow.' },
 ];
 ---
 
-<BaseLayout title="Error codes — Driftstack developer docs" description="Every error code Driftstack returns, what it means, and what to do.">
+<BaseLayout title="Error codes — Driftstack developer docs" description="Every problem-type URI Driftstack returns, what it means, and what to do.">
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
     <h1>Error codes</h1>
 
     <p class="lead">
-      Every error response from Driftstack carries a stable
-      <code>code</code> field. Use it to dispatch on error type in
-      your client code; the <code>message</code> is informational
-      and may change.
+      Every error response from Driftstack is RFC 7807
+      <code>application/problem+json</code>. The stable identifier is
+      the <code>type</code> URI; dispatch your client logic on
+      <code>type</code>, not on the HTTP status or the human-readable
+      <code>title</code> / <code>detail</code>.
     </p>
 
     <h2>Response shape</h2>
-    <pre><code>{`{
-  "error": {
-    "code": "rate_limited",
-    "message": "Rate limit exceeded on bucket sessions:start.",
-    "details": { /* optional, error-specific */ }
-  }
+    <pre><code>{`HTTP/1.1 429 Too Many Requests
+Retry-After: 12
+Content-Type: application/problem+json
+
+{
+  "type": "https://errors.driftstack.dev/rate-limited",
+  "title": "Too Many Requests",
+  "status": 429,
+  "detail": "Rate limit for \\"sessions:create\\" exceeded for tier \\"solo_manual\\".",
+  "retry_after_seconds": 12
 }`}</code></pre>
     <p>
-      Always check <code>error.code</code>, not the HTTP status
-      alone — the same HTTP status can correspond to multiple
-      error codes (e.g. 409 covers both <code>conflict</code> and
-      <code>concurrent_session_limit</code>).
+      Required fields: <code>type</code>, <code>title</code>,
+      <code>status</code>. Optional: <code>detail</code> (human
+      message), <code>instance</code> (request id when present), and
+      problem-specific extensions (flat keys on the top-level, per RFC
+      7807 §3.2). Always check <code>type</code>, not the HTTP status
+      alone — the same status can correspond to multiple types
+      (e.g. 429 covers both <code>rate-limited</code> and
+      <code>concurrency-limit</code>; 401 covers six distinct types).
     </p>
 
     <h2>Reference</h2>
+    <p>
+      The full URI is <code>https://errors.driftstack.dev/&lt;slug&gt;</code>
+      where <code>&lt;slug&gt;</code> is the value in the first column.
+      Slugs are stable; they will not be renamed without a deprecation
+      window.
+    </p>
     <table>
       <thead>
         <tr>
-          <th>Code</th>
+          <th>Type slug</th>
           <th>HTTP</th>
           <th>When</th>
           <th>Action</th>
@@ -67,7 +99,7 @@ const ERRORS = [
       <tbody>
         {ERRORS.map((e) => (
           <tr>
-            <td><code>{e.code}</code></td>
+            <td><code>{e.uri}</code></td>
             <td>{e.http}</td>
             <td>{e.when}</td>
             <td>{e.action}</td>
@@ -78,29 +110,40 @@ const ERRORS = [
 
     <h2>Stability</h2>
     <p>
-      The <code>code</code> values listed above are part of the API
+      The <code>type</code> URI slugs listed above are part of the API
       contract — they will not be renamed or removed without a
-      deprecation window. New codes may be added; defensive clients
-      should treat unknown codes as <code>internal_error</code>
-      (i.e. retry with backoff and surface the message to the
+      deprecation window. New types may be added; defensive clients
+      should treat unknown types as <code>internal</code>
+      (i.e. retry with backoff and surface <code>detail</code> to the
       operator).
     </p>
 
+    <h2>OAuth token endpoint</h2>
+    <p>
+      Errors from the OAuth token endpoint follow the standard problem
+      shape (the server maps OAuth 2.0 errors via
+      <code>UnauthorizedError</code> / <code>BadRequestError</code>):
+    </p>
+    <ul>
+      <li><code>invalid_client</code> / <code>unauthorized_client</code> → <code>type</code> is <code>unauthorized</code>.</li>
+      <li><code>invalid_request</code> / <code>invalid_scope</code> / <code>invalid_grant</code> / <code>access_denied</code> → <code>type</code> is <code>bad-request</code>.</li>
+    </ul>
+
     <h2>Status outages</h2>
     <p>
-      For platform-level outages (everyone hits <code>503</code>),
+      For platform-level outages (everyone hits 5xx),
       check <a href="https://status.driftstack.dev">status.driftstack.dev</a>.
       Subscribe to email notifications from the same page if you'd
-      like to be told before our dashboard refreshes.
+      like to be told before your dashboard refreshes.
     </p>
 
     <h2>Support</h2>
     <p>
       Persistent or surprising errors:
       <a href="mailto:developers@driftstack.dev">developers@driftstack.dev</a>.
-      Include the <code>X-Request-Id</code> header from the
-      response — every Driftstack response carries one, and we use
-      it to find the corresponding server logs.
+      Include the <code>X-Request-Id</code> header from the response —
+      every Driftstack response carries one, and we use it to find the
+      corresponding server logs.
     </p>
   </main>
 </BaseLayout>

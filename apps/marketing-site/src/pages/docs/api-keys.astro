@@ -4,11 +4,15 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // V-687 — API keys developer docs. Minting, scopes, rotation,
 // revocation, what to do when one leaks.
 
+// W217.B — scope tables pinned to the api_key_scope Postgres enum
+// (apps/server/src/db/schema.ts). The full enum has more values
+// (gui_control, driftstack_internal_admin) that are reserved for
+// dashboard + Driftstack-staff use and are intentionally not shown
+// to customer integrators here.
 const SCOPES = [
-  { name: 'read', desc: 'Read sessions, profiles, recordings — anything safe.' },
-  { name: 'write', desc: 'Mutate sessions / profiles. Does NOT include billing.' },
-  { name: 'admin', desc: 'Account-admin operations: webhook + rate-limit-override CRUD.' },
-  { name: 'account_owner', desc: 'Read-write across the whole account, including billing.' },
+  { name: 'read', desc: 'Read sessions and profiles.' },
+  { name: 'write', desc: 'Mutate sessions and profiles. Does NOT include billing.' },
+  { name: 'account_owner', desc: 'Read-write across the whole account, including billing and team management.' },
 ];
 
 const GRANULAR = [
@@ -16,8 +20,15 @@ const GRANULAR = [
   { name: 'write:sessions', desc: 'Start + stop sessions.' },
   { name: 'read:profiles', desc: 'Read browser-profile metadata.' },
   { name: 'write:profiles', desc: 'Mutate profiles.' },
-  { name: 'read:recordings', desc: 'Fetch playback URLs for recorded sessions.' },
-  { name: 'admin:billing', desc: 'Manage billing (Stripe portal, invoices).' },
+  { name: 'admin:profiles', desc: 'Delete + manage shared profiles.' },
+  { name: 'read:webhooks', desc: 'List webhook endpoints + delivery history.' },
+  { name: 'write:webhooks', desc: 'Create webhook endpoints + send test events.' },
+  { name: 'admin:webhooks', desc: 'Rotate webhook secrets + delete endpoints.' },
+  { name: 'read:api-keys', desc: 'List the account\'s API keys (metadata only).' },
+  { name: 'admin:api-keys', desc: 'Mint + revoke API keys.' },
+  { name: 'read:billing', desc: 'Read invoices, usage, and crypto-order history.' },
+  { name: 'admin:billing', desc: 'Initiate checkout sessions + manage subscriptions.' },
+  { name: 'read:audit', desc: 'Read the account audit log.' },
 ];
 ---
 
@@ -100,8 +111,10 @@ const GRANULAR = [
     <ol>
       <li>Mint a new key with the same scope set as the old one.</li>
       <li>Deploy the new key to your environment.</li>
-      <li>Verify your production traffic is using the new key (check
-        <code>X-Api-Key-Id</code> in your logs).</li>
+      <li>Verify your production traffic is using the new key — the
+        dashboard's <strong>Audit log</strong> view filters by the
+        acting <code>api_key_id</code>, so traffic on a stale key is
+        visible at a glance.</li>
       <li>Revoke the old key from the dashboard.</li>
     </ol>
 
@@ -139,7 +152,7 @@ const GRANULAR = [
     <h2>API key metadata in audit logs</h2>
     <p>
       Every audit-log entry your account generates includes the
-      <code>actor_key_id</code> field. View the audit log at
+      acting <code>api_key_id</code>. View the audit log at
       <strong>Dashboard → Settings → Audit log</strong> or via
       <code>GET /v1/account/audit-log</code>.
     </p>
