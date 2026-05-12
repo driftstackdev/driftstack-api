@@ -1,0 +1,130 @@
+// W434.A — drift guard for packages/api-types/src/incidents.ts.
+// V-295a public-status incident shapes. Drift here either drops a
+// severity/status enum value (admin can't post a real incident) or
+// breaks the public-vs-admin scope filter (private internal-triage
+// incidents leak to the public status page).
+//
+//   • V-295a framing pinned: two-table semantics (Incident +
+//     IncidentUpdate); status page reads public incidents; admin
+//     reads/writes both.
+//   • IncidentSeverity enum: minor | major | outage.
+//   • IncidentStatus enum: investigating | identified | monitoring
+//     | resolved.
+//   • IncidentSchema: 11-field public shape.
+//   • IncidentUpdate: id + incident_id + message + status +
+//     posted_at.
+//   • CreateIncident: title 1..200 + markdown description 1..5000
+//     + severity + optional status (default investigating) +
+//     affected_components free-form slugs (status page recognises
+//     api/gui-distribution/stripe/marketing/docs/status) + public
+//     optional (default true) + optional backdate-able started_at.
+//   • ListIncidentsQuery scope: public (status page) | all
+//     (admin default).
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'packages/api-types/src/incidents.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W434.A packages/api-types/src/incidents.ts content parity', () => {
+  const body = read(LIB);
+
+  it('V-295a framing pinned: public-status incident schemas; two-table semantics (top-level Incident + chronological IncidentUpdate timeline); status page renders public; admin reads/writes both via /v1/admin/incidents/*', () => {
+    expect(body).toMatch(/\/\/ V-295a — public-status incident schemas\./);
+    expect(body).toMatch(
+      /\/\/ Incidents have two-table semantics: a top-level Incident row with\s*\n?\s*\/\/ the current state \+ a chronological list of IncidentUpdate rows\s*\n?\s*\/\/ for the timeline\. The status page renders public incidents; admin\s*\n?\s*\/\/ surface reads \+ writes both via \/v1\/admin\/incidents\/\*\./,
+    );
+  });
+
+  it("imports: z from 'zod' + Iso8601Schema from './common.js'", () => {
+    expect(body).toMatch(/import \{ z \} from 'zod';/);
+    expect(body).toMatch(/import \{ Iso8601Schema \} from '\.\/common\.js';/);
+  });
+
+  it('IncidentSeverity enum: minor | major | outage', () => {
+    expect(body).toMatch(
+      /export const IncidentSeveritySchema = z\.enum\(\['minor', 'major', 'outage'\]\);/,
+    );
+    expect(body).toMatch(/export type IncidentSeverity = z\.infer<typeof IncidentSeveritySchema>;/);
+  });
+
+  it('IncidentStatus enum: investigating | identified | monitoring | resolved (in exact order)', () => {
+    expect(body).toMatch(
+      /export const IncidentStatusSchema = z\.enum\(\[\s*\n?\s*'investigating',\s*\n?\s*'identified',\s*\n?\s*'monitoring',\s*\n?\s*'resolved',\s*\n?\s*\]\);/,
+    );
+    expect(body).toMatch(/export type IncidentStatus = z\.infer<typeof IncidentStatusSchema>;/);
+  });
+
+  it('IncidentSchema public-view shape: id + title + description + severity + status + affected_components[] + public bool + started_at + nullable resolved_at + created_at + updated_at (11 fields)', () => {
+    expect(body).toMatch(
+      /export const IncidentSchema = z\.object\(\{\s*\n?\s*id: z\.string\(\),\s*\n?\s*title: z\.string\(\),\s*\n?\s*description: z\.string\(\),\s*\n?\s*severity: IncidentSeveritySchema,\s*\n?\s*status: IncidentStatusSchema,\s*\n?\s*affected_components: z\.array\(z\.string\(\)\),\s*\n?\s*public: z\.boolean\(\),\s*\n?\s*started_at: Iso8601Schema,\s*\n?\s*resolved_at: Iso8601Schema\.nullable\(\),\s*\n?\s*created_at: Iso8601Schema,\s*\n?\s*updated_at: Iso8601Schema,\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('IncidentUpdate: id + incident_id + message + status + posted_at', () => {
+    expect(body).toMatch(
+      /export const IncidentUpdateSchema = z\.object\(\{\s*\n?\s*id: z\.string\(\),\s*\n?\s*incident_id: z\.string\(\),\s*\n?\s*message: z\.string\(\),\s*\n?\s*status: IncidentStatusSchema,\s*\n?\s*posted_at: Iso8601Schema,\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('CreateIncident: title 1..200 + markdown description 1..5000 (rendered plaintext until V-295c) + severity + optional status default investigating + affected_components<=20 strings 1..50 optional + public optional default true + optional backdate-able started_at', () => {
+    expect(body).toMatch(/title: z\.string\(\)\.min\(1\)\.max\(200\),/);
+    expect(body).toMatch(
+      /\/\*\* Markdown body\. Rendered as plaintext on the status page until\s*\n?\s*\*\s*V-295c wires the markdown renderer\. \*\/\s*\n?\s*description: z\.string\(\)\.min\(1\)\.max\(5000\),/,
+    );
+    expect(body).toMatch(
+      /\/\*\* Initial status; defaults to 'investigating'\. \*\/\s*\n?\s*status: IncidentStatusSchema\.optional\(\),/,
+    );
+    expect(body).toMatch(
+      /\/\*\* Component slugs the incident affects\. Free-form; status page\s*\n?\s*\*\s*recognises 'api', 'gui-distribution', 'stripe', 'marketing',\s*\n?\s*\*\s*'docs', 'status' but accepts any\. \*\/\s*\n?\s*affected_components: z\.array\(z\.string\(\)\.min\(1\)\.max\(50\)\)\.max\(20\)\.optional\(\),/,
+    );
+    expect(body).toMatch(
+      /\/\*\* When false, the incident is admin-only \(internal triage before\s*\n?\s*\*\s*public confirmation\)\. Defaults true\. \*\/\s*\n?\s*public: z\.boolean\(\)\.optional\(\),/,
+    );
+    expect(body).toMatch(
+      /\/\*\* ISO-8601 timestamp when the incident actually started\.\s*\n?\s*\*\s*Defaults to server-now if omitted\. Operators usually backdate\s*\n?\s*\*\s*this once they identify the actual start time\. \*\/\s*\n?\s*started_at: Iso8601Schema\.optional\(\),/,
+    );
+  });
+
+  it('AddIncidentUpdate: message 1..2000 + status; ResolveIncident: final message 1..2000 only', () => {
+    expect(body).toMatch(
+      /export const AddIncidentUpdateRequestSchema = z\.object\(\{\s*\n?\s*message: z\.string\(\)\.min\(1\)\.max\(2000\),\s*\n?\s*status: IncidentStatusSchema,\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(
+      /export const ResolveIncidentRequestSchema = z\.object\(\{\s*\n?\s*\/\*\* Final message posted alongside the resolution\. \*\/\s*\n?\s*message: z\.string\(\)\.min\(1\)\.max\(2000\),\s*\n?\s*\}\);/,
+    );
+  });
+
+  it("ListIncidentsQuery: scope enum 'public'|'all' (status page vs admin default) + optional since + limit coerced int 1..100", () => {
+    expect(body).toMatch(
+      /\/\*\* When 'public', returns only public=true incidents \(status page\)\.\s*\n?\s*\*\s*When 'all' \(default for admin\), returns everything\. \*\/\s*\n?\s*scope: z\.enum\(\['public', 'all'\]\)\.optional\(\),/,
+    );
+    expect(body).toMatch(
+      /\/\*\* Filter to incidents started since this ISO-8601 timestamp\.\s*\n?\s*\*\s*Status page typically uses last-30-days\. \*\/\s*\n?\s*since: Iso8601Schema\.optional\(\),/,
+    );
+    expect(body).toMatch(
+      /limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.optional\(\),/,
+    );
+  });
+
+  it('ListIncidentsResponse: data array of IncidentSchema; IncidentDetailResponse: incident + updates[]', () => {
+    expect(body).toMatch(
+      /export const ListIncidentsResponseSchema = z\.object\(\{\s*\n?\s*data: z\.array\(IncidentSchema\),\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(
+      /export const IncidentDetailResponseSchema = z\.object\(\{\s*\n?\s*incident: IncidentSchema,\s*\n?\s*updates: z\.array\(IncidentUpdateSchema\),\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
