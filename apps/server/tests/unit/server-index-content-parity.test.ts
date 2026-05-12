@@ -1,0 +1,107 @@
+// W461.A — drift guard for apps/server/src/index.ts.
+// Production entry point. Drift here either drops the
+// bootstrap-failure → exit(1) fatal-on-throw guard (broken deploy
+// promotes silently because the /health probe never goes red) or
+// breaks the SIGTERM/SIGINT graceful shutdown (in-flight requests
+// get killed mid-write instead of completing via app.close()
+// + teardown()).
+//
+//   • Production-entry framing pinned: 'Loads config, builds the
+//     dep graph via createProductionDeps, builds the Fastify app,
+//     listens, and installs SIGTERM / SIGINT handlers for graceful
+//     shutdown.'
+//   • Fatal-bootstrap framing pinned: 'Failure to bootstrap
+//     (Postgres / Redis unreachable, config invalid) is fatal:
+//     process exits with code 1, the deploy pipeline's /health
+//     probe fails, the orchestrator does not promote the new image.'
+//   • 4 imports: loadConfig + createLogger + createProductionDeps
+//     + buildApp.
+//   • main async fn: loadConfig() → createLogger(config) →
+//     try/catch createProductionDeps with logger.fatal +
+//     process.exit(1) on failure.
+//   • Sentry framing pinned (V-117): 'Sentry hooks (error-handler
+//     + request breadcrumbs) are now installed inside buildApp
+//     from deps.sentry. teardown holds the SentryClient reference
+//     for flush/close on shutdown via the bootstrap closure.'
+//   • shutdown handler: app.close() catch warn (logs 'app close
+//     failed (proceeding to teardown)' + does NOT bail) +
+//     teardown() + process.exit(0).
+//   • SIGTERM + SIGINT signal handlers both wired to shutdown.
+//   • app.listen failure: logger.fatal + teardown() + exit(1).
+//   • void main() bootstrap call at module bottom.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/index.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W461.A apps/server/src/index.ts content parity', () => {
+  const body = read(LIB);
+
+  it("Production-entry framing pinned: 'Production entry. Loads config, builds the dep graph via createProductionDeps, builds the Fastify app, listens, and installs SIGTERM / SIGINT handlers for graceful shutdown.'", () => {
+    expect(body).toMatch(
+      /\/\/ Production entry\. Loads config, builds the dep graph via\s*\n?\s*\/\/ `createProductionDeps`, builds the Fastify app, listens, and\s*\n?\s*\/\/ installs SIGTERM \/ SIGINT handlers for graceful shutdown\./,
+    );
+  });
+
+  it("Fatal-bootstrap framing pinned: 'Failure to bootstrap (Postgres / Redis unreachable, config invalid) is fatal: process exits with code 1, the deploy pipeline's /health probe fails, the orchestrator does not promote the new image.'", () => {
+    expect(body).toMatch(
+      /\/\/ Failure to bootstrap \(Postgres \/ Redis unreachable, config\s*\n?\s*\/\/ invalid\) is fatal: process exits with code 1, the deploy\s*\n?\s*\/\/ pipeline's \/health probe fails, the orchestrator does not\s*\n?\s*\/\/ promote the new image\./,
+    );
+  });
+
+  it('4 imports: loadConfig + createLogger + createProductionDeps + buildApp from local module files', () => {
+    expect(body).toMatch(/import \{ loadConfig \} from '\.\/lib\/config\.js';/);
+    expect(body).toMatch(/import \{ createLogger \} from '\.\/lib\/logger\.js';/);
+    expect(body).toMatch(/import \{ createProductionDeps \} from '\.\/lib\/bootstrap\.js';/);
+    expect(body).toMatch(/import \{ buildApp \} from '\.\/lib\/app\.js';/);
+  });
+
+  it("main async fn: loadConfig() → createLogger(config) → try/catch createProductionDeps with logger.fatal {component:'bootstrap', err} + 'bootstrap failed — exiting' + process.exit(1) on failure", () => {
+    expect(body).toMatch(
+      /async function main\(\): Promise<void> \{\s*\n?\s*const config = loadConfig\(\);\s*\n?\s*const logger = createLogger\(config\);/,
+    );
+    expect(body).toMatch(
+      /let bootstrap;\s*\n?\s*try \{\s*\n?\s*bootstrap = await createProductionDeps\(config, logger\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*logger\.fatal\(\s*\n?\s*\{\s*\n?\s*component: 'bootstrap',\s*\n?\s*err:\s*\n?\s*err instanceof Error\s*\n?\s*\? \{ name: err\.name, message: err\.message, stack: err\.stack \}\s*\n?\s*: \{ value: err \},\s*\n?\s*\},\s*\n?\s*'bootstrap failed — exiting',\s*\n?\s*\);\s*\n?\s*process\.exit\(1\);\s*\n?\s*\}/,
+    );
+  });
+
+  it("V-117 Sentry framing pinned: 'Sentry hooks (error-handler + request breadcrumbs) are now installed inside buildApp from deps.sentry. teardown holds the SentryClient reference for flush/close on shutdown via the bootstrap closure.' + buildApp(deps) wiring + {deps, teardown} destructure", () => {
+    expect(body).toMatch(
+      /const \{ deps, teardown \} = bootstrap;\s*\n?\s*\/\/ V-117: Sentry hooks \(error-handler \+ request breadcrumbs\) are now\s*\n?\s*\/\/ installed inside buildApp from `deps\.sentry`\. teardown holds the\s*\n?\s*\/\/ SentryClient reference for flush\/close on shutdown via the\s*\n?\s*\/\/ bootstrap closure\.\s*\n?\s*const app = await buildApp\(deps\);/,
+    );
+  });
+
+  it("shutdown handler: 'shutdown signal received' log + try/await app.close() with catch logger.warn 'app close failed (proceeding to teardown)' + await teardown() + process.exit(0)", () => {
+    expect(body).toMatch(
+      /const shutdown = async \(signal: string\): Promise<void> => \{\s*\n?\s*logger\.info\(\{ component: 'lifecycle', signal \}, 'shutdown signal received'\);\s*\n?\s*try \{\s*\n?\s*await app\.close\(\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*logger\.warn\(\s*\n?\s*\{\s*\n?\s*component: 'lifecycle',\s*\n?\s*err: err instanceof Error \? \{ name: err\.name, message: err\.message \} : \{ value: err \},\s*\n?\s*\},\s*\n?\s*'app close failed \(proceeding to teardown\)',\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*await teardown\(\);\s*\n?\s*process\.exit\(0\);\s*\n?\s*\};/,
+    );
+  });
+
+  it('Both SIGTERM + SIGINT wired to shutdown via process.on(...) with void wrapping for fire-and-forget', () => {
+    expect(body).toMatch(/process\.on\('SIGTERM', \(\) => void shutdown\('SIGTERM'\)\);/);
+    expect(body).toMatch(/process\.on\('SIGINT', \(\) => void shutdown\('SIGINT'\)\);/);
+  });
+
+  it("app.listen failure: try await app.listen({host, port}) with logger.info success path ({host, port, env}, 'driftstack-api listening') + catch logger.fatal 'app.listen failed — exiting' + await teardown() + process.exit(1)", () => {
+    expect(body).toMatch(
+      /try \{\s*\n?\s*await app\.listen\(\{ host: config\.host, port: config\.port \}\);\s*\n?\s*logger\.info\(\s*\n?\s*\{ component: 'lifecycle', host: config\.host, port: config\.port, env: config\.nodeEnv \},\s*\n?\s*'driftstack-api listening',\s*\n?\s*\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*logger\.fatal\(\s*\n?\s*\{\s*\n?\s*component: 'lifecycle',\s*\n?\s*err: err instanceof Error \? \{ name: err\.name, message: err\.message \} : \{ value: err \},\s*\n?\s*\},\s*\n?\s*'app\.listen failed — exiting',\s*\n?\s*\);\s*\n?\s*await teardown\(\);\s*\n?\s*process\.exit\(1\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('void main() bootstrap call at module bottom (fire-and-forget pattern)', () => {
+    expect(body).toMatch(/void main\(\);/);
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
