@@ -1,0 +1,123 @@
+// W489.A — drift guard for apps/admin-panel/src/pages/rate-limit-overrides.astro.
+// V-194 per-account bucket override page. Drift here either drops
+// the 14-day-default TTL framing (operators land permanent
+// overrides accidentally without the audit-review flag) or breaks
+// the DELETE endpoint with bucket_key query param (Clear-now would
+// 404 silently if path changes).
+//
+//   • V-194 framing pinned + 'time-boxed capacity bumps' use-case.
+//   • Permanent overrides 'flagged in the weekly audit-log review'.
+//   • Bucket-key 3-value catalog framing: global / session_create /
+//     capture.
+//   • BUCKET_LABEL duplicated frontmatter + inline (only global +
+//     sessions:create today; framing comment mentions 3-value
+//     forward catalog).
+//   • DELETE /v1/admin/accounts/{id}/quota-override?bucket_key=
+//     contract.
+//   • fmtIso null → 'permanent' (distinctive from other pages where
+//     null → '—').
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/rate-limit-overrides.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W489.A apps/admin-panel/src/pages/rate-limit-overrides.astro content parity', () => {
+  const body = read(LIB);
+
+  it("V-194 framing pinned: 'progressive-enhancement against /v1/admin/rate-limit-overrides (new in V-194). SSG renders a placeholder mock; an inline <script> fetches with bearer auth, replaces the list, and wires Clear-now (DELETE) action against /v1/admin/accounts/:id/quota-override?bucket_key=<bucket>. New override / Extend require a target account first — surfaced as deep-links into the per-account detail page rather than re-implementing the form here.' — pinned so the deferred-create framing (form lives on per-account page, not duplicated here) survives", () => {
+    expect(body).toMatch(
+      /\/\/ V-194 — progressive-enhancement against \/v1\/admin\/rate-limit-\s*\n?\s*\/\/ overrides \(new in V-194\)\. SSG renders a placeholder mock; an inline\s*\n?\s*\/\/ <script> fetches with bearer auth, replaces the list, and wires\s*\n?\s*\/\/ Clear-now \(DELETE\) action against \/v1\/admin\/accounts\/:id\/quota-\s*\n?\s*\/\/ override\?bucket_key=<bucket>\. New override \/ Extend require a target\s*\n?\s*\/\/ account first — surfaced as deep-links into the per-account detail\s*\n?\s*\/\/ page rather than re-implementing the form here\./,
+    );
+  });
+
+  it("Page-purpose framing pinned: 'Per-account bucket overrides that supersede the tier defaults. Used for time-boxed capacity bumps during migrations + production incidents. All overrides are auditable + auto-expire if a TTL is set. To set a new override, open the per-account page (Accounts → select account).' — pinned so the use-case framing (migration cutover + incident response) + per-account-page redirect stays explicit", () => {
+    expect(body).toMatch(
+      /Per-account bucket overrides that supersede the tier defaults\. Used\s*\n?\s*for time-boxed capacity bumps during migrations \+ production\s*\n?\s*incidents\. All overrides are auditable \+ auto-expire if a TTL is\s*\n?\s*set\. To set a new override, open the per-account page \(Accounts →\s*\n?\s*select account\)\./,
+    );
+  });
+
+  it("Bucket-key 3-value catalog framing pinned: 'global (whole API), session_create (session creation only), capture (screenshot/DOM/PDF only)' — pinned so operators see the full forward-catalog (not just the 2 deployed today) and know which bucket-key strings the endpoint accepts", () => {
+    expect(body).toMatch(
+      /Bucket keys: <code class="font-mono">global<\/code>\s*\n?\s*\(whole API\), <code class="font-mono">session_create<\/code> \(session creation\s*\n?\s*only\), <code class="font-mono">capture<\/code> \(screenshot\/DOM\/PDF only\)\./,
+    );
+  });
+
+  it("14-day TTL default framing pinned: 'New overrides default to 14-day TTL. Permanent overrides allowed but flagged in the weekly audit-log review.' — pinned so the audit-review trigger for permanent overrides (no TTL) stays explicit (drift to dropping the 'flagged in weekly review' clause would weaken the governance posture around indefinite capacity grants)", () => {
+    expect(body).toMatch(
+      /New overrides default to 14-day TTL\. Permanent overrides allowed but\s*\n?\s*flagged in the weekly audit-log review\./,
+    );
+    expect(body).toMatch(
+      /No active overrides match the current filter\. New overrides default\s*\n?\s*to a 14-day TTL via the per-account page\./,
+    );
+  });
+
+  it("BUCKET_LABEL duplicated catalog (frontmatter Record + inline-script const): global → 'Global' + sessions:create → 'Sessions: create' — pinned so the SSG-rendered badge text matches the live-script's rendered badge text (drift between the two would cause a flash-of-mismatched-labels on hydrate)", () => {
+    expect(body).toMatch(
+      /const BUCKET_LABEL: Record<string, string> = \{\s*\n?\s*global: 'Global',\s*\n?\s*'sessions:create': 'Sessions: create',\s*\n?\s*\};/,
+    );
+    expect(body).toMatch(
+      /const BUCKET_LABEL = \{\s*\n?\s*global: 'Global',\s*\n?\s*'sessions:create': 'Sessions: create',\s*\n?\s*\};/,
+    );
+  });
+
+  it("Clear-now DELETE endpoint contract: /v1/admin/accounts/{encodeURIComponent(id)}/quota-override?bucket_key={encodeURIComponent(bucketKey)} + method:'DELETE' + Bearer auth + credentials:'include' + window.confirm pre-prompt — pinned so the destructive action requires explicit confirmation + URL encoding handles the colon in bucket-keys like 'sessions:create' (raw colon would break path parsing)", () => {
+    expect(body).toMatch(
+      /window\.confirm\(\s*\n?\s*'Clear the ' \+ bucketKey \+ ' override for ' \+ prefixedAccountId \+ '\?',\s*\n?\s*\);/,
+    );
+    expect(body).toMatch(
+      /apiBaseUrl \+\s*\n?\s*'\/v1\/admin\/accounts\/' \+\s*\n?\s*encodeURIComponent\(prefixedAccountId\) \+\s*\n?\s*'\/quota-override\?bucket_key=' \+\s*\n?\s*encodeURIComponent\(bucketKey\),\s*\n?\s*\{\s*\n?\s*method: 'DELETE',/,
+    );
+  });
+
+  it("fmtIso null → 'permanent' fallback (distinct from other admin pages where null → '—') — pinned so a no-TTL (permanent) override renders as a meaningful label rather than the generic em-dash placeholder, making the 'flag in weekly audit review' state visible at a glance to operators reading the list", () => {
+    expect(body).toMatch(
+      /function fmtIso\(iso: string \| null\): string \{\s*\n?\s*if \(iso === null\) return 'permanent';\s*\n?\s*return new Date\(iso\)\.toISOString\(\)\.replace\('T', ' '\)\.slice\(0, 16\) \+ ' UTC';\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /function fmtIso\(iso\) \{\s*\n?\s*if \(!iso\) return 'permanent';\s*\n?\s*return new Date\(iso\)\.toISOString\(\)\.replace\('T', ' '\)\.slice\(0, 16\) \+ ' UTC';\s*\n?\s*\}/,
+    );
+  });
+
+  it("Filter bar: account-id text input + include-expired checkbox + 'No overrides' empty-state region (data-region='empty' hidden initially) + 200ms debounce on input/change — pinned so the include-expired toggle re-fetches via include_expired=true query param (drift would silently disable the toggle)", () => {
+    expect(body).toMatch(/data-field="include-expired"/);
+    expect(body).toMatch(/Include expired/);
+    expect(body).toMatch(/<div data-region="empty" class="hidden">/);
+    expect(body).toMatch(
+      /if \(includeExpiredEl && includeExpiredEl\.checked\)\s*\n?\s*params\.set\('include_expired', 'true'\);/,
+    );
+    expect(body).toMatch(/setTimeout\(load, 200\)/);
+  });
+
+  it("Override row data-attribute contract: data-action='clear' + data-account-id={override.accountId} + data-bucket-key={override.bucketKey} on Clear-now button — pinned so the event-delegation pattern (root.addEventListener) reads the right attrs from the closest matching button (drift to data-id alone would lose the bucket-key information needed for the DELETE call)", () => {
+    expect(body).toMatch(
+      /data-action="clear"\s*\n?\s*data-account-id=\{override\.accountId\}\s*\n?\s*data-bucket-key=\{override\.bucketKey\}/,
+    );
+    expect(body).toMatch(
+      /const btn = target\.closest\('\[data-action="clear"\]'\);\s*\n?\s*if \(!btn\) return;\s*\n?\s*ev\.preventDefault\(\);\s*\n?\s*const accountId = btn\.getAttribute\('data-account-id'\);\s*\n?\s*const bucketKey = btn\.getAttribute\('data-bucket-key'\);\s*\n?\s*if \(accountId && bucketKey\) clear\(accountId, bucketKey\);/,
+    );
+  });
+
+  it("Capacity number formatting: toLocaleString('en-US') — pinned so 4-digit+ capacity values render with thousands separators (drift to bare String() would render '10000' instead of '10,000', making at-a-glance comparisons of high-capacity overrides harder for operators)", () => {
+    expect(body).toMatch(/\{override\.capacity\.toLocaleString\('en-US'\)\}/);
+  });
+
+  it("Banner state taxonomy: no-token / 403 forbidden / fetch-error on load + 'Clearing override…' / 'Override cleared. Refreshing…' / 'Couldn't clear (msg).' on action — pinned so the 6-state banner vocabulary matches the rest of the admin pages + the 204-No-Content success path on DELETE is handled correctly (status === 204 || r.ok)", () => {
+    expect(body).toMatch(/showBanner\('Clearing override…'\);/);
+    expect(body).toMatch(/showBanner\('Override cleared\. Refreshing…'\);/);
+    expect(body).toMatch(/showBanner\("Couldn't clear \(" \+ msg \+ '\)\.'\);/);
+    expect(body).toMatch(/if \(r\.status === 204 \|\| r\.ok\) return null;/);
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
