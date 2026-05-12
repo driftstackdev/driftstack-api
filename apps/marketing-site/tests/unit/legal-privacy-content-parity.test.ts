@@ -1,0 +1,195 @@
+// W377.B — drift guard for marketing-site /legal/privacy.md content.
+// Existing privacy-subprocessor-parity covers sub-processor row
+// derivation. This guard pins the load-bearing GDPR-Controller-side
+// claims a DPO reviewer anchors on:
+//
+//   • Version 1.0 + Effective 2026-05-07 (pin via doc-header drift).
+//   • Controller identity: Driftstack B.V. Amsterdam.
+//   • §3.2 Authentication-data security: API Keys scrypt-hashed,
+//     TOTP AES-256-GCM, 10 recovery codes scrypt-hashed (matches
+//     /trust/security-overview).
+//   • §3.4 Session Recordings: Customer-controlled retention,
+//     default 30, range 1–365 days.
+//   • §3.6 Renewal-reminder email mechanism (Stripe invoice.upcoming
+//     ~7 days before invoice).
+//   • §3.8 Marketing-site cookies: strictly-necessary only;
+//     no first-party analytics cookies.
+//   • §5 4 do-not-do honesty list: no sale / no behavioural ads /
+//     no cross-customer aggregation / no ML training without consent.
+//   • §7 13 Sub-processor rows pinned with transfer mechanism.
+//   • §9 Retention table: 7-year billing (AWR Art 52) + 30-day
+//     marketing-site access logs + 3-year support correspondence.
+//   • §11 DPO threshold policy: 1M monthly sessions OR 5K unique
+//     data subjects per Customer.
+//   • §13 Breach notification: 72-hour supervisory (Art 33(1)) +
+//     48-hour processor-to-customer target.
+//   • §14 Children: under 16 default.
+//   • §10 Data-subject rights: 1-month response, extendable by 2
+//     months (Art 12(3)). Autoriteit Persoonsgegevens lodging
+//     address Postbus 93374, 2509 AJ Den Haag.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal/privacy.md');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W377.B marketing-site /legal/privacy.md content parity', () => {
+  const body = read(PAGE);
+
+  it('version 1.0 + effective 2026-05-07 doc header pinned', () => {
+    expect(body).toMatch(/\*\*Version:\*\* 1\.0 · \*\*Effective:\*\* 2026-05-07/);
+  });
+
+  it('§1 Controller identity = Driftstack B.V. (Netherlands, Amsterdam)', () => {
+    expect(body).toMatch(
+      /Controller of Personal Data described in this Privacy Policy is \*\*Driftstack B\.V\.\*\*, a private limited company organised under the laws of the Netherlands, established in Amsterdam/,
+    );
+  });
+
+  it('§3.2 API Keys scrypt-hashed + TOTP AES-256-GCM + 10 recovery codes scrypt-hashed', () => {
+    expect(body).toMatch(/API Keys \(stored as scrypt-hashed values; the plaintext key/);
+    expect(body).toMatch(/TOTP secret encrypted at rest with\s+AES-256-GCM/);
+    expect(body).toMatch(/10 single-use\s+recovery codes stored as scrypt-hashed values/);
+    expect(body).toMatch(/per-session "MFA-satisfied-at"\s+timestamp/);
+  });
+
+  it('§3.4 Session Recordings: Customer-controlled 1–365 days, default 30', () => {
+    expect(body).toMatch(
+      /Customer-controlled\. Default 30 days; Customer can\s+configure 1–365 days or disable entirely/,
+    );
+  });
+
+  it('§3.6 billing data: no PAN retention (PCI-DSS via Stripe) + 7-year retention (Article 52 AWR)', () => {
+    expect(body).toMatch(/Driftstack does \*\*not\*\* retain primary account numbers\s+\(PANs\)/);
+    expect(body).toMatch(/Article 52 of the\s+Dutch _Algemene wet inzake rijksbelastingen_/);
+  });
+
+  it('§3.6 renewal-reminder email: Stripe invoice.upcoming ~7 days before invoice + opt-outable', () => {
+    expect(body).toMatch(
+      /Approximately seven \(7\) days before each\s+recurring subscription invoice is generated, Stripe fires an\s+`invoice\.upcoming` webhook/,
+    );
+    expect(body).toMatch(/opt out of this email at any time/);
+    expect(body).toMatch(/\[Emails reference page\]\(\/docs\/emails-reference\)/);
+  });
+
+  it('§3.8 marketing-site cookies: strictly-necessary only, no first-party analytics', () => {
+    expect(body).toMatch(/Driftstack does \*\*not\*\* currently set first-party analytics cookies/);
+    expect(body).toMatch(
+      /strictly-necessary cookies on the\s+marketing site \(session-id for signup flow, CSRF token\)/,
+    );
+    expect(body).toMatch(/Article 5\(3\) of\s+Directive 2002\/58\/EC/);
+  });
+
+  it('§5 4 do-not-do honesty list: no sale / no behavioural ads / no cross-customer / no ML training without consent', () => {
+    expect(body).toMatch(/Sell Personal Data to third parties\./);
+    expect(body).toMatch(/Use Customer's Personal Data for behavioural advertising or\s+profiling/);
+    expect(body).toMatch(
+      /Combine Customer-Connected Service data with Driftstack-internal\s+profiles or cross-Customer aggregates/,
+    );
+    expect(body).toMatch(
+      /Use Customer Data \(Sessions, Workflows, Recordings\) to train\s+machine-learning models/,
+    );
+    expect(body).toMatch(/bundled-LLM AI agent\s+feature/);
+  });
+
+  it('§6 international transfers: EU-US DPF + 2021 SCCs (Decision 2021/914) + Art 49 derogations only exceptional', () => {
+    expect(body).toMatch(/\*\*EU-US Data Privacy Framework \(DPF\)\*\*/);
+    expect(body).toMatch(
+      /\*\*2021 Standard Contractual Clauses\*\* \(Commission\s+Implementing Decision \(EU\) 2021\/914\)/,
+    );
+    expect(body).toMatch(/\*\*Article 49 GDPR derogations\*\* only in genuinely exceptional/);
+    expect(body).toMatch(/Driftstack does not rely on Article 49 derogations as a routine/);
+  });
+
+  it('§7 13 Sub-processor rows pinned (MacStadium / Stripe x2 / Anthropic / Moneybird / Hetzner / Neon / Upstash / Cloudflare / Postmark / Sentry / NowPayments / LiveKit)', () => {
+    for (const name of [
+      'MacStadium, Inc.',
+      'Stripe Payments Europe Limited',
+      'Stripe, Inc.',
+      'Anthropic, PBC',
+      'Moneybird B.V.',
+      'Hetzner Online GmbH',
+      'Neon, Inc.',
+      'Upstash, Inc.',
+      'Cloudflare, Inc.',
+      'Postmark / ActiveCampaign LLC',
+      'Sentry / Functional Software, Inc.',
+      'NowPayments OÜ',
+      'LiveKit',
+    ]) {
+      expect(body, `sub-processor missing: ${name}`).toContain(name);
+    }
+  });
+
+  it('§7 Neon + Upstash + Cloudflare data-residency = EU (Frankfurt / EU jurisdiction)', () => {
+    expect(body).toMatch(/Neon, Inc\.\*\* \(US, Delaware\) — _data resident in EU Frankfurt_/);
+    expect(body).toMatch(/Upstash, Inc\.\*\* \(US, Delaware\) — _data resident in EU Frankfurt_/);
+    expect(body).toMatch(/Cloudflare, Inc\.\*\* \(US, Delaware\) — _EU jurisdiction selected_/);
+  });
+
+  it('§8 Customer-Connected Services list: proxies / captcha / IMAP-Gmail / SMS — NOT sub-processors', () => {
+    expect(body).toMatch(/\*\*HTTP \/ SOCKS5 proxy providers\*\* \(e\.g\. Bright Data, Smartproxy/);
+    expect(body).toMatch(/\*\*Captcha-solving services\*\* \(e\.g\. 2Captcha, CapSolver/);
+    expect(body).toMatch(/\*\*Email services\*\* Customer accesses by IMAP, Gmail OAuth/);
+    expect(body).toMatch(/\*\*SMS-verification services\*\* \(e\.g\. TextVerified, Twilio\)/);
+  });
+
+  it('§9 retention table: billing 7-year (AWR Art 52) + marketing-site access logs 30 days + support 3 years', () => {
+    expect(body).toMatch(/7 years post-transaction \(Dutch tax law, AWR Art 52\)/);
+    expect(body).toMatch(/Marketing-site access logs.*\|\s*30 days/);
+    expect(body).toMatch(/Support correspondence.*\|\s*3 years post-resolution/);
+    expect(body).toMatch(/Session metadata\s*\|\s*90 days operational/);
+  });
+
+  it('§10 data-subject rights: 1-month response, extendable by 2 months (Art 12(3))', () => {
+    expect(body).toMatch(
+      /responds within one \(1\) month of receipt of the request, extendable by two \(2\) further months/,
+    );
+    expect(body).toMatch(/Article 12\(3\) GDPR/);
+  });
+
+  it('§10 Autoriteit Persoonsgegevens lodging address pinned (Postbus 93374, 2509 AJ Den Haag)', () => {
+    expect(body).toMatch(
+      /\*\*Autoriteit Persoonsgegevens\*\* \(Dutch DPA\), Postbus 93374, 2509\s+AJ Den Haag/,
+    );
+    expect(body).toMatch(/Article 77 GDPR/);
+  });
+
+  it('§11 DPO threshold policy: 1M monthly sessions OR 5K unique data subjects per Customer', () => {
+    expect(body).toMatch(/Total monthly active sessions across the Service exceed 1\s+million/);
+    expect(body).toMatch(
+      /regular and\s+systematic monitoring of more than 5,000 unique Data Subjects/,
+    );
+  });
+
+  it('§13 breach notification: 72-hour supervisory (Art 33(1)) + 48-hour processor-to-customer target', () => {
+    expect(body).toMatch(/within 72 hours of becoming\s+aware of the breach/);
+    expect(body).toMatch(/Article 33\(1\) GDPR/);
+    expect(body).toMatch(/target: within\s+48 hours of becoming aware/);
+  });
+
+  it('§14 children under 16 (no knowing collection)', () => {
+    expect(body).toMatch(/does not knowingly collect Personal Data of\s+children under 16/);
+  });
+
+  it('cross-links: terms.md + dpa.md', () => {
+    expect(body).toMatch(/\[Terms of Service\]\(terms\.md\)/);
+    expect(body).toMatch(/\[Data Processing Agreement \(DPA\)\]\(dpa\.md\)/);
+    const dir = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal');
+    expect(existsSync(resolve(dir, 'terms.md'))).toBe(true);
+    expect(existsSync(resolve(dir, 'dpa.md'))).toBe(true);
+  });
+
+  it('§4 no intentional Special Category Data collection (Article 9 GDPR)', () => {
+    expect(body).toMatch(/Driftstack does \*\*not\*\* intentionally collect Special Category Data/);
+    expect(body).toMatch(/Article 9 GDPR/);
+  });
+});
