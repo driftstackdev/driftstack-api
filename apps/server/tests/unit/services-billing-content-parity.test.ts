@@ -1,0 +1,180 @@
+// W407.C — drift guard for apps/server/src/services/billing.ts.
+// V-082 billing: 3 write ops (checkout-session / trial-pack /
+// portal) + 1 read (getBillingState). BillingProvider boundary
+// gates Stripe SDK from tests. Drift here either lets a customer
+// purchase the trial pack twice (ADR-003 one-per-account violation)
+// or skips ensureCustomerId (creates orphan checkout without a
+// Stripe customer record).
+//
+//   • V-082 framing pinned: 3-write + 1-read shape; idempotent
+//     checkout (two valid URLs returned; Stripe Checkout handles
+//     "already has sub").
+//   • Trial pack: ADR-003 $2.99 one-time one-per-account; portal
+//     requires stripe_customer_id (409 if not bootstrapped).
+//   • BillingProvider boundary: ensureCustomer + createSubscription
+//     Checkout + createTrialPackCheckout + createPortalSession.
+//   • SubscriptionMirror.status: 8-literal Stripe enum (incomplete
+//     / incomplete_expired / trialing / active / past_due /
+//     canceled / unpaid / paused).
+//   • createCheckoutSession: tier missing from tierPrices →
+//     BadRequestError "contact sales for enterprise"; billing
+//     period selects monthly | annual price id.
+//   • startTrialPack: ConflictError when trialPackPurchasedAt
+//     already set (one-trial-per-account).
+//   • createPortalSession: ConflictError when stripe_customer_id
+//     null (must complete checkout first).
+//   • getBillingState: active = trialPackPurchasedAt!=null AND
+//     !redeemed AND expiresAt > now AND creditCents > 0.
+//   • ensureCustomerId helper: lazy provisions via
+//     provider.ensureCustomer + repo.setStripeCustomerId.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/services/billing.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W407.C apps/server/src/services/billing.ts content parity', () => {
+  const body = read(LIB);
+
+  it('V-082 framing pinned: 3-write (checkout / trial-pack / portal) + 1-read (getBillingState)', () => {
+    expect(body).toMatch(/Billing service \(V-082\)\./);
+    expect(body).toMatch(
+      /1\. Checkout-session — start a paid-tier subscription\. Idempotent\s*\n?\s*\/\/\s*from the customer's perspective: hitting create twice for the\s*\n?\s*\/\/\s*same tier returns two valid Checkout URLs \(Stripe handles the\s*\n?\s*\/\/\s*"user already has a sub" path inside Checkout\)\./,
+    );
+    expect(body).toMatch(
+      /2\. Trial-pack — start the \$2\.99 one-time pre-paid credit per\s*\n?\s*\/\/\s*ADR-003\. Same Checkout shell, one-time price id \(not a sub\)\./,
+    );
+    expect(body).toMatch(
+      /3\. Customer portal — open Stripe Customer Portal for self-service\s*\n?\s*\/\/\s*plan change \/ payment-method update \/ cancellation\./,
+    );
+    expect(body).toMatch(
+      /Stripe API access is gated behind `BillingProvider` so tests run\s*\n?\s*\/\/\s*against an in-memory provider without touching real Stripe\./,
+    );
+  });
+
+  it('BillingProvider: 4-method boundary (ensureCustomer + createSubscriptionCheckout + createTrialPackCheckout + createPortalSession)', () => {
+    expect(body).toMatch(/export interface BillingProvider \{/);
+    expect(body).toMatch(
+      /ensureCustomer\(args: \{ accountId: string; email: string; name: string \| null \}\): Promise<string>;/,
+    );
+    expect(body).toMatch(
+      /createSubscriptionCheckout\(args: \{\s*\n?\s*customerId: string;\s*\n?\s*priceId: string;\s*\n?\s*successUrl: string;\s*\n?\s*cancelUrl: string;\s*\n?\s*accountId: string;\s*\n?\s*\}\): Promise<\{ url: string; sessionId: string \}>;/,
+    );
+    expect(body).toMatch(
+      /createTrialPackCheckout\(args: \{[\s\S]+?\}\): Promise<\{ url: string; sessionId: string \}>;/,
+    );
+    expect(body).toMatch(
+      /createPortalSession\(args: \{ customerId: string; returnUrl: string \}\): Promise<\{ url: string \}>;/,
+    );
+  });
+
+  it('BillingAccountSnapshot: 9 fields — trial pack quartet (purchasedAt + creditCents + expiresAt + redeemed) all nullable except redeemed:boolean', () => {
+    expect(body).toMatch(/export interface BillingAccountSnapshot \{/);
+    expect(body).toMatch(/stripeCustomerId: string \| null;/);
+    expect(body).toMatch(/trialPackPurchasedAt: Date \| null;/);
+    expect(body).toMatch(/trialPackCreditCents: number \| null;/);
+    expect(body).toMatch(/trialPackExpiresAt: Date \| null;/);
+    expect(body).toMatch(/trialPackRedeemed: boolean;/);
+  });
+
+  it('SubscriptionMirror.status: 8-literal Stripe enum (incomplete|incomplete_expired|trialing|active|past_due|canceled|unpaid|paused)', () => {
+    expect(body).toMatch(
+      /status:\s*\n?\s*\| 'incomplete'\s*\n?\s*\| 'incomplete_expired'\s*\n?\s*\| 'trialing'\s*\n?\s*\| 'active'\s*\n?\s*\| 'past_due'\s*\n?\s*\| 'canceled'\s*\n?\s*\| 'unpaid'\s*\n?\s*\| 'paused';/,
+    );
+  });
+
+  it('createCheckoutSession: NotFoundError on missing account; BadRequestError on tier not in tierPrices (contact sales for enterprise); billingPeriod selects monthly|annual', () => {
+    expect(body).toMatch(
+      /const account = await this\.repo\.getAccount\(args\.accountId\);\s*\n?\s*if \(account === null\) throw new NotFoundError\('Account not found\.'\);/,
+    );
+    expect(body).toMatch(
+      /if \(prices === undefined\) \{\s*\n?\s*throw new BadRequestError\(\s*\n?\s*`Tier "\$\{args\.tier\}" is not self-serve via Checkout\. Contact sales for enterprise\.`,/,
+    );
+    expect(body).toMatch(
+      /const priceId = args\.billingPeriod === 'monthly' \? prices\.monthly : prices\.annual;/,
+    );
+  });
+
+  it("startTrialPack: ConflictError when trialPackPurchasedAt already set (ADR-003 one-trial-per-account); resource:'trial_pack' metadata", () => {
+    expect(body).toMatch(
+      /if \(account\.trialPackPurchasedAt !== null\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*'Trial pack already purchased on this account; one trial pack per account\.',\s*\n?\s*\{ resource: 'trial_pack' \},/,
+    );
+    expect(body).toMatch(/priceId: this\.config\.trialPackPriceId,/);
+  });
+
+  it("createPortalSession: ConflictError when stripeCustomerId null (must complete checkout first); resource:'stripe_customer' metadata", () => {
+    expect(body).toMatch(
+      /if \(account\.stripeCustomerId === null\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*'Account has no Stripe customer record yet\. Complete a checkout flow first\.',\s*\n?\s*\{ resource: 'stripe_customer' \},/,
+    );
+    expect(body).toMatch(
+      /return this\.provider\.createPortalSession\(\{\s*\n?\s*customerId: account\.stripeCustomerId,\s*\n?\s*returnUrl: this\.config\.portalReturnUrl,/,
+    );
+  });
+
+  it('getBillingState.trialPack.active: 4-condition AND (purchasedAt!=null AND !redeemed AND expiresAt > now AND creditCents > 0)', () => {
+    expect(body).toMatch(
+      /const active =\s*\n?\s*account\.trialPackPurchasedAt !== null &&\s*\n?\s*!account\.trialPackRedeemed &&\s*\n?\s*account\.trialPackExpiresAt !== null &&\s*\n?\s*account\.trialPackExpiresAt\.getTime\(\) > now\.getTime\(\) &&\s*\n?\s*\(account\.trialPackCreditCents \?\? 0\) > 0;/,
+    );
+    expect(body).toMatch(
+      /trialPack: \{\s*\n?\s*active,\s*\n?\s*creditCentsRemaining: account\.trialPackCreditCents,\s*\n?\s*expiresAt: account\.trialPackExpiresAt,\s*\n?\s*redeemed: account\.trialPackRedeemed,/,
+    );
+  });
+
+  it('ensureCustomerId helper: lazy provisions via provider.ensureCustomer + repo.setStripeCustomerId (no-op if already set)', () => {
+    expect(body).toMatch(
+      /private async ensureCustomerId\(account: BillingAccountSnapshot\): Promise<string> \{\s*\n?\s*if \(account\.stripeCustomerId !== null\) return account\.stripeCustomerId;\s*\n?\s*const customerId = await this\.provider\.ensureCustomer\(\{\s*\n?\s*accountId: account\.id,\s*\n?\s*email: account\.email,\s*\n?\s*name: account\.name,\s*\n?\s*\}\);\s*\n?\s*await this\.repo\.setStripeCustomerId\(\{ accountId: account\.id, customerId \}\);/,
+    );
+  });
+
+  it('BillingRepo: 3-method (getAccount + setStripeCustomerId + findCurrentSubscription returning latest or null)', () => {
+    expect(body).toMatch(/export interface BillingRepo \{/);
+    expect(body).toMatch(
+      /getAccount\(accountId: string\): Promise<BillingAccountSnapshot \| null>;/,
+    );
+    expect(body).toMatch(
+      /setStripeCustomerId\(args: \{ accountId: string; customerId: string \}\): Promise<void>;/,
+    );
+    expect(body).toMatch(
+      /Returns the active or most-recent subscription for the account, or\s*\n?\s*\*\s*null if none\. "Active" here is loose — caller filters by status if\s*\n?\s*\*\s*needed\./,
+    );
+    expect(body).toMatch(
+      /findCurrentSubscription\(accountId: string\): Promise<SubscriptionMirror \| null>;/,
+    );
+  });
+
+  it('TierPriceMap + TierPrices: monthly + annual partial-record per tier; BillingServiceConfig 4-URL shape', () => {
+    expect(body).toMatch(
+      /export interface TierPrices \{\s*\n?\s*monthly: string;\s*\n?\s*annual: string;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(/export type TierPriceMap = Partial<Record<AccountTier, TierPrices>>;/);
+    expect(body).toMatch(/export interface BillingServiceConfig \{/);
+    expect(body).toMatch(
+      /\/\*\* Map of self-serve paid tier to monthly \+ annual Stripe price ids\. \*\/\s*\n?\s*tierPrices: TierPriceMap;/,
+    );
+    expect(body).toMatch(
+      /\/\*\* One-time price id for the trial-pack purchase\. \*\/\s*\n?\s*trialPackPriceId: string;/,
+    );
+    expect(body).toMatch(/defaultSuccessUrl: string;/);
+    expect(body).toMatch(/defaultCancelUrl: string;/);
+    expect(body).toMatch(/portalReturnUrl: string;/);
+  });
+
+  it('imports: AccountTier + BadRequestError + ConflictError + NotFoundError', () => {
+    expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
+    expect(body).toMatch(
+      /import \{ BadRequestError, ConflictError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
