@@ -1,0 +1,129 @@
+// W369.C — drift guard for status-site /subscribe page content.
+// V-657 + V-540.B. Existing status-site-subscribe-page-parity
+// test covers route + fetch wiring; this guard pins the load-
+// bearing UX + privacy claims:
+//
+//   • POST /v1/status/subscribe is the registered server route;
+//     202 / 400 / 429 status-code branches each render a
+//     distinct user-facing message (no silent failure mode).
+//   • V-540.B double-opt-in framing pinned (confirmation email
+//     before adding to list). A future "skip confirm" change
+//     softens GDPR posture and must update this copy first.
+//   • "Two emails per incident maximum" volume promise pinned —
+//     load-bearing privacy claim that bounds the subscription
+//     surface.
+//   • "We never send marketing or promotional email from the
+//     status list" pinned — distinguishes status list from any
+//     marketing list (no cross-mixing).
+//   • Unsubscribe affordance: one-click + every-email-carries-
+//     a-link claim.
+//   • The page is static-served from Cloudflare Pages (light
+//     enough to render even when control plane degraded) — pin
+//     so a future SSR-conversion forces an explicit decision.
+//   • PUBLIC_API_BASE_URL env-var wired for the fetch.
+//   • Email-input validation: required + autocomplete="email"
+//     + client-side regex sanity check before POST.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/status-site/src/pages/subscribe.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+function findRoute(): string {
+  // The status-subscribe endpoint may live in any routes file.
+  const candidates = [
+    'apps/server/src/routes/status-public.ts',
+    'apps/server/src/routes/status-subscribers.ts',
+    'apps/server/src/routes/status-subscribe.ts',
+    'apps/server/src/routes/admin-incidents.ts',
+  ];
+  for (const c of candidates) {
+    const p = resolve(REPO_ROOT, c);
+    if (existsSync(p)) {
+      const src = readFileSync(p, 'utf8');
+      if (src.includes("'/v1/status/subscribe'")) return p;
+    }
+  }
+  throw new Error('/v1/status/subscribe route file not found among candidates');
+}
+
+describe('W369.C status-site /subscribe page content parity', () => {
+  const body = read(PAGE);
+
+  it('POST /v1/status/subscribe wired client + registered server-side', () => {
+    const routePath = findRoute();
+    expect(existsSync(routePath)).toBe(true);
+    expect(read(routePath)).toContain("'/v1/status/subscribe'");
+    expect(body).toMatch(/\/v1\/status\/subscribe/);
+    expect(body).toMatch(/method: 'POST'/);
+  });
+
+  it('status-code branches: 202 success / 400 invalid email / 429 rate-limit / default error', () => {
+    expect(body).toMatch(/res\.status === 202/);
+    expect(body).toMatch(
+      /Check your inbox — click the link in the confirmation email to finish subscribing/,
+    );
+    expect(body).toMatch(/res\.status === 400/);
+    expect(body).toMatch(/That doesn't look like a valid email address/);
+    expect(body).toMatch(/res\.status === 429/);
+    expect(body).toMatch(/Too many subscribe attempts from this IP/);
+    expect(body).toMatch(/Subscribe failed \(HTTP \$\{res\.status\}\)\./);
+  });
+
+  it('V-540.B double-opt-in framing pinned (confirmation email before list-add)', () => {
+    expect(body).toMatch(
+      /Double-opt-in: we send a confirmation email to verify the address\s+before adding it to the notification list/,
+    );
+  });
+
+  it('"Two emails per incident maximum" volume promise pinned', () => {
+    expect(body).toMatch(/Two emails\s+per incident maximum/);
+  });
+
+  it('"never send marketing or promotional email from the status list" pinned (no cross-mixing)', () => {
+    expect(body).toMatch(/We\s+never send marketing or promotional email from the status list/);
+  });
+
+  it('unsubscribe affordance pinned (one-click + every-email-carries-a-link)', () => {
+    expect(body).toMatch(/Unsubscribe with one\s+click/);
+    expect(body).toMatch(/every email carries an unsubscribe link in the footer/);
+  });
+
+  it('page is static-served from Cloudflare Pages framing pinned', () => {
+    expect(body).toMatch(/the page itself is static-served from Cloudflare\s*\n?\s*\/\/\s*Pages/);
+  });
+
+  it('PUBLIC_API_BASE_URL env-var drives the fetch (no hardcoded prod URL)', () => {
+    expect(body).toMatch(/import\.meta\.env\.PUBLIC_API_BASE_URL/);
+    // Fallback constant pinned too.
+    expect(body).toMatch(/'https:\/\/api\.driftstack\.dev'/);
+  });
+
+  it('email-input required + autocomplete="email" + client-side regex sanity check', () => {
+    expect(body).toMatch(/<input[^>]*id="email-input"[\s\S]*?required/);
+    expect(body).toMatch(/<input[^>]*id="email-input"[\s\S]*?autocomplete="email"/);
+    // Client-side regex (defensive — server still validates).
+    expect(body).toMatch(/\/\^\.\+@\.\+\\\.\.\+\$\//);
+  });
+
+  it("'service-status incident' framing — not marketing comms", () => {
+    // Pin so a future "we'll also email you about new features"
+    // copy add forces a discussion about the status-list scope.
+    expect(body).toMatch(
+      /We'll email you when we post a service-status incident, and again\s+when it resolves/,
+    );
+  });
+
+  it('V-657 comment pinned (V-540.B-11-tested double-opt-in flow)', () => {
+    expect(body).toMatch(/V-657 — incident-email subscription handler/);
+    expect(body).toMatch(/V-540\.B-11-tested\s*\n?\s*\/\/\s*double-opt-in flow/);
+  });
+});
