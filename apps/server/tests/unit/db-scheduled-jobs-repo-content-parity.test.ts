@@ -1,0 +1,95 @@
+// W445.C — drift guard for apps/server/src/db/scheduled-jobs-repo.ts.
+// V-202d Drizzle ScheduledJobsRepo. Drift here either drops the FOR
+// UPDATE SKIP LOCKED clause (concurrent workers claim the same row
+// and run handlers twice) or removes the 5-minute lock-recovery
+// window (zombie workers leave jobs permanently locked).
+//
+//   • V-202d framing pinned.
+//   • enqueue dedup: when dedupOnAccountAndType + accountId set,
+//     check for existing pending (no completedAt + no failedAt) job
+//     of same (accountId, jobType); skip insert if exists.
+//   • claimDue atomic framing pinned: CTE + UPDATE...FROM...RETURNING;
+//     inner SELECT picks unfinished+due rows with FOR UPDATE SKIP
+//     LOCKED so concurrent workers never claim same row; outer
+//     UPDATE sets locked_by + locked_at + attempts++; RETURNING
+//     gives back claimed rows.
+//   • 5-minute zombie-lock recovery: (locked_by IS NULL OR
+//     locked_at < now - 5min).
+//   • markComplete: completedAt + clear locked_by/locked_at + updatedAt.
+//   • markRetry: bump runAt + lastError + clear locked + updatedAt.
+//   • markFailed: failedAt + lastError + clear locked + updatedAt.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/db/scheduled-jobs-repo.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W445.C apps/server/src/db/scheduled-jobs-repo.ts content parity', () => {
+  const body = read(LIB);
+
+  it("V-202d framing pinned: 'Drizzle implementation of ScheduledJobsRepo.'", () => {
+    expect(body).toMatch(/\/\/ V-202d — Drizzle implementation of ScheduledJobsRepo\./);
+  });
+
+  it('imports: and/eq/isNull/sql from drizzle-orm; Database; scheduledJobs schema; 3 service types (EnqueueScheduledJobInput + ScheduledJobRow + ScheduledJobsRepo)', () => {
+    expect(body).toMatch(/import \{ and, eq, isNull, sql \} from 'drizzle-orm';/);
+    expect(body).toMatch(/import \{ scheduledJobs \} from '\.\/schema\.js';/);
+    expect(body).toMatch(
+      /import type \{\s*\n?\s*EnqueueScheduledJobInput,\s*\n?\s*ScheduledJobRow,\s*\n?\s*ScheduledJobsRepo,\s*\n?\s*\} from '\.\.\/services\/scheduled-jobs\.js';/,
+    );
+  });
+
+  it("enqueue dedup framing pinned: when dedupOnAccountAndType===true AND accountId !== null, check for existing pending (completedAt IS NULL + failedAt IS NULL) of same (accountId, jobType); return {enqueued:false} if existing; comment: 'Check for an existing pending job of the same (account_id, job_type).'", () => {
+    expect(body).toMatch(
+      /if \(input\.dedupOnAccountAndType === true && input\.accountId !== null\) \{\s*\n?\s*\/\/ Check for an existing pending job of the same \(account_id, job_type\)\.\s*\n?\s*const existing = await this\.database\.db\s*\n?\s*\.select\(\{ id: scheduledJobs\.id \}\)\s*\n?\s*\.from\(scheduledJobs\)\s*\n?\s*\.where\(\s*\n?\s*and\(\s*\n?\s*eq\(scheduledJobs\.accountId, input\.accountId\),\s*\n?\s*eq\(scheduledJobs\.jobType, input\.jobType\),\s*\n?\s*isNull\(scheduledJobs\.completedAt\),\s*\n?\s*isNull\(scheduledJobs\.failedAt\),\s*\n?\s*\),\s*\n?\s*\)\s*\n?\s*\.limit\(1\);\s*\n?\s*if \(existing\.length > 0\) return \{ enqueued: false \};\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /await this\.database\.db\.insert\(scheduledJobs\)\.values\(\{\s*\n?\s*jobType: input\.jobType,\s*\n?\s*accountId: input\.accountId,\s*\n?\s*payload: input\.payload,\s*\n?\s*runAt: input\.runAt,\s*\n?\s*\}\);\s*\n?\s*return \{ enqueued: true \};/,
+    );
+  });
+
+  it("claimDue atomic framing pinned: 'Atomic claim via CTE + UPDATE ... FROM ... RETURNING. The inner SELECT picks unfinished, due rows with FOR UPDATE SKIP LOCKED so concurrent workers never claim the same row. The outer UPDATE sets locked_by + locked_at + increments attempts, then RETURNING gives us back the claimed rows.'", () => {
+    expect(body).toMatch(
+      /\/\/ Atomic claim via CTE \+ UPDATE \.\.\. FROM \.\.\. RETURNING\. The inner\s*\n?\s*\/\/ SELECT picks unfinished, due rows with FOR UPDATE SKIP LOCKED so\s*\n?\s*\/\/ concurrent workers never claim the same row\. The outer UPDATE\s*\n?\s*\/\/ sets locked_by \+ locked_at \+ increments attempts, then RETURNING\s*\n?\s*\/\/ gives us back the claimed rows\./,
+    );
+  });
+
+  it('claimDue raw SQL: WITH due AS (SELECT id FROM scheduled_jobs WHERE run_at <= now AND completed_at IS NULL AND failed_at IS NULL AND (locked_by IS NULL OR locked_at < now - 5min) ORDER BY run_at ASC LIMIT batchSize FOR UPDATE SKIP LOCKED) UPDATE ... SET locked_by, locked_at, attempts++, updated_at RETURNING 7 columns', () => {
+    expect(body).toMatch(
+      /WITH due AS \(\s*\n?\s*SELECT id\s*\n?\s*FROM scheduled_jobs\s*\n?\s*WHERE run_at <= \$\{opts\.now\}\s*\n?\s*AND completed_at IS NULL\s*\n?\s*AND failed_at IS NULL\s*\n?\s*AND \(locked_by IS NULL OR locked_at < \$\{new Date\(opts\.now\.getTime\(\) - 5 \* 60_000\)\}\)\s*\n?\s*ORDER BY run_at ASC\s*\n?\s*LIMIT \$\{opts\.batchSize\}\s*\n?\s*FOR UPDATE SKIP LOCKED\s*\n?\s*\)\s*\n?\s*UPDATE scheduled_jobs sj\s*\n?\s*SET locked_by\s*= \$\{opts\.workerId\},\s*\n?\s*locked_at\s*= \$\{opts\.now\},\s*\n?\s*attempts\s+= sj\.attempts \+ 1,\s*\n?\s*updated_at\s+= \$\{opts\.now\}\s*\n?\s*FROM due\s*\n?\s*WHERE sj\.id = due\.id\s*\n?\s*RETURNING sj\.id, sj\.job_type, sj\.account_id, sj\.payload, sj\.run_at,\s*\n?\s*sj\.attempts, sj\.max_attempts;/,
+    );
+  });
+
+  it('claimDue dual-shape row iter (postgres-js typed array vs {rows} envelope); rows.map to ScheduledJobRow shape (snake_case → camel; payload defaulted {})', () => {
+    expect(body).toMatch(
+      /\/\/ postgres-js returns rows as a typed array\.\s*\n?\s*const rows = \(result as unknown as \{ rows\?: unknown\[\] \}\)\.rows \?\? \(result as unknown\[\]\);/,
+    );
+    expect(body).toMatch(
+      /return \(rows as Array<Record<string, unknown>>\)\.map\(\(r\) => \(\{\s*\n?\s*id: r\.id as string,\s*\n?\s*jobType: r\.job_type as string,\s*\n?\s*accountId: \(r\.account_id as string \| null\) \?\? null,\s*\n?\s*payload: \(r\.payload as Record<string, unknown>\) \?\? \{\},\s*\n?\s*runAt: r\.run_at as Date,\s*\n?\s*attempts: r\.attempts as number,\s*\n?\s*maxAttempts: r\.max_attempts as number,\s*\n?\s*\}\)\);/,
+    );
+  });
+
+  it('markComplete: completedAt + clear lockedBy/lockedAt + updatedAt where id; markRetry: bump runAt + lastError + clear locked + updatedAt; markFailed: failedAt + lastError + clear locked + updatedAt', () => {
+    expect(body).toMatch(
+      /async markComplete\(jobId: string, at: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(scheduledJobs\)\s*\n?\s*\.set\(\{ completedAt: at, lockedBy: null, lockedAt: null, updatedAt: at \}\)\s*\n?\s*\.where\(eq\(scheduledJobs\.id, jobId\)\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /\.set\(\{\s*\n?\s*runAt: opts\.nextRunAt,\s*\n?\s*lastError: opts\.lastError,\s*\n?\s*lockedBy: null,\s*\n?\s*lockedAt: null,\s*\n?\s*updatedAt: new Date\(\),\s*\n?\s*\}\)/,
+    );
+    expect(body).toMatch(
+      /\.set\(\{\s*\n?\s*failedAt: opts\.at,\s*\n?\s*lastError: opts\.lastError,\s*\n?\s*lockedBy: null,\s*\n?\s*lockedAt: null,\s*\n?\s*updatedAt: opts\.at,\s*\n?\s*\}\)/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
