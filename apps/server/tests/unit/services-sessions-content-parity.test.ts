@@ -1,0 +1,242 @@
+// W404.C — drift guard for apps/server/src/services/sessions.ts.
+// Sessions service — owns concurrent-session limits + driver-call
+// failure capture + V-326 team RBAC fan-out semantics. Drift here
+// either breaks tier cap enforcement (over-limit session creation)
+// or scrambles V-326e webhook/audit fan-out direction (events go
+// to wrong audience).
+//
+//   • Account-scoped ownership invariant pinned: session belongs
+//     to exactly one account.
+//   • concurrentSessionLimitFor: TIER_CONCURRENT_SESSION_LIMITS
+//     (V-156) single-source-of-truth helper.
+//   • profileLimitFor: PROFILES_PER_TIER (V-136) — translates
+//     'custom' enterprise sentinel to null for legacy null-means-
+//     unlimited contract.
+//   • SessionRecord: 12 fields + 5-status union ('creating' |
+//     'ready' | 'busy' | 'destroyed' | 'errored').
+//   • SessionEventInput.type: 9-literal union covering full
+//     lifecycle (created → navigated/interacted/gui_input/waited/
+//     state_captured/screenshot_captured → destroyed/errored).
+//   • V-326e1 create: tier cap on OWNER's account (effectiveAccount
+//     opts); ConcurrencyLimitError when active >= limit.
+//   • V-202c first-failure email + V-304a first-success email
+//     dedup at lifecycle service.
+//   • destroy V-167: lookup-directly + terminal short-circuit
+//     ('destroyed' OR 'errored' → no-op) for REST idempotency.
+//   • V-090 errored = destroyed for customer (subsequent ops 410);
+//     terminal short-circuit in requireOwned.
+//   • V-326e3 runWithFailureCapture: session.failed webhook +
+//     V-202c first-failure email fan out to session.accountId
+//     (OWNER, NOT caller); audit row on OWNER's log with actor
+//     stays member.
+//   • listAll: driftstack_internal_admin scope (V-174 'admin'
+//     compat alias for legacy keys).
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/services/sessions.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
+  const body = read(LIB);
+
+  it('Account-scoped ownership invariant pinned: session belongs to exactly one account', () => {
+    expect(body).toMatch(
+      /Every method takes an AccountContext and enforces account-scoped ownership\s*\n?\s*\/\/\s*— a session belongs to exactly one account, and only that account's keys\s*\n?\s*\/\/\s*can operate on it\./,
+    );
+  });
+
+  it('concurrentSessionLimitFor: TIER_CONCURRENT_SESSION_LIMITS V-156 single-source-of-truth helper', () => {
+    expect(body).toMatch(
+      /\/\/ Single source of truth lives in api-types\s*\n?\s*\/\/ \(TIER_CONCURRENT_SESSION_LIMITS, V-156\)\./,
+    );
+    expect(body).toMatch(
+      /export function concurrentSessionLimitFor\(tier: AccountTier\): number \{\s*\n?\s*return TIER_CONCURRENT_SESSION_LIMITS\[tier\];\s*\n?\s*\}/,
+    );
+  });
+
+  it("profileLimitFor: PROFILES_PER_TIER V-136 — 'custom' enterprise sentinel → null for legacy unlimited contract", () => {
+    expect(body).toMatch(
+      /\/\/ Profile count limit per tier — enforced at the \/v1\/profiles\s*\n?\s*\/\/ creation gate\. Single source of truth lives in api-types\s*\n?\s*\/\/ \(PROFILES_PER_TIER, V-136\)\. The api-types record uses the\s*\n?\s*\/\/ 'custom' sentinel for enterprise; this helper translates to\s*\n?\s*\/\/ null for the legacy null-means-unlimited contract/,
+    );
+    expect(body).toMatch(
+      /export function profileLimitFor\(tier: AccountTier\): number \| null \{\s*\n?\s*const limit = PROFILES_PER_TIER\[tier\];\s*\n?\s*return limit === 'custom' \? null : limit;\s*\n?\s*\}/,
+    );
+  });
+
+  it("SessionRecord: 12 fields + 5-status union ('creating'|'ready'|'busy'|'destroyed'|'errored') + V-169 purpose", () => {
+    expect(body).toMatch(/export interface SessionRecord \{/);
+    expect(body).toMatch(/accountId: string;/);
+    expect(body).toMatch(/apiKeyId: string;/);
+    expect(body).toMatch(/driverSessionId: string;/);
+    expect(body).toMatch(/status: 'creating' \| 'ready' \| 'busy' \| 'destroyed' \| 'errored';/);
+    expect(body).toMatch(/archetype: string;/);
+    expect(body).toMatch(/\/\*\* V-169 — harness purpose\. \*\/\s*\n?\s*purpose: SessionPurpose;/);
+    expect(body).toMatch(/label: string \| null;/);
+    expect(body).toMatch(/metadata: Record<string, unknown> \| null;/);
+    expect(body).toMatch(/lastStateAt: Date \| null;/);
+    expect(body).toMatch(/destroyedAt: Date \| null;/);
+  });
+
+  it('SessionEventInput.type: 9-literal lifecycle union', () => {
+    expect(body).toMatch(/export interface SessionEventInput \{/);
+    expect(body).toMatch(
+      /type:\s*\n?\s*\| 'created'\s*\n?\s*\| 'navigated'\s*\n?\s*\| 'interacted'\s*\n?\s*\| 'gui_input'\s*\n?\s*\| 'waited'\s*\n?\s*\| 'state_captured'\s*\n?\s*\| 'screenshot_captured'\s*\n?\s*\| 'destroyed'\s*\n?\s*\| 'errored';/,
+    );
+  });
+
+  it('SessionRepo: 7 methods (insert/findSession/findSessionUnscoped/updateSessionStatus/countActiveSessions/listSessions/listAllSessions + recordEvent)', () => {
+    expect(body).toMatch(/export interface SessionRepo \{/);
+    expect(body).toMatch(/insertSession\(input: NewSessionInput\): Promise<SessionRecord>;/);
+    expect(body).toMatch(
+      /\/\*\* Find a session by id, scoped to the supplied account\. \*\/\s*\n?\s*findSession\(id: string, accountId: string\): Promise<SessionRecord \| null>;/,
+    );
+    expect(body).toMatch(
+      /\/\*\* Find a session by id WITHOUT account scoping \(admin force-actions only\)\. \*\/\s*\n?\s*findSessionUnscoped\(id: string\): Promise<SessionRecord \| null>;/,
+    );
+    expect(body).toMatch(/countActiveSessions\(accountId: string\): Promise<number>;/);
+    expect(body).toMatch(
+      /listSessions\(\s*\n?\s*accountId: string,\s*\n?\s*opts: \{ limit: number; cursor\?: string \},\s*\n?\s*\): Promise<SessionListPage>;/,
+    );
+    expect(body).toMatch(/listAllSessions\(opts: \{/);
+    expect(body).toMatch(/recordEvent\(input: SessionEventInput\): Promise<void>;/);
+  });
+
+  it('SessionsServiceDeps: 4 fields — repo + driver + V-216 accountAudit (session.created/destroyed only) + V-202c/V-304a accountLifecycle', () => {
+    expect(body).toMatch(/export interface SessionsServiceDeps \{/);
+    expect(body).toMatch(/repo: SessionRepo;/);
+    expect(body).toMatch(/driver: Driver;/);
+    expect(body).toMatch(
+      /webhooks\?: \{\s*\n?\s*enqueueEvent: \(\s*\n?\s*accountId: string,\s*\n?\s*eventType: 'session\.completed' \| 'session\.failed',/,
+    );
+    expect(body).toMatch(
+      /\/\*\* V-216: optional customer-facing audit emitter\. \*\/\s*\n?\s*accountAudit\?: \{[\s\S]+?action: 'session\.created' \| 'session\.destroyed';/,
+    );
+    expect(body).toMatch(
+      /V-202c: optional lifecycle dispatcher\. When wired, the first\s*\n?\s*\*\s*session\.failed for an account triggers `session-failed-first`\s*\n?\s*\*\s*email \(deduped via `accounts\.first_failure_email_sent_at`\)\./,
+    );
+    expect(body).toMatch(
+      /event:\s*\n?\s*\| \{ kind: 'session\.failed\.first'; sessionId: string; errorMessage: string \}\s*\n?\s*\| \{ kind: 'session\.success\.first'; sessionId: string \},/,
+    );
+  });
+
+  it('V-326e1 create: ConcurrencyLimitError when active >= limit; cap on OWNER account via effectiveAccountId opt', () => {
+    expect(body).toMatch(
+      /\/\/ V-326e1 — when effectiveAccountId is set \(route layer resolved\s*\n?\s*\/\/ X-Driftstack-Account \+ verified the caller has 'admin' role on\s*\n?\s*\/\/ the owner's team\), the new session is OWNED by the team owner\s*\n?\s*\/\/ and counts against the OWNER's concurrent cap\./,
+    );
+    expect(body).toMatch(/const accountId = opts\.effectiveAccountId \?\? ctx\.account\.id;/);
+    expect(body).toMatch(/const limit = concurrentSessionLimitFor\(tier\);/);
+    expect(body).toMatch(
+      /const active = await this\.deps\.repo\.countActiveSessions\(accountId\);/,
+    );
+    expect(body).toMatch(
+      /if \(active >= limit\) \{\s*\n?\s*throw new ConcurrencyLimitError\(active, limit\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('create: archetype = body.archetype ?? LOCKED_ARCHETYPE_ID; purpose = body.purpose ?? DEFAULT_SESSION_PURPOSE; emits session.created audit', () => {
+    expect(body).toMatch(/const archetype = body\.archetype \?\? LOCKED_ARCHETYPE_ID;/);
+    expect(body).toMatch(
+      /const purpose: SessionPurpose = body\.purpose \?\? DEFAULT_SESSION_PURPOSE;/,
+    );
+    expect(body).toMatch(
+      /action: 'session\.created',\s*\n?\s*targetResourceId: `ses_\$\{record\.id\}`,\s*\n?\s*payload: \{ archetype, purpose \},/,
+    );
+  });
+
+  it("V-167 destroy: lookup-directly + terminal short-circuit ('destroyed' OR 'errored' → no-op) for REST idempotency", () => {
+    expect(body).toMatch(
+      /\/\/ V-167 — true idempotent destroy\. Pre-V-167 this called requireOwned\(\)\s*\n?\s*\/\/ which threw SessionDestroyedError \(HTTP 410\) on already-destroyed\s*\n?\s*\/\/ sessions before the early-return short-circuit could run\./,
+    );
+    expect(body).toMatch(
+      /\/\/ Terminal-status no-ops\. 'destroyed' is the obvious one; 'errored'\s*\n?\s*\/\/ also short-circuits per V-090 \(a failed session has nothing\s*\n?\s*\/\/ useful left to destroy\)\.\s*\n?\s*if \(session\.status === 'destroyed' \|\| session\.status === 'errored'\) return;/,
+    );
+  });
+
+  it('destroy: emits session.completed webhook + V-304a session.success.first email + V-216 session.destroyed audit all try/catch swallow', () => {
+    expect(body).toMatch(
+      /await this\.deps\.webhooks\.enqueueEvent\(accountId, 'session\.completed', \{\s*\n?\s*session_id: `ses_\$\{session\.id\}`,\s*\n?\s*duration_ms: durationMs,\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(
+      /\/\/ V-304a — first-success activation email\.[\s\S]+?await this\.deps\.accountLifecycle\.emit\(accountId, \{\s*\n?\s*kind: 'session\.success\.first',\s*\n?\s*sessionId: `ses_\$\{session\.id\}`,\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(
+      /action: 'session\.destroyed',\s*\n?\s*targetResourceId: `ses_\$\{session\.id\}`,\s*\n?\s*payload: \{ duration_ms: durationMs \},/,
+    );
+  });
+
+  it("V-090 requireOwned: 'destroyed' OR 'errored' → SessionDestroyedError 410 (errored = destroyed for customer)", () => {
+    expect(body).toMatch(
+      /\/\/ V-090 founder-approved semantic: a session that has entered the\s*\n?\s*\/\/ 'errored' state behaves the same as 'destroyed' for the customer\s*\n?\s*\/\/ — subsequent ops 410\./,
+    );
+    expect(body).toMatch(
+      /if \(session\.status === 'destroyed' \|\| session\.status === 'errored'\) \{\s*\n?\s*throw new SessionDestroyedError\(\);/,
+    );
+  });
+
+  it("V-326e3 runWithFailureCapture: session.failed webhook + V-202c first-failure email fan-out to session.accountId (OWNER, not caller); audit on OWNER's log", () => {
+    expect(body).toMatch(
+      /\/\/ V-326e3 — fan-out goes to the SESSION OWNER \(session\.accountId\),\s*\n?\s*\/\/ not the caller\. When a member fails on an owner's session,\s*\n?\s*\/\/ the owner's webhook subscription fires \+ the owner gets the\s*\n?\s*\/\/ first-failure email\. The caller is the actor; the resource's\s*\n?\s*\/\/ owner is the audience\./,
+    );
+    expect(body).toMatch(
+      /await this\.deps\.webhooks\.enqueueEvent\(session\.accountId, 'session\.failed', \{\s*\n?\s*session_id: `ses_\$\{session\.id\}`,\s*\n?\s*duration_ms: durationMs,\s*\n?\s*operation,\s*\n?\s*error_name: errorName,\s*\n?\s*error_message: errorMessage,/,
+    );
+    expect(body).toMatch(
+      /await this\.deps\.accountLifecycle\.emit\(session\.accountId, \{\s*\n?\s*kind: 'session\.failed\.first',\s*\n?\s*sessionId: `ses_\$\{session\.id\}`,\s*\n?\s*errorMessage,\s*\n?\s*\}\);/,
+    );
+  });
+
+  it("runWithFailureCapture: updateSessionStatus 'errored' + recordEvent 'errored' + re-throw original err (DB writes best-effort)", () => {
+    expect(body).toMatch(
+      /\/\/ Persist the failure state\. Errors here are swallowed so the\s*\n?\s*\/\/ original driver error still propagates to the caller — the DB\s*\n?\s*\/\/ write is best-effort, the user-facing error wins\./,
+    );
+    expect(body).toMatch(
+      /await this\.deps\.repo\.updateSessionStatus\(session\.id, 'errored', \{\s*\n?\s*destroyedAt: erroredAt,\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(
+      /type: 'errored',\s*\n?\s*payload: \{ operation, error_name: errorName, error_message: errorMessage \},/,
+    );
+    expect(body).toMatch(/throw err;/);
+  });
+
+  it("listAll: driftstack_internal_admin scope (V-174 compat alias 'admin' accepted via requireScope)", () => {
+    expect(body).toMatch(
+      /Cross-account list for the admin panel \+ ops tooling\. Requires\s*\n?\s*\*\s*driftstack_internal_admin scope \(compat alias 'admin' also accepted\s*\n?\s*\*\s*for legacy keys per V-174 migration\)\./,
+    );
+    expect(body).toMatch(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/);
+    expect(body).toMatch(/return this\.deps\.repo\.listAllSessions\(opts\);/);
+  });
+
+  it("capture: 'screenshot' or 'pdf' kind → 'screenshot_captured' event; else 'state_captured'", () => {
+    expect(body).toMatch(
+      /type:\s*\n?\s*body\.kind === 'screenshot' \|\| body\.kind === 'pdf'\s*\n?\s*\?\s*'screenshot_captured'\s*\n?\s*:\s*'state_captured',/,
+    );
+  });
+
+  it('imports: api-types defaults (DEFAULT_SESSION_PURPOSE + LOCKED_ARCHETYPE_ID + PROFILES_PER_TIER + TIER_CONCURRENT_SESSION_LIMITS) + AccountContext + Driver + errors + GUIInputRequest', () => {
+    expect(body).toMatch(
+      /import \{\s*\n?\s*DEFAULT_SESSION_PURPOSE,\s*\n?\s*LOCKED_ARCHETYPE_ID,\s*\n?\s*PROFILES_PER_TIER,\s*\n?\s*TIER_CONCURRENT_SESSION_LIMITS,/,
+    );
+    expect(body).toMatch(/import type \{ AccountContext \} from '\.\/auth\.js';/);
+    expect(body).toMatch(/import type \{ Driver \} from '\.\.\/drivers\/types\.js';/);
+    expect(body).toMatch(/import type \{ GUIInputRequest \} from '\.\.\/schemas\/gui-input\.js';/);
+    expect(body).toMatch(
+      /import \{ ConcurrencyLimitError, NotFoundError, SessionDestroyedError \} from '\.\.\/lib\/errors\.js';/,
+    );
+    expect(body).toMatch(
+      /import \{ requireScope as throwIfMissingScope \} from '\.\.\/lib\/errors-helpers\.js';/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
