@@ -1,0 +1,107 @@
+// W471.C — drift guard for apps/gui-client/src/lib/use-admin-csv-export.ts.
+// V-534.AX admin CSV export hook. Drift here either drops the
+// blob-URL revocation in finally (memory leak: object URLs
+// accumulate for the whole session) or breaks the Bearer header
+// (a plain anchor link with the admin token in URL would expose
+// the token in browser history + referer headers).
+//
+//   • V-534.AX framing pinned: 'admin CSV export hook.' + 'Wraps
+//     GET /v1/admin/crypto-orders.csv (V-666.AC). The endpoint
+//     requires `Authorization: Bearer` so a plain anchor link
+//     won't work — we fetch the response as a blob, mint an
+//     object URL, and trigger a download via a synthesized anchor
+//     click. The blob URL is revoked immediately after the click
+//     to avoid leaking it for the rest of the session.'
+//   • State-machine framing 'idle | downloading | failed.
+//     Successful downloads snap back to idle so the button is
+//     immediately usable again.'
+//   • AdminCsvExportState 3-variant (idle | downloading | failed
+//     {message}).
+//   • UseAdminCsvExportOpts 5-field with V-666.BY createdAfter/
+//     createdBefore ISO 8601 bounds (inclusive lower / exclusive
+//     upper).
+//   • Query-string builder: status + search.trim() + accountId.
+//     trim() + createdAfter.trim() + createdBefore.trim() with
+//     length>0 guards.
+//   • Download flow: fetch blob + URL.createObjectURL +
+//     buildFilename + synthesized anchor click +
+//     URL.revokeObjectURL + setState idle.
+//   • buildFilename: `crypto-orders-${y}-${m}-${d}.csv` UTC with
+//     padStart 4/2/2 + UTCMonth+1.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/gui-client/src/lib/use-admin-csv-export.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W471.C apps/gui-client/src/lib/use-admin-csv-export.ts content parity', () => {
+  const body = read(LIB);
+
+  it("V-534.AX framing pinned: 'V-534.AX — admin CSV export hook.' + 'Wraps GET /v1/admin/crypto-orders.csv (V-666.AC). The endpoint requires `Authorization: Bearer` so a plain anchor link won't work — we fetch the response as a blob, mint an object URL, and trigger a download via a synthesized anchor click. The blob URL is revoked immediately after the click to avoid leaking it for the rest of the session.'", () => {
+    expect(body).toMatch(/\/\/ V-534\.AX — admin CSV export hook\./);
+    expect(body).toMatch(
+      /\/\/ Wraps GET \/v1\/admin\/crypto-orders\.csv \(V-666\.AC\)\. The endpoint requires\s*\n?\s*\/\/ `Authorization: Bearer` so a plain anchor link won't work — we fetch\s*\n?\s*\/\/ the response as a blob, mint an object URL, and trigger a download\s*\n?\s*\/\/ via a synthesized anchor click\. The blob URL is revoked immediately\s*\n?\s*\/\/ after the click to avoid leaking it for the rest of the session\./,
+    );
+  });
+
+  it("State-machine framing pinned: 'State machine: idle | downloading | failed. Successful downloads snap back to idle so the button is immediately usable again.'", () => {
+    expect(body).toMatch(
+      /\/\/ State machine: idle \| downloading \| failed\. Successful downloads\s*\n?\s*\/\/ snap back to idle so the button is immediately usable again\./,
+    );
+  });
+
+  it("AdminCsvExportState 3-variant (idle | downloading | failed{message}) + UseAdminCsvExportOpts 5-field with V-666.BY createdAfter 'ISO 8601 lower bound (inclusive)' + createdBefore 'ISO 8601 upper bound (exclusive)'", () => {
+    expect(body).toMatch(
+      /export type AdminCsvExportState =\s*\n?\s*\| \{ kind: 'idle' \}\s*\n?\s*\| \{ kind: 'downloading' \}\s*\n?\s*\| \{ kind: 'failed'; message: string \};/,
+    );
+    expect(body).toMatch(
+      /\/\*\* V-666\.BY — ISO 8601 lower bound \(inclusive\)\. \*\/\s*\n?\s*createdAfter\?: string \| null;\s*\n?\s*\/\*\* V-666\.BY — ISO 8601 upper bound \(exclusive\)\. \*\/\s*\n?\s*createdBefore\?: string \| null;/,
+    );
+  });
+
+  it("UseAdminCsvExportResult 3-method (state + download + reset); useAdminCsvExport: 5 opts ?? null defaults + no-apiKey → failed{message:'No API key configured.'}", () => {
+    expect(body).toMatch(
+      /export interface UseAdminCsvExportResult \{\s*\n?\s*state: AdminCsvExportState;\s*\n?\s*download: \(\) => Promise<void>;\s*\n?\s*reset: \(\) => void;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /const status = opts\.status \?\? null;\s*\n?\s*const search = opts\.search \?\? null;\s*\n?\s*const accountId = opts\.accountId \?\? null;\s*\n?\s*const createdAfter = opts\.createdAfter \?\? null;\s*\n?\s*const createdBefore = opts\.createdBefore \?\? null;/,
+    );
+  });
+
+  it("Query-string builder: new URL + status !== null .set('status', status); search.trim().length > 0 .set('search', search.trim()); accountId .set('account_id', accountId.trim()) (snake_case server field); createdAfter .set('created_after', ...); createdBefore .set('created_before', ...)", () => {
+    expect(body).toMatch(
+      /const url = new URL\(`\$\{baseUrl\}\/v1\/admin\/crypto-orders\.csv`\);\s*\n?\s*if \(status !== null\) url\.searchParams\.set\('status', status\);\s*\n?\s*if \(search !== null && search\.trim\(\)\.length > 0\) \{\s*\n?\s*url\.searchParams\.set\('search', search\.trim\(\)\);\s*\n?\s*\}\s*\n?\s*if \(accountId !== null && accountId\.trim\(\)\.length > 0\) \{\s*\n?\s*url\.searchParams\.set\('account_id', accountId\.trim\(\)\);\s*\n?\s*\}\s*\n?\s*if \(createdAfter !== null && createdAfter\.trim\(\)\.length > 0\) \{\s*\n?\s*url\.searchParams\.set\('created_after', createdAfter\.trim\(\)\);\s*\n?\s*\}\s*\n?\s*if \(createdBefore !== null && createdBefore\.trim\(\)\.length > 0\) \{\s*\n?\s*url\.searchParams\.set\('created_before', createdBefore\.trim\(\)\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('Download flow: setState downloading pre-fetch + fetch with Bearer auth + accept text/csv + !res.ok → failed{message: readApiErrorMessage} + res.ok → blob() + URL.createObjectURL + buildFilename(new Date()) + synthesized <a> click + URL.revokeObjectURL + setState idle', () => {
+    expect(body).toMatch(/setState\(\{ kind: 'downloading' \}\);/);
+    expect(body).toMatch(
+      /const res = await fetch\(url\.toString\(\), \{\s*\n?\s*method: 'GET',\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{settings\.apiKey\}`,\s*\n?\s*accept: 'text\/csv',\s*\n?\s*\},\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(
+      /const blob = await res\.blob\(\);\s*\n?\s*const objectUrl = URL\.createObjectURL\(blob\);\s*\n?\s*const filename = buildFilename\(new Date\(\)\);\s*\n?\s*const a = document\.createElement\('a'\);\s*\n?\s*a\.href = objectUrl;\s*\n?\s*a\.download = filename;\s*\n?\s*a\.style\.display = 'none';\s*\n?\s*document\.body\.appendChild\(a\);\s*\n?\s*a\.click\(\);\s*\n?\s*document\.body\.removeChild\(a\);\s*\n?\s*URL\.revokeObjectURL\(objectUrl\);\s*\n?\s*setState\(\{ kind: 'idle' \}\);/,
+    );
+  });
+
+  it('useCallback deps: [settings.apiKey, settings.baseUrl, status, search, accountId, createdAfter, createdBefore]; buildFilename: `crypto-orders-${y}-${m}-${d}.csv` UTC + getUTCFullYear padStart(4) + getUTCMonth()+1 padStart(2) + getUTCDate padStart(2)', () => {
+    expect(body).toMatch(
+      /\}, \[settings\.apiKey, settings\.baseUrl, status, search, accountId, createdAfter, createdBefore\]\);/,
+    );
+    expect(body).toMatch(
+      /function buildFilename\(now: Date\): string \{\s*\n?\s*const y = now\.getUTCFullYear\(\)\.toString\(\)\.padStart\(4, '0'\);\s*\n?\s*const m = \(now\.getUTCMonth\(\) \+ 1\)\.toString\(\)\.padStart\(2, '0'\);\s*\n?\s*const d = now\.getUTCDate\(\)\.toString\(\)\.padStart\(2, '0'\);\s*\n?\s*return `crypto-orders-\$\{y\}-\$\{m\}-\$\{d\}\.csv`;\s*\n?\s*\}/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
