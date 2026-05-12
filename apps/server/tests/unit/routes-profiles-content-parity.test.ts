@@ -1,0 +1,171 @@
+// W437.B — drift guard for apps/server/src/routes/profiles.ts.
+// V-081 5-endpoint base + V-313 clone + V-480 export/import + V-326e4
+// admin-only team gate + V-330 read-roles-equivalent. Drift here
+// either drops the V-326e4 admin role check (team member silently
+// gets profile-write capability on owner account) or breaks the V-480
+// envelope versioning (PROFILE_EXPORT_ENVELOPE_VERSION literal must
+// match @driftstack/api-types).
+//
+//   • V-081 5 endpoints: POST/GET/GET-one/PATCH/DELETE under
+//     /v1/profiles + V-313 clone + V-480 export/import.
+//   • prof_<uuid> public-id prefix conversion.
+//   • V-326e4 admin-only gate on team-scoped writes (POST/PATCH/
+//     DELETE/clone/import); V-330 read endpoints allow both roles.
+//   • Tier-cap + concurrent-cap derived from OWNER's tier on
+//     team-scoped writes.
+//   • V-480 export framing: metadata-only; per-profile browser state
+//     lives driver-side and out of scope for v1; envelope versioned so
+//     v2 stays back-compat; read-side audit emit for file-flow lineage.
+//   • V-480 import: accepts v1 envelope + mints fresh profile in
+//     caller's account; tier-cap + name-conflict match POST /v1/profiles;
+//     transfer between teammate accounts via file permitted.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/routes/profiles.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
+  const body = read(LIB);
+
+  it('header framing pinned: V-081 5 endpoints (POST create tier-limit / GET list cursor / GET one / PATCH partial / DELETE) + auth-gated + rate-limit("global") + prof_<uuid> public-id (same prefix-conversion convention as sessions.ts)', () => {
+    expect(body).toMatch(/\/\/ Profile routes — five endpoints under \/v1\/profiles \(V-081\)\./);
+    expect(body).toMatch(
+      /\/\/\s*POST\s+\/v1\/profiles\s+— create \(tier-limit enforced\)\s*\n?\s*\/\/\s*GET\s+\/v1\/profiles\s+— list \(cursor pagination\)\s*\n?\s*\/\/\s*GET\s+\/v1\/profiles\/:id\s+— get one\s*\n?\s*\/\/\s*PATCH\s+\/v1\/profiles\/:id\s+— partial update \(name, description\)\s*\n?\s*\/\/\s*DELETE \/v1\/profiles\/:id\s+— delete/,
+    );
+    expect(body).toMatch(
+      /\/\/ Auth-gated via app\.requireAuth \+ app\.rateLimit\('global'\)\. Public id\s*\n?\s*\/\/ format: `prof_<uuid>` — same prefix-conversion convention as\s*\n?\s*\/\/ sessions\.ts\./,
+    );
+  });
+
+  it('imports: 6 Zod schemas + PROFILE_EXPORT_ENVELOPE_VERSION from api-types; ProfileRecord/ProfilesService; BadRequest/Forbidden/Validation errors; AccountAuthRepo + resolveEffectiveAccount', () => {
+    expect(body).toMatch(
+      /import \{\s*\n?\s*CloneProfileRequestSchema,\s*\n?\s*CreateProfileRequestSchema,\s*\n?\s*PaginationQuerySchema,\s*\n?\s*PROFILE_EXPORT_ENVELOPE_VERSION,\s*\n?\s*ProfileImportRequestSchema,\s*\n?\s*UpdateProfileRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
+    );
+    expect(body).toMatch(
+      /import type \{ ProfileRecord, ProfilesService \} from '\.\.\/services\/profiles\.js';/,
+    );
+    expect(body).toMatch(
+      /import \{ BadRequestError, ForbiddenError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
+    );
+  });
+
+  it('V-326e4 effectiveAccountIdForWrite framing pinned: admin-only gate for profile write operations on team owners; returns accountId when team write should proceed / undefined self-scoped / throws ForbiddenError on member', () => {
+    expect(body).toMatch(
+      /\*\s*V-326e4 — admin-only gate for profile write operations on team\s*\n?\s*\*\s*owners\. Returns the effective accountId \(string\) when the team\s*\n?\s*\*\s*write should proceed, or undefined when the request is self-scoped\.\s*\n?\s*\*\s*Throws ForbiddenError on member-role team requests\./,
+    );
+    expect(body).toMatch(
+      /throw new ForbiddenError\('Profile writes on a team owner require admin role on that team\.'\);/,
+    );
+  });
+
+  it('PROFILE_ID_RE regex (prof_ + UUID); uuidFromProfileId throws BadRequestError; publicProfile mapper (7 fields: id prof_ + name + archetype + description + last_used_at nullable + created/updated_at)', () => {
+    expect(body).toMatch(
+      /const PROFILE_ID_RE = \/\^prof_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/;/,
+    );
+    expect(body).toMatch(
+      /function uuidFromProfileId\(value: string\): string \{\s*\n?\s*const match = PROFILE_ID_RE\.exec\(value\);\s*\n?\s*if \(!match \|\| !match\[1\]\) \{\s*\n?\s*throw new BadRequestError\('Invalid id format\. Expected "prof_<uuid>"\.'\);\s*\n?\s*\}\s*\n?\s*return match\[1\];\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /function publicProfile\(p: ProfileRecord\): Record<string, unknown> \{\s*\n?\s*return \{\s*\n?\s*id: `prof_\$\{p\.id\}`,\s*\n?\s*name: p\.name,\s*\n?\s*archetype: p\.archetype,\s*\n?\s*description: p\.description,\s*\n?\s*last_used_at: p\.lastUsedAt \? p\.lastUsedAt\.toISOString\(\) : null,\s*\n?\s*created_at: p\.createdAt\.toISOString\(\),\s*\n?\s*updated_at: p\.updatedAt\.toISOString\(\),\s*\n?\s*\};\s*\n?\s*\}/,
+    );
+  });
+
+  it('ProfileRoutesDeps: service + V-326e4 authRepo rationale (lookup OWNER tier for profile-cap check on POST when team-scoped)', () => {
+    expect(body).toMatch(
+      /\*\s*V-326e4 — needed to look up the OWNER's tier for the profile-cap\s*\n?\s*\*\s*check on POST \/v1\/profiles when team-scoped\./,
+    );
+    expect(body).toMatch(
+      /export interface ProfileRoutesDeps \{\s*\n?\s*service: ProfilesService;[\s\S]*?authRepo: AccountAuthRepo;\s*\n?\s*\}/,
+    );
+  });
+
+  it('V-326e4 POST /v1/profiles: admin-only when team-scoped; profile cap + accountId derive from OWNER; member 403; CreateProfileRequestSchema safeParse → ValidationError; owner.tier/id substitution', () => {
+    expect(body).toMatch(
+      /\/\/ V-326e4 — admin-only when targeting a team owner; profile cap \+\s*\n?\s*\/\/ accountId derive from the OWNER\. Member role gets 403\./,
+    );
+    expect(body).toMatch(/const parsed = CreateProfileRequestSchema\.safeParse\(req\.body\);/);
+    expect(body).toMatch(
+      /if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);/,
+    );
+    expect(body).toMatch(
+      /if \(eff !== undefined\) \{\s*\n?\s*const owner = await authRepo\.getAccount\(eff\);\s*\n?\s*if \(!owner\) throw new ForbiddenError\('Owner account no longer exists\.'\);\s*\n?\s*accountId = owner\.id;\s*\n?\s*tier = owner\.tier;\s*\n?\s*\}/,
+    );
+  });
+
+  it('V-330 GET /v1/profiles framing pinned: honors X-Driftstack-Account; read-only routes treat all roles equivalently — both member and admin can read; cursor uuid roundtrip via uuidFromProfileId; response prefixes nextCursor with prof_', () => {
+    expect(body).toMatch(
+      /\/\/ V-330 — honors X-Driftstack-Account: a team member with a valid\s*\n?\s*\/\/ membership lists the owner's profiles\. Read-only routes treat all\s*\n?\s*\/\/ roles equivalently — both 'member' and 'admin' can read\./,
+    );
+    expect(body).toMatch(
+      /const cursorUuid =\s*\n?\s*parsed\.data\.cursor !== undefined \? uuidFromProfileId\(parsed\.data\.cursor\) : undefined;/,
+    );
+    expect(body).toMatch(
+      /return \{\s*\n?\s*data: page\.data\.map\(publicProfile\),\s*\n?\s*has_more: page\.hasMore,\s*\n?\s*next_cursor: page\.nextCursor !== null \? `prof_\$\{page\.nextCursor\}` : null,\s*\n?\s*\};/,
+    );
+  });
+
+  it('V-330 GET /v1/profiles/:id: same effective-account scoping as list', () => {
+    expect(body).toMatch(
+      /\/\/ V-330 — same effective-account scoping as the list endpoint above\./,
+    );
+    expect(body).toMatch(
+      /const row = await service\.get\(\{ id, accountId: effective\.accountId \}\);/,
+    );
+  });
+
+  it('V-326e4 PATCH /v1/profiles/:id: admin-only on team scope; UpdateProfileRequestSchema; selective updates (name?/description?) preserved', () => {
+    expect(body).toMatch(/\/\/ V-326e4 — admin-only on team scope\./);
+    expect(body).toMatch(
+      /const updates: \{ name\?: string; description\?: string \| null \} = \{\};\s*\n?\s*if \(parsed\.data\.name !== undefined\) updates\.name = parsed\.data\.name;\s*\n?\s*if \(parsed\.data\.description !== undefined\) updates\.description = parsed\.data\.description;/,
+    );
+  });
+
+  it('DELETE /v1/profiles/:id: V-326e4 admin-only on team; 204 No Content', () => {
+    expect(body).toMatch(
+      /const eff = effectiveAccountIdForWrite\(req, ctx\);\s*\n?\s*const accountId = eff \?\? ctx\.account\.id;\s*\n?\s*await service\.delete\(\{ id, accountId \}\);\s*\n?\s*return reply\.code\(204\)\.send\(\);/,
+    );
+  });
+
+  it('V-313 POST /v1/profiles/:id/clone framing pinned: same admin-only-on-team gate as create; tier cap server-side (matches create path) → 402/TierLimit; name optional — server auto-derives non-conflicting `${source} (copy)` if omitted', () => {
+    expect(body).toMatch(
+      /\/\/ ── POST \/v1\/profiles\/:id\/clone \(V-313\) ─[\s\S]*?\/\/ Same admin-only-on-team gate as create\. Tier cap is checked\s*\n?\s*\/\/ server-side \(matches the create path\); 402 \/ TierLimit on\s*\n?\s*\/\/ exceeded\. Body `name` optional — server auto-derives a non-\s*\n?\s*\/\/ conflicting `\$\{source\} \(copy\)` if omitted\./,
+    );
+    expect(body).toMatch(
+      /const parsed = CloneProfileRequestSchema\.safeParse\(req\.body \?\? \{\}\);/,
+    );
+    expect(body).toMatch(
+      /const cloned = await service\.clone\(\{\s*\n?\s*id,\s*\n?\s*accountId,\s*\n?\s*tier,\s*\n?\s*\.\.\.\(parsed\.data\.name !== undefined \? \{ name: parsed\.data\.name \} : \{\}\),\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('V-480 GET /v1/profiles/:id/export framing pinned: metadata-only JSON; per-profile browser state lives driver-side out of scope for v1; versioned envelope so v2 stays back-compat; read-side audit emit for file-flow lineage', () => {
+    expect(body).toMatch(
+      /\/\/ ── GET \/v1\/profiles\/:id\/export \(V-480\) ─[\s\S]*?\/\/ Metadata-only JSON export\. Per-profile browser state lives driver-\s*\n?\s*\/\/ side and is out of scope for v1; the envelope is versioned so a v2\s*\n?\s*\/\/ that extends to driver state stays back-compat\. Read-side audit\s*\n?\s*\/\/ emit lets customers reconstruct file-flow lineage post-hoc\./,
+    );
+    expect(body).toMatch(
+      /return \{\s*\n?\s*version: PROFILE_EXPORT_ENVELOPE_VERSION,\s*\n?\s*exported_at: new Date\(\)\.toISOString\(\),\s*\n?\s*source_profile_id: `prof_\$\{row\.id\}`,\s*\n?\s*source_account_id: row\.accountId,\s*\n?\s*profile: \{\s*\n?\s*name: row\.name,\s*\n?\s*archetype: row\.archetype,\s*\n?\s*description: row\.description,\s*\n?\s*\},\s*\n?\s*\};/,
+    );
+  });
+
+  it('V-480 POST /v1/profiles/import framing pinned: v1 envelope → fresh profile minted in caller account; tier-cap + name-conflict match POST /v1/profiles; importing into different account than source permitted (transfer between teammate accounts via file)', () => {
+    expect(body).toMatch(
+      /\/\/ ── POST \/v1\/profiles\/import \(V-480\) ─[\s\S]*?\/\/ Accepts a v1 envelope, mints a fresh profile in the caller's\s*\n?\s*\/\/ account\. Tier-cap \+ name-conflict semantics match POST \/v1\/profiles\.\s*\n?\s*\/\/ Importing into a different account than the source is permitted\s*\n?\s*\/\/ \(transfer between teammate accounts via the file\)\./,
+    );
+    expect(body).toMatch(
+      /const env = parsed\.data\.envelope;\s*\n?\s*const row = await service\.importProfile\(\{\s*\n?\s*accountId,\s*\n?\s*tier,\s*\n?\s*sourceProfileId: env\.source_profile_id,\s*\n?\s*sourceAccountId: env\.source_account_id,\s*\n?\s*payload: env\.profile,\s*\n?\s*\.\.\.\(parsed\.data\.name_override !== undefined\s*\n?\s*\? \{ nameOverride: parsed\.data\.name_override \}\s*\n?\s*: \{\}\),\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
