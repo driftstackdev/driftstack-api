@@ -116,6 +116,21 @@ const apiBaseUrl = resolveApiBaseUrl();
                   ),
           )
           .then((body) => {
+            // V-353d — /v1/auth/login returns a discriminated union:
+            // either `{ session: ... }` (no MFA enrolled) or
+            // `{ mfa_required: true, challenge_token, ... }`. Until
+            // the MFA challenge UI lands, surface the second branch
+            // as a clear banner so MFA-enrolled users aren't silently
+            // redirected to / with no session set (which would bounce
+            // straight back to /login).
+            if (body && body.mfa_required === true) {
+              showBanner(
+                'This account has MFA enabled. The web-based MFA challenge ' +
+                  'UI is not available yet — please sign in via the API or ' +
+                  'temporarily disable MFA from the CLI (see /docs/api-keys).',
+              );
+              return;
+            }
             const session = body.session || {};
             if (session.token) {
               localStorage.setItem('ds_web_session_token', session.token);
