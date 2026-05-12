@@ -110,8 +110,10 @@ const apiBaseUrl = resolveApiBaseUrl();
     </div>
 
     <p class="mt-4 text-xs text-slate-500" data-field="footnote">
-      Retention 90 days hot in Postgres + R2 archive thereafter (ADR-006). JSON
-      Lines export available via <code class="font-mono">GET /v1/admin/audit-log?format=jsonl</code>.
+      Retention 90 days hot in Postgres + R2 archive thereafter (ADR-006). The
+      read endpoint paginates by timestamp DESC; bulk export is not yet
+      exposed from <code class="font-mono">/v1/admin/audit-log</code> — pull
+      pages via <code class="font-mono">cursor</code> for now.
     </p>
   </div>
 
