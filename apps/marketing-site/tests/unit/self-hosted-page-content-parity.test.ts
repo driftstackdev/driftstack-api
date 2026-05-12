@@ -1,0 +1,131 @@
+// W370.C — drift guard for marketing-site /self-hosted page
+// content. Existing self-hosted-sku-listing-baseline + self-
+// hosted-sku-parity + self-hosted-skus-parity + self-hosted-
+// narrative-baseline tests cover SKU shape parity to the
+// pricing data source. This guard pins the load-bearing sales
+// claims a procurement / security buyer reads:
+//
+//   • 3 SKUs come from SELF_HOSTED_SKUS data source (not hard-
+//     coded on the page). A future inline-copy regression would
+//     break the contract.
+//   • Hardware-by-SKU mapping (Mac Mini M4 / Mac Studio M4 Max
+//     / Mac Studio Ultra / Mac Pro / multi-node cluster).
+//   • "Session content never leaves your perimeter" privacy
+//     framing pinned — the load-bearing differentiator vs SaaS.
+//   • Driftstack-side scope: "control plane sees license +
+//     session metadata, never the session itself".
+//   • 3 "when self-hosted is the right call" categories pinned
+//     (Privacy / Volume / Sovereignty).
+//   • 4-step process pinned (Contact sales / Procure hardware
+//     / Onboard / Run) with sales@driftstack.dev contact.
+//   • "GA within 6 months of API public launch" timeline pinned.
+//   • Cross-link to /faq for procurement/compliance questions.
+//   • ASCII architecture diagram present with secure-channel
+//     callout.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/self-hosted.astro');
+const PRICING_DATA = resolve(REPO_ROOT, 'apps/marketing-site/src/data/pricing.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W370.C marketing-site /self-hosted page content parity', () => {
+  const body = read(PAGE);
+
+  it('SKUs come from SELF_HOSTED_SKUS data import (not inline-hardcoded)', () => {
+    expect(body).toMatch(
+      /import \{[\s\S]*?SELF_HOSTED_SKUS,[\s\S]*?\} from '\.\.\/data\/pricing\.ts';/,
+    );
+    expect(body).toMatch(/SELF_HOSTED_SKUS\.map\(\(sku\)/);
+    expect(existsSync(PRICING_DATA)).toBe(true);
+    expect(read(PRICING_DATA)).toContain('SELF_HOSTED_SKUS');
+  });
+
+  it('HARDWARE_BY_SKU map pinned: Solo / Pro / Enterprise (Mac Mini / Studio M4 Max / Studio Ultra / Pro / multi-node)', () => {
+    expect(body).toMatch(/self_hosted_solo: 'Mac Mini M4 16 GB \(customer-purchased\)'/);
+    expect(body).toMatch(/self_hosted_pro: 'Mac Studio M4 Max'/);
+    expect(body).toMatch(
+      /self_hosted_enterprise: 'Mac Studio Ultra \/ Mac Pro \/ multi-node cluster'/,
+    );
+  });
+
+  it('"session content never leaves your perimeter" privacy framing pinned', () => {
+    expect(body).toMatch(/Sessions never leave your perimeter/);
+    expect(body).toMatch(
+      /session content \(URLs, form data, captures,\s+recordings\) must not transit any vendor infrastructure beyond\s+your own/,
+    );
+  });
+
+  it('control-plane scope claim pinned (sees license + metadata, never session itself)', () => {
+    expect(body).toMatch(
+      /Driftstack's control plane sees license \+ session\s+metadata, never the session itself/,
+    );
+  });
+
+  it('3 "when self-hosted is the right call" categories pinned (Privacy / Volume / Sovereignty)', () => {
+    expect(body).toMatch(
+      /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Privacy<\/p>/,
+    );
+    expect(body).toMatch(
+      /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Volume<\/p>/,
+    );
+    expect(body).toMatch(
+      /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Sovereignty<\/p>/,
+    );
+  });
+
+  it('sustained-10+-concurrent break-even framing pinned (volume tier)', () => {
+    expect(body).toMatch(/sustained 10\+ concurrent across the month/);
+  });
+
+  it('4-step process pinned (01 Contact sales / 02 Procure hardware / 03 Onboard / 04 Run)', () => {
+    for (const step of [
+      '<h3 class="mt-3 font-semibold text-slate-900">Contact sales</h3>',
+      '<h3 class="mt-3 font-semibold text-slate-900">Procure hardware</h3>',
+      '<h3 class="mt-3 font-semibold text-slate-900">Onboard</h3>',
+      '<h3 class="mt-3 font-semibold text-slate-900">Run</h3>',
+    ]) {
+      expect(body, `step missing: ${step}`).toContain(step);
+    }
+  });
+
+  it('sales@driftstack.dev contact + "self-hosted GA within 6 months" timeline pinned', () => {
+    expect(body).toMatch(/mailto:sales@driftstack\.dev\?subject=Self-Hosted%20inquiry/);
+    expect(body).toMatch(/Self-hosted GA within 6 months\s+of API public launch/);
+  });
+
+  it('cross-link to /faq resolves (common-questions teaser section)', () => {
+    expect(body).toMatch(/<a href="\/faq" class="btn-secondary">See FAQ<\/a>/);
+    expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/faq.astro'))).toBe(true);
+  });
+
+  it('ASCII architecture diagram present with secure-channel callout', () => {
+    expect(body).toMatch(/YOUR INFRA[\s\S]+?DRIFTSTACK ORCHESTRATION/);
+    expect(body).toMatch(/Mac fleet/);
+    expect(body).toMatch(/Control plane/);
+    expect(body).toMatch(/secure ───/);
+    expect(body).toMatch(/channel/);
+    expect(body).toMatch(/\(HTTPS\)/);
+  });
+
+  it('egress posture pinned: WebKit sessions exit via your network (DC / VPN / roadmap BYO SOCKS5 / WG)', () => {
+    expect(body).toMatch(/WebKit sessions exit via your network/);
+    expect(body).toMatch(/DC \/ VPN \//);
+    expect(body).toMatch(/roadmap: BYO/);
+    expect(body).toMatch(/SOCKS5 \/ WG/);
+  });
+
+  it('"Concurrent capacity bounded by your hardware, not by license" pinned (cap framing)', () => {
+    // Distinguishes self-hosted from SaaS — tier licensing
+    // doesn't gate concurrent count on owned hardware.
+    expect(body).toMatch(/Concurrent capacity is bounded by your hardware, not by license\./);
+  });
+});
