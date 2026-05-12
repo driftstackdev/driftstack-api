@@ -1,0 +1,139 @@
+// W439.C — drift guard for apps/server/src/lib/openapi.ts.
+// OpenAPI 3.1 spec generator. Drift here either re-orders the
+// extendZodWithOpenApi setup (registry.register stops attaching
+// .openapi() metadata silently) or registers an inline anonymous
+// shape on a route (codegen produces nameless types — breaks
+// Pydantic / Go struct consumers).
+//
+//   • Header framing pinned: zod-to-openapi pairing; static JSON at
+//     /openapi.json + Scalar UI at /docs; route handler still does
+//     own Zod parse — generator only publishes contract.
+//   • Adding new endpoint 3-step recipe: api-types schemas →
+//     registerRoute(...) here → handler.
+//   • extendZodWithOpenApi(z) MUST run before any registry.register
+//     call.
+//   • Bearer auth scheme component.
+//   • V-386 AccountMeResponse inline rationale: defined here NOT
+//     api-types because SDKs read AccountSchema (lean shared type)
+//     and rich /me consumed only by dashboard via route directly.
+//   • Component-promotion rationale: reusable schemas promoted to
+//     components.schemas so codegen produces named types (Pydantic
+//     / Go structs) instead of inline anonymous shapes.
+//   • problemContent + errors4xx 400/401 application/problem+json.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W439.C apps/server/src/lib/openapi.ts content parity', () => {
+  const body = read(LIB);
+
+  it('Header framing pinned: OpenAPI 3.1 spec generator; @asteasolutions/zod-to-openapi registry pairs Zod schemas with route metadata (path, method, auth, rate-limit bucket, status codes); static JSON at /openapi.json + Scalar UI at /docs', () => {
+    expect(body).toMatch(/\/\/ OpenAPI 3\.1 spec generator\./);
+    expect(body).toMatch(
+      /\/\/ Builds the API document by registering Zod schemas with @asteasolutions\/\s*\n?\s*\/\/ zod-to-openapi and pairing them with route metadata \(path, method, auth,\s*\n?\s*\/\/ rate-limit bucket, status codes\)\. The output is a static JSON document\s*\n?\s*\/\/ served at \/openapi\.json and rendered by Scalar UI at \/docs\./,
+    );
+  });
+
+  it('Adding-new-endpoint 3-step recipe framing pinned: (1) define request+response schemas in @driftstack/api-types (2) registerRoute(...) call here (3) route handler in apps/server/src/routes/; route handler still does own Zod parse — generator only publishes contract', () => {
+    expect(body).toMatch(
+      /\/\/ Adding a new endpoint requires:\s*\n?\s*\/\/\s*1\. Define request \+ response schemas in @driftstack\/api-types\s*\n?\s*\/\/\s*2\. Add a `registerRoute\(\.\.\.\)` call in this file\s*\n?\s*\/\/\s*3\. Add the route handler in apps\/server\/src\/routes\//,
+    );
+    expect(body).toMatch(
+      /\/\/ The route handler still does its own Zod parse — this generator only\s*\n?\s*\/\/ publishes the contract\./,
+    );
+  });
+
+  it('imports: extendZodWithOpenApi + OpenApiGeneratorV31 + OpenAPIRegistry from @asteasolutions; OpenAPIObject from openapi3-ts/oas31; z from zod; extendZodWithOpenApi(z) BEFORE any registry.register', () => {
+    expect(body).toMatch(
+      /import \{\s*\n?\s*extendZodWithOpenApi,\s*\n?\s*OpenApiGeneratorV31,\s*\n?\s*OpenAPIRegistry,\s*\n?\s*\} from '@asteasolutions\/zod-to-openapi';/,
+    );
+    expect(body).toMatch(/import type \{ RouteConfig \} from '@asteasolutions\/zod-to-openapi';/);
+    expect(body).toMatch(/import type \{ OpenAPIObject \} from 'openapi3-ts\/oas31';/);
+    expect(body).toMatch(/import \{ z \} from 'zod';/);
+    expect(body).toMatch(
+      /\/\/ Augment z with \.openapi\(\) — must run before any registry\.register call\.\s*\n?\s*extendZodWithOpenApi\(z\);/,
+    );
+  });
+
+  it('V-386 AccountMeResponse inline rationale framing pinned: defined HERE rather than api-types because SDKs read AccountSchema (lean shared type) and rich /me response only consumed by dashboard via route directly', () => {
+    expect(body).toMatch(
+      /\/\/ V-386 — full \/v1\/account\/me response shape\. Defined here rather than\s*\n?\s*\/\/ in api-types because the SDKs read AccountSchema \(the lean shared\s*\n?\s*\/\/ type\) and the rich \/me response is only ever consumed by the\s*\n?\s*\/\/ dashboard via the route directly\./,
+    );
+  });
+
+  it('AccountMeResponseSchema shape: id + email + name nullable + tier + status + timezone nullable + slug nullable + region nullable + avatar_url nullable + mfa_enrolled bool + 4 capacity ints + teams array of {owner_account_id + role admin|member + membership_id}', () => {
+    expect(body).toMatch(
+      /const AccountMeResponseSchema = z\.object\(\{\s*\n?\s*id: z\.string\(\),\s*\n?\s*email: z\.string\(\)\.email\(\),\s*\n?\s*name: z\.string\(\)\.nullable\(\),\s*\n?\s*tier: AccountTierSchema,\s*\n?\s*status: AccountStatusSchema,\s*\n?\s*timezone: z\.string\(\)\.nullable\(\),\s*\n?\s*slug: z\.string\(\)\.nullable\(\),\s*\n?\s*region: AccountRegionSchema\.nullable\(\),\s*\n?\s*avatar_url: z\.string\(\)\.nullable\(\),\s*\n?\s*mfa_enrolled: z\.boolean\(\),\s*\n?\s*concurrent_session_cap: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*concurrent_session_active: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*profile_cap: z\.number\(\)\.int\(\)\.nonnegative\(\)\.nullable\(\),\s*\n?\s*profile_count: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*teams: z\.array\(\s*\n?\s*z\.object\(\{\s*\n?\s*owner_account_id: z\.string\(\),\s*\n?\s*role: z\.enum\(\['admin', 'member'\]\),\s*\n?\s*membership_id: z\.string\(\),\s*\n?\s*\}\),\s*\n?\s*\),\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('PaginatedSessions + PaginatedApiKeys inline schemas (data array + has_more + next_cursor on sessions; data array only on api-keys)', () => {
+    expect(body).toMatch(
+      /const PaginatedSessionsSchema = z\.object\(\{\s*\n?\s*data: z\.array\(SessionSchema\),\s*\n?\s*has_more: z\.boolean\(\),\s*\n?\s*next_cursor: z\.string\(\)\.nullable\(\),\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(
+      /const PaginatedApiKeysSchema = z\.object\(\{\s*\n?\s*data: z\.array\(ApiKeySchema\),\s*\n?\s*\}\);/,
+    );
+  });
+
+  it("Bearer auth scheme component (http bearer + bearerFormat 'API key')", () => {
+    expect(body).toMatch(
+      /r\.registerComponent\('securitySchemes', 'BearerAuth', \{\s*\n?\s*type: 'http',\s*\n?\s*scheme: 'bearer',\s*\n?\s*bearerFormat: 'API key',\s*\n?\s*\}\);/,
+    );
+  });
+
+  it("Component-promotion rationale framing pinned: reusable schemas promoted to components.schemas so codegen produces named types (Pydantic, Go structs, etc.) instead of inline anonymous shapes; anything referenced from a route's request/response is registered here", () => {
+    expect(body).toMatch(
+      /\/\/ Reusable schemas — promote to components\.schemas so codegen\s*\n?\s*\/\/ produces named types \(Pydantic, Go structs, etc\.\) instead of\s*\n?\s*\/\/ inline anonymous shapes\. Anything referenced from a route's\s*\n?\s*\/\/ request\/response is registered here\./,
+    );
+  });
+
+  it('Component registrations: Account + AccountMeResponse + ApiKey + Session + SessionState + Problem + UsagePeriodSummary + PaginationQuery + 5 session-resource action shapes (Create/Navigate/Interact/Wait/Capture) + ApiKey create + Webhook resource shapes + AdminAccount + AdminAuditLogEntry deterministic-order top-level rationale', () => {
+    expect(body).toMatch(/r\.register\('Account', AccountSchema\);/);
+    expect(body).toMatch(/r\.register\('AccountMeResponse', AccountMeResponseSchema\);/);
+    expect(body).toMatch(/r\.register\('Session', SessionSchema\);/);
+    expect(body).toMatch(/r\.register\('SessionState', SessionStateSchema\);/);
+    expect(body).toMatch(/r\.register\('Problem', ProblemSchema\);/);
+    expect(body).toMatch(/r\.register\('UsagePeriodSummary', UsagePeriodSummarySchema\);/);
+    expect(body).toMatch(/r\.register\('PaginationQuery', PaginationQuerySchema\);/);
+    expect(body).toMatch(
+      /\/\/ Sessions resource\s*\n?\s*r\.register\('CreateSessionRequest', CreateSessionRequestSchema\);/,
+    );
+    expect(body).toMatch(
+      /\/\/ API keys resource\s*\n?\s*r\.register\('CreateApiKeyRequest', CreateApiKeyRequestSchema\);/,
+    );
+    expect(body).toMatch(
+      /\/\/ Webhooks resource\s*\n?\s*r\.register\('WebhookEndpoint', WebhookEndpointSchema\);/,
+    );
+    expect(body).toMatch(
+      /\/\/ Admin \(already registered below for the admin section, but having\s*\n?\s*\/\/ them once at the top keeps the codegen output deterministic\)\.\s*\n?\s*r\.register\('AdminAccount', AdminAccountResponseSchema\);\s*\n?\s*r\.register\('AdminAuditLogEntry', AdminAuditLogEntrySchema\);/,
+    );
+  });
+
+  it('problemContent application/problem+json shape + errors4xx 400/401 entries with Problem $ref', () => {
+    expect(body).toMatch(
+      /const problemContent = \{\s*\n?\s*'application\/problem\+json': \{ schema: \{ \$ref: '#\/components\/schemas\/Problem' \} \},\s*\n?\s*\};/,
+    );
+    expect(body).toMatch(
+      /const errors4xx = \{\s*\n?\s*400: \{ description: 'Validation failed\.', content: problemContent \},\s*\n?\s*401: \{ description: 'Authentication failed\.', content: problemContent \},/,
+    );
+  });
+
+  it('auth security array shorthand for routes: [{ BearerAuth: [] }]', () => {
+    expect(body).toMatch(/const auth = \[\{ BearerAuth: \[\] \}\];/);
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
