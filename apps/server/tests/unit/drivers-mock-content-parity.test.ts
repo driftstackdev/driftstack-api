@@ -1,0 +1,190 @@
+// W431.C — drift guard for apps/server/src/drivers/mock.ts.
+// In-memory deterministic mock driver. Drift here either breaks
+// the determinism invariant (same inputs → different outputs) or
+// drops a trigger-host/selector path (tests can no longer exercise
+// the matching error branch the real driver will produce).
+//
+//   • Framing pinned: contract-level simulation;
+//     counter-based session ids; configurable latency; canned
+//     getState/capture data; idempotent destroy; trigger
+//     hosts/selectors for error simulation.
+//   • Determinism rationale pinned: same inputs → same outputs;
+//     anything needing randomness must be tested against real driver.
+//   • TRIGGER_HOSTS pinned: networkError + timeout + http500
+//     (error.driftstack-mock.test / timeout.driftstack-mock.test /
+//     http500.driftstack-mock.test).
+//   • TRIGGER_SELECTORS pinned: notFound (#nonexistent) +
+//     hangs (#hangs).
+//   • PNG_1X1_TRANSPARENT_BASE64 constant pinned.
+//   • InternalSession shape: V-169 purpose captured + opSeq.
+//   • MockDriverOptions: navigateLatencyMs/interactLatencyMs +
+//     fastForwardLatency.
+//   • Defaults: navigateLatencyMs 120 + interactLatencyMs 40 +
+//     fastForward false.
+//   • Session id format: `mock_ses_${padStart(8, '0')}`.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/drivers/mock.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W431.C apps/server/src/drivers/mock.ts content parity', () => {
+  const body = read(LIB);
+
+  it('Framing pinned: Mock WebKit driver — in-memory, deterministic; contract-level simulation', () => {
+    expect(body).toMatch(/\/\/ Mock WebKit driver — in-memory, deterministic\./);
+    expect(body).toMatch(
+      /\/\/ The mock simulates real WebKit behaviour at the contract level:\s*\n?\s*\/\/\s*- createSession returns a deterministic driver session id \(counter-based\)\s*\n?\s*\/\/\s*- navigate\/interact\/wait honour configurable latency from \.env\s*\n?\s*\/\/\s*- getState returns canned, deterministic data per session\s*\n?\s*\/\/\s*- capture returns canned bytes \(small base64-encoded blob for screenshots\)\s*\n?\s*\/\/\s*- destroy is idempotent/,
+    );
+  });
+
+  it('Error-simulation framing: trigger host/selector exercises every error path; TRIGGER_HOSTS + TRIGGER_SELECTORS rationale pinned', () => {
+    expect(body).toMatch(
+      /\/\/ Error simulation lets tests exercise every error path the real driver\s*\n?\s*\/\/ will produce\. A "trigger" host or selector causes the mock to throw the\s*\n?\s*\/\/ matching error — see TRIGGER_HOSTS and TRIGGER_SELECTORS below\./,
+    );
+  });
+
+  it('Determinism rationale pinned: same inputs → same outputs; real WebKit introduces variance; mock does NOT; randomness must be tested against real driver', () => {
+    expect(body).toMatch(
+      /\/\/ This driver is deterministic by design: same inputs → same outputs\. Real\s*\n?\s*\/\/ WebKit will introduce variance from network conditions, page randomness,\s*\n?\s*\/\/ etc\.; the mock does NOT\. Anything that needs randomness has to be tested\s*\n?\s*\/\/ against the real driver\./,
+    );
+  });
+
+  it("imports: sleep from 'node:timers/promises' + DriverError/SessionTimeoutError + full Driver type roster", () => {
+    expect(body).toMatch(/import \{ setTimeout as sleep \} from 'node:timers\/promises';/);
+    expect(body).toMatch(
+      /import \{ DriverError, SessionTimeoutError \} from '\.\.\/lib\/errors\.js';/,
+    );
+  });
+
+  it('TRIGGER_HOSTS pinned: networkError (error.) + timeout (timeout.) + http500 (http500.) all on .driftstack-mock.test', () => {
+    expect(body).toMatch(
+      /const TRIGGER_HOSTS = \{\s*\n?\s*\/\*\* Navigation throws DriverError \(network failure simulation\)\. \*\/\s*\n?\s*networkError: 'error\.driftstack-mock\.test',\s*\n?\s*\/\*\* Navigation hangs past timeout\. \*\/\s*\n?\s*timeout: 'timeout\.driftstack-mock\.test',\s*\n?\s*\/\*\* Navigation returns HTTP 4xx\/5xx\. \*\/\s*\n?\s*http500: 'http500\.driftstack-mock\.test',\s*\n?\s*\} as const;/,
+    );
+  });
+
+  it('TRIGGER_SELECTORS pinned: notFound (#nonexistent) + hangs (#hangs)', () => {
+    expect(body).toMatch(
+      /const TRIGGER_SELECTORS = \{\s*\n?\s*\/\*\* interact\/wait fails because the selector matches nothing\. \*\/\s*\n?\s*notFound: '#nonexistent',\s*\n?\s*\/\*\* interact times out \(element exists but never becomes interactable\)\. \*\/\s*\n?\s*hangs: '#hangs',\s*\n?\s*\} as const;/,
+    );
+  });
+
+  it('PNG_1X1_TRANSPARENT_BASE64 canned-screenshot constant pinned', () => {
+    expect(body).toMatch(
+      /\/\/ 1×1 transparent PNG, base64-encoded — used as canned screenshot payload\./,
+    );
+    expect(body).toMatch(
+      /const PNG_1X1_TRANSPARENT_BASE64 =\s*\n?\s*'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv\/lxKUAAAAASUVORK5CYII=';/,
+    );
+  });
+
+  it('InternalSession shape pinned: driverSessionId + archetype + V-169 purpose (captured for test inspection; mock doesnt act on it) + currentUrl/Title (nullable) + destroyed + opSeq', () => {
+    expect(body).toMatch(
+      /interface InternalSession \{\s*\n?\s*driverSessionId: DriverSessionId;\s*\n?\s*archetype: string;\s*\n?\s*\/\*\* V-169 — captured for test inspection; mock doesn't act on it\. \*\/\s*\n?\s*purpose: 'production_customer' \| 'cumulative_rig_validation' \| 'test_domain_probe';\s*\n?\s*currentUrl: string \| null;\s*\n?\s*currentTitle: string \| null;\s*\n?\s*destroyed: boolean;/,
+    );
+    expect(body).toMatch(
+      /\/\*\* Sequence counter incremented on every operation; lets tests reason about ordering\. \*\/\s*\n?\s*opSeq: number;/,
+    );
+  });
+
+  it('MockDriverOptions: navigateLatencyMs + interactLatencyMs + fastForwardLatency (no-op sleep for fast tests)', () => {
+    expect(body).toMatch(
+      /export interface MockDriverOptions \{\s*\n?\s*\/\*\* Per-call simulated latency for navigate\. \*\/\s*\n?\s*navigateLatencyMs\?: number;\s*\n?\s*\/\*\* Per-call simulated latency for interact\/wait\. \*\/\s*\n?\s*interactLatencyMs\?: number;/,
+    );
+    expect(body).toMatch(
+      /\/\*\*\s*\n?\s*\*\s*If true, replace `await sleep\(ms\)` with a no-op so tests run fast\.\s*\n?\s*\*\s*Production-like usage \(npm run dev\) should leave this false\.\s*\n?\s*\*\/\s*\n?\s*fastForwardLatency\?: boolean;/,
+    );
+  });
+
+  it('MockDriver constructor defaults: navigateLatencyMs 120 + interactLatencyMs 40 + fastForward false; private sessions Map + nextId starts at 1', () => {
+    expect(body).toMatch(
+      /export class MockDriver implements Driver \{\s*\n?\s*private readonly sessions = new Map<DriverSessionId, InternalSession>\(\);\s*\n?\s*private nextId = 1;/,
+    );
+    expect(body).toMatch(/this\.navigateLatencyMs = opts\.navigateLatencyMs \?\? 120;/);
+    expect(body).toMatch(/this\.interactLatencyMs = opts\.interactLatencyMs \?\? 40;/);
+    expect(body).toMatch(/this\.fastForward = opts\.fastForwardLatency \?\? false;/);
+  });
+
+  it("createSession: counter-based id format `mock_ses_${padStart(8,'0')}`; nextId increments; captures archetype + purpose + null url/title", () => {
+    expect(body).toMatch(
+      /const id = `mock_ses_\$\{this\.nextId\.toString\(\)\.padStart\(8, '0'\)\}`;\s*\n?\s*this\.nextId \+= 1;/,
+    );
+    expect(body).toMatch(
+      /this\.sessions\.set\(id, \{\s*\n?\s*driverSessionId: id,\s*\n?\s*archetype: input\.archetype,\s*\n?\s*purpose: input\.purpose,\s*\n?\s*currentUrl: null,\s*\n?\s*currentTitle: null,\s*\n?\s*destroyed: false,\s*\n?\s*opSeq: 0,\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('navigate: URL parse failure -> DriverError; networkError trigger -> DriverError "Simulated network failure"; timeout trigger -> sleep then SessionTimeoutError; http500 trigger -> status 500 else 200', () => {
+    expect(body).toMatch(
+      /try \{\s*\n?\s*host = new URL\(input\.url\)\.host;\s*\n?\s*\} catch \{\s*\n?\s*throw new DriverError\(`Invalid URL: \$\{input\.url\}`\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /if \(host === TRIGGER_HOSTS\.networkError\) \{\s*\n?\s*throw new DriverError\('Simulated network failure', \{ url: input\.url \}\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /if \(host === TRIGGER_HOSTS\.timeout\) \{\s*\n?\s*\/\/ Pretend to hang for the full timeout, then throw\.\s*\n?\s*await this\.sleep\(input\.timeoutMs\);\s*\n?\s*throw new SessionTimeoutError\(input\.timeoutMs\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(/const httpStatus = host === TRIGGER_HOSTS\.http500 \? 500 : 200;/);
+    expect(body).toMatch(/session\.currentTitle = `Mock page for \$\{host\}`;/);
+  });
+
+  it('interact: selector === notFound -> DriverError "Selector not found"; selector === hangs -> sleep+SessionTimeoutError; selector destructured from action with "in" guard', () => {
+    expect(body).toMatch(
+      /const selector = 'selector' in input\.action \? input\.action\.selector : undefined;/,
+    );
+    expect(body).toMatch(
+      /if \(selector === TRIGGER_SELECTORS\.notFound\) \{\s*\n?\s*throw new DriverError\(`Selector not found: \$\{selector\}`, \{ selector \}\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /if \(selector === TRIGGER_SELECTORS\.hangs\) \{\s*\n?\s*await this\.sleep\(input\.timeoutMs\);\s*\n?\s*throw new SessionTimeoutError\(input\.timeoutMs\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('wait: time condition -> sleep min(ms, timeoutMs); selector + notFound -> sleep full timeout + satisfied:false; default -> sleep interactLatencyMs + satisfied:true', () => {
+    expect(body).toMatch(
+      /if \(input\.condition\.kind === 'time'\) \{\s*\n?\s*const ms = Math\.min\(input\.condition\.ms, input\.timeoutMs\);\s*\n?\s*const start = Date\.now\(\);\s*\n?\s*await this\.sleep\(ms\);\s*\n?\s*return \{ satisfied: true, durationMs: Date\.now\(\) - start \};\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /if \(\s*\n?\s*input\.condition\.kind === 'selector' &&\s*\n?\s*input\.condition\.selector === TRIGGER_SELECTORS\.notFound\s*\n?\s*\) \{\s*\n?\s*\/\/ Wait for selector that never appears: time out, satisfied=false\.\s*\n?\s*await this\.sleep\(input\.timeoutMs\);\s*\n?\s*return \{ satisfied: false, durationMs: input\.timeoutMs \};\s*\n?\s*\}/,
+    );
+  });
+
+  it('capture: screenshot returns canned PNG base64; dom_snapshot returns canned utf8 HTML; default pdf returns base64 stub of "%PDF-1.4\\nmock-pdf"', () => {
+    expect(body).toMatch(
+      /if \(input\.kind === 'screenshot'\) \{\s*\n?\s*return \{\s*\n?\s*kind: 'screenshot',\s*\n?\s*data: PNG_1X1_TRANSPARENT_BASE64,\s*\n?\s*encoding: 'base64',\s*\n?\s*byteSize: Math\.floor\(\(PNG_1X1_TRANSPARENT_BASE64\.length \* 3\) \/ 4\),\s*\n?\s*durationMs: Date\.now\(\) - start,\s*\n?\s*\};\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /if \(input\.kind === 'dom_snapshot'\) \{\s*\n?\s*const dom = '<!doctype html><html><body>mock<\/body><\/html>';\s*\n?\s*return \{\s*\n?\s*kind: 'dom_snapshot',\s*\n?\s*data: dom,\s*\n?\s*encoding: 'utf8',\s*\n?\s*byteSize: Buffer\.byteLength\(dom, 'utf8'\),\s*\n?\s*durationMs: Date\.now\(\) - start,\s*\n?\s*\};\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /\/\/ pdf\s*\n?\s*const pdfStub = Buffer\.from\('%PDF-1\.4\\nmock-pdf'\)\.toString\('base64'\);/,
+    );
+  });
+
+  it('destroy: idempotent — looks up session, marks destroyed + deletes; destroying unknown session is no-op (no throw)', () => {
+    expect(body).toMatch(
+      /async destroy\(sessionId: DriverSessionId\): Promise<void> \{\s*\n?\s*await Promise\.resolve\(\);\s*\n?\s*const session = this\.sessions\.get\(sessionId\);\s*\n?\s*if \(session\) \{\s*\n?\s*session\.destroyed = true;\s*\n?\s*this\.sessions\.delete\(sessionId\);\s*\n?\s*\}\s*\n?\s*\/\/ Idempotent — destroying an unknown session is a no-op\.\s*\n?\s*\}/,
+    );
+  });
+
+  it('requireSession helper: throws DriverError on missing-or-destroyed session; sleep helper short-circuits on fastForward OR ms<=0', () => {
+    expect(body).toMatch(
+      /private requireSession\(id: DriverSessionId\): InternalSession \{\s*\n?\s*const session = this\.sessions\.get\(id\);\s*\n?\s*if \(!session \|\| session\.destroyed\) \{\s*\n?\s*throw new DriverError\(`Driver session not found: \$\{id\}`\);\s*\n?\s*\}\s*\n?\s*return session;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /private async sleep\(ms: number\): Promise<void> \{\s*\n?\s*if \(this\.fastForward \|\| ms <= 0\) return;\s*\n?\s*await sleep\(ms\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
