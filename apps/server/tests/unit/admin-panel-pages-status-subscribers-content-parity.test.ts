@@ -1,0 +1,103 @@
+// W487.B — drift guard for apps/admin-panel/src/pages/status-subscribers.astro.
+// V-312 admin view of status-page email subscribers (V-295c3 +
+// V-295c3-tombstone). Drift here either drops the V-281 dual-write
+// framing (force-unsubscribe could land without admin_audit_log
+// write — silent admin action) or breaks the V-295c3-tombstone
+// 'email = null after 90d purge' handling (tombstoned rows would
+// crash the row renderer instead of showing the '(purged)' span).
+//
+//   • V-312 + V-295c3 + V-281 framing pinned.
+//   • Status-badge 3-tone: unsubscribed (slate-100) / confirmed
+//     (emerald-50) / pending (amber-50 fallback).
+//   • Force-unsubscribe button gated by !sub.unsubscribed_at &&
+//     sub.email (tombstoned rows show 'no action').
+//   • Tombstoned-row span: '(purged — V-295c3-tombstone)'.
+//   • escapeHtml 5-char map (& < > " ').
+//   • localStorage token key 'driftstack_admin_token'.
+//   • POST /v1/admin/status-subscribers/{id}/force-unsubscribe
+//     endpoint contract.
+//   • Pagination framing: 'default 50 per page; ?limit=&offset='.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/status-subscribers.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content parity', () => {
+  const body = read(LIB);
+
+  it("V-312 + V-295c3 + V-281 framing pinned: 'admin view of status-page email subscribers (V-295c3 + V-295c3-tombstone). Read /v1/admin/status-subscribers; expose a force-unsubscribe button per row. Audit log dual-write happens server-side (V-281 pattern).' — pinned so the dual-write contract + read endpoint stay documented inline", () => {
+    expect(body).toMatch(
+      /\/\/ V-312 — admin view of status-page email subscribers \(V-295c3 \+\s*\n?\s*\/\/ V-295c3-tombstone\)\. Read \/v1\/admin\/status-subscribers; expose a\s*\n?\s*\/\/ force-unsubscribe button per row\. Audit log dual-write happens\s*\n?\s*\/\/ server-side \(V-281 pattern\)\./,
+    );
+  });
+
+  it("Page framing pinned: 'Email addresses subscribed to status.driftstack.dev incident notifications. Confirmed subscribers receive emails when public incidents are posted or resolved (V-295c3-followup fan-out). Force-unsubscribe writes admin_audit_log via V-281 dual-write.' — pinned so the customer-visible audit-trail contract survives", () => {
+    expect(body).toMatch(
+      /Email addresses subscribed to status\.driftstack\.dev incident notifications\. Confirmed\s*\n?\s*subscribers receive emails when public incidents are posted or resolved \(V-295c3-followup\s*\n?\s*fan-out\)\. Force-unsubscribe writes admin_audit_log via V-281 dual-write\./,
+    );
+  });
+
+  it("Status-badge 3-tone: unsubscribed_at present → slate-100 'unsubscribed {ts}' / confirmed_at present → emerald-50 'confirmed' / fallback → amber-50 'pending' — pinned so the badge taxonomy mirrors the canonical lifecycle (pending → confirmed → unsubscribed) + tombstoned rows don't double-classify (unsubscribed_at takes precedence over confirmed_at)", () => {
+    expect(body).toMatch(
+      /if \(sub\.unsubscribed_at\) \{\s*\n?\s*return '<span class="rounded-full bg-slate-100 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-slate-600">unsubscribed '/,
+    );
+    expect(body).toMatch(
+      /if \(sub\.confirmed_at\) \{\s*\n?\s*return '<span class="rounded-full bg-emerald-50 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-emerald-700">confirmed<\/span>';\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /return '<span class="rounded-full bg-amber-50 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-amber-700">pending<\/span>';/,
+    );
+  });
+
+  it("Force-unsubscribe gate: canForceUnsub = !sub.unsubscribed_at && sub.email — both required (already-unsubscribed rows + tombstoned rows with email=null both show 'no action' instead) — pinned so the button doesn't appear on rows where it would be a no-op or would crash on missing email", () => {
+    expect(body).toMatch(/const canForceUnsub = !sub\.unsubscribed_at && sub\.email;/);
+    expect(body).toMatch(/<span class="text-xs text-slate-400">no action<\/span>/);
+  });
+
+  it("Tombstoned-row email display: sub.email present → escapeHtml(sub.email) else '<span class=\"font-mono text-xs text-slate-400\">(purged — V-295c3-tombstone)</span>' — pinned so the 90d-post-unsubscribe purge cron's null-email tombstone renders as an explicit '(purged)' marker referencing the V-295c3-tombstone slice (not a bare empty cell that looks broken)", () => {
+    expect(body).toMatch(
+      /const emailDisplay = sub\.email\s*\n?\s*\? escapeHtml\(sub\.email\)\s*\n?\s*: '<span class="font-mono text-xs text-slate-400">\(purged — V-295c3-tombstone\)<\/span>';/,
+    );
+  });
+
+  it('escapeHtml 5-char map: & → &amp; / < → &lt; / > → &gt; / " → &quot; / \' → &#39; — pinned so the inline-DOM construction stays XSS-safe (drift to a 4-char map or wrong entity codes would expose a cross-site-scripting hole through customer-controlled email addresses)', () => {
+    expect(body).toMatch(
+      /\.replace\(\/\[&<>"'\]\/g, function \(c\) \{\s*\n?\s*if \(c === '&'\) return '&amp;';\s*\n?\s*if \(c === '<'\) return '&lt;';\s*\n?\s*if \(c === '>'\) return '&gt;';\s*\n?\s*if \(c === '"'\) return '&quot;';\s*\n?\s*return '&#39;';\s*\n?\s*\}\);/,
+    );
+  });
+
+  it("Auth pattern: localStorage.getItem('driftstack_admin_token') + Bearer header on /v1/admin/status-subscribers?limit=200 — pinned so the admin-token key stays in sync with the auth bootstrap (drift to a different key would silently sign every admin out)", () => {
+    expect(body).toMatch(/localStorage\.getItem\('driftstack_admin_token'\) \|\| ''/);
+    expect(body).toMatch(
+      /fetch\('\/v1\/admin\/status-subscribers\?limit=200', \{\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)/,
+    );
+  });
+
+  it("Force-unsubscribe contract: POST /v1/admin/status-subscribers/{encodeURIComponent(id)}/force-unsubscribe with empty {} body + Bearer auth + content-type:application/json + window.confirm prompt referencing admin_audit_log — pinned so the destructive action requires explicit confirmation and the URL encoding doesn't break on subscriber-IDs with special chars", () => {
+    expect(body).toMatch(
+      /window\.confirm\(\s*\n?\s*'Force-unsubscribe ' \+\s*\n?\s*email \+\s*\n?\s*'\? Writes admin_audit_log\. Customer can re-subscribe via the public form\.',\s*\n?\s*\);/,
+    );
+    expect(body).toMatch(
+      /fetch\('\/v1\/admin\/status-subscribers\/' \+ encodeURIComponent\(id\) \+ '\/force-unsubscribe', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*body: '\{\}',\s*\n?\s*\}\)/,
+    );
+  });
+
+  it("Pagination framing pinned: 'Subscribers list paginated server-side (default 50 per page; ?limit=&offset= query params for paging). Confirmed-and-still-subscribed rows trigger fan-out emails on public incident state changes (V-295c3-followup). Tombstoned rows (90d post-unsubscribe via V-295c3-tombstone purge cron) appear with email = null.' — pinned so the pagination contract + tombstone lifecycle stay documented to admins", () => {
+    expect(body).toMatch(
+      /Subscribers list paginated server-side \(default 50 per page; <code>\?limit=&amp;offset=<\/code>\s*\n?\s*query params for paging\)\. Confirmed-and-still-subscribed rows trigger fan-out emails on\s*\n?\s*public incident state changes \(V-295c3-followup\)\. Tombstoned rows \(90d post-unsubscribe via\s*\n?\s*V-295c3-tombstone purge cron\) appear with email = <code>null<\/code>\./,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
