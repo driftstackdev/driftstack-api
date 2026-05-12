@@ -2,6 +2,7 @@
 //
 //   POST /v1/auth/signup                 — email + password
 //   POST /v1/auth/verify-email           — consume signup-verify token
+//   POST /v1/auth/resend-verification    — resend signup-verify email (#187)
 //   POST /v1/auth/login                  — email + password → web session
 //   POST /v1/auth/magic-link/request     — request a magic-link email
 //   POST /v1/auth/magic-link/consume     — consume magic-link → web session
@@ -29,6 +30,7 @@ import {
   PasswordResetConfirmRequestSchema,
   PasswordResetRequestSchema,
   RefreshSessionRequestSchema,
+  ResendVerificationRequestSchema,
   SignupRequestSchema,
   VerifyEmailRequestSchema,
 } from '@driftstack/api-types';
@@ -129,6 +131,11 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     capacity: AUTH_IP_LIMITS.passwordResetRequest.capacity,
     refillPerSecond: AUTH_IP_LIMITS.passwordResetRequest.refillPerSecond,
   });
+  const resendVerificationGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'auth-ip:resend-verification',
+    capacity: AUTH_IP_LIMITS.resendVerification.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.resendVerification.refillPerSecond,
+  });
 
   app.post('/v1/auth/signup', { preHandler: [signupGate] }, async (req) => {
     const parsed = SignupRequestSchema.safeParse(req.body);
@@ -165,6 +172,31 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
       mapAuthFlowError(e);
     }
   });
+
+  // #187 — self-service resend of the signup verification email. The
+  // response shape is identical whether the email matched an unverified
+  // account, an already-verified account, or no account at all (the
+  // service silently no-ops in the latter two cases so the wire never
+  // leaks account-existence). IP-rate-limited at 3/min same as
+  // password-reset since each call fires a Postmark send.
+  app.post(
+    '/v1/auth/resend-verification',
+    { preHandler: [resendVerificationGate] },
+    async (req) => {
+      const parsed = ResendVerificationRequestSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+
+      const result = await service.resendSignupVerification({
+        email: parsed.data.email,
+        requestedFromIp: clientIp(req),
+      });
+      return {
+        sent: true as const,
+        expires_at: result.expiresAt.toISOString(),
+        ...(result.debugToken !== null ? { debug_token: result.debugToken } : {}),
+      };
+    },
+  );
 
   app.post('/v1/auth/login', { preHandler: [loginGate] }, async (req) => {
     const parsed = LoginRequestSchema.safeParse(req.body);

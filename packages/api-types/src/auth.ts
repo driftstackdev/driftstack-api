@@ -90,6 +90,28 @@ export const VerifyEmailResponseSchema = z.object({
 export type VerifyEmailResponse = z.infer<typeof VerifyEmailResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
+// Resend verification
+// ───────────────────────────────────────────────────────────────────────────
+
+export const ResendVerificationRequestSchema = z.object({
+  email: AuthEmailSchema,
+});
+export type ResendVerificationRequest = z.infer<typeof ResendVerificationRequestSchema>;
+
+// Shape-stable: client never learns whether the email matched an
+// unverified account. Service either mints + sends a fresh token or
+// silently no-ops (already verified, no account, recent re-send).
+export const ResendVerificationResponseSchema = z.object({
+  sent: z.literal(true),
+  expires_at: Iso8601Schema,
+  debug_token: z
+    .string()
+    .optional()
+    .describe('Stub email mode only — the plaintext verification token'),
+});
+export type ResendVerificationResponse = z.infer<typeof ResendVerificationResponseSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
 // Login
 // ───────────────────────────────────────────────────────────────────────────
 

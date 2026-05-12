@@ -40,10 +40,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       <button type="submit" class="btn-primary w-full">Verify + continue</button>
     </form>
 
-    <p class="mt-6 text-xs text-slate-500">
-      Token expired? <a href="/signup" class="text-oxblood-700 underline">Restart signup</a>.
-      (Resend-link flow lands in a future iteration.)
-    </p>
+    <div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-slate-500">
+      <span>Token expired or never arrived?</span>
+      <button
+        type="button"
+        data-action="resend"
+        class="text-oxblood-700 underline disabled:cursor-not-allowed disabled:text-slate-400 disabled:no-underline"
+      >
+        Resend verification email
+      </button>
+      <span data-field="resend-status" class="hidden text-emerald-700" role="status"></span>
+      <span>or <a href="/signup" class="text-oxblood-700 underline">restart signup</a>.</span>
+    </div>
   </div>
 
   <script is:inline define:vars={{ apiBaseUrl }}>
@@ -129,6 +137,55 @@ const apiBaseUrl = resolveApiBaseUrl();
       // banner + the user can correct or paste manually.
       if (linkToken && linkToken.length > 0) {
         submitToken(linkToken);
+      }
+
+      // #187 — self-service resend of the signup-verification email.
+      // The signup flow stashes the user's email in sessionStorage
+      // under `ds_signup_email`; if it's absent we prompt for it
+      // before posting. Server is shape-stable, so the success message
+      // is identical regardless of whether the email matched.
+      const resendBtn = root.querySelector('[data-action="resend"]');
+      const resendStatus = root.querySelector('[data-field="resend-status"]');
+      if (resendBtn) {
+        resendBtn.addEventListener('click', () => {
+          banner.classList.add('hidden');
+          let resendEmail = sessionStorage.getItem('ds_signup_email');
+          if (!resendEmail) {
+            resendEmail = window.prompt('Email address used at signup:') || '';
+            resendEmail = resendEmail.trim();
+            if (!resendEmail) return;
+          }
+          resendBtn.disabled = true;
+          fetch(apiBaseUrl + '/v1/auth/resend-verification', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ email: resendEmail }),
+          })
+            .then((r) =>
+              r.ok
+                ? r.json()
+                : r
+                    .json()
+                    .then((b) =>
+                      Promise.reject(new Error(b.detail || 'HTTP ' + r.status)),
+                    ),
+            )
+            .then(() => {
+              if (resendStatus) {
+                resendStatus.textContent = 'Sent — check your inbox.';
+                resendStatus.classList.remove('hidden');
+              }
+              // Re-enable after 60s so accidental double-clicks don't
+              // burn through the per-IP 3/min cap on the server side.
+              window.setTimeout(() => {
+                resendBtn.disabled = false;
+              }, 60_000);
+            })
+            .catch((err) => {
+              resendBtn.disabled = false;
+              showBanner(err && err.message ? err.message : 'Resend failed.');
+            });
+        });
       }
     })();
   </script>

@@ -257,6 +257,20 @@ export interface MfaChallengeResult {
   via: 'totp' | 'recovery';
 }
 
+export interface ResendVerificationArgs {
+  email: string;
+  requestedFromIp: string | null;
+}
+
+export interface ResendVerificationResult {
+  /** True if a fresh verify-email token was minted + an email sent; false
+   *  silently no-ops the response shape (no account, already verified,
+   *  email lookup failed). */
+  sent: boolean;
+  expiresAt: Date;
+  debugToken: string | null;
+}
+
 export interface MagicLinkRequestArgs {
   email: string;
   requestedFromIp: string | null;
@@ -410,6 +424,47 @@ export class AuthFlowsService {
     return {
       account,
       verifyExpiresAt: expiresAt,
+      debugToken: this.config.exposeDebugToken ? plaintext : null,
+    };
+  }
+
+  // #187 — self-service resend of the signup verification email.
+  //
+  // Shape-stable: response is identical whether the email matches an
+  // unverified account, an already-verified account, or no account at
+  // all — clients can't enumerate. The IP rate-limiter (3/min, same
+  // cap as password-reset) caps abuse independent of account state.
+  //
+  // Previously-issued email_verify tokens for the account are NOT
+  // expired here; the verify-email handler is single-use anyway, so a
+  // user who happens to click an old link still works. The new token
+  // is appended.
+  async resendSignupVerification(args: ResendVerificationArgs): Promise<ResendVerificationResult> {
+    const email = args.email.trim().toLowerCase();
+    const expiresAt = new Date(Date.now() + AUTH_TOKEN_TTL_MS.signupVerification);
+
+    const account = await this.repo.findAccountByEmail(email);
+    if (account === null || account.emailVerifiedAt !== null) {
+      // Don't leak account-existence or verification-state. Return the
+      // shape that would have happened on success; no email is sent.
+      return { sent: false, expiresAt, debugToken: null };
+    }
+
+    const plaintext = generateAuthToken();
+    await this.repo.insertAuthToken({
+      kind: 'email_verify',
+      accountId: account.id,
+      tokenHash: tokenHash(plaintext),
+      expiresAt,
+      requestedFromIp: args.requestedFromIp,
+    });
+
+    const link = `${this.config.verifyEmailUrl}?token=${plaintext}`;
+    void this.email.sendSignupVerification({ to: email, link, expiresAt });
+
+    return {
+      sent: true,
+      expiresAt,
       debugToken: this.config.exposeDebugToken ? plaintext : null,
     };
   }

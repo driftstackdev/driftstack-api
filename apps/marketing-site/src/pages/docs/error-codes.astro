@@ -22,7 +22,7 @@ const ERRORS = [
   { uri: 'revoked-key', http: 401, when: 'API key was revoked (manually or via rotation grace expiry).', action: 'Mint a new key from the dashboard.' },
   { uri: 'expired-key', http: 401, when: 'API key passed its `expires_at` (set by rotation).', action: 'Roll to the post-rotation key; old key auto-expires after the 24h grace window.' },
   { uri: 'invalid-auth-token', http: 401, when: 'Signup-verification / password-reset / magic-link token was malformed, consumed, or expired.', action: 'Request a fresh token via the dashboard.' },
-  { uri: 'email-not-verified', http: 401, when: 'Login attempted before the user verified their signup email.', action: 'Click the verify link in the welcome email (or resend it from /forgot-password).' },
+  { uri: 'email-not-verified', http: 401, when: 'Login attempted before the user verified their signup email.', action: 'Click the verify link in the welcome email, or use Resend verification email on /verify-email.' },
   { uri: 'invalid-credentials', http: 401, when: 'Login failed (wrong password) OR account does not exist — both surface the same shape on purpose (no enumeration).', action: 'Verify credentials; do not retry-loop.' },
   { uri: 'forbidden', http: 403, when: 'Key is valid but lacks the required scope for this endpoint.', action: 'Mint a key with the right scope (see /docs/api-keys).' },
   { uri: 'mfa-step-up-required', http: 403, when: 'Endpoint requires a fresh MFA step-up confirmation. Extension `requires_mfa_step_up: true`.', action: 'POST a 6-digit code to /v1/auth/mfa/step-up, then retry the original request.' },

@@ -49,12 +49,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         fresh one from the login page. The previous token is
         single-use and may have expired; a re-trigger mints a fresh
         one.</li>
-      <li><strong>Signup verification:</strong> there's no
-        self-service resend today — email
+      <li><strong>Signup verification:</strong> click
+        <strong>Resend verification email</strong> on the
+        <code>/verify-email</code> page in the customer dashboard
+        (the same page you landed on after signup). The button
+        re-mints a fresh token and re-sends the email; the per-IP
+        cap is 3/minute so accidental double-clicks won't lock you
+        out. If the email still doesn't arrive (typo'd domain,
+        Postmark suppression list), email
         <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>
         from a different address with the original signup email and
-        we'll replay it. We'll also confirm there's no typo in the
-        address that's silently bouncing.</li>
+        we'll clear the suppression + replay it.</li>
     </ul>
 
     <h2>4 · Corporate / workspace filters</h2>

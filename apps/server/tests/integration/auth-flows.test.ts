@@ -232,6 +232,87 @@ describe('POST /v1/auth/login', () => {
   });
 });
 
+// #187 — self-service resend of the signup-verification email.
+describe('POST /v1/auth/resend-verification', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('200 returns shape-stable response for unknown email (no enumeration)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/resend-verification',
+      payload: { email: 'ghost@driftstack.local' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ sent: boolean; expires_at: string; debug_token?: string }>();
+    expect(body.sent).toBe(true);
+    expect(body.expires_at).toBeDefined();
+    expect(body.debug_token).toBeUndefined();
+  });
+
+  it('200 returns shape-stable response for already-verified email (no enumeration)', async () => {
+    fx = await buildTestApp();
+    const signup = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: {
+        email: 'verified@driftstack.local',
+        password: 'correct horse battery staple',
+      },
+    });
+    const verifyToken = signup.json<{ debug_token: string }>().debug_token;
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      payload: { token: verifyToken },
+    });
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/resend-verification',
+      payload: { email: 'verified@driftstack.local' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ sent: boolean; debug_token?: string }>();
+    expect(body.sent).toBe(true);
+    // Already verified: no token should be returned even in debug mode.
+    expect(body.debug_token).toBeUndefined();
+  });
+
+  it('200 for unverified email mints a fresh, usable verify token', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: {
+        email: 'resend@driftstack.local',
+        password: 'correct horse battery staple',
+      },
+    });
+
+    const req = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/resend-verification',
+      payload: { email: 'resend@driftstack.local' },
+    });
+    const freshToken = req.json<{ debug_token: string }>().debug_token;
+    expect(freshToken).toBeDefined();
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      payload: { token: freshToken },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<SessionEnvelope>();
+    expect(body.session.token).toBeDefined();
+  });
+});
+
 describe('POST /v1/auth/magic-link', () => {
   let fx: TestAppFixture;
 
