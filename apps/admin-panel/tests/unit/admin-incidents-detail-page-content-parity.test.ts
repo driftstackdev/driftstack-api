@@ -1,0 +1,108 @@
+// W367.C — drift guard for admin-panel /incidents/[id] (detail)
+// page content. V-344. The companion of /incidents (list), which
+// W366.C pins. Existing incidents-detail-page-parity test covers
+// route + form structure; this guard pins:
+//
+//   • Frontmatter SEVERITY_BADGE + STATUS_BADGE keys match the
+//     incident-{severity,status} taxonomies exactly. STATUS_BADGE
+//     covers all 4 values incl. 'resolved'; SEVERITY_BADGE covers
+//     all 3.
+//   • V-344 wires Post-update + Mark-resolved forms to the live
+//     /v1/admin/incidents/:id/updates + /resolve endpoints
+//     (registered server-side) — replacing V-295a alert-stubs.
+//   • Audit actions 'incident.updated' + 'incident.resolved'
+//     emitted by the route (the page promises "every action
+//     audit-logged" via the list page; pin the detail's two
+//     additional actions here).
+//   • Status select default = 'monitoring' (operator is
+//     expected to have already progressed from 'investigating').
+//   • Resolve-form copy pinned: "stamps resolved_at" + "status
+//     page will show a green banner once propagated".
+//   • Resolved-incident view hides both forms (isResolved gate).
+//   • Back link to /incidents list pinned.
+//   • localStorage key ds_web_session_token.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/incidents/[id].astro');
+const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () => {
+  const body = read(PAGE);
+  const route = read(ROUTE);
+
+  it('SEVERITY_BADGE covers all 3 incident-severity values (minor / major / outage)', () => {
+    for (const s of ['minor', 'major', 'outage']) {
+      expect(body).toMatch(new RegExp(`${s}:\\s*'bg-`));
+    }
+  });
+
+  it('STATUS_BADGE covers all 4 incident-status values (investigating / identified / monitoring / resolved)', () => {
+    for (const s of ['investigating', 'identified', 'monitoring', 'resolved']) {
+      expect(body).toMatch(new RegExp(`${s}:\\s*'bg-`));
+    }
+  });
+
+  it('V-344 POST /v1/admin/incidents/:id/updates + /resolve wired server-side', () => {
+    expect(existsSync(ROUTE)).toBe(true);
+    expect(route).toContain("'/v1/admin/incidents/:id/updates'");
+    expect(route).toContain("'/v1/admin/incidents/:id/resolve'");
+    // V-344 — page binds both forms via the same fetch helper.
+    expect(body).toMatch(/bind\('add-update-form', '\/updates', true\)/);
+    expect(body).toMatch(/bind\('resolve-form', '\/resolve', false\)/);
+  });
+
+  it("audit actions 'incident.updated' + 'incident.resolved' emitted by route", () => {
+    expect(route).toContain("'incident.updated'");
+    expect(route).toContain("'incident.resolved'");
+  });
+
+  it("status-select default is 'monitoring' (operator already past 'investigating')", () => {
+    expect(body).toMatch(/<option value="monitoring" selected/);
+  });
+
+  it('resolve-form copy pinned: "stamps resolved_at" + "green banner once propagated"', () => {
+    expect(body).toMatch(/stamps\s*\n?\s*<code>resolved_at<\/code>/);
+    expect(body).toMatch(/The status page will show a green banner once propagated/);
+  });
+
+  it('resolved-incident view hides both forms (isResolved gate)', () => {
+    // The forms only render when !isResolved — pin so a future
+    // refactor doesn't accidentally let operators "un-resolve"
+    // by posting more updates to a closed incident.
+    expect(body).toMatch(/const isResolved = incident\.status === 'resolved'/);
+    expect(body).toMatch(/\{\s*!isResolved && \(/);
+  });
+
+  it('back-link to /incidents list pinned', () => {
+    expect(body).toMatch(
+      /<a href="\/incidents" class="text-sm text-oxblood-700 hover:underline">← Back to incidents<\/a>/,
+    );
+  });
+
+  it("'Sign in with a staff admin account' gate fires before fetch (no anonymous fallback)", () => {
+    expect(body).toMatch(/Sign in with a staff admin account before posting/);
+  });
+
+  it('localStorage key ds_web_session_token (admin-panel convention)', () => {
+    expect(body).toContain('ds_web_session_token');
+  });
+
+  it('V-344 replaces V-295a alert-stubs framing comment pinned', () => {
+    // The previous slice used window.alert() stubs; V-344 wired
+    // live endpoints. Pin so a future "let's reuse the alert
+    // pattern" softening can't slip in.
+    expect(body).toMatch(
+      /V-344 — wires Post-update \+ Mark-resolved forms to the live[\s\S]*Replaces\s*\n?\s*\/\/\s*the V-295a alert-stubs/,
+    );
+  });
+});
