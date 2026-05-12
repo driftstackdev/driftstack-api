@@ -7,8 +7,10 @@
 //   • The endpoint+filter shape (/v1/admin/audit-log?action=&
 //     admin_id=&limit=50) matches what ListAuditLogQuerySchema
 //     accepts server-side.
-//   • The 90-day retention + JSON-Lines export claim stays pinned
-//     (ADR-006).
+//   • The 90-day retention + ADR-006 reference stay pinned. The
+//     fictional `?format=jsonl` export claim was scrubbed in W350.C
+//     (admin-audit-log route does not accept a `format` param;
+//     bulk-export endpoint not yet shipped).
 //   • Result-only filtering happens client-side (the endpoint
 //     doesn't accept a `result` query param yet) — pin this
 //     posture so a future server addition doesn't silently leave
@@ -68,10 +70,13 @@ describe('W345.C admin /audit-log filter + lifecycle parity', () => {
     expect(schemaSrc).not.toMatch(/result:\s*z\.enum/);
   });
 
-  it('footnote pins 90-day hot retention + JSON-Lines export (ADR-006)', () => {
+  it('footnote pins 90-day hot retention + ADR-006 (no fictional JSONL export)', () => {
     expect(page).toMatch(/Retention 90 days hot in Postgres/);
     expect(page).toMatch(/ADR-006/);
-    expect(page).toMatch(/\?format=jsonl/);
+    // Negative guard: W350.C scrubbed the page's `?format=jsonl`
+    // claim because the route doesn't support it. Re-introducing
+    // it without a real route should break this test.
+    expect(page).not.toMatch(/\?format=jsonl/);
   });
 
   it('append-only + admin-immutability framing (D-025) is preserved', () => {
