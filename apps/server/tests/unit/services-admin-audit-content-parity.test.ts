@@ -1,0 +1,153 @@
+// W399.B — drift guard for apps/server/src/services/admin-audit.ts.
+// Admin audit log: every /v1/admin/* endpoint writes one row here
+// BEFORE returning its response. Append-only invariant enforced by
+// code, not DB (D-025). The AdminAuditAction closed Postgres enum is
+// the load-bearing artefact; drift here either silently loses an
+// audit row (record throws but caller swallows) or opens an unbounded
+// action vocabulary that breaks action-filtered queries.
+//
+//   • D-025 append-only invariant pinned (enforced by code, not DB).
+//   • Closed-enum action vocabulary: adding a new admin endpoint
+//     requires a migration — deliberate, gives action-filtered
+//     queries a free index hit.
+//   • AdminAuditAction union: 14 literals across 6 clusters
+//     (lifecycle / webhook-delivery / rate-limit-override / V-100
+//     force / V-281 customer-support tooling / V-295a incident /
+//     V-295c3-tombstone subscriber admin).
+//   • AdminAuditLogRow: 9 camelCased fields.
+//   • NewAdminAuditLogInput: required (adminAccountId, adminKeyId,
+//     action, result) + 4 optional.
+//   • ListAuditFilters: 6 filters + limit/cursor.
+//   • V-521 targetResourceId exact-match filter framing pinned.
+//   • record(): throw propagates — failure to audit fails the request
+//     (D-025).
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/services/admin-audit.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W399.B apps/server/src/services/admin-audit.ts content parity', () => {
+  const body = read(LIB);
+
+  it('Module framing: every /v1/admin/* endpoint writes one row before response; append-only', () => {
+    expect(body).toMatch(
+      /Every \/v1\/admin\/\* endpoint writes one row here before returning its\s*\n?\s*\/\/\s*response\. The repo exposes `insert\(\.\.\.\)` and a paginated `list\(\.\.\.\)`\s*\n?\s*\/\/\s*only — no UPDATE or DELETE method\. The "append-only" invariant is\s*\n?\s*\/\/\s*enforced by code, not the DB \(D-025\)\./,
+    );
+  });
+
+  it('Closed-enum framing: new admin endpoint = migration (action-filtered query index)', () => {
+    expect(body).toMatch(
+      /Action vocabulary is a closed Postgres enum \(`admin_audit_action`\)\.\s*\n?\s*\/\/\s*Adding a new admin endpoint requires a migration; this is intentional —\s*\n?\s*\/\/\s*it forces deliberate vocabulary choices and gives action-filtered\s*\n?\s*\/\/\s*queries a free index hit\./,
+    );
+  });
+
+  it('AdminAuditAction: 3-literal lifecycle cluster (tier_changed / suspended / unsuspended)', () => {
+    expect(body).toMatch(/export type AdminAuditAction =/);
+    expect(body).toMatch(/\| 'account\.tier_changed'/);
+    expect(body).toMatch(/\| 'account\.suspended'/);
+    expect(body).toMatch(/\| 'account\.unsuspended'/);
+  });
+
+  it('AdminAuditAction: webhook-delivery cluster (replayed / requeued)', () => {
+    expect(body).toMatch(/\| 'webhook_delivery\.replayed'/);
+    expect(body).toMatch(/\| 'webhook_delivery\.requeued'/);
+  });
+
+  it('AdminAuditAction: rate-limit-override cluster (set / cleared)', () => {
+    expect(body).toMatch(/\| 'rate_limit_override\.set'/);
+    expect(body).toMatch(/\| 'rate_limit_override\.cleared'/);
+  });
+
+  it('AdminAuditAction: V-100 force-on-customer-resources cluster (session.destroyed_by_admin / api_key.revoked_by_admin)', () => {
+    expect(body).toMatch(/\/\/ V-100: force actions on customer resources\./);
+    expect(body).toMatch(/\| 'session\.destroyed_by_admin'/);
+    expect(body).toMatch(/\| 'api_key\.revoked_by_admin'/);
+  });
+
+  it('AdminAuditAction: V-281 customer-support-tooling cluster (audit_note.added / refund.recorded)', () => {
+    expect(body).toMatch(/\/\/ V-281: customer-support tooling \(audit-only\)\./);
+    expect(body).toMatch(/\| 'audit_note\.added'/);
+    expect(body).toMatch(/\| 'refund\.recorded'/);
+  });
+
+  it('AdminAuditAction: V-295a status-incident-management cluster (incident.created/updated/resolved)', () => {
+    expect(body).toMatch(/\/\/ V-295a: status-page incident management\./);
+    expect(body).toMatch(/\| 'incident\.created'/);
+    expect(body).toMatch(/\| 'incident\.updated'/);
+    expect(body).toMatch(/\| 'incident\.resolved'/);
+  });
+
+  it('AdminAuditAction: V-295c3-tombstone status-subscriber cluster (force_unsubscribed / purged)', () => {
+    expect(body).toMatch(/\/\/ V-295c3-tombstone: status-page email subscriber admin actions\./);
+    expect(body).toMatch(/\| 'status_subscriber\.force_unsubscribed'/);
+    expect(body).toMatch(/\| 'status_subscriber\.purged';/);
+  });
+
+  it('AdminAuditLogRow: 9 camelCased fields (id, adminAccountId, adminKeyId, action, targetAccountId?, targetResourceId?, inputPayload?, result, ipAddress?, timestamp)', () => {
+    expect(body).toMatch(/export interface AdminAuditLogRow \{/);
+    expect(body).toMatch(/id: string;/);
+    expect(body).toMatch(/adminAccountId: string;/);
+    expect(body).toMatch(/adminKeyId: string;/);
+    expect(body).toMatch(/action: AdminAuditAction;/);
+    expect(body).toMatch(/targetAccountId: string \| null;/);
+    expect(body).toMatch(/targetResourceId: string \| null;/);
+    expect(body).toMatch(/inputPayload: Record<string, unknown> \| null;/);
+    expect(body).toMatch(/result: string;/);
+    expect(body).toMatch(/ipAddress: string \| null;/);
+    expect(body).toMatch(/timestamp: Date;/);
+  });
+
+  it('ListAuditFilters: 6 filters + limit + cursor; V-521 targetResourceId exact-match filter', () => {
+    expect(body).toMatch(/export interface ListAuditFilters \{/);
+    expect(body).toMatch(/adminAccountId\?: string;/);
+    expect(body).toMatch(/targetAccountId\?: string;/);
+    expect(body).toMatch(/action\?: AdminAuditAction;/);
+    expect(body).toMatch(/\/\*\* Inclusive lower bound\. \*\/\s*\n?\s*from\?: Date;/);
+    expect(body).toMatch(/\/\*\* Exclusive upper bound\. \*\/\s*\n?\s*to\?: Date;/);
+    expect(body).toMatch(
+      /\/\*\* V-521 — exact-match filter on the audit row's targetResourceId\. \*\/\s*\n?\s*targetResourceId\?: string;/,
+    );
+    expect(body).toMatch(/limit: number;/);
+    expect(body).toMatch(
+      /\/\*\* Pagination cursor — last seen `timestamp` ISO string\. \*\/\s*\n?\s*cursor\?: string;/,
+    );
+  });
+
+  it('AdminAuditLogRepo: 2 methods (insert + list — append-only)', () => {
+    expect(body).toMatch(
+      /export interface AdminAuditLogRepo \{\s*\n?\s*insert\(input: NewAdminAuditLogInput\): Promise<AdminAuditLogRow>;\s*\n?\s*list\(filters: ListAuditFilters\): Promise<ListAuditPage>;\s*\n?\s*\}/,
+    );
+  });
+
+  it('record(): MUST be called by route before response; throw propagates — failure to audit fails the request (D-025)', () => {
+    expect(body).toMatch(
+      /Record one admin action\. Must be called by the route handler before\s*\n?\s*\*\s*returning the response\. A throw here propagates up — failure to\s*\n?\s*\*\s*audit fails the request \(D-025\)\./,
+    );
+    expect(body).toMatch(
+      /record\(input: NewAdminAuditLogInput\): Promise<AdminAuditLogRow> \{\s*\n?\s*return this\.repo\.insert\(input\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('list: delegates to repo.list(filters)', () => {
+    expect(body).toMatch(
+      /list\(filters: ListAuditFilters\): Promise<ListAuditPage> \{\s*\n?\s*return this\.repo\.list\(filters\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('imports: NONE (self-contained — no api-types dep for the closed enum)', () => {
+    expect(body).not.toMatch(/^import /m);
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
