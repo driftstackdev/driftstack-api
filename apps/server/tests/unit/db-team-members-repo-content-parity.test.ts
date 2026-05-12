@@ -1,0 +1,129 @@
+// W448.C — drift guard for apps/server/src/db/team-members-repo.ts.
+// V-298c DrizzleTeamMembersRepo. Drift here either drops the
+// refresh-on-existing-pending-invite path on upsertInvite (every
+// re-invite would create a new row → email gets multiple unique
+// invite links + accept-flow ambiguity) or breaks the
+// onConflictDoNothing on upsertMembership (re-accepting same invite
+// would throw unique-violation instead of returning idempotently).
+//
+//   • V-298c framing pinned.
+//   • toInviteRow: 9-field TeamInviteRow.
+//   • upsertInvite: select existing pending (acceptedAt IS NULL)
+//     for (ownerAccountId, inviteeEmail); UPDATE if found (refresh
+//     token+expiry+role+invitedByAccountId); else INSERT new row.
+//   • findInviteByTokenHash + findAccountEmail: limit 1 lookups.
+//   • upsertMembership: INSERT … onConflictDoNothing on (owner,
+//     member) composite; SELECT fallback on conflict so we always
+//     return a row.
+//   • markInviteAccepted: 1-field set acceptedAt where id=inviteId.
+//   • listMembers: innerJoin accounts on member.memberAccountId =
+//     accounts.id → memberEmail surface at list-time; orderBy
+//     desc(createdAt).
+//   • listPendingInvites: where and(ownerAccountId, isNull(acceptedAt))
+//     + orderBy desc(createdAt).
+//   • removeMember: delete where and(id=membershipId, ownerAccountId);
+//     returns memberAccountId or null.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W448.C apps/server/src/db/team-members-repo.ts content parity', () => {
+  const body = read(LIB);
+
+  it("V-298c framing pinned: 'Drizzle-backed TeamMembersRepo.'", () => {
+    expect(body).toMatch(/\/\/ V-298c — Drizzle-backed TeamMembersRepo\./);
+  });
+
+  it('imports: and/desc/eq/isNull from drizzle-orm; 4 service types (TeamInviteRow + TeamMemberRow + TeamMembersRepo + TeamRole); Database; 3 schema tables (accounts + teamInvites + teamMembers)', () => {
+    expect(body).toMatch(/import \{ and, desc, eq, isNull \} from 'drizzle-orm';/);
+    expect(body).toMatch(
+      /import type \{\s*\n?\s*TeamInviteRow,\s*\n?\s*TeamMemberRow,\s*\n?\s*TeamMembersRepo,\s*\n?\s*TeamRole,\s*\n?\s*\} from '\.\.\/services\/team-members\.js';/,
+    );
+    expect(body).toMatch(/import \{ accounts, teamInvites, teamMembers \} from '\.\/schema\.js';/);
+  });
+
+  it('toInviteRow: 9-field TeamInviteRow (id + ownerAccountId + inviteeEmail + role + inviteTokenHash + inviteExpiresAt + invitedByAccountId + acceptedAt + createdAt)', () => {
+    expect(body).toMatch(
+      /function toInviteRow\(row: InviteDb\): TeamInviteRow \{\s*\n?\s*return \{\s*\n?\s*id: row\.id,\s*\n?\s*ownerAccountId: row\.ownerAccountId,\s*\n?\s*inviteeEmail: row\.inviteeEmail,\s*\n?\s*role: row\.role,\s*\n?\s*inviteTokenHash: row\.inviteTokenHash,\s*\n?\s*inviteExpiresAt: row\.inviteExpiresAt,\s*\n?\s*invitedByAccountId: row\.invitedByAccountId,\s*\n?\s*acceptedAt: row\.acceptedAt,\s*\n?\s*createdAt: row\.createdAt,\s*\n?\s*\};\s*\n?\s*\}/,
+    );
+  });
+
+  it("upsertInvite framing pinned: 'Look for an existing pending invite (not yet accepted) for the (owner, email) pair. If found, refresh the token + expiry. Otherwise insert a new row.'", () => {
+    expect(body).toMatch(
+      /\/\/ Look for an existing pending invite \(not yet accepted\) for the\s*\n?\s*\/\/ \(owner, email\) pair\. If found, refresh the token \+ expiry\.\s*\n?\s*\/\/ Otherwise insert a new row\./,
+    );
+  });
+
+  it("upsertInvite: select existing where and(ownerAccountId, inviteeEmail, isNull(acceptedAt)) + limit 1; refresh-path .set(4 fields) + throws 'team_invites refresh returned no row'; insert-path 6-field values + throws 'team_invites insert returned no row'", () => {
+    expect(body).toMatch(
+      /\.where\(\s*\n?\s*and\(\s*\n?\s*eq\(teamInvites\.ownerAccountId, input\.ownerAccountId\),\s*\n?\s*eq\(teamInvites\.inviteeEmail, input\.inviteeEmail\),\s*\n?\s*isNull\(teamInvites\.acceptedAt\),\s*\n?\s*\),\s*\n?\s*\)\s*\n?\s*\.limit\(1\);/,
+    );
+    expect(body).toMatch(
+      /\.set\(\{\s*\n?\s*inviteTokenHash: input\.inviteTokenHash,\s*\n?\s*inviteExpiresAt: input\.inviteExpiresAt,\s*\n?\s*role: input\.role,\s*\n?\s*invitedByAccountId: input\.invitedByAccountId,\s*\n?\s*\}\)/,
+    );
+    expect(body).toMatch(
+      /if \(!updated\) throw new Error\('team_invites refresh returned no row'\);/,
+    );
+    expect(body).toMatch(/if \(!row\) throw new Error\('team_invites insert returned no row'\);/);
+  });
+
+  it('findInviteByTokenHash + findAccountEmail: limit 1 lookups; findAccountEmail returns row?.email ?? null', () => {
+    expect(body).toMatch(
+      /async findInviteByTokenHash\(hash: string\): Promise<TeamInviteRow \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(teamInvites\)\s*\n?\s*\.where\(eq\(teamInvites\.inviteTokenHash, hash\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toInviteRow\(row\) : null;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /async findAccountEmail\(accountId: string\): Promise<string \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\{ email: accounts\.email \}\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.id, accountId\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row\?\.email \?\? null;\s*\n?\s*\}/,
+    );
+  });
+
+  it("upsertMembership: INSERT 6-field values + onConflictDoNothing target=[ownerAccountId, memberAccountId] composite; SELECT fallback on conflict; throws 'team_members upsert produced no row'", () => {
+    expect(body).toMatch(
+      /\.onConflictDoNothing\(\{\s*\n?\s*target: \[teamMembers\.ownerAccountId, teamMembers\.memberAccountId\],\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);/,
+    );
+    expect(body).toMatch(
+      /const row =\s*\n?\s*inserted \?\?\s*\n?\s*\([\s\S]*?\.select\(\)\s*\n?\s*\.from\(teamMembers\)\s*\n?\s*\.where\(\s*\n?\s*and\(\s*\n?\s*eq\(teamMembers\.ownerAccountId, input\.ownerAccountId\),\s*\n?\s*eq\(teamMembers\.memberAccountId, input\.memberAccountId\),\s*\n?\s*\),\s*\n?\s*\)\s*\n?\s*\.limit\(1\)/,
+    );
+    expect(body).toMatch(/if \(!row\) throw new Error\('team_members upsert produced no row'\);/);
+  });
+
+  it('markInviteAccepted: 1-field set acceptedAt where id=inviteId', () => {
+    expect(body).toMatch(
+      /async markInviteAccepted\(inviteId: string, at: Date\): Promise<void> \{\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(teamInvites\)\s*\n?\s*\.set\(\{ acceptedAt: at \}\)\s*\n?\s*\.where\(eq\(teamInvites\.id, inviteId\)\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('listMembers framing pinned: innerJoin accounts on memberAccountId to surface memberEmail at list-time; orderBy desc(createdAt)', () => {
+    expect(body).toMatch(
+      /\/\/ Join accounts to surface member email at list-time\. The shape\s*\n?\s*\/\/ matches in-memory repo's TeamMemberRow with memberEmail filled\./,
+    );
+    expect(body).toMatch(
+      /\.innerJoin\(accounts, eq\(accounts\.id, teamMembers\.memberAccountId\)\)\s*\n?\s*\.where\(eq\(teamMembers\.ownerAccountId, ownerAccountId\)\)\s*\n?\s*\.orderBy\(desc\(teamMembers\.createdAt\)\);/,
+    );
+  });
+
+  it('listPendingInvites: where and(ownerAccountId, isNull(acceptedAt)) + orderBy desc(createdAt)', () => {
+    expect(body).toMatch(
+      /async listPendingInvites\(ownerAccountId: string\): Promise<TeamInviteRow\[\]> \{\s*\n?\s*const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(teamInvites\)\s*\n?\s*\.where\(and\(eq\(teamInvites\.ownerAccountId, ownerAccountId\), isNull\(teamInvites\.acceptedAt\)\)\)\s*\n?\s*\.orderBy\(desc\(teamInvites\.createdAt\)\);/,
+    );
+  });
+
+  it('removeMember: delete where and(id=membershipId, ownerAccountId) + returning {memberAccountId}; returns result[0]?.memberAccountId ?? null on success, null on no-row', () => {
+    expect(body).toMatch(
+      /async removeMember\(membershipId: string, ownerAccountId: string\): Promise<string \| null> \{\s*\n?\s*const result = await this\.database\.db\s*\n?\s*\.delete\(teamMembers\)\s*\n?\s*\.where\(and\(eq\(teamMembers\.id, membershipId\), eq\(teamMembers\.ownerAccountId, ownerAccountId\)\)\)\s*\n?\s*\.returning\(\{ memberAccountId: teamMembers\.memberAccountId \}\);\s*\n?\s*return result\.length > 0 \? \(result\[0\]\?\.memberAccountId \?\? null\) : null;\s*\n?\s*\}/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
