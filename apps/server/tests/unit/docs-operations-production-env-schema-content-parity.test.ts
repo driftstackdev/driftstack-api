@@ -1,0 +1,125 @@
+// W553.B — drift guard for /docs/operations/production-env-schema.md.
+// Provisioning-order ops cheat-sheet. Drift here either weakens
+// the 9-group provisioning order (would invite mis-sequenced
+// boot or out-of-order founder runbooks), drops the live-key
+// SSH-write posture (would re-permit chat-readable terminal
+// exposure for sk_live_*), or weakens the sub-processor
+// crosswalk (would orphan DPA Annex 3 ↔ env-var mapping).
+//
+//   • 9 variable groups in provisioning order: Process/runtime +
+//     Database (Neon EU) + Redis (Upstash EU) + Auth-flow URLs +
+//     Email (Postmark) + R2 + Sentry + Stripe + Driver.
+//   • DASHBOARD_ORIGIN is V-266 browser-OAuth launch surface.
+//   • AUTH_EXPOSE_DEBUG_TOKEN never in production.
+//   • Live sk_live_* via SSH-write only — never gh secret set, never
+//     PR description.
+//   • BillingService wires only when STRIPE_SECRET_KEY +
+//     DRIFTSTACK_TIER_PRICE_IDS + STRIPE_TRIAL_PACK_PRICE_ID all set.
+//   • Admin gated by Cloudflare Access at origin, NOT by env-var.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'docs/operations/production-env-schema.md');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W553.B /docs/operations/production-env-schema.md content parity', () => {
+  const body = read(LIB);
+
+  it("Header + ops-cheat-sheet vs full-spec framing pinned: '# Production environment schema (operations summary)' + 'Provisioning-order summary of every env var the production / staging Hetzner VM needs in `/opt/driftstack/.env`. Sourced from `DEPLOY_DOTENV_BASE64` per `.github/workflows/deploy.yml` + `.github/workflows/server-deploy.yml`.' + 'The longer per-variable spec (defaults, allowed values, behaviour-on-absent) lives in `docs/deployment/env-vars.md`.' + 'This doc is the operations cheat sheet — what to set up first, what comes next, what's optional.' — pinned so the /opt/driftstack/.env + DEPLOY_DOTENV_BASE64 + deploy.yml + server-deploy.yml + env-vars.md-full-spec + cheat-sheet-role commitment survives", () => {
+    expect(body).toMatch(/^# Production environment schema \(operations summary\)$/m);
+    expect(body).toMatch(
+      /Provisioning-order summary of every env var the production \/ staging Hetzner VM needs in `\/opt\/driftstack\/\.env`\./,
+    );
+    expect(body).toMatch(
+      /Sourced from `DEPLOY_DOTENV_BASE64` per `\.github\/workflows\/deploy\.yml` \+ `\.github\/workflows\/server-deploy\.yml`\./,
+    );
+    expect(body).toMatch(
+      /The longer per-variable spec \(defaults, allowed values, behaviour-on-absent\) lives in `docs\/deployment\/env-vars\.md`\./,
+    );
+    expect(body).toMatch(
+      /This doc is the operations cheat sheet — what to set up first, what comes next, what's optional\./,
+    );
+  });
+
+  it("9-group provisioning-order framing pinned: '### 1. Process / runtime — set these first' + '### 2. Database (Neon, EU region)' + '### 3. Redis (Upstash, EU region)' + '### 4. Auth-flow URLs' + '### 5. Email (Postmark)' + '### 6. R2 (Cloudflare object storage)' + '### 7. Sentry (observability)' + '### 8. Stripe (billing)' + '### 9. Driver (production WebKit fork integration)' — pinned so the 9-group-provisioning-order commitment survives", () => {
+    expect(body).toMatch(/### 1\. Process \/ runtime — set these first/);
+    expect(body).toMatch(/### 2\. Database \(Neon, EU region\)/);
+    expect(body).toMatch(/### 3\. Redis \(Upstash, EU region\)/);
+    expect(body).toMatch(/### 4\. Auth-flow URLs/);
+    expect(body).toMatch(/### 5\. Email \(Postmark\)/);
+    expect(body).toMatch(/### 6\. R2 \(Cloudflare object storage\)/);
+    expect(body).toMatch(/### 7\. Sentry \(observability\)/);
+    expect(body).toMatch(/### 8\. Stripe \(billing\)/);
+    expect(body).toMatch(/### 9\. Driver \(production WebKit fork integration\)/);
+  });
+
+  it("Auth-flow URLs + DASHBOARD_ORIGIN + AUTH_EXPOSE_DEBUG_TOKEN framing pinned: 'AUTH_VERIFY_EMAIL_URL=https://app.driftstack.dev/auth/verify-email' + 'AUTH_MAGIC_LINK_URL=https://app.driftstack.dev/auth/magic-link' + 'AUTH_PASSWORD_RESET_URL=https://app.driftstack.dev/auth/password-reset' + 'DASHBOARD_ORIGIN=https://app.driftstack.dev' + '`DASHBOARD_ORIGIN` is the V-266 browser-OAuth flow's launch surface — the GUI client opens `${DASHBOARD_ORIGIN}/cli/authorize?code=…`.' + '`AUTH_EXPOSE_DEBUG_TOKEN` MUST stay unset / false in production. Local dev only.' — pinned so the 3-auth-URL-inventory + V-266-DASHBOARD_ORIGIN-OAuth-launch + AUTH_EXPOSE_DEBUG_TOKEN-never-production commitment survives", () => {
+    expect(body).toMatch(
+      /AUTH_VERIFY_EMAIL_URL=https:\/\/app\.driftstack\.dev\/auth\/verify-email/,
+    );
+    expect(body).toMatch(/AUTH_MAGIC_LINK_URL=https:\/\/app\.driftstack\.dev\/auth\/magic-link/);
+    expect(body).toMatch(
+      /AUTH_PASSWORD_RESET_URL=https:\/\/app\.driftstack\.dev\/auth\/password-reset/,
+    );
+    expect(body).toMatch(/DASHBOARD_ORIGIN=https:\/\/app\.driftstack\.dev/);
+    expect(body).toMatch(
+      /`DASHBOARD_ORIGIN` is the V-266 browser-OAuth flow's launch surface — the GUI client opens `\$\{dashboardOrigin\}\/cli\/authorize\?code=…`\.|`DASHBOARD_ORIGIN` is the V-266 browser-OAuth flow's launch surface/,
+    );
+    expect(body).toMatch(
+      /`AUTH_EXPOSE_DEBUG_TOKEN` MUST stay unset \/ false in production\. Local dev only\./,
+    );
+  });
+
+  it("Stripe live-mode + BillingService wiring framing pinned: 'STRIPE_SECRET_KEY=sk_live_…' + 'STRIPE_WEBHOOK_SECRET=whsec_…' + 'DRIFTSTACK_TIER_PRICE_IDS=trial_pack:price_…|solo_manual:price_…' + '19 IDs per ADR-004' + 'STRIPE_TRIAL_PACK_PRICE_ID=price_…' + '**Live-mode keys**: per the `stripe_credential_handling` rule, live `sk_live_…` keys go via SSH-write to Hetzner only — never via `gh secret set` from a chat-readable terminal, never in a PR description.' + 'Test-mode keys (`sk_test_…`) for staging are fine in `DEPLOY_DOTENV_BASE64`.' + 'When `STRIPE_SECRET_KEY` + `DRIFTSTACK_TIER_PRICE_IDS` + `STRIPE_TRIAL_PACK_PRICE_ID` are all set, the BillingService wires' + 'When any is unset, the routes don't register (pre-launch state) and the bootstrap log emits a `BillingService NOT wired` warning.' — pinned so the sk_live_* + whsec_* + 19-ADR-004-price-IDs + SSH-write-only + sk_test_*-staging-OK + 3-var-BillingService-wire + BillingService-NOT-wired-warning commitment survives", () => {
+    expect(body).toMatch(/STRIPE_SECRET_KEY=sk_live_…/);
+    expect(body).toMatch(/STRIPE_WEBHOOK_SECRET=whsec_…/);
+    expect(body).toMatch(/DRIFTSTACK_TIER_PRICE_IDS=trial_pack:price_…\|solo_manual:price_…/);
+    expect(body).toMatch(/19 IDs per ADR-004/);
+    expect(body).toMatch(/STRIPE_TRIAL_PACK_PRICE_ID=price_…/);
+    expect(body).toMatch(
+      /\*\*Live-mode keys\*\*: per the `stripe_credential_handling` rule, live `sk_live_…` keys go via SSH-write to Hetzner only/,
+    );
+    expect(body).toMatch(
+      /— never via `gh secret set` from a chat-readable terminal, never in a PR description\./,
+    );
+    expect(body).toMatch(
+      /Test-mode keys \(`sk_test_…`\) for staging are fine in `DEPLOY_DOTENV_BASE64`\./,
+    );
+    expect(body).toMatch(
+      /When `STRIPE_SECRET_KEY` \+ `DRIFTSTACK_TIER_PRICE_IDS` \+ `STRIPE_TRIAL_PACK_PRICE_ID` are all set, the BillingService wires;/,
+    );
+    expect(body).toMatch(
+      /When any is unset, the routes don't register \(pre-launch state\) and the bootstrap log emits a `BillingService NOT wired` warning\./,
+    );
+  });
+
+  it("Sub-processor crosswalk + Sequence-summary framing pinned: '## Sub-processor → env-var crosswalk' + 'Hetzner Online GmbH                                  | (host-level, not env-var)' + 'Neon, Inc.                                           | `DATABASE_URL`' + 'Upstash, Inc.                                        | `REDIS_URL`' + 'Cloudflare, Inc. (R2 + Pages)                        | `R2_*`' + 'Postmark (ActiveCampaign LLC)                        | `POSTMARK_*`' + 'Sentry (Functional Software, Inc.)                   | `SENTRY_*`' + 'Stripe Payments Europe Ltd / Stripe, Inc.            | `STRIPE_*` + `DRIFTSTACK_TIER_PRICE_IDS`' + '## Sequence summary' + 'Hetzner VMs (V-278 founder runbook).' + 'WebKit-fork driver → `DRIVER=webkit` (post-Agent-1 bridge integration).' — pinned so the 9-sub-processor-crosswalk + DPA-Annex-3-correctness + V-278-Hetzner-first + Agent-1-bridge-driver-last commitment survives", () => {
+    expect(body).toMatch(/## Sub-processor → env-var crosswalk/);
+    expect(body).toMatch(/Hetzner Online GmbH\s+\|\s+\(host-level, not env-var\)/);
+    expect(body).toMatch(/Neon, Inc\.\s+\|\s+`DATABASE_URL`/);
+    expect(body).toMatch(/Upstash, Inc\.\s+\|\s+`REDIS_URL`/);
+    expect(body).toMatch(/Cloudflare, Inc\. \(R2 \+ Pages\)\s+\|\s+`R2_\*`/);
+    expect(body).toMatch(/Postmark \(ActiveCampaign LLC\)\s+\|\s+`POSTMARK_\*`/);
+    expect(body).toMatch(/Sentry \(Functional Software, Inc\.\)\s+\|\s+`SENTRY_\*`/);
+    expect(body).toMatch(
+      /Stripe Payments Europe Ltd \/ Stripe, Inc\.\s+\|\s+`STRIPE_\*` \+ `DRIFTSTACK_TIER_PRICE_IDS`/,
+    );
+    expect(body).toMatch(/## Sequence summary/);
+    expect(body).toMatch(/1\. Hetzner VMs \(V-278 founder runbook\)\./);
+    expect(body).toMatch(
+      /9\. WebKit-fork driver → `DRIVER=webkit` \(post-Agent-1 bridge integration\)\./,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
