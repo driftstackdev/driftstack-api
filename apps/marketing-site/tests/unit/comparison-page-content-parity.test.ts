@@ -86,10 +86,14 @@ describe('W366.A marketing-site /comparison page content parity', () => {
   it('honesty section "Where Driftstack isn\'t the fit" with 3 non-fit categories pinned', () => {
     expect(body).toContain("Where Driftstack isn't the fit");
     expect(body).toMatch(
-      /<h3 class="text-lg font-medium text-slate-900">Desktop-only targets<\/h3>/,
+      /<h3 class="text-lg font-medium text-ink-primary">Desktop-only targets<\/h3>/,
     );
-    expect(body).toMatch(/<h3 class="text-lg font-medium text-slate-900">Pure HTML scraping<\/h3>/);
-    expect(body).toMatch(/<h3 class="text-lg font-medium text-slate-900">IP-pool-as-product<\/h3>/);
+    expect(body).toMatch(
+      /<h3 class="text-lg font-medium text-ink-primary">Pure HTML scraping<\/h3>/,
+    );
+    expect(body).toMatch(
+      /<h3 class="text-lg font-medium text-ink-primary">IP-pool-as-product<\/h3>/,
+    );
   });
 
   it('trial-pack CTA cross-link points at /pricing#trial-pack + figures pinned ($2.99 / 16h / once)', () => {

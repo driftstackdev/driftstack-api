@@ -33,10 +33,10 @@ describe('W498.A apps/marketing-site/src/pages/404.astro content parity', () => 
 
   it("404 monogram + 'We couldn't find that.' heading pinned — pinned so the typography hierarchy (small uppercase 404 monogram → large heading) survives (drift to dropping the 404 monogram would lose the at-a-glance error-code signal; drift to changing heading copy would change the tone from human to canned)", () => {
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">404<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-glow-red">404<\/p>/,
     );
     expect(body).toMatch(
-      /<h1 class="mt-4 text-4xl font-semibold tracking-tight text-slate-900">\s*\n?\s*We couldn't find that\.\s*\n?\s*<\/h1>/,
+      /<h1 class="mt-4 text-4xl font-semibold tracking-tight text-ink-primary">\s*\n?\s*We couldn't find that\.\s*\n?\s*<\/h1>/,
     );
   });
 

@@ -44,9 +44,9 @@ describe('V-292 — dashboard /profiles empty-state parity with GUI ProfilesView
   });
 
   it('both surfaces use the oxblood-50 / oxblood-700 (or accent / accent-subtle) tinted icon container', () => {
-    // Dashboard uses Tailwind's bg-oxblood-50 + text-oxblood-700 directly
+    // Dashboard uses Tailwind's bg-glow-red/10 + text-glow-red directly
     // because the Astro page styles map to the marketing-site token set.
-    expect(dashboardProfiles).toMatch(/bg-oxblood-50|text-oxblood-700/);
+    expect(dashboardProfiles).toMatch(/bg-oxblood-50|text-glow-red/);
 
     // GUI uses the bg-accent-subtle / text-accent semantic tokens which
     // map to the same oxblood palette via tailwind.config.ts.

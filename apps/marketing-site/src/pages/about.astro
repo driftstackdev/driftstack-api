@@ -9,11 +9,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   <!-- Header -->
   <section class="bg-gradient-to-b from-white to-slate-50">
     <div class="mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">About</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">About</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl">
         A small Dutch company building one product well.
       </h1>
-      <p class="mt-6 max-w-prose text-lg text-slate-600">
+      <p class="mt-6 max-w-prose text-lg text-ink-secondary">
         Driftstack ships iPhone Safari sessions on demand — same engine
         as the device, no patches, no detection-vendor surface area.
         We're solo-founded, EU-headquartered, and intentionally narrow:
@@ -23,17 +23,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   </section>
 
   <!-- What + why -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-20">
       <div class="grid gap-12 md:grid-cols-2">
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             What we're building
           </p>
-          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+          <h2 class="mt-3 text-2xl font-semibold text-ink-primary">
             iPhone Safari fidelity, on demand.
           </h2>
-          <p class="mt-3 text-slate-600">
+          <p class="mt-3 text-ink-secondary">
             Most stealth browsers patch JavaScript at runtime to fake an
             iOS fingerprint. Detection vendors built their industry on
             catching exactly that. Driftstack modifies WebKit's C++ source
@@ -43,19 +43,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </p>
         </div>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             Why we exist
           </p>
-          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+          <h2 class="mt-3 text-2xl font-semibold text-ink-primary">
             Stealth browsing matures.
           </h2>
-          <p class="mt-3 text-slate-600">
+          <p class="mt-3 text-ink-secondary">
             For the last decade, the field has been a runtime patching
             arms race that always favoured the detector. We think the
             next decade looks different: source-modified engines, real
             archetypes, transparent metering, and customer-configurable
             egress (the last is on our roadmap; see
-            <a href="/trust/security-overview" class="text-oxblood-700 underline">/trust/security-overview</a>
+            <a href="/trust/security-overview" class="text-glow-red underline">/trust/security-overview</a>
             for what's shipped today). Driftstack ships that future for
             iPhone Safari first because that's the device that matters
             most for commerce, ticketing, and account workflows.
@@ -66,24 +66,24 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   </section>
 
   <!-- Posture -->
-  <section class="border-t border-slate-200 bg-slate-50">
+  <section class="border-t border-white/10 bg-surface-base">
     <div class="mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Posture</p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Posture</p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
         Things you'll notice.
       </h2>
       <div class="mt-10 grid gap-6 md:grid-cols-3">
         <div>
-          <h3 class="font-semibold text-slate-900">EU-resident, by default</h3>
-          <p class="mt-3 text-sm text-slate-600">
+          <h3 class="font-semibold text-ink-primary">EU-resident, by default</h3>
+          <p class="mt-3 text-sm text-ink-secondary">
             Compute in Hetzner Falkenstein. Database on Neon EU. Object
             storage on Cloudflare R2 EU. Email through Postmark EU
             sending region. No silent transatlantic data flows.
           </p>
         </div>
         <div>
-          <h3 class="font-semibold text-slate-900">No behavioural data collection</h3>
-          <p class="mt-3 text-sm text-slate-600">
+          <h3 class="font-semibold text-ink-primary">No behavioural data collection</h3>
+          <p class="mt-3 text-sm text-ink-secondary">
             We don't log your destination URLs, response bodies, or
             session content. We don't train models on your traffic. We
             don't sell datasets. The control plane sees session metadata
@@ -91,8 +91,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </p>
         </div>
         <div>
-          <h3 class="font-semibold text-slate-900">Honest scope</h3>
-          <p class="mt-3 text-sm text-slate-600">
+          <h3 class="font-semibold text-ink-primary">Honest scope</h3>
+          <p class="mt-3 text-sm text-ink-secondary">
             We say no to things we can't ship well. Behavioural simulation
             and recipe libraries are Phase 3 — we'll talk about them when
             they ship, not before. SOC 2 is a future-revenue milestone, not
@@ -109,15 +109,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
        so the about page is not just "what we are" but "what we
        commit to". Visible in the About narrative because customers
        evaluating us read this page before /security and /trust. -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
         Operating commitments
       </p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
         What we promise to do.
       </h2>
-      <p class="mt-4 max-w-3xl text-sm text-slate-600">
+      <p class="mt-4 max-w-3xl text-sm text-ink-secondary">
         Pre-launch is the time when promises matter most — once
         you're paying for production access, you can't unwind a
         commitment. So we publish the operating commitments that
@@ -126,27 +126,27 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       </p>
 
       <div class="mt-10 grid gap-6 md:grid-cols-2">
-        <div class="rounded-lg border border-slate-200 bg-white p-5">
-          <h3 class="font-semibold text-slate-900">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-5">
+          <h3 class="font-semibold text-ink-primary">
             Pre-launch security audit, on a cadence
           </h3>
-          <p class="mt-2 text-sm text-slate-600">
+          <p class="mt-2 text-sm text-ink-secondary">
             Every meaningful slice of code merged is re-audited
             against the same six checks (scope-reach, plaintext-
             leakage, idempotency, audit-log injection, account-
             scope leakage, web-session-token security). Findings
             with closure status published at
-            <a href="/security" class="text-oxblood-700 underline">
+            <a href="/security" class="text-glow-red underline">
               /security
             </a>. Pre-paying-customer deep audit happens before
             commercial activation.
           </p>
         </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-5">
-          <h3 class="font-semibold text-slate-900">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-5">
+          <h3 class="font-semibold text-ink-primary">
             Disaster recovery rehearsed pre-launch
           </h3>
-          <p class="mt-2 text-sm text-slate-600">
+          <p class="mt-2 text-sm text-ink-secondary">
             Eleven DR scenarios documented with concrete recovery
             commands — host loss, Postgres corruption, Redis loss,
             R2 object loss, signing-key rotation under attack,
@@ -154,38 +154,38 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             regressions, multi-day Hetzner regional outage. Every
             scenario is rehearseable on staging before commercial
             activation. Public-facing posture at
-            <a href="/trust/incidents" class="text-oxblood-700 underline">
+            <a href="/trust/incidents" class="text-glow-red underline">
               /trust/incidents
             </a>.
           </p>
         </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-5">
-          <h3 class="font-semibold text-slate-900">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-5">
+          <h3 class="font-semibold text-ink-primary">
             Sub-processor change-log per Article 28(2)
           </h3>
-          <p class="mt-2 text-sm text-slate-600">
+          <p class="mt-2 text-sm text-ink-secondary">
             Every change to our sub-processor list (additions,
             removals, region migrations) is published 30 days
             before it takes effect at
-            <a href="/trust/sub-processors" class="text-oxblood-700 underline">
+            <a href="/trust/sub-processors" class="text-glow-red underline">
               /trust/sub-processors
             </a>. Customers get a right-of-objection window to
             terminate the affected portion of service if a new
             sub-processor doesn't meet their requirements.
           </p>
         </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-5">
-          <h3 class="font-semibold text-slate-900">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-5">
+          <h3 class="font-semibold text-ink-primary">
             Source escrow for Enterprise + Self-hosted
           </h3>
-          <p class="mt-2 text-sm text-slate-600">
+          <p class="mt-2 text-sm text-ink-secondary">
             Enterprise customers and Self-hosted licensees get
             access to the WebKit fork + control-plane source
             under a written escrow agreement. If Driftstack
             sunsets the cloud service, escrow releases the source
             so customers can continue running on their own
             hardware indefinitely. The
-            <a href="/faq#acceptable-use" class="text-oxblood-700 underline">
+            <a href="/faq#acceptable-use" class="text-glow-red underline">
               FAQ "what if Driftstack goes away?"
             </a>
             entry has the full mechanics.
@@ -196,51 +196,51 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   </section>
 
   <!-- Company facts -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
         Company facts
       </p>
       <dl class="mt-8 grid gap-6 md:grid-cols-2">
         <div class="flex gap-4 border-b border-slate-100 pb-4">
-          <dt class="w-40 shrink-0 text-sm text-slate-500">Entity</dt>
-          <dd class="text-sm text-slate-900">Dutch BV</dd>
+          <dt class="w-40 shrink-0 text-sm text-ink-muted">Entity</dt>
+          <dd class="text-sm text-ink-primary">Dutch BV</dd>
         </div>
         <div class="flex gap-4 border-b border-slate-100 pb-4">
-          <dt class="w-40 shrink-0 text-sm text-slate-500">Headquarters</dt>
-          <dd class="text-sm text-slate-900">Netherlands</dd>
+          <dt class="w-40 shrink-0 text-sm text-ink-muted">Headquarters</dt>
+          <dd class="text-sm text-ink-primary">Netherlands</dd>
         </div>
         <div class="flex gap-4 border-b border-slate-100 pb-4">
-          <dt class="w-40 shrink-0 text-sm text-slate-500">Team size</dt>
-          <dd class="text-sm text-slate-900">Solo founder + contractors</dd>
+          <dt class="w-40 shrink-0 text-sm text-ink-muted">Team size</dt>
+          <dd class="text-sm text-ink-primary">Solo founder + contractors</dd>
         </div>
         <div class="flex gap-4 border-b border-slate-100 pb-4">
-          <dt class="w-40 shrink-0 text-sm text-slate-500">Funding</dt>
-          <dd class="text-sm text-slate-900">Bootstrapped — no VC</dd>
+          <dt class="w-40 shrink-0 text-sm text-ink-muted">Funding</dt>
+          <dd class="text-sm text-ink-primary">Bootstrapped — no VC</dd>
         </div>
         <div class="flex gap-4 border-b border-slate-100 pb-4">
-          <dt class="w-40 shrink-0 text-sm text-slate-500">Sub-processors</dt>
-          <dd class="text-sm text-slate-900">
-            <a href="/trust/sub-processors" class="text-oxblood-700 underline"
+          <dt class="w-40 shrink-0 text-sm text-ink-muted">Sub-processors</dt>
+          <dd class="text-sm text-ink-primary">
+            <a href="/trust/sub-processors" class="text-glow-red underline"
               >/trust/sub-processors</a
             >
           </dd>
         </div>
         <div class="flex gap-4 border-b border-slate-100 pb-4">
-          <dt class="w-40 shrink-0 text-sm text-slate-500">Contact</dt>
-          <dd class="text-sm text-slate-900">hello@driftstack.dev</dd>
+          <dt class="w-40 shrink-0 text-sm text-ink-muted">Contact</dt>
+          <dd class="text-sm text-ink-primary">hello@driftstack.dev</dd>
         </div>
       </dl>
     </div>
   </section>
 
   <!-- CTA -->
-  <section class="border-t border-slate-200 bg-slate-50">
+  <section class="border-t border-white/10 bg-surface-base">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 class="text-2xl font-semibold text-slate-900">Want to try it?</h2>
-          <p class="mt-3 max-w-prose text-slate-600">
+          <h2 class="text-2xl font-semibold text-ink-primary">Want to try it?</h2>
+          <p class="mt-3 max-w-prose text-ink-secondary">
             $2.99 buys 16 hours of iPhone Safari sessions to evaluate.
             Used once per account, 14-day window, no card-charging surprises.
           </p>

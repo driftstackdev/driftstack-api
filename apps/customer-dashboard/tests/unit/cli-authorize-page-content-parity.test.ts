@@ -104,7 +104,7 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
   });
 
   it('cross-links pinned: /api-keys (revoke surface) + cancel → /', () => {
-    expect(body).toMatch(/<a href="\/api-keys" class="text-oxblood-700 underline">API keys<\/a>/);
+    expect(body).toMatch(/<a href="\/api-keys" class="text-glow-red underline">API keys<\/a>/);
     expect(body).toMatch(/<a href="\/api-keys"[\s\S]*?>\s*View your API keys\s*<\/a>/);
     expect(body).toMatch(
       /cancelBtn\.addEventListener\('click', \(\) => \{\s*\n?\s*window\.location\.href = '\/';/,

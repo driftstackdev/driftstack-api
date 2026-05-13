@@ -34,9 +34,9 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
 
 <DashboardLayout title="Select tier" withSidebar={false}>
   <div class="mx-auto max-w-4xl px-6 py-16" data-page="select-tier">
-    <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Choose your tier</p>
-    <h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Pick a plan.</h1>
-    <p class="mt-3 text-sm text-slate-600">
+    <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Choose your tier</p>
+    <h1 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">Pick a plan.</h1>
+    <p class="mt-3 text-sm text-ink-secondary">
       All tiers run the same engine. Only concurrent caps and profile
       counts change between them — there's no fingerprint or feature
       gating. Cancel anytime; pro-rated refunds within the first 14 days.
@@ -44,7 +44,7 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
 
     <div
       data-banner
-      class="mt-6 hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      class="mt-6 hidden rounded-lg border border-glow-red/30 bg-glow-red/10 px-4 py-3 text-sm text-glow-red-soft"
       role="status"
     >
     </div>
@@ -52,10 +52,10 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
     <!-- Trial pack hero card -->
     <div
       data-trial-card
-      class="mt-8 rounded-lg border border-oxblood-200 bg-white p-6"
+      class="mt-8 rounded-lg border border-glow-red/30 bg-surface-raised p-6"
     >
-      <h2 class="text-xl font-semibold text-slate-900">Trial pack — $2.99</h2>
-      <p class="mt-2 text-sm text-slate-600">
+      <h2 class="text-xl font-semibold text-ink-primary">Trial pack — $2.99</h2>
+      <p class="mt-2 text-sm text-ink-secondary">
         16 hours of iPhone Safari sessions. 1 concurrent. 14-day window.
         Once per account.
       </p>
@@ -68,11 +68,11 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
     <div class="mt-10 grid gap-4 md:grid-cols-2">
       {
         TIERS.map((t) => (
-          <div class="rounded-lg border border-slate-200 bg-white p-5">
-            <p class="font-mono text-xs uppercase tracking-widest text-slate-500">{t.ladder}</p>
-            <h3 class="mt-2 text-lg font-semibold text-slate-900">{t.label}</h3>
-            <p class="mt-1 text-2xl font-semibold text-slate-900">{t.price}</p>
-            <dl class="mt-4 space-y-1 text-sm text-slate-600">
+          <div class="rounded-lg border border-white/10 bg-surface-raised p-5">
+            <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">{t.ladder}</p>
+            <h3 class="mt-2 text-lg font-semibold text-ink-primary">{t.label}</h3>
+            <p class="mt-1 text-2xl font-semibold text-ink-primary">{t.price}</p>
+            <dl class="mt-4 space-y-1 text-sm text-ink-secondary">
               <div class="flex justify-between">
                 <dt>Concurrent</dt>
                 <dd class="font-mono">{TIER_CONCURRENT_SESSION_LIMITS[t.id].toString()}</dd>
@@ -97,8 +97,8 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
       }
     </div>
 
-    <p class="mt-8 text-xs text-slate-500">
-      Enterprise tier (~$4,000/mo, custom) — <a href="mailto:sales@driftstack.dev" class="text-oxblood-700 underline">contact sales</a>.
+    <p class="mt-8 text-xs text-ink-muted">
+      Enterprise tier (~$4,000/mo, custom) — <a href="mailto:sales@driftstack.dev" class="text-glow-red underline">contact sales</a>.
     </p>
   </div>
 

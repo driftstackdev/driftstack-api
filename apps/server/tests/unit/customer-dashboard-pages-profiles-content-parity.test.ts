@@ -71,13 +71,13 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
 
   it('4-button row per profile: Clone (oxblood) / Export (oxblood) / Snapshot (oxblood) / Delete (rose) — pinned so the per-profile action vocabulary stays 4-button (drift to dropping Snapshot would orphan the V-312 capture flow; drift to dropping Export would break the GDPR Article 20 portability path; drift to dropping Clone would lose the V-313 copy-with-derived-name UX)', () => {
     expect(body).toMatch(
-      /data-clone-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-oxblood-700 hover:underline">Clone<\/button>'/,
+      /data-clone-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-glow-red hover:underline">Clone<\/button>'/,
     );
     expect(body).toMatch(
-      /data-export-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-oxblood-700 hover:underline">Export<\/button>'/,
+      /data-export-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-glow-red hover:underline">Export<\/button>'/,
     );
     expect(body).toMatch(
-      /data-snapshot-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-oxblood-700 hover:underline">Snapshot<\/button>'/,
+      /data-snapshot-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-glow-red hover:underline">Snapshot<\/button>'/,
     );
     expect(body).toMatch(
       /data-delete-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-rose-700 hover:underline">Delete<\/button>'/,

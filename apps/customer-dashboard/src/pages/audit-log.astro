@@ -91,16 +91,16 @@ const FILTER_OPTIONS = [
   <div class="mx-auto max-w-5xl px-6 py-10" data-page="audit-log">
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
       role="status"
     >
     </div>
 
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-slate-500">Account-scoped events · append-only</p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Audit log</h1>
-        <p class="mt-2 max-w-prose text-sm text-slate-500">
+        <p class="text-sm text-ink-muted">Account-scoped events · append-only</p>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">Audit log</h1>
+        <p class="mt-2 max-w-prose text-sm text-ink-muted">
           Every action on your account: API key lifecycle, session activity, subscription changes.
           Export the full history at any time — your data, your file.
         </p>
@@ -108,12 +108,12 @@ const FILTER_OPTIONS = [
       <div class="flex shrink-0 gap-2">
         <button
           type="button"
-          class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+          class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-primary hover:bg-surface-base"
           data-export-csv>Export CSV</button
         >
         <button
           type="button"
-          class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50"
+          class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-primary hover:bg-surface-base"
           data-export-json>Export JSON</button
         >
       </div>
@@ -126,11 +126,11 @@ const FILTER_OPTIONS = [
       common case (action-only filtering) one click.
     -->
     <div class="mb-4 flex flex-wrap items-center gap-3">
-      <label class="text-sm font-medium text-slate-700" for="audit-filter">Action:</label>
+      <label class="text-sm font-medium text-ink-secondary" for="audit-filter">Action:</label>
       <select
         id="audit-filter"
         data-filter
-        class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+        class="rounded-md border border-white/10 bg-surface-raised px-3 py-1.5 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
       >
         {
           FILTER_OPTIONS.map((opt) => (
@@ -141,44 +141,44 @@ const FILTER_OPTIONS = [
       <button
         type="button"
         data-show-more-filters
-        class="text-sm text-oxblood-700 hover:underline"
+        class="text-sm text-glow-red hover:underline"
       >
         More filters ▾
       </button>
-      <span class="text-xs text-slate-500" data-count>—</span>
+      <span class="text-xs text-ink-muted" data-count>—</span>
     </div>
 
-    <details data-more-filters class="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <summary class="cursor-pointer text-sm font-medium text-slate-700">
+    <details data-more-filters class="mb-4 rounded-lg border border-white/10 bg-surface-base p-4">
+      <summary class="cursor-pointer text-sm font-medium text-ink-secondary">
         Date range · actor · target resource
       </summary>
       <div class="mt-4 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
         <div>
-          <label for="audit-from" class="block text-xs font-medium text-slate-600">From</label>
+          <label for="audit-from" class="block text-xs font-medium text-ink-secondary">From</label>
           <input
             id="audit-from"
             data-filter-from
             type="datetime-local"
-            class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+            class="mt-1 w-full rounded-md border border-white/10 px-2 py-1 text-sm"
           />
-          <p class="mt-1 text-[11px] text-slate-500">Inclusive lower bound.</p>
+          <p class="mt-1 text-[11px] text-ink-muted">Inclusive lower bound.</p>
         </div>
         <div>
-          <label for="audit-to" class="block text-xs font-medium text-slate-600">To</label>
+          <label for="audit-to" class="block text-xs font-medium text-ink-secondary">To</label>
           <input
             id="audit-to"
             data-filter-to
             type="datetime-local"
-            class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+            class="mt-1 w-full rounded-md border border-white/10 px-2 py-1 text-sm"
           />
-          <p class="mt-1 text-[11px] text-slate-500">Inclusive upper bound.</p>
+          <p class="mt-1 text-[11px] text-ink-muted">Inclusive upper bound.</p>
         </div>
         <div>
-          <label for="audit-actor" class="block text-xs font-medium text-slate-600">Actor</label>
+          <label for="audit-actor" class="block text-xs font-medium text-ink-secondary">Actor</label>
           <select
             id="audit-actor"
             data-filter-actor
-            class="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+            class="mt-1 w-full rounded-md border border-white/10 bg-surface-raised px-2 py-1 text-sm"
           >
             <option value="">Any</option>
             <option value="customer">Customer (you)</option>
@@ -187,7 +187,7 @@ const FILTER_OPTIONS = [
           </select>
         </div>
         <div>
-          <label for="audit-target" class="block text-xs font-medium text-slate-600"
+          <label for="audit-target" class="block text-xs font-medium text-ink-secondary"
             >Target resource id</label
           >
           <input
@@ -195,9 +195,9 @@ const FILTER_OPTIONS = [
             data-filter-target
             type="text"
             placeholder="e.g. profile_<id>"
-            class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm font-mono"
+            class="mt-1 w-full rounded-md border border-white/10 px-2 py-1 text-sm font-mono"
           />
-          <p class="mt-1 text-[11px] text-slate-500">Exact match.</p>
+          <p class="mt-1 text-[11px] text-ink-muted">Exact match.</p>
         </div>
       </div>
       <div class="mt-3 flex gap-2">
@@ -211,32 +211,32 @@ const FILTER_OPTIONS = [
         <button
           type="button"
           data-clear-filters
-          class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700"
+          class="rounded-md border border-white/10 bg-surface-raised px-3 py-1.5 text-xs font-medium text-ink-secondary"
         >
           Clear
         </button>
       </div>
     </details>
 
-    <div class="rounded-lg border border-slate-200 bg-white">
+    <div class="rounded-lg border border-white/10 bg-surface-raised">
       <ul class="divide-y divide-slate-100" data-list>
-        <li class="px-6 py-4 text-sm text-slate-500">Loading audit log…</li>
+        <li class="px-6 py-4 text-sm text-ink-muted">Loading audit log…</li>
       </ul>
-      <div class="hidden px-6 py-4 text-sm text-slate-500" data-empty>
+      <div class="hidden px-6 py-4 text-sm text-ink-muted" data-empty>
         No audit entries yet. Events appear here as you take actions on your account.
       </div>
       <div class="hidden border-t border-slate-100 px-6 py-3" data-load-more-row>
         <button
           type="button"
           data-load-more
-          class="text-sm font-medium text-oxblood-700 hover:text-oxblood-800 disabled:text-slate-400"
+          class="text-sm font-medium text-glow-red hover:text-oxblood-800 disabled:text-ink-muted"
         >
           Load more
         </button>
       </div>
     </div>
 
-    <p class="mt-6 text-xs text-slate-500">
+    <p class="mt-6 text-xs text-ink-muted">
       Exports cap at 10,000 rows per file. Older entries remain accessible via the read endpoint
       (<code class="font-mono">GET /v1/account/audit-log</code>) with cursor pagination. Account,
       billing, and authentication data export on request via <code class="font-mono"
@@ -332,15 +332,15 @@ const FILTER_OPTIONS = [
           '<li class="px-6 py-3">' +
           '<div class="flex items-start justify-between gap-6">' +
           '<div class="min-w-0">' +
-          '<p class="text-sm font-medium text-slate-900">' +
+          '<p class="text-sm font-medium text-ink-primary">' +
           escapeHtml(label) +
           payloadHint(entry) +
           '</p>' +
-          '<p class="mt-1 font-mono text-xs text-slate-500">' +
+          '<p class="mt-1 font-mono text-xs text-ink-muted">' +
           escapeHtml(entry.action) +
           (entry.target_resource_id ? ' · ' + escapeHtml(entry.target_resource_id) : '') +
           '</p></div>' +
-          '<span class="shrink-0 text-xs text-slate-500">' +
+          '<span class="shrink-0 text-xs text-ink-muted">' +
           escapeHtml(fmtTs(entry.timestamp)) +
           '</span></div></li>'
         );
@@ -386,7 +386,7 @@ const FILTER_OPTIONS = [
         if (!token) {
           if (list)
             list.innerHTML =
-              '<li class="px-6 py-4 text-sm text-slate-500">Sign in to view audit log.</li>';
+              '<li class="px-6 py-4 text-sm text-ink-muted">Sign in to view audit log.</li>';
           setLoadMoreVisible(false);
           return Promise.resolve();
         }

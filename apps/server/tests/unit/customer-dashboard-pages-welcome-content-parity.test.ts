@@ -46,7 +46,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
 
   it("Trial pack framing pinned: '$2.99 · one-time' price + '16 hours of session time. No subscription, no auto-renewal. 14-day window. Best path to evaluate before committing — most first-time customers start here.' — pinned so the trial-pack positioning as the recommended first step survives + the price ($2.99) + duration (16h) + window (14d) stay accurate", () => {
     expect(body).toMatch(
-      /<span class="font-mono text-sm text-slate-700">\$2\.99 · one-time<\/span>/,
+      /<span class="font-mono text-sm text-ink-secondary">\$2\.99 · one-time<\/span>/,
     );
     expect(body).toMatch(
       /16 hours of session time\. No subscription, no auto-renewal\.\s*\n?\s*14-day window\. Best path to evaluate before committing — most\s*\n?\s*first-time customers start here\./,
@@ -58,7 +58,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
 
   it("Monthly-tiers framing pinned: '$79–$1,499 / mo' range + 'Skip the trial and go straight to a monthly subscription — Solo Manual for human-driven sessions through to API Scale for high-volume automation. Cancel anytime.' — pinned so the price range + tier-purpose vocabulary (manual = human, API = automation) survives", () => {
     expect(body).toMatch(
-      /<span class="font-mono text-sm text-slate-500">\$79–\$1,499 \/ mo<\/span>/,
+      /<span class="font-mono text-sm text-ink-muted">\$79–\$1,499 \/ mo<\/span>/,
     );
     expect(body).toMatch(
       /Skip the trial and go straight to a monthly subscription — Solo\s*\n?\s*Manual for human-driven sessions through to API Scale for\s*\n?\s*high-volume automation\. Cancel anytime\./,
@@ -89,7 +89,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
 
   it("Skip-to-dashboard escape: 'Already know what you want? Skip to dashboard' link to '/' — pinned so customers who already know they want to configure manually (not via tier-select wizard) have a path out (drift to dropping this would force every customer through the tier-select funnel)", () => {
     expect(body).toMatch(
-      /Already know what you want\? <a href="\/" class="text-oxblood-700 underline">\s*\n?\s*Skip to dashboard\s*\n?\s*<\/a>/,
+      /Already know what you want\? <a href="\/" class="text-glow-red underline">\s*\n?\s*Skip to dashboard\s*\n?\s*<\/a>/,
     );
   });
 

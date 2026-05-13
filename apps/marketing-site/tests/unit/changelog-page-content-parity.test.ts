@@ -124,7 +124,7 @@ describe('W370.A marketing-site /changelog page content parity', () => {
   });
 
   it('time tag uses ISO date in datetime attribute (machine-readable changelog)', () => {
-    expect(body).toMatch(/<time class="font-mono text-xs text-slate-500" datetime=\{entry\.date\}/);
+    expect(body).toMatch(/<time class="font-mono text-xs text-ink-muted" datetime=\{entry\.date\}/);
   });
 
   it('cross-link to /docs resolves', () => {

@@ -58,13 +58,13 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
     expect(body).toMatch(/Three flows, four languages/);
     // 3 flow headings.
     expect(body).toMatch(
-      /<h3 class="text-xl font-semibold text-slate-900">1\. Create a session<\/h3>/,
+      /<h3 class="text-xl font-semibold text-ink-primary">1\. Create a session<\/h3>/,
     );
     expect(body).toMatch(
-      /<h3 class="text-xl font-semibold text-slate-900">2\. Drive the session<\/h3>/,
+      /<h3 class="text-xl font-semibold text-ink-primary">2\. Drive the session<\/h3>/,
     );
     expect(body).toMatch(
-      /<h3 class="text-xl font-semibold text-slate-900">3\. Capture a screenshot<\/h3>/,
+      /<h3 class="text-xl font-semibold text-ink-primary">3\. Capture a screenshot<\/h3>/,
     );
     // Each language appears at least 3× (once per flow).
     for (const langTag of ['# cURL', '// TypeScript', '# Python', '// Go']) {
@@ -145,7 +145,7 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
       // Use the surface-map heading class to anchor.
       expect(body, `surface section missing: ${section}`).toMatch(
         new RegExp(
-          `<h3 class="font-mono text-sm uppercase tracking-widest text-oxblood-700">\\s*${section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*<\\/h3>`,
+          `<h3 class="font-mono text-sm uppercase tracking-widest text-glow-red">\\s*${section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*<\\/h3>`,
         ),
       );
     }

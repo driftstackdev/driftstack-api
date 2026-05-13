@@ -72,10 +72,10 @@ describe('W365.A marketing-site /security page parity', () => {
   });
 
   it('"What we don\'t claim" honesty block pinned (no SOC 2 / no ISO 27001 / EU-default)', () => {
-    expect(body).toMatch(/<strong class="block text-slate-900">No SOC 2\.<\/strong>/);
-    expect(body).toMatch(/<strong class="block text-slate-900">No ISO 27001\.<\/strong>/);
+    expect(body).toMatch(/<strong class="block text-ink-primary">No SOC 2\.<\/strong>/);
+    expect(body).toMatch(/<strong class="block text-ink-primary">No ISO 27001\.<\/strong>/);
     expect(body).toMatch(
-      /<strong class="block text-slate-900">Data residency is EU-default\.<\/strong>/,
+      /<strong class="block text-ink-primary">Data residency is EU-default\.<\/strong>/,
     );
     // EU-only stack disclosed.
     expect(body).toMatch(/Hetzner FSN\s*\+ Neon EU \+ Upstash EU \+ Cloudflare R2 EU/);
@@ -103,7 +103,7 @@ describe('W365.A marketing-site /security page parity', () => {
   });
 
   it('threat-model structure: in-scope (5) + explicitly-out (4) buckets pinned', () => {
-    expect(body).toMatch(/<h3 class="text-lg font-medium text-slate-900">In scope<\/h3>/);
+    expect(body).toMatch(/<h3 class="text-lg font-medium text-ink-primary">In scope<\/h3>/);
     expect(body).toMatch(/Explicitly out of scope/);
     // In-scope categories.
     expect(body).toMatch(/<strong>API key compromise<\/strong>/);

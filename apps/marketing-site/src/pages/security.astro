@@ -9,11 +9,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   <!-- Header -->
   <section class="bg-gradient-to-b from-white to-slate-50">
     <div class="mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Security</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Security</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl">
         We don't see your traffic. We can't read your keys.
       </h1>
-      <p class="mt-6 max-w-prose text-lg text-slate-600">
+      <p class="mt-6 max-w-prose text-lg text-ink-secondary">
         Driftstack's security posture starts from a single principle:
         Driftstack should never have a copy of anything that would let us
         impersonate you, intercept your traffic, or replay your sessions.
@@ -23,16 +23,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   </section>
 
   <!-- Five-pillar layout -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-20">
       <div class="grid gap-12 md:grid-cols-2">
         <!-- Pillar 1 -->
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             01 · Transport
           </p>
-          <h2 class="mt-3 text-2xl font-semibold text-slate-900">TLS 1.2 + 1.3, HSTS preload-eligible.</h2>
-          <p class="mt-3 text-slate-600">
+          <h2 class="mt-3 text-2xl font-semibold text-ink-primary">TLS 1.2 + 1.3, HSTS preload-eligible.</h2>
+          <p class="mt-3 text-ink-secondary">
             All inbound traffic is HTTPS — Cloudflare terminates TLS
             at the edge with full (strict) origin validation against
             our Hetzner host. The API server speaks TLS 1.2 / 1.3
@@ -45,33 +45,33 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         <!-- Pillar 2 -->
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             02 · Egress (roadmap)
           </p>
-          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+          <h2 class="mt-3 text-2xl font-semibold text-ink-primary">
             Customer-configurable egress.
           </h2>
-          <p class="mt-3 text-slate-600">
+          <p class="mt-3 text-ink-secondary">
             Customer-configurable egress (SOCKS5 / WireGuard /
             OpenVPN) is on the roadmap — no server-side
             implementation ships today. Until then session traffic
             exits via Driftstack-managed infrastructure. We still
             never store destination response bodies; the control
             plane only persists session metadata. See
-            <a href="/trust/security-overview" class="text-oxblood-700 underline">/trust/security-overview</a>
+            <a href="/trust/security-overview" class="text-glow-red underline">/trust/security-overview</a>
             for the live posture.
           </p>
         </div>
 
         <!-- Pillar 3 -->
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             03 · API keys
           </p>
-          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+          <h2 class="mt-3 text-2xl font-semibold text-ink-primary">
             scrypt at rest, never in plaintext.
           </h2>
-          <p class="mt-3 text-slate-600">
+          <p class="mt-3 text-ink-secondary">
             API keys are hashed with scrypt (logN=15) before they touch
             the database. Plaintext is returned exactly once, on creation;
             after that there is no path — admin, support, ops — to recover
@@ -83,13 +83,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         <!-- Pillar 4 -->
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             04 · Webhooks
           </p>
-          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+          <h2 class="mt-3 text-2xl font-semibold text-ink-primary">
             HMAC-SHA256, replay-windowed.
           </h2>
-          <p class="mt-3 text-slate-600">
+          <p class="mt-3 text-ink-secondary">
             Outbound webhook deliveries carry a Driftstack-Signature header
             in the form <code class="font-mono">t=&lt;timestamp&gt;,v1=&lt;hex&gt;</code>.
             Customers verify with the SDK's
@@ -102,13 +102,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         <!-- Pillar 5 -->
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             05 · Team RBAC
           </p>
-          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+          <h2 class="mt-3 text-2xl font-semibold text-ink-primary">
             Admin / member roles, scope-gated writes.
           </h2>
-          <p class="mt-3 text-slate-600">
+          <p class="mt-3 text-ink-secondary">
             Team members read the owner's resources but only admin-role
             members can write. Sessions, profiles, webhooks, API keys,
             email preferences — every write route enforces the role
@@ -121,13 +121,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         <!-- Pillar 6 — full width -->
         <div class="md:col-span-2">
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             06 · No-customer-data-access posture
           </p>
-          <h2 class="mt-3 text-2xl font-semibold text-slate-900">
+          <h2 class="mt-3 text-2xl font-semibold text-ink-primary">
             Driftstack staff cannot read your sessions.
           </h2>
-          <p class="mt-3 max-w-prose text-slate-600">
+          <p class="mt-3 max-w-prose text-ink-secondary">
             Driftstack's control plane stores license metadata, session
             metadata (id, lifecycle status, timestamps), and aggregate
             usage counters. It does not store the session content itself.
@@ -142,35 +142,35 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   </section>
 
   <!-- What we don't claim -->
-  <section class="border-t border-slate-200 bg-slate-50">
+  <section class="border-t border-white/10 bg-surface-base">
     <div class="mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
         What we don't claim
       </p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
         Honest scope.
       </h2>
       <ul class="mt-8 grid gap-4 md:grid-cols-2">
-        <li class="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-700">
-          <strong class="block text-slate-900">No SOC 2.</strong>
+        <li class="rounded-lg border border-white/10 bg-surface-raised p-5 text-sm text-ink-secondary">
+          <strong class="block text-ink-primary">No SOC 2.</strong>
           We're a small team and SOC 2 is a future-quarter goal once
           revenue justifies the audit cost. We say so plainly rather
           than implying compliance via vague "enterprise-grade"
           language.
         </li>
-        <li class="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-700">
-          <strong class="block text-slate-900">No ISO 27001.</strong>
+        <li class="rounded-lg border border-white/10 bg-surface-raised p-5 text-sm text-ink-secondary">
+          <strong class="block text-ink-primary">No ISO 27001.</strong>
           Same answer. The framework's posture matters; the certificate
           itself follows when the audit fits the budget.
         </li>
-        <li class="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-700">
-          <strong class="block text-slate-900">Sub-processors are listed.</strong>
+        <li class="rounded-lg border border-white/10 bg-surface-raised p-5 text-sm text-ink-secondary">
+          <strong class="block text-ink-primary">Sub-processors are listed.</strong>
           Hetzner, Neon, Upstash, Cloudflare, Postmark, Sentry, Stripe,
           Anthropic, Moneybird, MacStadium. Full list with purpose +
-          jurisdiction at <a href="/trust/sub-processors" class="text-oxblood-700 underline">/trust/sub-processors</a>.
+          jurisdiction at <a href="/trust/sub-processors" class="text-glow-red underline">/trust/sub-processors</a>.
         </li>
-        <li class="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-700">
-          <strong class="block text-slate-900">Data residency is EU-default.</strong>
+        <li class="rounded-lg border border-white/10 bg-surface-raised p-5 text-sm text-ink-secondary">
+          <strong class="block text-ink-primary">Data residency is EU-default.</strong>
           Compute, database, object storage all in the EU (Hetzner FSN
           + Neon EU + Upstash EU + Cloudflare R2 EU). Session execution
           may run elsewhere under SCCs + EU-US DPF. Detail in the same
@@ -181,29 +181,29 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   </section>
 
   <!-- V-503 — defense in depth -->
-  <section class="border-t border-slate-200 bg-slate-50">
+  <section class="border-t border-white/10 bg-surface-base">
     <div class="mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
         Defense in depth
       </p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
         Layered controls. No single line of defense.
       </h2>
-      <p class="mt-3 max-w-prose text-slate-600">
+      <p class="mt-3 max-w-prose text-ink-secondary">
         Each layer below is independently effective; an attacker would have
         to bypass every one to reach customer keys or session content. We
         assume any single layer can fail and design the next layer to
         survive it.
       </p>
       <div class="mt-10 grid gap-6 md:grid-cols-2">
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             Edge
           </p>
-          <h3 class="mt-2 text-lg font-medium text-slate-900">
+          <h3 class="mt-2 text-lg font-medium text-ink-primary">
             Cloudflare TLS 1.3 + WAF
           </h3>
-          <p class="mt-3 text-sm text-slate-600">
+          <p class="mt-3 text-sm text-ink-secondary">
             All inbound traffic terminates at Cloudflare's edge. Full
             (strict) SSL/TLS validation against Let's Encrypt origin
             certificates ensures the request actually reached our origin
@@ -211,14 +211,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             automated abuse before it reaches the origin.
           </p>
         </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             Origin
           </p>
-          <h3 class="mt-2 text-lg font-medium text-slate-900">
+          <h3 class="mt-2 text-lg font-medium text-ink-primary">
             nginx hardening + UFW + fail2ban
           </h3>
-          <p class="mt-3 text-sm text-slate-600">
+          <p class="mt-3 text-sm text-ink-secondary">
             Hetzner origin host runs nginx with TLS 1.2 + 1.3 only,
             Mozilla intermediate cipher suite, HSTS preload-eligible. UFW
             firewall locks the host to ports 22 (SSH), 80 (redirect to
@@ -226,14 +226,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             kernel level.
           </p>
         </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             Application
           </p>
-          <h3 class="mt-2 text-lg font-medium text-slate-900">
+          <h3 class="mt-2 text-lg font-medium text-ink-primary">
             Auth gate + scope check + rate limit
           </h3>
-          <p class="mt-3 text-sm text-slate-600">
+          <p class="mt-3 text-sm text-ink-secondary">
             Every authenticated route runs through three middleware
             layers: auth (validates the API key + loads account context),
             scope check (enforces granular per-resource permissions like
@@ -242,14 +242,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             short-circuit the request before it touches a service.
           </p>
         </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             Data
           </p>
-          <h3 class="mt-2 text-lg font-medium text-slate-900">
+          <h3 class="mt-2 text-lg font-medium text-ink-primary">
             Encryption at rest + isolation
           </h3>
-          <p class="mt-3 text-sm text-slate-600">
+          <p class="mt-3 text-sm text-ink-secondary">
             API keys are scrypt-hashed with per-key salts; recovery is
             impossible by design. Account passwords use the same KDF.
             MFA TOTP secrets live in AES-256-GCM ciphertext with a
@@ -257,14 +257,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             provide encryption at rest by default at the storage layer.
           </p>
         </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             Audit
           </p>
-          <h3 class="mt-2 text-lg font-medium text-slate-900">
+          <h3 class="mt-2 text-lg font-medium text-ink-primary">
             Append-only customer audit log
           </h3>
-          <p class="mt-3 text-sm text-slate-600">
+          <p class="mt-3 text-sm text-ink-secondary">
             Every customer-visible event lands in an append-only audit
             log: API key lifecycle, MFA enrollment, profile changes,
             webhook secret rotations, login + password changes. Customers
@@ -273,14 +273,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             (GDPR Article 20).
           </p>
         </div>
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             Observability
           </p>
-          <h3 class="mt-2 text-lg font-medium text-slate-900">
+          <h3 class="mt-2 text-lg font-medium text-ink-primary">
             Sentry + structured logs
           </h3>
-          <p class="mt-3 text-sm text-slate-600">
+          <p class="mt-3 text-sm text-ink-secondary">
             Server errors land in Sentry (EU region) with PII scrubbed.
             Request logs use Pino structured JSON; slow-query log fires
             on Postgres queries past a configurable threshold. No customer
@@ -293,20 +293,20 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   </section>
 
   <!-- V-503 — threat model summary -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
         Threat model
       </p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
         What we defend against. What we don't.
       </h2>
       <div class="mt-8 grid gap-12 md:grid-cols-2">
         <div>
-          <h3 class="text-lg font-medium text-slate-900">In scope</h3>
-          <ul class="mt-4 space-y-3 text-sm text-slate-600">
+          <h3 class="text-lg font-medium text-ink-primary">In scope</h3>
+          <ul class="mt-4 space-y-3 text-sm text-ink-secondary">
             <li class="flex gap-3">
-              <span class="text-oxblood-700">•</span>
+              <span class="text-glow-red">•</span>
               <span>
                 <strong>API key compromise</strong> via leaked secret. Mitigation:
                 scrypt-hashed at rest; rotation flow with 24-hour grace;
@@ -314,7 +314,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               </span>
             </li>
             <li class="flex gap-3">
-              <span class="text-oxblood-700">•</span>
+              <span class="text-glow-red">•</span>
               <span>
                 <strong>Webhook signature forgery</strong>. Mitigation:
                 HMAC-SHA256 signed deliveries with 5-minute timestamp
@@ -322,7 +322,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               </span>
             </li>
             <li class="flex gap-3">
-              <span class="text-oxblood-700">•</span>
+              <span class="text-glow-red">•</span>
               <span>
                 <strong>Session hijacking</strong> via cross-site or
                 cross-account access. Mitigation: every route account-
@@ -331,7 +331,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               </span>
             </li>
             <li class="flex gap-3">
-              <span class="text-oxblood-700">•</span>
+              <span class="text-glow-red">•</span>
               <span>
                 <strong>Brute-force auth attempts</strong>. Mitigation:
                 per-IP rate limits on auth endpoints; fail2ban at the
@@ -339,7 +339,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               </span>
             </li>
             <li class="flex gap-3">
-              <span class="text-oxblood-700">•</span>
+              <span class="text-glow-red">•</span>
               <span>
                 <strong>Stolen browser session token</strong> (dashboard).
                 Mitigation: MFA on sensitive ops; active-sign-ins page
@@ -350,10 +350,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </ul>
         </div>
         <div>
-          <h3 class="text-lg font-medium text-slate-900">Explicitly out of scope</h3>
-          <ul class="mt-4 space-y-3 text-sm text-slate-600">
+          <h3 class="text-lg font-medium text-ink-primary">Explicitly out of scope</h3>
+          <ul class="mt-4 space-y-3 text-sm text-ink-secondary">
             <li class="flex gap-3">
-              <span class="text-amber-700">→</span>
+              <span class="text-glow-red">→</span>
               <span>
                 <strong>Customer's destination response content.</strong>
                 The control plane stores session metadata only — never
@@ -362,7 +362,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               </span>
             </li>
             <li class="flex gap-3">
-              <span class="text-amber-700">→</span>
+              <span class="text-glow-red">→</span>
               <span>
                 <strong>Detection-vendor cat-and-mouse evolution.</strong>
                 Our anti-detection posture is engine-level (real iPhone
@@ -373,7 +373,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               </span>
             </li>
             <li class="flex gap-3">
-              <span class="text-amber-700">→</span>
+              <span class="text-glow-red">→</span>
               <span>
                 <strong>Customer's keyboard / network at the endpoint.</strong>
                 We can't protect a leaked API key on a customer
@@ -382,7 +382,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               </span>
             </li>
             <li class="flex gap-3">
-              <span class="text-amber-700">→</span>
+              <span class="text-glow-red">→</span>
               <span>
                 <strong>Nation-state actors with sub-processor access.</strong>
                 We assume the EU sub-processors (Hetzner, Neon, Upstash,
@@ -398,18 +398,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   </section>
 
   <!-- V-503 — supply chain -->
-  <section class="border-t border-slate-200 bg-slate-50">
+  <section class="border-t border-white/10 bg-surface-base">
     <div class="mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
         Supply chain
       </p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
         Locked stack. Pinned versions. Audited dependencies.
       </h2>
       <div class="mt-8 grid gap-8 md:grid-cols-3">
         <div>
-          <h3 class="text-base font-medium text-slate-900">Locked stack</h3>
-          <p class="mt-3 text-sm text-slate-600">
+          <h3 class="text-base font-medium text-ink-primary">Locked stack</h3>
+          <p class="mt-3 text-sm text-ink-secondary">
             Node 22 LTS, TypeScript strict, Fastify, Drizzle, Postgres 17,
             Redis 7. The stack rarely changes; every dependency-bump PR
             goes through `npm audit` review and a green test gate before
@@ -417,16 +417,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </p>
         </div>
         <div>
-          <h3 class="text-base font-medium text-slate-900">Dependabot + Renovate</h3>
-          <p class="mt-3 text-sm text-slate-600">
+          <h3 class="text-base font-medium text-ink-primary">Dependabot + Renovate</h3>
+          <p class="mt-3 text-sm text-ink-secondary">
             Automated PRs for security advisories on direct + transitive
             deps. Auto-merge gated on passing CI; high-severity advisories
             page on-call within 24 hours of disclosure.
           </p>
         </div>
         <div>
-          <h3 class="text-base font-medium text-slate-900">SBOM + provenance</h3>
-          <p class="mt-3 text-sm text-slate-600">
+          <h3 class="text-base font-medium text-ink-primary">SBOM + provenance</h3>
+          <p class="mt-3 text-sm text-ink-secondary">
             Each release builds a CycloneDX SBOM alongside the artifact.
             Container images are signed; the deploy pipeline verifies the
             signature before pulling into production.
@@ -437,14 +437,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   </section>
 
   <!-- CTA -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 class="text-2xl font-semibold text-slate-900">
+          <h2 class="text-2xl font-semibold text-ink-primary">
             Specific question your security team is asking?
           </h2>
-          <p class="mt-3 max-w-prose text-slate-600">
+          <p class="mt-3 max-w-prose text-ink-secondary">
             Email security@driftstack.dev with the question. We answer
             everything in writing — no NDAs to read a one-paragraph
             answer about scrypt parameters or TLS cipher suites.

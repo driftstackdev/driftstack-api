@@ -74,7 +74,7 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
 
   it("Trial-pack hero framing pinned: '16 hours of iPhone Safari sessions. 1 concurrent. 14-day window. Once per account.' — pinned so the trial-pack spec (16h / 1 concurrent / 14d window / once-per-account uniqueness) survives as the canonical customer-facing description", () => {
     expect(body).toMatch(
-      /<h2 class="text-xl font-semibold text-slate-900">Trial pack — \$2\.99<\/h2>/,
+      /<h2 class="text-xl font-semibold text-ink-primary">Trial pack — \$2\.99<\/h2>/,
     );
     expect(body).toMatch(
       /16 hours of iPhone Safari sessions\. 1 concurrent\. 14-day window\.\s*\n?\s*Once per account\./,
@@ -115,7 +115,7 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
 
   it("Enterprise framing: 'Enterprise tier (~$4,000/mo, custom) — contact sales' with mailto:sales@driftstack.dev — pinned so the enterprise tier surfaces as a sales-only path (no self-serve checkout for ~$4k/mo) and the contact email stays canonical", () => {
     expect(body).toMatch(
-      /Enterprise tier \(~\$4,000\/mo, custom\) — <a href="mailto:sales@driftstack\.dev" class="text-oxblood-700 underline">contact sales<\/a>\./,
+      /Enterprise tier \(~\$4,000\/mo, custom\) — <a href="mailto:sales@driftstack\.dev" class="text-glow-red underline">contact sales<\/a>\./,
     );
   });
 

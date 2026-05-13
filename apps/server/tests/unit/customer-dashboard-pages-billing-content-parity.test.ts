@@ -45,7 +45,7 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
 
   it('STATUS_BADGE_CLASS 9-state catalog: active / trialing / past_due / canceled / unpaid / incomplete / incomplete_expired / paused / no_subscription with the right colors (emerald/amber/red/slate per severity) — pinned so the Stripe lifecycle vocabulary stays complete (drift to dropping incomplete_expired would render Stripe-state-incomplete-then-expired with no styling)', () => {
     expect(body).toMatch(
-      /const STATUS_BADGE_CLASS: Record<string, string> = \{\s*\n?\s*active: 'bg-emerald-50 text-emerald-700',\s*\n?\s*trialing: 'bg-amber-50 text-amber-700',\s*\n?\s*past_due: 'bg-red-50 text-red-700',\s*\n?\s*canceled: 'bg-slate-100 text-slate-600',\s*\n?\s*unpaid: 'bg-red-50 text-red-700',\s*\n?\s*incomplete: 'bg-amber-50 text-amber-700',\s*\n?\s*incomplete_expired: 'bg-slate-100 text-slate-600',\s*\n?\s*paused: 'bg-slate-100 text-slate-600',\s*\n?\s*no_subscription: 'bg-slate-100 text-slate-600',\s*\n?\s*\};/,
+      /const STATUS_BADGE_CLASS: Record<string, string> = \{\s*\n?\s*active: 'bg-emerald-400\/10 text-emerald-300',\s*\n?\s*trialing: 'bg-glow-red\/10 text-glow-red',\s*\n?\s*past_due: 'bg-red-50 text-red-700',\s*\n?\s*canceled: 'bg-surface-raised text-ink-secondary',\s*\n?\s*unpaid: 'bg-red-50 text-red-700',\s*\n?\s*incomplete: 'bg-glow-red\/10 text-glow-red',\s*\n?\s*incomplete_expired: 'bg-surface-raised text-ink-secondary',\s*\n?\s*paused: 'bg-surface-raised text-ink-secondary',\s*\n?\s*no_subscription: 'bg-surface-raised text-ink-secondary',\s*\n?\s*\};/,
     );
   });
 

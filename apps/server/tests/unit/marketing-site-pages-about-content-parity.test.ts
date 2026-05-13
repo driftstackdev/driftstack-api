@@ -110,11 +110,11 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
   });
 
   it("Company facts 6-entry dl: Entity Dutch BV + Headquarters Netherlands + Team Solo founder + contractors + Funding Bootstrapped — no VC + Sub-processors link + Contact hello@driftstack.dev — pinned so the canonical company facts stay consistent across the about page (drift to dropping any would create a 'what kind of company is this?' gap; drift to changing 'no VC' would change the company-vs-VC positioning)", () => {
-    expect(body).toMatch(/<dd class="text-sm text-slate-900">Dutch BV<\/dd>/);
-    expect(body).toMatch(/<dd class="text-sm text-slate-900">Netherlands<\/dd>/);
-    expect(body).toMatch(/<dd class="text-sm text-slate-900">Solo founder \+ contractors<\/dd>/);
-    expect(body).toMatch(/<dd class="text-sm text-slate-900">Bootstrapped — no VC<\/dd>/);
-    expect(body).toMatch(/<dd class="text-sm text-slate-900">hello@driftstack\.dev<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Dutch BV<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Netherlands<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Solo founder \+ contractors<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Bootstrapped — no VC<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-ink-primary">hello@driftstack\.dev<\/dd>/);
   });
 
   it("Trial-pack bottom CTA: 'Want to try it?' + '$2.99 buys 16 hours of iPhone Safari sessions to evaluate. Used once per account, 14-day window, no card-charging surprises.' + 'Get started — $2.99' button → /pricing#trial-pack — pinned so the trial-pack value-prop (16h / once-per-account / 14d) + the no-card-surprises reassurance + the CTA destination all survive (drift to dropping 'no card-charging surprises' would lose the 'this is not a subscription trap' framing)", () => {

@@ -31,10 +31,10 @@ function fmtDuration(ms: number | null): string {
 }
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
-  creating: 'bg-amber-50 text-amber-700',
-  ready: 'bg-emerald-50 text-emerald-700',
+  creating: 'bg-glow-red/10 text-glow-red',
+  ready: 'bg-emerald-400/10 text-emerald-300',
   busy: 'bg-blue-50 text-blue-700',
-  destroyed: 'bg-slate-100 text-slate-600',
+  destroyed: 'bg-surface-raised text-ink-secondary',
   errored: 'bg-red-50 text-red-700',
 };
 
@@ -59,18 +59,18 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
     -->
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
       role="status"
     ></div>
 
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-slate-500" data-field="header-summary">
+        <p class="text-sm text-ink-muted" data-field="header-summary">
           <span data-field="header-now">{MOCK_USAGE_SUMMARY.concurrent_now}</span> active · <span
             data-field="header-cap">{MOCK_USAGE_SUMMARY.concurrent_limit}</span> concurrent cap
         </p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Sessions</h1>
-        <p class="mt-2 max-w-prose text-sm text-slate-500">
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">Sessions</h1>
+        <p class="mt-2 max-w-prose text-sm text-ink-muted">
           Live sessions you're driving plus recent destroyed/errored ones.
           Sessions are the only billing meter — you pay for concurrent caps,
           not duration or per-call.
@@ -95,17 +95,17 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
 
     <!-- Concurrent meter -->
     <div class="mb-10 dashboard-card">
-      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+      <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">
         Concurrent capacity
       </p>
       <div class="mt-4 flex items-center gap-4">
-        <p class="font-mono text-3xl font-semibold text-slate-900">
+        <p class="font-mono text-3xl font-semibold text-ink-primary">
           <span data-field="meter-now">{MOCK_USAGE_SUMMARY.concurrent_now}</span>
-          <span class="text-base font-normal text-slate-500">
+          <span class="text-base font-normal text-ink-muted">
             / <span data-field="meter-cap">{MOCK_USAGE_SUMMARY.concurrent_limit}</span>
           </span>
         </p>
-        <div class="h-2 flex-1 overflow-hidden rounded bg-slate-100">
+        <div class="h-2 flex-1 overflow-hidden rounded bg-surface-raised">
           <div
             data-field="meter-bar"
             class="h-full bg-oxblood-700"
@@ -113,7 +113,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
           />
         </div>
       </div>
-      <p class="mt-3 text-xs text-slate-500">
+      <p class="mt-3 text-xs text-ink-muted">
         Once this hits your tier cap, new session creates return 429 with a
         retry-after hint. Upgrade your tier to lift the cap.
       </p>
@@ -121,21 +121,21 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
 
     <!-- Active sessions -->
     <section>
-      <h2 class="mb-4 text-lg font-semibold text-slate-900">
+      <h2 class="mb-4 text-lg font-semibold text-ink-primary">
         Active (<span data-count="active">{activeSessions.length.toString()}</span>)
       </h2>
-      <p data-empty="active" class:list={['text-sm text-slate-500', activeSessions.length === 0 ? '' : 'hidden']}>
+      <p data-empty="active" class:list={['text-sm text-ink-muted', activeSessions.length === 0 ? '' : 'hidden']}>
         No sessions running.
       </p>
       <ul
         data-list="active"
-        class:list={['divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white', activeSessions.length === 0 ? 'hidden' : '']}
+        class:list={['divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised', activeSessions.length === 0 ? 'hidden' : '']}
       >
         {activeSessions.map((session) => (
           <li class="flex items-start justify-between gap-6 px-6 py-4">
             <div class="min-w-0">
               <div class="flex items-center gap-3">
-                <p class="font-mono text-sm font-medium text-slate-900">{session.id}</p>
+                <p class="font-mono text-sm font-medium text-ink-primary">{session.id}</p>
                 <span
                   class:list={[
                     'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
@@ -145,7 +145,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
                   {session.status}
                 </span>
               </div>
-              <p class="mt-1 text-xs text-slate-500">
+              <p class="mt-1 text-xs text-ink-muted">
                 Archetype <code class="font-mono">{session.archetype}</code> · started{' '}
                 {fmtIso(session.created_at)}
                 {session.profile_id !== null && (
@@ -157,7 +157,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
               </p>
             </div>
             <div class="flex shrink-0 flex-col items-end gap-2">
-              <a href={`#detail-${session.id}`} class="text-sm text-oxblood-700 hover:underline">
+              <a href={`#detail-${session.id}`} class="text-sm text-glow-red hover:underline">
                 Open
               </a>
               <a href={`#destroy-${session.id}`} class="text-sm text-red-700 hover:underline">
@@ -171,21 +171,21 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
 
     <!-- Recent closed -->
     <section class="mt-12">
-      <h2 class="mb-4 text-lg font-semibold text-slate-900">
+      <h2 class="mb-4 text-lg font-semibold text-ink-primary">
         Recent (<span data-count="recent">{recentClosedSessions.length.toString()}</span>)
       </h2>
-      <p data-empty="recent" class:list={['text-sm text-slate-500', recentClosedSessions.length === 0 ? '' : 'hidden']}>
+      <p data-empty="recent" class:list={['text-sm text-ink-muted', recentClosedSessions.length === 0 ? '' : 'hidden']}>
         No recent sessions.
       </p>
       <ul
         data-list="recent"
-        class:list={['divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white', recentClosedSessions.length === 0 ? 'hidden' : '']}
+        class:list={['divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised', recentClosedSessions.length === 0 ? 'hidden' : '']}
       >
         {recentClosedSessions.map((session) => (
           <li class="flex items-start justify-between gap-6 px-6 py-4">
             <div class="min-w-0">
               <div class="flex items-center gap-3">
-                <p class="font-mono text-sm text-slate-700">{session.id}</p>
+                <p class="font-mono text-sm text-ink-secondary">{session.id}</p>
                 <span
                   class:list={[
                     'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
@@ -195,12 +195,12 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
                   {session.status}
                 </span>
               </div>
-              <p class="mt-1 text-xs text-slate-500">
+              <p class="mt-1 text-xs text-ink-muted">
                 Ran {fmtDuration(session.duration_ms)} · destroyed{' '}
                 {fmtIso(session.destroyed_at)}
               </p>
             </div>
-            <a href={`#replay-${session.id}`} class="text-sm text-oxblood-700 hover:underline">
+            <a href={`#replay-${session.id}`} class="text-sm text-glow-red hover:underline">
               View recording
             </a>
           </li>
@@ -208,7 +208,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
       </ul>
     </section>
 
-    <p class="mt-8 text-xs text-slate-500">
+    <p class="mt-8 text-xs text-ink-muted">
       Recordings retained 90 days hot, archived to R2 after that. Admin-only
       access initially per ADR-006; customer-facing recording UI lands when
       the V-040 R2 mirror ships.
@@ -235,10 +235,10 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
       }
 
       const STATUS_BADGE_CLASS = {
-        creating: 'bg-amber-50 text-amber-700',
-        ready: 'bg-emerald-50 text-emerald-700',
+        creating: 'bg-glow-red/10 text-glow-red',
+        ready: 'bg-emerald-400/10 text-emerald-300',
         busy: 'bg-blue-50 text-blue-700',
-        destroyed: 'bg-slate-100 text-slate-600',
+        destroyed: 'bg-surface-raised text-ink-secondary',
         errored: 'bg-red-50 text-red-700',
       };
 
@@ -279,7 +279,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
           '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
           '<div class="flex items-center gap-3">' +
-          '<p class="font-mono text-sm font-medium text-slate-900">' +
+          '<p class="font-mono text-sm font-medium text-ink-primary">' +
           escapeHtml(s.id) +
           '</p>' +
           '<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
@@ -288,7 +288,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
           escapeHtml(s.status) +
           '</span>' +
           '</div>' +
-          '<p class="mt-1 text-xs text-slate-500">Archetype <code class="font-mono">' +
+          '<p class="mt-1 text-xs text-ink-muted">Archetype <code class="font-mono">' +
           escapeHtml(s.archetype) +
           '</code> · started ' +
           escapeHtml(fmtIso(s.created_at)) +
@@ -297,7 +297,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
           '<div class="flex shrink-0 flex-col items-end gap-2">' +
           '<a href="#detail-' +
           escapeHtml(s.id) +
-          '" class="text-sm text-oxblood-700 hover:underline">Open</a>' +
+          '" class="text-sm text-glow-red hover:underline">Open</a>' +
           '<a href="#destroy-' +
           escapeHtml(s.id) +
           '" class="text-sm text-red-700 hover:underline">Destroy</a>' +
@@ -314,7 +314,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
           '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
           '<div class="flex items-center gap-3">' +
-          '<p class="font-mono text-sm text-slate-700">' +
+          '<p class="font-mono text-sm text-ink-secondary">' +
           escapeHtml(s.id) +
           '</p>' +
           '<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
@@ -323,14 +323,14 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
           escapeHtml(s.status) +
           '</span>' +
           '</div>' +
-          '<p class="mt-1 text-xs text-slate-500">Ran ' +
+          '<p class="mt-1 text-xs text-ink-muted">Ran ' +
           escapeHtml(fmtDuration(durationMs)) +
           ' · destroyed ' +
           escapeHtml(fmtIso(s.destroyed_at)) +
           '</p></div>' +
           '<a href="#replay-' +
           escapeHtml(s.id) +
-          '" class="text-sm text-oxblood-700 hover:underline">View recording</a>' +
+          '" class="text-sm text-glow-red hover:underline">View recording</a>' +
           '</li>'
         );
       }

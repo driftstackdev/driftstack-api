@@ -19,16 +19,16 @@ const apiBaseUrl = resolveApiBaseUrl();
   <div class="mx-auto max-w-4xl px-6 py-10" data-page="team">
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
       role="status"
     >
     </div>
 
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-slate-500">Account-scoped team</p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Team</h1>
-        <p class="mt-2 max-w-prose text-sm text-slate-500">
+        <p class="text-sm text-ink-muted">Account-scoped team</p>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">Team</h1>
+        <p class="mt-2 max-w-prose text-sm text-ink-muted">
           Members with access to this Driftstack account. Each member uses their own login + their
           own dashboard sessions; API keys remain account-scoped (shared) and admin-gated.
         </p>
@@ -39,27 +39,27 @@ const apiBaseUrl = resolveApiBaseUrl();
     <!-- Invite form (hidden by default) -->
     <div
       data-invite-form-wrap
-      class="mb-8 hidden rounded-lg border border-slate-200 bg-white p-6"
+      class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised p-6"
     >
-      <h2 class="text-lg font-semibold text-slate-900">Invite a member</h2>
+      <h2 class="text-lg font-semibold text-ink-primary">Invite a member</h2>
       <form data-invite-form class="mt-4 space-y-4">
         <div>
-          <label class="block text-sm font-medium text-slate-700" for="invite-email">Email</label>
+          <label class="block text-sm font-medium text-ink-secondary" for="invite-email">Email</label>
           <input
             id="invite-email"
             name="email"
             type="email"
             required
             placeholder="teammate@example.com"
-            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
           />
         </div>
         <div>
-          <label class="block text-sm font-medium text-slate-700" for="invite-role">Role</label>
+          <label class="block text-sm font-medium text-ink-secondary" for="invite-role">Role</label>
           <select
             id="invite-role"
             name="role"
-            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
           >
             <option value="member">Member</option>
             <option value="admin">Admin</option>
@@ -74,7 +74,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           <button
             type="button"
             data-invite-cancel
-            class="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-base"
           >
             Cancel
           </button>
@@ -89,30 +89,30 @@ const apiBaseUrl = resolveApiBaseUrl();
       </form>
     </div>
 
-    <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Members</h2>
+    <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-muted">Members</h2>
     <ul
       data-members-list
-      class="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white"
+      class="divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
     >
-      <li class="px-6 py-4 text-sm text-slate-500">Loading…</li>
+      <li class="px-6 py-4 text-sm text-ink-muted">Loading…</li>
     </ul>
 
-    <h2 class="mb-3 mt-10 text-sm font-semibold uppercase tracking-wide text-slate-500">
+    <h2 class="mb-3 mt-10 text-sm font-semibold uppercase tracking-wide text-ink-muted">
       Pending invites
     </h2>
     <ul
       data-invites-list
-      class="divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white"
+      class="divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
     >
-      <li class="px-6 py-4 text-sm text-slate-500">Loading…</li>
+      <li class="px-6 py-4 text-sm text-ink-muted">Loading…</li>
     </ul>
 
-    <p class="mt-8 text-xs text-slate-500">
+    <p class="mt-8 text-xs text-ink-muted">
       Invitees receive an email with a 7-day accept link. They must accept while signed in to the
       same email address. Once accepted, members can act on this account's resources by toggling
       the "Acting as" picker in the sidebar — reads work for both <code>member</code> and
       <code>admin</code> roles; writes require <code>admin</code>. See
-      <a href="https://docs.driftstack.dev/api/team" class="text-oxblood-700 underline" target="_blank" rel="noopener noreferrer">docs.driftstack.dev/api/team</a> for the role gating reference.
+      <a href="https://docs.driftstack.dev/api/team" class="text-glow-red underline" target="_blank" rel="noopener noreferrer">docs.driftstack.dev/api/team</a> for the role gating reference.
     </p>
   </div>
 
@@ -167,17 +167,17 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(m.member_email) +
           '" class="text-sm text-red-700 hover:underline">Remove</button>';
         const roleClass =
-          m.role === 'admin' ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-600';
+          m.role === 'admin' ? 'bg-blue-50 text-blue-700' : 'bg-surface-raised text-ink-secondary';
         return (
           '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
-          '<p class="text-base font-medium text-slate-900">' +
+          '<p class="text-base font-medium text-ink-primary">' +
           escapeHtml(m.member_email) +
           '</p>' +
-          '<p class="mt-1 font-mono text-xs text-slate-500">' +
+          '<p class="mt-1 font-mono text-xs text-ink-muted">' +
           escapeHtml(m.id) +
           '</p>' +
-          '<p class="mt-1 text-xs text-slate-500">Joined ' +
+          '<p class="mt-1 text-xs text-ink-muted">Joined ' +
           escapeHtml(fmtIsoDay(m.accepted_at)) +
           '</p></div>' +
           '<div class="flex shrink-0 items-center gap-3">' +
@@ -195,15 +195,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         return (
           '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
-          '<p class="text-base font-medium text-slate-900">' +
+          '<p class="text-base font-medium text-ink-primary">' +
           escapeHtml(inv.invitee_email) +
           '</p>' +
-          '<p class="mt-1 text-xs text-slate-500">Invited ' +
+          '<p class="mt-1 text-xs text-ink-muted">Invited ' +
           escapeHtml(fmtIsoDay(inv.created_at)) +
           ' · expires ' +
           escapeHtml(fmtIsoDay(inv.expires_at)) +
           '</p></div>' +
-          '<span class="inline-flex shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-amber-700">pending</span>' +
+          '<span class="inline-flex shrink-0 rounded-full bg-glow-red/10 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-glow-red">pending</span>' +
           '</li>'
         );
       }
@@ -213,10 +213,10 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!token) {
           if (membersList)
             membersList.innerHTML =
-              '<li class="px-6 py-4 text-sm text-slate-500">Sign in to see team members.</li>';
+              '<li class="px-6 py-4 text-sm text-ink-muted">Sign in to see team members.</li>';
           if (invitesList)
             invitesList.innerHTML =
-              '<li class="px-6 py-4 text-sm text-slate-500">Sign in to see pending invites.</li>';
+              '<li class="px-6 py-4 text-sm text-ink-muted">Sign in to see pending invites.</li>';
           return;
         }
         Promise.all([
@@ -239,14 +239,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (membersList) {
               membersList.innerHTML =
                 members.length === 0
-                  ? '<li class="px-6 py-4 text-sm text-slate-500">No team members yet. Invite one above.</li>'
+                  ? '<li class="px-6 py-4 text-sm text-ink-muted">No team members yet. Invite one above.</li>'
                   : members.map(memberRow).join('');
               wireRemoveButtons();
             }
             if (invitesList) {
               invitesList.innerHTML =
                 invites.length === 0
-                  ? '<li class="px-6 py-4 text-sm text-slate-500">No pending invites.</li>'
+                  ? '<li class="px-6 py-4 text-sm text-ink-muted">No pending invites.</li>'
                   : invites.map(inviteRow).join('');
             }
           })

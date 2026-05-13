@@ -95,13 +95,13 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
   });
 
   it("Honest-scope 4-card pinned: 'No SOC 2' + 'No ISO 27001' + 'Sub-processors are listed' + 'Data residency is EU-default' — pinned so the no-SOC2 + no-ISO27001 honest framing + sub-processor + EU-default 4-card combo survives (drift to claiming SOC 2 would break the integrity narrative; drift to vague 'enterprise-grade' language would weaken the comparison-against-competitor positioning)", () => {
-    expect(body).toMatch(/<strong class="block text-slate-900">No SOC 2\.<\/strong>/);
-    expect(body).toMatch(/<strong class="block text-slate-900">No ISO 27001\.<\/strong>/);
+    expect(body).toMatch(/<strong class="block text-ink-primary">No SOC 2\.<\/strong>/);
+    expect(body).toMatch(/<strong class="block text-ink-primary">No ISO 27001\.<\/strong>/);
     expect(body).toMatch(
-      /<strong class="block text-slate-900">Sub-processors are listed\.<\/strong>/,
+      /<strong class="block text-ink-primary">Sub-processors are listed\.<\/strong>/,
     );
     expect(body).toMatch(
-      /<strong class="block text-slate-900">Data residency is EU-default\.<\/strong>/,
+      /<strong class="block text-ink-primary">Data residency is EU-default\.<\/strong>/,
     );
   });
 
@@ -142,7 +142,7 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
       /Node 22 LTS, TypeScript strict, Fastify, Drizzle, Postgres 17,\s*\n?\s*Redis 7\./,
     );
     expect(body).toMatch(
-      /<h3 class="text-base font-medium text-slate-900">Dependabot \+ Renovate<\/h3>/,
+      /<h3 class="text-base font-medium text-ink-primary">Dependabot \+ Renovate<\/h3>/,
     );
     expect(body).toMatch(
       /Each release builds a CycloneDX SBOM alongside the artifact\.\s*\n?\s*Container images are signed; the deploy pipeline verifies the\s*\n?\s*signature before pulling into production\./,

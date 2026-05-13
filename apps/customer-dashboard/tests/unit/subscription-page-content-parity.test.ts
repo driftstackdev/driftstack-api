@@ -82,11 +82,11 @@ describe('W374.C customer-dashboard /subscription page content parity', () => {
 
   it('back-link to /billing for at-a-glance view pinned', () => {
     expect(body).toMatch(
-      /<a href="\/billing" class="text-oxblood-700 hover:underline">← Back to billing<\/a>/,
+      /<a href="\/billing" class="text-glow-red hover:underline">← Back to billing<\/a>/,
     );
     expect(existsSync(BILLING_PAGE)).toBe(true);
     // Body also cross-links to /billing in the descriptor.
-    expect(body).toMatch(/<a href="\/billing" class="text-oxblood-700 underline">\/billing<\/a>/);
+    expect(body).toMatch(/<a href="\/billing" class="text-glow-red underline">\/billing<\/a>/);
   });
 
   it('3 plan-management CTAs pinned (Upgrade / Downgrade / Stripe portal)', () => {
@@ -95,12 +95,12 @@ describe('W374.C customer-dashboard /subscription page content parity', () => {
     expect(body).toMatch(/<a href="#portal" class="btn-secondary">Open Stripe portal<\/a>/);
   });
 
-  it('invoice-status badge map pinned: paid (emerald) / open (amber) / void (slate)', () => {
+  it('invoice-status badge map pinned: paid (emerald) / open (glow-red after R3 migration) / void (surface-raised)', () => {
     expect(body).toMatch(
-      /invoice\.status === 'paid'\s*\n?\s*\?\s*'bg-emerald-50 text-emerald-700'/,
+      /invoice\.status === 'paid'\s*\n?\s*\?\s*'bg-emerald-400\/10 text-emerald-300'/,
     );
-    expect(body).toMatch(/invoice\.status === 'open'\s*\n?\s*\?\s*'bg-amber-50 text-amber-700'/);
-    expect(body).toMatch(/'bg-slate-100 text-slate-600'/);
+    expect(body).toMatch(/invoice\.status === 'open'\s*\n?\s*\?\s*'bg-glow-red\/10 text-glow-red'/);
+    expect(body).toMatch(/'bg-surface-raised text-ink-secondary'/);
   });
 
   it('invoice table columns: Date / Invoice / Amount / Status / (download)', () => {

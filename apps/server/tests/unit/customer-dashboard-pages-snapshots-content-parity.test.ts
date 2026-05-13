@@ -88,7 +88,7 @@ describe('W495.B apps/customer-dashboard/src/pages/snapshots.astro content parit
 
   it("Empty-state: 'No snapshots yet. Capture one from /profiles.' + dashed-border card — pinned so first-time users see a clear next-step (capture from /profiles) rather than a confusing empty list (drift to dropping the /profiles link would orphan customers who don't know where to capture from)", () => {
     expect(body).toMatch(
-      /No snapshots yet\. Capture one from <a href="\/profiles" class="text-oxblood-700 underline"\s*\n?\s*>\/profiles<\/a\s*\n?\s*>\./,
+      /No snapshots yet\. Capture one from <a href="\/profiles" class="text-glow-red underline"\s*\n?\s*>\/profiles<\/a\s*\n?\s*>\./,
     );
   });
 

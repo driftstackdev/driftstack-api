@@ -18,17 +18,17 @@ const apiBaseUrl = resolveApiBaseUrl();
   <div class="mx-auto max-w-5xl px-6 py-10" data-page="snapshots">
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
       role="status"
     >
     </div>
 
     <header class="mb-10">
-      <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Profile snapshots</h1>
-      <p class="mt-2 max-w-prose text-sm text-slate-500">
+      <h1 class="text-3xl font-semibold tracking-tight text-ink-primary">Profile snapshots</h1>
+      <p class="mt-2 max-w-prose text-sm text-ink-muted">
         Immutable point-in-time copies of saved profiles. Capture from <a
           href="/profiles"
-          class="text-oxblood-700 underline">/profiles</a
+          class="text-glow-red underline">/profiles</a
         >; restore here to clone a snapshot back into a new profile, or delete a snapshot
         when you no longer need it. Restoring counts against your profile tier cap and
         rejects on name conflict — the same way creating a profile does.
@@ -42,28 +42,28 @@ const apiBaseUrl = resolveApiBaseUrl();
     -->
     <div
       data-restore-form-wrap
-      class="mb-8 hidden rounded-lg border border-slate-200 bg-white p-6"
+      class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised p-6"
     >
-      <h2 class="text-lg font-semibold text-slate-900">
+      <h2 class="text-lg font-semibold text-ink-primary">
         Restore from snapshot
       </h2>
-      <p class="mt-2 text-sm text-slate-500">
+      <p class="mt-2 text-sm text-ink-muted">
         Restoring creates a new profile populated with the snapshot's frozen
         state. Counts against your tier's profile cap and rejects on name
         conflict.
       </p>
       <dl
         data-restore-source
-        class="mt-4 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-xs text-slate-500"
+        class="mt-4 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-xs text-ink-muted"
       >
         <dt>Source profile</dt>
-        <dd data-restore-source-name class="font-mono text-slate-900">—</dd>
+        <dd data-restore-source-name class="font-mono text-ink-primary">—</dd>
         <dt>Snapshot label</dt>
-        <dd data-restore-source-label class="font-mono text-slate-900">—</dd>
+        <dd data-restore-source-label class="font-mono text-ink-primary">—</dd>
       </dl>
       <form data-restore-form class="mt-4 space-y-4">
         <div>
-          <label for="restore-name" class="block text-sm font-medium text-slate-700">
+          <label for="restore-name" class="block text-sm font-medium text-ink-secondary">
             New profile name
           </label>
           <input
@@ -71,9 +71,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             data-restore-name-input
             type="text"
             required
-            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
           />
-          <p class="mt-1 text-xs text-slate-500">
+          <p class="mt-1 text-xs text-ink-muted">
             Default suggestion is the source profile name + " (restored)". Edit
             to whatever surfaces the purpose for your team.
           </p>
@@ -82,7 +82,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           <button type="submit" class="btn-primary" data-restore-submit>Restore</button>
           <button
             type="button"
-            class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-base"
             data-restore-cancel
           >
             Cancel
@@ -94,15 +94,15 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <ul
       data-list
-      class="mb-10 hidden divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white"
+      class="mb-10 hidden divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
     >
     </ul>
 
     <div
       data-empty
-      class="mb-10 rounded-lg border border-dashed border-slate-300 bg-white px-6 py-16 text-center text-sm text-slate-500"
+      class="mb-10 rounded-lg border border-dashed border-white/10 bg-surface-raised px-6 py-16 text-center text-sm text-ink-muted"
     >
-      No snapshots yet. Capture one from <a href="/profiles" class="text-oxblood-700 underline"
+      No snapshots yet. Capture one from <a href="/profiles" class="text-glow-red underline"
         >/profiles</a
       >.
     </div>
@@ -162,16 +162,16 @@ const apiBaseUrl = resolveApiBaseUrl();
         return (
           '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
-          '<p class="text-base font-medium text-slate-900">' +
+          '<p class="text-base font-medium text-ink-primary">' +
           escapeHtml(s.label || '(no label)') +
           '</p>' +
-          '<p class="mt-1 font-mono text-xs text-slate-500">' +
+          '<p class="mt-1 font-mono text-xs text-ink-muted">' +
           escapeHtml(s.id) +
           '</p>' +
           (s.description
-            ? '<p class="mt-2 text-sm text-slate-600">' + escapeHtml(s.description) + '</p>'
+            ? '<p class="mt-2 text-sm text-ink-secondary">' + escapeHtml(s.description) + '</p>'
             : '') +
-          '<p class="mt-2 text-xs text-slate-500">From ' +
+          '<p class="mt-2 text-xs text-ink-muted">From ' +
           escapeHtml(s.parent_name) +
           (s.parent_profile_id === null ? ' <em>(parent profile deleted)</em>' : '') +
           ' · captured ' +
@@ -184,7 +184,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(s.parent_name) +
           '" data-restore-label="' +
           escapeHtml(s.label || '') +
-          '" class="text-sm text-oxblood-700 hover:underline">Restore</button>' +
+          '" class="text-sm text-glow-red hover:underline">Restore</button>' +
           '<button type="button" data-delete="' +
           escapeHtml(s.id) +
           '" data-delete-label="' +

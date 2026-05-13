@@ -49,16 +49,16 @@ const apiBaseUrl = resolveApiBaseUrl();
   <div class="mx-auto max-w-5xl px-6 py-10" data-page="profiles">
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
       role="status"
     >
     </div>
 
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-slate-500" data-field="tier-line">{MOCK_USAGE_SUMMARY.tier} tier</p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Profiles</h1>
-        <p class="mt-2 max-w-prose text-sm text-slate-500">
+        <p class="text-sm text-ink-muted" data-field="tier-line">{MOCK_USAGE_SUMMARY.tier} tier</p>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">Profiles</h1>
+        <p class="mt-2 max-w-prose text-sm text-ink-muted">
           Persistent identity slots that survive across sessions. Each profile carries its own
           cookies, localStorage, and last-used timestamp. Sessions can be created against a profile
           or anonymously.
@@ -70,9 +70,9 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </header>
 
-    <p class="mb-6 text-sm text-slate-500" data-field="usage-line">
-      <strong class="font-medium text-slate-900" data-field="count">{profileCount}</strong> of
-      <strong class="font-medium text-slate-900" data-field="limit">{limitDisplay}</strong>
+    <p class="mb-6 text-sm text-ink-muted" data-field="usage-line">
+      <strong class="font-medium text-ink-primary" data-field="count">{profileCount}</strong> of
+      <strong class="font-medium text-ink-primary" data-field="limit">{limitDisplay}</strong>
       profile slots used.
       {atLimit && <span class="text-red-700"> · tier limit reached</span>}
     </p>
@@ -85,20 +85,20 @@ const apiBaseUrl = resolveApiBaseUrl();
     -->
     <div
       data-snapshot-form-wrap
-      class="mb-8 hidden rounded-lg border border-slate-200 bg-white p-6"
+      class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised p-6"
     >
-      <h2 class="text-lg font-semibold text-slate-900">
+      <h2 class="text-lg font-semibold text-ink-primary">
         Capture snapshot of <span data-snapshot-source-name class="font-mono"></span>
       </h2>
-      <p class="mt-2 text-sm text-slate-500">
+      <p class="mt-2 text-sm text-ink-muted">
         Snapshots are immutable point-in-time copies. The original profile
         keeps evolving; the snapshot is frozen. Restore from
-        <a href="/snapshots" class="text-oxblood-700 underline">/snapshots</a>
+        <a href="/snapshots" class="text-glow-red underline">/snapshots</a>
         later.
       </p>
       <form data-snapshot-form class="mt-4 space-y-4">
         <div>
-          <label for="snapshot-label" class="block text-sm font-medium text-slate-700">
+          <label for="snapshot-label" class="block text-sm font-medium text-ink-secondary">
             Snapshot label
           </label>
           <input
@@ -107,15 +107,15 @@ const apiBaseUrl = resolveApiBaseUrl();
             type="text"
             required
             placeholder='e.g. "before-migration", "post-login-state"'
-            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
           />
-          <p class="mt-1 text-xs text-slate-500">
+          <p class="mt-1 text-xs text-ink-muted">
             Surface why you captured this. Useful when a profile has many
             snapshots and you're picking one to restore.
           </p>
         </div>
         <div>
-          <label for="snapshot-description" class="block text-sm font-medium text-slate-700">
+          <label for="snapshot-description" class="block text-sm font-medium text-ink-secondary">
             Description (optional)
           </label>
           <input
@@ -123,14 +123,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             data-snapshot-description-input
             type="text"
             placeholder="What state was the profile in?"
-            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
           />
         </div>
         <div class="flex items-center gap-3 pt-2">
           <button type="submit" class="btn-primary" data-snapshot-submit>Capture snapshot</button>
           <button
             type="button"
-            class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-base"
             data-snapshot-cancel
           >
             Cancel
@@ -146,17 +146,17 @@ const apiBaseUrl = resolveApiBaseUrl();
     -->
     <div
       data-import-form-wrap
-      class="mb-8 hidden rounded-lg border border-slate-200 bg-white p-6"
+      class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised p-6"
     >
-      <h2 class="text-lg font-semibold text-slate-900">Import profile from JSON</h2>
-      <p class="mt-2 text-sm text-slate-500">
+      <h2 class="text-lg font-semibold text-ink-primary">Import profile from JSON</h2>
+      <p class="mt-2 text-sm text-ink-muted">
         Paste a v1 envelope (from another profile's Export action) or upload a
         <code class="font-mono text-xs">.json</code> file. Tier-cap + name-conflict
         rules match creating a fresh profile.
       </p>
       <form data-import-form class="mt-4 space-y-4">
         <div>
-          <label for="import-file" class="block text-sm font-medium text-slate-700">
+          <label for="import-file" class="block text-sm font-medium text-ink-secondary">
             Upload envelope (.json)
           </label>
           <input
@@ -164,11 +164,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             data-import-file-input
             type="file"
             accept="application/json,.json"
-            class="mt-1 block text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+            class="mt-1 block text-sm text-ink-secondary file:mr-3 file:rounded-md file:border-0 file:bg-surface-raised file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-secondary hover:file:bg-surface-elevated"
           />
         </div>
         <div>
-          <label for="import-text" class="block text-sm font-medium text-slate-700">
+          <label for="import-text" class="block text-sm font-medium text-ink-secondary">
             Or paste envelope JSON
           </label>
           <textarea
@@ -176,11 +176,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             data-import-text-input
             rows="6"
             placeholder='{"version":1,"exported_at":"…","source_profile_id":"prof_…","source_account_id":"…","profile":{"name":"…","archetype":"…","description":null}}'
-            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 font-mono text-xs"
+            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 font-mono text-xs"
           ></textarea>
         </div>
         <div>
-          <label for="import-name-override" class="block text-sm font-medium text-slate-700">
+          <label for="import-name-override" class="block text-sm font-medium text-ink-secondary">
             Rename on import (optional)
           </label>
           <input
@@ -188,14 +188,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             data-import-name-override-input
             type="text"
             placeholder="leave blank to keep the envelope's name"
-            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
           />
         </div>
         <div class="flex items-center gap-3 pt-2">
           <button type="submit" class="btn-primary" data-import-submit>Import</button>
           <button
             type="button"
-            class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-base"
             data-import-cancel
           >
             Cancel
@@ -208,27 +208,27 @@ const apiBaseUrl = resolveApiBaseUrl();
     <!-- V-284 — Create form, hidden by default -->
     <div
       data-create-form-wrap
-      class="mb-8 hidden rounded-lg border border-slate-200 bg-white p-6"
+      class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised p-6"
     >
-      <h2 class="text-lg font-semibold text-slate-900">Create a new profile</h2>
+      <h2 class="text-lg font-semibold text-ink-primary">Create a new profile</h2>
       <form data-create-form class="mt-4 space-y-4">
         <div>
-          <label for="profile-name" class="block text-sm font-medium text-slate-700">Name</label>
+          <label for="profile-name" class="block text-sm font-medium text-ink-secondary">Name</label>
           <input
             id="profile-name"
             name="name"
             type="text"
             required
             placeholder="e.g. shopper-account-1, signup-test"
-            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
           />
-          <p class="mt-1 text-xs text-slate-500">
+          <p class="mt-1 text-xs text-ink-muted">
             Unique within your account. Use a name that surfaces purpose ("shopper-acctA",
             "staging-smoke") for easier triage later.
           </p>
         </div>
         <div>
-          <label for="profile-description" class="block text-sm font-medium text-slate-700"
+          <label for="profile-description" class="block text-sm font-medium text-ink-secondary"
             >Description (optional)</label
           >
           <input
@@ -236,14 +236,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             name="description"
             type="text"
             placeholder="Returning-visitor profile for the checkout flow"
-            class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
           />
         </div>
         <div class="flex items-center gap-3 pt-2">
           <button type="submit" class="btn-primary" data-create-submit>Create profile</button>
           <button
             type="button"
-            class="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-base"
             data-create-cancel
           >
             Cancel
@@ -256,7 +256,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     <ul
       data-list
       class:list={[
-        'divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white',
+        'divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised',
         profileCount === 0 ? 'hidden' : '',
       ]}
     >
@@ -264,18 +264,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         MOCK_PROFILES.map((profile) => (
           <li class="flex items-start justify-between gap-6 px-6 py-4">
             <div class="min-w-0">
-              <p class="text-base font-medium text-slate-900">{profile.name}</p>
-              <p class="mt-1 font-mono text-xs text-slate-500">{profile.id}</p>
+              <p class="text-base font-medium text-ink-primary">{profile.name}</p>
+              <p class="mt-1 font-mono text-xs text-ink-muted">{profile.id}</p>
               {profile.description && (
-                <p class="mt-2 text-sm text-slate-600">{profile.description}</p>
+                <p class="mt-2 text-sm text-ink-secondary">{profile.description}</p>
               )}
-              <p class="mt-2 text-xs text-slate-500">
+              <p class="mt-2 text-xs text-ink-muted">
                 Archetype: {archetypeDisplayLabel(profile.archetype)} · last used{' '}
                 {fmtIso(profile.last_used_at)}
               </p>
             </div>
             <div class="flex shrink-0 flex-col items-end gap-2">
-              <span class="text-sm text-slate-400">Sign in to manage</span>
+              <span class="text-sm text-ink-muted">Sign in to manage</span>
             </div>
           </li>
         ))
@@ -286,11 +286,11 @@ const apiBaseUrl = resolveApiBaseUrl();
     <div
       data-empty
       class:list={[
-        'flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-8 py-16 text-center',
+        'flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-white/10 bg-surface-base px-8 py-16 text-center',
         profileCount === 0 ? '' : 'hidden',
       ]}
     >
-      <div class="flex h-12 w-12 items-center justify-center rounded-md bg-oxblood-50 text-oxblood-700">
+      <div class="flex h-12 w-12 items-center justify-center rounded-md bg-glow-red/10 text-glow-red">
         <svg
           width="24"
           height="24"
@@ -307,30 +307,30 @@ const apiBaseUrl = resolveApiBaseUrl();
         </svg>
       </div>
       <div class="flex flex-col gap-1">
-        <h3 class="text-base font-medium text-slate-900">No profiles yet</h3>
-        <p class="max-w-md text-sm text-slate-600">
+        <h3 class="text-base font-medium text-ink-primary">No profiles yet</h3>
+        <p class="max-w-md text-sm text-ink-secondary">
           A profile is a persistent identity — cookies, localStorage, IndexedDB — reused across
           sessions. Bind a session to a profile to keep login state, returning-visitor signals, and
           stealth fingerprints stable between runs.
         </p>
       </div>
       <button type="button" class="btn-primary" data-show-create>Create your first profile</button>
-      <p class="text-xs text-slate-500">
+      <p class="text-xs text-ink-muted">
         Sessions without a profile start ephemeral — fresh state every run.
       </p>
     </div>
 
     <section class="mt-10">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Profile limits</p>
-      <p class="mt-2 max-w-prose text-sm text-slate-500">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Profile limits</p>
+      <p class="mt-2 max-w-prose text-sm text-ink-muted">
         Enforced server-side at session creation. If your workload needs more, upgrade your tier:
       </p>
       <dl class="mt-4 grid gap-x-8 gap-y-2 text-sm md:grid-cols-2">
         {
           TIER_DISPLAY_ORDER.map((entry) => (
             <div class="flex justify-between border-b border-slate-100 pb-2">
-              <dt class="text-slate-600">{entry.label}</dt>
-              <dd class="font-mono text-slate-900">{fmtLimit(PROFILES_PER_TIER[entry.id])}</dd>
+              <dt class="text-ink-secondary">{entry.label}</dt>
+              <dd class="font-mono text-ink-primary">{fmtLimit(PROFILES_PER_TIER[entry.id])}</dd>
             </div>
           ))
         }
@@ -397,16 +397,16 @@ const apiBaseUrl = resolveApiBaseUrl();
         return (
           '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
-          '<p class="text-base font-medium text-slate-900">' +
+          '<p class="text-base font-medium text-ink-primary">' +
           escapeHtml(p.name) +
           '</p>' +
-          '<p class="mt-1 font-mono text-xs text-slate-500">' +
+          '<p class="mt-1 font-mono text-xs text-ink-muted">' +
           escapeHtml(p.id) +
           '</p>' +
           (p.description
-            ? '<p class="mt-2 text-sm text-slate-600">' + escapeHtml(p.description) + '</p>'
+            ? '<p class="mt-2 text-sm text-ink-secondary">' + escapeHtml(p.description) + '</p>'
             : '') +
-          '<p class="mt-2 text-xs text-slate-500">Archetype: ' +
+          '<p class="mt-2 text-xs text-ink-muted">Archetype: ' +
           escapeHtml(archetypeLabel(p.archetype)) +
           ' · last used ' +
           escapeHtml(fmtIso(p.last_used_at)) +
@@ -416,17 +416,17 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(p.id) +
           '" data-clone-name="' +
           escapeHtml(p.name) +
-          '" class="text-sm text-oxblood-700 hover:underline">Clone</button>' +
+          '" class="text-sm text-glow-red hover:underline">Clone</button>' +
           '<button type="button" data-export="' +
           escapeHtml(p.id) +
           '" data-export-name="' +
           escapeHtml(p.name) +
-          '" class="text-sm text-oxblood-700 hover:underline">Export</button>' +
+          '" class="text-sm text-glow-red hover:underline">Export</button>' +
           '<button type="button" data-snapshot="' +
           escapeHtml(p.id) +
           '" data-snapshot-name="' +
           escapeHtml(p.name) +
-          '" class="text-sm text-oxblood-700 hover:underline">Snapshot</button>' +
+          '" class="text-sm text-glow-red hover:underline">Snapshot</button>' +
           '<button type="button" data-delete="' +
           escapeHtml(p.id) +
           '" data-delete-name="' +

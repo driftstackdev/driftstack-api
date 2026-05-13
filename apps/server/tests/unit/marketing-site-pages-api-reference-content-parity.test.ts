@@ -59,34 +59,30 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
 
   it('11-group surface map taxonomy: Sessions + Profiles + API keys + Webhooks + Account + Team + Billing — crypto orders + Status + Auth flows + Billing — pinned so the 11-group enumeration of canonical route prefixes stays complete (drift to dropping any group would orphan SDK readers from that route surface; drift to merging Billing + crypto-orders would lose the separate billing-paths distinction)', () => {
     expect(body).toMatch(
-      /uppercase tracking-widest text-oxblood-700">\s*\n?\s*Sessions\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-glow-red">\s*\n?\s*Sessions\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-oxblood-700">\s*\n?\s*Profiles\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-glow-red">\s*\n?\s*Profiles\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-oxblood-700">\s*\n?\s*API keys\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-glow-red">\s*\n?\s*API keys\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-oxblood-700">\s*\n?\s*Webhooks\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-glow-red">\s*\n?\s*Webhooks\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-oxblood-700">\s*\n?\s*Account\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-glow-red">\s*\n?\s*Account\s*\n?\s*<\/h3>/,
+    );
+    expect(body).toMatch(/uppercase tracking-widest text-glow-red">\s*\n?\s*Team\s*\n?\s*<\/h3>/);
+    expect(body).toMatch(
+      /uppercase tracking-widest text-glow-red">\s*\n?\s*Billing — crypto orders\s*\n?\s*<\/h3>/,
+    );
+    expect(body).toMatch(/uppercase tracking-widest text-glow-red">\s*\n?\s*Status\s*\n?\s*<\/h3>/);
+    expect(body).toMatch(
+      /uppercase tracking-widest text-glow-red">\s*\n?\s*Auth flows\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /uppercase tracking-widest text-oxblood-700">\s*\n?\s*Team\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-oxblood-700">\s*\n?\s*Billing — crypto orders\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-oxblood-700">\s*\n?\s*Status\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-oxblood-700">\s*\n?\s*Auth flows\s*\n?\s*<\/h3>/,
-    );
-    expect(body).toMatch(
-      /uppercase tracking-widest text-oxblood-700">\s*\n?\s*Billing\s*\n?\s*<\/h3>/,
+      /uppercase tracking-widest text-glow-red">\s*\n?\s*Billing\s*\n?\s*<\/h3>/,
     );
   });
 
@@ -136,14 +132,14 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     expect(body).toMatch(/SessionDestroyedError/);
     expect(body).toMatch(/TierLimitError/);
     expect(body).toMatch(
-      /RateLimitError <em class="font-sans not-italic text-slate-500">\(retryable\)<\/em>/,
+      /RateLimitError <em class="font-sans not-italic text-ink-muted">\(retryable\)<\/em>/,
     );
     expect(body).toMatch(/ConcurrencyLimitError/);
     expect(body).toMatch(
-      /DriftstackError \(kind: <code>internal<\/code>\) <em class="font-sans not-italic text-slate-500">\(retryable\)<\/em>/,
+      /DriftstackError \(kind: <code>internal<\/code>\) <em class="font-sans not-italic text-ink-muted">\(retryable\)<\/em>/,
     );
     expect(body).toMatch(
-      /FeatureUnavailableError <em class="font-sans not-italic text-slate-500">\(NOT retryable\)<\/em>/,
+      /FeatureUnavailableError <em class="font-sans not-italic text-ink-muted">\(NOT retryable\)<\/em>/,
     );
   });
 

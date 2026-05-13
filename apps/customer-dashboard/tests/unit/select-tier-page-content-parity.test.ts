@@ -74,7 +74,7 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
 
   it('Enterprise mailto:sales@driftstack.dev fallback pinned (~$4,000/mo floor matches /faq + /pricing)', () => {
     expect(body).toMatch(
-      /Enterprise tier \(~\$4,000\/mo, custom\) — <a href="mailto:sales@driftstack\.dev" class="text-oxblood-700 underline">contact sales<\/a>\./,
+      /Enterprise tier \(~\$4,000\/mo, custom\) — <a href="mailto:sales@driftstack\.dev" class="text-glow-red underline">contact sales<\/a>\./,
     );
   });
 

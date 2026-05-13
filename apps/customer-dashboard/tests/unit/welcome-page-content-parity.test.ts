@@ -85,7 +85,7 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     // Load-bearing routing decision — V-184a redirects logged-in
     // customers via the dashboard home, not a session-specific page.
     expect(body).toMatch(/Skip to dashboard\s*<\/a>/);
-    expect(body).toMatch(/<a href="\/" class="text-oxblood-700 underline">/);
+    expect(body).toMatch(/<a href="\/" class="text-glow-red underline">/);
   });
 
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {

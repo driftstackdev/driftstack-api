@@ -36,11 +36,13 @@ describe('W367.A marketing-site /about page content parity', () => {
   const body = read(PAGE);
 
   it('posture 3-card section pinned: EU-resident / no-behavioural-data / honest-scope', () => {
-    expect(body).toMatch(/<h3 class="font-semibold text-slate-900">EU-resident, by default<\/h3>/);
     expect(body).toMatch(
-      /<h3 class="font-semibold text-slate-900">No behavioural data collection<\/h3>/,
+      /<h3 class="font-semibold text-ink-primary">EU-resident, by default<\/h3>/,
     );
-    expect(body).toMatch(/<h3 class="font-semibold text-slate-900">Honest scope<\/h3>/);
+    expect(body).toMatch(
+      /<h3 class="font-semibold text-ink-primary">No behavioural data collection<\/h3>/,
+    );
+    expect(body).toMatch(/<h3 class="font-semibold text-ink-primary">Honest scope<\/h3>/);
   });
 
   it('EU stack pinned: Hetzner FSN / Neon EU / Cloudflare R2 EU / Postmark EU', () => {
@@ -106,10 +108,10 @@ describe('W367.A marketing-site /about page content parity', () => {
   });
 
   it('company facts: Dutch BV / Netherlands / Solo founder + contractors / Bootstrapped no VC', () => {
-    expect(body).toMatch(/<dd class="text-sm text-slate-900">Dutch BV<\/dd>/);
-    expect(body).toMatch(/<dd class="text-sm text-slate-900">Netherlands<\/dd>/);
-    expect(body).toMatch(/<dd class="text-sm text-slate-900">Solo founder \+ contractors<\/dd>/);
-    expect(body).toMatch(/<dd class="text-sm text-slate-900">Bootstrapped — no VC<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Dutch BV<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Netherlands<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Solo founder \+ contractors<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Bootstrapped — no VC<\/dd>/);
     // hello@ contact email.
     expect(body).toContain('hello@driftstack.dev');
   });

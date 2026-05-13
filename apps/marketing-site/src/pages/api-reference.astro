@@ -21,11 +21,11 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
   <!-- Header -->
   <section class="bg-gradient-to-b from-white to-slate-50">
     <div class="mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">API reference</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">API reference</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl">
         Every endpoint, every shape.
       </h1>
-      <p class="mt-6 max-w-prose text-lg text-slate-600">
+      <p class="mt-6 max-w-prose text-lg text-ink-secondary">
         The Driftstack API is documented as an OpenAPI 3.1 spec generated
         from the same Zod schemas the server uses at runtime. There is no
         second source of truth — if a route exists, it's in the spec; if
@@ -35,7 +35,7 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
         <a href={API_DOCS_URL} class="btn-primary">Open interactive reference →</a>
         <a href={OPENAPI_JSON_URL} class="btn-secondary">Download openapi.json</a>
       </div>
-      <p class="mt-3 text-xs text-slate-500">
+      <p class="mt-3 text-xs text-ink-muted">
         Interactive reference uses Scalar — try requests against your API
         key directly in the browser.
       </p>
@@ -43,18 +43,18 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
   </section>
 
   <!-- Surface map -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Surface map</p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Surface map</p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
         Routes, grouped.
       </h2>
       <div class="mt-10 grid gap-6 md:grid-cols-2">
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <h3 class="font-mono text-sm uppercase tracking-widest text-glow-red">
             Sessions
           </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-slate-700">
+          <ul class="mt-3 space-y-2 font-mono text-xs text-ink-secondary">
             <li>POST /v1/sessions</li>
             <li>GET /v1/sessions</li>
             <li>GET /v1/sessions/:id</li>
@@ -67,11 +67,11 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
           </ul>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <h3 class="font-mono text-sm uppercase tracking-widest text-glow-red">
             Profiles
           </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-slate-700">
+          <ul class="mt-3 space-y-2 font-mono text-xs text-ink-secondary">
             <li>POST /v1/profiles</li>
             <li>GET /v1/profiles</li>
             <li>GET /v1/profiles/:id</li>
@@ -80,11 +80,11 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
           </ul>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <h3 class="font-mono text-sm uppercase tracking-widest text-glow-red">
             API keys
           </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-slate-700">
+          <ul class="mt-3 space-y-2 font-mono text-xs text-ink-secondary">
             <li>POST /v1/api-keys</li>
             <li>GET /v1/api-keys</li>
             <li>POST /v1/api-keys/:id/rotate</li>
@@ -92,11 +92,11 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
           </ul>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <h3 class="font-mono text-sm uppercase tracking-widest text-glow-red">
             Webhooks
           </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-slate-700">
+          <ul class="mt-3 space-y-2 font-mono text-xs text-ink-secondary">
             <li>POST /v1/webhooks</li>
             <li>GET /v1/webhooks</li>
             <li>GET /v1/webhooks/:id</li>
@@ -109,11 +109,11 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
           </ul>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <h3 class="font-mono text-sm uppercase tracking-widest text-glow-red">
             Account
           </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-slate-700">
+          <ul class="mt-3 space-y-2 font-mono text-xs text-ink-secondary">
             <li>GET /v1/account/me</li>
             <li>GET /v1/account/audit-log</li>
             <li>GET /v1/account/audit-log/export</li>
@@ -123,11 +123,11 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
           </ul>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <h3 class="font-mono text-sm uppercase tracking-widest text-glow-red">
             Team
           </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-slate-700">
+          <ul class="mt-3 space-y-2 font-mono text-xs text-ink-secondary">
             <li>POST /v1/team/invites</li>
             <li>GET /v1/team/invites</li>
             <li>POST /v1/team/invites/accept</li>
@@ -136,11 +136,11 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
           </ul>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <h3 class="font-mono text-sm uppercase tracking-widest text-glow-red">
             Billing — crypto orders
           </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-slate-700">
+          <ul class="mt-3 space-y-2 font-mono text-xs text-ink-secondary">
             <li>POST /v1/billing/crypto-checkout</li>
             <li>POST /v1/billing/crypto-checkout/quote</li>
             <li>GET /v1/billing/crypto-orders</li>
@@ -153,11 +153,11 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
           </ul>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <h3 class="font-mono text-sm uppercase tracking-widest text-glow-red">
             Status
           </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-slate-700">
+          <ul class="mt-3 space-y-2 font-mono text-xs text-ink-secondary">
             <li>GET /v1/status</li>
             <li>GET /v1/status/stream</li>
             <li>GET /v1/status/sla</li>
@@ -167,11 +167,11 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
           </ul>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <h3 class="font-mono text-sm uppercase tracking-widest text-glow-red">
             Auth flows
           </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-slate-700">
+          <ul class="mt-3 space-y-2 font-mono text-xs text-ink-secondary">
             <li>POST /v1/auth/signup</li>
             <li>POST /v1/auth/login</li>
             <li>POST /v1/auth/logout</li>
@@ -184,11 +184,11 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
           </ul>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-6">
-          <h3 class="font-mono text-sm uppercase tracking-widest text-oxblood-700">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <h3 class="font-mono text-sm uppercase tracking-widest text-glow-red">
             Billing
           </h3>
-          <ul class="mt-3 space-y-2 font-mono text-xs text-slate-700">
+          <ul class="mt-3 space-y-2 font-mono text-xs text-ink-secondary">
             <li>POST /v1/billing/checkout-session</li>
             <li>POST /v1/billing/portal-session</li>
             <li>POST /v1/billing/trial-pack</li>
@@ -203,13 +203,13 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
        samples for the three most-used flows. Reduces the
        "what does it actually look like to call this?" friction
        that the route-list above doesn't answer on its own. -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Common patterns</p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Common patterns</p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
         Three flows, four languages.
       </h2>
-      <p class="mt-3 max-w-prose text-slate-600">
+      <p class="mt-3 max-w-prose text-ink-secondary">
         Most integrations are built on the same three operations:
         spin up a session, drive it, capture artifacts. Below: each
         one in cURL, TypeScript, Python, and Go. Copy-paste straight
@@ -218,20 +218,20 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
 
       <!-- Create a session -->
       <div class="mt-10">
-        <h3 class="text-xl font-semibold text-slate-900">1. Create a session</h3>
-        <p class="mt-2 max-w-prose text-sm text-slate-600">
+        <h3 class="text-xl font-semibold text-ink-primary">1. Create a session</h3>
+        <p class="mt-2 max-w-prose text-sm text-ink-secondary">
           The minimal "hello world" — provision an iPhone 16 Pro Safari
           session, return its id. Default archetype if you don't pass one.
         </p>
         <div class="mt-5 grid gap-4 md:grid-cols-2">
           <pre
-            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>
 curl -X POST https://api.driftstack.dev/v1/sessions \
   -H "authorization: Bearer $DRIFTSTACK_API_KEY" \
   -H "content-type: application/json" \
   -d '{"archetype":"iphone16pro_ios18_7_safari26_4"}'</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>
 import { Driftstack } from "@driftstack/sdk";
 const client = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 const session = await client.sessions.create({
@@ -239,13 +239,13 @@ const session = await client.sessions.create({
 });
 console.log(session.id);</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>
 from driftstack import Driftstack
 client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
 session = client.sessions.create(archetype="iphone16pro_ios18_7_safari26_4")
 print(session.id)</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>
 client := driftstack.NewClient(driftstack.Config{
     APIKey: os.Getenv("DRIFTSTACK_API_KEY"),
 })
@@ -259,15 +259,15 @@ fmt.Println(session.ID)</code></pre>
 
       <!-- Drive the session -->
       <div class="mt-12">
-        <h3 class="text-xl font-semibold text-slate-900">2. Drive the session</h3>
-        <p class="mt-2 max-w-prose text-sm text-slate-600">
+        <h3 class="text-xl font-semibold text-ink-primary">2. Drive the session</h3>
+        <p class="mt-2 max-w-prose text-sm text-ink-secondary">
           Navigate, tap, wait. <code class="font-mono">interact</code>
           handles taps, swipes, and key presses; <code class="font-mono">wait</code>
           blocks until a DOM condition is met or a timeout fires.
         </p>
         <div class="mt-5 grid gap-4 md:grid-cols-2">
           <pre
-            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>
 curl -X POST $URL/navigate \
   -d '{"url":"https://example.com"}' ...
 curl -X POST $URL/interact \
@@ -275,7 +275,7 @@ curl -X POST $URL/interact \
 curl -X POST $URL/wait \
   -d '{"condition":{"kind":"selector","selector":"main"}}' ...</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>
 await client.sessions.navigate(session.id, { url: "https://example.com" });
 await client.sessions.interact(session.id, {
   action: { kind: "tap_at", x: 50, y: 120 },
@@ -285,7 +285,7 @@ await client.sessions.wait(session.id, {
   timeout_ms: 5000,
 });</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>
 client.sessions.navigate(session.id, url="https://example.com")
 client.sessions.interact(session.id, action={
     "kind": "tap_at", "x": 50, "y": 120,
@@ -294,7 +294,7 @@ client.sessions.wait(session.id, condition={
     "kind": "selector", "selector": "main",
 }, timeout_ms=5000)</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>
 _, err = client.Sessions.Navigate(ctx, session.ID, &driftstack.NavigateParams{
     URL: "https://example.com",
 })
@@ -306,8 +306,8 @@ _, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractParams{
 
       <!-- Capture artifacts -->
       <div class="mt-12">
-        <h3 class="text-xl font-semibold text-slate-900">3. Capture a screenshot</h3>
-        <p class="mt-2 max-w-prose text-sm text-slate-600">
+        <h3 class="text-xl font-semibold text-ink-primary">3. Capture a screenshot</h3>
+        <p class="mt-2 max-w-prose text-sm text-ink-secondary">
           <code class="font-mono">capture</code> takes one of four kinds:
           <code class="font-mono">screenshot</code>, <code class="font-mono">dom</code>,
           <code class="font-mono">pdf</code>, or <code class="font-mono">recording</code>.
@@ -317,22 +317,22 @@ _, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractParams{
         </p>
         <div class="mt-5 grid gap-4 md:grid-cols-2">
           <pre
-            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>
 curl -X POST $URL/capture \
   -d '{"kind":"screenshot"}' ...
 # response.data is base64 PNG</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>
 const shot = await client.sessions.capture(session.id, {
   kind: "screenshot",
 });
 fs.writeFileSync("out.png", Buffer.from(shot.data, "base64"));</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>
 shot = client.sessions.capture(session.id, kind="screenshot")
 Path("out.png").write_bytes(base64.b64decode(shot.data))</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>
 shot, _ := client.Sessions.Capture(ctx, session.ID, &driftstack.CaptureParams{
     Kind: "screenshot",
 })
@@ -347,13 +347,13 @@ os.WriteFile("out.png", data, 0644)</code></pre>
        UI documents each shape, but customers evaluating the platform
        often want one screen with "here's what can go wrong + how to
        react" before they pick the SDK. -->
-  <section class="border-t border-slate-200 bg-slate-50">
+  <section class="border-t border-white/10 bg-surface-base">
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Error reference</p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Error reference</p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
         What can go wrong, and what to do about it.
       </h2>
-      <p class="mt-3 max-w-prose text-slate-600">
+      <p class="mt-3 max-w-prose text-ink-secondary">
         Every error is RFC 7807
         <code class="font-mono">application/problem+json</code> with a
         stable <code class="font-mono">type</code> URI. SDK clients
@@ -363,78 +363,78 @@ os.WriteFile("out.png", data, 0644)</code></pre>
       <div class="mt-8 overflow-x-auto">
         <table class="min-w-full text-sm">
           <thead>
-            <tr class="border-b border-slate-300 text-left">
-              <th class="py-2 pr-4 font-medium text-slate-900">Status</th>
-              <th class="py-2 pr-4 font-medium text-slate-900">Type URI</th>
-              <th class="py-2 pr-4 font-medium text-slate-900">When</th>
-              <th class="py-2 font-medium text-slate-900">SDK class</th>
+            <tr class="border-b border-white/10 text-left">
+              <th class="py-2 pr-4 font-medium text-ink-primary">Status</th>
+              <th class="py-2 pr-4 font-medium text-ink-primary">Type URI</th>
+              <th class="py-2 pr-4 font-medium text-ink-primary">When</th>
+              <th class="py-2 font-medium text-ink-primary">SDK class</th>
             </tr>
           </thead>
           <tbody class="font-mono text-xs">
-            <tr class="border-b border-slate-200">
+            <tr class="border-b border-white/10">
               <td class="py-2 pr-4">400</td>
               <td class="py-2 pr-4">errors.driftstack.dev/validation-failed</td>
               <td class="py-2 pr-4 font-sans">Zod schema mismatch on request body.</td>
               <td class="py-2">ValidationError</td>
             </tr>
-            <tr class="border-b border-slate-200">
+            <tr class="border-b border-white/10">
               <td class="py-2 pr-4">401</td>
               <td class="py-2 pr-4">errors.driftstack.dev/unauthorized</td>
               <td class="py-2 pr-4 font-sans">API key missing, malformed, or revoked.</td>
               <td class="py-2">AuthError</td>
             </tr>
-            <tr class="border-b border-slate-200">
+            <tr class="border-b border-white/10">
               <td class="py-2 pr-4">404</td>
               <td class="py-2 pr-4">errors.driftstack.dev/not-found</td>
               <td class="py-2 pr-4 font-sans">Resource id doesn't exist or isn't visible to this key.</td>
               <td class="py-2">NotFoundError</td>
             </tr>
-            <tr class="border-b border-slate-200">
+            <tr class="border-b border-white/10">
               <td class="py-2 pr-4">409</td>
               <td class="py-2 pr-4">errors.driftstack.dev/conflict</td>
               <td class="py-2 pr-4 font-sans">Resource state precludes the operation (e.g. trial pack already purchased).</td>
               <td class="py-2">ConflictError</td>
             </tr>
-            <tr class="border-b border-slate-200">
+            <tr class="border-b border-white/10">
               <td class="py-2 pr-4">410</td>
               <td class="py-2 pr-4">errors.driftstack.dev/session-destroyed</td>
               <td class="py-2 pr-4 font-sans">Session was destroyed; create a new one.</td>
               <td class="py-2">SessionDestroyedError</td>
             </tr>
-            <tr class="border-b border-slate-200">
+            <tr class="border-b border-white/10">
               <td class="py-2 pr-4">429</td>
               <td class="py-2 pr-4">errors.driftstack.dev/tier-limit</td>
               <td class="py-2 pr-4 font-sans">Account hit a tier cap (profile count, api-keys per account).</td>
               <td class="py-2">TierLimitError</td>
             </tr>
-            <tr class="border-b border-slate-200">
+            <tr class="border-b border-white/10">
               <td class="py-2 pr-4">429</td>
               <td class="py-2 pr-4">errors.driftstack.dev/rate-limited</td>
               <td class="py-2 pr-4 font-sans">Per-account rate limit; <code>retry-after</code> header carries seconds.</td>
-              <td class="py-2">RateLimitError <em class="font-sans not-italic text-slate-500">(retryable)</em></td>
+              <td class="py-2">RateLimitError <em class="font-sans not-italic text-ink-muted">(retryable)</em></td>
             </tr>
-            <tr class="border-b border-slate-200">
+            <tr class="border-b border-white/10">
               <td class="py-2 pr-4">429</td>
               <td class="py-2 pr-4">errors.driftstack.dev/concurrency-limit</td>
               <td class="py-2 pr-4 font-sans">Account hit its tier-bound concurrent-session cap.</td>
               <td class="py-2">ConcurrencyLimitError</td>
             </tr>
-            <tr class="border-b border-slate-200">
+            <tr class="border-b border-white/10">
               <td class="py-2 pr-4">500</td>
               <td class="py-2 pr-4">errors.driftstack.dev/internal</td>
               <td class="py-2 pr-4 font-sans">Server-side fault. Logged + alerted.</td>
-              <td class="py-2">DriftstackError (kind: <code>internal</code>) <em class="font-sans not-italic text-slate-500">(retryable)</em></td>
+              <td class="py-2">DriftstackError (kind: <code>internal</code>) <em class="font-sans not-italic text-ink-muted">(retryable)</em></td>
             </tr>
             <tr>
               <td class="py-2 pr-4">503</td>
               <td class="py-2 pr-4">errors.driftstack.dev/feature-unavailable</td>
               <td class="py-2 pr-4 font-sans">Feature disabled at deploy time (e.g. avatar upload without R2 bucket).</td>
-              <td class="py-2">FeatureUnavailableError <em class="font-sans not-italic text-slate-500">(NOT retryable)</em></td>
+              <td class="py-2">FeatureUnavailableError <em class="font-sans not-italic text-ink-muted">(NOT retryable)</em></td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="mt-4 text-xs text-slate-500">
+      <p class="mt-4 text-xs text-ink-muted">
         SDK consumers can use <code class="font-mono">isRetryable(err)</code>
         (TypeScript) / equivalent predicates in Python + Go to filter
         which errors to retry without re-implementing the mapping.
@@ -443,23 +443,23 @@ os.WriteFile("out.png", data, 0644)</code></pre>
   </section>
 
   <!-- Spec posture -->
-  <section class="border-t border-slate-200 bg-slate-50">
+  <section class="border-t border-white/10 bg-surface-base">
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Spec posture</p>
-      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Spec posture</p>
+      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-ink-primary">
         Stable contract. Versioned. Auto-generated.
       </h2>
-      <ul class="mt-6 space-y-3 max-w-prose text-slate-600">
+      <ul class="mt-6 space-y-3 max-w-prose text-ink-secondary">
         <li class="flex gap-3">
-          <span class="text-oxblood-700">→</span>
+          <span class="text-glow-red">→</span>
           <span>Every endpoint has Zod schemas for request + response. The OpenAPI 3.1 spec is generated from the schemas — there is no second source of truth.</span>
         </li>
         <li class="flex gap-3">
-          <span class="text-oxblood-700">→</span>
+          <span class="text-glow-red">→</span>
           <span>Every error case maps to an RFC 7807 <code class="font-mono">application/problem+json</code> response with a stable <code class="font-mono">type</code> URI.</span>
         </li>
         <li class="flex gap-3">
-          <span class="text-oxblood-700">→</span>
+          <span class="text-glow-red">→</span>
           <span>Breaking changes ship under a new path version. <code class="font-mono">/v1</code> stays stable; <code class="font-mono">/v2</code> would be a new prefix, not a silent shape change.</span>
         </li>
       </ul>

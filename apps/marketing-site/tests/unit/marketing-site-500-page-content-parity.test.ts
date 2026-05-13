@@ -38,7 +38,7 @@ describe('W379.C marketing-site /500.astro content parity', () => {
 
   it('500 chip + H1 "Something went wrong on our end." pinned', () => {
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">500<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-glow-red">500<\/p>/,
     );
     expect(body).toMatch(/<h1[^>]*>\s*Something went wrong on our end\.\s*<\/h1>/);
   });
@@ -53,7 +53,7 @@ describe('W379.C marketing-site /500.astro content parity', () => {
 
   it('support@driftstack.dev escape-hatch CTA inline + "URL you were on" framing', () => {
     expect(body).toMatch(
-      /<a href="mailto:support@driftstack\.dev" class="text-oxblood-700 underline">support@driftstack\.dev<\/a>/,
+      /<a href="mailto:support@driftstack\.dev" class="text-glow-red underline">support@driftstack\.dev<\/a>/,
     );
     expect(body).toMatch(/with the URL you were on/);
     expect(body).toMatch(/If this is blocking something time-sensitive, email/);

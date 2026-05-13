@@ -40,7 +40,7 @@ describe('W379.B cross-app 404 pages content parity', () => {
       expect(body).toMatch(/import BaseLayout from '\.\.\/layouts\/BaseLayout\.astro';/);
       expect(body).toMatch(/<BaseLayout title="404 · Driftstack" description="Page not found\."/);
       expect(body).toMatch(
-        /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">404<\/p>/,
+        /<p class="font-mono text-xs uppercase tracking-widest text-glow-red">404<\/p>/,
       );
     });
 
@@ -100,19 +100,19 @@ describe('W379.B cross-app 404 pages content parity', () => {
 
     it('status-site-specific copy: "only hosts a single overview page plus per-incident pages under /incidents/<id>"', () => {
       expect(body).toMatch(
-        /The status site only hosts a single overview page plus per-incident pages\s+under <code class="font-mono text-sm text-slate-700">\/incidents\/&lt;id&gt;<\/code>/,
+        /The status site only hosts a single overview page plus per-incident pages\s+under <code class="font-mono text-sm text-ink-secondary">\/incidents\/&lt;id&gt;<\/code>/,
       );
     });
 
     it('status-site uses subtle underline link (not btn-primary) + "← Back to overview"', () => {
       expect(body).toMatch(
-        /<a href="\/" class="text-sm text-slate-700 underline hover:text-slate-900">\s*\n?\s*← Back to overview\s*\n?\s*<\/a>/,
+        /<a href="\/" class="text-sm text-ink-secondary underline hover:text-ink-primary">\s*\n?\s*← Back to overview\s*\n?\s*<\/a>/,
       );
     });
 
     it('status-site uses slate-500 chip (not oxblood like the others — neutral palette)', () => {
       expect(body).toMatch(
-        /<p class="font-mono text-xs uppercase tracking-widest text-slate-500">404<\/p>/,
+        /<p class="font-mono text-xs uppercase tracking-widest text-ink-muted">404<\/p>/,
       );
     });
   });

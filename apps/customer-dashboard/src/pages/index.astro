@@ -19,17 +19,17 @@ const apiBaseUrl = resolveApiBaseUrl();
   <div class="mx-auto max-w-6xl px-6 py-10" data-page="overview">
     <header class="mb-10 flex items-center justify-between gap-6">
       <div class="min-w-0">
-        <p class="text-sm text-slate-500">Welcome back</p>
+        <p class="text-sm text-ink-muted">Welcome back</p>
         <h1
           data-account-name
-          class="mt-1 truncate text-3xl font-semibold tracking-tight text-slate-900"
+          class="mt-1 truncate text-3xl font-semibold tracking-tight text-ink-primary"
         >
           —
         </h1>
       </div>
       <span
         data-account-tier
-        class="rounded-full bg-oxblood-50 px-3 py-1 text-xs font-medium uppercase tracking-wide text-oxblood-700"
+        class="rounded-full bg-glow-red/10 px-3 py-1 text-xs font-medium uppercase tracking-wide text-glow-red"
       >
         —
       </span>
@@ -37,69 +37,69 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+      class="mb-6 hidden rounded-lg border border-glow-red/30 bg-glow-red/10 px-4 py-3 text-sm text-amber-800"
       role="status"
     >
     </div>
 
     <section class="grid gap-6 md:grid-cols-3">
       <div class="dashboard-card">
-        <p class="text-xs font-mono uppercase tracking-widest text-slate-500">Concurrent now</p>
-        <p class="mt-3 text-3xl font-semibold text-slate-900">
+        <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Concurrent now</p>
+        <p class="mt-3 text-3xl font-semibold text-ink-primary">
           <span data-stat-concurrent>—</span>
-          <span class="text-base font-normal text-slate-500">
+          <span class="text-base font-normal text-ink-muted">
             / <span data-stat-concurrent-cap>—</span>
           </span>
         </p>
-        <p class="mt-1 text-sm text-slate-500">live sessions in flight</p>
+        <p class="mt-1 text-sm text-ink-muted">live sessions in flight</p>
       </div>
       <div class="dashboard-card">
-        <p class="text-xs font-mono uppercase tracking-widest text-slate-500">Profiles</p>
-        <p class="mt-3 text-3xl font-semibold text-slate-900">
+        <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Profiles</p>
+        <p class="mt-3 text-3xl font-semibold text-ink-primary">
           <span data-stat-profiles>—</span>
-          <span data-stat-profiles-cap class="text-base font-normal text-slate-500"></span>
+          <span data-stat-profiles-cap class="text-base font-normal text-ink-muted"></span>
         </p>
-        <p class="mt-1 text-sm text-slate-500">persistent identity slots</p>
+        <p class="mt-1 text-sm text-ink-muted">persistent identity slots</p>
       </div>
       <div class="dashboard-card">
-        <p class="text-xs font-mono uppercase tracking-widest text-slate-500">API keys</p>
-        <p class="mt-3 text-3xl font-semibold text-slate-900"><span data-stat-api-keys>—</span></p>
-        <p class="mt-1 text-sm text-slate-500">active keys</p>
+        <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">API keys</p>
+        <p class="mt-3 text-3xl font-semibold text-ink-primary"><span data-stat-api-keys>—</span></p>
+        <p class="mt-1 text-sm text-ink-muted">active keys</p>
       </div>
     </section>
 
     <section class="mt-10">
       <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-slate-900">Active sessions</h2>
-        <a href="/sessions" class="text-sm text-oxblood-700 hover:underline">View all →</a>
+        <h2 class="text-lg font-semibold text-ink-primary">Active sessions</h2>
+        <a href="/sessions" class="text-sm text-glow-red hover:underline">View all →</a>
       </div>
-      <div data-sessions-empty class="mt-3 hidden text-sm text-slate-500">
+      <div data-sessions-empty class="mt-3 hidden text-sm text-ink-muted">
         No sessions running right now.
       </div>
       <ul
         data-sessions-list
-        class="mt-4 hidden divide-y divide-slate-200 rounded-lg border border-slate-200 bg-white"
+        class="mt-4 hidden divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
       >
       </ul>
     </section>
 
     <section class="mt-10">
-      <h2 class="text-lg font-semibold text-slate-900">Subscription</h2>
-      <div data-subscription-empty class="mt-3 hidden text-sm text-slate-500">
-        No active subscription. <a href="/select-tier" class="text-oxblood-700 hover:underline">Pick a tier →</a>
+      <h2 class="text-lg font-semibold text-ink-primary">Subscription</h2>
+      <div data-subscription-empty class="mt-3 hidden text-sm text-ink-muted">
+        No active subscription. <a href="/select-tier" class="text-glow-red hover:underline">Pick a tier →</a>
       </div>
       <div data-subscription-card class="dashboard-card mt-4 hidden">
         <p
           data-subscription-line
-          class="font-mono text-xs uppercase tracking-widest text-slate-500"
+          class="font-mono text-xs uppercase tracking-widest text-ink-muted"
         >
         </p>
-        <p data-subscription-period class="mt-3 text-sm text-slate-600"></p>
+        <p data-subscription-period class="mt-3 text-sm text-ink-secondary"></p>
         <a href="/billing" class="btn-secondary mt-4 inline-flex">Manage billing</a>
       </div>
-      <div data-trial-pack class="dashboard-card mt-4 hidden border-emerald-200 bg-emerald-50">
-        <p class="font-mono text-xs uppercase tracking-widest text-emerald-700">Trial pack</p>
-        <p data-trial-pack-line class="mt-3 text-sm text-emerald-900"></p>
+      <div data-trial-pack class="dashboard-card mt-4 hidden border-emerald-400/30 bg-emerald-400/10">
+        <p class="font-mono text-xs uppercase tracking-widest text-emerald-300">Trial pack</p>
+        <p data-trial-pack-line class="mt-3 text-sm text-emerald-200"></p>
       </div>
     </section>
   </div>
@@ -220,15 +220,15 @@ const apiBaseUrl = resolveApiBaseUrl();
               return (
                 '<li class="flex items-center justify-between px-6 py-4">' +
                 '<div class="min-w-0">' +
-                '<p class="font-mono text-sm text-slate-900">' +
+                '<p class="font-mono text-sm text-ink-primary">' +
                 escapeHtml(s.id) +
                 '</p>' +
-                '<p class="mt-1 text-xs text-slate-500">' +
+                '<p class="mt-1 text-xs text-ink-muted">' +
                 escapeHtml(s.archetype || '—') +
                 ' · started ' +
                 escapeHtml(s.created_at || '') +
                 '</p></div>' +
-                '<span class="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium uppercase tracking-wide text-emerald-700">' +
+                '<span class="rounded-full bg-emerald-400/10 px-2 py-1 text-xs font-medium uppercase tracking-wide text-emerald-300">' +
                 escapeHtml(s.status || '—') +
                 '</span></li>'
               );

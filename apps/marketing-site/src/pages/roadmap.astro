@@ -105,20 +105,20 @@ const LATER: RoadmapItem[] = [
   <!-- Hero -->
   <section class="bg-gradient-to-b from-white to-slate-50">
     <div class="mx-auto max-w-6xl px-6 pb-16 pt-20 md:pt-24">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Roadmap</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Roadmap</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl">
         What's live, next, and further out.
       </h1>
-      <p class="mt-6 max-w-prose text-lg text-slate-600">
+      <p class="mt-6 max-w-prose text-lg text-ink-secondary">
         We don't publish dates; we publish ordering. <strong>Now</strong> ships
         today. <strong>Next</strong> is in active engineering and lands in the
         weeks ahead. <strong>Later</strong> is on the deck and will move up
         as the foundation supports it.
       </p>
-      <p class="mt-3 max-w-prose text-base text-slate-600">
+      <p class="mt-3 max-w-prose text-base text-ink-secondary">
         If something on the Later list would unlock a real workload for you
         today, mail
-        <a href="mailto:support@driftstack.dev" class="text-oxblood-700 underline"
+        <a href="mailto:support@driftstack.dev" class="text-glow-red underline"
           >support@driftstack.dev</a
         > — concrete demand reorders the deck.
       </p>
@@ -126,24 +126,24 @@ const LATER: RoadmapItem[] = [
   </section>
 
   <!-- Now -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="mb-8 flex items-baseline gap-4">
         <span
-          class="rounded-full bg-emerald-100 px-3 py-1 font-mono text-xs uppercase tracking-widest text-emerald-700"
+          class="rounded-full bg-emerald-100 px-3 py-1 font-mono text-xs uppercase tracking-widest text-emerald-300"
         >
           Now
         </span>
-        <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+        <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">
           Live and supported today.
         </h2>
       </div>
       <ul class="grid gap-6 md:grid-cols-2">
         {
           NOW.map((item) => (
-            <li class="rounded-lg border border-emerald-200 bg-emerald-50/40 p-6">
-              <h3 class="text-lg font-medium text-slate-900">{item.title}</h3>
-              <p class="mt-3 text-sm text-slate-600">{item.body}</p>
+            <li class="rounded-lg border border-emerald-400/30 bg-emerald-400/10/40 p-6">
+              <h3 class="text-lg font-medium text-ink-primary">{item.title}</h3>
+              <p class="mt-3 text-sm text-ink-secondary">{item.body}</p>
             </li>
           ))
         }
@@ -152,24 +152,24 @@ const LATER: RoadmapItem[] = [
   </section>
 
   <!-- Next -->
-  <section class="border-t border-slate-200 bg-slate-50">
+  <section class="border-t border-white/10 bg-surface-base">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="mb-8 flex items-baseline gap-4">
         <span
-          class="rounded-full bg-oxblood-100 px-3 py-1 font-mono text-xs uppercase tracking-widest text-oxblood-700"
+          class="rounded-full bg-glow-red/20 px-3 py-1 font-mono text-xs uppercase tracking-widest text-glow-red"
         >
           Next
         </span>
-        <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+        <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">
           In active engineering.
         </h2>
       </div>
       <ul class="grid gap-6 md:grid-cols-2">
         {
           NEXT.map((item) => (
-            <li class="rounded-lg border border-oxblood-200 bg-white p-6">
-              <h3 class="text-lg font-medium text-slate-900">{item.title}</h3>
-              <p class="mt-3 text-sm text-slate-600">{item.body}</p>
+            <li class="rounded-lg border border-glow-red/30 bg-surface-raised p-6">
+              <h3 class="text-lg font-medium text-ink-primary">{item.title}</h3>
+              <p class="mt-3 text-sm text-ink-secondary">{item.body}</p>
             </li>
           ))
         }
@@ -178,24 +178,24 @@ const LATER: RoadmapItem[] = [
   </section>
 
   <!-- Later -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="mb-8 flex items-baseline gap-4">
         <span
-          class="rounded-full bg-slate-200 px-3 py-1 font-mono text-xs uppercase tracking-widest text-slate-600"
+          class="rounded-full bg-surface-elevated px-3 py-1 font-mono text-xs uppercase tracking-widest text-ink-secondary"
         >
           Later
         </span>
-        <h2 class="text-2xl font-semibold tracking-tight text-slate-900">
+        <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">
           On the deck.
         </h2>
       </div>
       <ul class="grid gap-6 md:grid-cols-2">
         {
           LATER.map((item) => (
-            <li class="rounded-lg border border-slate-200 bg-slate-50/60 p-6">
-              <h3 class="text-lg font-medium text-slate-900">{item.title}</h3>
-              <p class="mt-3 text-sm text-slate-600">{item.body}</p>
+            <li class="rounded-lg border border-white/10 bg-surface-base/60 p-6">
+              <h3 class="text-lg font-medium text-ink-primary">{item.title}</h3>
+              <p class="mt-3 text-sm text-ink-secondary">{item.body}</p>
             </li>
           ))
         }
@@ -204,17 +204,17 @@ const LATER: RoadmapItem[] = [
   </section>
 
   <!-- CTA -->
-  <section class="border-t border-slate-200 bg-slate-50">
+  <section class="border-t border-white/10 bg-surface-base">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="flex flex-col items-start gap-6 md:flex-row md:items-end md:justify-between">
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
             Influence the order
           </p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
             Tell us what would unlock your workload.
           </h2>
-          <p class="mt-3 max-w-prose text-slate-600">
+          <p class="mt-3 max-w-prose text-ink-secondary">
             Customer demand is the single best ordering signal we have. If
             you're trying to decide whether to bet on Driftstack and a Later
             item is the deal-breaker, say so — that information moves it up.

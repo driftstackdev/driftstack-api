@@ -116,11 +116,11 @@ const ENTRIES: readonly ChangelogEntry[] = [
 
 const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
   launch: 'bg-oxblood-700 text-white',
-  sdk: 'bg-slate-900 text-white',
-  docs: 'bg-slate-200 text-slate-900',
+  sdk: 'bg-surface-inset text-white',
+  docs: 'bg-surface-elevated text-ink-primary',
   security: 'bg-red-100 text-red-900',
-  pricing: 'bg-amber-100 text-amber-900',
-  'self-hosted': 'bg-emerald-100 text-emerald-900',
+  pricing: 'bg-amber-100 text-glow-red-soft',
+  'self-hosted': 'bg-emerald-100 text-emerald-200',
 };
 ---
 
@@ -131,11 +131,11 @@ const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
   <!-- Header -->
   <section class="bg-gradient-to-b from-white to-slate-50">
     <div class="mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Changelog</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Changelog</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl">
         What changed.
       </h1>
-      <p class="mt-6 max-w-prose text-lg text-slate-600">
+      <p class="mt-6 max-w-prose text-lg text-ink-secondary">
         Customer-facing changes, in reverse-chronological order. SDK
         releases, pricing changes, security posture updates,
         self-hosted-tier adjustments. Engineering-internal changes
@@ -146,24 +146,24 @@ const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
   </section>
 
   <!-- Entries -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <ol class="space-y-10">
         {
           ENTRIES.map((entry) => (
             <li class="border-b border-slate-100 pb-8 last:border-b-0">
               <div class="flex items-center gap-3">
-                <time class="font-mono text-xs text-slate-500" datetime={entry.date}>
+                <time class="font-mono text-xs text-ink-muted" datetime={entry.date}>
                   {entry.date}
                 </time>
                 <span class={`inline-flex rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest ${CATEGORY_COLOR[entry.category]}`}>
                   {entry.category}
                 </span>
               </div>
-              <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
+              <h2 class="mt-3 text-2xl font-semibold tracking-tight text-ink-primary">
                 {entry.title}
               </h2>
-              <p class="mt-3 max-w-prose text-slate-600">{entry.body}</p>
+              <p class="mt-3 max-w-prose text-ink-secondary">{entry.body}</p>
             </li>
           ))
         }
@@ -172,17 +172,17 @@ const CATEGORY_COLOR: Record<ChangelogEntry['category'], string> = {
   </section>
 
   <!-- Subscribe banner -->
-  <section class="border-t border-slate-200 bg-slate-50">
+  <section class="border-t border-white/10 bg-surface-base">
     <div class="mx-auto max-w-6xl px-6 py-12">
       <div class="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 class="text-xl font-semibold text-slate-900">
+          <h2 class="text-xl font-semibold text-ink-primary">
             Want changelog entries delivered?
           </h2>
-          <p class="mt-2 max-w-prose text-sm text-slate-600">
+          <p class="mt-2 max-w-prose text-sm text-ink-secondary">
             Email <a
               href="mailto:hello@driftstack.dev?subject=Changelog%20subscribe"
-              class="text-oxblood-700 underline">hello@driftstack.dev</a> to
+              class="text-glow-red underline">hello@driftstack.dev</a> to
             get added to the customer changelog list. Roughly one email
             every 2-4 weeks; only material changes (no internal-noise
             spam).

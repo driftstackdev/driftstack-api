@@ -22,19 +22,19 @@ describe('W607 apps/status-site/src/pages/404.astro content parity', () => {
     expect(body).toMatch(/^import StatusLayout from '\.\.\/layouts\/StatusLayout\.astro';$/m);
     expect(body).toMatch(/<StatusLayout title="404 · Driftstack status">/);
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-slate-500">404<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-ink-muted">404<\/p>/,
     );
     expect(body).toMatch(
-      /<h1 class="mt-4 text-3xl font-semibold tracking-tight text-slate-900">Page not found\.<\/h1>/,
+      /<h1 class="mt-4 text-3xl font-semibold tracking-tight text-ink-primary">Page not found\.<\/h1>/,
     );
     expect(body).toMatch(
       /The status site only hosts a single overview page plus per-incident pages/,
     );
     expect(body).toMatch(
-      /under <code class="font-mono text-sm text-slate-700">\/incidents\/&lt;id&gt;<\/code>\./,
+      /under <code class="font-mono text-sm text-ink-secondary">\/incidents\/&lt;id&gt;<\/code>\./,
     );
     expect(body).toMatch(
-      /<a href="\/" class="text-sm text-slate-700 underline hover:text-slate-900">/,
+      /<a href="\/" class="text-sm text-ink-secondary underline hover:text-ink-primary">/,
     );
     expect(body).toMatch(/← Back to overview/);
     expect(existsSync(PAGE)).toBe(true);

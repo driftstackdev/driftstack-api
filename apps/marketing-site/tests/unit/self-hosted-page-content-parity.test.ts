@@ -72,13 +72,13 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
 
   it('3 "when self-hosted is the right call" categories pinned (Privacy / Volume / Sovereignty)', () => {
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Privacy<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-glow-red">Privacy<\/p>/,
     );
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Volume<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-glow-red">Volume<\/p>/,
     );
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Sovereignty<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-glow-red">Sovereignty<\/p>/,
     );
   });
 
@@ -88,10 +88,10 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
 
   it('4-step process pinned (01 Contact sales / 02 Procure hardware / 03 Onboard / 04 Run)', () => {
     for (const step of [
-      '<h3 class="mt-3 font-semibold text-slate-900">Contact sales</h3>',
-      '<h3 class="mt-3 font-semibold text-slate-900">Procure hardware</h3>',
-      '<h3 class="mt-3 font-semibold text-slate-900">Onboard</h3>',
-      '<h3 class="mt-3 font-semibold text-slate-900">Run</h3>',
+      '<h3 class="mt-3 font-semibold text-ink-primary">Contact sales</h3>',
+      '<h3 class="mt-3 font-semibold text-ink-primary">Procure hardware</h3>',
+      '<h3 class="mt-3 font-semibold text-ink-primary">Onboard</h3>',
+      '<h3 class="mt-3 font-semibold text-ink-primary">Run</h3>',
     ]) {
       expect(body, `step missing: ${step}`).toContain(step);
     }

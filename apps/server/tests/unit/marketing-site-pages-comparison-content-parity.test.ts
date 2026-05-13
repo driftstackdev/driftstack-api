@@ -85,16 +85,16 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
 
   it("Per-competitor 4-section comparison: 'Driftstack vs Browserless' + 'Driftstack vs Bright Data' + 'Driftstack vs ScrapingBee' + 'Driftstack vs Browserbase' each with a 'Pricing shape' subhead — pinned so the per-vendor head-to-head + the explicit pricing-shape callout survives (drift to dropping pricing-shape would hide the most-comparable cost-narrative for prospects)", () => {
     expect(body).toMatch(
-      /<h3 class="text-xl font-semibold text-slate-900">Driftstack vs Browserless<\/h3>/,
+      /<h3 class="text-xl font-semibold text-ink-primary">Driftstack vs Browserless<\/h3>/,
     );
     expect(body).toMatch(
-      /<h3 class="text-xl font-semibold text-slate-900">Driftstack vs Bright Data<\/h3>/,
+      /<h3 class="text-xl font-semibold text-ink-primary">Driftstack vs Bright Data<\/h3>/,
     );
     expect(body).toMatch(
-      /<h3 class="text-xl font-semibold text-slate-900">Driftstack vs ScrapingBee<\/h3>/,
+      /<h3 class="text-xl font-semibold text-ink-primary">Driftstack vs ScrapingBee<\/h3>/,
     );
     expect(body).toMatch(
-      /<h3 class="text-xl font-semibold text-slate-900">Driftstack vs Browserbase<\/h3>/,
+      /<h3 class="text-xl font-semibold text-ink-primary">Driftstack vs Browserbase<\/h3>/,
     );
     // Pricing shape subhead appears 4 times - just confirm presence via global match
     const pricingShapeMatches = body.match(/Pricing shape/g) || [];
@@ -109,10 +109,14 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
 
   it("When NOT Driftstack 3-card: Desktop-only targets + Pure HTML scraping + IP-pool-as-product — pinned so the honest-anti-recommendation 3-card list survives (drift to dropping would hide the where-Driftstack-isn't-the-fit guidance the V-472 doc-comment commits to)", () => {
     expect(body).toMatch(
-      /<h3 class="text-lg font-medium text-slate-900">Desktop-only targets<\/h3>/,
+      /<h3 class="text-lg font-medium text-ink-primary">Desktop-only targets<\/h3>/,
     );
-    expect(body).toMatch(/<h3 class="text-lg font-medium text-slate-900">Pure HTML scraping<\/h3>/);
-    expect(body).toMatch(/<h3 class="text-lg font-medium text-slate-900">IP-pool-as-product<\/h3>/);
+    expect(body).toMatch(
+      /<h3 class="text-lg font-medium text-ink-primary">Pure HTML scraping<\/h3>/,
+    );
+    expect(body).toMatch(
+      /<h3 class="text-lg font-medium text-ink-primary">IP-pool-as-product<\/h3>/,
+    );
   });
 
   it("Freshness stamp: 'Last reviewed 2026-05-10' + drift-correction mailto:support@driftstack.dev — pinned so the page-staleness signal + the customer-driven correction channel survive (drift to dropping the timestamp would let competitor rows go stale without a reviewer signal)", () => {
