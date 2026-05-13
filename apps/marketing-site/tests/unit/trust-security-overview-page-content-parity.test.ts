@@ -97,7 +97,7 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     // Pin the falsifiable honesty signal — a ✓-flip without
     // shipping must be flagged.
     expect(body).toMatch(
-      /<span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-amber-100[^>]*>○<\/span>\s*\n?\s*<div>\s*\n?\s*<p class="font-medium text-slate-900">Customer-configurable egress \(roadmap\)<\/p>/,
+      /<span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-amber-100[^>]*>○<\/span>\s*\n?\s*<div>\s*\n?\s*<p class="font-medium text-ink-primary">Customer-configurable egress \(roadmap\)<\/p>/,
     );
     expect(body).toMatch(
       /Per-account egress configuration \(SOCKS5 \/ WireGuard\s+tunnels\) is on the roadmap/,
@@ -105,7 +105,7 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
   });
 
   it('EU-only data plane: Hetzner Nuremberg / Neon Frankfurt / R2 EU jurisdiction', () => {
-    expect(body).toMatch(/<p class="font-medium text-slate-900">EU-only data plane<\/p>/);
+    expect(body).toMatch(/<p class="font-medium text-ink-primary">EU-only data plane<\/p>/);
     expect(body).toMatch(
       /Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s+object storage \(Cloudflare R2 EU jurisdiction\)/,
     );

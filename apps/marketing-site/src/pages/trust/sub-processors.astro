@@ -29,7 +29,7 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
     case 'material_change':
       return 'bg-amber-100 text-amber-800';
     case 'register_published':
-      return 'bg-slate-200 text-slate-700';
+      return 'bg-slate-200 text-ink-secondary';
   }
 }
 ---
@@ -38,18 +38,18 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
   title="Sub-processors"
   description="The complete list of sub-processors Driftstack engages, with regions of operation, purpose, and transfer mechanism. Source of truth for Article 28(2) sub-processor amendment notices."
 >
-  <section class="bg-gradient-to-b from-white to-slate-50">
+  <section class="bg-gradient-to-b from-surface-base to-surface-raised">
     <div class="mx-auto max-w-4xl px-6 py-20">
       <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Trust</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl">
         Sub-processors.
       </h1>
-      <p class="mt-6 max-w-prose text-lg text-slate-600">
+      <p class="mt-6 max-w-prose text-lg text-ink-secondary">
         The complete list of organisations that process customer data on
         Driftstack's behalf, the region they operate in, what they do, and
         the contractual basis under which any non-EU transfer happens.
       </p>
-      <p class="mt-3 max-w-prose text-sm text-slate-500">
+      <p class="mt-3 max-w-prose text-sm text-ink-muted">
         This page is the customer-facing source of truth for sub-processor
         changes. Adding or removing an entry triggers a 30-day notice to all
         customers per Article 28(2) of the GDPR; the same content also lives
@@ -57,32 +57,32 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
           >Annex 3 of the Data Processing Agreement</a
         >.
       </p>
-      <p class="mt-3 font-mono text-xs text-slate-500">
+      <p class="mt-3 font-mono text-xs text-ink-muted">
         Last updated: {SUB_PROCESSOR_REGISTER_LAST_UPDATED}
       </p>
     </div>
   </section>
 
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-4xl px-6 py-16">
       <div class="overflow-x-auto">
         <table class="w-full border-collapse text-left text-sm">
           <thead>
-            <tr class="border-b border-slate-200">
-              <th class="py-4 pr-4 font-medium text-slate-700">Sub-processor</th>
-              <th class="px-4 py-4 font-medium text-slate-700">Region</th>
-              <th class="px-4 py-4 font-medium text-slate-700">Purpose</th>
-              <th class="px-4 py-4 font-medium text-slate-700">Transfer mechanism</th>
+            <tr class="border-b border-white/10">
+              <th class="py-4 pr-4 font-medium text-ink-secondary">Sub-processor</th>
+              <th class="px-4 py-4 font-medium text-ink-secondary">Region</th>
+              <th class="px-4 py-4 font-medium text-ink-secondary">Purpose</th>
+              <th class="px-4 py-4 font-medium text-ink-secondary">Transfer mechanism</th>
             </tr>
           </thead>
           <tbody>
             {
               SUB_PROCESSORS.map((sp) => (
-                <tr class="border-b border-slate-100 align-top">
-                  <td class="py-4 pr-4 font-medium text-slate-900">{sp.name}</td>
-                  <td class="px-4 py-4 text-slate-700">{sp.region}</td>
-                  <td class="px-4 py-4 text-slate-600">{sp.purpose}</td>
-                  <td class="px-4 py-4 text-slate-600">{sp.transferMechanism}</td>
+                <tr class="border-b border-white/10 align-top">
+                  <td class="py-4 pr-4 font-medium text-ink-primary">{sp.name}</td>
+                  <td class="px-4 py-4 text-ink-secondary">{sp.region}</td>
+                  <td class="px-4 py-4 text-ink-secondary">{sp.purpose}</td>
+                  <td class="px-4 py-4 text-ink-secondary">{sp.transferMechanism}</td>
                 </tr>
               ))
             }
@@ -92,10 +92,10 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
     </div>
   </section>
 
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold text-slate-900">Region preference vs. region routing.</h2>
-      <div class="mt-6 space-y-4 text-sm text-slate-600">
+      <h2 class="text-2xl font-semibold text-ink-primary">Region preference vs. region routing.</h2>
+      <div class="mt-6 space-y-4 text-sm text-ink-secondary">
         <p>
           The "region" you can pick from <span class="font-mono">/settings → Region</span>
           (us / eu / apac) is a <em>stated preference</em>. It does not move
@@ -121,10 +121,10 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
   </section>
 
   <!-- V-478 — sub-processor change-log -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold text-slate-900">Change log.</h2>
-      <p class="mt-3 max-w-prose text-sm text-slate-600">
+      <h2 class="text-2xl font-semibold text-ink-primary">Change log.</h2>
+      <p class="mt-3 max-w-prose text-sm text-ink-secondary">
         Every material change to the register lands here as an immutable
         entry. Cosmetic edits (rewording, typo fixes) don't qualify and
         aren't logged.
@@ -132,11 +132,11 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
       <ol class="mt-8 space-y-4">
         {
           SUB_PROCESSOR_CHANGELOG.map((entry) => (
-            <li class="rounded-lg border border-slate-200 bg-white p-5">
+            <li class="rounded-lg border border-white/10 bg-surface-raised p-5">
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p class="font-mono text-xs text-slate-500">{entry.date}</p>
-                  <p class="mt-1 text-sm font-medium text-slate-900">
+                  <p class="font-mono text-xs text-ink-muted">{entry.date}</p>
+                  <p class="mt-1 text-sm font-medium text-ink-primary">
                     {entry.subject || 'Register-level entry'}
                   </p>
                 </div>
@@ -149,8 +149,8 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
                   {changeLogKindLabel(entry.kind)}
                 </span>
               </div>
-              <p class="mt-3 text-sm text-slate-600">{entry.summary}</p>
-              <p class="mt-2 font-mono text-xs text-slate-500">
+              <p class="mt-3 text-sm text-ink-secondary">{entry.summary}</p>
+              <p class="mt-2 font-mono text-xs text-ink-muted">
                 Effective: {entry.effective_at}
               </p>
             </li>
@@ -160,10 +160,10 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
     </div>
   </section>
 
-  <section class="border-t border-slate-200 bg-slate-50">
+  <section class="border-t border-white/10 bg-surface-raised/40">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold text-slate-900">How sub-processor changes work.</h2>
-      <div class="mt-6 space-y-4 text-sm text-slate-600">
+      <h2 class="text-2xl font-semibold text-ink-primary">How sub-processor changes work.</h2>
+      <div class="mt-6 space-y-4 text-sm text-ink-secondary">
         <p>
           When Driftstack engages a new sub-processor, removes one, or
           materially changes the role of an existing one, customers receive

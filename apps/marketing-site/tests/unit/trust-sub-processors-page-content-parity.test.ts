@@ -58,7 +58,7 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
     expect(body).toMatch(/case 'removed':\s*\n?\s*return 'bg-red-100 text-red-800';/);
     expect(body).toMatch(/case 'material_change':\s*\n?\s*return 'bg-amber-100 text-amber-800';/);
     expect(body).toMatch(
-      /case 'register_published':\s*\n?\s*return 'bg-slate-200 text-slate-700';/,
+      /case 'register_published':\s*\n?\s*return 'bg-slate-200 text-ink-secondary';/,
     );
   });
 
@@ -106,11 +106,13 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
   });
 
   it('table renders 4 columns (Sub-processor / Region / Purpose / Transfer mechanism)', () => {
-    expect(body).toMatch(/<th class="py-4 pr-4 font-medium text-slate-700">Sub-processor<\/th>/);
-    expect(body).toMatch(/<th class="px-4 py-4 font-medium text-slate-700">Region<\/th>/);
-    expect(body).toMatch(/<th class="px-4 py-4 font-medium text-slate-700">Purpose<\/th>/);
     expect(body).toMatch(
-      /<th class="px-4 py-4 font-medium text-slate-700">Transfer mechanism<\/th>/,
+      /<th class="py-4 pr-4 font-medium text-ink-secondary">Sub-processor<\/th>/,
+    );
+    expect(body).toMatch(/<th class="px-4 py-4 font-medium text-ink-secondary">Region<\/th>/);
+    expect(body).toMatch(/<th class="px-4 py-4 font-medium text-ink-secondary">Purpose<\/th>/);
+    expect(body).toMatch(
+      /<th class="px-4 py-4 font-medium text-ink-secondary">Transfer mechanism<\/th>/,
     );
   });
 

@@ -39,16 +39,18 @@ describe('W514.B apps/marketing-site/src/pages/docs/cost-monitoring.astro conten
 
   it("5-cost-component framing pinned: Compute (session-minutes) + Storage (R2 GB-months) + Egress (TURN GB) + Email (Postmark sends) + LLM tokens + 'The breakdown returned by /v1/account/cost mirrors the same five components.' — pinned so the 5-line component surface + the mirrors-the-route commitment survives (drift to dropping any component would create marketing↔cost-breakdown-response divergence)", () => {
     expect(body).toMatch(
-      /<dt class="text-sm font-medium text-slate-900">Compute \(session-minutes\)<\/dt>/,
+      /<dt class="text-sm font-medium text-ink-primary">Compute \(session-minutes\)<\/dt>/,
     );
     expect(body).toMatch(
-      /<dt class="text-sm font-medium text-slate-900">Storage \(R2 GB-months\)<\/dt>/,
+      /<dt class="text-sm font-medium text-ink-primary">Storage \(R2 GB-months\)<\/dt>/,
     );
-    expect(body).toMatch(/<dt class="text-sm font-medium text-slate-900">Egress \(TURN GB\)<\/dt>/);
     expect(body).toMatch(
-      /<dt class="text-sm font-medium text-slate-900">Email \(Postmark sends\)<\/dt>/,
+      /<dt class="text-sm font-medium text-ink-primary">Egress \(TURN GB\)<\/dt>/,
     );
-    expect(body).toMatch(/<dt class="text-sm font-medium text-slate-900">LLM tokens<\/dt>/);
+    expect(body).toMatch(
+      /<dt class="text-sm font-medium text-ink-primary">Email \(Postmark sends\)<\/dt>/,
+    );
+    expect(body).toMatch(/<dt class="text-sm font-medium text-ink-primary">LLM tokens<\/dt>/);
     expect(body).toMatch(
       /The breakdown returned by\s*\n?\s*<code class="font-mono">\/v1\/account\/cost<\/code> mirrors the\s*\n?\s*same five components\./,
     );

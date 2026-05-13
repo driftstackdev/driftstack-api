@@ -13,17 +13,17 @@ import StatusBadge from '../../components/StatusBadge.astro';
   description="Driftstack trust center: security architecture, sub-processors, legal agreements, incident history, and live platform status. One bookmark for everything compliance-relevant."
 >
   <!-- Hero -->
-  <section class="bg-gradient-to-b from-white to-slate-50">
+  <section class="bg-gradient-to-b from-surface-base to-surface-raised">
     <div class="mx-auto max-w-6xl px-6 pb-16 pt-20 md:pt-24">
       <div class="flex flex-wrap items-start justify-between gap-6">
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
             Trust center
           </p>
-          <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+          <h1 class="mt-3 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl">
             One bookmark for everything compliance-relevant.
           </h1>
-          <p class="mt-6 max-w-prose text-lg text-slate-600">
+          <p class="mt-6 max-w-prose text-lg text-ink-secondary">
             Security architecture, sub-processor list, legal agreements,
             and incident history — published in one place. Buyer
             evaluations and ongoing GDPR/DPA reviews can start here without
@@ -36,20 +36,20 @@ import StatusBadge from '../../components/StatusBadge.astro';
   </section>
 
   <!-- Cards -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="grid gap-6 md:grid-cols-2">
         <a
           href="/security"
-          class="group rounded-lg border border-slate-200 bg-white p-6 transition hover:border-oxblood-300 hover:shadow-sm"
+          class="group rounded-lg border border-white/10 bg-surface-raised p-6 transition hover:border-oxblood-300 hover:shadow-sm"
         >
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
             Security
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-slate-900 group-hover:text-oxblood-700">
+          <h2 class="mt-3 text-xl font-semibold text-ink-primary group-hover:text-oxblood-700">
             Architecture + posture →
           </h2>
-          <p class="mt-3 text-sm text-slate-600">
+          <p class="mt-3 text-sm text-ink-secondary">
             Four pillars shipped today: scrypt-hashed API keys at rest,
             HMAC-signed webhooks, no-customer-data-access enforcement,
             and EU-resident infrastructure. Customer-configurable
@@ -62,15 +62,15 @@ import StatusBadge from '../../components/StatusBadge.astro';
 
         <a
           href="/trust/sub-processors"
-          class="group rounded-lg border border-slate-200 bg-white p-6 transition hover:border-oxblood-300 hover:shadow-sm"
+          class="group rounded-lg border border-white/10 bg-surface-raised p-6 transition hover:border-oxblood-300 hover:shadow-sm"
         >
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
             Sub-processors
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-slate-900 group-hover:text-oxblood-700">
+          <h2 class="mt-3 text-xl font-semibold text-ink-primary group-hover:text-oxblood-700">
             Live list + regions →
           </h2>
-          <p class="mt-3 text-sm text-slate-600">
+          <p class="mt-3 text-sm text-ink-secondary">
             Every organisation that processes customer data on Driftstack's
             behalf, with region, purpose, and transfer mechanism. Source of
             truth for Article 28(2) amendment notices; mirrored in DPA
@@ -80,15 +80,15 @@ import StatusBadge from '../../components/StatusBadge.astro';
 
         <a
           href="/trust/incidents"
-          class="group rounded-lg border border-slate-200 bg-white p-6 transition hover:border-oxblood-300 hover:shadow-sm"
+          class="group rounded-lg border border-white/10 bg-surface-raised p-6 transition hover:border-oxblood-300 hover:shadow-sm"
         >
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
             Incident history
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-slate-900 group-hover:text-oxblood-700">
+          <h2 class="mt-3 text-xl font-semibold text-ink-primary group-hover:text-oxblood-700">
             Past events + post-mortems →
           </h2>
-          <p class="mt-3 text-sm text-slate-600">
+          <p class="mt-3 text-sm text-ink-secondary">
             Customer-impacting outages and security incidents, with
             timestamps, customer impact, root cause, and the remediation
             we applied. Live status badge above for current platform
@@ -98,15 +98,15 @@ import StatusBadge from '../../components/StatusBadge.astro';
 
         <a
           href="/legal/dpa"
-          class="group rounded-lg border border-slate-200 bg-white p-6 transition hover:border-oxblood-300 hover:shadow-sm"
+          class="group rounded-lg border border-white/10 bg-surface-raised p-6 transition hover:border-oxblood-300 hover:shadow-sm"
         >
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
             Legal
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-slate-900 group-hover:text-oxblood-700">
+          <h2 class="mt-3 text-xl font-semibold text-ink-primary group-hover:text-oxblood-700">
             DPA · Privacy · Terms · AUP →
           </h2>
-          <p class="mt-3 text-sm text-slate-600">
+          <p class="mt-3 text-sm text-ink-secondary">
             Standard agreements ready to sign on the customer side: Data
             Processing Agreement (Article 28 + SCCs), Privacy Policy
             (Article 13–15 disclosures), Terms of Service, Acceptable Use
@@ -116,15 +116,15 @@ import StatusBadge from '../../components/StatusBadge.astro';
 
         <a
           href="/trust/compliance"
-          class="group rounded-lg border border-slate-200 bg-white p-6 transition hover:border-oxblood-300 hover:shadow-sm"
+          class="group rounded-lg border border-white/10 bg-surface-raised p-6 transition hover:border-oxblood-300 hover:shadow-sm"
         >
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
             Compliance
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-slate-900 group-hover:text-oxblood-700">
+          <h2 class="mt-3 text-xl font-semibold text-ink-primary group-hover:text-oxblood-700">
             Certifications + pen-test + disclosure →
           </h2>
-          <p class="mt-3 text-sm text-slate-600">
+          <p class="mt-3 text-sm text-ink-secondary">
             Honest current state: certifications in place + in progress,
             pen-test access workflow, vulnerability-disclosure policy +
             safe-harbour, sub-processor change SLA, audit-log retention.
@@ -133,15 +133,15 @@ import StatusBadge from '../../components/StatusBadge.astro';
 
         <a
           href="/trust/security-overview"
-          class="group rounded-lg border border-slate-200 bg-white p-6 transition hover:border-oxblood-300 hover:shadow-sm"
+          class="group rounded-lg border border-white/10 bg-surface-raised p-6 transition hover:border-oxblood-300 hover:shadow-sm"
         >
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
             Security overview
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-slate-900 group-hover:text-oxblood-700">
+          <h2 class="mt-3 text-xl font-semibold text-ink-primary group-hover:text-oxblood-700">
             Evaluator's checklist →
           </h2>
-          <p class="mt-3 text-sm text-slate-600">
+          <p class="mt-3 text-sm text-ink-secondary">
             Every security claim mapped to the code path, test, or
             doc that backs it up. The page a prospect's CISO skims
             before scheduling a vendor review call.
@@ -152,18 +152,18 @@ import StatusBadge from '../../components/StatusBadge.astro';
   </section>
 
   <!-- Quick-reference strip -->
-  <section class="border-t border-slate-200 bg-slate-50">
+  <section class="border-t border-white/10 bg-surface-raised/40">
     <div class="mx-auto max-w-6xl px-6 py-12">
       <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
         Quick reference
       </p>
-      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
+      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-ink-primary">
         The questions buyer evaluations always ask.
       </h2>
       <dl class="mt-8 grid gap-x-8 gap-y-6 md:grid-cols-2">
         <div>
-          <dt class="text-sm font-medium text-slate-900">Where is data hosted?</dt>
-          <dd class="mt-1 text-sm text-slate-600">
+          <dt class="text-sm font-medium text-ink-primary">Where is data hosted?</dt>
+          <dd class="mt-1 text-sm text-ink-secondary">
             EU only. Compute (Hetzner Nuremberg), database (Neon Frankfurt),
             object storage (Cloudflare R2 EU jurisdiction). Full list at
             <a href="/trust/sub-processors" class="text-oxblood-700 underline"
@@ -172,24 +172,24 @@ import StatusBadge from '../../components/StatusBadge.astro';
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-slate-900">Do you see our destination URLs?</dt>
-          <dd class="mt-1 text-sm text-slate-600">
+          <dt class="text-sm font-medium text-ink-primary">Do you see our destination URLs?</dt>
+          <dd class="mt-1 text-sm text-ink-secondary">
             No. Session traffic exits through your egress (the SOCKS5 /
             WireGuard / OpenVPN proxies you configure). Driftstack
             orchestrates the session; the proxy carries the bytes.
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-slate-900">Are API keys recoverable by staff?</dt>
-          <dd class="mt-1 text-sm text-slate-600">
+          <dt class="text-sm font-medium text-ink-primary">Are API keys recoverable by staff?</dt>
+          <dd class="mt-1 text-sm text-ink-secondary">
             No. Keys are scrypt-hashed at rest. A database breach surfaces
             hashes, not keys. If a key leaks, rotate via the dashboard's
             24-hour grace flow.
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-slate-900">How do we get a DPA on file?</dt>
-          <dd class="mt-1 text-sm text-slate-600">
+          <dt class="text-sm font-medium text-ink-primary">How do we get a DPA on file?</dt>
+          <dd class="mt-1 text-sm text-ink-secondary">
             The DPA at <a href="/legal/dpa" class="text-oxblood-700 underline"
               >/legal/dpa</a
             > is pre-signed by Driftstack; counter-signing acceptance closes
@@ -198,8 +198,8 @@ import StatusBadge from '../../components/StatusBadge.astro';
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-slate-900">What's the incident-response SLA?</dt>
-          <dd class="mt-1 text-sm text-slate-600">
+          <dt class="text-sm font-medium text-ink-primary">What's the incident-response SLA?</dt>
+          <dd class="mt-1 text-sm text-ink-secondary">
             Pre-launch we don't publish a contractual SLA — we publish
             incidents at
             <a href="/trust/incidents" class="text-oxblood-700 underline"
@@ -209,8 +209,8 @@ import StatusBadge from '../../components/StatusBadge.astro';
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-slate-900">How do we get a security questionnaire answered?</dt>
-          <dd class="mt-1 text-sm text-slate-600">
+          <dt class="text-sm font-medium text-ink-primary">How do we get a security questionnaire answered?</dt>
+          <dd class="mt-1 text-sm text-ink-secondary">
             Email <a href="mailto:support@driftstack.dev" class="text-oxblood-700 underline"
               >support@driftstack.dev</a
             > with the document; we'll fill it line-by-line. CAIQ /
@@ -222,17 +222,17 @@ import StatusBadge from '../../components/StatusBadge.astro';
   </section>
 
   <!-- CTA -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="flex flex-col items-start gap-6 md:flex-row md:items-end md:justify-between">
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
             Compliance review
           </p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
             Bring the questionnaire. We'll fill it.
           </h2>
-          <p class="mt-3 max-w-prose text-slate-600">
+          <p class="mt-3 max-w-prose text-ink-secondary">
             CAIQ, VSAQ, custom enterprise vendor questionnaires — all
             welcome. Most answers come out of the pages linked above; the
             rest we write line-by-line within a working day.

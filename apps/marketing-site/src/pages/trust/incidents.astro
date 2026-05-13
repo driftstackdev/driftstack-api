@@ -53,17 +53,17 @@ function severityClass(s: Incident['severity']): string {
   description="Driftstack incident history with timestamps, customer impact, root cause, and remediation. Each customer-impacting outage or security event gets a public post-mortem."
 >
   <!-- Hero -->
-  <section class="bg-gradient-to-b from-white to-slate-50">
+  <section class="bg-gradient-to-b from-surface-base to-surface-raised">
     <div class="mx-auto max-w-6xl px-6 pb-16 pt-20 md:pt-24">
       <div class="flex flex-wrap items-start justify-between gap-6">
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
             Trust · Incidents
           </p>
-          <h1 class="mt-3 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+          <h1 class="mt-3 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl">
             Incident history.
           </h1>
-          <p class="mt-6 max-w-prose text-lg text-slate-600">
+          <p class="mt-6 max-w-prose text-lg text-ink-secondary">
             Every customer-impacting outage or security event gets a public
             entry below — including ones short enough that customers might
             not notice. Root cause and remediation are added within seven
@@ -76,52 +76,52 @@ function severityClass(s: Incident['severity']): string {
   </section>
 
   <!-- What we publish -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-12">
       <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
         What we publish
       </p>
-      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
+      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-ink-primary">
         Public-incident bar.
       </h2>
       <ul class="mt-6 grid gap-4 md:grid-cols-2">
-        <li class="rounded-lg border border-slate-200 bg-white p-5">
-          <p class="text-sm font-medium text-slate-900">
+        <li class="rounded-lg border border-white/10 bg-surface-raised p-5">
+          <p class="text-sm font-medium text-ink-primary">
             Customer-impacting downtime
           </p>
-          <p class="mt-2 text-sm text-slate-600">
+          <p class="mt-2 text-sm text-ink-secondary">
             Any period during which the API or dashboard returned non-2xx to
             real customer requests, including partial degradations
             (e.g. one Hetzner region affected; one Sub-processor leg
             unavailable).
           </p>
         </li>
-        <li class="rounded-lg border border-slate-200 bg-white p-5">
-          <p class="text-sm font-medium text-slate-900">
+        <li class="rounded-lg border border-white/10 bg-surface-raised p-5">
+          <p class="text-sm font-medium text-ink-primary">
             Security events
           </p>
-          <p class="mt-2 text-sm text-slate-600">
+          <p class="mt-2 text-sm text-ink-secondary">
             Any unauthorized access, data exposure, or cryptographic
             integrity event. Notice within the legal-required window;
             details once forensic analysis is complete.
           </p>
         </li>
-        <li class="rounded-lg border border-slate-200 bg-white p-5">
-          <p class="text-sm font-medium text-slate-900">
+        <li class="rounded-lg border border-white/10 bg-surface-raised p-5">
+          <p class="text-sm font-medium text-ink-primary">
             Sub-processor incidents
           </p>
-          <p class="mt-2 text-sm text-slate-600">
+          <p class="mt-2 text-sm text-ink-secondary">
             When an upstream sub-processor (Hetzner / Neon / Upstash /
             Cloudflare / Postmark / Stripe / Sentry) has an incident
             affecting our customers, we summarise their post-mortem and
             link the upstream report.
           </p>
         </li>
-        <li class="rounded-lg border border-slate-200 bg-white p-5">
-          <p class="text-sm font-medium text-slate-900">
+        <li class="rounded-lg border border-white/10 bg-surface-raised p-5">
+          <p class="text-sm font-medium text-ink-primary">
             Maintenance windows
           </p>
-          <p class="mt-2 text-sm text-slate-600">
+          <p class="mt-2 text-sm text-ink-secondary">
             Pre-announced windows for migrations, schema changes, or
             certificate rotations. Notice at least 72 hours in advance;
             customers can subscribe to advance notifications via
@@ -134,22 +134,22 @@ function severityClass(s: Incident['severity']): string {
   </section>
 
   <!-- Incident list -->
-  <section class="border-t border-slate-200 bg-slate-50">
+  <section class="border-t border-white/10 bg-surface-raised/40">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
         History
       </p>
-      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-slate-900">
+      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-ink-primary">
         Posted incidents.
       </h2>
 
       {
         INCIDENTS.length === 0 ? (
-          <div class="mt-8 rounded-lg border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-            <p class="text-base font-medium text-slate-900">
+          <div class="mt-8 rounded-lg border border-dashed border-white/15 bg-surface-raised px-6 py-16 text-center">
+            <p class="text-base font-medium text-ink-primary">
               No customer-impacting incidents to date.
             </p>
-            <p class="mt-2 max-w-prose text-sm text-slate-600 mx-auto">
+            <p class="mt-2 max-w-prose text-sm text-ink-secondary mx-auto">
               We've kept this list honest by entering it pre-launch — every
               incident from the first paying customer onward will land here.
               The live platform status above always reflects the current
@@ -159,11 +159,11 @@ function severityClass(s: Incident['severity']): string {
         ) : (
           <ol class="mt-8 space-y-6">
             {INCIDENTS.map((incident) => (
-              <li class="rounded-lg border border-slate-200 bg-white p-6">
+              <li class="rounded-lg border border-white/10 bg-surface-raised p-6">
                 <div class="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <p class="font-mono text-xs text-slate-500">{incident.date}</p>
-                    <h3 class="mt-1 text-lg font-medium text-slate-900">
+                    <p class="font-mono text-xs text-ink-muted">{incident.date}</p>
+                    <h3 class="mt-1 text-lg font-medium text-ink-primary">
                       {incident.title}
                     </h3>
                   </div>
@@ -178,35 +178,35 @@ function severityClass(s: Incident['severity']): string {
                 </div>
                 <dl class="mt-4 grid gap-x-6 gap-y-2 text-sm md:grid-cols-3">
                   <div>
-                    <dt class="text-xs text-slate-500">Duration</dt>
-                    <dd class="mt-1 text-slate-900">{incident.duration}</dd>
+                    <dt class="text-xs text-ink-muted">Duration</dt>
+                    <dd class="mt-1 text-ink-primary">{incident.duration}</dd>
                   </div>
                   <div>
-                    <dt class="text-xs text-slate-500">Customer impact</dt>
-                    <dd class="mt-1 text-slate-900">{incident.customer_impact}</dd>
+                    <dt class="text-xs text-ink-muted">Customer impact</dt>
+                    <dd class="mt-1 text-ink-primary">{incident.customer_impact}</dd>
                   </div>
                   <div>
-                    <dt class="text-xs text-slate-500">Components</dt>
-                    <dd class="mt-1 font-mono text-xs text-slate-700">
+                    <dt class="text-xs text-ink-muted">Components</dt>
+                    <dd class="mt-1 font-mono text-xs text-ink-secondary">
                       {incident.components.join(', ')}
                     </dd>
                   </div>
                 </dl>
-                <p class="mt-4 text-sm text-slate-700">{incident.summary}</p>
+                <p class="mt-4 text-sm text-ink-secondary">{incident.summary}</p>
                 {incident.root_cause && (
-                  <div class="mt-4 border-t border-slate-100 pt-4">
-                    <p class="text-xs font-mono uppercase tracking-widest text-slate-500">
+                  <div class="mt-4 border-t border-white/10 pt-4">
+                    <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">
                       Root cause
                     </p>
-                    <p class="mt-1 text-sm text-slate-700">{incident.root_cause}</p>
+                    <p class="mt-1 text-sm text-ink-secondary">{incident.root_cause}</p>
                   </div>
                 )}
                 {incident.remediation && (
-                  <div class="mt-4 border-t border-slate-100 pt-4">
-                    <p class="text-xs font-mono uppercase tracking-widest text-slate-500">
+                  <div class="mt-4 border-t border-white/10 pt-4">
+                    <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">
                       Remediation
                     </p>
-                    <p class="mt-1 text-sm text-slate-700">{incident.remediation}</p>
+                    <p class="mt-1 text-sm text-ink-secondary">{incident.remediation}</p>
                   </div>
                 )}
               </li>
@@ -218,17 +218,17 @@ function severityClass(s: Incident['severity']): string {
   </section>
 
   <!-- CTA -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="flex flex-col items-start gap-6 md:flex-row md:items-end md:justify-between">
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
             Subscribe
           </p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
             Get notified when status changes.
           </h2>
-          <p class="mt-3 max-w-prose text-slate-600">
+          <p class="mt-3 max-w-prose text-ink-secondary">
             Customers can opt into incident emails at the dashboard's
             settings page. Future updates: status.driftstack.dev with
             email + RSS subscription.

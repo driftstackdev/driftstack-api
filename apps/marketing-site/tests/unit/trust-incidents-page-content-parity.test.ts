@@ -63,16 +63,16 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
 
   it('4 "What we publish" bar entries pinned (downtime / security / sub-processor / maintenance)', () => {
     expect(body).toMatch(
-      /<p class="text-sm font-medium text-slate-900">\s*Customer-impacting downtime\s*<\/p>/,
+      /<p class="text-sm font-medium text-ink-primary">\s*Customer-impacting downtime\s*<\/p>/,
     );
     expect(body).toMatch(
-      /<p class="text-sm font-medium text-slate-900">\s*Security events\s*<\/p>/,
+      /<p class="text-sm font-medium text-ink-primary">\s*Security events\s*<\/p>/,
     );
     expect(body).toMatch(
-      /<p class="text-sm font-medium text-slate-900">\s*Sub-processor incidents\s*<\/p>/,
+      /<p class="text-sm font-medium text-ink-primary">\s*Sub-processor incidents\s*<\/p>/,
     );
     expect(body).toMatch(
-      /<p class="text-sm font-medium text-slate-900">\s*Maintenance windows\s*<\/p>/,
+      /<p class="text-sm font-medium text-ink-primary">\s*Maintenance windows\s*<\/p>/,
     );
   });
 

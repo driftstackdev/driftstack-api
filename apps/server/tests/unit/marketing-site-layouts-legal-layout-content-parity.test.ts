@@ -62,14 +62,14 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
       /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Legal<\/p>/,
     );
     expect(body).toMatch(
-      /<h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">/,
+      /<h1 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl">/,
     );
     expect(body).toMatch(
-      /\{description \? <p class="mt-4 max-w-prose text-base text-slate-600">\{description\}<\/p> : null\}/,
+      /\{description \? <p class="mt-4 max-w-prose text-base text-ink-secondary">\{description\}<\/p> : null\}/,
     );
   });
 
-  it("Prose styling framing pinned: 'prose prose-slate max-w-none' + 'prose-h1:hidden' (h1 hidden because the section-header h1 above the slot already renders the title) + 'prose-a:text-oxblood-700 prose-a:no-underline hover:prose-a:underline' (oxblood-anchor + hover-underline) + 'prose-blockquote:border-l-oxblood-300 prose-blockquote:not-italic prose-blockquote:text-slate-700' (oxblood-blockquote-border) — pinned so the prose-class commitment (h1-suppressed + oxblood-anchor + oxblood-blockquote-border + slate-text) survives (drift to a different brand color in prose styling would create cross-page styling divergence)", () => {
+  it("Prose styling framing pinned: 'prose prose-slate max-w-none' + 'prose-h1:hidden' (h1 hidden because the section-header h1 above the slot already renders the title) + 'prose-a:text-oxblood-700 prose-a:no-underline hover:prose-a:underline' (oxblood-anchor + hover-underline) + 'prose-blockquote:border-l-oxblood-300 prose-blockquote:not-italic prose-blockquote:text-ink-secondary' (oxblood-blockquote-border) — pinned so the prose-class commitment (h1-suppressed + oxblood-anchor + oxblood-blockquote-border + slate-text) survives (drift to a different brand color in prose styling would create cross-page styling divergence)", () => {
     expect(body).toMatch(/prose prose-slate max-w-none/);
     expect(body).toMatch(/prose-h1:hidden/);
     expect(body).toMatch(/prose-a:text-oxblood-700/);
@@ -77,13 +77,13 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
     expect(body).toMatch(/hover:prose-a:underline/);
     expect(body).toMatch(/prose-blockquote:border-l-oxblood-300/);
     expect(body).toMatch(/prose-blockquote:not-italic/);
-    expect(body).toMatch(/prose-blockquote:text-slate-700/);
+    expect(body).toMatch(/prose-blockquote:text-ink-secondary/);
   });
 
   it("Other-legal-documents nav framing pinned: 'aria-label=\"Other legal documents\"' + 'Other legal documents' eyebrow paragraph + 'mt-3 grid gap-1 sm:grid-cols-2' ul + 'text-sm text-oxblood-700 hover:underline' link styling — pinned so the cross-doc-nav + aria-label + 2-col-on-sm-and-up grid + oxblood-link-styling commitment survives", () => {
     expect(body).toMatch(/aria-label="Other legal documents"/);
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-slate-500">\s*\n?\s*Other legal documents\s*\n?\s*<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-ink-muted">\s*\n?\s*Other legal documents\s*\n?\s*<\/p>/,
     );
     expect(body).toMatch(/<ul class="mt-3 grid gap-1 sm:grid-cols-2">/);
     expect(body).toMatch(

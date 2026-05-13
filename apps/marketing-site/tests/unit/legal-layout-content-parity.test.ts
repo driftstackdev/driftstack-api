@@ -76,7 +76,7 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
       /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Legal<\/p>/,
     );
     expect(body).toMatch(
-      /<h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">\s*\n?\s*\{title\}\s*\n?\s*<\/h1>/,
+      /<h1 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl">\s*\n?\s*\{title\}\s*\n?\s*<\/h1>/,
     );
   });
 
@@ -90,7 +90,7 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
 
   it('prose code styling: slate-100 background + mono + rounded + no before/after pseudo-content', () => {
     expect(body).toMatch(
-      /prose-code:rounded prose-code:bg-slate-100 prose-code:px-1\.5 prose-code:py-0\.5 prose-code:font-mono prose-code:text-sm prose-code:before:content-none prose-code:after:content-none/,
+      /prose-code:rounded prose-code:bg-surface-inset prose-code:px-1\.5 prose-code:py-0\.5 prose-code:font-mono prose-code:text-sm prose-code:before:content-none prose-code:after:content-none/,
     );
   });
 
@@ -101,7 +101,7 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
   it('aria-label="Other legal documents" + "Other legal documents" heading', () => {
     expect(body).toMatch(/aria-label="Other legal documents"/);
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-slate-500">\s*\n?\s*Other legal documents\s*\n?\s*<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-ink-muted">\s*\n?\s*Other legal documents\s*\n?\s*<\/p>/,
     );
   });
 

@@ -29,28 +29,28 @@ const legalLinks = [
 ---
 
 <BaseLayout title={title} description={description}>
-  <section class="border-b border-slate-200 bg-gradient-to-b from-white to-slate-50">
+  <section class="border-b border-white/10 bg-gradient-to-b from-surface-base to-surface-raised">
     <div class="mx-auto max-w-3xl px-6 py-12">
       <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Legal</p>
-      <h1 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">
+      <h1 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl">
         {title}
       </h1>
-      {description ? <p class="mt-4 max-w-prose text-base text-slate-600">{description}</p> : null}
+      {description ? <p class="mt-4 max-w-prose text-base text-ink-secondary">{description}</p> : null}
     </div>
   </section>
 
   <section class="mx-auto max-w-3xl px-6 py-12">
     <article
-      class="prose prose-slate max-w-none prose-headings:scroll-mt-20 prose-headings:font-semibold prose-h1:hidden prose-h2:mt-12 prose-h2:text-2xl prose-h3:text-xl prose-p:leading-relaxed prose-a:text-oxblood-700 prose-a:no-underline hover:prose-a:underline prose-strong:text-slate-900 prose-code:rounded prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-li:my-1 prose-table:text-sm prose-th:bg-slate-50 prose-th:text-left prose-blockquote:border-l-oxblood-300 prose-blockquote:not-italic prose-blockquote:text-slate-700"
+      class="prose prose-slate max-w-none prose-headings:scroll-mt-20 prose-headings:font-semibold prose-h1:hidden prose-h2:mt-12 prose-h2:text-2xl prose-h3:text-xl prose-p:leading-relaxed prose-a:text-oxblood-700 prose-a:no-underline hover:prose-a:underline prose-strong:text-ink-primary prose-code:rounded prose-code:bg-surface-inset prose-code:px-1.5 prose-code:py-0.5 prose-code:font-mono prose-code:text-sm prose-code:before:content-none prose-code:after:content-none prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-li:my-1 prose-table:text-sm prose-th:bg-surface-raised prose-th:text-left prose-blockquote:border-l-oxblood-300 prose-blockquote:not-italic prose-blockquote:text-ink-secondary"
     >
       <slot />
     </article>
 
     <nav
-      class="mt-16 border-t border-slate-200 pt-8"
+      class="mt-16 border-t border-white/10 pt-8"
       aria-label="Other legal documents"
     >
-      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+      <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">
         Other legal documents
       </p>
       <ul class="mt-3 grid gap-1 sm:grid-cols-2">
