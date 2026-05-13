@@ -1,0 +1,135 @@
+// W501.A — drift guard for apps/marketing-site/src/pages/comparison.astro.
+// V-472 comparison page. Drift here either drops a competitor from
+// the 4-vendor table (would create marketing↔customer-mental-model
+// divergence for prospects coming from that vendor) or breaks the
+// 'tone: differentiation, not disparagement' framing (would shift to
+// adversarial marketing).
+//
+//   • V-472 doc-comment framing + 'no performance benchmarks' deferral.
+//   • ComparisonRow interface + 12 feature-row taxonomy.
+//   • 4-competitor scope: Browserless / Bright Data / ScrapingBee /
+//     Browserbase.
+//   • Per-competitor 'When the right answer' 4-section grid with
+//     'Pricing shape' header on each.
+//   • 'Last reviewed 2026-05-10' freshness stamp + mailto:support@
+//     drift-correction path.
+//   • When NOT Driftstack 3-card: Desktop-only / Pure HTML scraping /
+//     IP-pool-as-product.
+//   • $2.99 / 16 hours / used once trial-pack CTA.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/comparison.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity', () => {
+  const body = read(LIB);
+
+  it("V-472 framing pinned: 'comparison page. Driftstack vs Browserless / Bright Data / ScrapingBee / Browserbase. Tone: differentiation, not disparagement. Each competitor has a legitimate audience and use-case; the page names where Driftstack's posture is materially different and where it isn't a fit.' — pinned so the differentiation-not-disparagement tone + the 4-vendor scope + the 'name where Driftstack isn't a fit' commitment all survive (drift to disparagement would invite legal-shaped pushback; drift to adding more vendors would dilute the comparison)", () => {
+    expect(body).toMatch(
+      /\/\/ V-472 — comparison page\. Driftstack vs Browserless \/ Bright Data \/\s*\n?\s*\/\/ ScrapingBee \/ Browserbase\. Tone: differentiation, not disparagement\./,
+    );
+    expect(body).toMatch(
+      /\/\/ Each competitor has a legitimate audience and use-case; the page\s*\n?\s*\/\/ names where Driftstack's posture is materially different and where\s*\n?\s*\/\/ it isn't a fit\./,
+    );
+  });
+
+  it("'No performance benchmarks vs them — those land on the future /benchmarks subdomain (V-345) once empirical data is collected.' — pinned so the no-benchmarks-without-data commitment + the V-345 future-page reference survive (drift to claiming benchmarks would invite empirical pushback; drift to dropping V-345 reference would orphan the future-benchmarks plan)", () => {
+    expect(body).toMatch(
+      /\/\/ No performance benchmarks vs them — those land on the future\s*\n?\s*\/\/ \/benchmarks subdomain \(V-345\) once empirical data is collected\./,
+    );
+  });
+
+  it('ComparisonRow interface 6-field shape: feature + driftstack + browserless + brightData + scrapingBee + browserbase — pinned so the comparison-row TS shape stays correct (drift to dropping a vendor field would break the table render; drift to adding a vendor would require updating the table header alongside)', () => {
+    expect(body).toMatch(
+      /interface ComparisonRow \{\s*\n?\s*feature: string;\s*\n?\s*driftstack: string;\s*\n?\s*browserless: string;\s*\n?\s*brightData: string;\s*\n?\s*scrapingBee: string;\s*\n?\s*browserbase: string;\s*\n?\s*\}/,
+    );
+  });
+
+  it("12-row COMPARISON_ROWS feature taxonomy: Browser engine + Primary device target + Stealth approach + Fingerprint posture + Pricing model + Session metering surprises + Customer-controlled proxies + Data residency + GUI for human operators + SDK languages + Self-hosted option + Trial path — pinned so the 12-feature comparison-table surface stays consistent (drift to dropping rows would shrink the comparison surface; drift to changing order would lose the table's narrative flow)", () => {
+    expect(body).toMatch(/feature: 'Browser engine',/);
+    expect(body).toMatch(/feature: 'Primary device target',/);
+    expect(body).toMatch(/feature: 'Stealth approach',/);
+    expect(body).toMatch(/feature: 'Fingerprint posture',/);
+    expect(body).toMatch(/feature: 'Pricing model',/);
+    expect(body).toMatch(/feature: 'Session metering surprises',/);
+    expect(body).toMatch(/feature: 'Customer-controlled proxies',/);
+    expect(body).toMatch(/feature: 'Data residency',/);
+    expect(body).toMatch(/feature: 'GUI for human operators',/);
+    expect(body).toMatch(/feature: 'SDK languages',/);
+    expect(body).toMatch(/feature: 'Self-hosted option',/);
+    expect(body).toMatch(/feature: 'Trial path',/);
+  });
+
+  it("Driftstack engine row: 'Apple WebKit (C++ source-level fork)' — pinned so the canonical engine description (Apple WebKit + C++ + source-level fork) stays consistent across pages (drift would create marketing↔homepage↔about divergence)", () => {
+    expect(body).toMatch(/driftstack: 'Apple WebKit \(C\+\+ source-level fork\)',/);
+  });
+
+  it("Driftstack pricing-model row: 'Per concurrent session, hours unmetered' + Driftstack session-metering-surprises row: 'None — flat within concurrent cap' — pinned so the no-hourly-meter + no-surprise framing survives in the table (drift to adding per-call or per-hour would create cross-page divergence with the FAQ + pricing pages)", () => {
+    expect(body).toMatch(/driftstack: 'Per concurrent session, hours unmetered',/);
+    expect(body).toMatch(/driftstack: 'None — flat within concurrent cap',/);
+  });
+
+  it("Driftstack data-residency row: 'EU-only compute + storage' + customer-controlled-proxies row: 'Roadmap — see /trust/security-overview' — pinned so the EU-only compute commitment + the not-yet-shipped honest framing for customer-proxy survive (drift to claiming shipped customer-proxies would mislead privacy-driven prospects)", () => {
+    expect(body).toMatch(/driftstack: 'EU-only compute \+ storage',/);
+    expect(body).toMatch(/driftstack: 'Roadmap — see \/trust\/security-overview',/);
+  });
+
+  it("Per-competitor 4-section comparison: 'Driftstack vs Browserless' + 'Driftstack vs Bright Data' + 'Driftstack vs ScrapingBee' + 'Driftstack vs Browserbase' each with a 'Pricing shape' subhead — pinned so the per-vendor head-to-head + the explicit pricing-shape callout survives (drift to dropping pricing-shape would hide the most-comparable cost-narrative for prospects)", () => {
+    expect(body).toMatch(
+      /<h3 class="text-xl font-semibold text-slate-900">Driftstack vs Browserless<\/h3>/,
+    );
+    expect(body).toMatch(
+      /<h3 class="text-xl font-semibold text-slate-900">Driftstack vs Bright Data<\/h3>/,
+    );
+    expect(body).toMatch(
+      /<h3 class="text-xl font-semibold text-slate-900">Driftstack vs ScrapingBee<\/h3>/,
+    );
+    expect(body).toMatch(
+      /<h3 class="text-xl font-semibold text-slate-900">Driftstack vs Browserbase<\/h3>/,
+    );
+    // Pricing shape subhead appears 4 times - just confirm presence via global match
+    const pricingShapeMatches = body.match(/Pricing shape/g) || [];
+    expect(pricingShapeMatches.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("vs Bright Data BYO-proxy framing pinned: 'Bring your own proxy network or use SOCKS5 / WireGuard / OpenVPN to whatever IP pool you've already paid for. We don't sell proxies; we don't mark up egress.' — pinned so the 'BYO egress, no markup' positioning survives (drift to dropping would weaken the cost-comparison case against Bright Data who sells proxies)", () => {
+    expect(body).toMatch(
+      /Bring your own\s*\n?\s*proxy network or use SOCKS5 \/ WireGuard \/ OpenVPN to whatever IP\s*\n?\s*pool you've already paid for\. We don't sell proxies; we don't\s*\n?\s*mark up egress\./,
+    );
+  });
+
+  it("When NOT Driftstack 3-card: Desktop-only targets + Pure HTML scraping + IP-pool-as-product — pinned so the honest-anti-recommendation 3-card list survives (drift to dropping would hide the where-Driftstack-isn't-the-fit guidance the V-472 doc-comment commits to)", () => {
+    expect(body).toMatch(
+      /<h3 class="text-lg font-medium text-slate-900">Desktop-only targets<\/h3>/,
+    );
+    expect(body).toMatch(/<h3 class="text-lg font-medium text-slate-900">Pure HTML scraping<\/h3>/);
+    expect(body).toMatch(/<h3 class="text-lg font-medium text-slate-900">IP-pool-as-product<\/h3>/);
+  });
+
+  it("Freshness stamp: 'Last reviewed 2026-05-10' + drift-correction mailto:support@driftstack.dev — pinned so the page-staleness signal + the customer-driven correction channel survive (drift to dropping the timestamp would let competitor rows go stale without a reviewer signal)", () => {
+    expect(body).toMatch(/Last reviewed 2026-05-10\./);
+    expect(body).toMatch(
+      /If a competitor row drifts from current\s*\n?\s*public marketing, mail\s*\n?\s*<a href="mailto:support@driftstack\.dev"/,
+    );
+  });
+
+  it("Bottom CTA: '$2.99 trial pack — 16 hours, used once.' + 'Start trial — $2.99' → /pricing#trial-pack — pinned so the canonical trial-pack copy (16h / used once) + the conversion path stays consistent across pages (drift would create cross-page mechanic divergence)", () => {
+    expect(body).toMatch(/\$2\.99 trial pack — 16 hours, used once\./);
+    expect(body).toMatch(
+      /<a href="\/pricing#trial-pack" class="btn-primary">Start trial — \$2\.99<\/a>/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
