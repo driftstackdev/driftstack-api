@@ -106,7 +106,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
   it('V-331 "Acting as" picker: hidden by default + label + select element', () => {
     expect(body).toMatch(/V-331 — "Acting as" picker/);
     expect(body).toMatch(/data-act-as-picker-wrap/);
-    expect(body).toMatch(/class="hidden border-b border-white\/8 px-4 py-3"/);
+    expect(body).toMatch(/class="hidden border-b border-white\/10 px-4 py-3"/);
     expect(body).toMatch(/<label\s*\n?\s*for="act-as-picker"/);
     expect(body).toMatch(/Acting as\s*\n?\s*<\/label>/);
     expect(body).toMatch(/<select\s*\n?\s*id="act-as-picker"\s*\n?\s*data-act-as-picker/);

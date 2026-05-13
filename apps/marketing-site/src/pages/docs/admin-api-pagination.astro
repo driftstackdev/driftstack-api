@@ -35,10 +35,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <p>
       A list response looks like:
     </p>
-    <pre><code>{
-  "orders": [ ...up to `limit` rows... ],
+    <pre><code>{`{
+  "orders": [ ...up to \`limit\` rows... ],
   "next_cursor": "eyJ0cyI6MTcwMDAwMDAwMCwiaWQiOiJvcmRfYWJjIn0"
-}</code></pre>
+}`}</code></pre>
     <ul>
       <li><code>orders</code> contains up to <code>limit</code> rows
       from the page (default <code>limit=50</code>; max
@@ -49,18 +49,18 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </ul>
 
     <h2>The walk loop</h2>
-    <pre><code>let cursor = null;
+    <pre><code>{`let cursor = null;
 const all = [];
 do {{
   const params = new URLSearchParams({{ limit: '50' }});
   if (cursor) params.set('cursor', cursor);
-  const res = await fetch(`/v1/admin/crypto-orders?$&#123;params&#125;`, {{
-    headers: {{ authorization: `Bearer $ADMIN_KEY` }}
+  const res = await fetch(\`/v1/admin/crypto-orders?$&#123;params&#125;\`, {{
+    headers: {{ authorization: \`Bearer $ADMIN_KEY\` }}
   }});
   const body = await res.json();
   all.push(...body.orders);
   cursor = body.next_cursor;
-}} while (cursor !== null);</code></pre>
+}} while (cursor !== null);`}</code></pre>
     <p>
       Stop when <code>next_cursor</code> is <code>null</code>. Do not
       try to parse the cursor — its internal shape is not part of

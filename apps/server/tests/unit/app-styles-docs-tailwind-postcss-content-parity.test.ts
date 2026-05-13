@@ -65,7 +65,7 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
       /@apply text-sm text-ink-secondary transition-colors hover:text-glow-red;/,
     );
     expect(body).toMatch(/\.dashboard-card \{/);
-    expect(body).toMatch(/rounded-xl border border-white\/8/);
+    expect(body).toMatch(/rounded-xl border border-white\/10/);
     expect(body).toMatch(/\.form-input \{/);
     expect(body).toMatch(/\.form-label \{/);
     expect(body).toMatch(/\.form-helper \{/);

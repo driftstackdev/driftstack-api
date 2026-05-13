@@ -213,10 +213,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         existing <code>/v1/admin/crypto-orders</code> hook.
       </li>
       <li>
-        <strong>SDK — <code>list({status,limit})</code>.</strong>
+        <strong>SDK — <code>{`list({status,limit})`}</code>.</strong>
         <code>@driftstack/sdk-typescript</code>'s
         <code>client.cryptoOrders.list()</code> now accepts an
-        optional <code>{ status, limit }</code> object that maps to
+        optional <code>{`{ status, limit }`}</code> object that maps to
         the new server-side query params. Existing zero-arg callers
         continue to work unchanged.
       </li>
@@ -240,7 +240,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         The customer-facing receipt view now has both a
         <strong>Download PDF</strong> and a <strong>Download .txt</strong>
         button. They blob-fetch
-        <code>/v1/billing/crypto-orders/:id/receipt.{pdf,txt}</code>
+        <code>{`/v1/billing/crypto-orders/:id/receipt.{pdf,txt}`}</code>
         with the Bearer token attached and synthesize an anchor
         click — the endpoints are auth-gated, so a plain link
         wouldn't work.
@@ -400,7 +400,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <li>
         <strong>Crypto orders — customer note.</strong>
         <code>PATCH /v1/billing/crypto-orders/:id</code> accepts
-        <code>{ customer_note: string | null }</code> (capped 500
+        <code>{`{ customer_note: string | null }`}</code> (capped 500
         chars). Stored on the order envelope and returned on subsequent
         GETs.
       </li>

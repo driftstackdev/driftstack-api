@@ -225,27 +225,30 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
         </p>
         <div class="mt-5 grid gap-4 md:grid-cols-2">
           <pre
-            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>
-curl -X POST https://api.driftstack.dev/v1/sessions \
-  -H "authorization: Bearer $DRIFTSTACK_API_KEY" \
-  -H "content-type: application/json" \
-  -d '{"archetype":"iphone16pro_ios18_7_safari26_4"}'</code></pre>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
+curl -X POST https://api.driftstack.dev/v1/sessions \\
+  -H "authorization: Bearer $DRIFTSTACK_API_KEY" \\
+  -H "content-type: application/json" \\
+  -d '{"archetype":"iphone16pro_ios18_7_safari26_4"}'
+`}</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
 import { Driftstack } from "@driftstack/sdk";
 const client = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 const session = await client.sessions.create({
   archetype: "iphone16pro_ios18_7_safari26_4",
 });
-console.log(session.id);</code></pre>
+console.log(session.id);
+`}</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
 from driftstack import Driftstack
 client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
 session = client.sessions.create(archetype="iphone16pro_ios18_7_safari26_4")
-print(session.id)</code></pre>
+print(session.id)
+`}</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
 client := driftstack.NewClient(driftstack.Config{
     APIKey: os.Getenv("DRIFTSTACK_API_KEY"),
 })
@@ -253,7 +256,8 @@ session, err := client.Sessions.Create(ctx, &driftstack.SessionCreateParams{
     Archetype: "iphone16pro_ios18_7_safari26_4",
 })
 if err != nil { return err }
-fmt.Println(session.ID)</code></pre>
+fmt.Println(session.ID)
+`}</code></pre>
         </div>
       </div>
 
@@ -267,15 +271,16 @@ fmt.Println(session.ID)</code></pre>
         </p>
         <div class="mt-5 grid gap-4 md:grid-cols-2">
           <pre
-            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>
-curl -X POST $URL/navigate \
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
+curl -X POST $URL/navigate \\
   -d '{"url":"https://example.com"}' ...
-curl -X POST $URL/interact \
+curl -X POST $URL/interact \\
   -d '{"action":{"kind":"tap_at","x":50,"y":120}}' ...
-curl -X POST $URL/wait \
-  -d '{"condition":{"kind":"selector","selector":"main"}}' ...</code></pre>
+curl -X POST $URL/wait \\
+  -d '{"condition":{"kind":"selector","selector":"main"}}' ...
+`}</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
 await client.sessions.navigate(session.id, { url: "https://example.com" });
 await client.sessions.interact(session.id, {
   action: { kind: "tap_at", x: 50, y: 120 },
@@ -283,24 +288,27 @@ await client.sessions.interact(session.id, {
 await client.sessions.wait(session.id, {
   condition: { kind: "selector", selector: "main" },
   timeout_ms: 5000,
-});</code></pre>
+});
+`}</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
 client.sessions.navigate(session.id, url="https://example.com")
 client.sessions.interact(session.id, action={
     "kind": "tap_at", "x": 50, "y": 120,
 })
 client.sessions.wait(session.id, condition={
     "kind": "selector", "selector": "main",
-}, timeout_ms=5000)</code></pre>
+}, timeout_ms=5000)
+`}</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
 _, err = client.Sessions.Navigate(ctx, session.ID, &driftstack.NavigateParams{
     URL: "https://example.com",
 })
 _, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractParams{
     Action: driftstack.TapAt{X: 50, Y: 120},
-})</code></pre>
+})
+`}</code></pre>
         </div>
       </div>
 
@@ -317,27 +325,31 @@ _, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractParams{
         </p>
         <div class="mt-5 grid gap-4 md:grid-cols-2">
           <pre
-            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>
-curl -X POST $URL/capture \
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># cURL</span>{`
+curl -X POST $URL/capture \\
   -d '{"kind":"screenshot"}' ...
-# response.data is base64 PNG</code></pre>
+# response.data is base64 PNG
+`}</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
 const shot = await client.sessions.capture(session.id, {
   kind: "screenshot",
 });
-fs.writeFileSync("out.png", Buffer.from(shot.data, "base64"));</code></pre>
+fs.writeFileSync("out.png", Buffer.from(shot.data, "base64"));
+`}</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
 shot = client.sessions.capture(session.id, kind="screenshot")
-Path("out.png").write_bytes(base64.b64decode(shot.data))</code></pre>
+Path("out.png").write_bytes(base64.b64decode(shot.data))
+`}</code></pre>
           <pre
-            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>
+            class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Go</span>{`
 shot, _ := client.Sessions.Capture(ctx, session.ID, &driftstack.CaptureParams{
     Kind: "screenshot",
 })
 data, _ := base64.StdEncoding.DecodeString(shot.Data)
-os.WriteFile("out.png", data, 0644)</code></pre>
+os.WriteFile("out.png", data, 0644)
+`}</code></pre>
         </div>
       </div>
     </div>

@@ -41,11 +41,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <code>Idempotency-Key</code> so accidental retries don't mint
       duplicate orders.
     </p>
-    <pre><code>const key = crypto.randomUUID();
+    <pre><code>{`const key = crypto.randomUUID();
 const res = await fetch('https://api.driftstack.dev/v1/billing/crypto-checkout', {
   method: 'POST',
   headers: {
-    authorization: `Bearer $&#123;API_KEY&#125;`,
+    authorization: \`Bearer $&#123;API_KEY&#125;\`,
     'content-type': 'application/json',
     'idempotency-key': key,
   },
@@ -55,7 +55,7 @@ const res = await fetch('https://api.driftstack.dev/v1/billing/crypto-checkout',
     price_currency: 'USD',
   }),
 });
-const order = await res.json();</code></pre>
+const order = await res.json();`}</code></pre>
     <p>
       The response carries an <code>order_id</code> and either a
       <code>payment_address</code> (production NowPayments-backed

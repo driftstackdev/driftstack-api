@@ -34,10 +34,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </p>
 
     <h3>Subscribe</h3>
-    <pre><code>POST /v1/status/subscribe
+    <pre><code>{`POST /v1/status/subscribe
 Content-Type: application/json
 
-{ "email": "ops@yourcompany.example" }</code></pre>
+{ "email": "ops@yourcompany.example" }`}</code></pre>
     <p>
       Returns <code>202 Accepted</code> with a generic
       "confirmation email sent" message. We deliberately return the

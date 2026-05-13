@@ -113,9 +113,9 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
     expect(body).toMatch(/content: ' \]';/);
   });
 
-  it('card framing pinned: rounded-xl glass border-white/8 + bg-surface-raised/60 + backdrop-blur-sm + hover red-tinted top edge accent', () => {
+  it('card framing pinned: rounded-xl glass border-white/10 + bg-surface-raised/60 + backdrop-blur-sm + hover red-tinted top edge accent', () => {
     expect(body).toMatch(/\.card \{/);
-    expect(body).toMatch(/rounded-xl border border-white\/8/);
+    expect(body).toMatch(/rounded-xl border border-white\/10/);
     expect(body).toMatch(/bg-surface-raised\/60 backdrop-blur-sm/);
     expect(body).toMatch(/hover:border-glow-red\/30/);
     expect(body).toMatch(/\.card::before \{/);
@@ -138,7 +138,7 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
 
   it('code-preview framing pinned: monospace dark inset + window-chrome pip 3-circle header', () => {
     expect(body).toMatch(/\.code-preview \{/);
-    expect(body).toMatch(/rounded-xl border border-white\/8 bg-surface-inset/);
+    expect(body).toMatch(/rounded-xl border border-white\/10 bg-surface-inset/);
     expect(body).toMatch(/font-mono text-xs leading-6/);
     expect(body).toMatch(/\.code-preview \.code-window-chrome \{/);
     expect(body).toMatch(/\.code-preview \.code-window-chrome span\.pip \{/);

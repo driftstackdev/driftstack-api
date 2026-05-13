@@ -75,7 +75,7 @@ const navItems = [
     <div class="flex min-h-screen flex-col">
       {
         !withSidebar && (
-          <header class="border-b border-white/8 bg-surface-base/70 backdrop-blur-md">
+          <header class="border-b border-white/10 bg-surface-base/70 backdrop-blur-md">
             <div class="mx-auto flex max-w-6xl items-center px-6 py-4">
               <a
                 href="/"
@@ -93,8 +93,8 @@ const navItems = [
       <div class="flex flex-1">
         {
           withSidebar && (
-            <aside class="hidden w-60 shrink-0 border-r border-white/8 bg-surface-raised/40 backdrop-blur-md md:block">
-              <div class="flex h-16 items-center px-6 border-b border-white/8">
+            <aside class="hidden w-60 shrink-0 border-r border-white/10 bg-surface-raised/40 backdrop-blur-md md:block">
+              <div class="flex h-16 items-center px-6 border-b border-white/10">
                 <a
                   href="/"
                   class="group flex items-center gap-2.5 font-mono text-base font-semibold text-ink-primary"
@@ -114,7 +114,7 @@ const navItems = [
               */}
               <div
                 data-act-as-picker-wrap
-                class="hidden border-b border-white/8 px-4 py-3"
+                class="hidden border-b border-white/10 px-4 py-3"
               >
                 <label
                   for="act-as-picker"
@@ -126,7 +126,7 @@ const navItems = [
                   id="act-as-picker"
                   data-act-as-picker
                   class="mt-1 w-full rounded-md border border-white/10 bg-surface-inset px-2 py-1.5 text-sm text-ink-primary focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
-                />
+                ></select>
               </div>
               <nav class="px-4 py-6">
                 <ul class="space-y-1">
@@ -282,7 +282,7 @@ const navItems = [
             });
         })();
       </script>
-      <footer class="border-t border-white/8 bg-surface-base/70 backdrop-blur-md">
+      <footer class="border-t border-white/10 bg-surface-base/70 backdrop-blur-md">
         <div
           class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4 text-xs text-ink-muted"
         >

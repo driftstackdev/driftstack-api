@@ -161,7 +161,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         accrued usage yet (no 404).
       </p>
       <pre
-        class="mt-6 overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Example response</span>
+        class="mt-6 overflow-x-auto rounded-md bg-slate-900 p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// Example response</span>{`
 {
   "account_id": "01HF...",
   "billing_cycle": "2026-05",
@@ -175,7 +175,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     "totalCents": 14_055,
     "thresholdState": "under-soft"
   }
-}</code></pre>
+}
+`}</code></pre>
       <p class="mt-6 max-w-prose text-sm text-slate-600">
         All amounts are integer cents. Format with your locale of
         choice (the GUI client defaults to EUR; see

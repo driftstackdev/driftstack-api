@@ -28,7 +28,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       caller, returns the original response verbatim — same body,
       same <code>Location</code>, same minted IDs.
     </p>
-    <pre><code>POST /v1/billing/crypto-checkout
+    <pre><code>{`POST /v1/billing/crypto-checkout
 Authorization: Bearer $KEY
 Idempotency-Key: 7b3f2e0c-1b6a-4cf3-aa6d-9c2c1f8a1b22
 Content-Type: application/json
@@ -37,7 +37,7 @@ Content-Type: application/json
   "product": "team_manual",
   "price_cents": 4900,
   "price_currency": "USD"
-}</code></pre>
+}`}</code></pre>
     <p>
       When the response is a replay (i.e. the server is returning a
       previously-minted result rather than performing the work

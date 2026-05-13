@@ -105,7 +105,7 @@
      accent on hover. Used for feature cards, tier teasers, code
      previews, etc. */
   .card {
-    @apply relative overflow-hidden rounded-xl border border-white/8
+    @apply relative overflow-hidden rounded-xl border border-white/10
            bg-surface-raised/60 backdrop-blur-sm
            shadow-inset-divider transition-all duration-300
            hover:border-glow-red/30 hover:bg-surface-raised/80;
@@ -139,12 +139,12 @@
   /* Code-preview block — monospace, dark inset, syntax-friendly
      foreground tones. */
   .code-preview {
-    @apply rounded-xl border border-white/8 bg-surface-inset
+    @apply rounded-xl border border-white/10 bg-surface-inset
            font-mono text-xs leading-6 text-ink-secondary
            shadow-inset-divider;
   }
   .code-preview .code-window-chrome {
-    @apply flex items-center gap-2 border-b border-white/8 px-4 py-3;
+    @apply flex items-center gap-2 border-b border-white/10 px-4 py-3;
   }
   .code-preview .code-window-chrome span.pip {
     @apply h-2.5 w-2.5 rounded-full bg-white/15;

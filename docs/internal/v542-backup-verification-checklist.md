@@ -31,7 +31,7 @@ This checklist closes that gap.
 ### A. Pre-rehearsal state
 
 - [ ] **A1.** Production HEAD recorded: `git -C /Users/john/code/driftstack-api
-    rev-parse HEAD` → stored at `/tmp/dr-rehearse-pre-head.txt`.
+rev-parse HEAD` → stored at `/tmp/dr-rehearse-pre-head.txt`.
 - [ ] **A2.** Postgres production snapshot available within last 24h.
       Snapshot location: Neon's automated daily snapshot (auto-managed) OR
       `pg_dump` from the rehearsal harness against the running production
