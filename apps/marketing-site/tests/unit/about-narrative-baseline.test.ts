@@ -23,8 +23,8 @@ function read(p: string): string {
 describe('W334.B /about narrative baseline', () => {
   const body = read(PAGE);
 
-  it('hero headline frames Driftstack as a small Dutch company', () => {
-    expect(body).toMatch(/A small Dutch company building one product well/);
+  it('R9 hero headline pinned: "One engine. One product. Engineered for fidelity." — capability-led framing replaces the prior solo-founder identity copy', () => {
+    expect(body).toMatch(/One engine\. One product\. Engineered for fidelity\./);
   });
 
   it('positions WebKit source-code execution (R6 plain-English), not runtime JS patching', () => {

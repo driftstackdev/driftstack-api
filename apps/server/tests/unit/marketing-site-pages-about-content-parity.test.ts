@@ -34,13 +34,13 @@ function read(p: string): string {
 describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () => {
   const body = read(LIB);
 
-  it("Hero framing (R6 plain-English): 'A small Dutch company building one product well.' + new 'real iPhone Safari sessions on demand — same engine as a physical iPhone, with nothing patched at runtime' positioning + 'solo-founded, EU-based, deliberately narrow' identity", () => {
-    expect(body).toMatch(/A small Dutch company building one product well\./);
+  it("R9 hero framing (capability-led, no solo-founder identity): 'One engine. One product. Engineered for fidelity.' + 'real iPhone Safari sessions on demand — same engine as a physical iPhone, with nothing patched at runtime' positioning + 'EU-resident infrastructure, deliberately narrow scope: one product, two ways to use it, no land-grab' — replaces the prior 'small Dutch company' + 'solo-founded, EU-based' identity copy that read as indie-builder rather than enterprise-grade", () => {
+    expect(body).toMatch(/One engine\. One product\. Engineered for fidelity\./);
     expect(body).toMatch(
       /Driftstack ships real iPhone Safari sessions on demand — same\s*\n?\s*engine as a physical iPhone, with nothing patched at runtime that\s*\n?\s*detection systems could spot/,
     );
     expect(body).toMatch(
-      /We're solo-founded, EU-based, and\s*\n?\s*deliberately narrow: one product, two ways to use it, no land-grab\./,
+      /EU-resident infrastructure,\s*\n?\s*deliberately narrow scope: one product, two ways to use it, no\s*\n?\s*land-grab\./,
     );
   });
 
@@ -109,11 +109,15 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     );
   });
 
-  it("Company facts 6-entry dl: Entity Dutch BV + Headquarters Netherlands + Team Solo founder + contractors + Funding Bootstrapped — no VC + Sub-processors link + Contact hello@driftstack.dev — pinned so the canonical company facts stay consistent across the about page (drift to dropping any would create a 'what kind of company is this?' gap; drift to changing 'no VC' would change the company-vs-VC positioning)", () => {
+  it("R9 Company facts 6-entry dl: Entity Dutch BV (legal entity, kept) + Headquarters Netherlands + Focus 'One product, deliberately narrow' + Funding 'Independent — customer-funded' + Sub-processors link + Contact hello@driftstack.dev — replaces 'Team Solo founder + contractors' + 'Bootstrapped — no VC' which read as indie-builder framing; capability + funding-model surfaces stay legitimate", () => {
     expect(body).toMatch(/<dd class="text-sm text-ink-primary">Dutch BV<\/dd>/);
     expect(body).toMatch(/<dd class="text-sm text-ink-primary">Netherlands<\/dd>/);
-    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Solo founder \+ contractors<\/dd>/);
-    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Bootstrapped — no VC<\/dd>/);
+    expect(body).toMatch(
+      /<dd class="text-sm text-ink-primary">One product, deliberately narrow<\/dd>/,
+    );
+    expect(body).toMatch(
+      /<dd class="text-sm text-ink-primary">Independent — customer-funded<\/dd>/,
+    );
     expect(body).toMatch(/<dd class="text-sm text-ink-primary">hello@driftstack\.dev<\/dd>/);
   });
 

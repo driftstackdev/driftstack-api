@@ -107,12 +107,15 @@ describe('W367.A marketing-site /about page content parity', () => {
     );
   });
 
-  it('company facts: Dutch BV / Netherlands / Solo founder + contractors / Bootstrapped no VC', () => {
+  it('R9 company facts: Dutch BV (legal entity, kept for legitimate transparency) / Netherlands HQ / "One product, deliberately narrow" focus / "Independent — customer-funded" — replaces the prior solo-founder/no-VC framing which read as indie-builder rather than enterprise-grade', () => {
     expect(body).toMatch(/<dd class="text-sm text-ink-primary">Dutch BV<\/dd>/);
     expect(body).toMatch(/<dd class="text-sm text-ink-primary">Netherlands<\/dd>/);
-    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Solo founder \+ contractors<\/dd>/);
-    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Bootstrapped — no VC<\/dd>/);
-    // hello@ contact email.
+    expect(body).toMatch(
+      /<dd class="text-sm text-ink-primary">One product, deliberately narrow<\/dd>/,
+    );
+    expect(body).toMatch(
+      /<dd class="text-sm text-ink-primary">Independent — customer-funded<\/dd>/,
+    );
     expect(body).toContain('hello@driftstack.dev');
   });
 
@@ -133,8 +136,8 @@ describe('W367.A marketing-site /about page content parity', () => {
     expect(body).toMatch(/there's nothing for\s+detection to find/);
   });
 
-  it('"solo-founder Dutch BV building one product well" hero claim pinned', () => {
-    expect(body).toMatch(/A small Dutch company building one product well/);
-    expect(body).toMatch(/solo-founded, EU-based, and\s*\n?\s*deliberately narrow/);
+  it('R9 hero claim pinned: "One engine. One product. Engineered for fidelity." + capability-led "EU-resident infrastructure, deliberately narrow scope" — replaces the prior solo-Dutch-founder identity framing', () => {
+    expect(body).toMatch(/One engine\. One product\. Engineered for fidelity\./);
+    expect(body).toMatch(/EU-resident infrastructure,\s*\n?\s*deliberately narrow scope/);
   });
 });
