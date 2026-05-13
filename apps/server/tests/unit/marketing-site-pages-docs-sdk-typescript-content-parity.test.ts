@@ -1,0 +1,123 @@
+// W512.B — drift guard for apps/marketing-site/src/pages/docs/sdk-typescript.astro.
+// V-703 TypeScript SDK quickstart. Drift here either changes the
+// @driftstack/sdk package name (would create marketing↔npm-registry
+// divergence) or shifts the ESM-only commitment (would mislead CJS
+// users who land here).
+//
+//   • V-703 doc-comment framing + V-680 posture + companion to
+//     /docs/api-quickstart + /docs/cli-quickstart.
+//   • Package: @driftstack/sdk (npm/bun/pnpm install matrix).
+//   • Node ≥ 20 + Bun ≥ 1.1 + Deno ≥ 1.40 + ESM-only commitment.
+//   • new Driftstack({ apiKey, baseUrl }) constructor + reusable.
+//   • Session lifecycle: creating → ready → busy → destroyed / errored.
+//   • sessions.create no target URL; navigate separately.
+//   • 5-method drive surface: navigate / interact / wait / capture /
+//     destroy (idempotent).
+//   • iterate() async iterator + list() single-page.
+//   • DriftstackError with kind discriminator + ValidationError +
+//     RateLimitedError subclasses.
+//   • Tree-shakeable ~12kB gzipped for sessions-only.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/sdk-typescript.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W512.B apps/marketing-site/src/pages/docs/sdk-typescript.astro content parity', () => {
+  const body = read(LIB);
+
+  it("V-703 + V-680 framing pinned: 'TypeScript SDK quickstart. Companion to /docs/api-quickstart (raw HTTP / curl) and /docs/cli-quickstart. Pitched at teams that already have a Node/Bun/Deno service and want a typed surface instead of hand-rolling fetch calls. Posture matches V-680: code samples runnable verbatim once a key is in hand.' — pinned so the V-703 + V-680 anchors + 2-companion cross-references + verbatim-runnable-posture all survive (drift to dropping V-680 would orphan the doc from the consistent-posture commitment)", () => {
+    expect(body).toMatch(
+      /\/\/ V-703 — TypeScript SDK quickstart\. Companion to \/docs\/api-quickstart\s*\n?\s*\/\/ \(raw HTTP \/ curl\) and \/docs\/cli-quickstart\./,
+    );
+    expect(body).toMatch(
+      /\/\/ already have a Node\/Bun\/Deno service and want a typed surface\s*\n?\s*\/\/ instead of hand-rolling fetch calls\. Posture matches V-680: code\s*\n?\s*\/\/ samples runnable verbatim once a key is in hand\./,
+    );
+  });
+
+  it('@driftstack/sdk package + 3-runtime install matrix pinned: bun add + npm install + pnpm add — pinned so the canonical package name + 3-package-manager install paths stay consistent (drift to a different package name would create marketing↔npm divergence; drift to dropping pnpm would orphan one of the major package managers)', () => {
+    expect(body).toMatch(/<code>@driftstack\/sdk<\/code>/);
+    expect(body).toMatch(/bun add @driftstack\/sdk/);
+    expect(body).toMatch(/npm install @driftstack\/sdk/);
+    expect(body).toMatch(/pnpm add @driftstack\/sdk/);
+  });
+
+  it("Runtime floor + ESM-only commitment pinned: 'Node ≥ 20, Bun ≥ 1.1, and Deno ≥ 1.40 are supported. The SDK ships ESM-only; if you're still on CommonJS, use a dynamic import().' — pinned so the 3-runtime floor + ESM-only + dynamic-import fallback survive (drift to a different runtime floor would create marketing↔package.json engines divergence; drift to claiming CJS support would mislead about module format)", () => {
+    expect(body).toMatch(
+      /Node ≥ 20, Bun ≥ 1\.1, and Deno ≥ 1\.40 are supported\. The SDK\s*\n?\s*ships ESM-only; if you're still on CommonJS, use a dynamic\s*\n?\s*<code>import\(\)<\/code>\./,
+    );
+  });
+
+  it("Constructor framing pinned: 'new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY!, ... })' + 'The constructor does not make any network calls. Reuse one client across your process — it is internally pooled and safe for concurrent use.' — pinned so the apiKey + baseUrl-override + no-network-on-construct + reuse-pooled-concurrent commitments survive (drift to claiming a network call at construct-time would mislead about init cost)", () => {
+    expect(body).toMatch(/import \{ Driftstack \} from '@driftstack\/sdk';/);
+    expect(body).toMatch(/apiKey: process\.env\.DRIFTSTACK_API_KEY!/);
+    expect(body).toMatch(/\/\/ baseUrl defaults to https:\/\/api\.driftstack\.dev/);
+    expect(body).toMatch(
+      /The constructor does not make any network calls\. Reuse one\s*\n?\s*client across your process — it is internally pooled and safe\s*\n?\s*for concurrent use\./,
+    );
+  });
+
+  it("Session lifecycle states pinned: 'creating → ready → busy → destroyed / errored' — pinned so the 5-state session-lifecycle taxonomy stays consistent (drift to dropping 'errored' as a terminal state would leave customers unprepared for failures; drift to changing the order would create marketing↔state-machine divergence)", () => {
+    expect(body).toMatch(
+      /TypeScript narrows <code>session\.status<\/code> through the\s*\n?\s*lifecycle \(<code>creating<\/code> → <code>ready<\/code> →\s*\n?\s*<code>busy<\/code> → <code>destroyed<\/code> \/\s*\n?\s*<code>errored<\/code>\)\./,
+    );
+  });
+
+  it("sessions.create no-target-URL framing + sessions.navigate() separate-call pinned: 'The session creation call does NOT take a target URL — drive the session to a URL with client.sessions.navigate()' — pinned so the explicit-no-URL-on-create + navigate-separately commitment stays consistent with /docs/sdk-python (drift to claiming sessions.create takes a URL would create marketing↔OpenAPI divergence)", () => {
+    expect(body).toMatch(
+      /The session creation call does NOT take\s*\n?\s*a target URL — drive the session to a URL with\s*\n?\s*<code>client\.sessions\.navigate\(\)<\/code>/,
+    );
+  });
+
+  it("5-method session-drive surface + 'no built-in waitUntil helper' + idempotent destroy pinned — pinned so the 5-method drive surface + no-magic-wait helper + idempotent-destroy all survive (drift to claiming a waitUntil() helper exists would mislead about the SDK surface; consistent with /docs/sdk-python)", () => {
+    expect(body).toMatch(
+      /There is no built-in <code>waitUntil<\/code> helper — drive the\s*\n?\s*lifecycle with the methods that fit your workflow\s*\n?\s*\(<code>navigate<\/code>, <code>interact<\/code>,\s*\n?\s*<code>wait<\/code>, <code>capture<\/code>\)/,
+    );
+    expect(body).toMatch(/\/\/ Clean up — destroy is idempotent\./);
+  });
+
+  it("iterate() async iterator pinned: 'for await (const s of client.sessions.iterate({ limit: 50 }))' + 'iterate walks cursor pages transparently and stops when the server returns next_cursor: null. The single-page form is client.sessions.list(...).' — pinned so the iterate-walks-cursor + list-single-page commitment survives (consistent with /docs/sdk-python iterate() framing)", () => {
+    expect(body).toMatch(
+      /for await \(const s of client\.sessions\.iterate\(\{ limit: 50 \}\)\) \{/,
+    );
+    expect(body).toMatch(
+      /<code>iterate<\/code> walks cursor pages transparently and\s*\n?\s*stops when the server returns\s*\n?\s*<code>next_cursor: null<\/code>\./,
+    );
+  });
+
+  it("DriftstackError + kind discriminator + 4-attribute framing pinned: 'The error carries kind (discriminator, narrow with ===), status, type (the RFC 7807 URI), detail, and any extension fields from the problem response. Switch on kind for clean type-narrowing' + ValidationError + RateLimitedError subclass cases — pinned so the kind-discriminator + 4-attribute + 2-subclass + err.issues + err.retryAfterSeconds commitments survive (drift to renaming any attribute would create marketing↔SDK divergence)", () => {
+    expect(body).toMatch(
+      /The error carries <code>kind<\/code>\s*\n?\s*\(discriminator, narrow with <code>===<\/code>\),\s*\n?\s*<code>status<\/code>, <code>type<\/code> \(the RFC 7807 URI\),\s*\n?\s*<code>detail<\/code>, and any extension fields from the problem\s*\n?\s*response\./,
+    );
+    expect(body).toMatch(/err instanceof DriftstackError && err\.kind === 'validation'/);
+    expect(body).toMatch(/err instanceof DriftstackError && err\.kind === 'rate_limited'/);
+    expect(body).toMatch(/err\.issues/);
+    expect(body).toMatch(/err\.retryAfterSeconds/);
+  });
+
+  it("Tree-shakeable + 12kB gzipped framing pinned: 'The SDK is fully tree-shakeable. If you only import client.sessions.*, the recordings and billing modules never reach your bundle. Typical Next.js / Vite production bundles add ~12 kB gzipped.' — pinned so the tree-shakeable commitment + 12kB-gzipped bundle-size claim survive (drift to dropping the bundle-size figure would let customers question the SDK's bundle-friendliness; drift to claiming non-tree-shakeable would lose the bundle-size guarantee)", () => {
+    expect(body).toMatch(
+      /The SDK is fully tree-shakeable\. If you only import\s*\n?\s*<code>client\.sessions\.\*<\/code>, the recordings and billing\s*\n?\s*modules never reach your bundle\. Typical Next\.js \/ Vite\s*\n?\s*production bundles add ~12 kB gzipped\./,
+    );
+  });
+
+  it('5-related-doc cluster: /api-reference + /docs/sdk-typescript-crypto-orders + /docs/webhooks + /docs/cost-monitoring + /docs/error-codes — pinned so the 5-related-doc navigation surface stays complete (drift to dropping /docs/error-codes would orphan the RFC-7807-type cross-reference from the typed-errors framing)', () => {
+    expect(body).toMatch(/<a href="\/api-reference">Full API reference<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/sdk-typescript-crypto-orders">SDK — crypto orders<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/webhooks">Webhooks<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/cost-monitoring">Cost monitoring<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/error-codes">Error codes<\/a>/);
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
