@@ -141,6 +141,66 @@ await session.destroy();`}</code></pre>
     </div>
   </section>
 
+  <!-- R8 — Integrations strip. Outseta-style "works with your stack"
+       row. Three SDK languages + four orchestration tools that
+       customers commonly slot Driftstack into. Honest framing: only
+       the 3 SDKs are first-party; the orchestration tools (Playwright,
+       n8n, Make, Zapier) work because we expose a plain HTTPS API,
+       not because we ship integration plugins. -->
+  <section class="relative border-t border-white/10">
+    <div class="mx-auto max-w-6xl px-6 py-16">
+      <div class="grid gap-10 md:grid-cols-2 md:items-center">
+        <div>
+          <p class="section-label">Works with your stack</p>
+          <h2
+            class="mt-6 max-w-xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
+            style="letter-spacing: -0.02em;"
+          >
+            Three SDKs. One HTTPS API. Slots into anything.
+          </h2>
+          <p class="mt-5 max-w-prose text-base text-ink-secondary leading-relaxed">
+            First-party SDKs in TypeScript, Python, and Go. Beyond that, any
+            HTTP-aware tool can drive Driftstack — Playwright tests, n8n
+            workflows, Make.com scenarios, Zapier triggers, plain
+            <code class="font-mono text-glow-red">curl</code> from a cron job.
+          </p>
+        </div>
+        <div class="grid grid-cols-3 gap-3 text-center md:grid-cols-3">
+          <div class="card p-4">
+            <p class="font-mono text-xs uppercase tracking-[0.15em] text-glow-red">SDK</p>
+            <p class="mt-2 text-sm font-semibold text-ink-primary">TypeScript</p>
+            <p class="mt-1 text-xs text-ink-muted">@driftstack/sdk</p>
+          </div>
+          <div class="card p-4">
+            <p class="font-mono text-xs uppercase tracking-[0.15em] text-glow-red">SDK</p>
+            <p class="mt-2 text-sm font-semibold text-ink-primary">Python</p>
+            <p class="mt-1 text-xs text-ink-muted">driftstack-sdk</p>
+          </div>
+          <div class="card p-4">
+            <p class="font-mono text-xs uppercase tracking-[0.15em] text-glow-red">SDK</p>
+            <p class="mt-2 text-sm font-semibold text-ink-primary">Go</p>
+            <p class="mt-1 text-xs text-ink-muted">driftstack-go</p>
+          </div>
+          <div class="card p-4">
+            <p class="font-mono text-xs uppercase tracking-[0.15em] text-ink-muted">via API</p>
+            <p class="mt-2 text-sm font-semibold text-ink-primary">Playwright</p>
+            <p class="mt-1 text-xs text-ink-muted">drives sessions</p>
+          </div>
+          <div class="card p-4">
+            <p class="font-mono text-xs uppercase tracking-[0.15em] text-ink-muted">via API</p>
+            <p class="mt-2 text-sm font-semibold text-ink-primary">n8n · Make</p>
+            <p class="mt-1 text-xs text-ink-muted">workflow nodes</p>
+          </div>
+          <div class="card p-4">
+            <p class="font-mono text-xs uppercase tracking-[0.15em] text-ink-muted">via API</p>
+            <p class="mt-2 text-sm font-semibold text-ink-primary">curl · cron</p>
+            <p class="mt-1 text-xs text-ink-muted">plain HTTPS</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- The detection problem (renamed from "Cumulative rig" — too jargony) -->
   <section class="relative border-t border-white/10">
     <div class="mx-auto max-w-6xl px-6 py-24">
@@ -170,6 +230,83 @@ await session.destroy();`}</code></pre>
         Full methodology + signal-by-signal breakdown lands on
         <code class="font-mono text-glow-red">/trust/cumulative-rig</code> shortly.
       </p>
+    </div>
+  </section>
+
+  <!-- R8 — Fingerprint check visual. Replaces the previous text-only
+       "we match every signal" claim with a side-by-side stub showing
+       what a real iPhone vs. a typical stealth browser returns. The
+       6-row table is a stand-in for the full /trust/cumulative-rig
+       signal table; concrete numbers make the claim visually tangible
+       instead of asking the prospect to trust prose. -->
+  <section class="relative border-t border-white/10">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <div class="grid gap-10 md:grid-cols-2 md:items-start">
+        <div>
+          <p class="section-label">What detection systems see</p>
+          <h2
+            class="mt-6 max-w-xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
+            style="letter-spacing: -0.02em;"
+          >
+            Same signals as a physical iPhone. Not "close enough".
+          </h2>
+          <p class="mt-5 max-w-prose text-base text-ink-secondary leading-relaxed">
+            Detection systems read hundreds of small signals. A typical
+            stealth browser fakes the user-agent string but leaks the
+            underlying engine in the canvas, WebGL, or audio fingerprint.
+            Driftstack runs Apple's WebKit, so every signal returns the
+            exact iPhone value — not approximate.
+          </p>
+          <p class="mt-4 text-sm text-ink-muted">
+            A 6-signal preview. Full signal-by-signal table lands on
+            <code class="font-mono text-glow-red">/trust/cumulative-rig</code>
+            shortly — see
+            <a
+              href="/trust/security-overview"
+              class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
+              >/trust/security-overview</a
+            >
+            for what's live today.
+          </p>
+        </div>
+        <div class="card overflow-hidden">
+          <div class="grid grid-cols-[1fr_auto_auto] items-center gap-x-6 gap-y-3 px-6 py-5 text-sm">
+            <span class="font-mono text-xs uppercase tracking-[0.15em] text-ink-muted">
+              Signal
+            </span>
+            <span class="text-center font-mono text-xs uppercase tracking-[0.15em] text-ink-muted">
+              Stealth Chromium
+            </span>
+            <span class="text-center font-mono text-xs uppercase tracking-[0.15em] text-glow-red">
+              Driftstack
+            </span>
+
+            <span class="text-ink-primary">User-agent</span>
+            <span class="text-center text-ink-muted">spoofed</span>
+            <span class="text-center font-mono text-glow-red">real</span>
+
+            <span class="text-ink-primary">Canvas hash</span>
+            <span class="text-center text-ink-muted">leaks Chromium</span>
+            <span class="text-center font-mono text-glow-red">iPhone</span>
+
+            <span class="text-ink-primary">WebGL renderer</span>
+            <span class="text-center text-ink-muted">leaks Chromium</span>
+            <span class="text-center font-mono text-glow-red">Apple GPU</span>
+
+            <span class="text-ink-primary">AudioContext</span>
+            <span class="text-center text-ink-muted">leaks Chromium</span>
+            <span class="text-center font-mono text-glow-red">iOS</span>
+
+            <span class="text-ink-primary">Core Text metrics</span>
+            <span class="text-center text-ink-muted">leaks system</span>
+            <span class="text-center font-mono text-glow-red">iOS</span>
+
+            <span class="text-ink-primary">JS engine timing</span>
+            <span class="text-center text-ink-muted">V8 fingerprint</span>
+            <span class="text-center font-mono text-glow-red">JSCore</span>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
