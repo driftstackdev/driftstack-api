@@ -21,9 +21,13 @@
 
   body {
     @apply min-h-screen flex flex-col;
+    /* R7 — softer radial glow. The previous 0.12/0.08 alphas felt
+       oppressive on hero/footer; halving them keeps the brand wash
+       but lets the slate-900 surface breathe (outseta-style
+       restraint). */
     background-image:
-      radial-gradient(ellipse 90% 60% at 50% -10%, rgba(226, 56, 71, 0.12), transparent 70%),
-      radial-gradient(ellipse 80% 50% at 50% 100%, rgba(114, 47, 55, 0.08), transparent 75%);
+      radial-gradient(ellipse 90% 60% at 50% -10%, rgba(226, 56, 71, 0.07), transparent 70%),
+      radial-gradient(ellipse 80% 50% at 50% 100%, rgba(114, 47, 55, 0.05), transparent 75%);
     background-attachment: fixed;
   }
 

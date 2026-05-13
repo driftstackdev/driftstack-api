@@ -66,6 +66,38 @@ await session.destroy();`}</code></pre>
     </div>
   </section>
 
+  <!-- R7 — Trust strip. Outseta-style row of "what serious-buyer
+       signals do we already have shipped" so a prospect doesn't have
+       to dig through /trust to find them. Pre-launch honest framing:
+       we don't claim SOC 2 we don't have, but we do show real,
+       verifiable trust signals (EU residency, Stripe-of-record,
+       30-day sub-processor change-log, source escrow). -->
+  <section class="relative border-t border-white/10">
+    <div class="mx-auto max-w-6xl px-6 py-10">
+      <p class="text-center font-mono text-xs uppercase tracking-[0.2em] text-ink-muted">
+        Pre-launch trust signals
+      </p>
+      <div class="mt-6 grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-4">
+        <div class="flex flex-col items-center gap-1.5 text-center">
+          <span class="text-base font-semibold text-ink-primary">EU-resident</span>
+          <span class="text-xs text-ink-muted">Hetzner FSN · Neon EU · R2 EU</span>
+        </div>
+        <div class="flex flex-col items-center gap-1.5 text-center">
+          <span class="text-base font-semibold text-ink-primary">Stripe-billed</span>
+          <span class="text-xs text-ink-muted">SCA / 3DS · 14-day window</span>
+        </div>
+        <div class="flex flex-col items-center gap-1.5 text-center">
+          <span class="text-base font-semibold text-ink-primary">GDPR DPA</span>
+          <span class="text-xs text-ink-muted">Article 28(2) change-log</span>
+        </div>
+        <div class="flex flex-col items-center gap-1.5 text-center">
+          <span class="text-base font-semibold text-ink-primary">Source escrow</span>
+          <span class="text-xs text-ink-muted">Enterprise + Self-hosted</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Use cases (new — production polish: social proof + concrete uses) -->
   <section class="relative border-t border-white/10">
     <div class="mx-auto max-w-6xl px-6 py-20">
@@ -386,6 +418,76 @@ await session.destroy();`}</code></pre>
             </li>
           </ul>
           <a href="/self-hosted" class="btn-secondary mt-6">Contact sales</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- R7 — Design-partner band. Outseta's testimonial section
+       equivalent, but honest about pre-launch state. We don't have
+       customer-quote logos to show yet, so we frame it as "this is
+       who builds Driftstack and how we work with early customers"
+       instead of fake testimonials. Sets the tone outseta wins on:
+       real people, real photos, real specifics. -->
+  <section class="relative border-t border-white/10">
+    <div class="mx-auto max-w-6xl px-6 py-24">
+      <p class="section-label">Who builds it</p>
+      <h2
+        class="mt-6 max-w-3xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
+        style="letter-spacing: -0.02em;"
+      >
+        Built by operators, not a 20-person growth team.
+      </h2>
+      <p class="mt-6 max-w-prose text-lg text-ink-secondary leading-relaxed">
+        Driftstack is a solo-founded Dutch BV with a small group of senior
+        contractors on systems, security, and front-end. No VC pressure to
+        bolt on features. No SDR cold-email machine. The same engineer who
+        writes the WebKit patches answers your support email.
+      </p>
+      <div class="mt-12 grid gap-6 md:grid-cols-3">
+        <div class="card p-6">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">
+            Design partner
+          </p>
+          <h3 class="mt-3 text-base font-semibold text-ink-primary">
+            Direct engineer access
+          </h3>
+          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+            Pre-launch customers get a Slack channel shared with the engineer
+            who writes the code. Bug → fix → deploy in the same week, not the
+            same quarter. No tier-1 support gauntlet.
+          </p>
+        </div>
+        <div class="card p-6">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">
+            Honest pricing
+          </p>
+          <h3 class="mt-3 text-base font-semibold text-ink-primary">
+            One concurrent metric
+          </h3>
+          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+            No per-call markup, no per-element fees, no opaque "credits"
+            that expire. Concurrent cap is the only number you reason about.
+            Annual contracts save 20% — listed, not negotiated case-by-case.
+          </p>
+        </div>
+        <div class="card p-6">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">
+            Sovereignty
+          </p>
+          <h3 class="mt-3 text-base font-semibold text-ink-primary">
+            Your data stays in the EU
+          </h3>
+          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+            Customer data lives on Hetzner Falkenstein and Neon EU. We don't
+            log destination URLs, response bodies, or session content. The
+            full sub-processor list is on
+            <a
+              href="/trust/sub-processors"
+              class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
+              >/trust/sub-processors</a
+            >.
+          </p>
         </div>
       </div>
     </div>

@@ -50,11 +50,13 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
     expect(body).toMatch(/-webkit-font-smoothing: antialiased;/);
     expect(body).toMatch(/-moz-osx-font-smoothing: grayscale;/);
     expect(body).toMatch(/@apply min-h-screen flex flex-col;/);
+    // R7 — softened radial alphas (0.12→0.07 + 0.08→0.05) so the
+    // graphite surface breathes (outseta-style restraint).
     expect(body).toMatch(
-      /radial-gradient\(ellipse 90% 60% at 50% -10%, rgba\(226, 56, 71, 0\.12\)/,
+      /radial-gradient\(ellipse 90% 60% at 50% -10%, rgba\(226, 56, 71, 0\.07\)/,
     );
     expect(body).toMatch(
-      /radial-gradient\(ellipse 80% 50% at 50% 100%, rgba\(114, 47, 55, 0\.08\)/,
+      /radial-gradient\(ellipse 80% 50% at 50% 100%, rgba\(114, 47, 55, 0\.05\)/,
     );
     expect(body).toMatch(/background-attachment: fixed;/);
   });

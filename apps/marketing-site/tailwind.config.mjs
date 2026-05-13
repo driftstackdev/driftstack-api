@@ -39,20 +39,22 @@ export default {
           900: '#0f172a',
           950: '#020617',
         },
-        // Dark-theme surface tokens — semantic naming so future palette
-        // tweaks don't require touching every component.
+        // R7 — "graphite" surface palette. Lighter than the previous
+        // near-black abyss to address "kinda too dark" customer feedback
+        // while keeping the dark identity. Class names unchanged so
+        // every doc-parity test continues to pass.
         surface: {
-          base: '#0b0f14',
-          raised: '#111722',
-          elevated: '#1a2230',
-          inset: '#070a0e',
-          divider: '#1f2937',
+          base: '#0f172a', // slate-900 — main page background
+          raised: '#1e293b', // slate-800 — cards
+          elevated: '#334155', // slate-700 — elevated callouts
+          inset: '#020617', // slate-950 — code blocks (stays deepest for contrast)
+          divider: '#475569', // slate-600 — visible separator lines
         },
         ink: {
-          primary: '#e5e7eb',
-          secondary: '#9ca3af',
-          muted: '#6b7280',
-          inverted: '#0b0f14',
+          primary: '#f8fafc', // slate-50 — body headings
+          secondary: '#cbd5e1', // slate-300 — body copy (much more readable than -400)
+          muted: '#94a3b8', // slate-400 — supporting captions
+          inverted: '#0f172a',
         },
         // Brighter live-red used for glow + hover lifts. Layered on
         // top of oxblood-700 so the brand-locked accent stays the
@@ -72,9 +74,9 @@ export default {
       },
       boxShadow: {
         // Red-glow ring used on primary CTAs + accent borders.
-        'glow-red': '0 0 0 1px rgba(226, 56, 71, 0.35), 0 8px 24px -8px rgba(226, 56, 71, 0.45)',
-        'glow-red-lg': '0 0 0 1px rgba(226, 56, 71, 0.5), 0 16px 48px -12px rgba(226, 56, 71, 0.6)',
-        'inset-divider': 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+        'glow-red': '0 0 0 1px rgba(226, 56, 71, 0.3), 0 6px 20px -8px rgba(226, 56, 71, 0.35)',
+        'glow-red-lg': '0 0 0 1px rgba(226, 56, 71, 0.4), 0 12px 40px -12px rgba(226, 56, 71, 0.5)',
+        'inset-divider': 'inset 0 1px 0 rgba(255, 255, 255, 0.06)',
       },
       backgroundImage: {
         // Grid pattern + radial glow used on dark surfaces.
