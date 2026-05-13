@@ -1,0 +1,129 @@
+// W500.A — drift guard for apps/marketing-site/src/pages/faq.astro.
+// Public FAQ page. Drift here either drops a V-500 group (would lose
+// the architecture / migration / AUP questions that pad support
+// inboxes pre-launch) or breaks the canonical pricing/SLA numbers
+// (which customers reading the FAQ compare against the actual
+// product config).
+//
+//   • 10-group taxonomy (Pricing model + Trial pack + Tiers + upgrades
+//     + Billing + payments + Bundled LLM + BYOK + EU stack + compliance
+//     + V-500 Architecture + sessions + V-500 Migrating + V-500
+//     Acceptable use + Support + reliability).
+//   • Concurrent caps: Solo/Team/Agency Manual 1/3/8 + API
+//     Starter/Builder/Scale 2/8/24.
+//   • Trial pack mechanic: 299¢ credit + $0.18/hr + 14-day window +
+//     once-per-account.
+//   • Enterprise from $4,000/mo.
+//   • Stripe payment processor + EU VAT/BTW reverse-charge.
+//   • Support SLA ladder: 48h/24h/12h+Slack/4h+Slack/1h+CSM.
+//   • Uptime SLA: 99% Starter+Solo / 99.5% Builder+Scale / 99.9%
+//     Enterprise.
+//   • 20% annual discount + 30-day cancellation notice.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/faq.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W500.A apps/marketing-site/src/pages/faq.astro content parity', () => {
+  const body = read(LIB);
+
+  it('10-group taxonomy pinned: Pricing model + Trial pack + Tiers + upgrades + Billing + payments + Bundled LLM + BYOK + EU stack + compliance + V-500 Architecture + sessions + V-500 Migrating from another vendor + V-500 Acceptable use + Support + reliability — pinned so the 10-bucket structure stays consistent (drift to dropping V-500 groups would re-orphan customers from architecture / migration / AUP self-service answers)', () => {
+    expect(body).toMatch(/title: 'Pricing model',/);
+    expect(body).toMatch(/title: 'Trial pack',/);
+    expect(body).toMatch(/title: 'Tiers \+ upgrades',/);
+    expect(body).toMatch(/title: 'Billing \+ payments',/);
+    expect(body).toMatch(/title: 'Bundled LLM \+ BYOK',/);
+    expect(body).toMatch(/title: 'EU stack \+ compliance',/);
+    expect(body).toMatch(/title: 'Architecture \+ sessions',/);
+    expect(body).toMatch(/title: 'Migrating from another vendor',/);
+    expect(body).toMatch(/title: 'Acceptable use',/);
+    expect(body).toMatch(/title: 'Support \+ reliability',/);
+  });
+
+  it("V-500 'Architecture + sessions' group doc-comment framing pinned: 'V-500 — architecture + sessions group. Three buyer-recurring questions buried in support threads pre-launch; pulling them up so prospects answer themselves.' — pinned so the why-we-added-V-500-groups rationale survives (drift to dropping would let a future maintainer remove these groups thinking they're noise)", () => {
+    expect(body).toMatch(
+      /\/\/ V-500 — architecture \+ sessions group\. Three buyer-recurring\s*\n?\s*\/\/ questions buried in support threads pre-launch; pulling them\s*\n?\s*\/\/ up so prospects answer themselves\./,
+    );
+  });
+
+  it("Concurrent metering 7-tier framing pinned: 'Solo Manual = 1 concurrent / Team Manual = 3 / Agency Manual = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom' — pinned so the per-tier concurrent caps stay consistent with the customer-dashboard select-tier page (drift would create cross-page price-to-cap divergence)", () => {
+    expect(body).toMatch(
+      /Solo Manual = 1 concurrent \/ Team Manual = 3 \/ Agency Manual = 8 \/ API Starter = 2 \/ API Builder = 8 \/ API Scale = 24 \/ Enterprise = custom/,
+    );
+  });
+
+  it("Trial-pack mechanic pinned: 'The trial pack credits 299¢ to your account; sessions decrement at $0.18 per concurrent-hour (per ADR-003 trial-pack mechanic). 299 ÷ 18 ≈ 16.6 hours of usage. Unused credit expires 14 days after purchase.' — pinned so the canonical numbers (299¢ + $0.18/hr + ~16.6h + 14d expiry) + ADR-003 reference all survive (drift would create marketing↔ADR drift)", () => {
+    expect(body).toMatch(
+      /The trial pack credits 299¢ to your account; sessions decrement at \$0\.18 per concurrent-hour \(per ADR-003 trial-pack mechanic\)\. 299 ÷ 18 ≈ 16\.6 hours of usage\. Unused credit expires 14 days after purchase\./,
+    );
+  });
+
+  it("Enterprise pricing framing: 'from $4,000/mo on annual contracts only' — pinned so the Enterprise baseline-price + annual-only restriction stay consistent across marketing pages (drift to dropping the 'annual contracts only' would let prospects expect monthly Enterprise contracts that don't exist)", () => {
+    expect(body).toMatch(/Enterprise is custom — from \$4,000\/mo on annual contracts only\./);
+  });
+
+  it("Support SLA 5-tier ladder pinned: '48h Starter, 24h Solo, 12h Builder + Slack Connect, 4h Scale + Slack Connect, 1h Enterprise + dedicated CSM' — pinned so the support-response-time ladder stays consistent (drift to dropping Slack Connect on Builder/Scale would change the support-channel commitment; drift to dropping CSM on Enterprise would lose a key Enterprise upsell)", () => {
+    expect(body).toMatch(
+      /48h Starter, 24h Solo, 12h Builder \+ Slack Connect, 4h Scale \+ Slack Connect, 1h Enterprise \+ dedicated CSM\./,
+    );
+  });
+
+  it("Uptime SLA 3-bucket pinned: '99% Starter / Solo, 99.5% Builder / Scale, 99.9% Enterprise' + 'SLA credits applied automatically against the next invoice' — pinned so the per-tier uptime commitment + the auto-credit-against-next-invoice mechanic both survive (drift to dropping auto-credit would force customers through a credit-request workflow)", () => {
+    expect(body).toMatch(
+      /Uptime SLA scales with tier: 99% Starter \/ Solo, 99\.5% Builder \/ Scale, 99\.9% Enterprise\./,
+    );
+    expect(body).toMatch(/SLA credits applied automatically against the next invoice\./);
+  });
+
+  it("Annual contract framing: 'billed up front for 12 months at 20% off the monthly equivalent' + 'Annual contracts auto-renew unless cancelled at least 30 days before renewal' — pinned so the 20% discount + 30-day-notice cancellation policy stay consistent with the Stripe customer portal behavior (drift to a different notice period would create a Stripe↔marketing-page mismatch)", () => {
+    expect(body).toMatch(
+      /Annual contracts are billed up front for 12 months at 20% off the monthly equivalent\./,
+    );
+    expect(body).toMatch(
+      /Annual contracts auto-renew unless cancelled at least 30 days before renewal\./,
+    );
+  });
+
+  it('Stripe payment framing pinned: \'Stripe is our payment processor. Card statements show "STRIPE *DRIFTSTACK". Receipts come from Stripe. Subscription management goes through the Stripe Customer Portal. Stripe handles PCI compliance, fraud protection, dispute mechanisms, and EU VAT/BTW reverse-charge — all of which we inherit rather than reimplement.\' — pinned so the Stripe-handled scope (PCI + fraud + dispute + EU VAT/BTW reverse-charge) stays explicit (drift to dropping would let customers wonder which compliance pieces Driftstack does vs. Stripe)', () => {
+    expect(body).toMatch(
+      /Stripe handles PCI compliance, fraud protection, dispute mechanisms, and EU VAT\/BTW reverse-charge — all of which we inherit rather than reimplement\./,
+    );
+  });
+
+  it("Crypto-via-NowPayments framing: 'Yes — via NowPayments on tiers where the founder has enabled it.' + 'Crypto payments are non-refundable' — pinned so the NowPayments crypto rail + non-refundability stay explicit (drift to claiming refundable crypto would let customers expect impossible chargebacks; drift to dropping NowPayments would orphan customers from the canonical processor)", () => {
+    expect(body).toMatch(/Yes — via NowPayments on tiers where the founder has enabled it\./);
+    expect(body).toMatch(/<strong>Crypto payments are non-refundable<\/strong>/);
+  });
+
+  it("BYOK security framing: 'Your Anthropic API key is encrypted at rest with envelope encryption, decrypted in-memory only at session execution time, and never logged. The DPA covers the handling shape. Self-hosted customers can use their own KMS for the envelope key.' — pinned so the envelope-encryption + in-memory-only + never-logged + DPA-coverage + KMS-bring-your-own posture survive (drift to dropping any would weaken the BYOK security narrative for compliance buyers)", () => {
+    expect(body).toMatch(
+      /Your Anthropic API key is encrypted at rest with envelope encryption, decrypted in-memory only at session execution time, and never logged\. The DPA covers the handling shape\. Self-hosted customers can use their own KMS for the envelope key\./,
+    );
+  });
+
+  it("Cap-reached HTTP 429 + RFC 7807 framing: 'Session-creation requests fail with HTTP 429 + a structured RFC 7807 problem-detail pointing at the cap-reached state and (where applicable) the next-tier upgrade path. Existing in-flight sessions are not interrupted.' — pinned so the 429 status + RFC 7807 + non-interruption contract stay explicit (drift to dropping non-interruption would let customers think hitting cap mid-fleet would kill in-flight sessions)", () => {
+    expect(body).toMatch(
+      /Session-creation requests fail with HTTP 429 \+ a structured RFC 7807 problem-detail/,
+    );
+    expect(body).toMatch(/Existing in-flight sessions are not interrupted\./);
+  });
+
+  it("Source-escrow framing: 'Data portability: profiles + audit logs + session metadata can be exported as CSV/JSON from the dashboard or via the API at any time' + 'Self-hosted SKU: Enterprise + Self-hosted licensees receive source escrow — if the cloud service is sunsetted, the source escrow agreement releases the WebKit fork + control-plane code so customers can continue running the stack on their own hardware indefinitely.' — pinned so the 2-protection 'what if Driftstack goes away?' framing survives (drift to dropping would lose the dealbreaker answer for compliance-conscious enterprise buyers)", () => {
+    expect(body).toMatch(/<strong>Data portability:<\/strong>/);
+    expect(body).toMatch(/<strong>Self-hosted SKU:<\/strong>/);
+    expect(body).toMatch(/Enterprise \+ Self-hosted licensees receive source escrow/);
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
