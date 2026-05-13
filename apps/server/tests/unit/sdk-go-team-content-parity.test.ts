@@ -1,5 +1,25 @@
-// W591.A — drift guard for packages/sdk-go/team.go.
+// W591.A (W634-deepened) — drift guard for packages/sdk-go/team.go.
 // TeamResource Go parity. V-298c routes + V-298d auth-path gate.
+//
+// W634 splits the original 2 it() blocks into 6 focused per-verb
+// blocks + pins previously-implicit invariants:
+//
+//   • V-298d auth-path-not-yet-permissioned contract: accepted
+//     members CAN SIGN IN but their membership grants no implicit
+//     permissions on the owner's resources until V-298d ships. This
+//     is the load-bearing distinction between "the membership row
+//     exists" and "the bearer can act on behalf of the owner" —
+//     drift to claiming the latter would silently widen the auth
+//     surface.
+//   • Invite nil-body-default substitution (callers pass nil; SDK
+//     plugs &TeamInviteRequest{} so wire body is always valid).
+//   • AcceptInvite token wire encoding: the SDK takes a bare string
+//     token and wraps it as &TeamAcceptRequest{Token: token} — the
+//     ergonomic that lets callers paste the magic-link token directly
+//     without constructing a request struct.
+//   • RemoveMember idempotent DELETE with URL-escape on membershipID
+//     (so a malformed id cannot inject path traversal).
+//   • HTTP-method correctness per verb (POST/GET/DELETE).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -17,32 +37,57 @@ function read(p: string): string {
 describe('W591.A packages/sdk-go/team.go content parity', () => {
   const body = read(LIB);
 
-  it('TeamResource framing + V-298c routes + V-298d auth-path-not-yet-permissioned + 5 verbs (Invite nil-body-default + ListMembers + ListInvites + AcceptInvite + RemoveMember idempotent DELETE quote-escaped membershipID) pinned', () => {
+  it("file exists at canonical path + TeamResource V-298c routes anchor + V-298d auth-path-not-yet-permissioned contract pinned. CRITICAL distinction: accepted members CAN SIGN IN, but their membership grants no implicit permissions on the owner's resources until V-298d ships. Drift to claiming the membership grants implicit permissions would silently widen the auth surface.", () => {
+    expect(existsSync(LIB)).toBe(true);
+    expect(body).toMatch(/^package driftstack$/m);
     expect(body).toMatch(/\/\/ TeamResource handles \/v1\/team\/\*\. V-298c routes; auth path/);
     expect(body).toMatch(/\/\/ integration is V-298d — accepted members can sign in but the/);
     expect(body).toMatch(/\/\/ membership grants no implicit permissions on the owner's resources/);
     expect(body).toMatch(/\/\/ until V-298d ships\./);
     expect(body).toMatch(/^type TeamResource struct \{\s*\n\s*client \*Client\s*\n\}/m);
+  });
+
+  it('Invite — POST /v1/team/invites with nil-body-default substitution (callers pass nil; SDK plugs &TeamInviteRequest{} so the wire body is always a valid empty struct rather than Go zero-value JSON "null")', () => {
+    expect(body).toMatch(/\/\/ Invite an email to join the calling owner's team\./);
     expect(body).toMatch(
-      /func \(r \*TeamResource\) Invite\(ctx context\.Context, body \*TeamInviteRequest\) \(\*TeamInviteResponse, error\) \{\s*\n\s*if body == nil \{\s*\n\s*body = &TeamInviteRequest\{\}\s*\n\s*\}/,
+      /func \(r \*TeamResource\) Invite\(ctx context\.Context, body \*TeamInviteRequest\) \(\*TeamInviteResponse, error\)/,
     );
-    expect(body).toMatch(/path:\s+"\/v1\/team\/invites",/);
+    expect(body).toMatch(/if body == nil \{\s*\n\s*body = &TeamInviteRequest\{\}\s*\n\s*\}/);
+    expect(body).toMatch(/method: "POST",\s*\n\s*path:\s+"\/v1\/team\/invites",/);
+  });
+
+  it('ListMembers — GET /v1/team/members returns CONFIRMED memberships only (V-298c). The "confirmed" qualifier in the doc-comment matters: pending invites live on the separate ListInvites surface so the two endpoints have non-overlapping result sets.', () => {
     expect(body).toMatch(/\/\/ ListMembers returns confirmed memberships for the calling owner\./);
-    expect(body).toMatch(/path:\s+"\/v1\/team\/members",/);
+    expect(body).toMatch(
+      /func \(r \*TeamResource\) ListMembers\(ctx context\.Context\) \(\*TeamMembersList, error\)/,
+    );
+    expect(body).toMatch(/method: "GET",\s*\n\s*path:\s+"\/v1\/team\/members",/);
+  });
+
+  it('ListInvites — GET /v1/team/invites returns PENDING (unaccepted, unexpired) invites only. Both "unaccepted" AND "unexpired" qualifiers pinned because dropping either would silently broaden the surface (e.g. returning expired invites would let stale tokens look actionable in the dashboard).', () => {
     expect(body).toMatch(
       /\/\/ ListInvites returns pending \(unaccepted, unexpired\) invites for the/,
     );
+    expect(body).toMatch(/\/\/ calling owner\./);
     expect(body).toMatch(
-      /func \(r \*TeamResource\) AcceptInvite\(ctx context\.Context, token string\) \(\*TeamAcceptResponse, error\) \{/,
+      /func \(r \*TeamResource\) ListInvites\(ctx context\.Context\) \(\*TeamInvitesList, error\)/,
+    );
+    expect(body).toMatch(/method: "GET",\s*\n\s*path:\s+"\/v1\/team\/invites",/);
+  });
+
+  it('AcceptInvite — POST /v1/team/invites/accept consumes a token and creates the membership. SDK ergonomic: takes a BARE STRING token (not a *TeamAcceptRequest), and wraps as &TeamAcceptRequest{Token: token} internally. Drift to forcing callers to construct the request struct themselves would break the "paste the magic-link token directly" UX.', () => {
+    expect(body).toMatch(/\/\/ AcceptInvite consumes a token and creates the membership\./);
+    expect(body).toMatch(
+      /func \(r \*TeamResource\) AcceptInvite\(ctx context\.Context, token string\) \(\*TeamAcceptResponse, error\)/,
     );
     expect(body).toMatch(/body:\s+&TeamAcceptRequest\{Token: token\},/);
-    expect(body).toMatch(/path:\s+"\/v1\/team\/invites\/accept",/);
+    expect(body).toMatch(/method: "POST",\s*\n\s*path:\s+"\/v1\/team\/invites\/accept",/);
+  });
+
+  it('RemoveMember — DELETE /v1/team/members/{membershipID}, plain error return (no out struct). URL-escapes the membershipID so a malformed id cannot inject path traversal. By-membership-id (not by-email/user-id) so a member with multiple memberships across teams can be removed from one without affecting the others.', () => {
+    expect(body).toMatch(/\/\/ RemoveMember by membership id\./);
     expect(body).toMatch(
       /func \(r \*TeamResource\) RemoveMember\(ctx context\.Context, membershipID string\) error \{\s*\n\s*return r\.client\.do\(ctx, requestOptions\{\s*\n\s*method: "DELETE",\s*\n\s*path:\s+"\/v1\/team\/members\/" \+ url\.PathEscape\(membershipID\),\s*\n\s*\}\)\s*\n\}/,
     );
-  });
-
-  it('file exists at canonical path', () => {
-    expect(existsSync(LIB)).toBe(true);
   });
 });
