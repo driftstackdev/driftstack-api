@@ -1,0 +1,148 @@
+// W502.A — drift guard for apps/marketing-site/src/pages/pricing.astro.
+// Pricing landing page — the canonical $79/$249/$699 Manual + $149/$499/$1,499
+// API ladder + Enterprise-from-$4k + self-hosted SKUs + the $2.99 trial pack.
+// Drift here either changes a tier price (would create marketing↔Stripe
+// invoice divergence) or breaks the 'pay per concurrent session, no surprise
+// overage' framing that the entire pricing narrative rests on.
+//
+//   • 5-import set from pricing.ts: API_TIERS + SELF_HOSTED_* + TRIAL_PACK.
+//   • fmtUsd helper (whole vs decimal formatting branch).
+//   • fmtAiAgent 3-state: byok_only / byok_or_bundled / byok_or_bundled_custom.
+//   • Trial pack hero card: $2.99 one-time, hoursApprox + concurrent +
+//     windowDays + creditCents + meterRate from TRIAL_PACK.
+//   • Positioning band: 'Pay per concurrent session.' + 'No surprise
+//     overage bills.' framing.
+//   • V-502 'Which tier is right for me?' decision-tree section: Trial
+//     pack $2.99 / Solo Manual $79 / Team Manual $249 / Agency Manual $699
+//     / API Starter $149 / API Builder $499 / API Scale $1,499 /
+//     Enterprise from $4,000.
+//   • Monthly/annual toggle with −20% annual savings badge.
+//   • BYOK / Bundled LLM explainer.
+//   • Mini FAQ teaser: 4 questions + 'See full FAQ' link.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', () => {
+  const body = read(LIB);
+
+  it('5-import set from pricing.ts: API_TIERS + SELF_HOSTED_ARCHETYPE_UPDATES + SELF_HOSTED_SKUS + SELF_HOSTED_SOFTWARE_UPDATES + SELF_HOSTED_SOURCE_ACCESS + TRIAL_PACK — pinned so the tier-data import stays sourced from the canonical pricing.ts (drift to hardcoding here would diverge from the pricing-page comparison + checkout + FAQ when the tier table changes)', () => {
+    expect(body).toMatch(
+      /import \{\s*\n?\s*API_TIERS,\s*\n?\s*SELF_HOSTED_ARCHETYPE_UPDATES,\s*\n?\s*SELF_HOSTED_SKUS,\s*\n?\s*SELF_HOSTED_SOFTWARE_UPDATES,\s*\n?\s*SELF_HOSTED_SOURCE_ACCESS,\s*\n?\s*TRIAL_PACK,\s*\n?\s*\} from '\.\.\/data\/pricing\.ts';/,
+    );
+  });
+
+  it("fmtAiAgent 3-state LLM-billing map: byok_only → 'BYOK (Anthropic key required)' / byok_or_bundled → 'BYOK or bundled (your choice)' / byok_or_bundled_custom → 'BYOK or bundled (custom rate)' — pinned so the 3-state AI-agent column display strings stay consistent (drift to dropping 'Anthropic key required' would obscure which model provider; drift to dropping 'custom rate' would lose the Enterprise-tier signal)", () => {
+    expect(body).toMatch(/case 'byok_only':\s*\n?\s*return 'BYOK \(Anthropic key required\)';/);
+    expect(body).toMatch(
+      /case 'byok_or_bundled':\s*\n?\s*return 'BYOK or bundled \(your choice\)';/,
+    );
+    expect(body).toMatch(
+      /case 'byok_or_bundled_custom':\s*\n?\s*return 'BYOK or bundled \(custom rate\)';/,
+    );
+  });
+
+  it("Trial pack hero card pinned: '$2.99 buys ~{TRIAL_PACK.hoursApprox} hours of iPhone Safari sessions to evaluate the platform.' + 'concurrent session, {TRIAL_PACK.windowDays}-day window from purchase, used once per account.' — pinned so the $2.99 / iPhone Safari / windowDays / used-once-per-account 4-state framing survives (drift to dropping 'used once per account' would invite trial-pack abuse; drift to dropping iPhone Safari would obscure what the trial actually runs)", () => {
+    expect(body).toMatch(
+      /\$2\.99 buys ~\{TRIAL_PACK\.hoursApprox\} hours of iPhone Safari\s*\n?\s*sessions to evaluate the platform\./,
+    );
+    expect(body).toMatch(
+      /concurrent session, \{TRIAL_PACK\.windowDays\}-day window from\s*\n?\s*purchase, used once per account\./,
+    );
+  });
+
+  it("Trial pack mechanics framing pinned: '{TRIAL_PACK.creditCents}¢ of pre-paid credit decremented at {TRIAL_PACK.meterRate}.' + 'The trial pack is the only Driftstack product with hour-based metering — paid tiers are concurrent-only.' — pinned so the credit-cents + meter-rate + concurrent-only-paid-tiers commitment survives (drift to dropping the 'only product with hour-based metering' framing would let customers think paid tiers also meter hours)", () => {
+    expect(body).toMatch(
+      /\{TRIAL_PACK\.creditCents\}¢ of pre-paid credit\s*\n?\s*decremented at \{TRIAL_PACK\.meterRate\}\./,
+    );
+    expect(body).toMatch(
+      /The trial pack is the only\s*\n?\s*Driftstack product with hour-based metering — paid tiers are\s*\n?\s*concurrent-only\./,
+    );
+  });
+
+  it("Positioning band pinned: 'Pay per concurrent session.' + 'Run as many hours as you want within your concurrent cap.' + 'No surprise overage bills.' — pinned so the 3-part flat-pricing-no-surprise narrative survives (drift to dropping 'No surprise overage bills' would weaken the central differentiation against per-hour vendors like Browserless)", () => {
+    expect(body).toMatch(/Pay per concurrent session\./);
+    expect(body).toMatch(/Run as many hours as you want within your concurrent cap\./);
+    expect(body).toMatch(/No surprise overage bills\./);
+  });
+
+  it("V-502 decision-tree section 8 tier cards: Trial pack $2.99 + Solo Manual $79 + Team Manual $249 + Agency Manual $699 + API Starter $149 + API Builder $499 + API Scale $1,499 + Enterprise from $4,000 — pinned so the 8-tier 'which is right for me' decision-tree stays complete (drift to dropping any tier would orphan that-tier prospects; drift to changing a price would create marketing↔Stripe-invoice divergence)", () => {
+    expect(body).toMatch(/Trial pack — \$2\.99/);
+    expect(body).toMatch(/Solo Manual — \$79\/mo/);
+    expect(body).toMatch(/Team Manual — \$249\/mo/);
+    expect(body).toMatch(/Agency Manual — \$699\/mo/);
+    expect(body).toMatch(/API Starter — \$149\/mo/);
+    expect(body).toMatch(/API Builder — \$499\/mo/);
+    expect(body).toMatch(/API Scale — \$1,499\/mo/);
+    expect(body).toMatch(/Enterprise — from \$4,000\/mo/);
+  });
+
+  it("Solo Manual decision-card framing pinned: 'One human clicking in the desktop GUI client; up to 10 persistent profiles. Power users running 1 session at a time across 10 different client identities' — pinned so the 1-session/10-profile/desktop-GUI Solo framing stays consistent (drift to dropping '10 persistent profiles' would create marketing↔pricing-table divergence on the per-tier profile counts)", () => {
+    expect(body).toMatch(
+      /One human clicking in the desktop GUI client; up to 10\s*\n?\s*persistent profiles\. Power users running 1 session at a time\s*\n?\s*across 10 different client identities/,
+    );
+  });
+
+  it("Annual −20% toggle pinned: 'Monthly' button + 'Annual' button + '−20%' badge — pinned so the monthly/annual toggle UI + the 20% annual savings positioning survives (drift to dropping the −20% badge would hide the annual-contract discount that drives high-ACV deals)", () => {
+    expect(body).toMatch(/data-period="monthly"/);
+    expect(body).toMatch(/data-period="annual"/);
+    expect(body).toMatch(/−20%/);
+  });
+
+  it("Manual ladder header pinned: 'Manual — for humans' + 'Persistent profiles. Drive sessions yourself in the GUI client. No code required.' — pinned so the Manual-ladder positioning (humans + GUI + no-code) stays consistent (drift to dropping 'No code required' would obscure why Manual is a separate ladder from API)", () => {
+    expect(body).toMatch(/Manual — for humans/);
+    expect(body).toMatch(
+      /Persistent profiles\. Drive sessions yourself in the GUI client\. No code\s*\n?\s*required\./,
+    );
+  });
+
+  it("API ladder BYOK explainer pinned: 'bring your own API key from Anthropic for the optional AI agent feature. Your model spend goes to your provider account; Driftstack doesn't markup or proxy.' — pinned so the BYOK-anthropic + no-markup framing survives (drift to claiming markup would invite billing-transparency pushback; drift to dropping anthropic specificity would obscure which provider the BYOK uses)", () => {
+    expect(body).toMatch(/<em>bring your own API key<\/em> from Anthropic for the optional AI/);
+    expect(body).toMatch(
+      /Your model spend goes\s*\n?\s*to your provider account; Driftstack doesn't markup or proxy\./,
+    );
+  });
+
+  it("Self-hosted ladder header pinned: 'Self-hosted — for sovereignty' + 'Run the entire stack on your own hardware. No concurrent-session caps from us — your hardware is the cap. Driftstack licenses the software, you scale the fleet.' — pinned so the no-license-cap + hardware-is-the-cap unit-economics flip survives (drift to dropping 'No concurrent-session caps from us' would lose THE core self-hosted economic narrative)", () => {
+    expect(body).toMatch(/Self-hosted — for sovereignty/);
+    expect(body).toMatch(
+      /Run the entire stack on your own hardware\. No concurrent-session caps from\s*\n?\s*us — your hardware is the cap\. Driftstack licenses the software, you\s*\n?\s*scale the fleet\./,
+    );
+  });
+
+  it("BYOK / Bundled LLM section pinned: 'BYOK or bundled — your call.' + 'API Builder, API Scale, Enterprise' bundled-tier list + 'Self-hosted SKUs are BYOK-only because we don't proxy LLM calls into customer hardware.' — pinned so the bundled-tier scope + the self-hosted-BYOK-only architectural reason survive (drift to claiming self-hosted bundled would create marketing↔engineering divergence)", () => {
+    expect(body).toMatch(/BYOK or bundled — your call\./);
+    expect(body).toMatch(/Bundled LLM \(API Builder, API Scale, Enterprise\)/);
+    expect(body).toMatch(
+      /Self-hosted SKUs are BYOK-only because we don't proxy LLM calls into\s*\n?\s*customer hardware\./,
+    );
+  });
+
+  it("Mini FAQ teaser 4 questions: 'Manual or API — which one?' + 'Why concurrent caps and not hours?' + 'Can I switch tiers mid-month?' + 'What happens when the trial pack runs out?' + 'See full FAQ' → /faq — pinned so the 4-question pricing-FAQ teaser stays complete (drift to dropping the concurrent-caps explainer would lose the why-not-hourly answer; drift to dropping the trial-pack-runs-out answer would orphan trial-pack customers facing 402)", () => {
+    expect(body).toMatch(/Manual or API — which one\?/);
+    expect(body).toMatch(/Why concurrent caps and not hours\?/);
+    expect(body).toMatch(/Can I switch tiers mid-month\?/);
+    expect(body).toMatch(/What happens when the trial pack runs out\?/);
+    expect(body).toMatch(/<a href="\/faq" class="btn-secondary">See full FAQ<\/a>/);
+  });
+
+  it("VAT framing pinned: 'All prices in USD. VAT/BTW added per region per applicable EU rules. No setup fees on any tier. Annual contracts billed up front.' — pinned so the USD-base + VAT/BTW + no-setup-fee + annual-prepay 4-state commitment survives (drift to dropping VAT/BTW would surprise EU customers at checkout; drift to dropping 'no setup fees' would let prospects assume hidden onboarding charges)", () => {
+    expect(body).toMatch(
+      /All prices in USD\. VAT\/BTW added per region per applicable EU rules\. No\s*\n?\s*setup fees on any tier\. Annual contracts billed up front\./,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
