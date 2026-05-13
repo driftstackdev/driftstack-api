@@ -1,26 +1,7 @@
-// W500.C — drift guard for apps/marketing-site/src/pages/index.astro.
-// Marketing homepage. Drift here either drops the WebKit C++ source
-// modification framing (THE core technical differentiator) or breaks
-// the canonical price points (which customers compare against the
-// /pricing page and the customer-dashboard select-tier).
-//
-//   • Hero: 'iPhone Safari fingerprints. Without the runtime tells.'
-//     + 'Most stealth browsers modify JavaScript at runtime.'
-//   • WebKit C++ source modification framing.
-//   • Bit-identical cumulative-rig 'never approximate' framing.
-//   • Real WebKit / Real Core Text / Real iOS rendering framing.
-//   • 2-button hero CTA: Get started — $2.99 + Download GUI client →
-//     github.com/driftstackdev/driftstack-gui/releases.
-//   • Trial pack '16 hours · 14-day window · used once per account.'
-//   • Code example with archetype: 'iphone16pro_ios18_7_safari26_4'.
-//   • Concurrent metering positioning ('only thing you pay for').
-//   • EU-resident infra + customer-configurable egress roadmap
-//     (SOCKS5/WireGuard/OpenVPN).
-//   • Manual vs API 2-audience split: $79/$249/$699 Manual + 1/3/8
-//     concurrent / $149/$499/$1,499 API + 2/8/24 concurrent.
-//   • Self-hosted teaser 3-driver: privacy / volume / sovereignty.
-//   • Pricing teaser: 'Two ladders. One trial pack to start.' +
-//     20% annual savings.
+// W500.C (R5-refreshed) — drift guard for apps/marketing-site/src/pages/index.astro.
+// R5 reworked the homepage copy for non-technical readers, added a
+// 3-card use-case section, and a final-CTA bottom section. This guard
+// pins the load-bearing claims on the rewritten page.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -38,52 +19,44 @@ function read(p: string): string {
 describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () => {
   const body = read(LIB);
 
-  it("BaseLayout title='Driftstack' + SEO description: 'iPhone Safari fingerprints. Without the runtime tells. We modify WebKit's C++ source instead of patching JavaScript. $2.99 trial pack — 16 hours, used once per account.' — pinned so the SEO description covers the canonical positioning (iPhone Safari + runtime-tells claim + WebKit C++ + $2.99/16h/once-per-account) all in one description for search snippets", () => {
+  it("BaseLayout title='Driftstack' + R5 plain-English SEO description (real iPhone Safari sessions / pixel-perfect / $2.99 trial)", () => {
     expect(body).toMatch(
-      /<BaseLayout\s*\n?\s*title="Driftstack"\s*\n?\s*description="iPhone Safari fingerprints\. Without the runtime tells\. We modify WebKit's C\+\+ source instead of patching JavaScript\. \$2\.99 trial pack — 16 hours, used once per account\."/,
+      /<BaseLayout\s*\n?\s*title="Driftstack"\s*\n?\s*description="Real iPhone Safari sessions, on demand\. Pixel-perfect device fingerprints with no detectable software fingerprint\. Try it for \$2\.99 — 16 hours of sessions, one purchase per account\."/,
     );
   });
 
-  it("Hero tagline + H1: 'iPhone Safari fingerprints. Without the runtime tells.' (oxblood mono uppercase) + 'Most stealth browsers modify JavaScript at runtime.' (H1) + 'Detection vendors built their industry on catching exactly that.' (subheadline) — pinned so the canonical hero positioning (provocative-claim → why-detection-fails-our-competitors) survives (drift to dropping the runtime-tells tagline would lose THE core marketing hook)", () => {
-    expect(body).toMatch(/iPhone Safari fingerprints\. Without the runtime tells\./);
-    expect(body).toMatch(/Most stealth browsers modify JavaScript at runtime\./);
-    expect(body).toMatch(/Detection vendors built their industry on catching exactly that\./);
-  });
-
-  it("WebKit C++ source modification framing pinned: 'We modify WebKit's C++ source instead. There's nothing at the JavaScript layer for detection to find — because nothing was changed there. The fingerprint your code reads is the fingerprint a real iPhone reads. Same engine, same primitives, same source of truth.' — pinned so THE core technical differentiator survives intact (drift to dropping any phrase would weaken the source-vs-runtime distinction the entire marketing strategy hangs on)", () => {
+  it('Hero copy (R5): section label + iPhone-Safari headline + detection-built-to-catch hook + WebKit-source-code differentiator', () => {
+    expect(body).toMatch(/iPhone Safari sessions that look like a real iPhone\./);
+    expect(body).toMatch(/Most stealth browsers modify JavaScript at runtime/);
+    expect(body).toMatch(/detection systems are built to catch/);
     expect(body).toMatch(
-      /We modify WebKit's C\+\+ source instead\. There's nothing at the\s*\n?\s*JavaScript layer for detection to find — because nothing was\s*\n?\s*changed there\. The fingerprint your code reads is the\s*\n?\s*fingerprint a real iPhone reads\. Same engine, same primitives,\s*\n?\s*same source of truth\./,
+      /We run Apple's WebKit source code, the\s*\n?\s*same engine inside every real iPhone/,
     );
   });
 
-  it("Cumulative-rig 'Bit-identical.' giant-headline framing pinned: 'Bit-identical.' + 'Validated against the reference iPhone 16 Pro on iOS 18.7 / Safari 26.4. Every measured signal returns the exact reference value — not approximate, not within tolerance. A signal either matches the reference, or we treat the gap as a launch-blocker bug.' — pinned so the 'binary parity, no percentages' commitment + the launch-blocker-bug stake-in-the-ground all survive (drift to soft language like 'high parity' would re-introduce the percentage-fudging marketing competitors do)", () => {
+  it("Cumulative-rig 'Bit-identical.' giant-headline framing pinned + iPhone 16 Pro / iOS 18.7 / Safari 26.4 reference", () => {
     expect(body).toMatch(/Bit-identical\./);
+    expect(body).toMatch(/iPhone 16 Pro running iOS 18\.7 \/ Safari 26\.4/);
     expect(body).toMatch(
-      /Validated against the reference iPhone 16 Pro on iOS 18\.7 \/ Safari\s*\n?\s*26\.4\. Every measured signal returns the exact reference value — not\s*\n?\s*approximate, not within tolerance\./,
-    );
-    expect(body).toMatch(
-      /A signal either matches the\s*\n?\s*reference, or we treat the gap as a launch-blocker bug\./,
+      /If a signal differs from what\s*\n?\s*a real iPhone sends, we treat it as a launch-blocking bug/,
     );
   });
 
-  it("Stack framing: 'Real WebKit. Real Core Text. Real iOS rendering.' + 'Not a Chromium fork with a user-agent swap. Not Playwright with stealth plugins layered on. Driftstack runs Apple's WebKit C++ source' — pinned so the differentiator-by-negation (NOT Chromium / NOT Playwright + stealth) + the 3-realness pillars (WebKit + Core Text + iOS rendering) both survive (drift to dropping the 'NOT' framing would weaken the comparative positioning)", () => {
+  it("Stack framing: 'Real WebKit. Real Core Text. Real iOS rendering.' + Not-Chromium / Not-Playwright differentiator", () => {
     expect(body).toMatch(/Real WebKit\. Real Core Text\. Real iOS rendering\./);
-    expect(body).toMatch(
-      /Not a Chromium fork with a user-agent swap\. Not Playwright with stealth\s*\n?\s*plugins layered on\. Driftstack runs Apple's WebKit C\+\+ source/,
-    );
+    expect(body).toMatch(/Not a Chromium fork with a fake user-agent/);
+    expect(body).toMatch(/Not Playwright with a\s*\n?\s*stealth plugin patched over it/);
   });
 
-  it("Hero CTAs + trial-pack subline: 'Get started — $2.99' → /pricing#trial-pack (primary) + 'Download GUI client' → github.com/driftstackdev/driftstack-gui/releases (secondary) + '16 hours · 14-day window · used once per account.' subline — pinned so the 2-CTA conversion path + the trial-pack mechanic subline (16h / 14d / once) all survive (drift to dropping the GUI download would orphan the Manual ladder; drift to wrong github org would break the canonical reference)", () => {
+  it("Hero CTAs + trial-pack subline (R5: 'Start for $2.99' + 'Why not Browserless?')", () => {
     expect(body).toMatch(
-      /<a href="\/pricing#trial-pack" class="btn-primary">Get started — \$2\.99<\/a>/,
+      /<a href="\/pricing#trial-pack" class="btn-primary">Start for \$2\.99<\/a>/,
     );
-    expect(body).toMatch(
-      /<a href="https:\/\/github\.com\/driftstackdev\/driftstack-gui\/releases" class="btn-secondary"\s*\n?\s*>Download GUI client<\/a/,
-    );
-    expect(body).toMatch(/16 hours · 14-day window · used once per account\./);
+    expect(body).toMatch(/<a href="\/comparison" class="btn-secondary">Why not Browserless\?<\/a>/);
+    expect(body).toMatch(/16 hours of session time · 14-day window · one trial per account\./);
   });
 
-  it("Code example contract: archetype: 'iphone16pro_ios18_7_safari26_4' + proxy: { type: 'wireguard', config: '...' } + session.navigate + session.waitForChallenge + session.interact({ tap: '#submit' }) + session.getState + session.destroy — pinned so the homepage code snippet stays consistent with the canonical SDK shape (drift to a different archetype slug would create marketing↔SDK divergence; drift to dropping wireguard would lose the proxy-config positioning)", () => {
+  it('Code example contract: archetype + wireguard proxy + navigate/waitForChallenge/interact/destroy', () => {
     expect(body).toMatch(/archetype: 'iphone16pro_ios18_7_safari26_4',/);
     expect(body).toMatch(/proxy: \{ type: 'wireguard', config: '\.\.\.' \},/);
     expect(body).toMatch(/await session\.navigate\(\{ url: 'https:\/\/target\.example' \}\);/);
@@ -92,51 +65,65 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/await session\.destroy\(\);/);
   });
 
-  it("Concurrent metering framing pinned: 'Pay per concurrent session, not per call.' + 'Concurrent = how many sessions run at the same time, like browser tabs you'd have open at once. That's the only thing we meter. Within your concurrent cap, run as many hours as you want — no per-call markup, no per-element fees, no hourly metering that turns idle browsers into surprise overage charges.' — pinned so the 3-anti-pattern framing (no per-call + no per-element + no hourly) stays explicit (drift to dropping would let prospects worry about hidden metering)", () => {
+  it("Concurrent metering framing pinned: 'Pay per concurrent session, not per call.' + 3 anti-pattern bullets", () => {
     expect(body).toMatch(/Pay per concurrent session, not per call\./);
     expect(body).toMatch(
       /no per-call markup, no\s*\n?\s*per-element fees, no hourly metering that turns idle browsers\s*\n?\s*into surprise overage charges\./,
     );
   });
 
-  it("EU compliance framing pinned: 'Customer data hosted in the EU — compute, database, and object storage all in the EU jurisdiction. The control plane stores session metadata only; we never store destination response bodies. Session execution may run in supported regions outside the EU under SCCs and the EU-US Data Privacy Framework' + customer-configurable egress roadmap (SOCKS5 / WireGuard / OpenVPN) — pinned so the EU-by-default + SCCs/DPF + roadmap-BYO-egress all survive (drift would weaken the privacy posture pitch)", () => {
+  it("EU compliance framing (R5 plain language): 'All customer data … sits in the EU' + customer-configurable egress roadmap", () => {
     expect(body).toMatch(
-      /Customer data hosted in the EU — compute, database, and object\s*\n?\s*storage all in the EU jurisdiction\. The control plane stores\s*\n?\s*session metadata only; we never store destination response\s*\n?\s*bodies\./,
+      /All customer data — the database, the object storage, and the\s*\n?\s*compute that runs sessions — sits in the EU/,
     );
+    expect(body).toMatch(/We store only the\s*\n?\s*metadata about your sessions/);
     expect(body).toMatch(
       /Customer-configurable egress \(SOCKS5 \/ WireGuard \/ OpenVPN\)\s*\n?\s*is on the roadmap/,
     );
   });
 
-  it("Manual ladder framing: 'Solo Manual $79/mo · Team $249/mo · Agency $699/mo' + '1 / 3 / 8 concurrent sessions per tier' + 'Unlimited hours within your concurrent cap' — pinned so the Manual price-ladder + concurrent-cap-ladder stays consistent with /pricing + the customer-dashboard select-tier (drift would create cross-page price divergence)", () => {
+  it('Manual ladder framing: $79/$249/$699 + 1/3/8 concurrent + unlimited hours within cap', () => {
     expect(body).toMatch(/Solo Manual \$79\/mo · Team \$249\/mo · Agency \$699\/mo/);
     expect(body).toMatch(/1 \/ 3 \/ 8 concurrent sessions per tier/);
     expect(body).toMatch(/Unlimited hours within your concurrent cap/);
   });
 
-  it("API ladder framing: 'API Starter $149/mo · Builder $499/mo · Scale $1,499/mo' + '2 / 8 / 24 concurrent sessions per tier; Enterprise custom' + 'Bundled LLM, or bring your own Anthropic API key, for AI-driven sessions (Builder+)' — pinned so the API price-ladder + concurrent-cap + the Builder+ bundled-LLM-or-BYOK gating all survive (drift to claiming bundled-LLM on Starter would change the gating)", () => {
+  it('API ladder framing: $149/$499/$1,499 + 2/8/24 concurrent + bundled-or-BYOK AI on Builder+', () => {
     expect(body).toMatch(/API Starter \$149\/mo · Builder \$499\/mo · Scale \$1,499\/mo/);
     expect(body).toMatch(/2 \/ 8 \/ 24 concurrent sessions per tier; Enterprise custom/);
     expect(body).toMatch(
-      /Bundled LLM, or bring your own Anthropic API key, for AI-driven sessions\s+\(Builder\+\)/,
+      /Optional bundled AI assistant — or bring your own Anthropic API key\s+\(Builder\+\)/,
     );
   });
 
-  it("Pricing teaser: 'Two ladders. One trial pack to start.' + 'Annual contracts save 20%' — pinned so the dual-ladder positioning + the 20% annual savings stay consistent with the FAQ (drift to a different savings percentage would create FAQ↔homepage divergence)", () => {
+  it("Pricing teaser: 'Two ladders. One trial pack to start.' + 20% annual savings", () => {
     expect(body).toMatch(/Two ladders\. One trial pack to start\./);
-    expect(body).toMatch(/Annual\s*\n?\s*contracts save 20%\./);
+    expect(body).toMatch(/Annual contracts save 20%\./);
   });
 
-  it("Self-hosted teaser 3-driver list: 'Privacy-required workloads where session content must not leave your perimeter.' + 'Sustained high-concurrency operations where owned hardware costs less than equivalent cloud-tier subscriptions.' + 'Full data sovereignty over recordings, screenshots, and request artefacts.' — pinned so the 3-self-host-motivator list stays consistent with /self-hosted's 3-card 'When self-hosted makes sense' section (drift would create cross-page narrative divergence)", () => {
+  it('Self-hosted teaser 3-driver list (R5 plain language: privacy-sensitive / high-concurrency / sovereignty)', () => {
     expect(body).toMatch(
-      /Privacy-required workloads where session content must not leave your perimeter\./,
+      /Privacy-sensitive workloads where session contents must\s*\n?\s*not leave your network/,
     );
     expect(body).toMatch(
-      /Sustained high-concurrency operations where owned hardware costs less than\s*\n?\s*equivalent cloud-tier subscriptions\./,
+      /High-concurrency use where owned hardware costs less than\s*\n?\s*an equivalent cloud subscription/,
     );
     expect(body).toMatch(
-      /Full data sovereignty over recordings, screenshots, and request artefacts\./,
+      /Full data sovereignty over recordings, screenshots, and\s*\n?\s*everything sessions produce/,
     );
+  });
+
+  it('R5 NEW section: 3 use-case cards (mobile-Safari coverage / mobile-first scraping / multi-account)', () => {
+    expect(body).toMatch(/Anywhere a real iPhone Safari fingerprint matters\./);
+    expect(body).toMatch(/Mobile-Safari coverage/);
+    expect(body).toMatch(/Mobile-first scraping/);
+    expect(body).toMatch(/Multi-account operations/);
+  });
+
+  it('R5 NEW section: final-CTA bottom section ("Try Driftstack for $2.99." + Read the docs)', () => {
+    expect(body).toMatch(/Try Driftstack for \$2\.99\./);
+    expect(body).toMatch(/Read the docs/);
+    expect(body).toMatch(/<a href="https:\/\/docs\.driftstack\.dev" class="btn-secondary">/);
   });
 
   it('file exists at canonical path', () => {

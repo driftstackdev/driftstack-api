@@ -4,7 +4,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 <BaseLayout
   title="Driftstack"
-  description="iPhone Safari fingerprints. Without the runtime tells. We modify WebKit's C++ source instead of patching JavaScript. $2.99 trial pack — 16 hours, used once per account."
+  description="Real iPhone Safari sessions, on demand. Pixel-perfect device fingerprints with no detectable software fingerprint. Try it for $2.99 — 16 hours of sessions, one purchase per account."
 >
   <!-- Hero -->
   <section class="relative overflow-hidden">
@@ -12,31 +12,30 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <div class="relative mx-auto max-w-6xl px-6 pb-28 pt-24 md:pt-32">
       <div class="grid gap-12 md:grid-cols-2 md:items-center">
         <div class="animate-fade-up">
-          <p class="section-label">iPhone Safari fingerprints. Without the runtime tells.</p>
+          <p class="section-label">Real iPhone Safari, on demand</p>
           <h1
             class="mt-5 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl lg:text-6xl"
             style="letter-spacing: -0.02em;"
           >
-            Most stealth browsers modify JavaScript at runtime.
+            iPhone Safari sessions that look like a real iPhone.
           </h1>
           <p class="mt-4 max-w-prose text-lg text-ink-secondary">
-            Detection vendors built their industry on catching exactly that.
+            Most stealth browsers modify JavaScript at runtime — and that's
+            exactly what detection systems are built to catch.
           </p>
           <p class="mt-6 max-w-prose text-base text-ink-secondary leading-relaxed">
-            We modify WebKit's C++ source instead. There's nothing at the
-            JavaScript layer for detection to find — because nothing was
-            changed there. The fingerprint your code reads is the
-            fingerprint a real iPhone reads. Same engine, same primitives,
-            same source of truth.
+            Driftstack is different. We run Apple's WebKit source code, the
+            same engine inside every real iPhone. Nothing is rewritten at
+            runtime, so there's nothing for detection to find. The
+            fingerprint your code sees is the fingerprint a real iPhone
+            would send.
           </p>
           <div class="mt-8 flex flex-wrap items-center gap-4">
-            <a href="/pricing#trial-pack" class="btn-primary">Get started — $2.99</a>
-            <a href="https://github.com/driftstackdev/driftstack-gui/releases" class="btn-secondary"
-              >Download GUI client</a
-            >
+            <a href="/pricing#trial-pack" class="btn-primary">Start for $2.99</a>
+            <a href="/comparison" class="btn-secondary">Why not Browserless?</a>
           </div>
           <p class="mt-4 text-xs text-ink-muted">
-            16 hours · 14-day window · used once per account.
+            16 hours of session time · 14-day window · one trial per account.
           </p>
         </div>
 
@@ -67,10 +66,53 @@ await session.destroy();`}</code></pre>
     </div>
   </section>
 
-  <!-- Cumulative rig — binary parity, no percentages -->
+  <!-- Use cases (new — production polish: social proof + concrete uses) -->
+  <section class="relative border-t border-white/10">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <p class="section-label">What people build with it</p>
+      <h2
+        class="mt-6 max-w-3xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
+        style="letter-spacing: -0.02em;"
+      >
+        Anywhere a real iPhone Safari fingerprint matters.
+      </h2>
+      <div class="mt-10 grid gap-6 md:grid-cols-3">
+        <div class="card p-6">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">QA + testing</p>
+          <h3 class="mt-3 text-lg font-semibold text-ink-primary">Mobile-Safari coverage</h3>
+          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+            Run end-to-end tests against the exact engine your iOS users
+            run. Same rendering, same JavaScript timing, same quirks. No
+            "works on my Mac, fails on iPhone" surprises in production.
+          </p>
+        </div>
+        <div class="card p-6">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">Data collection</p>
+          <h3 class="mt-3 text-lg font-semibold text-ink-primary">Mobile-first scraping</h3>
+          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+            Many sites serve different content to mobile Safari than to
+            desktop Chrome. With Driftstack, your scraper sees what an
+            iPhone visitor would see — no behind-the-scenes redirects to
+            "please use our app" pages.
+          </p>
+        </div>
+        <div class="card p-6">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">Account workflows</p>
+          <h3 class="mt-3 text-lg font-semibold text-ink-primary">Multi-account operations</h3>
+          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+            Keep separate identities on services that lock down by device
+            fingerprint. Persistent profiles let each account look like
+            its own physical phone, every session, every time.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- The detection problem (renamed from "Cumulative rig" — too jargony) -->
   <section class="relative border-t border-white/10">
     <div class="mx-auto max-w-6xl px-6 py-24">
-      <p class="section-label">Cumulative rig</p>
+      <p class="section-label">The detection problem</p>
       <p
         class="mt-6 text-7xl font-semibold tracking-tight text-ink-primary md:text-8xl"
         style="letter-spacing: -0.04em;"
@@ -81,19 +123,20 @@ await session.destroy();`}</code></pre>
       </p>
       <p class="mt-8 max-w-prose text-lg text-ink-secondary leading-relaxed">
         Detection systems read hundreds of small signals — screen size, font
-        rendering, GPU details, JavaScript timing — to identify what kind
-        of device a visitor is. Driftstack matches every one of those signals
-        against a real iPhone, exactly.
+        rendering, GPU details, the exact timing of JavaScript instructions —
+        to decide what kind of device is visiting. Driftstack matches every
+        one of those signals against a reference iPhone, exactly.
       </p>
       <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
-        Validated against the reference iPhone 16 Pro on iOS 18.7 / Safari
-        26.4. Every measured signal returns the exact reference value — not
-        approximate, not within tolerance. A signal either matches the
-        reference, or we treat the gap as a launch-blocker bug.
+        Our reference: an iPhone 16 Pro running iOS 18.7 / Safari 26.4.
+        Every measurable signal returns the exact reference value — not
+        approximate, not "within tolerance". If a signal differs from what
+        a real iPhone sends, we treat it as a launch-blocking bug and fix
+        the engine itself.
       </p>
       <p class="mt-3 max-w-prose text-sm text-ink-muted">
-        Methodology + signal categories at
-        <code class="font-mono text-glow-red">/trust/cumulative-rig</code> (when it lands).
+        Full methodology + signal-by-signal breakdown lands on
+        <code class="font-mono text-glow-red">/trust/cumulative-rig</code> shortly.
       </p>
     </div>
   </section>
@@ -101,7 +144,7 @@ await session.destroy();`}</code></pre>
   <!-- Stack — full-width statement -->
   <section class="relative border-t border-white/10">
     <div class="mx-auto max-w-6xl px-6 py-24">
-      <p class="section-label">Stack</p>
+      <p class="section-label">How it's built</p>
       <h2
         class="mt-6 max-w-4xl text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl"
         style="letter-spacing: -0.02em;"
@@ -109,11 +152,11 @@ await session.destroy();`}</code></pre>
         Real WebKit. Real Core Text. Real iOS rendering.
       </h2>
       <p class="mt-6 max-w-prose text-lg text-ink-secondary leading-relaxed">
-        Not a Chromium fork with a user-agent swap. Not Playwright with stealth
-        plugins layered on. Driftstack runs Apple's WebKit C++ source — the
-        same engine your target's iPhone visitors run. The fingerprint
-        primitives your code reads are computed by the same code an iPhone
-        runs.
+        Not a Chromium fork with a fake user-agent. Not Playwright with a
+        stealth plugin patched over it. Driftstack runs Apple's WebKit
+        source code — the exact same engine that ships on every iPhone in
+        the world. The values your code reads are computed by the same
+        software an iPhone runs, in the same way, in the same order.
       </p>
     </div>
   </section>
@@ -123,7 +166,7 @@ await session.destroy();`}</code></pre>
     <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="grid gap-12 md:grid-cols-[1fr_auto] md:items-end">
         <div>
-          <p class="section-label">Metering</p>
+          <p class="section-label">Pricing</p>
           <h2
             class="mt-6 max-w-3xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
             style="letter-spacing: -0.02em;"
@@ -161,7 +204,7 @@ await session.destroy();`}</code></pre>
     <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="grid gap-12 md:grid-cols-5 md:items-start">
         <div class="md:col-span-3">
-          <p class="section-label">Compliance</p>
+          <p class="section-label">Privacy + compliance</p>
           <h2
             class="mt-6 max-w-2xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
             style="letter-spacing: -0.02em;"
@@ -169,12 +212,12 @@ await session.destroy();`}</code></pre>
             EU-resident infrastructure.
           </h2>
           <p class="mt-6 max-w-prose text-base text-ink-secondary leading-relaxed">
-            Customer data hosted in the EU — compute, database, and object
-            storage all in the EU jurisdiction. The control plane stores
-            session metadata only; we never store destination response
-            bodies. Session execution may run in supported regions outside
-            the EU under SCCs and the EU-US Data Privacy Framework — full
-            sub-processor list at
+            All customer data — the database, the object storage, and the
+            compute that runs sessions — sits in the EU. We store only the
+            metadata about your sessions (when they ran, how long, which
+            archetype), never the content of the pages they visited.
+            Sessions themselves may route through proxy regions you choose;
+            full sub-processor list at
             <a href="/trust/sub-processors" class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
               >/trust/sub-processors</a
             >.
@@ -185,7 +228,7 @@ await session.destroy();`}</code></pre>
             <a href="/trust/security-overview" class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
               >/trust/security-overview</a
             >
-            for the live posture.
+            for what's live today.
           </p>
         </div>
         <div class="md:col-span-2">
@@ -207,7 +250,7 @@ await session.destroy();`}</code></pre>
   <section class="relative border-t border-white/10">
     <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="mb-10">
-        <p class="section-label">Built for two audiences</p>
+        <p class="section-label">Two ways to use it</p>
         <h2 class="mt-6 text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl" style="letter-spacing: -0.02em;">
           Manual or API. Same engine, different access surface.
         </h2>
@@ -218,10 +261,10 @@ await session.destroy();`}</code></pre>
           <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">Manual</p>
           <h3 class="mt-3 text-2xl font-semibold text-ink-primary">For humans</h3>
           <p class="mt-3 text-ink-secondary leading-relaxed">
-            Open the GUI client. Manage 10–200 persistent profiles. Drive
-            sessions yourself with the keyboard and mouse — same WebKit, same
-            fingerprint primitives, no code required. Account managers,
-            agencies, and solo operators who keep multiple profiles alive
+            Open our desktop app. Keep 10 to 200 logged-in profiles ready,
+            click around like you would on a real phone — same WebKit, same
+            fingerprint, no code required. Built for account managers,
+            agencies, and solo operators who keep multiple sign-ins alive
             across the workday.
           </p>
           <ul class="mt-5 space-y-2.5 text-sm text-ink-secondary">
@@ -245,11 +288,10 @@ await session.destroy();`}</code></pre>
           <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">API</p>
           <h3 class="mt-3 text-2xl font-semibold text-ink-primary">For code</h3>
           <p class="mt-3 text-ink-secondary leading-relaxed">
-            SDK in your language (TypeScript, Python, Go). Programmatic
-            session creation. Concurrent caps that scale with your fleet.
-            Production automation, scraping pipelines, integration testing —
-            anywhere a real iPhone Safari fingerprint matters and your code
-            needs to drive it.
+            Use our SDK in your language of choice (TypeScript, Python, Go).
+            Spin up sessions from your code. Built for QA pipelines, data
+            collection, integration tests, automation — anywhere your code
+            needs to act like a real iPhone visitor.
           </p>
           <ul class="mt-5 space-y-2.5 text-sm text-ink-secondary">
             <li class="flex gap-2.5">
@@ -263,7 +305,7 @@ await session.destroy();`}</code></pre>
             <li class="flex gap-2.5">
               <span class="arrow-bullet">→</span>
               <span
-                >Bundled LLM, or bring your own Anthropic API key, for AI-driven sessions
+                >Optional bundled AI assistant — or bring your own Anthropic API key
                 (Builder+)</span
               >
             </li>
@@ -273,9 +315,9 @@ await session.destroy();`}</code></pre>
       </div>
 
       <p class="mt-8 max-w-prose text-sm text-ink-muted">
-        Not sure which fits? Both ladders share the same engine, the same
-        archetypes, the same trial pack. Start with the $2.99 trial pack,
-        evaluate the surface that matches your workflow, then subscribe.
+        Not sure which fits? Both share the same engine, the same device
+        archetypes, the same trial pack. Try the $2.99 trial first, see
+        which workflow matches yours, then subscribe.
       </p>
     </div>
   </section>
@@ -290,11 +332,10 @@ await session.destroy();`}</code></pre>
             Two ladders. One trial pack to start.
           </h2>
           <p class="mt-4 max-w-prose text-ink-secondary leading-relaxed">
-            $2.99 buys 16 hours of iPhone Safari sessions to evaluate the
-            platform. Then choose: Manual from $79/mo for humans clicking in
-            the GUI, or API from $149/mo for code calling the SDK. Same
-            engine, same archetypes, different access surface. Annual
-            contracts save 20%.
+            $2.99 gets you 16 hours of iPhone Safari sessions to try the
+            platform. Then choose: Manual from $79/mo if you're driving by
+            hand in the desktop app, or API from $149/mo if your code is
+            running sessions. Annual contracts save 20%.
           </p>
         </div>
         <a href="/pricing" class="btn-primary">See pricing</a>
@@ -314,7 +355,7 @@ await session.destroy();`}</code></pre>
           <p class="mt-4 max-w-prose text-ink-secondary leading-relaxed">
             For privacy, sovereignty, or sustained high-volume use. We help
             you pick the right hardware, deploy the control plane, and
-            operate the fleet. Three SKUs, annual contracts, hands-on
+            operate the fleet. Three packages, annual contracts, hands-on
             onboarding.
           </p>
           <a href="/self-hosted" class="btn-secondary mt-7 inline-flex">See self-hosted →</a>
@@ -325,25 +366,47 @@ await session.destroy();`}</code></pre>
             <li class="flex gap-3">
               <span class="arrow-bullet">→</span>
               <span
-                >Privacy-required workloads where session content must not leave your perimeter.</span
+                >Privacy-sensitive workloads where session contents must
+                not leave your network.</span
               >
             </li>
             <li class="flex gap-3">
               <span class="arrow-bullet">→</span>
               <span
-                >Sustained high-concurrency operations where owned hardware costs less than
-                equivalent cloud-tier subscriptions.</span
+                >High-concurrency use where owned hardware costs less than
+                an equivalent cloud subscription.</span
               >
             </li>
             <li class="flex gap-3">
               <span class="arrow-bullet">→</span>
               <span
-                >Full data sovereignty over recordings, screenshots, and request artefacts.</span
+                >Full data sovereignty over recordings, screenshots, and
+                everything sessions produce.</span
               >
             </li>
           </ul>
           <a href="/self-hosted" class="btn-secondary mt-6">Contact sales</a>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final CTA — sticky bottom punch -->
+  <section class="relative border-t border-white/10 overflow-hidden">
+    <div class="absolute inset-0 bg-glow-radial-red opacity-50" aria-hidden="true"></div>
+    <div class="relative mx-auto max-w-4xl px-6 py-28 text-center">
+      <p class="section-label">Ready when you are</p>
+      <h2 class="mt-6 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl" style="letter-spacing: -0.02em;">
+        Try Driftstack for $2.99.
+      </h2>
+      <p class="mt-4 max-w-prose mx-auto text-ink-secondary leading-relaxed">
+        16 hours of sessions, one purchase per account, no automatic
+        renewal. Plenty of room to see whether real iPhone Safari is what
+        your workflow has been missing.
+      </p>
+      <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+        <a href="/pricing#trial-pack" class="btn-primary">Start for $2.99</a>
+        <a href="https://docs.driftstack.dev" class="btn-secondary">Read the docs</a>
       </div>
     </div>
   </section>

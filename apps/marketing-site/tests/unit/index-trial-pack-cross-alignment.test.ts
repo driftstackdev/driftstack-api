@@ -40,6 +40,6 @@ describe('W329.B / hero ↔ TRIAL_PACK cross-alignment', () => {
     expect(TRIAL_PACK.oncePerAccount).toBe(true);
     // The homepage doesn't have to spell out "once per account" but
     // the description meta tag does — assert the framing exists.
-    expect(body).toMatch(/(?:once per account|used once)/i);
+    expect(body).toMatch(/(?:one trial per account|used once)/i);
   });
 });

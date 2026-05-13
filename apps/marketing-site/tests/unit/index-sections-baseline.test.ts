@@ -23,7 +23,7 @@ const REQUIRED_PHRASES = [
   'Bit-identical',
   'Real WebKit',
   'Pay per concurrent session',
-  'Customer data hosted in the EU',
+  'All customer data',
   'Manual or API',
   'Two ladders',
   'Run Driftstack on your own infrastructure',

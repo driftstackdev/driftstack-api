@@ -23,7 +23,7 @@ describe('W327.B / index CTA baseline', () => {
 
   it('primary CTA above the fold points at /pricing#trial-pack', () => {
     expect(body).toMatch(
-      /<a\s+href="\/pricing#trial-pack"\s+class="btn-primary">[\s\S]{0,40}Get started\s*—\s*\$2\.99/,
+      /<a\s+href="\/pricing#trial-pack"\s+class="btn-primary">[\s\S]{0,40}Start for \$2\.99/,
     );
   });
 

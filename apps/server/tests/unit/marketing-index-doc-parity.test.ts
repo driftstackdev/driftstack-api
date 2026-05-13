@@ -48,7 +48,7 @@ describe('W246.D marketing-site /index doc parity', () => {
 
   it('keeps EU-residency truthful (compute / database / object storage)', () => {
     expect(doc).toMatch(/EU-resident infrastructure/);
-    expect(doc).toMatch(/EU jurisdiction/);
+    expect(doc).toMatch(/sits in the EU/);
   });
 
   it('does not claim "never sees destination URL" as a control-plane property', () => {

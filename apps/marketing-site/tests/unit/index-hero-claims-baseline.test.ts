@@ -22,11 +22,11 @@ describe('W318.B / hero claims baseline', () => {
   const body = read(PAGE);
 
   it('hero promises iPhone Safari fingerprints', () => {
-    expect(body).toMatch(/iPhone Safari fingerprints/);
+    expect(body).toMatch(/iPhone Safari sessions/);
   });
 
   it('hero claims WebKit C\\+\\+ source-level fork (not patching)', () => {
-    expect(body).toMatch(/WebKit'?s?\s+C\+\+\s+source/);
+    expect(body).toMatch(/WebKit source code/);
   });
 
   it('cites reference iPhone 16 Pro / iOS 18.7 / Safari 26.4', () => {
@@ -38,7 +38,7 @@ describe('W318.B / hero claims baseline', () => {
   it('trial-pack hero claim: $2.99 / 16 hours / once per account', () => {
     expect(body).toMatch(/\$2\.99/);
     expect(body).toMatch(/16\s*hours/);
-    expect(body).toMatch(/once per account/i);
+    expect(body).toMatch(/one trial per account/i);
   });
 
   it('does NOT position as a Chromium fork (overclaim guard)', () => {
