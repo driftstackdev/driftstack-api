@@ -1,4 +1,23 @@
-// W592.A — drift guard for packages/sdk-go/billing.go.
+// W592.A (W628-deepened) — drift guard for packages/sdk-go/billing.go.
+// The original test pinned the 4-verb surface in a single monster it()
+// block. W628 splits it into per-verb focused blocks + adds pins for
+// previously-implicit invariants:
+//
+//   • HTTP-method correctness per verb (POST/GET).
+//   • V-082 anchor on the BillingResource doc-comment.
+//   • Stripe checkout URL contract: CreateCheckoutSession returns a
+//     URL the customer must redirect to — drift to a different
+//     payment flow would silently break the buyer journey.
+//   • $2.99 trial-pack once-per-account gate + nil-body default
+//     (StartTrialPackRequest can be nil — SDK substitutes an empty
+//     struct so callers don't have to construct one for the
+//     no-options case).
+//   • CreatePortalSession current-account scoping (the returned URL
+//     manages the *calling* account's payment method, never another
+//     team's).
+//
+// Drift on any of these would silently regress the billing flow —
+// these are the security-load-bearing customer-redirect paths.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +35,8 @@ function read(p: string): string {
 describe('W592.A packages/sdk-go/billing.go content parity', () => {
   const body = read(LIB);
 
-  it('BillingResource V-082 + 4 verbs (GetState subscription+trial / CreateCheckoutSession Stripe URL / StartTrialPack $2.99 once-per-account nil-body-default / CreatePortalSession Stripe Customer Portal) pinned', () => {
+  it('file exists at canonical path + BillingResource V-082 anchor + binds /v1/billing endpoints (4-verb surface summary in resource doc-comment)', () => {
+    expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/\/\/ BillingResource handles \/v1\/billing endpoints \(V-082\)\./);
     expect(body).toMatch(
       /\/\/ GetState returns the current subscription mirror \+ trial-pack state\./,
@@ -25,20 +45,46 @@ describe('W592.A packages/sdk-go/billing.go content parity', () => {
     expect(body).toMatch(/\/\/ URLs the customer redirects to\. CreatePortalSession returns a/);
     expect(body).toMatch(/\/\/ Stripe Customer Portal URL\./);
     expect(body).toMatch(/^type BillingResource struct \{\s*\n\s*client \*Client\s*\n\}/m);
+  });
+
+  it('GetState — GET /v1/billing returns the current-account subscription mirror + trial-pack state (Stripe-of-record snapshot the dashboard uses to render plan/usage). Drift would diverge the dashboard from Stripe.', () => {
+    expect(body).toMatch(/\/\/ GetState returns the current subscription \+ trial-pack state\./);
     expect(body).toMatch(
-      /func \(r \*BillingResource\) GetState\(ctx context\.Context\) \(\*GetBillingStateResponse, error\) \{/,
+      /func \(r \*BillingResource\) GetState\(ctx context\.Context\) \(\*GetBillingStateResponse, error\)/,
     );
-    expect(body).toMatch(/path:\s+"\/v1\/billing",/);
-    expect(body).toMatch(/path:\s+"\/v1\/billing\/checkout-session",/);
+    expect(body).toMatch(/method: "GET",\s*\n\s*path:\s+"\/v1\/billing",/);
+  });
+
+  it('CreateCheckoutSession — POST /v1/billing/checkout-session returns a Stripe Checkout URL for a tier subscription. Customer-redirect-required framing pinned ("The customer must be redirected to the URL to complete payment") — drift to a different payment flow would break the buyer journey.', () => {
+    expect(body).toMatch(/\/\/ CreateCheckoutSession returns a Stripe Checkout URL for a tier/);
+    expect(body).toMatch(/\/\/ subscription\. The customer must be redirected to the URL to/);
+    expect(body).toMatch(/\/\/ complete payment\./);
+    expect(body).toMatch(
+      /func \(r \*BillingResource\) CreateCheckoutSession\(ctx context\.Context, body \*CreateCheckoutSessionRequest\) \(\*CreateCheckoutSessionResponse, error\)/,
+    );
+    expect(body).toMatch(/method: "POST",\s*\n\s*path:\s+"\/v1\/billing\/checkout-session",/);
+  });
+
+  it('StartTrialPack — POST /v1/billing/trial-pack returns a Stripe Checkout URL for the $2.99 trial pack + once-per-account constraint ("calling on an account that has already redeemed returns an error") + nil-body-default substitution (callers pass nil; SDK plugs in &StartTrialPackRequest{} so the wire-level body is always a valid empty struct, not Go zero-value JSON "null")', () => {
     expect(body).toMatch(/\/\/ StartTrialPack returns a Stripe Checkout URL for the \$2\.99 trial/);
     expect(body).toMatch(/\/\/ pack purchase\. Once-per-account; calling on an account that has/);
     expect(body).toMatch(/\/\/ already redeemed returns an error\./);
+    expect(body).toMatch(
+      /func \(r \*BillingResource\) StartTrialPack\(ctx context\.Context, body \*StartTrialPackRequest\) \(\*StartTrialPackResponse, error\)/,
+    );
     expect(body).toMatch(/if body == nil \{\s*\n\s*body = &StartTrialPackRequest\{\}\s*\n\s*\}/);
-    expect(body).toMatch(/path:\s+"\/v1\/billing\/trial-pack",/);
-    expect(body).toMatch(/path:\s+"\/v1\/billing\/portal-session",/);
+    expect(body).toMatch(/method: "POST",\s*\n\s*path:\s+"\/v1\/billing\/trial-pack",/);
   });
 
-  it('file exists at canonical path', () => {
-    expect(existsSync(LIB)).toBe(true);
+  it('CreatePortalSession — POST /v1/billing/portal-session returns a Stripe Customer Portal URL scoped to the *current* account ("the customer manages payment method, invoices, and cancellation through the returned URL"). No body payload — the calling account identity comes from the bearer token, never a parameter, so customers can never request a portal URL for someone else\'s account.', () => {
+    expect(body).toMatch(/\/\/ CreatePortalSession returns a Stripe Customer Portal URL for the/);
+    expect(body).toMatch(/\/\/ current account\. The customer manages payment method, invoices,/);
+    expect(body).toMatch(/\/\/ and cancellation through the returned URL\./);
+    expect(body).toMatch(
+      /func \(r \*BillingResource\) CreatePortalSession\(ctx context\.Context\) \(\*CreatePortalSessionResponse, error\)/,
+    );
+    expect(body).toMatch(
+      /method: "POST",\s*\n\s*path:\s+"\/v1\/billing\/portal-session",\s*\n\s*out:\s+&out,/,
+    );
   });
 });
