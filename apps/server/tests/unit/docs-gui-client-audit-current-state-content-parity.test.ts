@@ -1,0 +1,285 @@
+// W573.B — drift guard for /docs/gui-client/audit-current-state.md.
+// V-236 GUI-client PHASE-1 audit per founder direction 2026-05-06.
+// Drift here either re-weights the "GUI client is more complete than
+// checklist suggested" headline finding, drops a P0/P1/P2/T3 audit-
+// dimension verdict, or unsets the 2-item P0 (profile-create + tier-
+// aware enforcement) + 1-backend-dep launch-blocker triage.
+//
+//   • V-236. PHASE 1. 13 audit dimensions.
+//   • Headline: GUI client more complete than launch checklist.
+//   • P0: profile-create form + tier-aware enforcement + backend
+//     /v1/account/me dep.
+//   • P1: rust-toolchain.toml pin + self-hosted titlebar conditional.
+//   • P2: WebRTC + auto-update + first-run wizard + UX polish.
+//   • T3 founder-ack: API-key at-rest + telemetry + distribution.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'docs/gui-client/audit-current-state.md');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W573.B /docs/gui-client/audit-current-state.md content parity', () => {
+  const body = read(LIB);
+
+  it('Header + V-236 PHASE-1 + 13-dimension + Tauri-2.0-2.1 + Rust-1.95 + React-18.3 + Vite-5.4 framing pinned', () => {
+    expect(body).toMatch(/^# GUI client audit — current state vs file 128 spec$/m);
+    expect(body).toMatch(
+      /\*\*V-236 — PHASE 1 of GUI client launch arc per founder direction 2026-05-06\.\*\*/,
+    );
+    expect(body).toMatch(/Walks `apps\/gui-client\/` systematically\./);
+    expect(body).toMatch(
+      /For each of the 13 audit dimensions: current state, gap vs file 128 spec, recommended priority for closure/,
+    );
+    expect(body).toMatch(
+      /\(P0 launch-blocking \/ P1 launch-recommended \/ P2 post-launch \/ T2-T3-surface for items needing founder ack\)\./,
+    );
+    expect(body).toMatch(
+      /The headline finding: \*\*the GUI client is more complete than the launch checklist suggested\.\*\*/,
+    );
+    expect(body).toMatch(
+      /Sessions \/ profiles \(read \+ delete\) \/ proxies \/ recordings \/ connectivity \/ settings all wire to live Driftstack API endpoints\./,
+    );
+    expect(body).toMatch(/Auth chain is live; brand consistency is locked\./);
+    expect(body).toMatch(/The remaining launch-blockers are narrow \+ concrete\./);
+    expect(body).toMatch(/### 1\. Tauri framework version \+ Rust toolchain pin/);
+    expect(body).toMatch(/\*\*Current:\*\* Tauri 2\.0–2\.1/);
+    expect(body).toMatch(
+      /`@tauri-apps\/cli@\^2\.1\.0` in `package\.json:18`; `tauri = "2\.0"` in `Cargo\.toml:18`/,
+    );
+    expect(body).toMatch(/Rust edition 2021\./);
+    expect(body).toMatch(
+      /`README\.md` mentions "Rust 1\.95\+" as soft requirement; no `rust-toolchain\.toml` for hard pin\./,
+    );
+    expect(body).toMatch(
+      /\*\*Priority:\*\* \*\*P1\*\* — small \(5 min\): add `rust-toolchain\.toml` with `\[toolchain\] channel = "1\.95\.0"`\./,
+    );
+    expect(body).toMatch(/### 2\. Frontend stack/);
+    expect(body).toMatch(
+      /\*\*Current:\*\* React 18\.3 \+ TypeScript 5\.7 \(strict\) \+ Tailwind 3\.4 \+ Vite 5\.4\./,
+    );
+  });
+
+  it('Dimensions 3-7 (runnable + auth + sessions + GUI streaming + profile mgmt) framing pinned', () => {
+    expect(body).toMatch(/### 3\. Runnable today/);
+    expect(body).toMatch(/- `npm run dev` → Vite browser shell at `http:\/\/localhost:1420`\./);
+    expect(body).toMatch(/All 10 views route correctly in browser-only mode/);
+    expect(body).toMatch(
+      /- `npm run tauri:dev` → native macOS desktop window with hot reload against the same Vite backend\./,
+    );
+    expect(body).toMatch(/### 4\. Auth flow state/);
+    expect(body).toMatch(/\*\*Current:\*\* API-key auth \(no web session\)\./);
+    expect(body).toMatch(
+      /`client\.ts:16–19` builds `Driftstack` SDK client from `apiKey` \+ `baseUrl`\./,
+    );
+    expect(body).toMatch(
+      /Settings persisted via Tauri Store plugin to `~\/Library\/Application Support\/dev\.driftstack\.gui\/settings\.json`/,
+    );
+    expect(body).toMatch(/API key masked in Settings UI but \*\*stored plaintext on disk\*\*/);
+    expect(body).toMatch(
+      /\(acknowledged in `settings\.ts:6–8` with future keychain upgrade queued for "GUI8"\)/,
+    );
+    expect(body).toMatch(
+      /\*\*Priority:\*\* \*\*T3 founder-ack required\*\* — security\/customer-data architecture decision\./,
+    );
+    expect(body).toMatch(
+      /Three approaches: \(a\) macOS Keychain via `@tauri-apps\/plugin-stronghold` or similar,/,
+    );
+    expect(body).toMatch(
+      /\(b\) encrypted-at-rest with OS-derived key, \(c\) keep plaintext \+ document explicitly\./,
+    );
+    expect(body).toMatch(/### 5\. Session management/);
+    expect(body).toMatch(
+      /\*\*Current:\*\* Fully wired to `\/v1\/sessions\/\*` via `@driftstack\/sdk`\./,
+    );
+    expect(body).toMatch(
+      /- `SessionsView\.tsx:37–91` — `client\.sessions\.list\(\)` with 5s auto-poll/,
+    );
+    expect(body).toMatch(
+      /- `LiveSessionView\.tsx:114` — `client\.sessions\.capture\(sessionId, \{ kind: 'screenshot' \}\)` polled at 500ms\./,
+    );
+    expect(body).toMatch(/- `client\.sessions\.getState\(sessionId\)` for URL \+ title metadata\./);
+    expect(body).toMatch(
+      /- `client\.sessions\.interact\(\)` for intent actions \(scroll, key\) at line 225\./,
+    );
+    expect(body).toMatch(
+      /- Coordinate-level input → `\/v1\/sessions\/:id\/gui-input` \(separate endpoint, requires `gui_control` scope\)/,
+    );
+    expect(body).toMatch(/### 6\. GUI streaming/);
+    expect(body).toMatch(
+      /\*\*Current:\*\* Polling-based base64 PNG over HTTP\/JSON via `client\.sessions\.capture\(\)`\./,
+    );
+    expect(body).toMatch(
+      /500ms frame interval; ~50–200 KB per frame on the wire; ~1s end-to-end latency floor/,
+    );
+    expect(body).toMatch(/Tap marker UX shows input registered for 600ms \(line 470\)\./);
+    expect(body).toMatch(
+      /All frames are live captures from real WebKit fork driver sessions — no mock data path\./,
+    );
+    expect(body).toMatch(/\*\*Priority:\*\* \*\*P2\*\* \(post-launch\)\./);
+    expect(body).toMatch(/### 7\. Profile management/);
+    expect(body).toMatch(
+      /\*\*Current:\*\* Read \+ delete fully wired to `\/v1\/profiles\/\*` via `@driftstack\/sdk`\./,
+    );
+    expect(body).toMatch(
+      /- `ProfilesView\.tsx:39–92` — `client\.profiles\.iterate\(\{ limit: 50 \}\)` for listing \(async iterator\)/,
+    );
+    expect(body).toMatch(
+      /\*\*Gap:\*\* Create-profile button is stubbed: `aria-disabled="true"` at `ProfilesView\.tsx:118`\./,
+    );
+    expect(body).toMatch(/Comment notes "pending dialog for name \+ archetype picker\."/);
+    expect(body).toMatch(
+      /\*\*Priority:\*\* \*\*P0 launch-blocking\.\*\* Manual-tier customers expect profile management end-to-end in the GUI\./,
+    );
+    expect(body).toMatch(
+      /Estimated ~1-2hr Tier-1 work: form modal with name \+ archetype picker, calls existing `\/v1\/profiles POST`, refreshes list on success\./,
+    );
+  });
+
+  it('Dimensions 8-13 + Section-14 endpoint + P0/P1/P2/T3 summaries + Conclusion framing pinned', () => {
+    expect(body).toMatch(/### 8\. Tier-aware enforcement/);
+    expect(body).toMatch(
+      /\*\*Current:\*\* Not implemented\. No tier reading from API; no concurrent-cap gating in the GUI\./,
+    );
+    expect(body).toMatch(
+      /Server-side enforcement IS in place \(V-073 concurrent-cap enforcement at `\/v1\/sessions POST`\);/,
+    );
+    expect(body).toMatch(/the GUI just doesn't show the cap or pre-empt the 402 response\./);
+    expect(body).toMatch(/server returns `402 ConcurrencyLimitExceeded`, GUI shows error banner\./);
+    expect(body).toMatch(
+      /Per file 128 spec, GUI should display "X of Y concurrent sessions" \+ disable-when-full so the customer never sees the 402 unless racing\./,
+    );
+    expect(body).toMatch(/\*\*Priority:\*\* \*\*P0 launch-blocking\*\* for Manual-tier UX\./);
+    expect(body).toMatch(/Estimated ~2-3hr Tier-1 work:/);
+    expect(body).toMatch(/1\. Read tier \+ concurrent cap on settings load/);
+    expect(body).toMatch(
+      /2\. Display "X \/ Y concurrent sessions" in `SessionsView\.tsx` header\./,
+    );
+    expect(body).toMatch(/3\. Gate Spawn button on `active < cap`\./);
+    expect(body).toMatch(/### 9\. Self-hosted variant/);
+    expect(body).toMatch(/\*\*Current:\*\* Single build, dual-mode via runtime config\./);
+    expect(body).toMatch(
+      /Tauri identifier `dev\.driftstack\.gui` is hardcoded \(`tauri\.conf\.json:5`\);/,
+    );
+    expect(body).toMatch(
+      /App titlebar shows "Driftstack · self-hosted" universally \(`App\.tsx:143`\)\./,
+    );
+    expect(body).toMatch(
+      /\*\*Gap:\*\* "self-hosted" label is hardcoded — cloud customers see it too\./,
+    );
+    expect(body).toMatch(
+      /\*\*Priority:\*\* \*\*P1 launch-recommended\.\*\* Estimated ~30min Tier-1 work to make the titlebar label conditional on URL match\./,
+    );
+    expect(body).toMatch(/### 10\. Update mechanism/);
+    expect(body).toMatch(
+      /\*\*Current:\*\* Not implemented\. README explicitly notes "No auto-update mechanism\."/,
+    );
+    expect(body).toMatch(/No Sparkle, no Tauri Updater plugin, no GitHub Releases automation\./);
+    expect(body).toMatch(/Manual `\.dmg` re-download is the only upgrade path\./);
+    expect(body).toMatch(
+      /\*\*Priority:\*\* \*\*P2 post-launch\.\*\* Pre-launch: zero customers, zero updates\./,
+    );
+    expect(body).toMatch(/Add when first signed release is cut\./);
+    expect(body).toMatch(
+      /\*\*Distribution mechanism \(signed installer \/ DMG \/ Sparkle \/ GitHub Releases\) is Tier-3 — surface for founder when reaching PHASE 3\.\*\*/,
+    );
+    expect(body).toMatch(/### 11\. Telemetry \/ Sentry/);
+    expect(body).toMatch(
+      /\*\*Current:\*\* Not implemented\. No `@sentry\/\*` imports, no error reporting, no telemetry crates in `Cargo\.toml`\./,
+    );
+    expect(body).toMatch(
+      /\*\*Priority:\*\* \*\*T3 founder-ack required\.\*\* Customer-data architecture decision\./,
+    );
+    expect(body).toMatch(
+      /Driftstack-cloud API has Sentry \(V-198 \/ D-034\); should the GUI client also report\?/,
+    );
+    expect(body).toMatch(/### 12\. Anonymity policy compliance \(V-211 mirror\)/);
+    expect(body).toMatch(
+      /\*\*Current:\*\* \*\*COMPLIANT\.\*\* No founder name in customer-facing strings\./,
+    );
+    expect(body).toMatch(/No external-tooling references in any visible text\./);
+    expect(body).toMatch(/Internal developer comments reference "the founder" generically/);
+    expect(body).toMatch(/### 13\. Brand consistency \(V-219\\\* mirror\)/);
+    expect(body).toMatch(
+      /\*\*Current:\*\* \*\*LOCKED \+ COMPLIANT\.\*\* All tokens aligned with the Driftstack brand:/,
+    );
+    expect(body).toMatch(/- \*\*Oxblood accent\*\* — `#722f37` \(`tailwind\.config\.ts:37`\)/);
+    expect(body).toMatch(
+      /- \*\*Geist Sans body font\*\* — `tailwind\.config\.ts:54–62` with system-ui fallback\./,
+    );
+    expect(body).toMatch(
+      /- \*\*Berkeley Mono technical accents\*\* — `tailwind\.config\.ts:67–75` via `\.mono` class\./,
+    );
+    expect(body).toMatch(
+      /- \*\*Lowercase "driftstack" wordmark\*\* — `App\.tsx:141` renders sentence-case in titlebar\./,
+    );
+    expect(body).toMatch(/## Section 14 — Endpoint contracts the GUI needs/);
+    expect(body).toMatch(
+      /\*\*what endpoint returns the calling account's tier \+ concurrent-session cap\?\*\*/,
+    );
+    expect(body).toMatch(/- `\/v1\/sessions GET` already returns the active list;/);
+    expect(body).toMatch(
+      /- `\/v1\/account` — exists\? Need to verify in `apps\/server\/src\/routes\/`\./,
+    );
+    expect(body).toMatch(/- A new `\/v1\/account\/me` or `\/v1\/account\/limits` endpoint\./);
+    expect(body).toMatch(/\*\*P0 dependency chain:\*\*/);
+    expect(body).toMatch(/1\. Verify whether `\/v1\/account` or equivalent exists\./);
+    expect(body).toMatch(
+      /2\. If not, add minimal `\/v1\/account\/me` endpoint returning `\{ tier, concurrent_cap, profiles_used, profiles_cap \}`\./,
+    );
+    expect(body).toMatch(/3\. Wire SDK accessor\./);
+    expect(body).toMatch(/4\. Consume in GUI's SessionsView\./);
+    expect(body).toMatch(/## P0 launch-blocking summary/);
+    expect(body).toMatch(
+      /\| 1\s+\| Profile create form modal\s+\| ~1-2hr Tier-1\s+\| None \(`\/v1\/profiles POST` exists\)\s+\|/,
+    );
+    expect(body).toMatch(
+      /\| 2\s+\| Tier-aware enforcement display\s+\| ~2-3hr Tier-1\s+\| Verify `\/v1\/account` shape; may need backend addition \|/,
+    );
+    expect(body).toMatch(
+      /\| 3\s+\| Backend: confirm or add `\/v1\/account\/me` \| ~1hr Tier-1 in `apps\/server` \| Blocks #2\s+\|/,
+    );
+    expect(body).toMatch(/## P1 launch-recommended summary/);
+    expect(body).toMatch(/\| 1\s+\| `rust-toolchain\.toml` pin\s+\| ~5min\s+\|/);
+    expect(body).toMatch(
+      /\| 2\s+\| Self-hosted titlebar label conditional on URL \| ~30min Tier-1\s+\|/,
+    );
+    expect(body).toMatch(/## P2 post-launch summary/);
+    expect(body).toMatch(
+      /- WebRTC streaming \(depends on file 36 server-side architecture work\)\./,
+    );
+    expect(body).toMatch(
+      /- Auto-update mechanism \(Sparkle \/ Tauri Updater \/ GitHub Releases\)\./,
+    );
+    expect(body).toMatch(/- First-run setup wizard \(cloud vs self-hosted choice\)\./);
+    expect(body).toMatch(/## T3 founder-ack-required surfaces/);
+    expect(body).toMatch(
+      /- \*\*API key at-rest storage\*\* — keychain vs encrypted file vs plaintext \+ acknowledged\./,
+    );
+    expect(body).toMatch(
+      /- \*\*Telemetry posture\*\* — cloud-reports-to-Sentry vs self-hosted-no-reporting vs both-with-opt-in\./,
+    );
+    expect(body).toMatch(
+      /- \*\*Distribution mechanism\*\* \(when reaching PHASE 3\) — signed `\.dmg` \/ Sparkle \/ GitHub Releases \/ etc\./,
+    );
+    expect(body).toMatch(/## Conclusion/);
+    expect(body).toMatch(
+      /The GUI client is in much better shape than the founder direction's checklist suggested\./,
+    );
+    expect(body).toMatch(
+      /Sessions \/ profiles \(read\+delete\) \/ proxies \/ recordings \/ connectivity \/ settings are live against real API endpoints;/,
+    );
+    expect(body).toMatch(/brand \+ anonymity are locked; auth \+ storage paths work\./);
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
