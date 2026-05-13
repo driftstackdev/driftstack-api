@@ -1,0 +1,155 @@
+// W604 — drift guard for apps/docs/src/pages/reference + webhooks.
+// 6 modules in one suite: errors + rate-limits + scopes + endpoints + events + replay.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const ERR = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/errors.md');
+const RL = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/rate-limits.md');
+const SC = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/scopes.md');
+const WE = resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/endpoints.md');
+const EV = resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/events.md');
+const RP = resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/replay.md');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W604 apps/docs reference + webhooks pages content parity', () => {
+  it('reference/errors.md: V-507 + RFC 9457 problem-details + every problem-type URI + 3-language matrix + retryable column (rate-limited yes / internal yes / TransportError yes; everything else no)', () => {
+    const body = read(ERR);
+    expect(body).toMatch(/^title: Error reference$/m);
+    expect(body).toMatch(/V-507 reference\./);
+    expect(body).toMatch(/RFC 9457 Problem Details/);
+    expect(body).toMatch(/"type": "https:\/\/errors\.driftstack\.dev\/rate-limited"/);
+    expect(body).toMatch(/"retry_after_seconds": 12/);
+    expect(body).toMatch(
+      /`errors\.driftstack\.dev\/rate-limited`\s+\| 429\s+\| `RateLimitError`\s+\| `RateLimitError`\s+\| `RateLimitError`\s+\| \*\*yes\*\*/,
+    );
+    expect(body).toMatch(
+      /`errors\.driftstack\.dev\/internal`\s+\| 5xx\s+\| `InternalError`\s+\| `InternalError`\s+\| `InternalError`\s+\| \*\*yes\*\*/,
+    );
+    expect(body).toMatch(
+      /\(network failure \/ parse error\)\s+\| 0\s+\| `TransportError`\s+\| `TransportError`\s+\| `TransportError`\s+\| \*\*yes\*\*/,
+    );
+    expect(body).toMatch(/`errors\.driftstack\.dev\/concurrency-limit`\s+\| 429/);
+    expect(body).toMatch(/`errors\.driftstack\.dev\/tier-limit`\s+\| 429/);
+    expect(body).toMatch(/`errors\.driftstack\.dev\/session-destroyed`\s+\| 410/);
+    expect(body).toMatch(/`errors\.driftstack\.dev\/session-timeout`\s+\| 504/);
+    expect(body).toMatch(/`errors\.driftstack\.dev\/driver-not-integrated`\s+\| 503/);
+    expect(body).toMatch(/^## When to retry$/m);
+    expect(existsSync(ERR)).toBe(true);
+  });
+
+  it('reference/rate-limits.md: V-505 + token-bucket anti-abuse-not-pricing-meter (concurrent-only per ADR-004) + 2 bucket keys (global + sessions:create) + 8-tier defaults pinned', () => {
+    const body = read(RL);
+    expect(body).toMatch(/^title: Rate limits$/m);
+    expect(body).toMatch(/V-505 reference\./);
+    expect(body).toMatch(/Driftstack enforces per-tier token-bucket rate/);
+    expect(body).toMatch(/intentional anti-abuse caps \(runaway scripts, accidental DoS\),/);
+    expect(body).toMatch(/not the pricing meter\. Pricing is concurrent-only per ADR-004\./);
+    expect(body).toMatch(/^## Two bucket keys$/m);
+    expect(body).toMatch(/- \*\*`global`\*\* — every authenticated `\/v1\/\*` call\./);
+    expect(body).toMatch(/- \*\*`sessions:create`\*\* — `POST \/v1\/sessions` only\./);
+    expect(body).toMatch(/A `POST \/v1\/sessions` consumes from BOTH `global` and/);
+    expect(body).toMatch(/`sessions:create` — hitting either cap returns 429\./);
+    expect(body).toMatch(/\| `trial_pack`\s+\| 60\s+\| 1\s+\|/);
+    expect(body).toMatch(/\| `api_starter`\s+\| 240\s+\| 4\s+\|/);
+    expect(body).toMatch(/\| `api_builder`\s+\| 1,800\s+\| 30\s+\|/);
+    expect(body).toMatch(/\| `api_scale`\s+\| 6,000\s+\| 100\s+\|/);
+    expect(body).toMatch(/\| `enterprise`\s+\| 60,000\s+\| 1,000\s+\|/);
+    expect(existsSync(RL)).toBe(true);
+  });
+
+  it('reference/scopes.md: V-505 + 3 categories (Broad read/write/admin + Account-control account_owner/driftstack_internal_admin + Granular V-481 verb:resource) + L-001 gui_control special scope pinned', () => {
+    const body = read(SC);
+    expect(body).toMatch(/^title: API key scopes$/m);
+    expect(body).toMatch(/V-505 reference\./);
+    expect(body).toMatch(/Every Driftstack API key carries a set of/);
+    expect(body).toMatch(/scopes\./);
+    expect(body).toMatch(/^## Scope categories$/m);
+    expect(body).toMatch(/1\. \*\*Broad scopes\*\* — `read`, `write`, `admin`\./);
+    expect(body).toMatch(/2\. \*\*Account-control scopes\*\* — `account_owner`,/);
+    expect(body).toMatch(/`driftstack_internal_admin`\./);
+    expect(body).toMatch(/3\. \*\*Granular scopes \(V-481\)\*\* — `verb:resource` syntax/);
+    expect(body).toMatch(/\| `admin`\s+\| broad \(legacy\)\s+\| Pre-V-174 alias\./);
+    expect(body).toMatch(
+      /Treated as satisfying both `account_owner` \+ `driftstack_internal_admin`\./,
+    );
+    expect(body).toMatch(/\| `gui_control`\s+\| special\s+\| Manual-control plane/);
+    expect(body).toMatch(/Self-hosted GUI workflow only \(locked-decision L-001\)\./);
+    expect(existsSync(SC)).toBe(true);
+  });
+
+  it('webhooks/endpoints.md: customer-controlled HTTPS URL + signing-secret-shown-ONCE + V-359 24h rotation grace + dual-sign x-driftstack-signature + x-driftstack-signature-prev + consecutive-failures auto-disable + test.ping rejected from subscribe list pinned', () => {
+    const body = read(WE);
+    expect(body).toMatch(/^title: Webhook endpoints$/m);
+    expect(body).toMatch(/customer-controlled HTTPS URL that/);
+    expect(body).toMatch(/Driftstack POSTs event payloads to\./);
+    expect(body).toMatch(/Safe to log \+ display; the full secret is shown ONCE at create/);
+    expect(body).toMatch(/`prev_secret_prefix` \+ `rotation_grace_expires_at` are null/);
+    expect(body).toMatch(/except during the 24-hour grace period after a secret rotation/);
+    expect(body).toMatch(/\(V-359\)\. When non-null, Driftstack is dual-signing every outbound/);
+    expect(body).toMatch(/delivery \(`x-driftstack-signature` \+ `x-driftstack-signature-prev`\)/);
+    expect(body).toMatch(/`consecutive_failures` increments on each failed delivery \+ zeros/);
+    expect(body).toMatch(/endpoint auto-disables \(`disabled_at` set\)/);
+    expect(body).toMatch(/Only subscribable event types/);
+    expect(body).toMatch(/count here; `test\.ping` is delivery-side-only and is rejected if/);
+    expect(existsSync(WE)).toBe(true);
+  });
+
+  it('webhooks/events.md: V-203 catalog + LIVE/DECLARED/PLANNED status tags + quick-index table (session.completed/failed/api_key.revoked + 13 planned + test.ping V-356) + common envelope shape pinned', () => {
+    const body = read(EV);
+    expect(body).toMatch(/^title: Webhook events catalog$/m);
+    expect(body).toMatch(/^# Webhook events — catalog \+ payload shapes$/m);
+    expect(body).toMatch(/V-203 — comprehensive reference for every webhook event type the/);
+    expect(body).toMatch(/> \*\*Status notation\*\*: events are tagged/);
+    expect(body).toMatch(
+      /> \[LIVE\] \(declared in the enum \+ fired by a service emitter today\),/,
+    );
+    expect(body).toMatch(
+      /> \[DECLARED\] \(declared in the enum but no production emitter wired\),/,
+    );
+    expect(body).toMatch(/> \[PLANNED\] \(not yet in the enum; queued for V-NNN\)\./);
+    expect(body).toMatch(/\| `session\.completed`\s+\| \[LIVE\]\s+\|/);
+    expect(body).toMatch(/\| `session\.failed`\s+\| \[LIVE\]\s+\|/);
+    expect(body).toMatch(/\| `api_key\.revoked`\s+\| \[LIVE\]\s+\|/);
+    expect(body).toMatch(/\| `quota\.warning_80pct`\s+\| \[DECLARED\]\s+\|/);
+    expect(body).toMatch(/\| `quota\.exceeded`\s+\| \[DECLARED\]\s+\|/);
+    expect(body).toMatch(
+      /\| `test\.ping`\s+\| \[LIVE\]\s+\| Synthetic test event from POST \/v1\/webhooks\/:id\/test/,
+    );
+    expect(body).toMatch(/\| `session\.created`\s+\| \[PLANNED\]\s+\|/);
+    expect(body).toMatch(
+      /\| `trial_pack\.purchased`\s+\| \[PLANNED\]\s+\| \$2\.99 trial pack purchased/,
+    );
+    expect(body).toMatch(/^## Common envelope$/m);
+    expect(body).toMatch(/"id": "evt_<uuid>"/);
+    expect(body).toMatch(/"type": "<event-type>"/);
+    expect(body).toMatch(/"account_id": "acc_<uuid>"/);
+    expect(existsSync(EV)).toBe(true);
+  });
+
+  it('webhooks/replay.md: 5-retry-exp-backoff-then-DLQ + POST /v1/webhook-deliveries/:id/replay + reset-to-pending + ~30s next-cycle + account-scoped + empty body + 200 response shape pinned', () => {
+    const body = read(RP);
+    expect(body).toMatch(/^title: Replaying webhook deliveries$/m);
+    expect(body).toMatch(/^# Replaying webhook deliveries$/m);
+    expect(body).toMatch(/Driftstack retries failed webhook deliveries 5 times with exponential/);
+    expect(body).toMatch(/backoff before parking them in the DLQ\./);
+    expect(body).toMatch(/^## Endpoint$/m);
+    expect(body).toMatch(/`POST \/v1\/webhook-deliveries\/:deliveryId\/replay`/);
+    expect(body).toMatch(/Resets the delivery to `pending` so the worker re-fires it on the next/);
+    expect(body).toMatch(/cycle \(within ~30 seconds\)\./);
+    expect(body).toMatch(/Account-scoped: the delivery must belong/);
+    expect(body).toMatch(/Request body: `\{\}` \(empty\)\./);
+    expect(body).toMatch(/"status": "pending",/);
+    expect(body).toMatch(/"attempts": 0,/);
+    expect(body).toMatch(/By 10:15 the deliveries land in DLQ \(`status: "dlq"`\)\./);
+    expect(body).toMatch(/`GET \/v1\/webhooks\/:webhookId\/deliveries\?status=dlq`/);
+    expect(existsSync(RP)).toBe(true);
+  });
+});
