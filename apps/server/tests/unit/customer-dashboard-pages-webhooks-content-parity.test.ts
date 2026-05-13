@@ -1,0 +1,144 @@
+// W497.B — drift guard for apps/customer-dashboard/src/pages/webhooks.astro.
+// V-181 + V-347 + V-351b + V-359 + V-403 + V-443 + V-475 + V-356
+// webhooks page. Drift here either drops the V-475 in-page secret
+// reveal (would revert to window.prompt — blocked in incognito) or
+// breaks the V-403/V-443 delivery-log filter + cursor pagination
+// (customers couldn't drill into per-status delivery history).
+//
+//   • V-181 progressive-enhancement framing.
+//   • V-347 create-form + secret-shown-ONCE reveal.
+//   • V-475 in-page rotate-secret reveal pane (replaces window.prompt).
+//   • V-351b PATCH-style edit form with active toggle.
+//   • V-359 rotation_grace_expires_at indicator + 24h grace framing.
+//   • V-403 + V-443 delivery-log filter (6 status) + cursor pagination.
+//   • V-356 send-test endpoint with 202-success.
+//   • 5-event subscribe enum: session.completed/session.failed/
+//     api_key.revoked/quota.warning_80pct/quota.exceeded.
+//   • HMAC-SHA256 + 5-min timestamp tolerance framing.
+//   • Retry 5× exponential backoff + DLQ + no-auto-retry framing.
+//   • V-331b act-as header in all writes.
+//   • POST + PATCH + DELETE + /:id/rotate-secret + /:id/test +
+//     /:id/deliveries + /webhook-deliveries/:id/replay contracts.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/webhooks.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity', () => {
+  const body = read(LIB);
+
+  it("V-181 framing pinned: 'progressive-enhancement wiring against /v1/webhooks, mirrors V-180 /sessions pattern. SSG renders mock for instant paint; inline <script> replaces the endpoint list with live data when ds_web_session_token is in localStorage.' — pinned so the SSG-mock + live-replace pattern + the cross-page V-180 sessions consistency reference survive", () => {
+    expect(body).toMatch(
+      /\/\/ V-181 — progressive-enhancement wiring against \/v1\/webhooks,\s*\n?\s*\/\/ mirrors V-180 \/sessions pattern\. SSG renders mock for instant\s*\n?\s*\/\/ paint; inline <script> replaces the endpoint list with live data/,
+    );
+  });
+
+  it('Delivery-counts coming-soon framing pinned: \'Live /v1/webhooks response shape DOES include endpoint metadata (URL, events, active, description, consecutive_failures, last_success_at, last_failure_at, created_at) but does NOT include aggregate delivery_counts (delivered/failed/dlq). The mock displays delivery_counts; in live mode we render dashes for those cells and surface a note ("Delivery counts coming soon"). Adding a delivery-aggregation endpoint is a separate V-NNN.\' — pinned so the mock-vs-live shape divergence stays documented (drift to claiming live counts work would mislead customers reading the page comments)', () => {
+    expect(body).toMatch(
+      /\/\/ Live \/v1\/webhooks response shape DOES include endpoint metadata\s*\n?\s*\/\/ \(URL, events, active, description, consecutive_failures,\s*\n?\s*\/\/ last_success_at, last_failure_at, created_at\) but does NOT\s*\n?\s*\/\/ include aggregate delivery_counts/,
+    );
+  });
+
+  it("V-475 in-page rotate-secret reveal framing pinned: 'rotate-secret in-page reveal. Replaces the window.prompt shown in earlier slices; some browsers block prompts in non-interactive contexts (incognito, autofill blockers, etc.). Inline reveal is keyboard-accessible + paste-target-friendly.' — pinned so the why-not-window.prompt rationale + the keyboard-accessibility framing survive (drift to window.prompt would re-introduce the incognito-blocked bug)", () => {
+    expect(body).toMatch(
+      /V-475 — rotate-secret in-page reveal\. Replaces the window\.prompt\s*\n?\s*shown in earlier slices; some browsers block prompts in\s*\n?\s*non-interactive contexts \(incognito, autofill blockers, etc\.\)\./,
+    );
+  });
+
+  it("HMAC-SHA256 + 5-min timestamp tolerance framing pinned: 'HMAC-SHA256-signed event delivery · 5-minute timestamp tolerance' — pinned so the signature algorithm + replay window stay explicit (drift to dropping HMAC-SHA256 would let customers wonder which signature scheme to verify against; drift to dropping 5-min tolerance would lose the replay-attack window framing)", () => {
+    expect(body).toMatch(/HMAC-SHA256-signed event delivery · 5-minute timestamp tolerance/);
+  });
+
+  it('5-event subscribe enum: session.completed (default-checked) + session.failed + api_key.revoked + quota.warning_80pct + quota.exceeded — pinned so the event vocabulary stays 5-event (drift to dropping quota.* would hide the cap-monitoring path; drift to dropping default-checked on session.completed would let new customers create endpoints with zero events)', () => {
+    expect(body).toMatch(/<input type="checkbox" name="event" value="session\.completed" checked/);
+    expect(body).toMatch(/<input type="checkbox" name="event" value="session\.failed"/);
+    expect(body).toMatch(/<input type="checkbox" name="event" value="api_key\.revoked"/);
+    expect(body).toMatch(/<input type="checkbox" name="event" value="quota\.warning_80pct"/);
+    expect(body).toMatch(/<input type="checkbox" name="event" value="quota\.exceeded"/);
+  });
+
+  it("V-403 + V-443 delivery-log framing pinned: 'delivery-log status filter + cursor pagination. Backend accepts ?status= + ?cursor= on /v1/webhooks/:id/deliveries. V-443 stores a cursor per endpoint in a closure-scoped Map so the Load-more button can append the next page without re-fetching the whole list. Filter changes reset the cursor + clear append state.' — pinned so the per-endpoint pager Map + filter-resets-cursor semantics stay correct (drift to a global cursor would break parallel delivery-log views for multi-endpoint accounts)", () => {
+    expect(body).toMatch(
+      /\/\/ V-403 \+ V-443 — delivery-log status filter \+ cursor pagination\.\s*\n?\s*\/\/ Backend accepts \?status= \+ \?cursor= on \/v1\/webhooks\/:id\/deliveries\.\s*\n?\s*\/\/ V-443 stores a `cursor` per endpoint in a closure-scoped Map/,
+    );
+    expect(body).toMatch(/const deliveriesPager = new Map\(\);/);
+  });
+
+  it("V-403 6-status filter enum: '' (All statuses) + pending + in_flight + delivered + failed + dlq — pinned so the delivery-log filter taxonomy covers ALL 5 delivery states + the unfiltered 'All' option (drift to dropping in_flight would hide deliveries mid-attempt; drift to dropping dlq would hide deliveries that landed in the dead-letter queue, defeating the requeue UX)", () => {
+    expect(body).toMatch(/\['', 'pending', 'in_flight', 'delivered', 'failed', 'dlq'\]/);
+  });
+
+  it("V-347 secret-shown-ONCE framing pinned: 'Endpoint created' card + 'Copy this signing secret now — it won't be shown again. Use it with the SDK's verifyWebhookSignature helper to authenticate incoming deliveries.' — pinned so customers know the secret is one-shot AND the SDK helper-by-name reference stays correct (drift to dropping verifyWebhookSignature reference would orphan customers from the canonical verification path)", () => {
+    expect(body).toMatch(
+      /Copy this signing secret now — it won't be shown again\. Use it with the SDK's\s*\n?\s*<code class="font-mono">verifyWebhookSignature<\/code> helper to authenticate\s*\n?\s*incoming deliveries\./,
+    );
+  });
+
+  it("V-359 rotation 24h grace framing pinned: 'Rotate signing secret for <id>?\\n\\nThe new secret is shown ONCE. The old secret stays active for 24h so your verifier can roll forward without dropped deliveries.' + rotation_grace_expires_at endpoint card indicator — pinned so the 24h dual-validity window + the inline 'rotating · ends <date>' badge survive (drift to dropping grace would create a zero-downtime-impossible secret swap; drift to dropping the in-flight indicator would hide rotation state from the customer)", () => {
+    expect(body).toMatch(
+      /'Rotate signing secret for ' \+\s*\n?\s*id \+\s*\n?\s*'\?\\n\\nThe new secret is shown ONCE\. The old secret stays active for 24h so your verifier can roll forward without dropped deliveries\.',/,
+    );
+    expect(body).toMatch(
+      /\/\/ V-359 — rotation-in-flight indicator\. When the endpoint is\s*\n?\s*\/\/ dual-signing, surface the grace expiry inline so customers\s*\n?\s*\/\/ know how long they have to roll the new secret across\s*\n?\s*\/\/ their verifier infra\./,
+    );
+  });
+
+  it('Webhook API contracts: POST /v1/webhooks + PATCH /v1/webhooks/:id + DELETE /v1/webhooks/:id + POST /v1/webhooks/:id/rotate-secret + POST /v1/webhooks/:id/test + GET /v1/webhooks/:id/deliveries + POST /v1/webhook-deliveries/:id/replay — pinned so the 7-endpoint webhook lifecycle contract stays correct (drift to renaming any path would break the wired UI action)', () => {
+    expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/webhooks', \{\s*\n?\s*method: 'POST',/);
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(editingEndpoint\.id\), \{\s*\n?\s*method: 'PATCH',/,
+    );
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',/,
+    );
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/rotate-secret', \{\s*\n?\s*method: 'POST',/,
+    );
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/webhooks\/' \+ encodeURIComponent\(id\) \+ '\/test', \{\s*\n?\s*method: 'POST',/,
+    );
+    expect(body).toMatch(
+      /apiBaseUrl \+\s*\n?\s*'\/v1\/webhooks\/' \+\s*\n?\s*encodeURIComponent\(endpointId\) \+\s*\n?\s*'\/deliveries\?'/,
+    );
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/webhook-deliveries\/' \+ encodeURIComponent\(id\) \+ '\/replay', \{\s*\n?\s*method: 'POST',/,
+    );
+  });
+
+  it("V-356 send-test framing pinned: 'wire the per-row \"Send test\" buttons. POSTs to /v1/webhooks/:id/test which enqueues a synthetic test.ping delivery on the endpoint regardless of subscription.' + 202-or-r.ok success branch — pinned so the test-delivery 'bypasses subscription filter' semantic survives (drift to requiring subscription would block test-pings on production endpoints subscribed to only quota events)", () => {
+    expect(body).toMatch(
+      /\/\/ V-356 — wire the per-row "Send test" buttons\. POSTs to\s*\n?\s*\/\/ \/v1\/webhooks\/:id\/test which enqueues a synthetic test\.ping\s*\n?\s*\/\/ delivery on the endpoint regardless of subscription\./,
+    );
+    expect(body).toMatch(/if \(!r\.ok && r\.status !== 202\) \{/);
+  });
+
+  it("Retry + DLQ framing pinned: 'Failed deliveries retry 5× with exponential backoff before landing in the DLQ. DLQ entries are admin-replayable; no auto-retry past the initial attempts to avoid storm-on-recovery patterns.' — pinned so the 5× retry budget + the no-auto-retry-past-budget storm-prevention framing both survive (drift to dropping 'storm-on-recovery' would hide WHY auto-retry doesn't continue past 5 attempts)", () => {
+    expect(body).toMatch(
+      /Failed deliveries retry 5× with exponential backoff before landing in\s*\n?\s*the DLQ\. DLQ entries are admin-replayable; no auto-retry past the\s*\n?\s*initial attempts to avoid storm-on-recovery patterns\./,
+    );
+  });
+
+  it("V-475 plaintext-wipe-on-dismiss framing pinned: 'Clear secret from DOM so it isn't recoverable post-dismiss.' + rotateSecretEl.textContent = '' on hide — pinned so the post-dismiss DOM wipe survives (drift to leaving the secret in the DOM would let post-dismiss page inspectors recover the rotated secret, defeating the shown-ONCE contract)", () => {
+    expect(body).toMatch(/\/\/ Clear secret from DOM so it isn't recoverable post-dismiss\./);
+    expect(body).toMatch(/rotateSecretEl\.textContent = '';/);
+  });
+
+  it("HTTPS-required + 10s 2xx framing pinned: 'HTTPS required. The endpoint must respond 2xx within 10s for delivery to count as successful.' — pinned so the protocol requirement + response-time budget stay explicit (drift to dropping HTTPS would let customers register HTTP endpoints that fail with cryptic 'TLS required' errors; drift to dropping 10s would leave customers wondering why their slow webhooks land in DLQ)", () => {
+    expect(body).toMatch(
+      /HTTPS required\. The endpoint must respond 2xx within 10s for delivery to count\s*\n?\s*as successful\./,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
