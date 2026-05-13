@@ -49,25 +49,25 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
       /\/\/ Mobile-menu list mirrors desktop \+ adds the secondary pages that\s*\n?\s*\/\/ don't earn a top-level desktop slot \(currently: Roadmap\)\./,
     );
     expect(body).toMatch(
-      /const mobileExtraItems = \[\s*\n?\s*\{ href: '\/roadmap', label: 'Roadmap' \},\s*\n?\s*\];/,
+      /const mobileExtraItems = \[\s*\{ href: '\/roadmap', label: 'Roadmap' \},?\s*\];/,
     );
   });
 
   it("Active-link styling + pathname-match framing pinned: 'pathname === item.href && text-oxblood-700 font-medium' + Astro.url.pathname source-of-truth — pinned so the active-link styling pattern + pathname source commitment survives (drift to claiming external active state would mislead users about their current location)", () => {
     expect(body).toMatch(/const pathname = Astro\.url\.pathname;/);
     expect(body).toMatch(
-      /class:list=\{\['nav-link', pathname === item\.href && 'text-oxblood-700 font-medium'\]\}/,
+      /class:list=\{\[\s*'nav-link',\s*pathname === item\.href && 'text-glow-red font-medium',?\s*\]\}/,
     );
   });
 
-  it("Logo + brand framing pinned: a href / + 'driftstack' brand + bg-oxblood-700 oxblood-rounded 'D' tile + font-mono font-semibold + h-7-w-7 size — pinned so the logo + brand-text + oxblood-tile + font-mono commitment survives (drift to a different brand color or font-family would create cross-page styling divergence)", () => {
+  it("Logo + brand framing pinned: a href / + 'driftstack' brand + bg-gradient-accent gradient 'D' tile + font-mono font-semibold + h-8-w-8 size + glow-red shadow — pinned so the logo + brand-text + gradient-accent-tile + font-mono commitment survives (drift to a different brand color or font-family would create cross-page styling divergence)", () => {
     expect(body).toMatch(
-      /<a href="\/" class="flex items-center gap-2 font-mono text-base font-semibold text-slate-900">/,
+      /<a\s+href="\/"\s+class="group flex items-center gap-2\.5 font-mono text-base font-semibold text-ink-primary"/,
     );
     expect(body).toMatch(
-      /class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700 text-white"/,
+      /class="relative inline-flex h-8 w-8 items-center justify-center rounded-md bg-gradient-accent text-white shadow-glow-red/,
     );
-    expect(body).toMatch(/<span>driftstack<\/span>/);
+    expect(body).toMatch(/<span class="tracking-tight">driftstack<\/span>/);
   });
 
   it("Desktop nav 2-CTA framing pinned: 'Sign in' → https://app.driftstack.dev/login + 'Get started' btn-primary → /pricing#trial-pack — pinned so the 2-CTA target (dashboard login URL + #trial-pack pricing anchor) commitment survives (drift to a different login URL would create marketing↔dashboard divergence)", () => {
@@ -97,7 +97,7 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
 
   it("Mobile nav popup positioning + composed-list framing pinned: 'absolute right-0 top-12 z-20 flex w-56 flex-col gap-1 rounded-md border border-slate-200 bg-white p-3 shadow-lg' + [...navItems, ...mobileExtraItems].map composition + 'in item && item.external' type-narrowed external check — pinned so the mobile-popup positioning + composed-list-spread + type-narrowed-external check survives", () => {
     expect(body).toMatch(
-      /class="absolute right-0 top-12 z-20 flex w-56 flex-col gap-1 rounded-md border border-slate-200 bg-white p-3 shadow-lg"/,
+      /class="absolute right-0 top-12 z-20 flex w-56 flex-col gap-1 rounded-md border border-white\/10 bg-surface-raised p-3 shadow-glow-red"/,
     );
     expect(body).toMatch(/\[\.\.\.navItems, \.\.\.mobileExtraItems\]\.map\(\(item\) => \(/);
     expect(body).toMatch(/'external' in item && item\.external \? '_blank' : undefined/);

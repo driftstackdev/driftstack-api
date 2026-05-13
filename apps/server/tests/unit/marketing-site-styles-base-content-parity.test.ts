@@ -1,19 +1,22 @@
-// W524.A — drift guard for apps/marketing-site/src/styles/base.css.
-// Site-wide Tailwind base layer + 3-utility-component (btn-primary +
-// btn-secondary + nav-link). Drift here either changes the brand-color
-// (oxblood-700) used by every CTA + nav link (would create cross-page
-// brand-color divergence) or breaks the Geist + Berkeley Mono font
-// stack (would create cross-page typography divergence).
+// W524.A (refactored R1) — drift guard for apps/marketing-site/src/styles/base.css.
+// Site-wide Tailwind base layer + dark-mode-first design tokens + the
+// 4-utility-component set (btn-primary, btn-secondary, nav-link,
+// section-label, card, code-preview, accent-rule). Drift here either
+// changes the brand red used by every CTA or breaks the Geist + Berkeley
+// Mono font stack (would create cross-page typography divergence).
 //
 //   • 3 Tailwind directives: @tailwind base / components / utilities.
+//   • Dark mode by default: color-scheme: dark; surface-base bg.
 //   • Geist + Berkeley Mono font-family with system-stack fallback.
-//   • color-scheme: light + html bg-slate-50 + text-slate-900.
-//   • body min-h-screen flex flex-col (footer-pinned-to-bottom shell).
+//   • Radial-glow body background (oxblood top + soft bottom).
 //   • ::selection bg-oxblood-700 text-white.
-//   • btn-primary: bg-oxblood-700 + hover:bg-oxblood-800 + focus-visible
-//     outline-oxblood-700.
-//   • btn-secondary: border-slate-300 + bg-white + slate-900 text.
-//   • nav-link: text-sm + text-slate-600 + hover:text-oxblood-700.
+//   • btn-primary: bg-oxblood-700 + shadow-glow-red + hover lift.
+//   • btn-secondary: glass border-white/10 + bg-white/5 + backdrop-blur.
+//   • nav-link: text-ink-secondary + hover:text-glow-red.
+//   • section-label: mono [BRACKETED] glow-red accent.
+//   • card: rounded-xl glass surface with red-tinted top edge on hover.
+//   • code-preview: monospace dark inset with window-chrome pip header.
+//   • accent-rule: red glow vertical bar for callouts.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -31,55 +34,126 @@ function read(p: string): string {
 describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => {
   const body = read(LIB);
 
-  it("3 Tailwind directive + Geist/Berkeley-Mono framing pinned: '@tailwind base;' + '@tailwind components;' + '@tailwind utilities;' + 'Geist Sans + Berkeley Mono are loaded via @font-face declarations that ship with the deployed site. Falling back to system stack if the font fetches fail.' — pinned so the 3-directive Tailwind base + Geist-Sans + Berkeley-Mono custom-font commitment + system-stack-fallback safety survives (drift to a different font-family would create cross-page typography divergence)", () => {
+  it('3 Tailwind directives + dark-mode-first design-token framing pinned', () => {
     expect(body).toMatch(/@tailwind base;/);
     expect(body).toMatch(/@tailwind components;/);
     expect(body).toMatch(/@tailwind utilities;/);
-    expect(body).toMatch(
-      /\/\* Geist Sans \+ Berkeley Mono are loaded via @font-face declarations\s*\n?\s*that ship with the deployed site\. Falling back to system stack if\s*\n?\s*the font fetches fail\. \*\//,
-    );
+    expect(body).toMatch(/Dark-mode-first marketing surface\./);
+    expect(body).toMatch(/Tokens shared with apps\/customer-/);
   });
 
-  it("base layer html/body framing pinned: 'color-scheme: light;' + 'html { bg-slate-50 + text-slate-900 + font-family: Geist, ui-sans-serif, system-ui, sans-serif + font-feature-settings: cv11, ss01 + -webkit-font-smoothing: antialiased + -moz-osx-font-smoothing: grayscale }' + 'body { min-h-screen flex flex-col }' — pinned so the light-mode-only + slate-50-bg + Geist-with-system-fallback + cv11/ss01-OpenType-features + antialiased-rendering + flex-column-body-shell commitment survives", () => {
-    expect(body).toMatch(/color-scheme: light;/);
-    expect(body).toMatch(/@apply bg-slate-50 text-slate-900;/);
+  it('base layer html/body framing pinned: color-scheme: dark + surface-base bg + Geist Sans font stack + cv11/ss01 OpenType + radial-glow body background', () => {
+    expect(body).toMatch(/color-scheme: dark;/);
+    expect(body).toMatch(/@apply bg-surface-base text-ink-primary;/);
     expect(body).toMatch(/font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;/);
     expect(body).toMatch(/font-feature-settings: 'cv11', 'ss01';/);
     expect(body).toMatch(/-webkit-font-smoothing: antialiased;/);
     expect(body).toMatch(/-moz-osx-font-smoothing: grayscale;/);
     expect(body).toMatch(/@apply min-h-screen flex flex-col;/);
+    expect(body).toMatch(
+      /radial-gradient\(ellipse 90% 60% at 50% -10%, rgba\(226, 56, 71, 0\.12\)/,
+    );
+    expect(body).toMatch(
+      /radial-gradient\(ellipse 80% 50% at 50% 100%, rgba\(114, 47, 55, 0\.08\)/,
+    );
+    expect(body).toMatch(/background-attachment: fixed;/);
   });
 
-  it('code/pre/kbd Berkeley-Mono framing pinned: \'code, pre, kbd { font-family: "Berkeley Mono", ui-monospace, SFMono-Regular, monospace; font-feature-settings: normal; }\' — pinned so the 3-element mono-font targeting + Berkeley-Mono-with-ui-monospace-fallback + font-feature-reset commitment survives', () => {
+  it('code/pre/kbd Berkeley-Mono framing pinned', () => {
     expect(body).toMatch(
       /code,\s*\n?\s*pre,\s*\n?\s*kbd \{\s*\n?\s*font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;\s*\n?\s*font-feature-settings: normal;\s*\n?\s*\}/,
     );
   });
 
-  it("::selection oxblood framing pinned: '::selection { bg-oxblood-700 text-white }' — pinned so the brand-color selection-highlight (oxblood text-on-white-text) commitment survives (drift to a different selection color would create cross-page selection-highlight divergence)", () => {
+  it('::selection oxblood framing pinned (brand-locked selection)', () => {
     expect(body).toMatch(/::selection \{\s*\n?\s*@apply bg-oxblood-700 text-white;\s*\n?\s*\}/);
   });
 
-  it("btn-primary framing pinned: 'inline-flex items-center justify-center rounded-md bg-oxblood-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-oxblood-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-oxblood-700' — pinned so the primary-CTA oxblood-700-fill + hover:oxblood-800-darker + 2px-outline-on-focus-visible + 2px-outline-offset commitment survives (drift to a different brand color in btn-primary would propagate to every CTA on the site)", () => {
+  it('hairline divider hr: 1px gradient with red glimmer in middle', () => {
+    expect(body).toMatch(/hr \{/);
+    expect(body).toMatch(/@apply border-0 h-px;/);
+    expect(body).toMatch(/rgba\(226, 56, 71, 0\.25\)/);
+  });
+
+  it('btn-primary framing pinned: bg-oxblood-700 + shadow-glow-red + hover lift (hover:bg-oxblood-600 + hover:shadow-glow-red-lg + hover:-translate-y-0.5) + focus-visible outline-glow-red', () => {
     expect(body).toMatch(/\.btn-primary \{/);
     expect(body).toMatch(/bg-oxblood-700/);
-    expect(body).toMatch(/hover:bg-oxblood-800/);
-    expect(body).toMatch(/focus-visible:outline-oxblood-700/);
-    expect(body).toMatch(/focus-visible:outline-2/);
-    expect(body).toMatch(/focus-visible:outline-offset-2/);
+    expect(body).toMatch(/shadow-glow-red/);
+    expect(body).toMatch(/hover:bg-oxblood-600/);
+    expect(body).toMatch(/hover:shadow-glow-red-lg/);
+    expect(body).toMatch(/hover:-translate-y-0\.5/);
+    expect(body).toMatch(/focus-visible:outline-glow-red/);
+    expect(body).toMatch(/active:translate-y-0/);
   });
 
-  it("btn-secondary framing pinned: 'inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-oxblood-700' — pinned so the secondary-CTA slate-300-border + white-fill + slate-900-text + hover:slate-100 + same-oxblood-focus-outline commitment survives", () => {
+  it('btn-secondary framing pinned: glass-on-dark border-white/10 + bg-white/5 + backdrop-blur-sm + hover:border-white/20 + hover:bg-white/10', () => {
     expect(body).toMatch(/\.btn-secondary \{/);
-    expect(body).toMatch(/border border-slate-300/);
-    expect(body).toMatch(/bg-white/);
-    expect(body).toMatch(/text-slate-900/);
-    expect(body).toMatch(/hover:bg-slate-100/);
+    expect(body).toMatch(/border border-white\/10/);
+    expect(body).toMatch(/bg-white\/5/);
+    expect(body).toMatch(/text-ink-primary/);
+    expect(body).toMatch(/backdrop-blur-sm/);
+    expect(body).toMatch(/hover:border-white\/20/);
+    expect(body).toMatch(/hover:bg-white\/10/);
   });
 
-  it("nav-link framing pinned: 'text-sm text-slate-600 transition-colors hover:text-oxblood-700' — pinned so the nav-link slate-600-default + hover:oxblood-700 commitment survives (drift to a different nav-link color would create cross-page nav-color divergence)", () => {
+  it('nav-link framing pinned: text-sm + text-ink-secondary + hover:text-glow-red', () => {
     expect(body).toMatch(/\.nav-link \{/);
-    expect(body).toMatch(/@apply text-sm text-slate-600 transition-colors hover:text-oxblood-700;/);
+    expect(body).toMatch(
+      /@apply text-sm text-ink-secondary transition-colors hover:text-glow-red;/,
+    );
+  });
+
+  it('section-label framing pinned: mono uppercase tracking-[0.2em] text-glow-red + [BRACKETED] pseudo-element before/after', () => {
+    expect(body).toMatch(/\.section-label \{/);
+    expect(body).toMatch(/font-mono text-xs uppercase/);
+    expect(body).toMatch(/tracking-\[0\.2em\] text-glow-red/);
+    expect(body).toMatch(/\.section-label::before \{/);
+    expect(body).toMatch(/content: '\[ ';/);
+    expect(body).toMatch(/\.section-label::after \{/);
+    expect(body).toMatch(/content: ' \]';/);
+  });
+
+  it('card framing pinned: rounded-xl glass border-white/8 + bg-surface-raised/60 + backdrop-blur-sm + hover red-tinted top edge accent', () => {
+    expect(body).toMatch(/\.card \{/);
+    expect(body).toMatch(/rounded-xl border border-white\/8/);
+    expect(body).toMatch(/bg-surface-raised\/60 backdrop-blur-sm/);
+    expect(body).toMatch(/hover:border-glow-red\/30/);
+    expect(body).toMatch(/\.card::before \{/);
+    expect(body).toMatch(/rgba\(226, 56, 71, 0\.6\)/);
+    expect(body).toMatch(/\.card:hover::before \{/);
+    expect(body).toMatch(/@apply opacity-100;/);
+  });
+
+  it('grid-bg framing pinned: dual linear-gradient grid pattern with radial mask', () => {
+    expect(body).toMatch(/\.grid-bg \{/);
+    expect(body).toMatch(
+      /linear-gradient\(to right, rgba\(255, 255, 255, 0\.04\) 1px, transparent 1px\)/,
+    );
+    expect(body).toMatch(
+      /linear-gradient\(to bottom, rgba\(255, 255, 255, 0\.04\) 1px, transparent 1px\)/,
+    );
+    expect(body).toMatch(/background-size: 40px 40px;/);
+    expect(body).toMatch(/mask-image: radial-gradient/);
+  });
+
+  it('code-preview framing pinned: monospace dark inset + window-chrome pip 3-circle header', () => {
+    expect(body).toMatch(/\.code-preview \{/);
+    expect(body).toMatch(/rounded-xl border border-white\/8 bg-surface-inset/);
+    expect(body).toMatch(/font-mono text-xs leading-6/);
+    expect(body).toMatch(/\.code-preview \.code-window-chrome \{/);
+    expect(body).toMatch(/\.code-preview \.code-window-chrome span\.pip \{/);
+    expect(body).toMatch(/h-2\.5 w-2\.5 rounded-full bg-white\/15/);
+  });
+
+  it('accent-rule framing pinned: vertical glow-red border-left + box-shadow red glow', () => {
+    expect(body).toMatch(/\.accent-rule \{/);
+    expect(body).toMatch(/border-l-2 border-glow-red pl-6/);
+    expect(body).toMatch(/box-shadow: -2px 0 16px -4px rgba\(226, 56, 71, 0\.4\)/);
+  });
+
+  it('arrow-bullet framing pinned: text-glow-red font-mono', () => {
+    expect(body).toMatch(/\.arrow-bullet \{/);
+    expect(body).toMatch(/@apply text-glow-red font-mono;/);
   });
 
   it('file exists at canonical path', () => {

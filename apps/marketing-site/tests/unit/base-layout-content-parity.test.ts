@@ -119,7 +119,7 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
   });
 
   it('html lang="en" + charset UTF-8 + viewport meta', () => {
-    expect(body).toMatch(/<html lang="en">/);
+    expect(body).toMatch(/<html lang="en" class="dark">/);
     expect(body).toMatch(/<meta charset="UTF-8" \/>/);
     expect(body).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1" \/>/);
   });

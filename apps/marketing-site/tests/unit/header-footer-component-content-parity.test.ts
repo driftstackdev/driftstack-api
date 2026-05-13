@@ -67,13 +67,13 @@ describe('W382.C marketing-site Header.astro content parity', () => {
 
   it('mobileExtraItems: Roadmap (mobile-only, not on desktop)', () => {
     expect(body).toMatch(
-      /const mobileExtraItems = \[\s*\n?\s*\{ href: '\/roadmap', label: 'Roadmap' \},\s*\n?\s*\];/,
+      /const mobileExtraItems = \[\s*\{ href: '\/roadmap', label: 'Roadmap' \},?\s*\];/,
     );
   });
 
-  it('V-219* D-badge + lowercase "driftstack" wordmark in header', () => {
-    expect(body).toMatch(/rounded-md bg-oxblood-700 text-white/);
-    expect(body).toMatch(/<span>driftstack<\/span>/);
+  it('V-219* D-badge (gradient-accent) + lowercase "driftstack" wordmark in header', () => {
+    expect(body).toMatch(/rounded-md bg-gradient-accent text-white/);
+    expect(body).toMatch(/<span class="tracking-tight">driftstack<\/span>/);
   });
 
   it('Sign in CTA → app.driftstack.dev/login + Get started CTA → /pricing#trial-pack', () => {
@@ -98,8 +98,8 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     expect(body).toMatch(/rel=\{item\.external \? 'noopener noreferrer' : undefined\}/);
   });
 
-  it('active-route highlighting: pathname === item.href → text-oxblood-700 font-medium', () => {
-    expect(body).toMatch(/pathname === item\.href && 'text-oxblood-700 font-medium'/);
+  it('active-route highlighting: pathname === item.href → text-glow-red font-medium', () => {
+    expect(body).toMatch(/pathname === item\.href && 'text-glow-red font-medium'/);
   });
 });
 
@@ -121,7 +121,9 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     const expected = ['Product', 'Company', 'Trust', 'Legal'];
     let lastIdx = -1;
     for (const heading of expected) {
-      const idx = body.indexOf(`<h3 class="font-medium text-slate-900">${heading}</h3>`);
+      const idx = body.indexOf(
+        `<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">${heading}</h3>`,
+      );
       expect(idx, `column heading out of order: ${heading}`).toBeGreaterThan(lastIdx);
       lastIdx = idx;
     }
@@ -183,9 +185,9 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     expect(body).toMatch(/&copy; \{year\} Driftstack\. All rights reserved\./);
   });
 
-  it('V-219* D-badge + lowercase "driftstack" wordmark in footer', () => {
-    expect(body).toMatch(/rounded-md bg-oxblood-700 text-white text-xs/);
-    expect(body).toMatch(/<span>driftstack<\/span>/);
+  it('V-219* D-badge (gradient-accent) + lowercase "driftstack" wordmark in footer', () => {
+    expect(body).toMatch(/rounded-md bg-gradient-accent text-white text-xs/);
+    expect(body).toMatch(/<span class="tracking-tight">driftstack<\/span>/);
   });
 
   it('Docs + Status external links carry target="_blank" + rel="noopener noreferrer"', () => {

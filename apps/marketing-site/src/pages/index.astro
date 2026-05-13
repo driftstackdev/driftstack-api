@@ -7,20 +7,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   description="iPhone Safari fingerprints. Without the runtime tells. We modify WebKit's C++ source instead of patching JavaScript. $2.99 trial pack — 16 hours, used once per account."
 >
   <!-- Hero -->
-  <section class="bg-gradient-to-b from-white to-slate-50">
-    <div class="mx-auto max-w-6xl px-6 pb-24 pt-20 md:pt-28">
+  <section class="relative overflow-hidden">
+    <div class="absolute inset-0 grid-bg opacity-40" aria-hidden="true"></div>
+    <div class="relative mx-auto max-w-6xl px-6 pb-28 pt-24 md:pt-32">
       <div class="grid gap-12 md:grid-cols-2 md:items-center">
-        <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
-            iPhone Safari fingerprints. Without the runtime tells.
-          </p>
-          <h1 class="mt-4 text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl">
+        <div class="animate-fade-up">
+          <p class="section-label">iPhone Safari fingerprints. Without the runtime tells.</p>
+          <h1
+            class="mt-5 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl lg:text-6xl"
+            style="letter-spacing: -0.02em;"
+          >
             Most stealth browsers modify JavaScript at runtime.
           </h1>
-          <p class="mt-3 max-w-prose text-lg text-slate-700">
+          <p class="mt-4 max-w-prose text-lg text-ink-secondary">
             Detection vendors built their industry on catching exactly that.
           </p>
-          <p class="mt-6 max-w-prose text-base text-slate-600">
+          <p class="mt-6 max-w-prose text-base text-ink-secondary leading-relaxed">
             We modify WebKit's C++ source instead. There's nothing at the
             JavaScript layer for detection to find — because nothing was
             changed there. The fingerprint your code reads is the
@@ -33,21 +35,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               >Download GUI client</a
             >
           </div>
-          <p class="mt-3 text-xs text-slate-500">
+          <p class="mt-4 text-xs text-ink-muted">
             16 hours · 14-day window · used once per account.
           </p>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <div class="flex items-center gap-2 border-b border-slate-200 pb-3">
-            <span class="h-2.5 w-2.5 rounded-full bg-slate-300"></span>
-            <span class="h-2.5 w-2.5 rounded-full bg-slate-300"></span>
-            <span class="h-2.5 w-2.5 rounded-full bg-slate-300"></span>
-            <span class="ml-2 font-mono text-xs text-slate-500"
-              >driftstack-typescript-sdk</span
-            >
+        <div class="code-preview">
+          <div class="code-window-chrome">
+            <span class="pip"></span>
+            <span class="pip"></span>
+            <span class="pip"></span>
+            <span class="ml-3 text-xs text-ink-muted">driftstack-typescript-sdk</span>
           </div>
-          <pre class="mt-4 overflow-x-auto text-xs leading-6 text-slate-800"><code>{`import { Driftstack } from '@driftstack/sdk';
+          <pre class="overflow-x-auto p-5 text-ink-primary"><code>{`import { Driftstack } from '@driftstack/sdk';
 
 const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 
@@ -68,45 +68,47 @@ await session.destroy();`}</code></pre>
   </section>
 
   <!-- Cumulative rig — binary parity, no percentages -->
-  <section class="border-t border-slate-200 bg-slate-50">
-    <div class="mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Cumulative rig</p>
+  <section class="relative border-t border-white/8">
+    <div class="mx-auto max-w-6xl px-6 py-24">
+      <p class="section-label">Cumulative rig</p>
       <p
-        class="mt-4 text-7xl font-semibold tracking-tight text-slate-900 md:text-8xl"
-        style="letter-spacing: -0.03em;"
+        class="mt-6 text-7xl font-semibold tracking-tight text-ink-primary md:text-8xl"
+        style="letter-spacing: -0.04em;"
       >
-        Bit-identical.
+        <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+          Bit-identical.
+        </span>
       </p>
-      <p class="mt-6 max-w-prose text-lg text-slate-700">
+      <p class="mt-8 max-w-prose text-lg text-ink-secondary leading-relaxed">
         Detection systems read hundreds of small signals — screen size, font
         rendering, GPU details, JavaScript timing — to identify what kind
         of device a visitor is. Driftstack matches every one of those signals
         against a real iPhone, exactly.
       </p>
-      <p class="mt-4 max-w-prose text-base text-slate-600">
+      <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
         Validated against the reference iPhone 16 Pro on iOS 18.7 / Safari
         26.4. Every measured signal returns the exact reference value — not
         approximate, not within tolerance. A signal either matches the
         reference, or we treat the gap as a launch-blocker bug.
       </p>
-      <p class="mt-3 max-w-prose text-sm text-slate-500">
+      <p class="mt-3 max-w-prose text-sm text-ink-muted">
         Methodology + signal categories at
-        <code class="font-mono">/trust/cumulative-rig</code> (when it lands).
+        <code class="font-mono text-glow-red">/trust/cumulative-rig</code> (when it lands).
       </p>
     </div>
   </section>
 
   <!-- Stack — full-width statement -->
-  <section class="border-t border-slate-200 bg-white">
+  <section class="relative border-t border-white/8">
     <div class="mx-auto max-w-6xl px-6 py-24">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Stack</p>
+      <p class="section-label">Stack</p>
       <h2
-        class="mt-4 max-w-4xl text-4xl font-semibold tracking-tight text-slate-900 md:text-5xl"
+        class="mt-6 max-w-4xl text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl"
         style="letter-spacing: -0.02em;"
       >
         Real WebKit. Real Core Text. Real iOS rendering.
       </h2>
-      <p class="mt-6 max-w-prose text-lg text-slate-600">
+      <p class="mt-6 max-w-prose text-lg text-ink-secondary leading-relaxed">
         Not a Chromium fork with a user-agent swap. Not Playwright with stealth
         plugins layered on. Driftstack runs Apple's WebKit C++ source — the
         same engine your target's iPhone visitors run. The fingerprint
@@ -117,19 +119,19 @@ await session.destroy();`}</code></pre>
   </section>
 
   <!-- Metering — single dense paragraph + data point -->
-  <section class="border-t border-slate-200 bg-slate-50">
-    <div class="mx-auto max-w-6xl px-6 py-20">
+  <section class="relative border-t border-white/8">
+    <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="grid gap-12 md:grid-cols-[1fr_auto] md:items-end">
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Metering</p>
+          <p class="section-label">Metering</p>
           <h2
-            class="mt-4 max-w-3xl text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl"
+            class="mt-6 max-w-3xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
             style="letter-spacing: -0.02em;"
           >
             Pay per concurrent session, not per call.
           </h2>
-          <p class="mt-6 max-w-prose text-base text-slate-600">
-            <strong class="text-slate-900">Concurrent</strong> = how many
+          <p class="mt-6 max-w-prose text-base text-ink-secondary leading-relaxed">
+            <strong class="text-ink-primary">Concurrent</strong> = how many
             sessions run at the same time, like browser tabs you'd have open
             at once. That's the only thing we meter. Within your concurrent
             cap, run as many hours as you want — no per-call markup, no
@@ -138,60 +140,63 @@ await session.destroy();`}</code></pre>
             pages on the same session — same line item, same price.
           </p>
         </div>
-        <div class="flex flex-col gap-1 border-l-4 border-oxblood-700 pl-6">
-          <span class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+        <div class="accent-rule flex flex-col gap-1">
+          <span class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">
             Concurrent cap
           </span>
-          <span class="font-mono text-5xl font-semibold text-slate-900" style="letter-spacing: 0.02em;">
+          <span
+            class="font-mono text-5xl font-semibold text-ink-primary"
+            style="letter-spacing: 0.02em;"
+          >
             =
           </span>
-          <span class="text-sm text-slate-600">the only thing you pay for</span>
+          <span class="text-sm text-ink-secondary">the only thing you pay for</span>
         </div>
       </div>
     </div>
   </section>
 
   <!-- Compliance — 60/40 split with code-style egress block -->
-  <section class="border-t border-slate-200 bg-white">
-    <div class="mx-auto max-w-6xl px-6 py-20">
+  <section class="relative border-t border-white/8">
+    <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="grid gap-12 md:grid-cols-5 md:items-start">
         <div class="md:col-span-3">
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Compliance</p>
+          <p class="section-label">Compliance</p>
           <h2
-            class="mt-4 max-w-2xl text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl"
+            class="mt-6 max-w-2xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
             style="letter-spacing: -0.02em;"
           >
             EU-resident infrastructure.
           </h2>
-          <p class="mt-6 max-w-prose text-base text-slate-600">
+          <p class="mt-6 max-w-prose text-base text-ink-secondary leading-relaxed">
             Customer data hosted in the EU — compute, database, and object
             storage all in the EU jurisdiction. The control plane stores
             session metadata only; we never store destination response
             bodies. Session execution may run in supported regions outside
             the EU under SCCs and the EU-US Data Privacy Framework — full
             sub-processor list at
-            <a href="/trust/sub-processors" class="text-oxblood-700 underline"
+            <a href="/trust/sub-processors" class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
               >/trust/sub-processors</a
             >.
           </p>
-          <p class="mt-4 max-w-prose text-base text-slate-600">
+          <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
             Customer-configurable egress (SOCKS5 / WireGuard / OpenVPN)
             is on the roadmap — see
-            <a href="/trust/security-overview" class="text-oxblood-700 underline"
+            <a href="/trust/security-overview" class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
               >/trust/security-overview</a
             >
             for the live posture.
           </p>
         </div>
         <div class="md:col-span-2">
-          <div class="rounded-lg border border-slate-200 bg-slate-900 p-5 font-mono text-xs leading-6 text-slate-200">
-            <span class="text-slate-500"># Driftstack control plane</span><br />
-            <span class="text-oxblood-300">→</span> stores session metadata only<br />
-            <span class="text-oxblood-300">→</span> never stores response bodies<br />
-            <span class="text-oxblood-300">→</span> EU-jurisdiction object storage<br />
+          <div class="code-preview p-5">
+            <span class="text-ink-muted"># Driftstack control plane</span><br />
+            <span class="arrow-bullet">→</span> stores session metadata only<br />
+            <span class="arrow-bullet">→</span> never stores response bodies<br />
+            <span class="arrow-bullet">→</span> EU-jurisdiction object storage<br />
             <br />
-            <span class="text-slate-500"># Roadmap — customer-configurable egress</span><br />
-            <span class="text-slate-500">→ SOCKS5 / WireGuard / OpenVPN (not shipped)</span>
+            <span class="text-ink-muted"># Roadmap — customer-configurable egress</span><br />
+            <span class="text-ink-muted">→ SOCKS5 / WireGuard / OpenVPN (not shipped)</span>
           </div>
         </div>
       </div>
@@ -199,74 +204,75 @@ await session.destroy();`}</code></pre>
   </section>
 
   <!-- Built for two audiences -->
-  <section class="border-t border-slate-200 bg-white">
-    <div class="mx-auto max-w-6xl px-6 py-20">
+  <section class="relative border-t border-white/8">
+    <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="mb-10">
-        <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
-          Built for two audiences
-        </p>
-        <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+        <p class="section-label">Built for two audiences</p>
+        <h2 class="mt-6 text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl" style="letter-spacing: -0.02em;">
           Manual or API. Same engine, different access surface.
         </h2>
       </div>
 
       <div class="grid gap-6 md:grid-cols-2">
-        <div class="rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Manual</p>
-          <h3 class="mt-3 text-2xl font-semibold text-slate-900">For humans</h3>
-          <p class="mt-3 text-slate-600">
+        <div class="card p-8">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">Manual</p>
+          <h3 class="mt-3 text-2xl font-semibold text-ink-primary">For humans</h3>
+          <p class="mt-3 text-ink-secondary leading-relaxed">
             Open the GUI client. Manage 10–200 persistent profiles. Drive
             sessions yourself with the keyboard and mouse — same WebKit, same
             fingerprint primitives, no code required. Account managers,
             agencies, and solo operators who keep multiple profiles alive
             across the workday.
           </p>
-          <ul class="mt-4 space-y-2 text-sm text-slate-600">
-            <li class="flex gap-2">
-              <span class="text-oxblood-700">→</span>
+          <ul class="mt-5 space-y-2.5 text-sm text-ink-secondary">
+            <li class="flex gap-2.5">
+              <span class="arrow-bullet">→</span>
               <span>Solo Manual $79/mo · Team $249/mo · Agency $699/mo</span>
             </li>
-            <li class="flex gap-2">
-              <span class="text-oxblood-700">→</span>
+            <li class="flex gap-2.5">
+              <span class="arrow-bullet">→</span>
               <span>1 / 3 / 8 concurrent sessions per tier</span>
             </li>
-            <li class="flex gap-2">
-              <span class="text-oxblood-700">→</span>
+            <li class="flex gap-2.5">
+              <span class="arrow-bullet">→</span>
               <span>Unlimited hours within your concurrent cap</span>
             </li>
           </ul>
-          <a href="/pricing#manual" class="btn-secondary mt-6 inline-flex">See Manual pricing →</a>
+          <a href="/pricing#manual" class="btn-secondary mt-7 inline-flex">See Manual pricing →</a>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">API</p>
-          <h3 class="mt-3 text-2xl font-semibold text-slate-900">For code</h3>
-          <p class="mt-3 text-slate-600">
+        <div class="card p-8">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">API</p>
+          <h3 class="mt-3 text-2xl font-semibold text-ink-primary">For code</h3>
+          <p class="mt-3 text-ink-secondary leading-relaxed">
             SDK in your language (TypeScript, Python, Go). Programmatic
             session creation. Concurrent caps that scale with your fleet.
             Production automation, scraping pipelines, integration testing —
             anywhere a real iPhone Safari fingerprint matters and your code
             needs to drive it.
           </p>
-          <ul class="mt-4 space-y-2 text-sm text-slate-600">
-            <li class="flex gap-2">
-              <span class="text-oxblood-700">→</span>
+          <ul class="mt-5 space-y-2.5 text-sm text-ink-secondary">
+            <li class="flex gap-2.5">
+              <span class="arrow-bullet">→</span>
               <span>API Starter $149/mo · Builder $499/mo · Scale $1,499/mo</span>
             </li>
-            <li class="flex gap-2">
-              <span class="text-oxblood-700">→</span>
+            <li class="flex gap-2.5">
+              <span class="arrow-bullet">→</span>
               <span>2 / 8 / 24 concurrent sessions per tier; Enterprise custom</span>
             </li>
-            <li class="flex gap-2">
-              <span class="text-oxblood-700">→</span>
-              <span>Bundled LLM, or bring your own Anthropic API key, for AI-driven sessions (Builder+)</span>
+            <li class="flex gap-2.5">
+              <span class="arrow-bullet">→</span>
+              <span
+                >Bundled LLM, or bring your own Anthropic API key, for AI-driven sessions
+                (Builder+)</span
+              >
             </li>
           </ul>
-          <a href="/pricing#api" class="btn-secondary mt-6 inline-flex">See API pricing →</a>
+          <a href="/pricing#api" class="btn-secondary mt-7 inline-flex">See API pricing →</a>
         </div>
       </div>
 
-      <p class="mt-8 max-w-prose text-sm text-slate-500">
+      <p class="mt-8 max-w-prose text-sm text-ink-muted">
         Not sure which fits? Both ladders share the same engine, the same
         archetypes, the same trial pack. Start with the $2.99 trial pack,
         evaluate the surface that matches your workflow, then subscribe.
@@ -275,15 +281,15 @@ await session.destroy();`}</code></pre>
   </section>
 
   <!-- Pricing teaser -->
-  <section class="border-t border-slate-200 bg-slate-50">
-    <div class="mx-auto max-w-6xl px-6 py-20">
+  <section class="relative border-t border-white/8">
+    <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="flex flex-col items-start gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Pricing</p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+          <p class="section-label">Pricing</p>
+          <h2 class="mt-6 text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl" style="letter-spacing: -0.02em;">
             Two ladders. One trial pack to start.
           </h2>
-          <p class="mt-3 max-w-prose text-slate-600">
+          <p class="mt-4 max-w-prose text-ink-secondary leading-relaxed">
             $2.99 buys 16 hours of iPhone Safari sessions to evaluate the
             platform. Then choose: Manual from $79/mo for humans clicking in
             the GUI, or API from $149/mo for code calling the SDK. Same
@@ -297,40 +303,40 @@ await session.destroy();`}</code></pre>
   </section>
 
   <!-- Self-hosted teaser -->
-  <section class="border-t border-slate-200 bg-white">
-    <div class="mx-auto max-w-6xl px-6 py-20">
+  <section class="relative border-t border-white/8">
+    <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="grid gap-10 md:grid-cols-2 md:items-center">
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Self-hosted</p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+          <p class="section-label">Self-hosted</p>
+          <h2 class="mt-6 text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl" style="letter-spacing: -0.02em;">
             Run Driftstack on your own infrastructure.
           </h2>
-          <p class="mt-3 max-w-prose text-slate-600">
+          <p class="mt-4 max-w-prose text-ink-secondary leading-relaxed">
             For privacy, sovereignty, or sustained high-volume use. We help
             you pick the right hardware, deploy the control plane, and
             operate the fleet. Three SKUs, annual contracts, hands-on
             onboarding.
           </p>
-          <a href="/self-hosted" class="btn-secondary mt-6 inline-flex">See self-hosted →</a>
+          <a href="/self-hosted" class="btn-secondary mt-7 inline-flex">See self-hosted →</a>
         </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 p-6">
-          <h3 class="font-medium text-slate-900">When self-hosted makes sense</h3>
-          <ul class="mt-4 space-y-3 text-sm text-slate-600">
+        <div class="card p-7">
+          <h3 class="font-medium text-ink-primary">When self-hosted makes sense</h3>
+          <ul class="mt-5 space-y-3.5 text-sm text-ink-secondary">
             <li class="flex gap-3">
-              <span class="text-oxblood-700">→</span>
+              <span class="arrow-bullet">→</span>
               <span
                 >Privacy-required workloads where session content must not leave your perimeter.</span
               >
             </li>
             <li class="flex gap-3">
-              <span class="text-oxblood-700">→</span>
+              <span class="arrow-bullet">→</span>
               <span
                 >Sustained high-concurrency operations where owned hardware costs less than
                 equivalent cloud-tier subscriptions.</span
               >
             </li>
             <li class="flex gap-3">
-              <span class="text-oxblood-700">→</span>
+              <span class="arrow-bullet">→</span>
               <span
                 >Full data sovereignty over recordings, screenshots, and request artefacts.</span
               >

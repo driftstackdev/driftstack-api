@@ -2,17 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Geist Sans + Berkeley Mono are loaded via @font-face declarations
-   that ship with the deployed site. Falling back to system stack if
-   the font fetches fail. */
+/* Dark-mode-first marketing surface. Tokens shared with apps/customer-
+   dashboard/src/styles/base.css. Keep synchronised — customer
+   experience reads as one product. */
 
 @layer base {
   :root {
-    color-scheme: light;
+    color-scheme: dark;
   }
 
   html {
-    @apply bg-slate-50 text-slate-900;
+    @apply bg-surface-base text-ink-primary;
     font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
     font-feature-settings: 'cv11', 'ss01';
     -webkit-font-smoothing: antialiased;
@@ -21,6 +21,10 @@
 
   body {
     @apply min-h-screen flex flex-col;
+    background-image:
+      radial-gradient(ellipse 90% 60% at 50% -10%, rgba(226, 56, 71, 0.12), transparent 70%),
+      radial-gradient(ellipse 80% 50% at 50% 100%, rgba(114, 47, 55, 0.08), transparent 75%);
+    background-attachment: fixed;
   }
 
   code,
@@ -33,18 +37,128 @@
   ::selection {
     @apply bg-oxblood-700 text-white;
   }
+
+  /* Hairline divider rule used between sections. The white-04 mix
+     reads as a near-invisible 1px line against surface-base; the
+     gradient adds a faint red glimmer in the middle. */
+  hr {
+    @apply border-0 h-px;
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      rgba(255, 255, 255, 0.08) 40%,
+      rgba(226, 56, 71, 0.25) 50%,
+      rgba(255, 255, 255, 0.08) 60%,
+      transparent 100%
+    );
+  }
 }
 
 @layer components {
+  /* Primary CTA — oxblood base with a red glow ring + lift on hover.
+     The two layered shadows + transition give it a tactile feel
+     without overloading the saturation budget. */
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-md bg-oxblood-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-oxblood-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-oxblood-700;
+    @apply relative inline-flex items-center justify-center rounded-md
+           bg-oxblood-700 px-5 py-2.5 text-sm font-medium text-white
+           shadow-glow-red transition-all duration-200
+           hover:bg-oxblood-600 hover:shadow-glow-red-lg hover:-translate-y-0.5
+           focus-visible:outline focus-visible:outline-2
+           focus-visible:outline-offset-2 focus-visible:outline-glow-red
+           active:translate-y-0;
   }
 
+  /* Secondary CTA — glass-on-dark with subtle border + soft hover. */
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-oxblood-700;
+    @apply inline-flex items-center justify-center rounded-md
+           border border-white/10 bg-white/5 px-5 py-2.5 text-sm
+           font-medium text-ink-primary backdrop-blur-sm
+           transition-all duration-200
+           hover:border-white/20 hover:bg-white/10
+           focus-visible:outline focus-visible:outline-2
+           focus-visible:outline-offset-2 focus-visible:outline-glow-red;
   }
 
+  /* Nav link — muted by default, accent on hover. */
   .nav-link {
-    @apply text-sm text-slate-600 transition-colors hover:text-oxblood-700;
+    @apply text-sm text-ink-secondary transition-colors hover:text-glow-red;
+  }
+
+  /* Bracketed section label — mono + glow accent. Used as the
+     [STACK] / [METERING] / [COMPLIANCE] markers above each section
+     headline. The pseudo-elements add the brackets so the label
+     content stays the bare word. */
+  .section-label {
+    @apply inline-flex items-center font-mono text-xs uppercase
+           tracking-[0.2em] text-glow-red;
+  }
+  .section-label::before {
+    content: '[ ';
+    @apply text-ink-muted;
+  }
+  .section-label::after {
+    content: ' ]';
+    @apply text-ink-muted;
+  }
+
+  /* Card surface — glass-morphism on dark with red-tinted top edge
+     accent on hover. Used for feature cards, tier teasers, code
+     previews, etc. */
+  .card {
+    @apply relative overflow-hidden rounded-xl border border-white/8
+           bg-surface-raised/60 backdrop-blur-sm
+           shadow-inset-divider transition-all duration-300
+           hover:border-glow-red/30 hover:bg-surface-raised/80;
+  }
+  .card::before {
+    content: '';
+    @apply pointer-events-none absolute inset-x-0 top-0 h-px
+           opacity-0 transition-opacity duration-300;
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      rgba(226, 56, 71, 0.6) 50%,
+      transparent 100%
+    );
+  }
+  .card:hover::before {
+    @apply opacity-100;
+  }
+
+  /* Subtle grid background — used on hero + select sections to add
+     depth without overpowering content. */
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 75%);
+  }
+
+  /* Code-preview block — monospace, dark inset, syntax-friendly
+     foreground tones. */
+  .code-preview {
+    @apply rounded-xl border border-white/8 bg-surface-inset
+           font-mono text-xs leading-6 text-ink-secondary
+           shadow-inset-divider;
+  }
+  .code-preview .code-window-chrome {
+    @apply flex items-center gap-2 border-b border-white/8 px-4 py-3;
+  }
+  .code-preview .code-window-chrome span.pip {
+    @apply h-2.5 w-2.5 rounded-full bg-white/15;
+  }
+
+  /* Accent rule — vertical glow line used to draw the eye to a
+     metric or callout. */
+  .accent-rule {
+    @apply border-l-2 border-glow-red pl-6;
+    box-shadow: -2px 0 16px -4px rgba(226, 56, 71, 0.4);
+  }
+
+  /* Trust pip — small dot used in stat callouts. */
+  .arrow-bullet {
+    @apply text-glow-red font-mono;
   }
 }

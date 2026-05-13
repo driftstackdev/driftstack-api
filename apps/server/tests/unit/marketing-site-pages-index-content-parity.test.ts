@@ -118,7 +118,7 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/API Starter \$149\/mo · Builder \$499\/mo · Scale \$1,499\/mo/);
     expect(body).toMatch(/2 \/ 8 \/ 24 concurrent sessions per tier; Enterprise custom/);
     expect(body).toMatch(
-      /Bundled LLM, or bring your own Anthropic API key, for AI-driven sessions \(Builder\+\)/,
+      /Bundled LLM, or bring your own Anthropic API key, for AI-driven sessions\s+\(Builder\+\)/,
     );
   });
 

@@ -44,7 +44,9 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
   });
 
   it("Product-category 7-link framing pinned: /pricing Pricing + /comparison Comparison + /roadmap Roadmap + /self-hosted Self-hosted + https://docs.driftstack.dev Docs (external, noopener noreferrer, target=_blank) + https://app.driftstack.dev/signup 'Sign up' + https://app.driftstack.dev/login 'Sign in' — pinned so the 7-product-link surface + Docs-external-safety + auth-URL-dashboard-routes commitment survives", () => {
-    expect(body).toMatch(/<h3 class="font-medium text-slate-900">Product<\/h3>/);
+    expect(body).toMatch(
+      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Product<\/h3>/,
+    );
     expect(body).toMatch(/<li><a href="\/pricing" class="nav-link">Pricing<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/comparison" class="nav-link">Comparison<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/roadmap" class="nav-link">Roadmap<\/a><\/li>/);
@@ -61,7 +63,9 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
   });
 
   it('Company-category 5-link framing pinned: /about + /faq + /changelog + mailto:support@driftstack.dev + mailto:sales@driftstack.dev — pinned so the 5-company-link surface + 2-mailto-channel (support + sales) commitment survives (drift to dropping either mailto would orphan the sales+support routing)', () => {
-    expect(body).toMatch(/<h3 class="font-medium text-slate-900">Company<\/h3>/);
+    expect(body).toMatch(
+      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Company<\/h3>/,
+    );
     expect(body).toMatch(/<li><a href="\/about" class="nav-link">About<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/faq" class="nav-link">FAQ<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/changelog" class="nav-link">Changelog<\/a><\/li>/);
@@ -74,7 +78,9 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
   });
 
   it("Trust-category 5-link framing pinned: /trust 'Trust center' + /security Security + /trust/sub-processors Sub-processors + /trust/incidents Incidents + https://status.driftstack.dev Status (external, noopener noreferrer, target=_blank) — pinned so the 5-trust-link surface + status.driftstack.dev-external safety commitment survives", () => {
-    expect(body).toMatch(/<h3 class="font-medium text-slate-900">Trust<\/h3>/);
+    expect(body).toMatch(
+      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Trust<\/h3>/,
+    );
     expect(body).toMatch(/<li><a href="\/trust" class="nav-link">Trust center<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/security" class="nav-link">Security<\/a><\/li>/);
     expect(body).toMatch(
@@ -87,7 +93,9 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
   });
 
   it("Legal-category 4-link framing pinned: /legal/terms Terms + /legal/privacy Privacy + /legal/dpa DPA + /legal/aup 'Acceptable Use' — pinned so the 4-legal-link surface stays consistent with the W506-pinned legal/ docs (drift to dropping any legal page from the footer would orphan it from compliance review-discovery)", () => {
-    expect(body).toMatch(/<h3 class="font-medium text-slate-900">Legal<\/h3>/);
+    expect(body).toMatch(
+      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Legal<\/h3>/,
+    );
     expect(body).toMatch(/<li><a href="\/legal\/terms" class="nav-link">Terms<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/legal\/privacy" class="nav-link">Privacy<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/legal\/dpa" class="nav-link">DPA<\/a><\/li>/);

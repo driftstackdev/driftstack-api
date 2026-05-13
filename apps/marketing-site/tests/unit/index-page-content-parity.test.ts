@@ -134,7 +134,7 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
 
   it('Bundled-LLM-or-BYOK claim pinned (Builder+ tier gate)', () => {
     expect(body).toMatch(
-      /Bundled LLM, or bring your own Anthropic API key, for AI-driven sessions \(Builder\+\)/,
+      /Bundled LLM, or bring your own Anthropic API key, for AI-driven sessions\s+\(Builder\+\)/,
     );
   });
 });
