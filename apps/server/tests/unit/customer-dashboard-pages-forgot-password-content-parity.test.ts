@@ -50,7 +50,7 @@ describe('W491.C apps/customer-dashboard/src/pages/forgot-password.astro content
 
   it("Anti-enumeration success copy: 'If <email> matches a Driftstack account, a reset link is on the way. The link expires in <window>.' (conditional 'if' phrasing — never confirms whether the email matched) — pinned so the customer-facing copy doesn't accidentally leak account existence by phrasing it as 'we sent a link' (which would imply confirmation) instead of 'if it matches' (which doesn't)", () => {
     expect(body).toMatch(
-      /If <span data-success-email class="mono"><\/span> matches a Driftstack account, a reset link\s*\n?\s*is on the way\. The link expires in <span data-success-window class="mono">60 minutes<\/span/,
+      /If <span data-success-email class="[^"]+"><\/span> matches a Driftstack\s*\n?\s*account, a reset link is on the way\. The link expires in <span\s*\n?\s*data-success-window\s*\n?\s*class="[^"]+">60 minutes<\/span/,
     );
   });
 
@@ -87,7 +87,7 @@ describe('W491.C apps/customer-dashboard/src/pages/forgot-password.astro content
   it("Page chrome: withSidebar={false} layout + 'Remembered it? Sign in.' fallback link to /login — pinned so the no-sidebar auth-page convention stays consistent + the sign-in escape hatch survives for customers who realize they remember their password mid-flow", () => {
     expect(body).toMatch(/<DashboardLayout title="Forgot password" withSidebar=\{false\}>/);
     expect(body).toMatch(
-      /Remembered it\? <a href="\/login" class="text-oxblood-700 underline">Sign in<\/a>/,
+      /Remembered it\? <a\s*\n?\s*href="\/login"\s*\n?\s*class="text-glow-red[^"]*"\s*\n?\s*>\s*Sign in\s*<\/a\s*\n?\s*>/,
     );
   });
 

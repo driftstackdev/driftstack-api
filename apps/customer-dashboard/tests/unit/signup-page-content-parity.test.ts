@@ -81,7 +81,7 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
   });
 
   it('"one signup per email" framing pinned', () => {
-    expect(body).toMatch(/one signup per email/);
+    expect(body).toMatch(/one signup\s+per email/);
   });
 
   it('Email autocomplete + new-password autocomplete attributes pinned (a11y + UX)', () => {

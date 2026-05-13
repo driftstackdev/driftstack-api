@@ -43,7 +43,7 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
       /const params = new URLSearchParams\(window\.location\.search\);\s*\n?\s*const token = params\.get\('token'\);\s*\n?\s*\n?\s*if \(!token\) \{\s*\n?\s*form\.classList\.add\('hidden'\);\s*\n?\s*missing\.classList\.remove\('hidden'\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /No reset token in URL\. Open the page from the link in your reset email, or\s*\n?\s*<a href="\/forgot-password" class="text-oxblood-700 underline">request a new one<\/a>\./,
+      /No reset token in URL\. Open the page from the link in your reset email, or\s*\n?\s*<a\s*\n?\s*href="\/forgot-password"\s*\n?\s*class="text-glow-red[^"]*"\s*\n?\s*>\s*request a new one\s*<\/a\s*\n?\s*>\./,
     );
   });
 
@@ -83,7 +83,7 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
   it("Page chrome + cross-link: withSidebar={false} + 'Choose a new password for your Driftstack account. The link is single-use; if you need another, request one from the forgot-password page.' framing + /forgot-password cross-link — pinned so customers landing on an expired token have a clear path back to request a new one (instead of getting stuck)", () => {
     expect(body).toMatch(/<DashboardLayout title="Reset password" withSidebar=\{false\}>/);
     expect(body).toMatch(
-      /Choose a new password for your Driftstack account\. The link is single-use; if you need\s*\n?\s*another, request one from the\s*\n?\s*<a href="\/forgot-password" class="text-oxblood-700 underline">forgot-password<\/a> page\./,
+      /Choose a new password for your Driftstack account\. The link is single-use; if you need\s*\n?\s*another, request one from the\s*\n?\s*<a\s*\n?\s*href="\/forgot-password"\s*\n?\s*class="text-glow-red[^"]*"\s*\n?\s*>\s*forgot-password\s*<\/a\s*\n?\s*> page\./,
     );
   });
 

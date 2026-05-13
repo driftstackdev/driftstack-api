@@ -40,36 +40,51 @@ const navItems = [
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b0f14" />
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
     <meta name="robots" content="noindex" />
   </head>
-  <body class="bg-slate-50 text-slate-900">
+  <body class="relative">
     {/*
       V-219* — brand alignment with marketing site:
-        - Sidebar header: D-badge + lowercase font-mono "driftstack" wordmark
-          matches apps/marketing-site/src/components/Header.astro pattern
+        - Sidebar header: D-badge (gradient-accent) + lowercase font-mono
+          "driftstack" wordmark matches apps/marketing-site/src/components/
+          Header.astro pattern.
         - withSidebar={false} branch: minimal horizontal header so onboarding
-          pages have brand presence (Gap 2 from the V-219* audit)
-        - Footer (signed-in dashboard) with legal-doc links (Gap 7)
+          pages have brand presence (Gap 2 from the V-219* audit) +
+          ambient radial-glow background so the auth surfaces feel cohesive
+          with the marketing landing.
+        - Footer (signed-in dashboard) with legal-doc links (Gap 7).
     */}
+
+    {/* Ambient background — only visible when withSidebar is false (auth +
+        onboarding pages). The sidebar pages have plenty of UI chrome so the
+        ambient glow would be visually noisy. */}
+    {!withSidebar && (
+      <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">
+        <div class="absolute inset-x-0 top-0 h-[600px] bg-glow-radial-red" />
+        <div class="absolute inset-x-0 bottom-0 h-[400px] bg-glow-radial-red-soft" />
+      </div>
+    )}
+
     <div class="flex min-h-screen flex-col">
       {
         !withSidebar && (
-          <header class="border-b border-slate-200 bg-white">
+          <header class="border-b border-white/8 bg-surface-base/70 backdrop-blur-md">
             <div class="mx-auto flex max-w-6xl items-center px-6 py-4">
               <a
                 href="/"
-                class="flex items-center gap-2 font-mono text-base font-semibold text-slate-900"
+                class="group flex items-center gap-2.5 font-mono text-base font-semibold text-ink-primary"
               >
-                <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700 text-white">
+                <span class="relative inline-flex h-8 w-8 items-center justify-center rounded-md bg-gradient-accent text-white shadow-glow-red transition-all duration-300 group-hover:shadow-glow-red-lg">
                   D
                 </span>
-                <span>driftstack</span>
+                <span class="tracking-tight">driftstack</span>
               </a>
             </div>
           </header>
@@ -78,16 +93,16 @@ const navItems = [
       <div class="flex flex-1">
         {
           withSidebar && (
-            <aside class="hidden w-56 shrink-0 border-r border-slate-200 bg-white md:block">
-              <div class="flex h-16 items-center px-6 border-b border-slate-200">
+            <aside class="hidden w-60 shrink-0 border-r border-white/8 bg-surface-raised/40 backdrop-blur-md md:block">
+              <div class="flex h-16 items-center px-6 border-b border-white/8">
                 <a
                   href="/"
-                  class="flex items-center gap-2 font-mono text-base font-semibold text-slate-900"
+                  class="group flex items-center gap-2.5 font-mono text-base font-semibold text-ink-primary"
                 >
-                  <span class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700 text-white">
+                  <span class="relative inline-flex h-8 w-8 items-center justify-center rounded-md bg-gradient-accent text-white shadow-glow-red transition-all duration-300 group-hover:shadow-glow-red-lg">
                     D
                   </span>
-                  <span>driftstack</span>
+                  <span class="tracking-tight">driftstack</span>
                 </a>
               </div>
               {/*
@@ -99,19 +114,19 @@ const navItems = [
               */}
               <div
                 data-act-as-picker-wrap
-                class="hidden border-b border-slate-200 px-4 py-3"
+                class="hidden border-b border-white/8 px-4 py-3"
               >
                 <label
                   for="act-as-picker"
-                  class="block text-[10px] font-mono uppercase tracking-widest text-slate-500"
+                  class="block text-[10px] font-mono uppercase tracking-widest text-ink-muted"
                 >
                   Acting as
                 </label>
                 <select
                   id="act-as-picker"
                   data-act-as-picker
-                  class="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
-                ></select>
+                  class="mt-1 w-full rounded-md border border-white/10 bg-surface-inset px-2 py-1.5 text-sm text-ink-primary focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+                />
               </div>
               <nav class="px-4 py-6">
                 <ul class="space-y-1">
@@ -120,10 +135,10 @@ const navItems = [
                       <a
                         href={item.href}
                         class:list={[
-                          'block rounded-md px-3 py-2 text-sm transition-colors',
+                          'block rounded-md px-3 py-2 text-sm transition-all duration-200',
                           pathname === item.href || pathname.startsWith(item.href + '/')
-                            ? 'bg-oxblood-50 font-medium text-oxblood-700'
-                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                            ? 'bg-glow-red/10 font-medium text-glow-red shadow-inset-divider'
+                            : 'text-ink-secondary hover:bg-white/5 hover:text-ink-primary',
                         ]}
                       >
                         {item.label}
@@ -141,18 +156,18 @@ const navItems = [
                ds_act_as_account selection differs from self. -->
           <div
             data-act-as-banner
-            class="hidden border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-900"
+            class="hidden border-b border-glow-red/30 bg-glow-red/10 px-6 py-3 text-sm text-glow-red-soft backdrop-blur-sm"
             role="status"
           >
             <div class="mx-auto flex max-w-6xl items-center justify-between gap-4">
               <span>
-                Acting as <span class="font-mono" data-act-as-owner>—</span>. All actions
-                read + write that team's resources.
+                Acting as <span class="font-mono" data-act-as-owner>—</span>. All actions read +
+                write that team's resources.
               </span>
               <button
                 type="button"
                 data-act-as-clear
-                class="rounded border border-amber-300 bg-white px-3 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100"
+                class="rounded border border-glow-red/40 bg-surface-raised px-3 py-1 text-xs font-medium text-ink-primary hover:bg-glow-red/20"
               >
                 Switch back to self
               </button>
@@ -232,9 +247,7 @@ const navItems = [
             .then(function (me) {
               if (!me || !Array.isArray(me.teams) || me.teams.length === 0) return;
               // Build options: Self + each team owner.
-              const options = [
-                { value: '', label: 'Self (' + (me.email || me.id) + ')' },
-              ];
+              const options = [{ value: '', label: 'Self (' + (me.email || me.id) + ')' }];
               for (const t of me.teams) {
                 options.push({
                   value: t.owner_account_id,
@@ -269,9 +282,9 @@ const navItems = [
             });
         })();
       </script>
-      <footer class="border-t border-slate-200 bg-white">
+      <footer class="border-t border-white/8 bg-surface-base/70 backdrop-blur-md">
         <div
-          class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4 text-xs text-slate-500"
+          class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4 text-xs text-ink-muted"
         >
           <span>Driftstack</span>
           {/* W211 — these pages live on the marketing-site at
@@ -280,11 +293,13 @@ const navItems = [
               relative paths would 404 against the Cloudflare Pages
               project that serves the dashboard. */}
           <nav class="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <a href="https://driftstack.dev/legal/privacy" class="hover:text-oxblood-700">Privacy</a>
-            <a href="https://driftstack.dev/legal/terms" class="hover:text-oxblood-700">Terms</a>
-            <a href="https://driftstack.dev/legal/dpa" class="hover:text-oxblood-700">DPA</a>
-            <a href="https://driftstack.dev/legal/aup" class="hover:text-oxblood-700">AUP</a>
-            <a href="https://driftstack.dev/trust/sub-processors" class="hover:text-oxblood-700">Sub-processors</a>
+            <a href="https://driftstack.dev/legal/privacy" class="hover:text-glow-red">Privacy</a>
+            <a href="https://driftstack.dev/legal/terms" class="hover:text-glow-red">Terms</a>
+            <a href="https://driftstack.dev/legal/dpa" class="hover:text-glow-red">DPA</a>
+            <a href="https://driftstack.dev/legal/aup" class="hover:text-glow-red">AUP</a>
+            <a href="https://driftstack.dev/trust/sub-processors" class="hover:text-glow-red"
+              >Sub-processors</a
+            >
           </nav>
         </div>
       </footer>

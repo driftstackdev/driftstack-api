@@ -56,7 +56,7 @@ describe('W352.B /forgot-password page parity', () => {
     // because the server's response is shape-stable regardless of
     // whether the email matched.
     expect(body).toMatch(
-      /If\s*<span[^>]*data-success-email[^>]*>[^<]*<\/span>\s*matches a Driftstack account/,
+      /If\s*<span[^>]*data-success-email[^>]*>[^<]*<\/span>\s*matches a Driftstack\s*[\n\r]?\s*account/,
     );
   });
 

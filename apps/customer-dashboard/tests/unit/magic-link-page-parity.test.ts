@@ -43,7 +43,7 @@ describe('#190 magic-link consume page parity', () => {
 
   it('fallback form is hidden by default and revealed when no URL token', () => {
     expect(body).toContain('data-form="magic-link"');
-    expect(body).toMatch(/class="mt-8 hidden space-y-4"/);
+    expect(body).toMatch(/class="hidden space-y-5"/);
     expect(body).toContain('showFallbackForm');
   });
 

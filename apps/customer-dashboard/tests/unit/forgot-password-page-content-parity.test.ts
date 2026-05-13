@@ -54,7 +54,7 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
 
   it('"If <email> matches a Driftstack account, a reset link is on the way" anti-enumeration copy', () => {
     expect(body).toMatch(
-      /If <span data-success-email[^>]*><\/span> matches a Driftstack account, a reset link\s+is on the way/,
+      /If\s*<span data-success-email[^>]*><\/span>\s*matches a Driftstack\s*[\n\r]?\s*account, a reset link/,
     );
   });
 
@@ -65,7 +65,7 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
     expect(body).toMatch(/successWindow\.textContent = minutes \+ ' minutes'/);
     // Default fallback copy when no expires_at returned.
     // (Astro source splits the closing `</span\n>` across lines.)
-    expect(body).toMatch(/<span data-success-window[^>]*>60 minutes<\/span\s*>/);
+    expect(body).toMatch(/<span\s*\n?\s*data-success-window[^>]*>60 minutes<\/span\s*>/);
   });
 
   it('AUTH_EXPOSE_DEBUG_TOKEN dev paste-in: debug_token surfaces /reset-password?token=…', () => {
@@ -81,7 +81,9 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
   });
 
   it('/login cross-link present ("Remembered it? Sign in")', () => {
-    expect(body).toMatch(/<a href="\/login" class="text-oxblood-700 underline">Sign in<\/a>/);
+    expect(body).toMatch(
+      /<a\s*\n?\s*href="\/login"\s*\n?\s*class="[^"]+"\s*>\s*Sign in\s*<\/a\s*>/,
+    );
     expect(body).toMatch(/Remembered it\?/);
   });
 

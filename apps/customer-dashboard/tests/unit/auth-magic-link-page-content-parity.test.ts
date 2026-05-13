@@ -82,13 +82,15 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
 
   it('fallback-form copy pinned: "Paste the one from your magic-link email" + ?token= hint', () => {
     expect(body).toMatch(
-      /We couldn't find a token in the URL\. Paste the one from your magic-link email below\s+\(everything after <code>\?token=<\/code>\)/,
+      /We couldn't find a token in the URL\. Paste the one from your magic-link email below\s+\(everything after <code[^>]*>\?token=<\/code>\)/,
     );
   });
 
   it('/login cross-link present ("Link expired? Request a fresh one")', () => {
     expect(body).toMatch(/Link expired\? Request a fresh one from the/);
-    expect(body).toMatch(/<a href="\/login" class="text-oxblood-700 underline">login page<\/a>/);
+    expect(body).toMatch(
+      /<a\s*\n?\s*href="\/login"\s*\n?\s*class="[^"]+"\s*>\s*login page\s*<\/a\s*>/,
+    );
     expect(existsSync(LOGIN_PAGE)).toBe(true);
   });
 
@@ -98,7 +100,7 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
 
   it('"Signing you in…" intro copy pinned (status surface during auto-submit)', () => {
     expect(body).toMatch(
-      /<h1 class="text-3xl font-semibold tracking-tight text-slate-900">Signing you in…<\/h1>/,
+      /<h1 class="[^"]*text-4xl[^"]*text-ink-primary[^"]*"[^>]*>\s*Signing you in…\s*<\/h1>/,
     );
     expect(body).toMatch(/intro\.textContent = 'Signing you in…'/);
   });

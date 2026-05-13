@@ -91,8 +91,8 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/`ds_act_as_account` for the\s*\n?\s*\/\/\s*optional team-owner override/);
   });
 
-  it('V-219* D-badge appears in both withSidebar=true sidebar + withSidebar=false header branches', () => {
-    const dBadgeMatches = body.match(/rounded-md bg-oxblood-700 text-white/g);
+  it('V-219* D-badge (gradient-accent + glow-red shadow) appears in both withSidebar=true sidebar + withSidebar=false header branches', () => {
+    const dBadgeMatches = body.match(/rounded-md bg-gradient-accent text-white shadow-glow-red/g);
     expect(dBadgeMatches).not.toBeNull();
     expect(dBadgeMatches!.length).toBeGreaterThanOrEqual(2);
     expect(body).toMatch(/V-219\* — brand alignment with marketing site:/);
@@ -106,7 +106,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
   it('V-331 "Acting as" picker: hidden by default + label + select element', () => {
     expect(body).toMatch(/V-331 — "Acting as" picker/);
     expect(body).toMatch(/data-act-as-picker-wrap/);
-    expect(body).toMatch(/class="hidden border-b border-slate-200 px-4 py-3"/);
+    expect(body).toMatch(/class="hidden border-b border-white\/8 px-4 py-3"/);
     expect(body).toMatch(/<label\s*\n?\s*for="act-as-picker"/);
     expect(body).toMatch(/Acting as\s*\n?\s*<\/label>/);
     expect(body).toMatch(/<select\s*\n?\s*id="act-as-picker"\s*\n?\s*data-act-as-picker/);
@@ -115,7 +115,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
   it('"Acting as" banner: x-team-resources framing + "Switch back to self" button', () => {
     expect(body).toMatch(/data-act-as-banner/);
     expect(body).toMatch(
-      /Acting as <span class="font-mono" data-act-as-owner>—<\/span>\. All actions\s*\n?\s*read \+ write that team's resources/,
+      /Acting as <span class="font-mono" data-act-as-owner>—<\/span>\. All actions read \+\s*\n?\s*write that team's resources/,
     );
     expect(body).toMatch(/data-act-as-clear/);
     expect(body).toMatch(/>\s*\n?\s*Switch back to self\s*\n?\s*</);
@@ -153,19 +153,19 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
       /W211 — these pages live on the marketing-site at\s*\n?\s*[\s\S]*?driftstack\.dev/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/privacy" class="hover:text-oxblood-700">Privacy<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/privacy" class="hover:text-glow-red">Privacy<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/terms" class="hover:text-oxblood-700">Terms<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/terms" class="hover:text-glow-red">Terms<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/dpa" class="hover:text-oxblood-700">DPA<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/dpa" class="hover:text-glow-red">DPA<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/aup" class="hover:text-oxblood-700">AUP<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/aup" class="hover:text-glow-red">AUP<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/trust\/sub-processors" class="hover:text-oxblood-700">Sub-processors<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/trust\/sub-processors" class="hover:text-glow-red"\s*\n?\s*>Sub-processors<\/a\s*>/,
     );
   });
 
@@ -184,9 +184,9 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(existsSync(resolve(dir, 'settings.astro'))).toBe(true);
   });
 
-  it('active-route highlighting: pathname === href OR startsWith href+"/" → oxblood-50 + oxblood-700', () => {
+  it('active-route highlighting: pathname === href OR startsWith href+"/" → glow-red bg/text + inset-divider shadow', () => {
     expect(body).toMatch(
-      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n?\s*\?\s*'bg-oxblood-50 font-medium text-oxblood-700'/,
+      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n?\s*\?\s*'bg-glow-red\/10 font-medium text-glow-red shadow-inset-divider'/,
     );
   });
 });

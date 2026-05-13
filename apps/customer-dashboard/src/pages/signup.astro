@@ -12,63 +12,71 @@ const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="Sign up" withSidebar={false}>
-  <div class="mx-auto max-w-md px-6 py-16" data-page="signup">
-    <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Sign up</h1>
-    <p class="mt-3 text-sm text-slate-600">
-      Create your Driftstack account. After signup we'll email you a verification
-      code; one signup per email.
+  <div
+    class="mx-auto flex min-h-[calc(100vh-14rem)] w-full max-w-md flex-col justify-center px-6 py-16 animate-fade-up"
+    data-page="signup"
+  >
+    <p class="section-label">Create account</p>
+    <h1 class="mt-5 text-4xl font-semibold tracking-tight text-ink-primary" style="letter-spacing: -0.02em;">
+      Sign up
+    </h1>
+    <p class="mt-3 text-sm text-ink-secondary">
+      Create your Driftstack account. After signup we'll email you a verification code; one signup
+      per email.
     </p>
 
-    <div
-      data-banner
-      class="mt-6 hidden rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
-      role="status"
-    >
+    <div class="auth-card mt-8">
+      <div data-banner class="banner-warn mb-5 hidden" role="status"></div>
+
+      <form data-form="signup" class="space-y-5">
+        <div>
+          <label class="form-label" for="signup-email">Email</label>
+          <input
+            id="signup-email"
+            name="email"
+            type="email"
+            required
+            autocomplete="email"
+            class="form-input"
+            placeholder="you@example.com"
+          />
+        </div>
+        <div>
+          <label class="form-label" for="signup-name">Name (optional)</label>
+          <input
+            id="signup-name"
+            name="name"
+            type="text"
+            autocomplete="name"
+            class="form-input"
+            placeholder="Jane Doe"
+          />
+        </div>
+        <div>
+          <label class="form-label" for="signup-password">Password</label>
+          <input
+            id="signup-password"
+            name="password"
+            type="password"
+            required
+            minlength="12"
+            autocomplete="new-password"
+            class="form-input"
+            placeholder="••••••••••••"
+          />
+          <p class="form-helper">12+ characters. Use a passphrase.</p>
+        </div>
+        <button type="submit" class="btn-primary w-full">Create account</button>
+      </form>
+
+      <p class="mt-6 text-xs text-ink-muted">
+        Already have an account? <a
+          data-login-link
+          href="/login"
+          class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft">Sign in</a
+        >.
+      </p>
     </div>
-
-    <form data-form="signup" class="mt-8 space-y-4">
-      <div>
-        <label class="block text-sm font-medium text-slate-700" for="signup-email">Email</label>
-        <input
-          id="signup-email"
-          name="email"
-          type="email"
-          required
-          autocomplete="email"
-          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-slate-700" for="signup-name">Name (optional)</label>
-        <input
-          id="signup-name"
-          name="name"
-          type="text"
-          autocomplete="name"
-          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-slate-700" for="signup-password">Password</label>
-        <input
-          id="signup-password"
-          name="password"
-          type="password"
-          required
-          minlength="12"
-          autocomplete="new-password"
-          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        />
-        <p class="mt-1 text-xs text-slate-500">12+ characters. Use a passphrase.</p>
-      </div>
-      <button type="submit" class="btn-primary w-full">Create account</button>
-    </form>
-
-    <p class="mt-6 text-xs text-slate-500">
-      Already have an account? <a data-login-link href="/login" class="text-oxblood-700 underline"
-        >Sign in</a
-      >.
-    </p>
   </div>
 
   <script is:inline define:vars={{ apiBaseUrl }}>
@@ -109,7 +117,9 @@ const apiBaseUrl = resolveApiBaseUrl();
           credentials: 'include',
         })
           .then((r) =>
-            r.ok ? r.json() : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+            r.ok
+              ? r.json()
+              : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
           )
           .then((body) => {
             // Stash the email for the verify page (no token yet — that

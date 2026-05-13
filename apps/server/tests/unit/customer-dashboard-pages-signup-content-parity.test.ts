@@ -40,20 +40,16 @@ describe('W492.B apps/customer-dashboard/src/pages/signup.astro content parity',
 
   it("Form structure: email required + name optional ('Name (optional)' label) + password required minlength=12 + '12+ characters. Use a passphrase.' hint — pinned so the minimum-12-char password policy + the 'passphrase encouraged' hint stay consistent with reset-password page (both client-side enforce the same floor)", () => {
     expect(body).toMatch(/required\s*\n?\s*autocomplete="email"/);
-    expect(body).toMatch(
-      /<label class="block text-sm font-medium text-slate-700" for="signup-name">Name \(optional\)<\/label>/,
-    );
+    expect(body).toMatch(/<label class="form-label" for="signup-name">Name \(optional\)<\/label>/);
     expect(body).toMatch(
       /<input\s*\n?\s*id="signup-password"\s*\n?\s*name="password"\s*\n?\s*type="password"\s*\n?\s*required\s*\n?\s*minlength="12"\s*\n?\s*autocomplete="new-password"/,
     );
-    expect(body).toMatch(
-      /<p class="mt-1 text-xs text-slate-500">12\+ characters\. Use a passphrase\.<\/p>/,
-    );
+    expect(body).toMatch(/<p class="form-helper">12\+ characters\. Use a passphrase\.<\/p>/);
   });
 
   it("Page intro framing pinned: 'Create your Driftstack account. After signup we'll email you a verification code; one signup per email.' — pinned so the 'one signup per email' uniqueness invariant is surfaced before submission (drift to dropping would surprise customers who try to signup with an already-taken email)", () => {
     expect(body).toMatch(
-      /Create your Driftstack account\. After signup we'll email you a verification\s*\n?\s*code; one signup per email\./,
+      /Create your Driftstack account\. After signup we'll email you a verification code; one signup\s*\n?\s*per email\./,
     );
   });
 
@@ -94,7 +90,7 @@ describe('W492.B apps/customer-dashboard/src/pages/signup.astro content parity',
   it("Page chrome: withSidebar={false} + 'Already have an account? Sign in' fallback link — pinned so the no-sidebar auth-page convention stays consistent + the sign-in escape hatch survives for customers who realize they already have an account mid-flow", () => {
     expect(body).toMatch(/<DashboardLayout title="Sign up" withSidebar=\{false\}>/);
     expect(body).toMatch(
-      /Already have an account\? <a data-login-link href="\/login" class="text-oxblood-700 underline"\s*\n?\s*>Sign in<\/a\s*\n?\s*>/,
+      /Already have an account\? <a\s*\n?\s*data-login-link\s*\n?\s*href="\/login"\s*\n?\s*class="text-glow-red[^"]*"\s*\n?\s*>\s*Sign in\s*<\/a\s*\n?\s*>/,
     );
   });
 

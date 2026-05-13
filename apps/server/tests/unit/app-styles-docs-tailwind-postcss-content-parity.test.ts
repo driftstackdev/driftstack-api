@@ -17,41 +17,70 @@ function read(rel: string): string {
 }
 
 describe('W626 app styles + docs tailwind + postcss content parity', () => {
-  it('admin-panel + customer-dashboard src/styles/base.css: shared 3-layer Tailwind base + tokens-shared-with-marketing-site framing + light color-scheme + Geist+Berkeley font stacks + 4 brand atoms (btn-primary oxblood-700 + btn-secondary white + nav-link + dashboard-card) pinned', () => {
-    const sharedShape = (app: string) => {
-      const body = read(`apps/${app}/src/styles/base.css`);
-      expect(body).toMatch(/^@tailwind base;$/m);
-      expect(body).toMatch(/^@tailwind components;$/m);
-      expect(body).toMatch(/^@tailwind utilities;$/m);
-      expect(body).toMatch(/Tokens shared with apps\/marketing-site\/src\/styles\/base\.css\./);
-      expect(body).toMatch(/Keep$/m);
-      expect(body).toMatch(/synchronised — customer experience reads as one product\./);
-      expect(body).toMatch(/^@layer base \{$/m);
-      expect(body).toMatch(/color-scheme: light;/);
-      expect(body).toMatch(/@apply bg-slate-50 text-slate-900;/);
-      expect(body).toMatch(/font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;/);
-      expect(body).toMatch(/font-feature-settings: 'cv11', 'ss01';/);
-      expect(body).toMatch(
-        /font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;/,
-      );
-      expect(body).toMatch(/::selection \{/);
-      expect(body).toMatch(/@apply bg-oxblood-700 text-white;/);
-      expect(body).toMatch(/^@layer components \{$/m);
-      expect(body).toMatch(/\.btn-primary \{/);
-      expect(body).toMatch(
-        /@apply inline-flex items-center justify-center rounded-md bg-oxblood-700/,
-      );
-      expect(body).toMatch(/\.btn-secondary \{/);
-      expect(body).toMatch(/border border-slate-300 bg-white/);
-      expect(body).toMatch(/\.nav-link \{/);
-      expect(body).toMatch(
-        /@apply text-sm text-slate-600 transition-colors hover:text-oxblood-700;/,
-      );
-      expect(body).toMatch(/\.dashboard-card \{/);
-      expect(existsSync(resolve(REPO_ROOT, `apps/${app}/src/styles/base.css`))).toBe(true);
-    };
-    sharedShape('admin-panel');
-    sharedShape('customer-dashboard');
+  it('admin-panel src/styles/base.css: 3-layer Tailwind base + light color-scheme + Geist+Berkeley font stacks + 4 brand atoms (btn-primary oxblood-700 + btn-secondary white + nav-link + dashboard-card) — admin-panel still on the legacy light theme pinned', () => {
+    const body = read('apps/admin-panel/src/styles/base.css');
+    expect(body).toMatch(/^@tailwind base;$/m);
+    expect(body).toMatch(/^@tailwind components;$/m);
+    expect(body).toMatch(/^@tailwind utilities;$/m);
+    expect(body).toMatch(/^@layer base \{$/m);
+    expect(body).toMatch(/color-scheme: light;/);
+    expect(body).toMatch(/@apply bg-slate-50 text-slate-900;/);
+    expect(body).toMatch(/font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;/);
+    expect(body).toMatch(/font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;/);
+    expect(body).toMatch(/@apply bg-oxblood-700 text-white;/);
+    expect(body).toMatch(/\.btn-primary \{/);
+    expect(body).toMatch(
+      /@apply inline-flex items-center justify-center rounded-md bg-oxblood-700/,
+    );
+    expect(body).toMatch(/\.btn-secondary \{/);
+    expect(body).toMatch(/border border-slate-300 bg-white/);
+    expect(body).toMatch(/\.nav-link \{/);
+    expect(body).toMatch(/@apply text-sm text-slate-600 transition-colors hover:text-oxblood-700;/);
+    expect(body).toMatch(/\.dashboard-card \{/);
+    expect(existsSync(resolve(REPO_ROOT, 'apps/admin-panel/src/styles/base.css'))).toBe(true);
+  });
+
+  it('customer-dashboard src/styles/base.css (R2 dark refactor): dark color-scheme + surface-base bg + glass btn-primary with shadow-glow-red + form-input/form-label/banner-warn/auth-card + section-label [BRACKETED] mono + dashboard-card glass — tokens-shared-with-marketing-site framing pinned', () => {
+    const body = read('apps/customer-dashboard/src/styles/base.css');
+    expect(body).toMatch(/^@tailwind base;$/m);
+    expect(body).toMatch(/^@tailwind components;$/m);
+    expect(body).toMatch(/^@tailwind utilities;$/m);
+    expect(body).toMatch(/Dark-mode-first dashboard surface\./);
+    expect(body).toMatch(/Tokens shared with apps\/marketing-/);
+    expect(body).toMatch(/color-scheme: dark;/);
+    expect(body).toMatch(/@apply bg-surface-base text-ink-primary;/);
+    expect(body).toMatch(/font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;/);
+    expect(body).toMatch(/font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;/);
+    expect(body).toMatch(/@apply bg-oxblood-700 text-white;/);
+    expect(body).toMatch(/\.btn-primary \{/);
+    expect(body).toMatch(/bg-oxblood-700/);
+    expect(body).toMatch(/shadow-glow-red/);
+    expect(body).toMatch(/hover:bg-oxblood-600/);
+    expect(body).toMatch(/hover:-translate-y-0\.5/);
+    expect(body).toMatch(/\.btn-secondary \{/);
+    expect(body).toMatch(/border border-white\/10/);
+    expect(body).toMatch(/backdrop-blur-sm/);
+    expect(body).toMatch(/\.nav-link \{/);
+    expect(body).toMatch(
+      /@apply text-sm text-ink-secondary transition-colors hover:text-glow-red;/,
+    );
+    expect(body).toMatch(/\.dashboard-card \{/);
+    expect(body).toMatch(/rounded-xl border border-white\/8/);
+    expect(body).toMatch(/\.form-input \{/);
+    expect(body).toMatch(/\.form-label \{/);
+    expect(body).toMatch(/\.form-helper \{/);
+    expect(body).toMatch(/\.banner-info \{/);
+    expect(body).toMatch(/\.banner-warn \{/);
+    expect(body).toMatch(/\.section-label \{/);
+    expect(body).toMatch(/font-mono text-xs uppercase/);
+    expect(body).toMatch(/\.section-label::before \{/);
+    expect(body).toMatch(/content: '\[ ';/);
+    expect(body).toMatch(/\.auth-card \{/);
+    expect(body).toMatch(/bg-surface-raised\/70 backdrop-blur-md/);
+    expect(body).toMatch(/shadow-glow-red/);
+    expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/src/styles/base.css'))).toBe(
+      true,
+    );
   });
 
   it('docs/src/styles/base.css: Tailwind base + Geist+Berkeley @font-face framing + light color-scheme + 3 brand atoms (btn-primary + btn-secondary + nav-link) — NO dashboard-card (docs-specific) pinned', () => {

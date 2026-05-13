@@ -58,9 +58,9 @@ describe('W372.B customer-dashboard /reset-password page content parity', () => 
   });
 
   it('missing-token UX: data-missing block + back-to-/forgot-password cross-link', () => {
-    expect(body).toMatch(/<div data-missing[\s\S]*?No reset token in URL/);
+    expect(body).toMatch(/<div\s*\n?\s*data-missing[\s\S]*?No reset token in URL/);
     expect(body).toMatch(
-      /Open the page from the link in your reset email, or\s+<a href="\/forgot-password" class="text-oxblood-700 underline">request a new one<\/a>/,
+      /Open the page from the link in your reset email, or\s+<a\s*\n?\s*href="\/forgot-password"\s*\n?\s*class="[^"]+"\s*>\s*request a new one\s*<\/a\s*>/,
     );
     expect(existsSync(FORGOT)).toBe(true);
     // Token-absent branch swaps form for missing UI.

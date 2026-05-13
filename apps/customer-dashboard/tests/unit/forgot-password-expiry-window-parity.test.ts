@@ -49,7 +49,7 @@ describe('W346.B /forgot-password expiry-window parity', () => {
   it('anti-enumeration framing: "If <email> matches a Driftstack account"', () => {
     // Pin the exact "If … matches" framing — the page must never
     // confirm or deny account existence.
-    expect(page).toMatch(/If [\s\S]{0,80}matches a Driftstack account/);
+    expect(page).toMatch(/If [\s\S]{0,200}matches a Driftstack[\s\S]{0,40}account/);
     expect(page).not.toMatch(/account does not exist/i);
     expect(page).not.toMatch(/no account found/i);
     expect(page).not.toMatch(/email not registered/i);
