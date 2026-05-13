@@ -32,12 +32,8 @@ describe('W498.A apps/marketing-site/src/pages/404.astro content parity', () => 
   });
 
   it("404 monogram + 'We couldn't find that.' heading pinned — pinned so the typography hierarchy (small uppercase 404 monogram → large heading) survives (drift to dropping the 404 monogram would lose the at-a-glance error-code signal; drift to changing heading copy would change the tone from human to canned)", () => {
-    expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-glow-red">404<\/p>/,
-    );
-    expect(body).toMatch(
-      /<h1 class="mt-4 text-4xl font-semibold tracking-tight text-ink-primary">\s*\n?\s*We couldn't find that\.\s*\n?\s*<\/h1>/,
-    );
+    expect(body).toMatch(/<p class="section-label">404<\/p>/);
+    expect(body).toMatch(/<h1[\s\S]*?>\s*\n?\s*We couldn't find that\.\s*\n?\s*<\/h1>/);
   });
 
   it("Body framing: 'The page you were looking for has moved, doesn't exist, or never did.' — pinned so the 3-state framing (moved / doesn't exist / never did) survives (drift to a 1-state framing would lose the gentle 'or never did' acknowledgment that some stale links were never valid)", () => {

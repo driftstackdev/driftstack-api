@@ -37,9 +37,7 @@ describe('W379.C marketing-site /500.astro content parity', () => {
   });
 
   it('500 chip + H1 "Something went wrong on our end." pinned', () => {
-    expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-glow-red">500<\/p>/,
-    );
+    expect(body).toMatch(/<p class="section-label">500<\/p>/);
     expect(body).toMatch(/<h1[^>]*>\s*Something went wrong on our end\.\s*<\/h1>/);
   });
 
@@ -48,12 +46,12 @@ describe('W379.C marketing-site /500.astro content parity', () => {
   });
 
   it('"The error has been captured; we\'ll look at it" implicit Sentry-capture claim pinned', () => {
-    expect(body).toMatch(/The error has been captured; we'll look at\s+it/);
+    expect(body).toMatch(/The error has been captured and we'll look\s+into it/);
   });
 
   it('support@driftstack.dev escape-hatch CTA inline + "URL you were on" framing', () => {
     expect(body).toMatch(
-      /<a href="mailto:support@driftstack\.dev" class="text-glow-red underline">support@driftstack\.dev<\/a>/,
+      /<a href="mailto:support@driftstack\.dev" class="text-glow-red[^"]*">support@driftstack\.dev<\/a>/,
     );
     expect(body).toMatch(/with the URL you were on/);
     expect(body).toMatch(/If this is blocking something time-sensitive, email/);
@@ -66,9 +64,7 @@ describe('W379.C marketing-site /500.astro content parity', () => {
     );
   });
 
-  it('Twitter/X + email-support fallback framing for pre-status-page-launch period', () => {
-    expect(body).toMatch(
-      /Status page lives at status\.driftstack\.dev when it lands\. Until\s+then, check the Twitter\/X account or email support/,
-    );
+  it('R6 status-page link footer pinned', () => {
+    expect(body).toMatch(/Live status: <a href="https:\/\/status\.driftstack\.dev"/);
   });
 });

@@ -3,16 +3,24 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
 <BaseLayout title="404 · Driftstack" description="Page not found.">
-  <section class="bg-surface-raised">
-    <div class="mx-auto max-w-3xl px-6 py-32 text-center">
-      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">404</p>
-      <h1 class="mt-4 text-4xl font-semibold tracking-tight text-ink-primary">
+  <section class="relative overflow-hidden">
+    <div class="absolute inset-0 bg-glow-radial-red opacity-60" aria-hidden="true"></div>
+    <div class="relative mx-auto max-w-3xl px-6 py-32 text-center animate-fade-up">
+      <p class="section-label">404</p>
+      <h1
+        class="mt-6 text-5xl font-semibold tracking-tight text-ink-primary md:text-6xl"
+        style="letter-spacing: -0.03em;"
+      >
         We couldn't find that.
       </h1>
-      <p class="mt-4 text-ink-secondary">
+      <p class="mt-6 max-w-prose mx-auto text-ink-secondary leading-relaxed">
         The page you were looking for has moved, doesn't exist, or never did.
+        If you typed a URL by hand, double-check the spelling. If you got
+        here from a link on driftstack.dev, drop us a line at
+        <a href="mailto:support@driftstack.dev" class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft">support@driftstack.dev</a> —
+        we'll fix it.
       </p>
-      <div class="mt-8 flex justify-center gap-4">
+      <div class="mt-10 flex flex-wrap justify-center gap-4">
         <a href="/" class="btn-primary">Back home</a>
         <a href="/pricing" class="btn-secondary">See pricing</a>
       </div>

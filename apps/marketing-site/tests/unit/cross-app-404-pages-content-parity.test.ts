@@ -39,9 +39,7 @@ describe('W379.B cross-app 404 pages content parity', () => {
     it('uses BaseLayout + 404 title chip', () => {
       expect(body).toMatch(/import BaseLayout from '\.\.\/layouts\/BaseLayout\.astro';/);
       expect(body).toMatch(/<BaseLayout title="404 · Driftstack" description="Page not found\."/);
-      expect(body).toMatch(
-        /<p class="font-mono text-xs uppercase tracking-widest text-glow-red">404<\/p>/,
-      );
+      expect(body).toMatch(/<p class="section-label">404<\/p>/);
     });
 
     it('marketing-specific copy: "We couldn\'t find that." + "moved, doesn\'t exist, or never did"', () => {

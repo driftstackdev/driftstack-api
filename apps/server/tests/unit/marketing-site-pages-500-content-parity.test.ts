@@ -37,17 +37,13 @@ describe('W498.B apps/marketing-site/src/pages/500.astro content parity', () => 
   });
 
   it("500 monogram + 'Something went wrong on our end.' heading — pinned so the typography hierarchy + the 'on us not you' tone survive (drift to a 'try again' heading would shift blame to the customer; drift to dropping the 500 monogram would lose the at-a-glance error-code signal)", () => {
-    expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-glow-red">500<\/p>/,
-    );
-    expect(body).toMatch(
-      /<h1 class="mt-4 text-4xl font-semibold tracking-tight text-ink-primary">\s*\n?\s*Something went wrong on our end\.\s*\n?\s*<\/h1>/,
-    );
+    expect(body).toMatch(/<p class="section-label">500<\/p>/);
+    expect(body).toMatch(/<h1[\s\S]*?>\s*\n?\s*Something went wrong on our end\.\s*\n?\s*<\/h1>/);
   });
 
   it("'This is on us, not you. The error has been captured; we'll look at it. If this is blocking something time-sensitive, email support@driftstack.dev with the URL you were on.' framing pinned — pinned so the explicit blame-claim + the captured-error reassurance + the URL-required escape-hatch all survive (drift to dropping 'with the URL you were on' would force support to play 20 questions to find which page failed)", () => {
     expect(body).toMatch(
-      /This is on us, not you\. The error has been captured; we'll look at\s*\n?\s*it\. If this is blocking something time-sensitive, email\s*\n?\s*<a href="mailto:support@driftstack\.dev" class="text-glow-red underline">support@driftstack\.dev<\/a>\s*\n?\s*with the URL you were on\./,
+      /This is on us, not you\. The error has been captured and we'll look\s*\n?\s*into it\. If this is blocking something time-sensitive, email\s*\n?\s*<a href="mailto:support@driftstack\.dev" class="text-glow-red[^"]*">support@driftstack\.dev<\/a>\s*\n?\s*with the URL you were on\b/,
     );
   });
 
@@ -58,10 +54,8 @@ describe('W498.B apps/marketing-site/src/pages/500.astro content parity', () => 
     );
   });
 
-  it("Future-status framing pinned: 'Status page lives at status.driftstack.dev when it lands. Until then, check the Twitter/X account or email support.' — pinned so the not-yet-live status page is honest with customers about its readiness (drift to silently linking would let customers click through to a broken/empty page; drift to dropping the Twitter/X mention would orphan customers from the interim outage-broadcast channel)", () => {
-    expect(body).toMatch(
-      /Status page lives at status\.driftstack\.dev when it lands\. Until\s*\n?\s*then, check the Twitter\/X account or email support\./,
-    );
+  it('R6 status-page link footer pinned (status page is now live so dropped the pre-launch fallback framing)', () => {
+    expect(body).toMatch(/Live status: <a href="https:\/\/status\.driftstack\.dev"/);
   });
 
   it('file exists at canonical path', () => {
