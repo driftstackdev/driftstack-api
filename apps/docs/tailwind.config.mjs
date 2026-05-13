@@ -4,8 +4,15 @@
 import typography from '@tailwindcss/typography';
 
 /** @type {import('tailwindcss').Config} */
+
+// R11 — docs site graphite palette synced with marketing-site +
+// customer-dashboard. Adds the surface / ink / glow tokens so the
+// docs reads as one product with driftstack.dev rather than the
+// previous light-theme context switch. Code blocks render on a
+// deeper slate-950 surface for readable contrast.
 export default {
   content: ['./src/**/*.{astro,html,js,jsx,md,mdx,ts,tsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
@@ -37,6 +44,24 @@ export default {
           900: '#0f172a',
           950: '#020617',
         },
+        surface: {
+          base: '#0f172a', // slate-900 — page body
+          raised: '#1e293b', // slate-800 — cards
+          elevated: '#334155', // slate-700 — elevated rows
+          inset: '#020617', // slate-950 — code blocks
+          divider: '#475569', // slate-600
+        },
+        ink: {
+          primary: '#f8fafc',
+          secondary: '#cbd5e1',
+          muted: '#94a3b8',
+          inverted: '#0f172a',
+        },
+        glow: {
+          red: '#e23847',
+          'red-soft': '#f25366',
+          'red-deep': '#a8202d',
+        },
       },
       fontFamily: {
         sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
@@ -44,6 +69,11 @@ export default {
       },
       maxWidth: {
         prose: '65ch',
+      },
+      boxShadow: {
+        'glow-red': '0 0 0 1px rgba(226, 56, 71, 0.3), 0 6px 20px -8px rgba(226, 56, 71, 0.35)',
+        'glow-red-lg': '0 0 0 1px rgba(226, 56, 71, 0.4), 0 12px 40px -12px rgba(226, 56, 71, 0.5)',
+        'inset-divider': 'inset 0 1px 0 rgba(255, 255, 255, 0.06)',
       },
     },
   },

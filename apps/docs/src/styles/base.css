@@ -2,17 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Geist Sans + Berkeley Mono are loaded via @font-face declarations
-   that ship with the deployed site. Falling back to system stack if
-   the font fetches fail. */
+/* R11 — dark-mode docs surface. Synced with the marketing-site +
+   customer-dashboard "graphite" palette so the product reads as one
+   site, not three. Code blocks land on slate-950 (surface.inset) for
+   high-contrast monospace readability — replaces the prior light
+   slate-100 prose-code background that the founder flagged as
+   "ugly extra white background, barely readable". */
 
 @layer base {
   :root {
-    color-scheme: light;
+    color-scheme: dark;
   }
 
   html {
-    @apply bg-slate-50 text-slate-900;
+    @apply bg-surface-base text-ink-primary;
     font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
     font-feature-settings: 'cv11', 'ss01';
     -webkit-font-smoothing: antialiased;
@@ -21,6 +24,12 @@
 
   body {
     @apply min-h-screen flex flex-col;
+    background-image: radial-gradient(
+      ellipse 90% 60% at 50% -10%,
+      rgba(226, 56, 71, 0.05),
+      transparent 70%
+    );
+    background-attachment: fixed;
   }
 
   code,
@@ -37,14 +46,26 @@
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-md bg-oxblood-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-oxblood-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-oxblood-700;
+    @apply inline-flex items-center justify-center rounded-md bg-oxblood-700
+           px-4 py-2 text-sm font-medium text-white shadow-glow-red
+           transition-all duration-200
+           hover:bg-oxblood-800 hover:shadow-glow-red-lg hover:-translate-y-0.5
+           focus-visible:outline focus-visible:outline-2
+           focus-visible:outline-offset-2 focus-visible:outline-glow-red
+           active:translate-y-0;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm transition-colors hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-oxblood-700;
+    @apply inline-flex items-center justify-center rounded-md
+           border border-white/10 bg-white/5 px-4 py-2 text-sm
+           font-medium text-ink-primary backdrop-blur-sm
+           transition-all duration-200
+           hover:border-white/20 hover:bg-white/10
+           focus-visible:outline focus-visible:outline-2
+           focus-visible:outline-offset-2 focus-visible:outline-glow-red;
   }
 
   .nav-link {
-    @apply text-sm text-slate-600 transition-colors hover:text-oxblood-700;
+    @apply text-sm text-ink-secondary transition-colors hover:text-glow-red;
   }
 }

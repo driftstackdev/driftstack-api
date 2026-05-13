@@ -17,16 +17,16 @@ function isActive(href: string): boolean {
 }
 ---
 
-<header class="border-b border-slate-200 bg-white">
+<header class="border-b border-white/10 bg-surface-raised">
   <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-    <a href="/" class="flex items-center gap-2 font-mono text-base font-semibold text-slate-900">
+    <a href="/" class="flex items-center gap-2 font-mono text-base font-semibold text-ink-primary">
       <span
         class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700 text-white"
       >
         D
       </span>
       <span>driftstack</span>
-      <span class="ml-1 text-xs text-slate-500">docs</span>
+      <span class="ml-1 text-xs text-ink-muted">docs</span>
     </a>
 
     <nav class="hidden items-center gap-6 md:flex">
@@ -34,7 +34,7 @@ function isActive(href: string): boolean {
         navItems.map((item) => (
           <a
             href={item.href}
-            class:list={['nav-link', isActive(item.href) && 'text-oxblood-700 font-medium']}
+            class:list={['nav-link', isActive(item.href) && 'text-glow-red font-medium']}
             target={item.external ? '_blank' : undefined}
             rel={item.external ? 'noopener noreferrer' : undefined}
           >
@@ -47,7 +47,7 @@ function isActive(href: string): boolean {
     <div class="flex items-center gap-3 md:hidden">
       <details class="relative">
         <summary
-          class="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-slate-200 text-slate-700 [&::-webkit-details-marker]:hidden"
+          class="flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-md border border-white/10 text-ink-secondary [&::-webkit-details-marker]:hidden"
           aria-label="Open navigation menu"
         >
           <svg
@@ -67,15 +67,15 @@ function isActive(href: string): boolean {
           </svg>
         </summary>
         <nav
-          class="absolute right-0 top-12 z-20 flex w-56 flex-col gap-1 rounded-md border border-slate-200 bg-white p-3 shadow-lg"
+          class="absolute right-0 top-12 z-20 flex w-56 flex-col gap-1 rounded-md border border-white/10 bg-surface-raised p-3 shadow-lg"
         >
           {
             navItems.map((item) => (
               <a
                 href={item.href}
                 class:list={[
-                  'rounded px-3 py-2 text-sm text-slate-700 hover:bg-slate-100',
-                  isActive(item.href) && 'text-oxblood-700 font-medium',
+                  'rounded px-3 py-2 text-sm text-ink-secondary hover:bg-white/10',
+                  isActive(item.href) && 'text-glow-red font-medium',
                 ]}
                 target={item.external ? '_blank' : undefined}
                 rel={item.external ? 'noopener noreferrer' : undefined}

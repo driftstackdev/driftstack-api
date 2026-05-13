@@ -83,16 +83,14 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     );
   });
 
-  it('docs/src/styles/base.css: Tailwind base + Geist+Berkeley @font-face framing + light color-scheme + 3 brand atoms (btn-primary + btn-secondary + nav-link) — NO dashboard-card (docs-specific) pinned', () => {
+  it('R11 docs/src/styles/base.css: Tailwind base + dark color-scheme + bg-surface-base graphite body + Geist+Berkeley font stack + 3 brand atoms (btn-primary + btn-secondary + nav-link). The earlier light-theme baseline (color-scheme: light + bg-slate-50) was migrated to dark so the docs read as one product with driftstack.dev rather than the prior context switch', () => {
     const body = read('apps/docs/src/styles/base.css');
     expect(body).toMatch(/^@tailwind base;$/m);
     expect(body).toMatch(/^@tailwind components;$/m);
     expect(body).toMatch(/^@tailwind utilities;$/m);
-    expect(body).toMatch(/Geist Sans \+ Berkeley Mono are loaded via @font-face declarations/);
-    expect(body).toMatch(/that ship with the deployed site\. Falling back to system stack if/);
     expect(body).toMatch(/^@layer base \{$/m);
-    expect(body).toMatch(/color-scheme: light;/);
-    expect(body).toMatch(/@apply bg-slate-50 text-slate-900;/);
+    expect(body).toMatch(/color-scheme: dark;/);
+    expect(body).toMatch(/@apply bg-surface-base text-ink-primary;/);
     expect(body).toMatch(/font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;/);
     expect(body).toMatch(/font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;/);
     expect(body).toMatch(/@apply bg-oxblood-700 text-white;/);

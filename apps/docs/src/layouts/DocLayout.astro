@@ -37,7 +37,7 @@ function isActive(href: string): boolean {
         {
           DOC_NAV.map((section) => (
             <div class="mb-5">
-              <p class="font-mono text-xs uppercase tracking-wide text-slate-500">
+              <p class="font-mono text-xs uppercase tracking-wide text-ink-muted">
                 {section.label}
               </p>
               <ul class="mt-2 space-y-1">
@@ -48,8 +48,8 @@ function isActive(href: string): boolean {
                       class:list={[
                         'block rounded px-2 py-1 text-sm transition-colors',
                         isActive(item.href)
-                          ? 'bg-oxblood-50 text-oxblood-700 font-medium'
-                          : 'text-slate-700 hover:bg-slate-100',
+                          ? 'bg-glow-red/15 text-glow-red font-medium'
+                          : 'text-ink-secondary hover:bg-white/5 hover:text-ink-primary',
                       ]}
                     >
                       {item.label}
@@ -62,8 +62,42 @@ function isActive(href: string): boolean {
         }
       </nav>
     </aside>
+    <!-- R11 — prose styling rebuilt for the dark surface. Uses
+         `prose-invert` so the typography plugin's defaults flip to
+         light text on dark, then overrides the load-bearing tokens
+         explicitly:
+           - body copy: ink-secondary for soft readability
+           - headings: ink-primary, semibold
+           - links: glow-red (the lighter brand-red reads against
+             slate-900; the locked oxblood-700 is too dark to be
+             readable on a dark surface)
+           - inline code: subtle white/8 chip with ink-primary text
+             so it pops against body copy without looking like a
+             button
+           - fenced pre: surface-inset (slate-950) with a 1px
+             white/10 border + ink-secondary text — high-contrast
+             monospace replacement for the previous "ugly white
+             extra background" the founder flagged
+           - blockquote: oxblood-300 left rule + ink-secondary text
+           - tables: surface-raised header row + white/10 borders -->
     <article
-      class="prose prose-slate max-w-3xl flex-1 prose-headings:font-semibold prose-headings:text-slate-900 prose-a:text-oxblood-700 prose-a:no-underline hover:prose-a:underline prose-code:font-mono prose-code:text-[0.875em] prose-code:rounded prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-pre:bg-slate-900 prose-pre:text-slate-100"
+      class="prose prose-invert prose-slate max-w-3xl flex-1
+             prose-headings:font-semibold prose-headings:text-ink-primary
+             prose-p:text-ink-secondary prose-li:text-ink-secondary
+             prose-strong:text-ink-primary
+             prose-a:text-glow-red prose-a:no-underline hover:prose-a:underline
+             prose-code:font-mono prose-code:text-[0.875em] prose-code:rounded
+             prose-code:bg-white/10 prose-code:px-1.5 prose-code:py-0.5
+             prose-code:text-ink-primary prose-code:before:content-none
+             prose-code:after:content-none
+             prose-pre:bg-surface-inset prose-pre:border prose-pre:border-white/10
+             prose-pre:text-ink-secondary prose-pre:shadow-inset-divider
+             prose-blockquote:border-l-oxblood-300 prose-blockquote:text-ink-secondary
+             prose-blockquote:not-italic
+             prose-th:bg-surface-raised prose-th:text-ink-primary
+             prose-td:text-ink-secondary
+             prose-th:border-white/10 prose-td:border-white/10
+             prose-hr:border-white/10"
     >
       <slot />
     </article>

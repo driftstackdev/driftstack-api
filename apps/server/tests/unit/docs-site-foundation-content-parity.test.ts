@@ -34,7 +34,7 @@ describe('W599 apps/docs foundation modules content parity', () => {
     expect(body).toMatch(/\/\/ Cross-links back to marketing for the full company navigation\./);
     expect(body).toMatch(/^const year = new Date\(\)\.getUTCFullYear\(\);$/m);
     expect(body).toMatch(/<span>driftstack<\/span>/);
-    expect(body).toMatch(/<span class="ml-1 text-xs text-slate-500">docs<\/span>/);
+    expect(body).toMatch(/<span class="ml-1 text-xs text-ink-muted">docs<\/span>/);
     expect(body).toMatch(
       /Reference \+ guides for the Driftstack API, SDKs, and self-hosted client\./,
     );
@@ -109,10 +109,16 @@ describe('W599 apps/docs foundation modules content parity', () => {
       /return pathname === href \|\| pathname === href\.replace\(\/\\\/\$\/, ''\);/,
     );
     expect(body).toMatch(/DOC_NAV\.map\(\(section\) => \(/);
-    expect(body).toMatch(/prose prose-slate max-w-3xl flex-1/);
-    expect(body).toMatch(/prose-a:text-oxblood-700/);
-    expect(body).toMatch(/prose-code:bg-slate-100/);
-    expect(body).toMatch(/prose-pre:bg-slate-900 prose-pre:text-slate-100/);
+    // R11 — dark-themed prose stack. `prose-invert` flips the
+    // typography defaults to light text on dark, then we override
+    // tokens explicitly so links read against slate-900 (glow-red
+    // not oxblood-700, which was too dark on the new graphite
+    // surface) and code blocks land on surface-inset (slate-950).
+    expect(body).toMatch(/prose prose-invert prose-slate max-w-3xl flex-1/);
+    expect(body).toMatch(/prose-a:text-glow-red/);
+    expect(body).toMatch(/prose-code:bg-white\/10/);
+    expect(body).toMatch(/prose-pre:bg-surface-inset/);
+    expect(body).toMatch(/prose-pre:text-ink-secondary/);
     expect(existsSync(DOC)).toBe(true);
   });
 
@@ -120,11 +126,14 @@ describe('W599 apps/docs foundation modules content parity', () => {
     const body = read(NOT_FOUND);
     expect(body).toMatch(/^import BaseLayout from '\.\.\/layouts\/BaseLayout\.astro';$/m);
     expect(body).toMatch(/<BaseLayout title="Page not found">/);
-    expect(body).toMatch(/<h1 class="text-4xl font-semibold text-slate-900">Page not found<\/h1>/);
+    expect(body).toMatch(
+      /<h1 class="text-4xl font-semibold text-ink-primary">Page not found<\/h1>/,
+    );
     expect(body).toMatch(
       /The page you're looking for might have moved as the docs site is built out\./,
     );
-    expect(body).toMatch(/<a href="\/" class="text-oxblood-700 hover:underline">overview<\/a>/);
+    // R11 — link colour swapped to glow-red for dark-mode readability.
+    expect(body).toMatch(/<a href="\/" class="text-glow-red hover:underline">overview<\/a>/);
     expect(body).toMatch(
       /href="https:\/\/github\.com\/driftstackdev\/driftstack-api\/tree\/main\/docs"/,
     );
