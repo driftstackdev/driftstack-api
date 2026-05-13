@@ -37,18 +37,21 @@ export default {
           900: '#0f172a',
           950: '#020617',
         },
+        // R7 — "graphite" palette synced with marketing-site. Lighter
+        // than the prior near-black abyss so the dashboard reads as
+        // less oppressive while staying brand-dark.
         surface: {
-          base: '#0b0f14',
-          raised: '#111722',
-          elevated: '#1a2230',
-          inset: '#070a0e',
-          divider: '#1f2937',
+          base: '#0f172a', // slate-900
+          raised: '#1e293b', // slate-800
+          elevated: '#334155', // slate-700
+          inset: '#020617', // slate-950 — code/diff surfaces stay deepest
+          divider: '#475569', // slate-600
         },
         ink: {
-          primary: '#e5e7eb',
-          secondary: '#9ca3af',
-          muted: '#6b7280',
-          inverted: '#0b0f14',
+          primary: '#f8fafc', // slate-50
+          secondary: '#cbd5e1', // slate-300 — more readable body
+          muted: '#94a3b8', // slate-400
+          inverted: '#0f172a',
         },
         glow: {
           red: '#e23847',
@@ -64,9 +67,9 @@ export default {
         prose: '65ch',
       },
       boxShadow: {
-        'glow-red': '0 0 0 1px rgba(226, 56, 71, 0.35), 0 8px 24px -8px rgba(226, 56, 71, 0.45)',
-        'glow-red-lg': '0 0 0 1px rgba(226, 56, 71, 0.5), 0 16px 48px -12px rgba(226, 56, 71, 0.6)',
-        'inset-divider': 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
+        'glow-red': '0 0 0 1px rgba(226, 56, 71, 0.3), 0 6px 20px -8px rgba(226, 56, 71, 0.35)',
+        'glow-red-lg': '0 0 0 1px rgba(226, 56, 71, 0.4), 0 12px 40px -12px rgba(226, 56, 71, 0.5)',
+        'inset-divider': 'inset 0 1px 0 rgba(255, 255, 255, 0.06)',
       },
       backgroundImage: {
         'glow-radial-red':
