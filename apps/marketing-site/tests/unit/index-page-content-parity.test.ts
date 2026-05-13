@@ -32,21 +32,16 @@ function read(p: string): string {
 describe('W371.A marketing-site /index (homepage) content parity', () => {
   const body = read(PAGE);
 
-  it('hero positioning pinned: stealth-browsers-modify-JS framing + detection-systems-built-to-catch hook', () => {
-    expect(body).toMatch(/iPhone Safari sessions that look like a real iPhone\./);
-    expect(body).toMatch(/Most stealth browsers modify JavaScript at runtime/);
-    expect(body).toMatch(/detection systems are built to catch/);
+  it('R12 hero positioning pinned: "Real iPhone Safari. Cloud-hosted. API-first." + sub-line lists every-signal fidelity + "stealth tools rewrite JavaScript at runtime and leak the underlying engine in the next hash" framing', () => {
+    expect(body).toMatch(/Real iPhone Safari\. Cloud-hosted\. API-first\./);
+    expect(body).toMatch(/Spin up a session in seconds\. Drive it from TypeScript, Python,/);
+    expect(body).toMatch(/Most stealth tools rewrite JavaScript at runtime/);
+    expect(body).toMatch(/leak the\s*\n?\s*underlying engine in the next hash/);
   });
 
-  it('WebKit-source-instead differentiator pinned (no JS-runtime patches)', () => {
+  it('R12 WebKit-source-instead differentiator pinned (no JS-runtime patches): "Driftstack runs Apple\'s WebKit source code directly. Nothing is rewritten, so there\'s nothing for detection systems to spot."', () => {
     expect(body).toMatch(
-      /We run Apple's WebKit source code, the\s+same engine inside every real iPhone/,
-    );
-    expect(body).toMatch(
-      /Nothing is rewritten at\s+runtime, so there's nothing for detection to find/,
-    );
-    expect(body).toMatch(
-      /The\s+fingerprint your code sees is the fingerprint a real iPhone\s+would send/,
+      /Driftstack runs Apple's\s+WebKit source code directly\. Nothing is rewritten, so there's\s+nothing for detection systems to spot\./,
     );
   });
 
@@ -61,11 +56,11 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).toMatch(/Why not Browserless\?/);
   });
 
-  it('"Bit-identical" framing pinned + iPhone 16 Pro / iOS 18.7 / Safari 26.4 reference', () => {
-    expect(body).toMatch(/Bit-identical\./);
-    expect(body).toMatch(/iPhone 16 Pro running iOS 18\.7 \/ Safari 26\.4/);
+  it('R12 "Indistinguishable from a real iPhone." framing (plain-English replacement for the prior "Bit-identical" jargon) + iPhone 16 Pro / iOS 18.7 / Safari 26.4 reference + launch-blocking-bug fidelity commitment', () => {
+    expect(body).toMatch(/Indistinguishable from a real iPhone\./);
+    expect(body).toMatch(/iPhone 16 Pro, iOS 18\.7, Safari 26\.4/);
     expect(body).toMatch(
-      /If a signal differs from what\s+a real iPhone sends, we treat it as a launch-blocking bug/,
+      /If any\s+measurable signal differs from what that phone sends, we treat\s+it as a launch-blocking bug/,
     );
   });
 
@@ -75,15 +70,16 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).toMatch(/proxy: \{ type: 'wireguard', config: '\.\.\.' \}/);
   });
 
-  it('"Pay per concurrent session, not per call" metering framing pinned', () => {
-    expect(body).toMatch(/Pay per concurrent session, not per call\./);
-    expect(body).toMatch(/no per-call markup, no\s+per-element fees/);
+  it('R12 metering framing pinned: "One metric. Concurrent sessions. That\'s it." + no-per-call-markup + no-per-element-fees + 200-pages-on-one-session example — replaces the prior "Pay per concurrent session, not per call." copy', () => {
+    expect(body).toMatch(/One metric\. Concurrent sessions\. That's it\./);
+    expect(body).toMatch(/No\s*\n?\s*per-call markup\. No per-element fees\./);
+    expect(body).toMatch(/Visit\s+200 pages on one session for the cost of visiting one\./);
   });
 
-  it('EU-resident compliance section: control-plane scope claim pinned', () => {
-    expect(body).toMatch(/EU-resident infrastructure\./);
-    expect(body).toMatch(/All customer data — the database, the object storage, and the\s+compute/);
-    expect(body).toMatch(/We store only the\s+metadata about your sessions/);
+  it('R12 EU-resident compliance section: "Customer data stays in the EU." headline + Hetzner Falkenstein / Neon EU / Cloudflare R2 named stack + session-metadata-only commitment + sub-processors cross-link', () => {
+    expect(body).toMatch(/Customer data stays in the EU\./);
+    expect(body).toMatch(/Hetzner\s+Falkenstein, Neon EU, and Cloudflare R2/);
+    expect(body).toMatch(/We log\s+session metadata only/);
     expect(body).toMatch(/href="\/trust\/sub-processors"/);
   });
 
@@ -116,10 +112,13 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     );
   });
 
-  it('"Real WebKit. Real Core Text. Real iOS rendering." stack-statement pinned', () => {
-    expect(body).toMatch(/Real WebKit\. Real Core Text\. Real iOS rendering\./);
-    expect(body).toMatch(/Not a Chromium fork with a fake user-agent/);
-    expect(body).toMatch(/Not Playwright with a\s+stealth plugin patched over it/);
+  it('R12 stack-statement pinned: "Apple\'s engine. Not a Chromium copy." headline + "Chromium fork with a fake user-agent" + "Playwright with a patch plugin layered on top" contrast + "WebKit, Core Text, and the iOS rendering pipeline" capability list — replaces the prior "Real WebKit. Real Core Text. Real iOS rendering." three-Reals headline', () => {
+    expect(body).toMatch(/Apple's engine\. Not a Chromium copy\./);
+    expect(body).toMatch(/Chromium fork with a\s+fake user-agent/);
+    expect(body).toMatch(/Playwright with a patch plugin layered on/);
+    expect(body).toMatch(
+      /WebKit, Core Text, and\s+the iOS rendering pipeline produce your fingerprint the way\s+Apple wrote them, in the order Apple intended\./,
+    );
   });
 
   it('bundled-or-BYOK AI claim pinned (Builder+ tier gate)', () => {
@@ -128,14 +127,12 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     );
   });
 
-  it('R5 polish: 3-card use-case section + final-CTA bottom section pinned', () => {
-    // New "What people build with it" section adds social-proof context.
-    expect(body).toMatch(/Anywhere a real iPhone Safari fingerprint matters/);
+  it('R12 polish: 3-card use-case section "Anywhere mobile Safari fidelity decides the outcome." headline + Mobile-Safari coverage / Mobile-first scraping / Multi-account operations cards + Final-CTA "See it for yourself. $2.99." headline + "Read the docs" secondary CTA', () => {
+    expect(body).toMatch(/Anywhere mobile Safari fidelity decides the outcome\./);
     expect(body).toMatch(/Mobile-Safari coverage/);
     expect(body).toMatch(/Mobile-first scraping/);
     expect(body).toMatch(/Multi-account operations/);
-    // Final-CTA section adds a second conversion point at the bottom.
-    expect(body).toMatch(/Try Driftstack for \$2\.99\./);
+    expect(body).toMatch(/See it for yourself\. \$2\.99\./);
     expect(body).toMatch(/Read the docs/);
   });
 });

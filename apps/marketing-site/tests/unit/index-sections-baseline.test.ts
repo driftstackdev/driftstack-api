@@ -1,12 +1,13 @@
-// W323.B — drift guard for marketing /index section coverage. The
-// homepage carries a sequence of narrative sections that anchor the
-// product story. Pins their presence so a future copy refactor
-// doesn't silently drop a section:
-//   • Bit-identical fingerprint claim
-//   • Real WebKit positioning
-//   • Concurrent-cap pricing positioning
-//   • EU data plane
-//   • Manual + API audience split
+// W323.B (R12-refreshed) — drift guard for marketing /index section
+// coverage. Anchors the narrative beats so a future copy refactor
+// doesn't silently drop a section. R12 simplified the headlines for
+// non-technical readers; updated phrase list:
+//   • "Indistinguishable from a real iPhone." fingerprint claim
+//     (replaces the prior "Bit-identical" jargon)
+//   • "Apple's engine" stack positioning (replaces "Real WebKit")
+//   • "One metric. Concurrent sessions." pricing positioning
+//   • "Customer data stays in the EU." data plane section
+//   • "Drive it by hand, or drive it from code." audience split
 //   • Two ladders + trial pack
 //   • Self-hosted as a parallel offering
 
@@ -20,11 +21,11 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/index.astro');
 
 const REQUIRED_PHRASES = [
-  'Bit-identical',
-  'Real WebKit',
-  'Pay per concurrent session',
-  'All customer data',
-  'Manual or API',
+  'Indistinguishable from a real iPhone',
+  "Apple's engine",
+  'One metric. Concurrent sessions',
+  'Customer data stays in the EU',
+  'Drive it by hand, or drive it from code',
   'Two ladders',
   'Run Driftstack on your own infrastructure',
 ];

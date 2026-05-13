@@ -19,33 +19,36 @@ function read(p: string): string {
 describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () => {
   const body = read(LIB);
 
-  it("BaseLayout title='Driftstack' + R5 plain-English SEO description (real iPhone Safari sessions / pixel-perfect / $2.99 trial)", () => {
+  it("R12 BaseLayout title='Driftstack' + new SEO description: 'Real iPhone Safari sessions, on demand. The same WebKit engine every iPhone ships — no patches at runtime, no stealth plugins, nothing for detection to find. Try it for $2.99.' — replaces the prior 'Pixel-perfect device fingerprints with no detectable software fingerprint' copy", () => {
     expect(body).toMatch(
-      /<BaseLayout\s*\n?\s*title="Driftstack"\s*\n?\s*description="Real iPhone Safari sessions, on demand\. Pixel-perfect device fingerprints with no detectable software fingerprint\. Try it for \$2\.99 — 16 hours of sessions, one purchase per account\."/,
+      /<BaseLayout\s*\n?\s*title="Driftstack"\s*\n?\s*description="Real iPhone Safari sessions, on demand\. The same WebKit engine every iPhone ships — no patches at runtime, no stealth plugins, nothing for detection to find\. Try it for \$2\.99\."/,
     );
   });
 
-  it('Hero copy (R5): section label + iPhone-Safari headline + detection-built-to-catch hook + WebKit-source-code differentiator', () => {
-    expect(body).toMatch(/iPhone Safari sessions that look like a real iPhone\./);
-    expect(body).toMatch(/Most stealth browsers modify JavaScript at runtime/);
-    expect(body).toMatch(/detection systems are built to catch/);
+  it('R12 Hero copy: section label + new "Real iPhone Safari. Cloud-hosted. API-first." headline + sub-paragraph listing every-signal fidelity + "stealth tools rewrite JavaScript at runtime and leak the underlying engine in the next hash" framing — replaces the prior "iPhone Safari sessions that look like a real iPhone." + "Most stealth browsers modify JavaScript at runtime" copy', () => {
+    expect(body).toMatch(/Real iPhone Safari\. Cloud-hosted\. API-first\./);
+    expect(body).toMatch(/Spin up a session in seconds\. Drive it from TypeScript, Python,/);
+    expect(body).toMatch(/Most stealth tools rewrite JavaScript at runtime/);
     expect(body).toMatch(
-      /We run Apple's WebKit source code, the\s*\n?\s*same engine inside every real iPhone/,
+      /Driftstack runs Apple's\s*\n?\s*WebKit source code directly\. Nothing is rewritten, so there's\s*\n?\s*nothing for detection systems to spot\./,
     );
   });
 
-  it("Cumulative-rig 'Bit-identical.' giant-headline framing pinned + iPhone 16 Pro / iOS 18.7 / Safari 26.4 reference", () => {
-    expect(body).toMatch(/Bit-identical\./);
-    expect(body).toMatch(/iPhone 16 Pro running iOS 18\.7 \/ Safari 26\.4/);
+  it('R12 "Indistinguishable from a real iPhone." giant-headline framing (plain-English replacement for the prior "Bit-identical" jargon) + iPhone 16 Pro / iOS 18.7 / Safari 26.4 reference + launch-blocking-bug fidelity commitment', () => {
+    expect(body).toMatch(/Indistinguishable from a real iPhone\./);
+    expect(body).toMatch(/iPhone 16 Pro, iOS 18\.7, Safari 26\.4/);
     expect(body).toMatch(
-      /If a signal differs from what\s*\n?\s*a real iPhone sends, we treat it as a launch-blocking bug/,
+      /If any\s*\n?\s*measurable signal differs from what that phone sends, we treat\s*\n?\s*it as a launch-blocking bug/,
     );
   });
 
-  it("Stack framing: 'Real WebKit. Real Core Text. Real iOS rendering.' + Not-Chromium / Not-Playwright differentiator", () => {
-    expect(body).toMatch(/Real WebKit\. Real Core Text\. Real iOS rendering\./);
-    expect(body).toMatch(/Not a Chromium fork with a fake user-agent/);
-    expect(body).toMatch(/Not Playwright with a\s*\n?\s*stealth plugin patched over it/);
+  it('R12 Stack framing: "Apple\'s engine. Not a Chromium copy." headline replaces the prior "Real WebKit. Real Core Text. Real iOS rendering." copy. Still preserves the Not-Chromium / Not-Playwright contrast + names WebKit / Core Text / iOS rendering pipeline downstream', () => {
+    expect(body).toMatch(/Apple's engine\. Not a Chromium copy\./);
+    expect(body).toMatch(/Chromium fork with a\s*\n?\s*fake user-agent/);
+    expect(body).toMatch(/Playwright with a patch plugin layered on/);
+    expect(body).toMatch(
+      /WebKit, Core Text, and\s*\n?\s*the iOS rendering pipeline produce your fingerprint the way\s*\n?\s*Apple wrote them, in the order Apple intended\./,
+    );
   });
 
   it("Hero CTAs + trial-pack subline (R5: 'Start for $2.99' + 'Why not Browserless?')", () => {
@@ -65,18 +68,19 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/await session\.destroy\(\);/);
   });
 
-  it("Concurrent metering framing pinned: 'Pay per concurrent session, not per call.' + 3 anti-pattern bullets", () => {
-    expect(body).toMatch(/Pay per concurrent session, not per call\./);
+  it('R12 Concurrent metering framing pinned: "One metric. Concurrent sessions. That\'s it." headline + per-line anti-pattern callouts (No per-call markup. No per-element fees. No hourly metering...) + 200-pages-on-one-session concrete example — replaces the prior "Pay per concurrent session, not per call." copy', () => {
+    expect(body).toMatch(/One metric\. Concurrent sessions\. That's it\./);
+    expect(body).toMatch(/No\s*\n?\s*per-call markup\. No per-element fees\./);
     expect(body).toMatch(
-      /no per-call markup, no\s*\n?\s*per-element fees, no hourly metering that turns idle browsers\s*\n?\s*into surprise overage charges\./,
+      /No hourly metering that\s*\n?\s*turns idle sessions into surprise overage charges\./,
     );
+    expect(body).toMatch(/Visit\s*\n?\s*200 pages on one session for the cost of visiting one\./);
   });
 
-  it("EU compliance framing (R5 plain language): 'All customer data … sits in the EU' + customer-configurable egress roadmap", () => {
-    expect(body).toMatch(
-      /All customer data — the database, the object storage, and the\s*\n?\s*compute that runs sessions — sits in the EU/,
-    );
-    expect(body).toMatch(/We store only the\s*\n?\s*metadata about your sessions/);
+  it('R12 EU compliance framing pinned: "Customer data stays in the EU." headline + named "Hetzner Falkenstein, Neon EU, and Cloudflare R2" stack + "We log session metadata only" commitment + customer-configurable egress roadmap — replaces the prior "EU-resident infrastructure." + "All customer data … sits in the EU" copy', () => {
+    expect(body).toMatch(/Customer data stays in the EU\./);
+    expect(body).toMatch(/Hetzner\s*\n?\s*Falkenstein, Neon EU, and Cloudflare R2/);
+    expect(body).toMatch(/We log\s*\n?\s*session metadata only/);
     expect(body).toMatch(
       /Customer-configurable egress \(SOCKS5 \/ WireGuard \/ OpenVPN\)\s*\n?\s*is on the roadmap/,
     );
@@ -113,15 +117,15 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     );
   });
 
-  it('R5 NEW section: 3 use-case cards (mobile-Safari coverage / mobile-first scraping / multi-account)', () => {
-    expect(body).toMatch(/Anywhere a real iPhone Safari fingerprint matters\./);
+  it('R12 use-case section pinned: "Anywhere mobile Safari fidelity decides the outcome." headline + 3-card Mobile-Safari coverage / Mobile-first scraping / Multi-account operations — replaces the prior "Anywhere a real iPhone Safari fingerprint matters." headline', () => {
+    expect(body).toMatch(/Anywhere mobile Safari fidelity decides the outcome\./);
     expect(body).toMatch(/Mobile-Safari coverage/);
     expect(body).toMatch(/Mobile-first scraping/);
     expect(body).toMatch(/Multi-account operations/);
   });
 
-  it('R5 NEW section: final-CTA bottom section ("Try Driftstack for $2.99." + Read the docs)', () => {
-    expect(body).toMatch(/Try Driftstack for \$2\.99\./);
+  it('R12 final-CTA pinned: "See it for yourself. $2.99." headline + Read the docs secondary CTA — replaces the prior "Try Driftstack for $2.99." copy', () => {
+    expect(body).toMatch(/See it for yourself\. \$2\.99\./);
     expect(body).toMatch(/Read the docs/);
     expect(body).toMatch(/<a href="https:\/\/docs\.driftstack\.dev" class="btn-secondary">/);
   });

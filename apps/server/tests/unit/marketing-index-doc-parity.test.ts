@@ -46,9 +46,9 @@ describe('W246.D marketing-site /index doc parity', () => {
     }
   });
 
-  it('keeps EU-residency truthful (compute / database / object storage)', () => {
-    expect(doc).toMatch(/EU-resident infrastructure/);
-    expect(doc).toMatch(/sits in the EU/);
+  it('R12 EU-residency truthful (compute / database / object storage): "Customer data stays in the EU." headline + named Hetzner Falkenstein / Neon EU / Cloudflare R2 stack — replaces the prior "EU-resident infrastructure" + "sits in the EU" copy', () => {
+    expect(doc).toMatch(/Customer data stays in the EU/);
+    expect(doc).toMatch(/Hetzner\s*\n?\s*Falkenstein, Neon EU, and Cloudflare R2/);
   });
 
   it('does not claim "never sees destination URL" as a control-plane property', () => {
