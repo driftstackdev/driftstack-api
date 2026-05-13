@@ -51,7 +51,7 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     // /driftstack-mark.svg so the browser tab icon matches the rest of
     // the product (marketing-site + docs + customer-dashboard).
     expect(body).toMatch(
-      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg" \/>/,
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg(\?v=\d+)?" \/>/,
     );
     expect(body).toMatch(/<meta charset="UTF-8" \/>/);
     expect(body).toMatch(

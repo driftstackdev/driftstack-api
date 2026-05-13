@@ -72,7 +72,7 @@ describe('W382.C marketing-site Header.astro content parity', () => {
   });
 
   it('R15 brand mark in header: /driftstack-mark.svg <img> (iPhone-D logo) + lowercase "driftstack" wordmark — replaces the prior bg-gradient-accent D-tile chip with the real SVG brand asset', () => {
-    expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg"/);
+    expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
     expect(body).toMatch(/<span class="tracking-tight">driftstack<\/span>/);
   });
 
@@ -186,7 +186,7 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
   });
 
   it('R15 brand mark in footer: /driftstack-mark.svg <img> (iPhone-D logo) — replaces the prior bg-gradient-accent text-xs D chip. Footer no longer renders a separate "driftstack" wordmark element (the brand SVG carries the identity on its own at the footer scale)', () => {
-    expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg"/);
+    expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
   });
 
   it('Docs + Status external links carry target="_blank" + rel="noopener noreferrer"', () => {

@@ -83,7 +83,9 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
 
   it('R15 brand mark: /driftstack-mark.svg <img> (iPhone-D logo) — replaces the prior bg-oxblood-700 + text-white "D" chip placeholder with the real SVG brand asset', () => {
     expect(body).toMatch(/V-219\* — D-badge \+ lowercase font-mono "driftstack" wordmark/);
-    expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg"\s*\n?\s*alt="Driftstack"/);
+    expect(body).toMatch(
+      /<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"\s*\n?\s*alt="Driftstack"/,
+    );
   });
 
   it('"driftstack" wordmark in lowercase font-mono', () => {

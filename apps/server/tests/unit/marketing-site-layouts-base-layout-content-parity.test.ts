@@ -96,7 +96,7 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
   it('R15 favicon points at /driftstack-mark.svg (the real brand SVG shipped in apps/marketing-site/public/) — replaces the prior inline data-URL placeholder favicon (Georgia-serif white D on oxblood-722F37 tile). Drift to a different brand-mark source would create cross-page brand divergence', () => {
     expect(body).toMatch(/rel="icon"/);
     expect(body).toMatch(/type="image\/svg\+xml"/);
-    expect(body).toMatch(/href="\/driftstack-mark\.svg"/);
+    expect(body).toMatch(/href="\/driftstack-mark\.svg(\?v=\d+)?"/);
   });
 
   it('doctype + viewport + canonical-link + Header/Footer-slot framing pinned: \'<!doctype html>\' + \'<html lang="en">\' + \'meta name="viewport" content="width=device-width, initial-scale=1"\' + \'link rel="canonical" href={canonical}\' + Header + main flex-1 + slot + Footer — pinned so the doctype + lang=en + viewport + canonical-link + Header/Footer-shell + main-slot commitment survives', () => {

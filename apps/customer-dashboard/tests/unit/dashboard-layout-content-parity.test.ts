@@ -92,7 +92,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
   });
 
   it('R15 brand mark (/driftstack-mark.svg <img>) appears in both withSidebar=true sidebar + withSidebar=false header branches — replaces the prior bg-gradient-accent + shadow-glow-red D chip with the real iPhone-D SVG brand asset', () => {
-    const markMatches = body.match(/src="\/driftstack-mark\.svg"/g);
+    const markMatches = body.match(/src="\/driftstack-mark\.svg(\?v=\d+)?"/g);
     expect(markMatches).not.toBeNull();
     expect(markMatches!.length).toBeGreaterThanOrEqual(2);
     expect(body).toMatch(/V-219\* — brand alignment with marketing site:/);

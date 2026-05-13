@@ -64,7 +64,7 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     expect(body).toMatch(
       /<a\s+href="\/"\s+class="group flex items-center gap-2\.5 font-mono text-base font-semibold text-ink-primary"/,
     );
-    expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg"/);
+    expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
     expect(body).toMatch(/width="32"\s*\n?\s*height="32"/);
     expect(body).toMatch(/<span class="tracking-tight">driftstack<\/span>/);
   });

@@ -87,7 +87,7 @@ describe('W599 apps/docs foundation modules content parity', () => {
     // data-URL placeholder to the real /driftstack-mark.svg brand
     // asset.
     expect(body).toMatch(
-      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg" \/>/,
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg(\?v=\d+)?" \/>/,
     );
     expect(existsSync(BASE)).toBe(true);
   });
