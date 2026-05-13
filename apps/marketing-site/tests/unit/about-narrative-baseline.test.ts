@@ -27,8 +27,8 @@ describe('W334.B /about narrative baseline', () => {
     expect(body).toMatch(/A small Dutch company building one product well/);
   });
 
-  it('positions WebKit C\\+\\+ source modification, not runtime JS patching', () => {
-    expect(body).toMatch(/Driftstack modifies WebKit'?s? C\+\+ source/);
+  it('positions WebKit source-code execution (R6 plain-English), not runtime JS patching', () => {
+    expect(body).toMatch(/we run Apple's WebKit\s+source code/);
   });
 
   it('EU-resident posture lists Hetzner / Neon / Cloudflare R2 / Postmark', () => {

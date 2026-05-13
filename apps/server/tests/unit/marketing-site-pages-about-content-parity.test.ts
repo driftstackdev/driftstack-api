@@ -34,19 +34,19 @@ function read(p: string): string {
 describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () => {
   const body = read(LIB);
 
-  it("Hero framing: 'A small Dutch company building one product well.' + 'Driftstack ships iPhone Safari sessions on demand — same engine as the device, no patches, no detection-vendor surface area. We're solo-founded, EU-headquartered, and intentionally narrow: one product, two ladders, no land-grab.' — pinned so the solo-founded + EU-HQ + intentionally-narrow positioning all survives (drift to dropping 'no land-grab' would lose the 'we will stay focused' commitment customers evaluate when comparing against VC-backed competitors)", () => {
+  it("Hero framing (R6 plain-English): 'A small Dutch company building one product well.' + new 'real iPhone Safari sessions on demand — same engine as a physical iPhone, with nothing patched at runtime' positioning + 'solo-founded, EU-based, deliberately narrow' identity", () => {
     expect(body).toMatch(/A small Dutch company building one product well\./);
     expect(body).toMatch(
-      /Driftstack ships iPhone Safari sessions on demand — same engine\s*\n?\s*as the device, no patches, no detection-vendor surface area\./,
+      /Driftstack ships real iPhone Safari sessions on demand — same\s*\n?\s*engine as a physical iPhone, with nothing patched at runtime that\s*\n?\s*detection systems could spot/,
     );
     expect(body).toMatch(
-      /We're solo-founded, EU-headquartered, and intentionally narrow:\s*\n?\s*one product, two ladders, no land-grab\./,
+      /We're solo-founded, EU-based, and\s*\n?\s*deliberately narrow: one product, two ways to use it, no land-grab\./,
     );
   });
 
-  it("WebKit C++ source modification framing pinned: 'Most stealth browsers patch JavaScript at runtime to fake an iOS fingerprint. Detection vendors built their industry on catching exactly that. Driftstack modifies WebKit's C++ source instead — there's nothing at the JavaScript layer to detect, because nothing was changed there. The fingerprint your code reads is the fingerprint a real iPhone reads.' — pinned so the source-vs-runtime distinction + the why-detection-fails framing both survive (drift to dropping would lose THE core technical differentiator)", () => {
+  it("WebKit source-code framing pinned (R6 plain-English rewrite): 'we run Apple's WebKit source code, the same engine that ships on every real iPhone' replaces the prior C++/modify-source jargon while preserving the source-vs-runtime distinction", () => {
     expect(body).toMatch(
-      /Most stealth browsers patch JavaScript at runtime to fake an\s*\n?\s*iOS fingerprint\. Detection vendors built their industry on\s*\n?\s*catching exactly that\. Driftstack modifies WebKit's C\+\+ source\s*\n?\s*instead — there's nothing at the JavaScript layer to detect,\s*\n?\s*because nothing was changed there\. The fingerprint your code\s*\n?\s*reads is the fingerprint a real iPhone reads\./,
+      /Most stealth browsers fake an iPhone by rewriting JavaScript\s*\n?\s*at runtime\. Detection systems are built to catch exactly that\.\s*\n?\s*Driftstack takes a different approach: we run Apple's WebKit\s*\n?\s*source code, the same engine that ships on every real iPhone\./,
     );
   });
 

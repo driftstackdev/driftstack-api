@@ -129,12 +129,12 @@ describe('W367.A marketing-site /about page content parity', () => {
     // Load-bearing differentiator vs every Chromium-stealth-
     // plugin competitor. A future copy softening to "stealth
     // bundles" would break the entire positioning.
-    expect(body).toMatch(/Driftstack modifies WebKit's C\+\+ source\s+instead/);
-    expect(body).toMatch(/there's nothing at the JavaScript layer to detect/);
+    expect(body).toMatch(/we run Apple's WebKit\s+source code/);
+    expect(body).toMatch(/there's nothing for\s+detection to find/);
   });
 
   it('"solo-founder Dutch BV building one product well" hero claim pinned', () => {
     expect(body).toMatch(/A small Dutch company building one product well/);
-    expect(body).toMatch(/solo-founded, EU-headquartered, and intentionally narrow/);
+    expect(body).toMatch(/solo-founded, EU-based, and\s*\n?\s*deliberately narrow/);
   });
 });

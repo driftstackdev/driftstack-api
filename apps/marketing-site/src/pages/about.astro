@@ -7,57 +7,66 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   description="Driftstack is a solo-founder Dutch BV building iPhone Safari sessions on demand. EU-resident infrastructure, no behavioural data collection. Customer-configurable egress is on the roadmap."
 >
   <!-- Header -->
-  <section class="bg-gradient-to-b from-white to-slate-50">
-    <div class="mx-auto max-w-6xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">About</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl">
+  <section class="relative overflow-hidden">
+    <div class="absolute inset-0 grid-bg opacity-40" aria-hidden="true"></div>
+    <div class="relative mx-auto max-w-6xl px-6 py-24 animate-fade-up">
+      <p class="section-label">About</p>
+      <h1
+        class="mt-6 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl lg:text-6xl"
+        style="letter-spacing: -0.02em;"
+      >
         A small Dutch company building one product well.
       </h1>
-      <p class="mt-6 max-w-prose text-lg text-ink-secondary">
-        Driftstack ships iPhone Safari sessions on demand — same engine
-        as the device, no patches, no detection-vendor surface area.
-        We're solo-founded, EU-headquartered, and intentionally narrow:
-        one product, two ladders, no land-grab.
+      <p class="mt-6 max-w-prose text-lg text-ink-secondary leading-relaxed">
+        Driftstack ships real iPhone Safari sessions on demand — same
+        engine as a physical iPhone, with nothing patched at runtime that
+        detection systems could spot. We're solo-founded, EU-based, and
+        deliberately narrow: one product, two ways to use it, no land-grab.
       </p>
     </div>
   </section>
 
   <!-- What + why -->
-  <section class="border-t border-white/10 bg-surface-raised">
-    <div class="mx-auto max-w-6xl px-6 py-20">
+  <section class="relative border-t border-white/10">
+    <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="grid gap-12 md:grid-cols-2">
-        <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
+        <div class="card p-8">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">
             What we're building
           </p>
           <h2 class="mt-3 text-2xl font-semibold text-ink-primary">
             iPhone Safari fidelity, on demand.
           </h2>
-          <p class="mt-3 text-ink-secondary">
-            Most stealth browsers patch JavaScript at runtime to fake an
-            iOS fingerprint. Detection vendors built their industry on
-            catching exactly that. Driftstack modifies WebKit's C++ source
-            instead — there's nothing at the JavaScript layer to detect,
-            because nothing was changed there. The fingerprint your code
-            reads is the fingerprint a real iPhone reads.
+          <p class="mt-3 text-ink-secondary leading-relaxed">
+            Most stealth browsers fake an iPhone by rewriting JavaScript
+            at runtime. Detection systems are built to catch exactly that.
+            Driftstack takes a different approach: we run Apple's WebKit
+            source code, the same engine that ships on every real iPhone.
+            Nothing is rewritten at runtime, so there's nothing for
+            detection to find. The fingerprint your code reads is the
+            fingerprint a real iPhone would send.
           </p>
         </div>
-        <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
+        <div class="card p-8">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">
             Why we exist
           </p>
           <h2 class="mt-3 text-2xl font-semibold text-ink-primary">
             Stealth browsing matures.
           </h2>
-          <p class="mt-3 text-ink-secondary">
-            For the last decade, the field has been a runtime patching
+          <p class="mt-3 text-ink-secondary leading-relaxed">
+            For the last decade, the field has been a runtime-patching
             arms race that always favoured the detector. We think the
-            next decade looks different: source-modified engines, real
-            archetypes, transparent metering, and customer-configurable
-            egress (the last is on our roadmap; see
-            <a href="/trust/security-overview" class="text-glow-red underline">/trust/security-overview</a>
+            next decade looks different: real browser engines, real
+            device profiles, transparent metering, customer-configurable
+            egress (the last is on the roadmap; see
+            <a
+              href="/trust/security-overview"
+              class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
+              >/trust/security-overview</a
+            >
             for what's shipped today). Driftstack ships that future for
-            iPhone Safari first because that's the device that matters
+            iPhone Safari first, because that's the device that matters
             most for commerce, ticketing, and account workflows.
           </p>
         </div>
