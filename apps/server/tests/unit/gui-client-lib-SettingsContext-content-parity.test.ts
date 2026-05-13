@@ -1,4 +1,31 @@
-// W608.A — drift guard for apps/gui-client/src/lib/SettingsContext.tsx.
+// W608.A (W631-deepened) — drift guard for apps/gui-client/src/lib/SettingsContext.tsx.
+//
+// W631 splits the original 2 monster it() blocks into 8 focused per-
+// concept blocks + pins previously-implicit React subtleties:
+//
+//   • Cancelled-load race: the initial loadSettings() useEffect uses
+//     a `cancelled` flag flipped by the cleanup function. If a fast
+//     unmount lands before the promise resolves, the setSettings
+//     call is skipped (no React "set state on unmounted component"
+//     warning). Drift to dropping the flag would re-introduce the
+//     warning + a potential stale-state write.
+//   • V-242 telemetry re-init dependency-array: the effect re-runs
+//     when baseUrl OR telemetryOptIn changes. initTelemetry is
+//     idempotent + close()s the old client on opt-out so customers
+//     who flip the toggle mid-session don't ship stale telemetry.
+//   • useMemo client deps: buildClient is memoised on [apiKey,
+//     baseUrl] specifically — not the whole settings object — so
+//     a settings.theme change doesn't pointlessly rebuild the SDK
+//     client.
+//   • refreshAccountMe useCallback deps: [client] — refreshing
+//     account-me is tied to the SDK client identity, not the raw
+//     apiKey, so it follows the buildClient memo.
+//   • useSettings hook contract: throws an Error if used outside
+//     <SettingsProvider>. Error message pinned verbatim because
+//     downstream catch-blocks can pattern-match on it.
+//   • update() merges next over previous + persists via saveSettings
+//     so a partial Partial<DriftstackSettings> overwrites only the
+//     fields the caller passed.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +43,8 @@ function read(p: string): string {
 describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', () => {
   const body = read(LIB);
 
-  it('SettingsContext framing: single-source-of-truth for apiKey + baseUrl + V-239 AccountSelfProfile (cap-gating UX) + refreshAccountMe manual refresh + V-242 telemetry init/reconfigure pinned', () => {
+  it('file exists at canonical path + module-level framing pinned (single-source-of-truth for apiKey+baseUrl + V-239 AccountSelfProfile + V-242 telemetry re-init)', () => {
+    expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/\/\/ Settings context — single source of truth for the API key \+ base/);
     expect(body).toMatch(/\/\/ URL across the React tree\./);
     expect(body).toMatch(
@@ -33,7 +61,7 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
     expect(body).toMatch(/\/\/ create\/destroy that mutates the count\./);
   });
 
-  it('SettingsContextValue interface + SettingsProvider + V-242 telemetry re-init on baseUrl/optIn change + soft-fail accountMe (null → ungated UI) pinned', () => {
+  it('SettingsContextValue interface — 6-field shape pinned (settings + loading + client nullable + V-239 accountMe nullable + V-239 refreshAccountMe + update). Drift to a non-nullable client or accountMe would break the "no key set yet → ungated UI" soft-fail invariant.', () => {
     expect(body).toMatch(/^interface SettingsContextValue \{$/m);
     expect(body).toMatch(/settings: DriftstackSettings;/);
     expect(body).toMatch(/loading: boolean;/);
@@ -42,29 +70,70 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
       /\/\*\* V-239 — current account's tier \+ caps \+ usage\. Null while loading or unauthenticated\. \*\//,
     );
     expect(body).toMatch(/accountMe: AccountSelfProfile \| null;/);
+    expect(body).toMatch(
+      /\/\*\* V-239 — manually trigger a re-fetch \(e\.g\. after a create\/destroy\)\. \*\//,
+    );
     expect(body).toMatch(/refreshAccountMe: \(\) => Promise<void>;/);
+    expect(body).toMatch(
+      /\/\*\* Update settings \+ persist\. Returns once the on-disk write resolves\. \*\//,
+    );
     expect(body).toMatch(/update: \(next: Partial<DriftstackSettings>\) => Promise<void>;/);
     expect(body).toMatch(
       /^export const SettingsContext = createContext<SettingsContextValue \| null>\(null\);$/m,
     );
+  });
+
+  it('Initial loadSettings cancelled-race guard pinned — `let cancelled = false` flag flipped by the cleanup function so a fast unmount before the promise resolves doesn\'t setSettings on an unmounted tree. Drift to dropping the flag would re-introduce React\'s "set state on unmounted component" warning + a potential stale-state write.', () => {
     expect(body).toMatch(/export function SettingsProvider/);
+    expect(body).toMatch(
+      /useEffect\(\(\) => \{\s*\n\s*let cancelled = false;\s*\n\s*void loadSettings\(\)\.then\(\(s\) => \{\s*\n\s*if \(!cancelled\) \{\s*\n\s*setSettings\(s\);\s*\n\s*setLoading\(false\);\s*\n\s*\}\s*\n\s*\}\);\s*\n\s*return \(\) => \{\s*\n\s*cancelled = true;\s*\n\s*\};\s*\n\s*\}, \[\]\);/,
+    );
+  });
+
+  it('V-242 telemetry re-init effect — dependency array [settings.baseUrl, settings.telemetryOptIn]. initTelemetry is "idempotent + reconfigure-safe; it close()s the existing client when the customer opts out mid-session" — so a customer flipping the opt-in toggle MID-SESSION doesn\'t need to refresh the app for the change to take effect.', () => {
     expect(body).toMatch(
       /\/\/ V-242 — re-init telemetry whenever baseUrl or telemetryOptIn changes\./,
     );
-    expect(body).toMatch(/\/\/ initTelemetry is idempotent \+ reconfigure-safe;/);
+    expect(body).toMatch(/\/\/ initTelemetry is idempotent \+ reconfigure-safe; it close\(\)s the/);
+    expect(body).toMatch(/\/\/ existing client when the customer opts out mid-session\./);
     expect(body).toMatch(
       /initTelemetry\(\{ baseUrl: settings\.baseUrl, optIn: settings\.telemetryOptIn \}\);/,
     );
+    expect(body).toMatch(/\}, \[settings\.baseUrl, settings\.telemetryOptIn\]\);/);
+  });
+
+  it('update() — useCallback with [settings] dep, merges Partial<DriftstackSettings> over previous settings + persists via saveSettings. Returns once the on-disk write resolves so callers can chain on completion. Drift to a different merge order (e.g. previous over next) would break the "partial update overwrites only the passed fields" contract.', () => {
     expect(body).toMatch(
-      /const client = useMemo\(\s*\n\s*\(\) => buildClient\(settings\.apiKey, settings\.baseUrl\),/,
+      /const update = useCallback\(\s*\n\s*async \(next: Partial<DriftstackSettings>\) => \{\s*\n\s*const merged: DriftstackSettings = \{ \.\.\.settings, \.\.\.next \};\s*\n\s*setSettings\(merged\);\s*\n\s*await saveSettings\(merged\);\s*\n\s*\},\s*\n\s*\[settings\],\s*\n\s*\);/,
     );
-    expect(body).toMatch(/\/\/ Soft-fail: leave accountMe null \+ don't surface the error here\./);
+  });
+
+  it('Memoised SDK client — useMemo on [apiKey, baseUrl] specifically, not the whole settings object. A settings.theme change should not rebuild the client (avoids dropping in-flight requests when the user toggles the theme). Drift to [settings] would cause unnecessary client churn.', () => {
+    expect(body).toMatch(
+      /const client = useMemo\(\s*\n\s*\(\) => buildClient\(settings\.apiKey, settings\.baseUrl\),\s*\n\s*\[settings\.apiKey, settings\.baseUrl\],\s*\n\s*\);/,
+    );
+  });
+
+  it('V-239 refreshAccountMe + auto-fetch effect — useCallback on [client]; null-client short-circuit sets accountMe=null; soft-fail try/catch swallows the error and leaves accountMe=null ("Views consuming accountMe should treat null as cap unknown; don\'t gate"). Drift to surfacing the error here would break the "cap-unknown → ungated UI" invariant that prevents accidentally locking customers out when the server is down.', () => {
+    expect(body).toMatch(
+      /const refreshAccountMe = useCallback\(async \(\): Promise<void> => \{\s*\n\s*if \(!client\) \{\s*\n\s*setAccountMe\(null\);\s*\n\s*return;\s*\n\s*\}\s*\n\s*try \{\s*\n\s*const me = await client\.account\.me\(\);\s*\n\s*setAccountMe\(me\);\s*\n\s*\} catch \{\s*\n\s*\/\/ Soft-fail: leave accountMe null \+ don't surface the error here\./,
+    );
     expect(body).toMatch(/\/\/ Views consuming accountMe should treat null as "cap unknown;/);
     expect(body).toMatch(/\/\/ don't gate"\./);
+    expect(body).toMatch(/The actual failure surfaces when the user attempts/);
+    expect(body).toMatch(/an action that hits the cap \(server returns 402\)\./);
+    expect(body).toMatch(/setAccountMe\(null\);\s*\n\s*\}\s*\n\s*\}, \[client\]\);/);
+    expect(body).toMatch(
+      /useEffect\(\(\) => \{\s*\n\s*void refreshAccountMe\(\);\s*\n\s*\}, \[refreshAccountMe\]\);/,
+    );
+  });
+
+  it('useSettings hook — throws Error with exact message "useSettings must be used inside <SettingsProvider>" if called outside the provider tree. Message pinned verbatim because downstream catch-blocks can pattern-match on it for error UX.', () => {
     expect(body).toMatch(/^export function useSettings\(\): SettingsContextValue \{$/m);
+    expect(body).toMatch(/const ctx = useContext\(SettingsContext\);/);
     expect(body).toMatch(
       /if \(!ctx\) throw new Error\('useSettings must be used inside <SettingsProvider>'\);/,
     );
-    expect(existsSync(LIB)).toBe(true);
+    expect(body).toMatch(/return ctx;/);
   });
 });
