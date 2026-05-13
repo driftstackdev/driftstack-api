@@ -6,7 +6,7 @@ description: 5-minute getting-started for the driftstack-sdk Python client. Sync
 
 # Python quickstart
 
-V-504 — laser-focused 5-minute path to a working Python Driftstack
+— laser-focused 5-minute path to a working Python Driftstack
 session. For the multi-language overview see the [combined quickstart](/quickstart/).
 
 ## Prerequisites

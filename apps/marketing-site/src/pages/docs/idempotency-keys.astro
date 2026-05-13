@@ -102,7 +102,7 @@ Content-Type: application/json
       body differs from the original — if you send <code>k1</code>
       with price_cents=4900 first, then <code>k1</code> with
       price_cents=9900, you still get the original 4900-cent order
-      back. The server records the mismatch (V-666.AR) and surfaces
+ back. The server records the mismatch and surfaces
       it as <code>body_mismatches</code> on the admin
       <code>GET /v1/admin/crypto-orders/idempotency-metrics</code>
       counter, so support can spot client bugs where a key is being

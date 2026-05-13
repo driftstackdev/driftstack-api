@@ -6,7 +6,7 @@ description: 5-minute getting-started for the @driftstack/sdk TypeScript client.
 
 # TypeScript quickstart
 
-V-504 — laser-focused 5-minute path to a working TypeScript Driftstack
+— laser-focused 5-minute path to a working TypeScript Driftstack
 session. For the multi-language overview see the [combined quickstart](/quickstart/).
 
 ## Prerequisites

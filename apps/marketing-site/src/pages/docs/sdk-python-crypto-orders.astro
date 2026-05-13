@@ -12,7 +12,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <p class="lead">
       The <code>client.crypto_orders</code> resource wraps every
-      customer-facing endpoint on the V-666 surface from both
+ customer-facing endpoint on the surface from both
       <code>Driftstack</code> (sync) and <code>AsyncDriftstack</code>
       (asyncio). Admin endpoints are not exposed; integrators that need
       them call the REST surface directly.
@@ -48,11 +48,11 @@ page = client.crypto_orders.list()
 for o in page["orders"]:
     print(o["order_id"], o["status"], o["expires_at"])
 
-# Narrow to a single status server-side (V-666.BR).
+# Narrow to a single status server-side.
 paid = client.crypto_orders.list(status="paid", limit=25)
 
 single = client.crypto_orders.get("ord_abc123def456")
-print(single["events"])  # V-666.AU timeline`}</code></pre>
+print(single["events"])  # event timeline`}</code></pre>
     <p>
       <code>status</code> accepts <code>pending</code>,
       <code>confirming</code>, <code>paid</code>, <code>failed</code>,

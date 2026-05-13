@@ -6,7 +6,7 @@ description: Reference for every webhook event type the Driftstack API emits —
 
 # Webhook events — catalog + payload shapes
 
-V-203 — comprehensive reference for every webhook event type the
+— comprehensive reference for every webhook event type the
 Driftstack control plane emits (or will emit). Source-of-truth for
 the customer-facing `/api/webhook-events` docs page on the marketing
 site (when it lands as a Tier 3 visual surface).
@@ -172,7 +172,7 @@ Planned shape:
 ### `test.ping` [LIVE]
 
 Synthetic test event emitted by `POST /v1/webhooks/:id/test`
-(V-356). Fires REGARDLESS of subscription so customers can verify
+. Fires REGARDLESS of subscription so customers can verify
 their handler signature-checks correctly without subscribing to it.
 Customers cannot subscribe to `test.ping` (the create / update Zod
 schemas reject it); the test endpoint dispatches once per call.
@@ -243,12 +243,12 @@ dashboards).
 
 Trial-pack-specific lifecycle events. `purchased` fires on the Stripe
 checkout completion event; `expired` fires from the trial-pack
-expiry job (which doesn't yet exist — see V-202 notes).
+expiry job (which doesn't yet exist — see notes).
 
 ### `webhook_endpoint.created` / `webhook_endpoint.deleted` / `webhook_endpoint.secret_rotated` [PLANNED]
 
 Self-meta events: a webhook fires when a webhook endpoint is
-registered, deleted, or its signing secret rotated (V-359).
+registered, deleted, or its signing secret rotated .
 Useful for change-tracking systems. Recursion risk is low (the
 endpoint that fires the event is one of multiple endpoints, not
 the one being created/deleted/rotated).
@@ -305,7 +305,7 @@ Auto-disable after N consecutive failures is a planned safety net
 `consecutive_failures` field on `GET /v1/webhooks` to detect a
 drifting endpoint.
 
-## Subscription model (V-514)
+## Subscription model
 
 Two related but distinct enums in `packages/api-types/src/webhooks.ts`:
 
@@ -379,9 +379,9 @@ checks correctly before relying on it for production events.
 - Webhook resource: `apps/server/src/routes/webhooks.ts`
 - Webhook delivery service:
   `apps/server/src/services/webhooks.ts` +
-  `apps/server/src/services/durable-webhook-delivery.ts` (V-173)
+  `apps/server/src/services/durable-webhook-delivery.ts`
 - DLQ admin operations: `apps/admin-panel/src/pages/webhook-dlq.astro`
-  (V-189) — V-512 adds the `endpoint_id` drill-down filter
+  — adds the `endpoint_id` drill-down filter
 - Stripe webhook signature (the inverse direction — Stripe → us):
   `apps/server/src/lib/stripe-signing.ts` and
   `docs/deployment/stripe-webhook-testing.md`

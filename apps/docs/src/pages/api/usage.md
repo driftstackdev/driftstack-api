@@ -159,7 +159,7 @@ when an endpoint is subscribed.
 
 Both endpoints accept any valid bearer (API key OR web session)
 with `read` scope. The X-Driftstack-Account header is honored for
-team scopes per V-326c (member roles read the owner's usage).
+team scopes per the (member roles read the owner's usage).
 
 ## Errors
 
@@ -171,7 +171,7 @@ team scopes per V-326c (member roles read the owner's usage).
 
 ## Backend notes
 
-The `usage_records` table is the source of truth (per V-073 +
-V-105). The dashboard currently renders zeros for buckets that
+The `usage_records` table is the source of truth (per the +
+. The dashboard currently renders zeros for buckets that
 predate the writers landing in production; that's expected
 empty-state, not a bug.

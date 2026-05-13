@@ -65,10 +65,10 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
       /\| Sessions\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Full CRUD \+ navigate\/interact\/wait\s+\|/,
     );
     expect(body).toMatch(
-      /\| API keys\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Includes `rotate` with 24h grace \(V-296\)\s+\|/,
+      /\| API keys\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Includes `rotate` with 24h grace\s+\|/,
     );
     expect(body).toMatch(
-      /\| Team RBAC\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Invite\/accept\/list\/remove \(V-298\)\s+\|/,
+      /\| Team RBAC\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Invite\/accept\/list\/remove\s+\|/,
     );
     expect(existsSync(INSTALL)).toBe(true);
   });

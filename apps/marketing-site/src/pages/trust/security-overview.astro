@@ -59,7 +59,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             <p class="mt-1 text-sm text-slate-600">
               AES-256-GCM at-rest encryption of TOTP secrets. Recovery
               codes are scrypt-hashed (mirroring API key handling). Step-up
-              gate (V-353e) requires MFA on destructive admin paths.
+ gate requires MFA on destructive admin paths.
             </p>
             <p class="mt-1 text-xs font-mono text-slate-500">
               apps/server/src/lib/mfa-totp.ts · apps/server/src/services/mfa.ts
@@ -154,7 +154,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
               before any state mutation
             </p>
             <p class="mt-1 text-sm text-slate-600">
-              Stripe: V-080 timestamp+sha256 HMAC. NowPayments: V-487
+ Stripe: timestamp+sha256 HMAC. NowPayments:
               HMAC-SHA512 on canonical-keyed JSON. Shared raw-body
               parser ensures the bytes the signature was computed over
               are the bytes the verifier sees.
@@ -197,7 +197,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
               Today's API returns capture bytes inline; there is no
               server-side capture retention layer to configure.
               Session recordings + their retention controls land
-              with V-540 — see
+ with — see
               <a href="/docs/recordings" class="text-oxblood-700 underline"
                 >/docs/recordings</a
               >.

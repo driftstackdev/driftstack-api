@@ -19,7 +19,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <p class="lead">
       Session recordings are on the <a href="/roadmap">roadmap</a>
-      under V-540 but not yet exposed via the public API.
+ under but not yet exposed via the public API.
       <strong>No endpoint, webhook event, or request body field
       currently triggers recording today.</strong> This page describes
       the planned shape so customers building toward it can budget
@@ -32,7 +32,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <code class="font-mono">"record": true</code> on
         <code class="font-mono">POST /v1/sessions</code> today is a
         no-op — the server silently strips unrecognised fields. Don't
-        rely on recordings landing until V-540 ships.
+        rely on recordings landing until the feature ships.
       </p>
     </div>
 
@@ -52,9 +52,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <li><strong>Retention</strong> tier-dependent (sketch: 7d Trial
         Pack, 30d Solo / API Starter, 90d Team / API Builder, 180d
         Agency / API Scale, custom Enterprise). Final values land
-        with V-540.</li>
+        with the rollout.</li>
       <li><strong>Redaction</strong> for sensitive inputs — also
-        planned post-V-540.</li>
+        planned for the rollout.</li>
     </ul>
 
     <h2>What works today</h2>
@@ -81,7 +81,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <p>
       Subscribe to the <a href="/changelog">API changelog</a> RSS
       or <a href="/docs/status-subscriptions">status-page
-      subscriptions</a>; the V-540 rollout will land as an entry on
+ subscriptions</a>; the rollout will land as an entry on
       both, along with the new endpoint + event type appearing on
       <a href="/api-reference">/api-reference</a>.
     </p>

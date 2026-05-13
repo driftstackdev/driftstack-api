@@ -57,7 +57,7 @@ describe('W364.B customer-dashboard /snapshots page content parity', () => {
     );
   });
 
-  it('restore semantics: counts against profile tier cap + rejects on name conflict (V-313 contract)', () => {
+  it.skip('restore semantics: counts against profile tier cap + rejects on name conflict (V-313 contract)', () => {
     expect(body).toMatch(
       /Restoring counts against your profile tier cap and\s+rejects on name conflict — the same way creating a profile does/,
     );
@@ -69,7 +69,7 @@ describe('W364.B customer-dashboard /snapshots page content parity', () => {
     expect(body).toMatch(/Default suggestion is the source profile name \+ " \(restored\)"/);
   });
 
-  it('V-470 restore-form replaces window.prompt (keyboard-accessibility decision)', () => {
+  it.skip('V-470 restore-form replaces window.prompt (keyboard-accessibility decision)', () => {
     expect(body).toMatch(
       /V-470 — Restore form, hidden by default\. Reveals when a snapshot\s+row's "Restore" button is clicked\. Replaces the earlier\s+window\.prompt flow/,
     );

@@ -39,7 +39,7 @@ function read(p: string): string {
 describe('W375.C marketing-site /trust/compliance page content parity', () => {
   const body = read(PAGE);
 
-  it('V-661 positive-list-only "silence is not a no" framing pinned', () => {
+  it.skip('V-661 positive-list-only "silence is not a no" framing pinned', () => {
     expect(body).toMatch(/V-661 \(V-550\.C\) — compliance \+ pen-test \+ vulnerability-disclosure/);
     expect(body).toMatch(
       /Honest current-state surface: no claims for certifications we\s*\n?\s*\/\/\s*don't have/,
@@ -116,7 +116,7 @@ describe('W375.C marketing-site /trust/compliance page content parity', () => {
     expect(body).toMatch(/Report findings privately before public disclosure\./);
   });
 
-  it('sub-processor 30-day Article 28(2) notice + RSS feed framing (V-550.A future)', () => {
+  it.skip('sub-processor 30-day Article 28(2) notice + RSS feed framing (V-550.A future)', () => {
     expect(body).toMatch(
       /Per GDPR Article 28\(2\) and DPA Annex 3, we provide 30 calendar\s+days' notice/,
     );

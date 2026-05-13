@@ -137,7 +137,7 @@ if out.MfaRequired {
 }
 ```
 
-## MFA challenge (V-353d)
+## MFA challenge
 
 `POST /v1/auth/mfa/challenge`
 
@@ -155,7 +155,7 @@ was used; `recovery_code` consumption decrements
 `account.recovery_code_used` in the audit log with
 `payload.remaining`.
 
-## MFA step-up (V-353e)
+## MFA step-up
 
 `POST /v1/auth/mfa/step-up`
 
@@ -195,7 +195,7 @@ Same no-enumeration semantics as magic-link: always `200`.
 ```
 
 Issues a fresh session and invalidates ALL prior sessions for the
-account (per V-303 active-sessions rev). The customer is logged in
+account (per the active-sessions rev). The customer is logged in
 on the device that confirmed the reset; every other device must
 re-authenticate.
 
@@ -222,14 +222,14 @@ without re-prompting for credentials.
 Returns `204 No Content`. Subsequent requests with that token
 return `401 Unauthorized`.
 
-## Sessions list + revoke (V-355)
+## Sessions list + revoke
 
 For "active sign-ins" management, see [Account](/api/account/) and
 the `/v1/account/web-sessions` endpoints — they let customers see
 every device currently signed in and revoke any individual session
 or every-other.
 
-## CLI / GUI activation flow (V-460)
+## CLI / GUI activation flow
 
 Browser-OAuth-style activation lets CLI and GUI tools obtain an API
 key without asking the user to copy/paste from the dashboard.

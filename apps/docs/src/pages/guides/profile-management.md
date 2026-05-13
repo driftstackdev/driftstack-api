@@ -98,13 +98,13 @@ const profile = await client.profiles.get('prof_01HV...');
 
 ## Bind a session to a profile
 
-> **Status: planned (V-294 catalog).** Programmatic session-to-profile binding via the SDK isn't yet wired. `POST /v1/sessions` currently accepts `{ archetype, purpose, label, metadata }` only — no `profile_id` field. Sessions started via the SDK are profile-less today; the binding lives in the dashboard's GUI client driver layer.
+> **Status: planned (catalog).** Programmatic session-to-profile binding via the SDK isn't yet wired. `POST /v1/sessions` currently accepts `{ archetype, purpose, label, metadata }` only — no `profile_id` field. Sessions started via the SDK are profile-less today; the binding lives in the dashboard's GUI client driver layer.
 
 When the binding lands, sessions created with a profile reference will inherit the profile's storage state on launch and write new state back on clean destroy (or clean idle-timeout). Without a profile, the session starts ephemeral.
 
 **Track the rollout:** the [V-294 feature catalog](https://github.com/driftstackdev/driftstack-api/blob/main/docs/architecture/v294-feature-catalog.md) lists "Profile-to-session binding" as IN-FLIGHT; the change will be additive (new optional field on the request body).
 
-In the meantime, profiles still serve as long-lived archetype anchors for the dashboard's GUI flows + as restore-from-snapshot targets (V-312).
+In the meantime, profiles still serve as long-lived archetype anchors for the dashboard's GUI flows + as restore-from-snapshot targets .
 
 ## Delete a profile
 
@@ -116,7 +116,7 @@ await client.profiles.delete('prof_01HV...');
 
 If a session is currently bound to the profile, the deletion blocks until the session ends (or returns `409 Conflict` if you set `force=false`, the default).
 
-## Clone a profile (V-313)
+## Clone a profile
 
 `POST /v1/profiles/:id/clone`. Duplicates the profile metadata into a new row carrying the source's `archetype` + `description`. Underlying storage state is NOT cloned — the new profile starts with a fresh state slot under the same archetype.
 
@@ -130,7 +130,7 @@ const named = await client.profiles.clone('prof_01HV...', { name: 'staging-mirro
 
 Tier-cap + name-conflict are checked the same way as `create`: 429 if your tier limit would be exceeded, 409 on explicit-name collision, 404 if the source profile isn't yours or doesn't exist. The audit-log entry for the new profile carries `payload.cloned_from: "profile_<uuid>"` (the internal `profile_` prefix; see [audit-log payload reference](/api/audit-log/#payload-reference-v-399) for the format).
 
-## Snapshots — immutable point-in-time copies (V-312)
+## Snapshots — immutable point-in-time copies
 
 A snapshot is a frozen copy of a profile. The parent profile keeps evolving — its name, description, and storage state mutate as you use it. The snapshot does not.
 

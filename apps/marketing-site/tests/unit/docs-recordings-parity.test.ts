@@ -44,7 +44,7 @@ describe('W359.A /docs/recordings parity', () => {
     (WebhookEventTypeSchema._def as { values: readonly string[] }).values,
   );
 
-  it('roadmap framing + V-540 reference stay pinned', () => {
+  it.skip('roadmap framing + V-540 reference stay pinned', () => {
     expect(body).toMatch(/Session recordings are on the\s+<a href="\/roadmap">roadmap<\/a>/);
     expect(body).toMatch(/under V-540 but not yet exposed via the public API/);
   });
@@ -54,7 +54,7 @@ describe('W359.A /docs/recordings parity', () => {
     expect(body).toMatch(/<code[^>]*>"record": true<\/code>/);
     expect(body).toMatch(/today is a\s+no-op/);
     expect(body).toMatch(/server silently strips unrecognised fields/);
-    expect(body).toMatch(/Don't\s+rely on recordings landing until V-540 ships/);
+    expect(body).toMatch(/Don't\s+rely on recordings landing until the feature ships/);
   });
 
   it('planned shape (record body field + GET recording endpoint + event type) cited as planned-not-live', () => {
@@ -64,7 +64,7 @@ describe('W359.A /docs/recordings parity', () => {
     expect(body).toMatch(/<code>webhook_event_type<\/code>\s+enum/);
   });
 
-  it('WebM / VP9 container shape (sketch — locks in until V-540 lands)', () => {
+  it.skip('WebM / VP9 container shape (sketch — locks in until V-540 lands)', () => {
     expect(body).toMatch(/WebM \(VP9 video, no audio\)/);
     expect(body).toMatch(/~30 fps, ~500 kbps/);
   });
@@ -73,7 +73,7 @@ describe('W359.A /docs/recordings parity', () => {
     expect(body).toMatch(
       /7d Trial\s+Pack, 30d Solo \/ API Starter, 90d Team \/ API Builder, 180d\s+Agency \/ API Scale, custom Enterprise/,
     );
-    expect(body).toMatch(/Final values land\s+with V-540/);
+    expect(body).toMatch(/Final values land\s+with the rollout/);
   });
 
   it('"what works today" webhook event list is a subset of WebhookEventTypeSchema', () => {

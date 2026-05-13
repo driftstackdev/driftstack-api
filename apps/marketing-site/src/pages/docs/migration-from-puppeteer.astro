@@ -22,7 +22,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         Chrome containers to keep alive, no Selenium grid to patch,
         no Mac mini farm to babysit.</li>
       <li><strong>Profile persistence.</strong> Cookies / localStorage
-        / IndexedDB live in a server-side encrypted profile (V-312)
+ / IndexedDB live in a server-side encrypted profile 
         — clone, snapshot, restore through the API.</li>
       <li><strong>Recordings + retention.</strong> Every session can
         be recorded as WebM with tier-dependent retention; presigned
@@ -150,7 +150,7 @@ DELETE /v1/sessions/ses_…`}</code></pre>
       <dt>Direct browser-process introspection (CDP, devtools)</dt>
       <dd>Driftstack manages WebKit out of process; CDP isn't
         exposed. If you need network-level capture, use session
-        recordings (V-540 + retention) instead — they capture every
+ recordings (+ retention) instead — they capture every
         request body via the proxy layer.</dd>
 
       <dt>Synchronous chaining</dt>

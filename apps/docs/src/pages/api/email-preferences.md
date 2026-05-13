@@ -6,7 +6,7 @@ description: Manage which transactional emails Driftstack sends — opt out of w
 
 # Email preferences
 
-V-520 reference. Driftstack sends two categories of email:
+reference. Driftstack sends two categories of email:
 
 1. **Operational** — non-optional. Required for the service to
    work (signup verification, password reset, billing-failure
@@ -91,13 +91,13 @@ Required scope: `write` or `account_owner`.
 | `event_type`               | What it is                                  | Default |
 | -------------------------- | ------------------------------------------- | ------- |
 | `signup-welcome`           | First email after account creation          | opt-in  |
-| `session-success-first`    | One-time activation milestone (V-304a)      | opt-in  |
+| `session-success-first`    | One-time activation milestone               | opt-in  |
 | `session-failed-first`     | One-time first-failure notice               | opt-in  |
 | `tier-changed`             | Confirmation when subscription tier changes | opt-in  |
 | `trial-pack-purchased`     | $2.99 trial pack confirmation               | opt-in  |
 | `trial-pack-expired`       | 14-day window closed                        | opt-in  |
 | `billing-receipt`          | Successful payment receipt                  | opt-in  |
-| `billing-renewal-reminder` | 7-days-before-renewal heads-up (V-304b)     | opt-in  |
+| `billing-renewal-reminder` | 7-days-before-renewal heads-up              | opt-in  |
 
 ## What's NOT opt-outable
 

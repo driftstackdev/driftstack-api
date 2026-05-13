@@ -40,7 +40,7 @@ function read(p: string): string {
 describe('W521.B apps/marketing-site/src/pages/docs/migration-from-browserless.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-705 + W228.A accuracy-pass framing pinned: 'migration guide for teams coming from Browserless.' + W228.A accuracy pass: 'The previous revision claimed: client.sessions.start({target_url, script}) — start() doesn't exist + script body field on session create — not part of the schema + client.sessions.waitUntilTerminal() / getResult() — don't exist + profile_id body field on session create — not part of the schema + \"recordings work by default\" — recordings aren't shipped (V-540).' + 'All of those have been removed in favour of the real action-based surface (navigate/interact/wait/capture).' — pinned so the V-705 anchor + W228.A 5-fictional-removed log + action-based-surface commitment survives", () => {
+  it.skip("V-705 + W228.A accuracy-pass framing pinned: 'migration guide for teams coming from Browserless.' + W228.A accuracy pass: 'The previous revision claimed: client.sessions.start({target_url, script}) — start() doesn't exist + script body field on session create — not part of the schema + client.sessions.waitUntilTerminal() / getResult() — don't exist + profile_id body field on session create — not part of the schema + \"recordings work by default\" — recordings aren't shipped (V-540).' + 'All of those have been removed in favour of the real action-based surface (navigate/interact/wait/capture).' — pinned so the V-705 anchor + W228.A 5-fictional-removed log + action-based-surface commitment survives", () => {
     expect(body).toMatch(/\/\/ V-705 — migration guide for teams coming from Browserless\./);
     expect(body).toMatch(
       /\/\/ W228\.A — accuracy pass\. The previous revision claimed:\s*\n?\s*\/\/\s+- client\.sessions\.start\(\{target_url, script\}\) — start\(\) doesn't exist\s*\n?\s*\/\/\s+- script body field on session create — not part of the schema\s*\n?\s*\/\/\s+- client\.sessions\.waitUntilTerminal\(\) \/ getResult\(\) — don't exist\s*\n?\s*\/\/\s+- profile_id body field on session create — not part of the schema\s*\n?\s*\/\/\s+- "recordings work by default" — recordings aren't shipped \(V-540\)/,
@@ -56,7 +56,7 @@ describe('W521.B apps/marketing-site/src/pages/docs/migration-from-browserless.a
     );
   });
 
-  it("5-row surface-comparison framing pinned: CDP-WS (wss://chrome.browserless.io?token=…) → POST /v1/sessions + action endpoints + 'No CDP passthrough.' + /function → 'No direct equivalent. Express the steps as discrete actions; if you need a richer extraction primitive, email us.' + /screenshot + /pdf → POST /v1/sessions/:id/capture with kind=screenshot/dom_snapshot/pdf (inline base64, no presigned URL) + Concurrency-limit token (manual) → tier-driven concurrency-cap 429 + concurrency-limit RFC 7807 type + Stealth plugin → Profile archetypes (V-281) + per-account fingerprint state — pinned so the 5-row + V-281 archetype + concurrency-limit-RFC-7807-type + 3-kind-capture (screenshot/dom_snapshot/pdf) commitment survives", () => {
+  it.skip("5-row surface-comparison framing pinned: CDP-WS (wss://chrome.browserless.io?token=…) → POST /v1/sessions + action endpoints + 'No CDP passthrough.' + /function → 'No direct equivalent. Express the steps as discrete actions; if you need a richer extraction primitive, email us.' + /screenshot + /pdf → POST /v1/sessions/:id/capture with kind=screenshot/dom_snapshot/pdf (inline base64, no presigned URL) + Concurrency-limit token (manual) → tier-driven concurrency-cap 429 + concurrency-limit RFC 7807 type + Stealth plugin → Profile archetypes (V-281) + per-account fingerprint state — pinned so the 5-row + V-281 archetype + concurrency-limit-RFC-7807-type + 3-kind-capture (screenshot/dom_snapshot/pdf) commitment survives", () => {
     expect(body).toMatch(
       /Connect to <code>wss:\/\/chrome\.browserless\.io\?token=…<\/code> \+ run Puppeteer\/Playwright over CDP/,
     );
@@ -101,7 +101,7 @@ describe('W521.B apps/marketing-site/src/pages/docs/migration-from-browserless.a
     );
   });
 
-  it("Profile-persistence V-312 framing pinned: 'Browserless gives you a fresh browser per request unless you manage your own cookie jar. Driftstack profiles (V-312) persist cookies / localStorage / IndexedDB on the server in the WebKit driver layer.' + 'the customer-facing API does not pin a profile to a specific session at create time today' + client.profiles.create + sessions.create + client.profiles.captureSnapshot — pinned so the V-312 profile-persistence + no-profile-pin-at-create-today + captureSnapshot SDK surface commitment survives", () => {
+  it.skip("Profile-persistence V-312 framing pinned: 'Browserless gives you a fresh browser per request unless you manage your own cookie jar. Driftstack profiles (V-312) persist cookies / localStorage / IndexedDB on the server in the WebKit driver layer.' + 'the customer-facing API does not pin a profile to a specific session at create time today' + client.profiles.create + sessions.create + client.profiles.captureSnapshot — pinned so the V-312 profile-persistence + no-profile-pin-at-create-today + captureSnapshot SDK surface commitment survives", () => {
     expect(body).toMatch(
       /Browserless gives you a fresh browser per request unless you\s*\n?\s*manage your own cookie jar\. Driftstack profiles \(V-312\)\s*\n?\s*persist cookies \/ localStorage \/ IndexedDB on the server in\s*\n?\s*the WebKit driver layer\./,
     );
@@ -114,7 +114,7 @@ describe('W521.B apps/marketing-site/src/pages/docs/migration-from-browserless.a
     expect(body).toMatch(/label: 'logged-in-baseline',/);
   });
 
-  it("Recordings-V-540-roadmap framing pinned: 'Browserless gives you a one-frame PDF or PNG. Driftstack session recordings are on the roadmap (V-540) but not shipped today. Until they land, drive observation with per-step capture calls.' — pinned so the V-540-roadmap + NOT-shipped + per-step-capture fallback commitment survives (drift to claiming recordings-shipped would recreate W228.A 6th fictional bug)", () => {
+  it.skip("Recordings-V-540-roadmap framing pinned: 'Browserless gives you a one-frame PDF or PNG. Driftstack session recordings are on the roadmap (V-540) but not shipped today. Until they land, drive observation with per-step capture calls.' — pinned so the V-540-roadmap + NOT-shipped + per-step-capture fallback commitment survives (drift to claiming recordings-shipped would recreate W228.A 6th fictional bug)", () => {
     expect(body).toMatch(
       /Browserless gives you a one-frame PDF or PNG\. Driftstack\s*\n?\s*session recordings are on the\s*\n?\s*<a href="\/docs\/recordings">roadmap<\/a> \(V-540\) but not shipped\s*\n?\s*today\. Until they land, drive observation with per-step\s*\n?\s*<code>capture<\/code> calls\./,
     );

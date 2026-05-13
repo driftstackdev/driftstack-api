@@ -66,7 +66,7 @@ customer to `checkout_url`; Stripe handles card collection +
 `success_url`.
 
 `success_url` and `cancel_url` are validated against an allowlist
-(V-248). Customers self-hosting Driftstack configure the allowlist
+. Customers self-hosting Driftstack configure the allowlist
 in their deployment env.
 
 ## Start the trial pack

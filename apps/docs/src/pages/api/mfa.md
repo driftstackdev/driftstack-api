@@ -177,7 +177,7 @@ email address via single-use link; the MFA gate fires at the next
 ## Step-up reauth
 
 Some operations require a fresh MFA proof (currently: disabling MFA;
-the locked V-353a verdict adds account-deletion when self-service
+the locked verdict adds account-deletion when self-service
 deletion ships). When a gated route is called without a fresh proof,
 it returns:
 
@@ -267,7 +267,7 @@ Response (200):
 }
 ```
 
-Per the V-353a Q3 verdict, this endpoint is NOT step-up gated —
+Per the Q3 verdict, this endpoint is NOT step-up gated —
 regenerating recovery codes is recoverable (the customer can rotate
 again if compromised); only disabling + account-delete are gated.
 

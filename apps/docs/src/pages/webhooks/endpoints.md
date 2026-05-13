@@ -38,7 +38,7 @@ inbound delivery.
   / rotate time.
 - `prev_secret_prefix` + `rotation_grace_expires_at` are null
   except during the 24-hour grace period after a secret rotation
-  (V-359). When non-null, Driftstack is dual-signing every outbound
+  . When non-null, Driftstack is dual-signing every outbound
   delivery (`x-driftstack-signature` + `x-driftstack-signature-prev`)
   so customers can roll the new secret across their verifier
   infrastructure without dropped deliveries.
@@ -48,7 +48,7 @@ inbound delivery.
   re-create the endpoint to re-enable.
 - `events` is the subscription list. Only subscribable event types
   count here; `test.ping` is delivery-side-only and is rejected if
-  passed in the events array (V-356).
+  passed in the events array .
 
 ## Subscribe (create)
 
@@ -93,7 +93,7 @@ account. No pagination yet; sorted newest-first.
 `GET /v1/webhooks/:id` — single endpoint. 404 if not found / not
 owned.
 
-## Update (V-351)
+## Update
 
 `PATCH /v1/webhooks/:id`
 
@@ -124,7 +124,7 @@ deliveries fail terminally (no retry); historical deliveries stay
 queryable for the standard retention window. Idempotent — re-
 deletes return 204 no-op.
 
-## Send test (V-356)
+## Send test
 
 `POST /v1/webhooks/:id/test`
 
@@ -151,7 +151,7 @@ send_test_event`.
 `400 BadRequest` if the endpoint is paused (`active: false` OR
 `disabled_at` set) — re-enable before testing.
 
-## Rotate signing secret (V-359)
+## Rotate signing secret
 
 `POST /v1/webhooks/:id/rotate-secret`
 

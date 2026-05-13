@@ -1,12 +1,12 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: API key scopes
-description: Full reference of API key scopes — broad, granular, and the V-481 broad-satisfies-granular rule.
+description: Full reference of API key scopes — broad, granular, and the broad-satisfies-granular rule.
 ---
 
 # API key scopes
 
-V-505 reference. Every Driftstack API key carries a set of
+reference. Every Driftstack API key carries a set of
 scopes. Each `/v1/*` endpoint declares the scope it requires,
 and the request is allowed only if the key's scope set
 satisfies that requirement.
@@ -24,7 +24,7 @@ There are three categories of scopes, in order of breadth:
    (`account_owner`) and Driftstack-staff-only operations
    (`driftstack_internal_admin`). Customer keys never carry
    `driftstack_internal_admin`.
-3. **Granular scopes (V-481)** — `verb:resource` syntax (e.g.
+3. **Granular scopes ** — `verb:resource` syntax (e.g.
    `read:sessions`, `write:webhooks`). Narrow keys for
    integrations that should not have full account access.
 
@@ -34,7 +34,7 @@ There are three categories of scopes, in order of breadth:
 | --------------------------- | --------------- | ------------------------------------------------------------------------------------------------------- |
 | `read`                      | broad           | All read-side operations across every resource the customer owns.                                       |
 | `write`                     | broad           | All read + state-mutating operations except destructive admin actions.                                  |
-| `admin`                     | broad (legacy)  | Pre-V-174 alias. Treated as satisfying both `account_owner` + `driftstack_internal_admin`.              |
+| `admin`                     | broad (legacy)  | Pre-alias. Treated as satisfying both `account_owner` + `driftstack_internal_admin`.                    |
 | `account_owner`             | account-control | Mint API keys, revoke API keys, manage subscription, `/v1/account/*`. Customer dashboard scope.         |
 | `driftstack_internal_admin` | account-control | `/v1/admin/*` — list all accounts, suspend account, change tier, force-actions. Driftstack staff.       |
 | `gui_control`               | special         | Manual-control plane (`tap_at`, `type_focused`). Self-hosted GUI workflow only (locked-decision L-001). |
@@ -52,7 +52,7 @@ There are three categories of scopes, in order of breadth:
 | `admin:billing`             | granular        | All admin operations on billing (start trial, change subscription, manage portal).                      |
 | `read:audit`                | granular        | Read account audit log only.                                                                            |
 
-## V-481 broad-satisfies-granular rule
+## broad-satisfies-granular rule
 
 A key with a broad scope **satisfies** any granular scope on
 the same verb:

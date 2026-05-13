@@ -15,7 +15,7 @@ you left off.
 The profile model is intentionally light at the metadata layer —
 profile rows hold a name, archetype, optional description, and
 last-used timestamp. The underlying browser state is managed by
-the driver layer (V-073 + V-105) and isn't directly exposed
+the driver layer (+ and isn't directly exposed
 through this API.
 
 ## Tier caps
@@ -126,7 +126,7 @@ archetype is intentionally not editable — repin via
 `POST /v1/profiles/:id/clone` with a new archetype, then delete the
 old profile after migration.
 
-## Clone (V-313)
+## Clone
 
 `POST /v1/profiles/:id/clone`
 
@@ -157,7 +157,7 @@ Errors mirror create: 429 if the cap would be exceeded by the
 clone, 409 on explicit-name collision, 404 if the source isn't
 found / not owned by the caller.
 
-## Snapshots (V-312)
+## Snapshots
 
 Snapshots are immutable point-in-time copies of a profile. The
 parent profile keeps evolving — its archetype, name, description,
@@ -228,7 +228,7 @@ Returns `204 No Content`. Idempotent on already-deleted profiles
 Read endpoints (GET) accept any valid bearer with `read` scope;
 write endpoints (POST, PATCH, DELETE) require admin scope on the
 calling key. Team RBAC: `X-Driftstack-Account` is honored for
-both reads and writes per V-326e — member roles cannot write on
+both reads and writes per the — member roles cannot write on
 the owner's account; admin members can.
 
 ## Lifecycle interaction

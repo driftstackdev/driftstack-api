@@ -60,7 +60,7 @@ The `actor_type` enum:
 `actor_account_id` is the **calling** account for `customer` actions
 — which is NOT necessarily the same as the row's `account_id`.
 When a team member acts on the owner's account via the
-`X-Driftstack-Account` header (V-326c), the entry lands on the
+`X-Driftstack-Account` header , the entry lands on the
 **owner's** audit log (`account_id = acc_<owner>`) but
 `actor_account_id` records the **member** who performed the
 action (`acc_<member>`). Owners reading their audit log can
@@ -74,18 +74,18 @@ calls and `key_<key-uuid>` for API-key calls. Both are `null` for
 
 `ip_address` and `user_agent` (top-level fields on the entry) are
 surfaced in the schema but deliberately null in production
-customer-facing responses for privacy (per V-211): the dashboard
+customer-facing responses for privacy (per the): the dashboard
 rendering doesn't display them, and the admin tooling reads them
 out of a separate internal store.
 
 **Caveat (V-413):** the auth-flow audit events
 (`account.email_verified`, `account.login`, `account.logout`,
 `account.password_changed`) currently store `issued_from_ip` +
-`user_agent` inside `payload` — contrary to the V-211 intent at
+`user_agent` inside `payload` — contrary to the intent at
 the row-level columns. The fields appear in the customer's own
 audit log (acceptable under GDPR Article 15 right of access to
 own data) AND in a team member's view of the owner's audit log
-when the member uses the X-Driftstack-Account header (V-326c)
+when the member uses the X-Driftstack-Account header
 to read the owner's account. Team owners aware of this caveat
 can mitigate by limiting team-member access to admins-only or by
 filing a privacy request; a server-side payload scrub is queued
@@ -94,35 +94,35 @@ both new emit paths AND historical row backfill.
 
 ## Action catalog
 
-| Action                            | Origin   | Notes                                                                                                                                                                                                                                                                                                                    |
-| --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `account.email_verified`          | system   | Customer clicked the verify-email link                                                                                                                                                                                                                                                                                   |
-| `account.login`                   | customer | Successful sign-in. `payload.method` ∈ {`password`, `magic_link`, `password_reset`, `mfa_totp`, `mfa_recovery`}                                                                                                                                                                                                          |
-| `account.logout`                  | customer | Web session revoked                                                                                                                                                                                                                                                                                                      |
-| `account.password_changed`        | customer | Password reset confirmed                                                                                                                                                                                                                                                                                                 |
-| `account.mfa_enrolled`            | customer | First successful TOTP verify (V-353b)                                                                                                                                                                                                                                                                                    |
-| `account.mfa_disabled`            | customer | DELETE /v1/account/mfa (V-353b/e)                                                                                                                                                                                                                                                                                        |
-| `account.recovery_code_used`      | customer | Recovery code consumed (login or step-up). `payload.remaining`                                                                                                                                                                                                                                                           |
-| `api_key.minted`                  | customer | POST /v1/api-keys                                                                                                                                                                                                                                                                                                        |
-| `api_key.rotated`                 | customer | POST /v1/api-keys/:id/rotate (V-296). 24h grace                                                                                                                                                                                                                                                                          |
-| `api_key.revoked`                 | customer | DELETE /v1/api-keys/:id                                                                                                                                                                                                                                                                                                  |
-| `session.created`                 | system   | New session row inserted                                                                                                                                                                                                                                                                                                 |
-| `session.destroyed`               | system   | Session reached `destroyed`                                                                                                                                                                                                                                                                                              |
-| `profile.created`                 | customer | POST /v1/profiles, /clone (V-313 — `payload.cloned_from: "profile_<uuid>"`), or /v1/profile-snapshots/:id/restore (V-312 — `payload.restored_from_snapshot: "psnap_<uuid>"`). Pre-existing format asymmetry: `cloned_from` uses an internal `profile_` prefix; `restored_from_snapshot` uses the public `psnap_` prefix. |
-| `profile.deleted`                 | customer | DELETE /v1/profiles/:id                                                                                                                                                                                                                                                                                                  |
-| `profile.exported`                | customer | GET /v1/profiles/:id/export (V-480). Payload carries `source_profile_id` + `source_account_id` for portability lineage                                                                                                                                                                                                   |
-| `profile.imported`                | customer | POST /v1/profiles/import (V-480) — new profile minted from an export envelope; payload mirrors the source ids                                                                                                                                                                                                            |
-| `subscription.tier_changed`       | system   | Stripe portal-driven tier change                                                                                                                                                                                                                                                                                         |
-| `webhook_endpoint.created`        | customer | POST /v1/webhooks                                                                                                                                                                                                                                                                                                        |
-| `webhook_endpoint.updated`        | customer | PATCH /v1/webhooks/:id (V-351)                                                                                                                                                                                                                                                                                           |
-| `webhook_endpoint.deleted`        | customer | DELETE /v1/webhooks/:id                                                                                                                                                                                                                                                                                                  |
-| `webhook_endpoint.secret_rotated` | customer | POST /v1/webhooks/:id/rotate-secret (V-359). Payload includes new + old prefixes + grace expiry                                                                                                                                                                                                                          |
-| `webhook_delivery.replayed`       | customer | POST /v1/webhook-deliveries/:id/replay (V-307) or POST /v1/webhooks/:id/test (V-356)                                                                                                                                                                                                                                     |
-| `team.member_invited`             | customer | Team owner invited a new member                                                                                                                                                                                                                                                                                          |
-| `team.invite_accepted`            | customer | Member accepted the invite                                                                                                                                                                                                                                                                                               |
-| `team.member_removed`             | customer | Owner removed a member                                                                                                                                                                                                                                                                                                   |
-| `admin.refund_recorded`           | staff    | Support recorded a Stripe refund post-hoc                                                                                                                                                                                                                                                                                |
-| `admin.support_note`              | staff    | Free-form support-operator note attached to the account                                                                                                                                                                                                                                                                  |
+| Action                            | Origin   | Notes                                                                                                                                                                                                                                                                                                        |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `account.email_verified`          | system   | Customer clicked the verify-email link                                                                                                                                                                                                                                                                       |
+| `account.login`                   | customer | Successful sign-in. `payload.method` ∈ {`password`, `magic_link`, `password_reset`, `mfa_totp`, `mfa_recovery`}                                                                                                                                                                                              |
+| `account.logout`                  | customer | Web session revoked                                                                                                                                                                                                                                                                                          |
+| `account.password_changed`        | customer | Password reset confirmed                                                                                                                                                                                                                                                                                     |
+| `account.mfa_enrolled`            | customer | First successful TOTP verify                                                                                                                                                                                                                                                                                 |
+| `account.mfa_disabled`            | customer | DELETE /v1/account/mfa (/e)                                                                                                                                                                                                                                                                                  |
+| `account.recovery_code_used`      | customer | Recovery code consumed (login or step-up). `payload.remaining`                                                                                                                                                                                                                                               |
+| `api_key.minted`                  | customer | POST /v1/api-keys                                                                                                                                                                                                                                                                                            |
+| `api_key.rotated`                 | customer | POST /v1/api-keys/:id/rotate . 24h grace                                                                                                                                                                                                                                                                     |
+| `api_key.revoked`                 | customer | DELETE /v1/api-keys/:id                                                                                                                                                                                                                                                                                      |
+| `session.created`                 | system   | New session row inserted                                                                                                                                                                                                                                                                                     |
+| `session.destroyed`               | system   | Session reached `destroyed`                                                                                                                                                                                                                                                                                  |
+| `profile.created`                 | customer | POST /v1/profiles, /clone (— `payload.cloned_from: "profile_<uuid>"`), or /v1/profile-snapshots/:id/restore (— `payload.restored_from_snapshot: "psnap_<uuid>"`). Pre-existing format asymmetry: `cloned_from` uses an internal `profile_` prefix; `restored_from_snapshot` uses the public `psnap_` prefix. |
+| `profile.deleted`                 | customer | DELETE /v1/profiles/:id                                                                                                                                                                                                                                                                                      |
+| `profile.exported`                | customer | GET /v1/profiles/:id/export . Payload carries `source_profile_id` + `source_account_id` for portability lineage                                                                                                                                                                                              |
+| `profile.imported`                | customer | POST /v1/profiles/import — new profile minted from an export envelope; payload mirrors the source ids                                                                                                                                                                                                        |
+| `subscription.tier_changed`       | system   | Stripe portal-driven tier change                                                                                                                                                                                                                                                                             |
+| `webhook_endpoint.created`        | customer | POST /v1/webhooks                                                                                                                                                                                                                                                                                            |
+| `webhook_endpoint.updated`        | customer | PATCH /v1/webhooks/:id                                                                                                                                                                                                                                                                                       |
+| `webhook_endpoint.deleted`        | customer | DELETE /v1/webhooks/:id                                                                                                                                                                                                                                                                                      |
+| `webhook_endpoint.secret_rotated` | customer | POST /v1/webhooks/:id/rotate-secret . Payload includes new + old prefixes + grace expiry                                                                                                                                                                                                                     |
+| `webhook_delivery.replayed`       | customer | POST /v1/webhook-deliveries/:id/replay or POST /v1/webhooks/:id/test                                                                                                                                                                                                                                         |
+| `team.member_invited`             | customer | Team owner invited a new member                                                                                                                                                                                                                                                                              |
+| `team.invite_accepted`            | customer | Member accepted the invite                                                                                                                                                                                                                                                                                   |
+| `team.member_removed`             | customer | Owner removed a member                                                                                                                                                                                                                                                                                       |
+| `admin.refund_recorded`           | staff    | Support recorded a Stripe refund post-hoc                                                                                                                                                                                                                                                                    |
+| `admin.support_note`              | staff    | Free-form support-operator note attached to the account                                                                                                                                                                                                                                                      |
 
 ## Filter examples
 
@@ -157,7 +157,7 @@ while (true) {
 }
 ```
 
-## Payload reference (V-399)
+## Payload reference
 
 Several action types carry typed `payload` fields the customer
 dashboard renders inline. Consumers parsing the JSON should expect
@@ -172,8 +172,8 @@ the following shapes:
 
 // profile.created — three creation paths
 { "name": "<profile-name>", "archetype": "<archetype-slug>" }                          // direct create
-{ "name": "...", "archetype": "...", "cloned_from": "profile_<uuid>" }                 // V-313 clone
-{ "name": "...", "archetype": "...", "restored_from_snapshot": "psnap_<uuid>" }        // V-312 restore
+{ "name": "...", "archetype": "...", "cloned_from": "profile_<uuid>" } // clone
+{ "name": "...", "archetype": "...", "restored_from_snapshot": "psnap_<uuid>" } // restore
 
 // webhook_endpoint.secret_rotated (V-359)
 {
@@ -238,7 +238,7 @@ ceiling and older entries weren't included. Customers needing the
 full history should narrow the date window or paginate via the
 read endpoint above.
 
-### SDK examples (V-462; JSON branch only)
+### SDK examples (; JSON branch only)
 
 The SDKs expose the JSON branch only — CSV download is browser-driven
 and not useful through a typed SDK call. Customers wanting CSV hit
@@ -271,7 +271,7 @@ for _, entry := range dump.Data {
 
 Both endpoints accept a customer bearer (API key OR web session)
 with `read` scope. The X-Driftstack-Account header is honored for
-team scopes (V-326c): a member with read access on the team owner
+team scopes : a member with read access on the team owner
 sees the OWNER's audit log when the header is set.
 
 ## Errors

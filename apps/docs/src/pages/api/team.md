@@ -11,7 +11,7 @@ more member-accounts joined to it via the `/v1/team/*` endpoints.
 Each member uses their own login + their own dashboard sessions. API
 keys remain account-scoped (shared across the team) and admin-gated.
 
-> **Status (V-326e — May 2026):** end-to-end. Members can read the
+> **Status (— May 2026):** end-to-end. Members can read the
 > owner's resources via `X-Driftstack-Account: acc_<owner-uuid>` on
 > any `/v1/*` request; members with the `admin` role can also write.
 > See "Acting on behalf of an owner" below.
@@ -50,7 +50,7 @@ Role gating:
 - **Write endpoints** (POST / PATCH / DELETE / api-keys rotate)
   require `admin` role on the team. `member` role gets `403`.
 
-Endpoints that honor the header (V-326 / V-330):
+Endpoints that honor the header :
 
 - `/v1/sessions` (GET / POST / DELETE) + `/:id/{navigate,interact,
 wait,capture,gui-input,state}`
@@ -206,7 +206,7 @@ Every team mutation writes an entry to the customer audit log
 | `team.invite_accepted` | invitee calls POST /v1/team/invites/accept |
 | `team.member_removed`  | owner calls DELETE /v1/team/members/:id    |
 
-Use the audit-log export (V-297) to download the team history at
+Use the audit-log export to download the team history at
 any time:
 
 ```bash

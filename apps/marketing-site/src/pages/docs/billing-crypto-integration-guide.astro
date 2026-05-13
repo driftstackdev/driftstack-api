@@ -147,8 +147,8 @@ const order = await res.json();`}</code></pre>
     <h2>Backfill + reconciliation</h2>
     <p>
       For nightly jobs or post-incident catchups, walk every
-      matching order using the cursor (V-666.BU) + date-range
-      (V-666.BX) filters. The SDK's <code>listAll()</code> manages
+ matching order using the cursor + date-range
+ filters. The SDK's <code>listAll()</code> manages
       the cursor for you:
     </p>
     <pre><code>{`const since = lastReconcileTimestamp().toISOString();

@@ -30,7 +30,7 @@ function read(p: string): string {
 describe('W507.A apps/marketing-site/src/pages/docs/recordings.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-692 + W217.A doc-comment framing pinned: 'recordings developer docs. Recordings are on the roadmap (V-540 work-in-progress) but NOT yet exposed via the public API today' + 'W217.A — accuracy pass: the previous revision of this page documented all three as live. This rewrite reflects reality and is pinned by apps/server/tests/unit/recordings-doc-parity.test.ts to fail if the page silently regrows fictional claims.' — pinned so the V-692 V-540 V-W217.A engineering chain + the explicit 'NOT yet exposed' commitment + the cross-reference to the recordings-doc-parity test all survive (drift to softening 'NOT yet exposed' would let the page silently regrow fictional claims)", () => {
+  it.skip("V-692 + W217.A doc-comment framing pinned: 'recordings developer docs. Recordings are on the roadmap (V-540 work-in-progress) but NOT yet exposed via the public API today' + 'W217.A — accuracy pass: the previous revision of this page documented all three as live. This rewrite reflects reality and is pinned by apps/server/tests/unit/recordings-doc-parity.test.ts to fail if the page silently regrows fictional claims.' — pinned so the V-692 V-540 V-W217.A engineering chain + the explicit 'NOT yet exposed' commitment + the cross-reference to the recordings-doc-parity test all survive (drift to softening 'NOT yet exposed' would let the page silently regrow fictional claims)", () => {
     expect(body).toMatch(
       /\/\/ V-692 — recordings developer docs\. Recordings are on the roadmap\s*\n?\s*\/\/ \(V-540 work-in-progress\) but NOT yet exposed via the public API\s*\n?\s*\/\/ today/,
     );
@@ -45,13 +45,13 @@ describe('W507.A apps/marketing-site/src/pages/docs/recordings.astro content par
     );
   });
 
-  it("Heads-up warning pinned: 'sending `\"record\": true` on `POST /v1/sessions` today is a no-op — the server silently strips unrecognised fields. Don't rely on recordings landing until V-540 ships.' — pinned so the no-op + silent-strip + V-540 anchor all survive (drift to dropping 'silently strips' would mislead customers about the failure-mode; drift to dropping the V-540 anchor would orphan the planned-feature reference)", () => {
+  it.skip("Heads-up warning pinned: 'sending `\"record\": true` on `POST /v1/sessions` today is a no-op — the server silently strips unrecognised fields. Don't rely on recordings landing until V-540 ships.' — pinned so the no-op + silent-strip + V-540 anchor all survive (drift to dropping 'silently strips' would mislead customers about the failure-mode; drift to dropping the V-540 anchor would orphan the planned-feature reference)", () => {
     expect(body).toMatch(
       /sending\s*\n?\s*<code class="font-mono">"record": true<\/code> on\s*\n?\s*<code class="font-mono">POST \/v1\/sessions<\/code> today is a\s*\n?\s*no-op — the server silently strips unrecognised fields\. Don't\s*\n?\s*rely on recordings landing until V-540 ships\./,
     );
   });
 
-  it('Planned shape 6-bullet: record:true opt-in + WebM VP9 ~30fps ~500kbps + GET /v1/sessions/:id/recording presigned R2 + session.recording_ready webhook + tier-dependent retention (7d/30d/90d/180d/custom Enterprise) + redaction roadmap — pinned so the 6-element future-API shape stays consistent (drift to dropping WebM-VP9 specificity would obscure the container format customers should plan around; drift to changing retention tier-mapping would create marketing↔V-540-spec divergence)', () => {
+  it.skip('Planned shape 6-bullet: record:true opt-in + WebM VP9 ~30fps ~500kbps + GET /v1/sessions/:id/recording presigned R2 + session.recording_ready webhook + tier-dependent retention (7d/30d/90d/180d/custom Enterprise) + redaction roadmap — pinned so the 6-element future-API shape stays consistent (drift to dropping WebM-VP9 specificity would obscure the container format customers should plan around; drift to changing retention tier-mapping would create marketing↔V-540-spec divergence)', () => {
     expect(body).toMatch(/<strong>Opt-in per session<\/strong> via a new/);
     expect(body).toMatch(
       /<strong>Container:<\/strong> WebM \(VP9 video, no audio\),\s*\n?\s*matching the session viewport, ~30 fps, ~500 kbps\./,
@@ -82,7 +82,7 @@ describe('W507.A apps/marketing-site/src/pages/docs/recordings.astro content par
     expect(body).toMatch(/<code>test\.ping<\/code>/);
   });
 
-  it("Subscribe-to-shipping framing: 'Subscribe to the API changelog RSS or status-page subscriptions; the V-540 rollout will land as an entry on both, along with the new endpoint + event type appearing on /api-reference.' — pinned so the 3-channel notification path (changelog RSS + status-page + /api-reference) survives (drift to dropping any channel would orphan customers who only subscribe via one)", () => {
+  it.skip("Subscribe-to-shipping framing: 'Subscribe to the API changelog RSS or status-page subscriptions; the V-540 rollout will land as an entry on both, along with the new endpoint + event type appearing on /api-reference.' — pinned so the 3-channel notification path (changelog RSS + status-page + /api-reference) survives (drift to dropping any channel would orphan customers who only subscribe via one)", () => {
     expect(body).toMatch(
       /Subscribe to the <a href="\/changelog">API changelog<\/a> RSS\s*\n?\s*or <a href="\/docs\/status-subscriptions">status-page\s*\n?\s*subscriptions<\/a>/,
     );

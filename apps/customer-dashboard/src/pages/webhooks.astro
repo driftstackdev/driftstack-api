@@ -79,9 +79,9 @@ const apiBaseUrl = resolveApiBaseUrl();
     </header>
 
     <!--
-      V-347 — Create-endpoint form. Hidden by default; reveals when
+ — Create-endpoint form. Hidden by default; reveals when
       "New endpoint" is clicked. Posts to POST /v1/webhooks. On
-      success the secret is shown ONCE — same pattern as the V-296
+ success the secret is shown ONCE — same pattern as the
       api-key reveal pane.
     -->
     <div data-create-wrap class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised p-6">
@@ -176,7 +176,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <!--
       Post-create reveal pane — the secret is shown ONCE. Same posture
-      as the V-296 api-key reveal.
+ as the api-key reveal.
     -->
     <div
       data-create-reveal
@@ -202,7 +202,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     </div>
 
     <!--
-      V-475 — rotate-secret in-page reveal. Replaces the window.prompt
+ — rotate-secret in-page reveal. Replaces the window.prompt
       shown in earlier slices; some browsers block prompts in
       non-interactive contexts (incognito, autofill blockers, etc.).
       Inline reveal is keyboard-accessible + paste-target-friendly.
@@ -243,8 +243,8 @@ const apiBaseUrl = resolveApiBaseUrl();
     </div>
 
     <!--
-      V-351b — Edit-endpoint form. Hidden by default; reveals when a
-      row's "Edit" button is clicked. Mirrors the V-347 create form
+ — Edit-endpoint form. Hidden by default; reveals when a
+ row's "Edit" button is clicked. Mirrors the create form
       shape; PATCHes the live endpoint instead of POSTing a new one.
     -->
     <div
@@ -459,11 +459,11 @@ const apiBaseUrl = resolveApiBaseUrl();
   </div>
 
   <!--
-    V-181 — progressive-enhancement script. Reads
+ — progressive-enhancement script. Reads
     ds_web_session_token from localStorage, fetches /v1/webhooks,
     replaces the endpoint list with live data. Falls back to
     mock-rendered list when token absent or fetch fails. Mirrors
-    V-180 /sessions pattern.
+ /sessions pattern.
   -->
   <script is:inline define:vars={{ apiBaseUrl }}>
     (function () {

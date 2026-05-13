@@ -23,15 +23,15 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <ul>
       <li>
         <strong>Auth — derivation paths match dashboard routes.</strong>
-        V-079.C: the DASHBOARD_ORIGIN-derived defaults now land on
+: the DASHBOARD_ORIGIN-derived defaults now land on
         the customer-dashboard's real file-based routes
         (<code>/verify-email</code>, <code>/reset-password</code>)
         instead of the previous <code>/auth/&lt;flow&gt;</code> paths
-        that 404'd. Sister fix to V-079.B.
+ that 404'd. Sister fix to
       </li>
       <li>
         <strong>Dashboard — auto-verify on the verify-email page.</strong>
-        V-184a.B: when the user clicks the verification link in
+B: when the user clicks the verification link in
         their email, the dashboard now reads
         <code>?token=…</code> from the URL and submits it
         automatically — previously the user was asked to copy + paste
@@ -40,7 +40,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </li>
       <li>
         <strong>Server — runtime URLs centralized on DASHBOARD_ORIGIN.</strong>
-        V-057.E: lifecycle emails, team-invite emails, and Stripe
+: lifecycle emails, team-invite emails, and Stripe
         success/cancel/portal defaults now all source from
         <code>config.dashboardOrigin</code>. Removes scattered
         <code>https://app.driftstack.dev</code> literals + the
@@ -56,7 +56,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </li>
       <li>
         <strong>Auth — DASHBOARD_ORIGIN now drives email link URLs.</strong>
-        V-079.B: a single <code>DASHBOARD_ORIGIN</code> env var
+: a single <code>DASHBOARD_ORIGIN</code> env var
         derives the three auth-flow email URLs (verify-email,
         magic-link, password-reset). Production boot now refuses
         to start if any URL still resolves to <code>localhost</code>
@@ -258,7 +258,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <strong>OpenAPI — full crypto surface documented.</strong>
         Quote, daily, pending-age, idempotency-metrics, CSV
         export, and admin apply-ipn endpoints are now in the spec.
-        Combined with V-666.AX/AY/AZ the entire crypto surface
+ Combined with/AY/AZ the entire crypto surface
         (customer + admin) is machine-readable.
       </li>
       <li>
@@ -406,7 +406,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </li>
       <li>
         <strong>Crypto orders — admin CSV export.</strong>
-        <code>GET /v1/admin/crypto-orders.csv</code> reuses the V-666.T
+ <code>GET /v1/admin/crypto-orders.csv</code> reuses the
         status + search filters and exports up to 1000 rows per call.
       </li>
       <li>

@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: SDK versioning policy
-description: Driftstack SDK versioning + deprecation policy. Independent of HTTP API versioning per V-177.
+description: Driftstack SDK versioning + deprecation policy. Independent of HTTP API versioning per the.
 ---
 
 # SDK versioning + deprecation policy
@@ -161,7 +161,7 @@ autonomous; MAJOR publishes always require explicit founder approval.
 
 - Each SDK's `CHANGELOG.md` for the running history.
 - `docs/decisions.md` D-021 for the original SDK package decision
-  (TypeScript-first, expanded to Python + Go in V-035 + V-038).
+  (TypeScript-first, expanded to Python + Go in +.
 - `packages/api-types/` for the Zod schemas that drive
   `openapi.json` generation; any schema change here propagates to
   all three SDKs at re-generation time.

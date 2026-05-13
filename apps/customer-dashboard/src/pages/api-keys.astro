@@ -121,7 +121,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           </div>
 
           <!--
-            V-481 — granular scope picker. Hidden by default; reveals when
+ — granular scope picker. Hidden by default; reveals when
             the "granular" radio is selected. Submits the raw array of
             selected `verb:resource` scopes.
           -->
@@ -265,7 +265,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     </div>
 
     <!--
-      V-296b — dedicated rotate reveal pane. Mirrors the V-475 webhook
+ — dedicated rotate reveal pane. Mirrors the webhook
       rotate-secret pattern. Surfaces the new plaintext + grace expiry
       so the customer knows how long the OLD key keeps working.
       Replaces the previous reuse of the create-flow pane (which
@@ -378,12 +378,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       Scopes: <code class="font-mono">read</code> (list/get-only),
       <code class="font-mono">write</code> (create sessions, navigate, interact),
       <code class="font-mono">account_owner</code> (manage webhooks, billing, mint other keys —
-      V-174). Always create the narrowest-scoped key the job needs.
+. Always create the narrowest-scoped key the job needs.
     </p>
   </div>
 
   <!--
-    V-182 + V-270 — progressive-enhancement script. Reads
+ + — progressive-enhancement script. Reads
     ds_web_session_token from localStorage, fetches /v1/api-keys,
     replaces the key list with live data. Wires the New-key form
     POST + revoke DELETE flows.

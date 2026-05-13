@@ -59,7 +59,7 @@ This page replaces the previous in-DPA appendix (DPA v0.9, section
   crypto-payment customers used a manual invoice flow; the crypto
   surface is now part of the Service proper.
 - **LiveKit added** for the Browser Theatre live-session feature
-  (V-531). Live sessions are off by default; the row above applies
+  . Live sessions are off by default; the row above applies
   only to customers who turn the feature on.
 - **Hetzner narrowed** to dev/staging only. Previously listed as a
   production secondary; production has been consolidated onto AWS.

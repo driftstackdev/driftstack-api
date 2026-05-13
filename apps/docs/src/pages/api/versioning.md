@@ -106,11 +106,11 @@ When `/v2/*` does ship, expect:
 
 - **`/v1/sessions/*`** — session lifecycle is the most-likely
   candidate for a future `/v2/*` cut. Customers already opt into
-  schema evolution via `purpose` + `archetype` fields (V-169);
+  schema evolution via `purpose` + `archetype` fields ;
   shape changes within the lifecycle (e.g. new states, new
   required fields) are breaking and trigger the deprecation cycle.
 - **`/v1/api-keys/*`** — scope enum is the breaking-change risk
-  (V-174 was the most recent expansion; future scopes may need
+  (was the most recent expansion; future scopes may need
   the deprecation cycle if the meaning of `account_owner`
   narrows or splits further).
 - **`/v1/webhooks/*`** — `WebhookEventType` enum is closed. Adding
@@ -130,8 +130,8 @@ When `/v2/*` does ship, expect:
   launch. Breaking changes don't trigger external deprecation
   cycle; staff updates the panel + the docs in lock-step.
 - **`/v1/account/*`** — customer self-serve account data
-  (audit-log, email-preferences, rate-limits per V-216 / V-204 /
-  V-219). Same external-facing breaking-change discipline as
+  (audit-log, email-preferences, rate-limits per the /
+  . Same external-facing breaking-change discipline as
   `/v1/sessions/*`.
 
 ## What customers should do
@@ -158,7 +158,7 @@ When `/v2/*` does ship, expect:
   scale + customer count. Revisit post-launch if a deprecation
   cycle proves painful.
 - **Continuous breaking changes** — pre-1.0 SDKs ship them
-  (V-201 broke AccountTier; documented + intended). The HTTP API
+  (broke AccountTier; documented + intended). The HTTP API
   itself is post-1.0 from the customer's perspective even though
   Driftstack is pre-launch — customers pinning to `/v1/*` should
   see additive-only changes.

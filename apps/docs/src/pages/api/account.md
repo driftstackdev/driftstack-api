@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Account
-description: Read + edit the calling account — name, timezone, slug (V-298a), region preference (V-298b), avatar (V-352b).
+description: Read + edit the calling account — name, timezone, slug , region preference , avatar .
 ---
 
 # Account
@@ -22,23 +22,23 @@ const me = await client.account.me();
 
 Returns the account's full self-visible state:
 
-| Field                       | Type           | Notes                                                                                                                                                                   |
-| --------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                        | string         | Public id, prefixed `acc_`.                                                                                                                                             |
-| `email`                     | string         | Login email.                                                                                                                                                            |
-| `name`                      | string \| null | Display name; null falls back to email in the UI.                                                                                                                       |
-| `tier`                      | enum           | One of the seven tier slugs.                                                                                                                                            |
-| `status`                    | enum           | `active` / `suspended` / `deleted`.                                                                                                                                     |
-| `timezone`                  | string \| null | IANA name (`Europe/Amsterdam`); null means UTC fallback for client renders.                                                                                             |
-| `slug`                      | string \| null | V-298a — readable handle (lowercase a-z + 0-9 + hyphen, 3-32 chars). Null when unset.                                                                                   |
-| `region`                    | enum \| null   | V-298b — stated infrastructure-region preference (`us` / `eu` / `apac`). Informational for v1; routing is governed by [DPA Annex 3](/legal/dpa#annex-3-sub-processors). |
-| `avatar_url`                | string \| null | V-352b — short-lived (1h) presigned R2 GET URL. Null when no avatar uploaded or the public bucket isn't wired in this deploy.                                           |
-| `mfa_enrolled`              | boolean        | True once TOTP enrolment is verified.                                                                                                                                   |
-| `concurrent_session_cap`    | number         | Per-tier active-session ceiling.                                                                                                                                        |
-| `concurrent_session_active` | number         | Currently-active count.                                                                                                                                                 |
-| `profile_cap`               | number \| null | Per-tier profile ceiling; null on enterprise (custom).                                                                                                                  |
-| `profile_count`             | number         | Currently-saved profiles.                                                                                                                                               |
-| `teams`                     | array          | V-326c — owner accounts the caller is a member of. Each entry: `owner_account_id`, `role`, `membership_id`. Empty array when not on any team.                           |
+| Field                       | Type           | Notes                                                                                                                                                            |
+| --------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                        | string         | Public id, prefixed `acc_`.                                                                                                                                      |
+| `email`                     | string         | Login email.                                                                                                                                                     |
+| `name`                      | string \| null | Display name; null falls back to email in the UI.                                                                                                                |
+| `tier`                      | enum           | One of the seven tier slugs.                                                                                                                                     |
+| `status`                    | enum           | `active` / `suspended` / `deleted`.                                                                                                                              |
+| `timezone`                  | string \| null | IANA name (`Europe/Amsterdam`); null means UTC fallback for client renders.                                                                                      |
+| `slug`                      | string \| null | — readable handle (lowercase a-z + 0-9 + hyphen, 3-32 chars). Null when unset.                                                                                   |
+| `region`                    | enum \| null   | — stated infrastructure-region preference (`us` / `eu` / `apac`). Informational for v1; routing is governed by [DPA Annex 3](/legal/dpa#annex-3-sub-processors). |
+| `avatar_url`                | string \| null | — short-lived (1h) presigned R2 GET URL. Null when no avatar uploaded or the public bucket isn't wired in this deploy.                                           |
+| `mfa_enrolled`              | boolean        | True once TOTP enrolment is verified.                                                                                                                            |
+| `concurrent_session_cap`    | number         | Per-tier active-session ceiling.                                                                                                                                 |
+| `concurrent_session_active` | number         | Currently-active count.                                                                                                                                          |
+| `profile_cap`               | number \| null | Per-tier profile ceiling; null on enterprise (custom).                                                                                                           |
+| `profile_count`             | number         | Currently-saved profiles.                                                                                                                                        |
+| `teams`                     | array          | — owner accounts the caller is a member of. Each entry: `owner_account_id`, `role`, `membership_id`. Empty array when not on any team.                           |
 
 ## Update the calling account
 
@@ -60,13 +60,13 @@ a nullable field.
 - `name` — 1-120 trimmed chars; null clears (UI falls back to email).
 - `timezone` — IANA name (`Europe/Amsterdam`); null clears (UTC fallback).
 - `slug` — 3-32 chars, lowercase a-z + 0-9 + hyphen, no leading or trailing hyphen, no consecutive hyphens. Returns `409 Conflict` when another account already owns the slug. Null clears.
-- `region` — V-298b. One of `us` / `eu` / `apac`. Null clears.
+- `region` — One of `us` / `eu` / `apac`. Null clears.
 
 Returns the same shape as `GET /v1/account/me` with the new values applied.
 
 ## Avatar upload
 
-`POST /v1/account/me/avatar` — V-352b.
+`POST /v1/account/me/avatar` —
 
 Inline base64 body. The image lands in the EU-jurisdiction
 Cloudflare R2 bucket; the response includes a presigned read URL.
@@ -87,7 +87,7 @@ Field shape:
 object is left in place (a sweeper job collects orphaned keys
 off the hot path).
 
-## Active sign-ins (V-355)
+## Active sign-ins
 
 The dashboard's "active sign-ins" panel and SDK `client.account`
 resource expose the calling account's web-session list:
@@ -114,12 +114,12 @@ for _, s := range list.Data {
 
 The entry with `current: true` is the calling session itself.
 IP addresses are deliberately omitted; user-agents are reduced to
-OS + browser bucket per V-211 anonymity. Revoke individual
+OS + browser bucket per the anonymity. Revoke individual
 sessions with `revokeWebSession(id)` / `revoke_web_session(id)` /
 `RevokeWebSession(ctx, id)`. Revoke every other session in one
 call with `revokeAllOtherWebSessions()` / equivalent.
 
-## Effective rate limits (V-258)
+## Effective rate limits
 
 Read the calling account's effective per-bucket rate-limit config
 including any active overrides:
@@ -135,7 +135,7 @@ for (const bucket of cfg.buckets) {
 `override` when staff has applied a per-account adjustment;
 `override_expires_at` is non-null in the override case.
 
-## Email preferences (V-204)
+## Email preferences
 
 Per-event opt-out toggles for non-critical customer emails:
 
@@ -152,21 +152,21 @@ they're absent from the `OptOutableEmailEvent` enum on purpose.
 
 Programmatic access to the customer audit log lives at
 [`/api/audit-log`](/api/audit-log/) — `client.auditLog.list()` /
-`client.auditLog.iterate()` walk the same V-216 ledger the
-dashboard renders. Pair with the V-216 export endpoint for GDPR
+`client.auditLog.iterate()` walk the same ledger the
+dashboard renders. Pair with the export endpoint for GDPR
 Article 20 portability bulk-pulls.
 
 ## MFA enrollment + step-up
 
-MFA management is on `client.mfa.*` (V-353b) — `status`,
+MFA management is on `client.mfa.*` — `status`,
 `enroll`, `verify`, `disable`, `regenerateRecoveryCodes`. The
 login-time MFA exchange + step-up are on `client.auth.*` —
-`mfaChallenge` (V-353d) + `mfaStepUp` (V-353e). Full walkthrough
+`mfaChallenge` + `mfaStepUp` . Full walkthrough
 at [`/api/auth#mfa-challenge-v-353d`](/api/auth/#mfa-challenge-v-353d).
 
 ## Why `/me` ignores team-RBAC
 
-The `X-Driftstack-Account` header (V-326e) routes most `/v1/*`
+The `X-Driftstack-Account` header routes most `/v1/*`
 requests to a team owner's account. `/v1/account/me` is the
 exception: editing a team owner's display name, slug, region, or
 avatar via a member's bearer token would be surprising. If

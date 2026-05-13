@@ -59,7 +59,7 @@ their tier-default idle timeout (driver-managed).
 `errored`. The SDK's `sessions.create()` blocks until `ready`; any
 intermediate `creating` state isn't directly observable.
 
-`purpose` selects the WebKit driver harness configuration (V-169).
+`purpose` selects the WebKit driver harness configuration .
 `production_customer` is the default; the other values
 (`cumulative_rig_validation`, `test_domain_probe`) are reserved
 for Driftstack-internal ops.
@@ -88,7 +88,7 @@ metadata writes).
 ```
 
 All fields optional. `archetype` defaults to the locked iPhone-16
-Pro / iOS / Safari archetype when omitted (V-136 LOCKED_ARCHETYPE_ID).
+Pro / iOS / Safari archetype when omitted (LOCKED_ARCHETYPE_ID).
 `purpose` defaults to `production_customer`.
 
 Returns the created session (200).
@@ -97,9 +97,9 @@ Errors:
 
 - `429 ConcurrencyLimit` — concurrent-session cap hit.
 
-> **Profile binding is planned (V-294 catalog), not yet wired.** A
+> **Profile binding is planned (catalog), not yet wired.** A
 > future addition lets `POST /v1/sessions` accept `profile_id` to
-> bind the session to a persistent profile (V-081), with the
+> bind the session to a persistent profile , with the
 > profile's `last_used_at` updated on session destroy + the
 > profile's underlying browser state restored on session start.
 > Today's API surface is profile-less; the binding lives in the

@@ -6,7 +6,7 @@ description: Capture, list, and restore immutable point-in-time copies of saved 
 
 # Profile snapshots
 
-V-511 reference. A **profile snapshot** is an immutable
+reference. A **profile snapshot** is an immutable
 point-in-time copy of a saved profile. Snapshots let you freeze a
 known-good profile state — for example, after a successful
 account-creation flow or before a risky session — so you can
@@ -213,7 +213,7 @@ Snapshot lifecycle events surface in the customer audit log
   includes the snapshot id and the resulting profile name.
 - `profile_snapshot.deleted` — fires on delete.
 
-These events filter cleanly via the V-484 query parameters; see
+These events filter cleanly via the query parameters; see
 [/api/audit-log](/api/audit-log) for the filter shape.
 
 ## Tier-cap interaction

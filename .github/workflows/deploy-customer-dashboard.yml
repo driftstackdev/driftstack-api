@@ -74,6 +74,9 @@ jobs:
       - name: Install dependencies (workspace-aware)
         run: npm install --no-audit
 
+      - name: Build api-types (customer-dashboard depends on @driftstack/api-types)
+        run: npm run build --workspace @driftstack/api-types
+
       - name: Build customer dashboard
         env:
           # V-278.B/F follow-up — bake the live API origin into the

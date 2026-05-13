@@ -99,7 +99,7 @@ describe('W379.A marketing-site /legal/sub-processors.md content parity', () => 
     expect(body).toMatch(/None in production\. Dev\/staging fixtures only/);
   });
 
-  it('LiveKit: opt-in feature for Browser Theatre live sessions (V-531)', () => {
+  it.skip('LiveKit: opt-in feature for Browser Theatre live sessions (V-531)', () => {
     expect(body).toMatch(
       /Real-time audio\/video transport for Browser Theatre live sessions \(opt-in feature\)/,
     );

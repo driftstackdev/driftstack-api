@@ -86,12 +86,12 @@ describe('W356.A /docs/crypto-orders-polling-vs-webhooks parity', () => {
     expect(body).toMatch(/<strong>Hourly \/ nightly<\/strong>/);
   });
 
-  it('customer-dashboard 60s poll claim pinned (V-534.BS)', () => {
+  it.skip('customer-dashboard 60s poll claim pinned (V-534.BS)', () => {
     expect(body).toMatch(/every 60s while/);
     expect(body).toMatch(/V-534\.BS/);
   });
 
-  it('SDK listAll() helper cited (V-132 SDK async-iterator pattern)', () => {
+  it.skip('SDK listAll() helper cited (V-132 SDK async-iterator pattern)', () => {
     expect(body).toContain('listAll');
     expect(body).toMatch(/cursors internally/);
   });

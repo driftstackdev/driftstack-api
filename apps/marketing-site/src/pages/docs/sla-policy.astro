@@ -74,7 +74,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>How we measure</h2>
     <p>
       Availability is measured per calendar month, using probes from
-      our health-probe service (V-295b). The probes target:
+ our health-probe service . The probes target:
     </p>
     <ul>
       <li><code>GET /v1/health</code> — the API health endpoint.</li>
@@ -85,7 +85,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       A probe is "failed" when it returns non-2xx OR exceeds 5s. A
       minute is counted as downtime when 3+ consecutive probes fail
       (i.e. ≥ 3 minutes of failure register, mirroring the auto-
-      incident threshold from V-295b). Probes run every 60s from
+ incident threshold from. Probes run every 60s from
       three geo-distributed locations; the minute counts as down only
       when ≥ 2 of 3 locations register a failure (avoids regional
       ISP routing issues being counted against us).

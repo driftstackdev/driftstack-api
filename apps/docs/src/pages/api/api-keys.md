@@ -49,7 +49,7 @@ Response (201):
 `GET /v1/api-keys` returns all active and revoked keys for the calling
 account. Plaintext is never included.
 
-## Rotate a key (V-296)
+## Rotate a key
 
 `POST /v1/api-keys/:id/rotate`
 

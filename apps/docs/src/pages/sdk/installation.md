@@ -174,21 +174,21 @@ asyncio.run(main())
 
 **Resources:**
 
-| Accessor                   | Methods                                                                                                                                                               |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `client.sessions`          | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `destroy`                                                                            |
-| `client.profiles`          | `create`, `list`, `get`, `delete`                                                                                                                                     |
-| `client.api_keys`          | `create`, `list`, `rotate` (V-296), `revoke`                                                                                                                          |
-| `client.usage`             | `current_period`                                                                                                                                                      |
-| `client.webhooks`          | `create`, `list`, `get`, `update` (V-464), `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` (V-307), `rotate_secret` (V-359), `send_test` (V-463) |
-| `client.team`              | `invite`, `list_members`, `list_invites`, `accept_invite`, `remove_member` (V-298)                                                                                    |
-| `client.account`           | `me`, `update_me`, `upload_avatar`, `clear_avatar`, `list_web_sessions`, `revoke_web_session`, `revoke_all_other_web_sessions`, `rate_limits`                         |
-| `client.auth`              | `cli_authorize_initiate / bind / exchange` (V-460), `mfa_challenge` (V-353d), `mfa_step_up` (V-353e), plus signup / login / logout / refresh / magic-link / reset     |
-| `client.audit_log`         | `list`, `iterate`, `export` (V-462)                                                                                                                                   |
-| `client.mfa`               | `status`, `enroll`, `verify`, `disable`, `regenerate_recovery_codes` (V-353b)                                                                                         |
-| `client.email_preferences` | `list`, `set`, `opt_in`, `opt_out` (V-204)                                                                                                                            |
-| `client.legal`             | `documents`, `required`, `accept` (V-049 / V-458)                                                                                                                     |
-| `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete` (V-312)                                                                                  |
+| Accessor                   | Methods                                                                                                                                       |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client.sessions`          | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `destroy`                                                    |
+| `client.profiles`          | `create`, `list`, `get`, `delete`                                                                                                             |
+| `client.api_keys`          | `create`, `list`, `rotate` , `revoke`                                                                                                         |
+| `client.usage`             | `current_period`                                                                                                                              |
+| `client.webhooks`          | `create`, `list`, `get`, `update` , `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` , `rotate_secret` , `send_test`      |
+| `client.team`              | `invite`, `list_members`, `list_invites`, `accept_invite`, `remove_member`                                                                    |
+| `client.account`           | `me`, `update_me`, `upload_avatar`, `clear_avatar`, `list_web_sessions`, `revoke_web_session`, `revoke_all_other_web_sessions`, `rate_limits` |
+| `client.auth`              | `cli_authorize_initiate / bind / exchange` , `mfa_challenge` , `mfa_step_up` , plus signup / login / logout / refresh / magic-link / reset    |
+| `client.audit_log`         | `list`, `iterate`, `export`                                                                                                                   |
+| `client.mfa`               | `status`, `enroll`, `verify`, `disable`, `regenerate_recovery_codes`                                                                          |
+| `client.email_preferences` | `list`, `set`, `opt_in`, `opt_out`                                                                                                            |
+| `client.legal`             | `documents`, `required`, `accept`                                                                                                             |
+| `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete`                                                                  |
 
 Inputs accept either a Pydantic model OR a plain `dict`. Outputs are typed Pydantic models.
 
@@ -238,15 +238,15 @@ The HTTP API and the SDKs version independently. SDKs at any version stay compat
 
 ## What ships
 
-| Capability   | TS  | Python | Go  | Notes                                                    |
-| ------------ | --- | ------ | --- | -------------------------------------------------------- |
-| Sessions     | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait                       |
-| Profiles     | ✅  | ✅     | ✅  | Create, list, get, delete                                |
-| API keys     | ✅  | ✅     | ✅  | Includes `rotate` with 24h grace (V-296)                 |
-| Webhooks     | ✅  | ✅     | ✅  | CRUD + delivery introspection + `replayDelivery` (V-307) |
-| Team RBAC    | ✅  | ✅     | ✅  | Invite/accept/list/remove (V-298)                        |
-| Usage        | ✅  | ✅     | ✅  | Current-period read                                      |
-| Account self | ✅  | ✅     | ✅  | `me` returns tier + concurrent + profile counts          |
+| Capability   | TS  | Python | Go  | Notes                                            |
+| ------------ | --- | ------ | --- | ------------------------------------------------ |
+| Sessions     | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait               |
+| Profiles     | ✅  | ✅     | ✅  | Create, list, get, delete                        |
+| API keys     | ✅  | ✅     | ✅  | Includes `rotate` with 24h grace                 |
+| Webhooks     | ✅  | ✅     | ✅  | CRUD + delivery introspection + `replayDelivery` |
+| Team RBAC    | ✅  | ✅     | ✅  | Invite/accept/list/remove                        |
+| Usage        | ✅  | ✅     | ✅  | Current-period read                              |
+| Account self | ✅  | ✅     | ✅  | `me` returns tier + concurrent + profile counts  |
 
 ## Next steps
 
