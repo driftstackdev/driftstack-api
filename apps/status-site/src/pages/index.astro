@@ -17,30 +17,30 @@ const R2_FALLBACK_URL =
   <section id="overall" class="mb-8">
     <div
       id="overall-card"
-      class="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
+      class="rounded-lg border border-white/10 bg-surface-raised p-6 shadow-sm"
       data-state="loading"
     >
       <div class="flex items-center gap-3">
         <span
           id="overall-dot"
-          class="inline-block h-3 w-3 rounded-full bg-slate-300"
+          class="inline-block h-3 w-3 rounded-full bg-ink-muted"
           aria-hidden="true"></span>
-        <h1 id="overall-title" class="text-xl font-semibold text-slate-900">
+        <h1 id="overall-title" class="text-xl font-semibold text-ink-primary">
           Loading current status…
         </h1>
       </div>
-      <p id="overall-summary" class="mt-2 text-sm text-slate-500">
+      <p id="overall-summary" class="mt-2 text-sm text-ink-muted">
         Fetching incident data from <code class="font-mono text-xs">{API_BASE}/v1/status/incidents</code>.
       </p>
     </div>
   </section>
 
   <section id="incidents-section" class="mb-12">
-    <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+    <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-muted">
       Incidents — last 30 days
     </h2>
     <div id="incidents-list" class="space-y-3">
-      <div class="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500">
+      <div class="rounded-lg border border-white/10 bg-surface-raised p-5 text-sm text-ink-muted">
         Loading…
       </div>
     </div>
@@ -50,19 +50,19 @@ const R2_FALLBACK_URL =
   <section class="mb-8 flex flex-wrap items-center gap-3 text-sm">
     <a
       href="/subscribe"
-      class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-50"
+      class="rounded-md border border-white/15 bg-surface-raised px-3 py-1.5 text-ink-secondary hover:bg-white/10"
     >
       Subscribe to incident emails
     </a>
     <a
       href="/history"
-      class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-50"
+      class="rounded-md border border-white/15 bg-surface-raised px-3 py-1.5 text-ink-secondary hover:bg-white/10"
     >
       Full incident history (90 days)
     </a>
   </section>
 
-  <section class="text-xs text-slate-500">
+  <section class="text-xs text-ink-muted">
     <p>
       This page reads from the public no-auth endpoint
       <code class="font-mono">{API_BASE}/v1/status/incidents</code>. The page itself stores
@@ -89,7 +89,7 @@ const R2_FALLBACK_URL =
     operational: 'bg-emerald-500',
     degraded: 'bg-amber-500',
     outage: 'bg-red-500',
-    unknown: 'bg-slate-300',
+    unknown: 'bg-ink-muted',
   };
   const STATE_TITLE = {
     operational: 'All systems operational',
@@ -130,27 +130,27 @@ const R2_FALLBACK_URL =
     const updates = (inc.updates ?? [])
       .map(
         (u) => `
-          <li class="relative pl-5 border-l border-slate-200">
+          <li class="relative pl-5 border-l border-white/10">
             <span class="absolute -left-[5px] top-1 inline-block h-2 w-2 rounded-full bg-oxblood-700"></span>
             <div class="flex flex-wrap items-baseline gap-2">
               ${badge(u.status, STATUS_BADGE[u.status] ?? [])}
-              <span class="text-xs text-slate-500">${fmtIso(u.posted_at)}</span>
+              <span class="text-xs text-ink-muted">${fmtIso(u.posted_at)}</span>
             </div>
-            <p class="mt-1 text-sm text-slate-700">${escapeHtml(u.message)}</p>
+            <p class="mt-1 text-sm text-ink-secondary">${escapeHtml(u.message)}</p>
           </li>
         `,
       )
       .join('');
     const opacity = inc.status === 'resolved' ? 'opacity-80' : '';
     return `
-      <article class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm ${opacity}">
+      <article class="rounded-lg border border-white/10 bg-surface-raised p-5 shadow-sm ${opacity}">
         <header class="mb-2">
           <div class="flex flex-wrap items-center gap-2">
             ${badge(inc.severity, SEVERITY_BADGE[inc.severity] ?? [])}
             ${badge(inc.status, STATUS_BADGE[inc.status] ?? [])}
           </div>
-          <h3 class="mt-2 text-base font-semibold text-slate-900">${escapeHtml(inc.title)}</h3>
-          <p class="mt-1 text-xs text-slate-500">
+          <h3 class="mt-2 text-base font-semibold text-ink-primary">${escapeHtml(inc.title)}</h3>
+          <p class="mt-1 text-xs text-ink-muted">
             Started ${fmtIso(inc.started_at)}${
               inc.resolved_at ? ` · resolved ${fmtIso(inc.resolved_at)}` : ''
             }${
@@ -256,7 +256,7 @@ const R2_FALLBACK_URL =
 
       if (detailed.length === 0) {
         list.innerHTML = `
-          <div class="rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-500">
+          <div class="rounded-lg border border-white/10 bg-surface-raised p-5 text-sm text-ink-muted">
             No incidents in the last 30 days.
           </div>
         `;
@@ -271,7 +271,7 @@ const R2_FALLBACK_URL =
       }
       if (resolved.length > 0) {
         sections.push(`
-          <h3 class="mb-2 mt-6 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          <h3 class="mb-2 mt-6 text-sm font-semibold uppercase tracking-wide text-ink-muted">
             Resolved
           </h3>
           <div class="space-y-3">${resolved.map(renderIncident).join('')}</div>

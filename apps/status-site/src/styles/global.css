@@ -2,11 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/* R13 — status-site dark surface synced with marketing-site +
+   customer-dashboard + docs. Customers checking status during an
+   incident shouldn't experience a brand-jarring light theme when
+   the rest of the product is dark. */
+
 @layer base {
+  :root {
+    color-scheme: dark;
+  }
   html {
     font-family: Geist, ui-sans-serif, system-ui, sans-serif;
+    @apply bg-surface-base text-ink-primary;
   }
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply min-h-screen bg-surface-base text-ink-primary antialiased;
   }
 }

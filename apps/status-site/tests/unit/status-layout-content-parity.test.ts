@@ -53,17 +53,17 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     );
   });
 
-  it('header: "Driftstack" wordmark + middot + "status" subtitle', () => {
+  it('R13 header: "Driftstack" wordmark + middot + "status" subtitle — using dark-theme ink tokens (text-ink-primary / text-ink-muted) after the status-site dark migration', () => {
     expect(body).toMatch(
-      /<span class="text-base font-semibold tracking-tight text-slate-900">Driftstack<\/span>/,
+      /<span class="text-base font-semibold tracking-tight text-ink-primary">Driftstack<\/span>/,
     );
-    expect(body).toMatch(/<span class="text-slate-400">·<\/span>/);
-    expect(body).toMatch(/<span class="text-slate-500">status<\/span>/);
+    expect(body).toMatch(/<span class="text-ink-muted">·<\/span>/);
+    expect(body).toMatch(/<span class="text-ink-muted">status<\/span>/);
   });
 
-  it('header right-nav: driftstack.dev external cross-link', () => {
+  it('R13 header right-nav: driftstack.dev external cross-link — dark-theme ink-muted -> ink-primary hover after status-site migration', () => {
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev" class="text-slate-500 hover:text-slate-900">\s*\n?\s*driftstack\.dev\s*\n?\s*<\/a>/,
+      /<a href="https:\/\/driftstack\.dev" class="text-ink-muted hover:text-ink-primary">\s*\n?\s*driftstack\.dev\s*\n?\s*<\/a>/,
     );
   });
 
@@ -73,9 +73,9 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     );
   });
 
-  it('footer privacy-policy cross-link to driftstack.dev/legal/privacy-policy', () => {
+  it('R13 footer privacy-policy cross-link to driftstack.dev/legal/privacy-policy — dark-theme hover:text-ink-primary after status-site migration', () => {
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/privacy-policy" class="hover:text-slate-900">\s*\n?\s*Privacy\s*\n?\s*<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/privacy-policy" class="hover:text-ink-primary">\s*\n?\s*Privacy\s*\n?\s*<\/a>/,
     );
   });
 
@@ -87,9 +87,9 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     expect(body).toMatch(/<main[^>]*>\s*\n?\s*<slot \/>\s*\n?\s*<\/main>/);
   });
 
-  it('html lang="en" + bg-white header + bg-slate-50/white split', () => {
+  it('R13 html lang="en" + dark header + min-h-screen body — replaces the prior bg-white header + bg-slate-50 body split after the status-site dark migration', () => {
     expect(body).toMatch(/<html lang="en">/);
-    expect(body).toMatch(/<header class="border-b border-slate-200 bg-white">/);
+    expect(body).toMatch(/<header class="border-b border-white\/10 bg-surface-raised">/);
     expect(body).toMatch(/<body class="min-h-screen">/);
   });
 
