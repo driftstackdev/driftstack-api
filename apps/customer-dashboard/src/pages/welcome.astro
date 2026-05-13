@@ -1,48 +1,50 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 
-// V-184a — onboarding step 3. Brief intro + CTA to tier-select.
-// V-501 — copy polish + "what happens next" 3-step within Tier-1 bounds.
-// Tier 3 visual UX (full brand intro + animated diagrams) lands in
-// V-184b draft.
+// Onboarding step 3 — brief intro + CTA to tier-select. R6 polish:
+// section-label header + auth-card style hero offer + step-list
+// what-happens-next + cleaner visual hierarchy.
 ---
 
 <DashboardLayout title="Welcome" withSidebar={false}>
-  <div class="mx-auto max-w-2xl px-6 py-16" data-page="welcome">
-    <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Welcome</p>
-    <h1 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
+  <div class="mx-auto max-w-2xl px-6 py-16 animate-fade-up" data-page="welcome">
+    <p class="section-label">Welcome</p>
+    <h1
+      class="mt-5 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl"
+      style="letter-spacing: -0.02em;"
+    >
       Your account is ready.
     </h1>
-    <p class="mt-4 text-ink-secondary">
-      Driftstack runs real iPhone Safari sessions — same WebKit C++ engine,
-      same fingerprint surface as a physical iPhone. Pick how you want to
-      start:
+    <p class="mt-4 text-ink-secondary leading-relaxed">
+      Driftstack runs real iPhone Safari sessions — the same browser engine
+      every iPhone uses, so your sessions look indistinguishable from a
+      physical phone. Pick how you'd like to start:
     </p>
 
     <ul class="mt-8 space-y-4">
-      <li class="rounded-lg border border-glow-red/30 bg-surface-raised p-5">
+      <li class="auth-card">
         <div class="flex items-baseline justify-between gap-3">
           <h2 class="text-lg font-semibold text-ink-primary">Trial pack</h2>
-          <span class="font-mono text-sm text-ink-secondary">$2.99 · one-time</span>
+          <span class="font-mono text-sm text-glow-red-soft">$2.99 · one-time</span>
         </div>
-        <p class="mt-2 text-sm text-ink-secondary">
+        <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
           16 hours of session time. No subscription, no auto-renewal.
-          14-day window. Best path to evaluate before committing — most
-          first-time customers start here.
+          14-day window. The best way to try Driftstack before committing —
+          most first-time customers start here.
         </p>
         <a href="/select-tier?focus=trial" class="btn-primary mt-4 inline-flex">
           Start trial pack
         </a>
       </li>
-      <li class="rounded-lg border border-white/10 bg-surface-raised p-5">
+      <li class="card p-6">
         <div class="flex items-baseline justify-between gap-3">
           <h2 class="text-lg font-semibold text-ink-primary">Pick a tier</h2>
           <span class="font-mono text-sm text-ink-muted">$79–$1,499 / mo</span>
         </div>
-        <p class="mt-2 text-sm text-ink-secondary">
-          Skip the trial and go straight to a monthly subscription — Solo
-          Manual for human-driven sessions through to API Scale for
-          high-volume automation. Cancel anytime.
+        <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+          Skip the trial and subscribe right away — Solo Manual for hand-
+          driven sessions, all the way up to API Scale for high-volume
+          automation. Cancel anytime.
         </p>
         <a href="/select-tier" class="btn-secondary mt-4 inline-flex">View tiers</a>
       </li>
@@ -50,29 +52,48 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 
     <section
       aria-label="What happens next"
-      class="mt-10 rounded-lg border border-white/10 bg-surface-base p-5"
+      class="mt-12 rounded-xl border border-white/10 bg-surface-base/60 backdrop-blur-sm p-6"
     >
-      <h2 class="text-sm font-semibold uppercase tracking-wide text-ink-secondary">
-        What happens next
-      </h2>
-      <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm text-ink-secondary">
-        <li>
-          You'll be redirected to Stripe to confirm payment. We never see
-          your card details.
+      <p class="section-label">What happens next</p>
+      <ol class="mt-5 space-y-4 text-sm text-ink-secondary">
+        <li class="flex gap-4">
+          <span
+            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-glow-red/40 bg-glow-red/10 font-mono text-xs text-glow-red"
+            >1</span
+          >
+          <span class="leading-relaxed">
+            We'll send you to Stripe to confirm payment. Your card details
+            stay between you and Stripe — we never see them.
+          </span>
         </li>
-        <li>
-          Back here, you'll create your first session — a real iPhone
-          Safari that runs on our fleet.
+        <li class="flex gap-4">
+          <span
+            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-glow-red/40 bg-glow-red/10 font-mono text-xs text-glow-red"
+            >2</span
+          >
+          <span class="leading-relaxed">
+            Back here, you'll create your first session — a real iPhone
+            Safari instance running on our fleet.
+          </span>
         </li>
-        <li>
-          We'll mint your first API key automatically. You can revoke or
-          rotate it any time on the API keys page.
+        <li class="flex gap-4">
+          <span
+            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-glow-red/40 bg-glow-red/10 font-mono text-xs text-glow-red"
+            >3</span
+          >
+          <span class="leading-relaxed">
+            We'll create your first API key automatically. You can revoke
+            or rotate it any time on the API keys page.
+          </span>
         </li>
       </ol>
     </section>
 
     <p class="mt-8 text-xs text-ink-muted">
-      Already know what you want? <a href="/" class="text-glow-red underline">
+      Already know what you want? <a
+        href="/"
+        class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
+      >
         Skip to dashboard
       </a>.
     </p>

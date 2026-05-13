@@ -47,6 +47,6 @@ describe('W268.C /welcome onboarding ↔ TRIAL_PACK + subscription parity', () =
 
   it('iPhone Safari narrative is the canonical product framing', () => {
     expect(page).toMatch(/iPhone Safari sessions/);
-    expect(page).toMatch(/WebKit C\+\+ engine/);
+    expect(page).toMatch(/the same browser engine/);
   });
 });

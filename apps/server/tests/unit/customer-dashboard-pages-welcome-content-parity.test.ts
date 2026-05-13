@@ -1,20 +1,7 @@
-// W491.B — drift guard for apps/customer-dashboard/src/pages/welcome.astro.
-// V-184a + V-501 onboarding step 3 (after signup + verify). Drift
-// here either drops the no-token defensive redirect (customers
-// landing here without auth would see the page but the next step
-// /select-tier would fail) or breaks the trial-pack 'most first-
-// time customers start here' framing (would push customers into
-// the higher-cost monthly tiers).
-//
-//   • V-184a + V-501 framing pinned.
-//   • Trial pack '$2.99 · one-time' + 16-hour + 14-day-window
-//     framing.
-//   • Monthly tiers '$79–$1,499 / mo' range (Solo Manual → API
-//     Scale).
-//   • 3-step 'What happens next' (Stripe → first session → API
-//     key auto-mint).
-//   • Defensive redirect: no ds_web_session_token → /signup.
-//   • aria-label='What happens next' on the steps section.
+// W491.B (R6-refreshed) — drift guard for apps/customer-dashboard/src/pages/welcome.astro.
+// R6 simplified the copy for non-technical readers and dropped the
+// V-NNN internal tracking IDs from customer-visible text. This guard
+// pins the load-bearing claims on the rewritten page.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -32,64 +19,68 @@ function read(p: string): string {
 describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-184a + V-501 framing pinned: 'onboarding step 3. Brief intro + CTA to tier-select.' + 'copy polish + What happens next 3-step within Tier-1 bounds.' + 'Tier 3 visual UX (full brand intro + animated diagrams) lands in V-184b draft.' — pinned so the onboarding-step framing + the V-184b deferral note survive", () => {
+  it('R6 onboarding-step-3 framing comment pinned', () => {
+    expect(body).toMatch(/Onboarding step 3 — brief intro \+ CTA to tier-select\. R6 polish/);
+  });
+
+  it("Brand intro (R6 plain-English rewrite): 'real iPhone Safari sessions — the same browser engine every iPhone uses, so your sessions look indistinguishable from a physical phone.'", () => {
     expect(body).toMatch(
-      /\/\/ V-184a — onboarding step 3\. Brief intro \+ CTA to tier-select\.\s*\n?\s*\/\/ V-501 — copy polish \+ "what happens next" 3-step within Tier-1 bounds\.\s*\n?\s*\/\/ Tier 3 visual UX \(full brand intro \+ animated diagrams\) lands in\s*\n?\s*\/\/ V-184b draft\./,
+      /Driftstack runs real iPhone Safari sessions — the same browser engine\s*\n?\s*every iPhone uses, so your sessions look indistinguishable from a\s*\n?\s*physical phone\./,
     );
   });
 
-  it("Brand intro framing pinned: 'Driftstack runs real iPhone Safari sessions — same WebKit C++ engine, same fingerprint surface as a physical iPhone. Pick how you want to start:' — pinned so the value-prop framing on the post-signup welcome stays explicit (drift would weaken the customer's understanding that they're getting REAL Safari, not a simulator)", () => {
+  it('Trial-pack framing pinned: $2.99 · one-time + 16h + 14d + recommended-first-step language', () => {
     expect(body).toMatch(
-      /Driftstack runs real iPhone Safari sessions — same WebKit C\+\+ engine,\s*\n?\s*same fingerprint surface as a physical iPhone\. Pick how you want to\s*\n?\s*start:/,
-    );
-  });
-
-  it("Trial pack framing pinned: '$2.99 · one-time' price + '16 hours of session time. No subscription, no auto-renewal. 14-day window. Best path to evaluate before committing — most first-time customers start here.' — pinned so the trial-pack positioning as the recommended first step survives + the price ($2.99) + duration (16h) + window (14d) stay accurate", () => {
-    expect(body).toMatch(
-      /<span class="font-mono text-sm text-ink-secondary">\$2\.99 · one-time<\/span>/,
+      /<span class="font-mono text-sm text-glow-red-soft">\$2\.99 · one-time<\/span>/,
     );
     expect(body).toMatch(
-      /16 hours of session time\. No subscription, no auto-renewal\.\s*\n?\s*14-day window\. Best path to evaluate before committing — most\s*\n?\s*first-time customers start here\./,
+      /16 hours of session time\. No subscription, no auto-renewal\.\s*\n?\s*14-day window\. The best way to try Driftstack before committing —\s*\n?\s*most first-time customers start here\./,
     );
     expect(body).toMatch(
       /<a href="\/select-tier\?focus=trial" class="btn-primary mt-4 inline-flex">\s*\n?\s*Start trial pack\s*\n?\s*<\/a>/,
     );
   });
 
-  it("Monthly-tiers framing pinned: '$79–$1,499 / mo' range + 'Skip the trial and go straight to a monthly subscription — Solo Manual for human-driven sessions through to API Scale for high-volume automation. Cancel anytime.' — pinned so the price range + tier-purpose vocabulary (manual = human, API = automation) survives", () => {
+  it("Monthly-tiers framing (R6 plain language): '$79–$1,499 / mo' + Solo Manual for hand-driven sessions / API Scale", () => {
     expect(body).toMatch(
       /<span class="font-mono text-sm text-ink-muted">\$79–\$1,499 \/ mo<\/span>/,
     );
     expect(body).toMatch(
-      /Skip the trial and go straight to a monthly subscription — Solo\s*\n?\s*Manual for human-driven sessions through to API Scale for\s*\n?\s*high-volume automation\. Cancel anytime\./,
+      /Skip the trial and subscribe right away — Solo Manual for hand-\s*\n?\s*driven sessions, all the way up to API Scale for high-volume\s*\n?\s*automation\. Cancel anytime\./,
     );
     expect(body).toMatch(
       /<a href="\/select-tier" class="btn-secondary mt-4 inline-flex">View tiers<\/a>/,
     );
   });
 
-  it("'What happens next' 3-step framing pinned: (1) Stripe redirect 'We never see your card details.' (2) First session 'a real iPhone Safari that runs on our fleet.' (3) API key auto-mint 'You can revoke or rotate it any time on the API keys page.' — pinned so the post-payment expectations stay explicit (drift to dropping the 'we never see your card' clause would weaken the security trust signal)", () => {
-    expect(body).toMatch(
-      /You'll be redirected to Stripe to confirm payment\. We never see\s*\n?\s*your card details\./,
-    );
-    expect(body).toMatch(
-      /Back here, you'll create your first session — a real iPhone\s*\n?\s*Safari that runs on our fleet\./,
-    );
-    expect(body).toMatch(
-      /We'll mint your first API key automatically\. You can revoke or\s*\n?\s*rotate it any time on the API keys page\./,
-    );
+  it("'What happens next' 3-step framing pinned (R6 numbered-circle visual + simpler copy)", () => {
     expect(body).toMatch(/aria-label="What happens next"/);
+    // Step 1 — Stripe redirect + "we never see them" reassurance.
+    expect(body).toMatch(
+      /We'll send you to Stripe to confirm payment\. Your card details\s*\n?\s*stay between you and Stripe — we never see them\./,
+    );
+    // Step 2 — first session = real iPhone Safari on the fleet.
+    expect(body).toMatch(
+      /Back here, you'll create your first session — a real iPhone\s*\n?\s*Safari instance running on our fleet\./,
+    );
+    // Step 3 — first API key auto-created + revocable.
+    expect(body).toMatch(
+      /We'll create your first API key automatically\. You can revoke\s*\n?\s*or rotate it any time on the API keys page\./,
+    );
+    // The numbered-circle visual treatment: glow-red bordered round badges 1/2/3.
+    expect(body).toMatch(/rounded-full border border-glow-red\/40 bg-glow-red\/10/);
   });
 
-  it("Defensive redirect: localStorage.getItem('ds_web_session_token') === null → window.location.replace('/signup') — pinned so direct navigation to /welcome without auth doesn't show the page with broken downstream actions (use replace() to avoid a back-button loop)", () => {
+  it("Defensive redirect: localStorage.getItem('ds_web_session_token') === null → window.location.replace('/signup')", () => {
     expect(body).toMatch(
       /\/\/ Defensive redirect: if user lands here without a token, send to\s*\n?\s*\/\/ \/signup\. \(Direct nav to \/welcome shouldn't normally happen\.\)\s*\n?\s*\(function \(\) \{\s*\n?\s*const token = localStorage\.getItem\('ds_web_session_token'\);\s*\n?\s*if \(!token\) window\.location\.replace\('\/signup'\);\s*\n?\s*\}\)\(\);/,
     );
   });
 
-  it("Skip-to-dashboard escape: 'Already know what you want? Skip to dashboard' link to '/' — pinned so customers who already know they want to configure manually (not via tier-select wizard) have a path out (drift to dropping this would force every customer through the tier-select funnel)", () => {
+  it("Skip-to-dashboard escape: 'Already know what you want? Skip to dashboard' link to '/'", () => {
+    expect(body).toMatch(/Already know what you want\?/);
     expect(body).toMatch(
-      /Already know what you want\? <a href="\/" class="text-glow-red underline">\s*\n?\s*Skip to dashboard\s*\n?\s*<\/a>/,
+      /<a\s*\n?\s*href="\/"\s*\n?\s*class="text-glow-red[^"]*"\s*\n?\s*>\s*Skip to dashboard\s*<\/a>/,
     );
   });
 

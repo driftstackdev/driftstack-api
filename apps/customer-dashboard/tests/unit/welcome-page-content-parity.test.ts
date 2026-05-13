@@ -50,22 +50,24 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     // /welcome under-promises or over-promises.
     expect(body).toMatch(/\$79–\$1,499 \/ mo/);
     // "Solo Manual" + "API Scale" tier names also pinned.
-    expect(body).toMatch(/Solo\s+Manual for human-driven sessions through to API Scale/);
+    expect(body).toMatch(
+      /Solo Manual for hand-\s*\n?\s*driven sessions, all the way up to API Scale/,
+    );
   });
 
   it('"What happens next" 3-step contract pinned (Stripe / session / API key)', () => {
     expect(body).toContain('What happens next');
-    // Step 1 — Stripe redirect + "We never see your card details".
+    // Step 1 — Stripe redirect + card-detail reassurance.
     expect(body).toMatch(
-      /You'll be redirected to Stripe to confirm payment\. We never see\s+your card details/,
+      /We'll send you to Stripe to confirm payment\. Your card details\s+stay between you and Stripe — we never see them/,
     );
     // Step 2 — first session = real iPhone Safari on the fleet.
     expect(body).toMatch(
-      /you'll create your first session — a real iPhone\s+Safari that runs on our fleet/,
+      /you'll create your first session — a real iPhone\s+Safari instance running on our fleet/,
     );
-    // Step 3 — first API key auto-minted + revocable.
+    // Step 3 — first API key auto-created + revocable.
     expect(body).toMatch(
-      /We'll mint your first API key automatically\. You can revoke or\s+rotate it any time on the API keys page/,
+      /We'll create your first API key automatically\. You can revoke\s+or rotate it any time on the API keys page/,
     );
   });
 
@@ -82,27 +84,24 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
   });
 
   it('"Skip to dashboard" escape hatch points at root (/), not /sessions', () => {
-    // Load-bearing routing decision — V-184a redirects logged-in
+    // Load-bearing routing decision — onboarding redirects logged-in
     // customers via the dashboard home, not a session-specific page.
     expect(body).toMatch(/Skip to dashboard\s*<\/a>/);
-    expect(body).toMatch(/<a href="\/" class="text-glow-red underline">/);
+    expect(body).toMatch(/<a\s*\n?\s*href="\/"\s*\n?\s*class="text-glow-red[^"]*"\s*\n?\s*>/);
   });
 
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {
     expect(body).toContain('ds_web_session_token');
   });
 
-  it('V-184a + V-501 framing comment pinned (onboarding step 3 + copy polish)', () => {
-    expect(body).toMatch(/V-184a — onboarding step 3/);
-    expect(body).toMatch(/V-501 — copy polish \+ "what happens next" 3-step within Tier-1 bounds/);
+  it('R6 onboarding step 3 framing comment pinned', () => {
+    expect(body).toMatch(/Onboarding step 3 — brief intro \+ CTA to tier-select/);
+    expect(body).toMatch(/R6 polish/);
   });
 
-  it('hero claim: "Driftstack runs real iPhone Safari sessions — same WebKit C++ engine"', () => {
-    // First post-verification message a customer reads — pin the
-    // engine framing so it stays aligned with the marketing-site
-    // /security + /comparison pages.
+  it('hero claim (R6 plain-English rewrite): real iPhone Safari sessions + same browser engine + indistinguishable from a physical iPhone', () => {
     expect(body).toMatch(
-      /Driftstack runs real iPhone Safari sessions — same WebKit C\+\+ engine,\s+same fingerprint surface as a physical iPhone/,
+      /Driftstack runs real iPhone Safari sessions — the same browser engine\s+every iPhone uses, so your sessions look indistinguishable from a\s+physical phone/,
     );
   });
 
