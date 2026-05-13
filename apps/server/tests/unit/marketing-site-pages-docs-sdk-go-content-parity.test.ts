@@ -1,0 +1,146 @@
+// W514.A — drift guard for apps/marketing-site/src/pages/docs/sdk-go.astro.
+// V-706 Go SDK quickstart. Drift here either changes the module path (would
+// create marketing↔go-proxy divergence) or breaks the typed-errors framing
+// (would mislead about errors.As / errors.Is patterns).
+//
+//   • V-706 doc-comment framing + V-703/V-704 SDK-trilogy companion.
+//   • Module: github.com/driftstackdev/driftstack-api/packages/sdk-go.
+//   • Go ≥ 1.22 + zero non-stdlib deps + net/http JSON.
+//   • driftstack.NewClient(Config{APIKey, BaseURL}) + no-network-on-construct
+//     + http.Client-pooled.
+//   • sessions.Create no target URL + Sessions.Navigate to URL.
+//   • 5-state SessionStatus constants: SessionCreating / SessionReady /
+//     SessionBusy / SessionDestroyed / SessionErrored.
+//   • 5-method drive surface: Navigate / Interact / Wait / Capture / Destroy.
+//   • Typed errors with errors.As + errors.Is + ErrConflict sentinel +
+//     RetryAfterSeconds.
+//   • RFC 7807 4-field apiError shape: Status / ProblemType / Message / Problem.
+//   • context.Context first-arg + cancellation cascades.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/sdk-go.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity', () => {
+  const body = read(LIB);
+
+  it("V-706 framing pinned: 'Go SDK quickstart. Third entry in the SDK quickstart trilogy (TypeScript V-703 / Python V-704). Same skeleton, Go-idiomatic examples. Pitched at backend teams running Go services that need a browser leg for scrape / E2E / generate-PDF workloads.' — pinned so the V-706 anchor + V-703/V-704 trilogy cross-ref + target-audience framing all survive (drift to dropping the trilogy anchor would orphan the doc from the sister-SDK reference)", () => {
+    expect(body).toMatch(
+      /\/\/ V-706 — Go SDK quickstart\. Third entry in the SDK quickstart trilogy\s*\n?\s*\/\/ \(TypeScript V-703 \/ Python V-704\)\. Same skeleton, Go-idiomatic\s*\n?\s*\/\/ examples\. Pitched at backend teams running Go services that need a\s*\n?\s*\/\/ browser leg for scrape \/ E2E \/ generate-PDF workloads\./,
+    );
+  });
+
+  it("Module path + Go ≥ 1.22 + zero-non-stdlib-deps framing pinned: 'go get github.com/driftstackdev/driftstack-api/packages/sdk-go@latest' + 'Go ≥ 1.22 is supported. The module has zero non-stdlib runtime dependencies (it speaks raw JSON over net/http); no transitive bloat.' — pinned so the canonical module path + Go-version floor + zero-deps commitment all survive (drift to a different module path would create marketing↔go-proxy divergence; drift to claiming non-zero deps would let the no-transitive-bloat story slip)", () => {
+    expect(body).toMatch(
+      /go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go@latest/,
+    );
+    expect(body).toMatch(
+      /Go ≥ 1\.22 is supported\. The module has zero non-stdlib runtime\s*\n?\s*dependencies \(it speaks raw JSON over <code>net\/http<\/code>\); no\s*\n?\s*transitive bloat\./,
+    );
+  });
+
+  it('driftstack.NewClient + Config{APIKey, BaseURL} + no-network-on-construct + http.Client-pooled framing pinned — pinned so the constructor + 2-field-config + no-network-on-construct + http.Client-pooled-reuse commitments survive (drift to claiming a network call at construct-time would mislead about init cost)', () => {
+    expect(body).toMatch(/client, err := driftstack\.NewClient\(driftstack\.Config\{/);
+    expect(body).toMatch(/APIKey: os\.Getenv\("DRIFTSTACK_API_KEY"\)/);
+    expect(body).toMatch(/\/\/ BaseURL defaults to https:\/\/api\.driftstack\.dev/);
+    expect(body).toMatch(
+      /The constructor does not make any network calls\. Reuse one\s*\n?\s*client across your process — it is internally pooled via\s*\n?\s*<code>http\.Client<\/code> with sensible defaults/,
+    );
+  });
+
+  it("Sessions.Create + 2-field CreateSessionRequest (Archetype + PurposeProductionCustomer) + 5-state SessionStatus constants pinned: SessionCreating + SessionReady + SessionBusy + SessionDestroyed + SessionErrored + 'switch on those for exhaustive compile-time coverage' + no-target-URL framing — pinned so the 5-state-constant + exhaustive-switch + no-URL-on-create commitments survive (drift to dropping any state constant would shrink the typed-status surface)", () => {
+    expect(body).toMatch(
+      /session, err := client\.Sessions\.Create\(ctx, &driftstack\.CreateSessionRequest\{/,
+    );
+    expect(body).toMatch(/Archetype: "default"/);
+    expect(body).toMatch(/Purpose:\s+driftstack\.PurposeProductionCustomer/);
+    expect(body).toMatch(
+      /<code>SessionStatus<\/code> type with the constants\s*\n?\s*<code>SessionCreating<\/code>, <code>SessionReady<\/code>,\s*\n?\s*<code>SessionBusy<\/code>, <code>SessionDestroyed<\/code>, and\s*\n?\s*<code>SessionErrored<\/code> — switch on those for exhaustive\s*\n?\s*compile-time coverage\./,
+    );
+    expect(body).toMatch(
+      /The create call doesn't take a target\s*\n?\s*URL; drive the session to a URL with\s*\n?\s*<code>client\.Sessions\.Navigate\(\.\.\.\)<\/code>\./,
+    );
+  });
+
+  it("5-method drive surface: Navigate + Interact + Wait + Capture + Destroy (idempotent) + 'no built-in wait-until-terminal helper' framing pinned — pinned so the 5-method drive surface + no-magic-wait-helper + idempotent-destroy survive (drift to claiming a wait-until-terminal helper exists would mislead about the SDK surface)", () => {
+    expect(body).toMatch(
+      /There is no built-in <em>wait-until-terminal<\/em> helper\. Drive\s*\n?\s*the session through its lifecycle with\s*\n?\s*<code>Navigate<\/code>, <code>Interact<\/code>,\s*\n?\s*<code>Wait<\/code>, <code>Capture<\/code>, then\s*\n?\s*<code>Destroy<\/code> when you're done\./,
+    );
+    expect(body).toMatch(/\/\/ Idempotent\./);
+  });
+
+  it("Wait kind='time' + Capture kind='screenshot' + Destroy framing pinned + 'For batch workloads, prefer webhooks over polling.' — pinned so the Wait/Capture/Destroy snippets + webhooks-over-polling commitment survive (drift to dropping the prefer-webhooks framing would let batch-workload customers default to polling)", () => {
+    expect(body).toMatch(/Kind:\s+"time"/);
+    expect(body).toMatch(/DurationMs: 1000/);
+    expect(body).toMatch(/Kind: "screenshot"/);
+    expect(body).toMatch(/shot\.ByteSize/);
+    expect(body).toMatch(/client\.Sessions\.Destroy\(ctx, session\.ID\)/);
+    expect(body).toMatch(
+      /For batch workloads, prefer\s*\n?\s*<a href="\/docs\/webhooks">webhooks<\/a> over polling\./,
+    );
+  });
+
+  it('Sessions.List pagination framing pinned: ListSessionsQuery{Limit: 50} + page.Data range + page.NextCursor empty-string + refeed-as-query.Cursor — pinned so the List + NextCursor-empty + refeed-pattern survives (drift to dropping NextCursor would create marketing↔server-cursor divergence)', () => {
+    expect(body).toMatch(
+      /page, err := client\.Sessions\.List\(ctx, &driftstack\.ListSessionsQuery\{Limit: 50\}\)/,
+    );
+    expect(body).toMatch(/for _, s := range page\.Data \{/);
+    expect(body).toMatch(/s\.Status == driftstack\.SessionDestroyed/);
+    expect(body).toMatch(
+      /\/\/ page\.NextCursor is "" when there are no more pages; refeed it as\s*\n?\s*\/\/ query\.Cursor on subsequent calls to walk the full history\./,
+    );
+  });
+
+  it('Typed-errors surface pinned: ValidationError + RateLimitError + ConcurrencyLimitError + NotFoundError + errors.As recover-typed-shape + errors.Is sentinel-match + ErrRateLimit + ErrValidation + ErrConflict 409-any-subclass — pinned so the 4-named-error + errors.As/errors.Is + 3-sentinel surface (ErrRateLimit/ErrValidation/ErrConflict) survives (drift to renaming any subclass would create marketing↔SDK divergence)', () => {
+    expect(body).toMatch(
+      /<code>ValidationError<\/code>, <code>RateLimitError<\/code>,\s*\n?\s*<code>ConcurrencyLimitError<\/code>,\s*\n?\s*<code>NotFoundError<\/code>, etc\./,
+    );
+    expect(body).toMatch(/var rl \*driftstack\.RateLimitError/);
+    expect(body).toMatch(/if errors\.As\(err, &rl\)/);
+    expect(body).toMatch(/rl\.RetryAfterSeconds/);
+    expect(body).toMatch(/var ve \*driftstack\.ValidationError/);
+    expect(body).toMatch(/if errors\.Is\(err, driftstack\.ErrConflict\)/);
+    expect(body).toMatch(/\/\/ any 409, regardless of subclass/);
+  });
+
+  it("apiError 4-attribute shape pinned: Status + ProblemType (RFC 7807 URI) + Message + Problem (full parsed problem map) + 'Read additional extension fields off err.Problem.' — pinned so the 4-attribute embedded-error + RFC-7807-URI anchor + extension-fields-via-Problem survive (drift to renaming any attribute would create marketing↔SDK divergence)", () => {
+    expect(body).toMatch(
+      /Every typed error embeds an <code>apiError<\/code> shape with\s*\n?\s*<code>Status<\/code>, <code>ProblemType<\/code> \(the RFC 7807\s*\n?\s*URI\), <code>Message<\/code>, and <code>Problem<\/code> \(the full\s*\n?\s*parsed problem map\)\. Read additional extension fields off\s*\n?\s*<code>err\.Problem<\/code>\./,
+    );
+  });
+
+  it("context.Context first-arg + cancellation-cascades + no-goroutine-leaks framing pinned: 'Every method takes a context.Context as its first argument. Cancellation cascades through the underlying HTTP requests, so a parent deadline (or an HTTP request cancellation in a Gin / chi / standard http.Server handler) cleanly aborts in-flight SDK calls. No goroutine leaks even under heavy concurrent load.' — pinned so the context-first-arg + 3-framework-namedrop (Gin/chi/http.Server) + no-goroutine-leaks commitment survives (drift to dropping the goroutine-leak-free claim would weaken the concurrency story)", () => {
+    expect(body).toMatch(
+      /Every method takes a <code>context\.Context<\/code> as its first\s*\n?\s*argument\. Cancellation cascades through the underlying HTTP\s*\n?\s*requests, so a parent deadline \(or an HTTP request cancellation\s*\n?\s*in a Gin \/ chi \/ standard <code>http\.Server<\/code> handler\)\s*\n?\s*cleanly aborts in-flight SDK calls\. No goroutine leaks even\s*\n?\s*under heavy concurrent load\./,
+    );
+  });
+
+  it('7-where-to-go-next cluster: /api-reference + /docs/sdk-go-crypto-orders + /docs/sdk-typescript + /docs/sdk-python + /docs/webhooks + /docs/cost-monitoring + /docs/error-codes — pinned so the 7-related-doc navigation surface stays complete (drift to dropping /docs/sdk-go-crypto-orders would orphan the V-666 crypto-checkout cross-reference)', () => {
+    expect(body).toMatch(/<a href="\/api-reference">Full API reference<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/sdk-go-crypto-orders">Crypto orders<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/sdk-typescript">TypeScript SDK<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/sdk-python">Python SDK<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/webhooks">Webhooks<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/cost-monitoring">Cost monitoring<\/a>/);
+    expect(body).toMatch(/<a href="\/docs\/error-codes">Error codes<\/a>/);
+  });
+
+  it("developers@driftstack.dev + 'within one business day' SLA pinned — pinned so the developer-channel routing + 1-business-day response commitment stays consistent across SDK pages (drift to a different SLA would create cross-page divergence)", () => {
+    expect(body).toMatch(
+      /<a href="mailto:developers@driftstack\.dev">developers@driftstack\.dev<\/a>\.\s*\n?\s*We respond within one business day\./,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});

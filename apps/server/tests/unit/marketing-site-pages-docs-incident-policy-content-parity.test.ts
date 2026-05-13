@@ -1,0 +1,162 @@
+// W514.C — drift guard for apps/marketing-site/src/pages/docs/incident-policy.astro.
+// V-701 incident response + SLA policy. Drift here either softens the
+// severity ladder (would create marketing↔ops-procedure divergence) or
+// breaks the /v1/status/sla response shape (would mislead consumers about
+// the camelCase + data: envelope contract).
+//
+//   • V-701 doc-comment framing + companion fix-log (no incident_subscriptions
+//     field; incident.* events NOT subscribable; sla camelCase + data: envelope;
+//     no ?window_days param).
+//   • status.driftstack.dev + 3-endpoint surface: GET /v1/status, GET
+//     /v1/status/incidents, POST /v1/status/subscribe.
+//   • 4-severity ladder: Critical (≤15min, every 30min) / Major (≤30min,
+//     every 60min) / Minor (≤60min, at resolution) / Maintenance (≥48h notice).
+//   • Detection 3-signal: V-295b probes (60s, 3-consecutive → critical) +
+//     customer reports (support@, ≤30min EU biz hrs) + internal alerting.
+//   • 5-step customer comms: file → email fan-out → progress → resolution →
+//     postmortem within 7 business days for Critical/Major.
+//   • incident.created/updated/resolved NOT in SubscribableWebhookEventTypeSchema.
+//   • /v1/status/sla 9-field camelCase response + 30-day rolling window + no-auth.
+//   • 3-contact ladder: urgent@ (acute) / support@ (non-acute) / security@ (PGP).
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/incident-policy.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro content parity', () => {
+  const body = read(LIB);
+
+  it("V-701 framing + fix-log pinned: 'incident response + customer-facing policy docs. Major fixes vs. prior revision: removed fictional incident_subscriptions account field, removed claim that incident.* are subscribable webhook events (they aren't — they're admin-audit / SSE-broadcast events), fixed /v1/status/sla response shape (camelCase, data: envelope), removed fictional ?window_days query param.' — pinned so the V-701 anchor + 4-fix-log commitments survive (drift to re-introducing the fictional fields would re-create marketing↔server divergence)", () => {
+    expect(body).toMatch(/\/\/ V-701 — incident response \+ customer-facing policy docs\./);
+    expect(body).toMatch(
+      /\/\/ Pinned by tests\/unit\/incident-policy-doc-parity\.test\.ts\. Major fixes\s*\n?\s*\/\/ vs\. prior revision: removed fictional `incident_subscriptions` account\s*\n?\s*\/\/ field, removed claim that `incident\.\*` are subscribable webhook\s*\n?\s*\/\/ events \(they aren't — they're admin-audit \/ SSE-broadcast events\),\s*\n?\s*\/\/ fixed \/v1\/status\/sla response shape \(camelCase, `data:` envelope\),\s*\n?\s*\/\/ removed fictional `\?window_days` query param\./,
+    );
+  });
+
+  it('status.driftstack.dev + 3-endpoint surface pinned: GET /v1/status (overall + per-component) + GET /v1/status/incidents (recent/live) + POST /v1/status/subscribe + /docs/status-subscriptions cross-link — pinned so the 3-endpoint surface + status-subscriptions companion doc survives (drift to a different status-endpoint shape would create marketing↔status-route divergence)', () => {
+    expect(body).toMatch(
+      /<a href="https:\/\/status\.driftstack\.dev">status\.driftstack\.dev<\/a>/,
+    );
+    expect(body).toMatch(
+      /<code>GET \/v1\/status<\/code> \(overall \+ per-component status\)\s*\n?\s*and <code>GET \/v1\/status\/incidents<\/code> \(recent \/ live\s*\n?\s*incidents\)/,
+    );
+    expect(body).toMatch(/<code>POST \/v1\/status\/subscribe<\/code>/);
+    expect(body).toMatch(
+      /<a href="\/docs\/status-subscriptions">\/docs\/status-subscriptions<\/a>/,
+    );
+  });
+
+  it('4-severity ladder pinned: Critical (≤15min, every 30min) + Major (5%+ error rate / sub-customer auth-sessions outage, ≤30min, every 60min) + Minor (single non-critical surface, ≤60min, at resolution) + Maintenance (≥48h notice) — pinned so the 4-row severity table + update-cadences + 48h-maintenance-notice survive (drift to softening any cadence would put Driftstack on the hook for slower comms than promised)', () => {
+    expect(body).toMatch(
+      /<td><strong>Critical<\/strong><\/td>\s*\n?\s*<td>Core API down across all customers, or data-loss risk\.<\/td>\s*\n?\s*<td>≤ 15 min<\/td>\s*\n?\s*<td>Every 30 min until resolved\.<\/td>/,
+    );
+    expect(body).toMatch(
+      /<td><strong>Major<\/strong><\/td>\s*\n?\s*<td>API degraded \(\{'>'\}5% error rate\) OR a critical surface\s*\n?\s*\(auth, sessions\) unavailable for a subset of customers\.<\/td>\s*\n?\s*<td>≤ 30 min<\/td>\s*\n?\s*<td>Every 60 min\.<\/td>/,
+    );
+    expect(body).toMatch(
+      /<td><strong>Minor<\/strong><\/td>\s*\n?\s*<td>Single non-critical surface \(dashboard, an SDK build pipeline\) degraded\.<\/td>\s*\n?\s*<td>≤ 60 min<\/td>\s*\n?\s*<td>At resolution\.<\/td>/,
+    );
+    expect(body).toMatch(
+      /<td><strong>Maintenance<\/strong><\/td>\s*\n?\s*<td>Planned change with potential impact\. Always announced\s*\n?\s*≥48h in advance\.<\/td>/,
+    );
+  });
+
+  it("Detection 3-signal pinned: V-295b 60-second poller against /v1/health + 'Three consecutive failures auto-create a Critical incident' + customer reports email support@driftstack.dev + 'We acknowledge within 30 min during EU business hours' + internal alerting via Sentry + cost-monitoring thresholds — pinned so the V-295b anchor + 3-consecutive-rule + 30-min-EU-biz-hours-ACK + 2-internal-alert-source (Sentry/cost-monitoring) survives", () => {
+    expect(body).toMatch(
+      /<strong>V-295b health probes:<\/strong> 60-second poller\s*\n?\s*against <code>\/v1\/health<\/code> \+ per-region API endpoints\.\s*\n?\s*Three consecutive failures auto-create a Critical incident/,
+    );
+    expect(body).toMatch(
+      /<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*\n?\s*and Slack channel monitoring\. We acknowledge within 30 min\s*\n?\s*during EU business hours\./,
+    );
+    expect(body).toMatch(
+      /<strong>Internal alerting:<\/strong> Sentry \+ cost-monitoring\s*\n?\s*thresholds page on-call\./,
+    );
+  });
+
+  it('5-step customer comms pinned: 1) status-page entry filed + 2) email fan-out to /v1/status/subscribe subscribers + 3) progress updates per cadence + 4) resolution + final email with root-cause + 5) postmortem within 7 business days for Critical/Major — pinned so the 5-step comms cascade + 7-business-day postmortem SLA + inline-summary-for-Minor framing survives (drift to a longer postmortem SLA would create marketing↔ops divergence)', () => {
+    expect(body).toMatch(
+      /<strong>Status page entry filed<\/strong> with severity \+\s*\n?\s*title \+ affected components\./,
+    );
+    expect(body).toMatch(
+      /<strong>Email fan-out<\/strong> to confirmed\s*\n?\s*<code>\/v1\/status\/subscribe<\/code> subscribers\./,
+    );
+    expect(body).toMatch(
+      /<strong>Postmortem<\/strong> for Critical \/ Major incidents\s*\n?\s*published within 7 business days/,
+    );
+    expect(body).toMatch(
+      /Minor\s*\n?\s*incidents get an inline summary on the resolved status entry\./,
+    );
+  });
+
+  it("incident.* NOT-in-SubscribableWebhookEventTypeSchema framing pinned: 'incident.created / incident.updated / incident.resolved are admin-audit / internal SSE event types — they are not yet in SubscribableWebhookEventTypeSchema, so they can't be the target of a POST /v1/webhooks subscription. Email subscription is the customer-facing notification path today.' — pinned so the 3-event-namedrop + not-yet-subscribable + email-is-the-customer-path commitment survives (drift to claiming the incident events are subscribable would re-introduce the V-701-fix-log divergence)", () => {
+    expect(body).toMatch(
+      /<code>incident\.created<\/code> \/\s*\n?\s*<code>incident\.updated<\/code> \/ <code>incident\.resolved<\/code>\s*\n?\s*are admin-audit \/ internal SSE event types — they are not yet\s*\n?\s*in <code>SubscribableWebhookEventTypeSchema<\/code>, so they\s*\n?\s*can't be the target of a <code>POST \/v1\/webhooks<\/code>\s*\n?\s*subscription\. Email subscription is the customer-facing\s*\n?\s*notification path today\./,
+    );
+  });
+
+  it("/docs/sla-policy authoritative-reference framing pinned: 'Tier-by-tier SLA targets, the windowing methodology, the credit bands, and the dispute process all live in /docs/sla-policy — that is the authoritative reference. Tier identifiers used there match the AccountTier enum exactly.' — pinned so the /docs/sla-policy authoritative cross-ref + AccountTier-enum-match commitment survives (drift to dropping the AccountTier-enum-match anchor would re-create tier-name-divergence risk)", () => {
+    expect(body).toMatch(
+      /Tier-by-tier SLA targets, the windowing methodology, the\s*\n?\s*credit bands, and the dispute process all live in\s*\n?\s*<a href="\/docs\/sla-policy">\/docs\/sla-policy<\/a> — that is the\s*\n?\s*authoritative reference\. Tier identifiers used there match\s*\n?\s*the <code>AccountTier<\/code> enum exactly\./,
+    );
+  });
+
+  it("/v1/status/sla response shape pinned: data: envelope + 9-field camelCase (target + uptimePct + totalProbes + okCount + failCount + lastProbeAt + lastFailureAt + windowStart + windowEnd) + 'No auth — status surface is public. Window is a fixed rolling 30 days. Field names are camelCase (the SLA report serialises its internal model directly).' — pinned so the data-envelope + 9-field camelCase shape + public-no-auth + 30d-rolling-window + serialises-internal-model commitments survive (drift to flipping to snake_case would create marketing↔server divergence)", () => {
+    expect(body).toMatch(/GET \/v1\/status\/sla/);
+    expect(body).toMatch(/"data": \[/);
+    expect(body).toMatch(/"target": "api\.driftstack\.dev"/);
+    expect(body).toMatch(/"uptimePct": 99\.99/);
+    expect(body).toMatch(/"totalProbes": 43200/);
+    expect(body).toMatch(/"okCount": 43196/);
+    expect(body).toMatch(/"failCount": 4/);
+    expect(body).toMatch(/"lastProbeAt":/);
+    expect(body).toMatch(/"lastFailureAt":/);
+    expect(body).toMatch(/"windowStart":/);
+    expect(body).toMatch(/"windowEnd":/);
+    expect(body).toMatch(
+      /No auth — status surface is public\. Window is a fixed rolling\s*\n?\s*30 days\. Field names are camelCase \(the SLA report serialises\s*\n?\s*its internal model directly\)\./,
+    );
+  });
+
+  it("Postmortems blameless framing pinned: 'Public postmortems for Critical + Major incidents live on the public status page, attached to the resolved incident entry. Each follows the same template: timeline, root cause, what we changed to prevent recurrence. Postmortems are blameless and detailed enough to be useful — we'd rather over-share than under-share.' — pinned so the 3-template-field (timeline/root-cause/prevention) + blameless + over-share commitment survives", () => {
+    expect(body).toMatch(
+      /Each follows the same\s*\n?\s*template: timeline, root cause, what we changed to prevent\s*\n?\s*recurrence\. Postmortems are blameless and detailed enough to be\s*\n?\s*useful — we'd rather over-share than under-share\./,
+    );
+  });
+
+  it('3-contact ladder pinned: urgent@driftstack.dev (acute outage, straight to on-call) + support@driftstack.dev (non-acute bug, session id + timestamp) + security@driftstack.dev (PGP available) + /docs/api-security-headers cross-link — pinned so the 3-channel routing + on-call-direct-urgent-channel + session-id-timestamp request-pattern + PGP-available framing survives (drift to merging any channel would create marketing↔mailbox-routing divergence)', () => {
+    expect(body).toMatch(/<a href="mailto:urgent@driftstack\.dev">urgent@driftstack\.dev<\/a>\./);
+    expect(body).toMatch(/That goes straight to on-call\./);
+    expect(body).toMatch(
+      /<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*\n?\s*with a session id \+ timestamp\./,
+    );
+    expect(body).toMatch(
+      /<a href="mailto:security@driftstack\.dev">security@driftstack\.dev<\/a>\s*\n?\s*— PGP available on the page\./,
+    );
+    expect(body).toMatch(
+      /<a href="\/docs\/api-security-headers">\/docs\/api-security-headers<\/a>/,
+    );
+  });
+
+  it('4-related-doc cluster: /docs/sla-policy + /docs/status-subscriptions + /docs/webhooks (subscribable today) + status.driftstack.dev — pinned so the 4-related navigation surface stays complete (drift to dropping /docs/sla-policy would orphan the authoritative-credit-bands reference)', () => {
+    expect(body).toMatch(
+      /<a href="\/docs\/sla-policy">SLA policy \(authoritative tier targets \+ credit bands\)<\/a>/,
+    );
+    expect(body).toMatch(/<a href="\/docs\/status-subscriptions">Status email subscriptions<\/a>/);
+    expect(body).toMatch(
+      /<a href="\/docs\/webhooks">Webhook signing \+ retries \(for the events that are subscribable today\)<\/a>/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
