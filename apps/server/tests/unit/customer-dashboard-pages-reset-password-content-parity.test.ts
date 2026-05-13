@@ -1,0 +1,93 @@
+// W492.A — drift guard for apps/customer-dashboard/src/pages/reset-password.astro.
+// V-273 password-reset confirmation page. Drift here either drops
+// the one-shot token framing (drift to letting users re-submit the
+// same token would break the V-079 single-use invariant) or breaks
+// the auto-login flow (token-as-session handoff would force the
+// customer to log in again after reset, hostile UX).
+//
+//   • V-273 + V-079 framing pinned (5-step flow comment).
+//   • One-shot token: 'second use returns 400'.
+//   • Token-from-URL via URLSearchParams.get('token') + missing-
+//     token bail.
+//   • Password match + minLength=12 validation.
+//   • Auto-login: ds_web_session_token write + redirect to '/'.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/reset-password.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content parity', () => {
+  const body = read(LIB);
+
+  it("V-273 + V-079 framing pinned: 'Password-reset confirmation page. Pairs with the V-079 backend route POST /v1/auth/password-reset/confirm.' + 5-step flow comment + 'Token is one-shot — second use returns 400.' — pinned so the one-shot invariant + auto-login behavior survive (drift to multi-use tokens would let attackers replay leaked reset links)", () => {
+    expect(body).toMatch(
+      /\/\/ V-273 — Password-reset confirmation page\. Pairs with the V-079\s*\n?\s*\/\/ backend route `POST \/v1\/auth\/password-reset\/confirm`\./,
+    );
+    expect(body).toMatch(/\/\/ {3}5\. Token is one-shot — second use returns 400\./);
+    expect(body).toMatch(
+      /\/\/ {3}4\. Server returns a fresh web session on success; page writes\s*\n?\s*\/\/ {6}`ds_web_session_token` to localStorage and redirects to \/\./,
+    );
+  });
+
+  it("Missing-token bail: URLSearchParams + params.get('token') → if !token: form.add('hidden') + missing.remove('hidden') + early return — pinned so the form doesn't allow submission without a token (drift to leaving the form visible would let customers fill in a password and get a confusing server error instead of the clear 'No reset token in URL' explanation)", () => {
+    expect(body).toMatch(
+      /const params = new URLSearchParams\(window\.location\.search\);\s*\n?\s*const token = params\.get\('token'\);\s*\n?\s*\n?\s*if \(!token\) \{\s*\n?\s*form\.classList\.add\('hidden'\);\s*\n?\s*missing\.classList\.remove\('hidden'\);\s*\n?\s*return;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /No reset token in URL\. Open the page from the link in your reset email, or\s*\n?\s*<a href="\/forgot-password" class="text-oxblood-700 underline">request a new one<\/a>\./,
+    );
+  });
+
+  it("Client-side validation: password !== confirm → 'Passwords do not match.' bail-banner + password.length < 12 → 'Password must be at least 12 characters.' bail-banner — pinned so the dual checks happen client-side before the server roundtrip (drift to relying on server-only validation would surface 422s for what should be inline UX errors)", () => {
+    expect(body).toMatch(
+      /if \(password !== confirm\) \{\s*\n?\s*showBanner\('Passwords do not match\.'\);\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*if \(password\.length < 12\) \{\s*\n?\s*showBanner\('Password must be at least 12 characters\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
+    );
+  });
+
+  it("Input minlength=12 + autocomplete='new-password' on both password fields — pinned so browsers + password managers know this is a new password (not a sign-in form) and don't auto-fill with the OLD password from the customer's vault (which would defeat the entire reset flow)", () => {
+    expect(body).toMatch(
+      /<input\s*\n?\s*id="reset-password-input"\s*\n?\s*name="password"\s*\n?\s*type="password"\s*\n?\s*required\s*\n?\s*minlength="12"\s*\n?\s*autocomplete="new-password"/,
+    );
+    expect(body).toMatch(
+      /<input\s*\n?\s*id="reset-confirm-input"\s*\n?\s*name="confirm"\s*\n?\s*type="password"\s*\n?\s*required\s*\n?\s*minlength="12"\s*\n?\s*autocomplete="new-password"/,
+    );
+  });
+
+  it('POST /v1/auth/password-reset/confirm contract: body:{token, new_password} (snake_case new_password matching server schema) + content-type:application/json — pinned so the field name stays in sync with V-079 schema (drift to camelCase newPassword would silently 400)', () => {
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/password-reset\/confirm', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{ token: token, new_password: password \}\),\s*\n?\s*\}\)/,
+    );
+  });
+
+  it("Auto-login on success: const session = body.session || {}; if session.token → localStorage.setItem('ds_web_session_token', session.token) + redirect to '/' — pinned so the customer doesn't get bounced back to /login after a successful reset (the V-079 server returns a fresh session expressly to avoid the double-step UX)", () => {
+    expect(body).toMatch(
+      /const session = body\.session \|\| \{\};\s*\n?\s*if \(session\.token\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);\s*\n?\s*\}\s*\n?\s*window\.location\.href = '\/';/,
+    );
+  });
+
+  it("problem+json error surfacing: r.json().catch(() => ({})).then((b) => Promise.reject(new Error(b.detail || 'HTTP N'))) — pinned so server-returned problem+json detail (like 'token expired' or 'token already used') reaches the customer banner (drift to bare 'HTTP 400' would hide which specific reset-token error happened)", () => {
+    expect(body).toMatch(
+      /r\.ok\s*\n?\s*\? r\.json\(\)\s*\n?\s*: r\s*\n?\s*\.json\(\)\s*\n?\s*\.catch\(\(\) => \(\{\}\)\)\s*\n?\s*\.then\(\(b\) => Promise\.reject\(new Error\(b\.detail \|\| 'HTTP ' \+ r\.status\)\)\),/,
+    );
+  });
+
+  it("Page chrome + cross-link: withSidebar={false} + 'Choose a new password for your Driftstack account. The link is single-use; if you need another, request one from the forgot-password page.' framing + /forgot-password cross-link — pinned so customers landing on an expired token have a clear path back to request a new one (instead of getting stuck)", () => {
+    expect(body).toMatch(/<DashboardLayout title="Reset password" withSidebar=\{false\}>/);
+    expect(body).toMatch(
+      /Choose a new password for your Driftstack account\. The link is single-use; if you need\s*\n?\s*another, request one from the\s*\n?\s*<a href="\/forgot-password" class="text-oxblood-700 underline">forgot-password<\/a> page\./,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});

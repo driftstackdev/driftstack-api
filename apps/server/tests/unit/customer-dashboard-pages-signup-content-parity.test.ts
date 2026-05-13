@@ -1,0 +1,104 @@
+// W492.B — drift guard for apps/customer-dashboard/src/pages/signup.astro.
+// V-184a onboarding step 1 (account creation). Drift here either
+// drops the V-267 next-param preservation (deep-links from /cli/
+// authorize would lose their continuation across signup → verify
+// flow) or breaks the debug_token sessionStorage handoff (dev
+// flow loses the paste-into-verify convenience).
+//
+//   • V-184a framing pinned + onboarding-flow comment.
+//   • signup → verify-email → welcome → select-tier → first-
+//     session flow.
+//   • email + optional name + minlength=12 password.
+//   • sessionStorage: ds_signup_email + ds_debug_verify_token.
+//   • V-267 + V-269: next= URL preservation through signup →
+//     verify-email redirect AND to /login fallback link.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/signup.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W492.B apps/customer-dashboard/src/pages/signup.astro content parity', () => {
+  const body = read(LIB);
+
+  it("V-184a framing pinned: 'onboarding flow Tier 1 scaffolding. Minimal placeholder UX; full Tier 3 visual lands as V-184b draft for founder review.' + 5-step flow: 'signup → verify-email → welcome → select-tier → first-session. Each page uses localStorage.ds_web_session_token for cross-page state.' — pinned so the canonical onboarding sequence + the cross-page state-key contract survive", () => {
+    expect(body).toMatch(
+      /\/\/ V-184a — onboarding flow Tier 1 scaffolding\. Minimal placeholder\s*\n?\s*\/\/ UX; full Tier 3 visual lands as V-184b draft for founder review\./,
+    );
+    expect(body).toMatch(
+      /\/\/ Flow: signup → verify-email → welcome → select-tier → first-session\.\s*\n?\s*\/\/ Each page uses localStorage\.ds_web_session_token for cross-page state\./,
+    );
+  });
+
+  it("Form structure: email required + name optional ('Name (optional)' label) + password required minlength=12 + '12+ characters. Use a passphrase.' hint — pinned so the minimum-12-char password policy + the 'passphrase encouraged' hint stay consistent with reset-password page (both client-side enforce the same floor)", () => {
+    expect(body).toMatch(/required\s*\n?\s*autocomplete="email"/);
+    expect(body).toMatch(
+      /<label class="block text-sm font-medium text-slate-700" for="signup-name">Name \(optional\)<\/label>/,
+    );
+    expect(body).toMatch(
+      /<input\s*\n?\s*id="signup-password"\s*\n?\s*name="password"\s*\n?\s*type="password"\s*\n?\s*required\s*\n?\s*minlength="12"\s*\n?\s*autocomplete="new-password"/,
+    );
+    expect(body).toMatch(
+      /<p class="mt-1 text-xs text-slate-500">12\+ characters\. Use a passphrase\.<\/p>/,
+    );
+  });
+
+  it("Page intro framing pinned: 'Create your Driftstack account. After signup we'll email you a verification code; one signup per email.' — pinned so the 'one signup per email' uniqueness invariant is surfaced before submission (drift to dropping would surprise customers who try to signup with an already-taken email)", () => {
+    expect(body).toMatch(
+      /Create your Driftstack account\. After signup we'll email you a verification\s*\n?\s*code; one signup per email\./,
+    );
+  });
+
+  it("Optional name handling: const name = fd.get('name'); if (name) payload.name = name — pinned so the name field only goes into the payload when non-empty (drift to always-include would send an empty string and might fail server-side min-length validation; drift to always-exclude would lose the friendly customer name)", () => {
+    expect(body).toMatch(
+      /const name = fd\.get\('name'\);\s*\n?\s*if \(name\) payload\.name = name;/,
+    );
+  });
+
+  it("sessionStorage handoff: ds_signup_email (so verify-email page can show 'Code sent to X') + ds_debug_verify_token (only set when server returns debug_token, i.e. AUTH_EXPOSE_DEBUG_TOKEN=true) — pinned so the post-signup → verify-email handoff carries both the email context AND the dev-mode paste-in token", () => {
+    expect(body).toMatch(
+      /sessionStorage\.setItem\('ds_signup_email', payload\.email\);\s*\n?\s*if \(body\.debug_token\) \{\s*\n?\s*sessionStorage\.setItem\('ds_debug_verify_token', body\.debug_token\);\s*\n?\s*\}/,
+    );
+  });
+
+  it("V-267 next= preservation through signup → verify-email redirect: params.get('next') + verifyUrl = next ? '/verify-email?next=' + encodeURIComponent(next) : '/verify-email' — pinned so deep-links from /cli/authorize (and other entry points) preserve their continuation target across the 5-step onboarding flow (drift to dropping ?next= would orphan the customer at /verify-email with no path back to their intended destination)", () => {
+    expect(body).toMatch(
+      /\/\/ V-267 — pass through the \?next= deep link so flows that\s*\n?\s*\/\/ brought the user to signup \(e\.g\. GUI activation at\s*\n?\s*\/\/ \/cli\/authorize\) can resume after verify-email completes\./,
+    );
+    expect(body).toMatch(
+      /const verifyUrl = next\s*\n?\s*\? '\/verify-email\?next=' \+ encodeURIComponent\(next\)\s*\n?\s*: '\/verify-email';/,
+    );
+  });
+
+  it("V-269 next= preservation on /login fallback link: nextRaw → loginLink href becomes '/login?next=' + encodeURIComponent(nextRaw) — pinned so customers who click 'Already have an account? Sign in' from a deep-linked signup still hit their intended destination after sign-in (drift would lose the next= and send them to the dashboard root instead)", () => {
+    expect(body).toMatch(/\/\/ V-269 — preserve \?next= when bouncing the user to \/login\./);
+    expect(body).toMatch(
+      /if \(nextRaw && loginLink\) \{\s*\n?\s*loginLink\.setAttribute\('href', '\/login\?next=' \+ encodeURIComponent\(nextRaw\)\);\s*\n?\s*\}/,
+    );
+  });
+
+  it("POST /v1/auth/signup contract: payload {email, password, name?} + credentials:'include' (for V-269 dual-cookie session handoff) — pinned so the post-signup cookie comes back set on the right domain + the optional name shape matches server schema", () => {
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/signup', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(payload\),\s*\n?\s*credentials: 'include',\s*\n?\s*\}\)/,
+    );
+  });
+
+  it("Page chrome: withSidebar={false} + 'Already have an account? Sign in' fallback link — pinned so the no-sidebar auth-page convention stays consistent + the sign-in escape hatch survives for customers who realize they already have an account mid-flow", () => {
+    expect(body).toMatch(/<DashboardLayout title="Sign up" withSidebar=\{false\}>/);
+    expect(body).toMatch(
+      /Already have an account\? <a data-login-link href="\/login" class="text-oxblood-700 underline"\s*\n?\s*>Sign in<\/a\s*\n?\s*>/,
+    );
+  });
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+});
