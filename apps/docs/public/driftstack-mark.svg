@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" aria-label="Driftstack logo">
+  <!-- Driftstack mark — uppercase D with an iPhone silhouette as the
+       inner counter (notch detail at top). Even-odd fill rule punches
+       the iPhone out of the D so any surface shows through. Oxblood
+       #722F37 brand-locked accent. -->
+  <path fill="#722F37" fill-rule="evenodd" d="
+    M 40 24
+    L 148 24
+    C 200 24 244 66 244 118
+    L 244 138
+    C 244 190 200 232 148 232
+    L 40 232
+    Z
+    M 96 66
+    C 96 58 102 52 110 52
+    L 130 52
+    C 130 56 132 60 136 60
+    L 152 60
+    C 156 60 158 56 158 52
+    L 178 52
+    C 186 52 192 58 192 66
+    L 192 190
+    C 192 198 186 204 178 204
+    L 110 204
+    C 102 204 96 198 96 190
+    Z
+  "/>
+</svg>

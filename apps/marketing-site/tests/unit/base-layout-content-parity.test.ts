@@ -105,11 +105,10 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     expect(body).toMatch(/<meta name="twitter:image" content=\{ogImageUrl\} \/>/);
   });
 
-  it('inline SVG favicon: oxblood #722F37 D-badge data-URL', () => {
-    expect(body).toMatch(/<link\s*\n?\s*rel="icon"/);
-    expect(body).toMatch(/data:image\/svg\+xml/);
-    expect(body).toMatch(/%23722F37/);
-    expect(body).toMatch(/Georgia,serif/);
+  it('R15 favicon points at /driftstack-mark.svg (the brand iPhone-D mark) — replaces the prior inline data-URL placeholder favicon (Georgia-serif white D on oxblood-tile) with the real brand SVG asset shipped under apps/marketing-site/public/', () => {
+    expect(body).toMatch(
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg" \/>/,
+    );
   });
 
   it('renders <Header /> + <slot /> in <main class="flex-1"> + <Footer />', () => {

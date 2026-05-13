@@ -28,13 +28,19 @@ const pathname = Astro.url.pathname;
       class="group flex items-center gap-2.5 font-mono text-base font-semibold text-ink-primary"
     >
       <span
-        class="relative inline-flex h-8 w-8 items-center justify-center rounded-md bg-gradient-accent text-white shadow-glow-red transition-all duration-300 group-hover:shadow-glow-red-lg"
+        class="relative inline-flex h-8 w-8 items-center justify-center transition-all duration-300 group-hover:scale-110"
       >
-        D
+        <img
+          src="/driftstack-mark.svg"
+          alt="Driftstack"
+          width="32"
+          height="32"
+          class="h-full w-full"
+        />
         <span
           aria-hidden="true"
-          class="absolute inset-0 rounded-md opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-          style="box-shadow: 0 0 24px 4px rgba(226, 56, 71, 0.5);"></span>
+          class="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+          style="filter: drop-shadow(0 0 12px rgba(226, 56, 71, 0.5));"></span>
       </span>
       <span class="tracking-tight">driftstack</span>
     </a>

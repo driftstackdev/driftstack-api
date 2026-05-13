@@ -83,8 +83,12 @@ describe('W599 apps/docs foundation modules content parity', () => {
     expect(body).toMatch(/<meta name="robots" content="index,follow" \/>/);
     expect(body).toMatch(/<meta property="og:site_name" content="Driftstack docs" \/>/);
     expect(body).toMatch(/<meta name="twitter:card" content="summary_large_image" \/>/);
-    expect(body).toMatch(/rect width='64' height='64' rx='12' fill='%23722F37'/);
-    expect(body).toMatch(/text-anchor='middle' fill='white' font-family='Georgia,serif'/);
+    // R15 — docs favicon swapped from the inline Georgia-serif D
+    // data-URL placeholder to the real /driftstack-mark.svg brand
+    // asset.
+    expect(body).toMatch(
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg" \/>/,
+    );
     expect(existsSync(BASE)).toBe(true);
   });
 

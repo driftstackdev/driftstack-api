@@ -91,10 +91,10 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/`ds_act_as_account` for the\s*\n?\s*\/\/\s*optional team-owner override/);
   });
 
-  it('V-219* D-badge (gradient-accent + glow-red shadow) appears in both withSidebar=true sidebar + withSidebar=false header branches', () => {
-    const dBadgeMatches = body.match(/rounded-md bg-gradient-accent text-white shadow-glow-red/g);
-    expect(dBadgeMatches).not.toBeNull();
-    expect(dBadgeMatches!.length).toBeGreaterThanOrEqual(2);
+  it('R15 brand mark (/driftstack-mark.svg <img>) appears in both withSidebar=true sidebar + withSidebar=false header branches — replaces the prior bg-gradient-accent + shadow-glow-red D chip with the real iPhone-D SVG brand asset', () => {
+    const markMatches = body.match(/src="\/driftstack-mark\.svg"/g);
+    expect(markMatches).not.toBeNull();
+    expect(markMatches!.length).toBeGreaterThanOrEqual(2);
     expect(body).toMatch(/V-219\* — brand alignment with marketing site:/);
   });
 

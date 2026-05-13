@@ -60,13 +60,12 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     );
   });
 
-  it("Logo + brand framing pinned: a href / + 'driftstack' brand + bg-gradient-accent gradient 'D' tile + font-mono font-semibold + h-8-w-8 size + glow-red shadow — pinned so the logo + brand-text + gradient-accent-tile + font-mono commitment survives (drift to a different brand color or font-family would create cross-page styling divergence)", () => {
+  it("R15 logo + brand framing pinned: a href / wrapping the new /driftstack-mark.svg <img> (iPhone-D brand SVG) + 'driftstack' wordmark + font-mono font-semibold + h-8-w-8 mark size. Replaces the prior bg-gradient-accent text-white 'D' chip with the real SVG brand asset. Drift to a different brand-mark source or font-family would create cross-page styling divergence.", () => {
     expect(body).toMatch(
       /<a\s+href="\/"\s+class="group flex items-center gap-2\.5 font-mono text-base font-semibold text-ink-primary"/,
     );
-    expect(body).toMatch(
-      /class="relative inline-flex h-8 w-8 items-center justify-center rounded-md bg-gradient-accent text-white shadow-glow-red/,
-    );
+    expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg"/);
+    expect(body).toMatch(/width="32"\s*\n?\s*height="32"/);
     expect(body).toMatch(/<span class="tracking-tight">driftstack<\/span>/);
   });
 

@@ -374,25 +374,25 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
                 </span>
               </div>
               <dl class="mt-6 space-y-3 text-sm">
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Browser profiles</dt>
                   <dd class="text-right font-medium text-ink-primary">{tier.profiles.toString()}</dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Concurrent sessions</dt>
                   <dd class="text-right font-medium text-ink-primary">{tier.concurrent.toString()}</dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Hours</dt>
                   <dd class="text-right text-ink-primary">{tier.hoursLabel}</dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">AI agent (LLM-driven sessions)</dt>
                   <dd class="text-right text-ink-secondary">
                     {fmtAiAgent(tier.aiAgent, tier.llmBilling)}
                   </dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Support</dt>
                   <dd class="text-right text-ink-secondary">{tier.support}</dd>
                 </div>
@@ -482,25 +482,25 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
                 </>
               )}
               <dl class="mt-6 space-y-3 text-sm">
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Browser profiles</dt>
                   <dd class="text-right font-medium text-ink-primary">{tier.profiles.toString()}</dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Concurrent sessions</dt>
                   <dd class="text-right font-medium text-ink-primary">{tier.concurrent.toString()}</dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Hours</dt>
                   <dd class="text-right text-ink-primary">{tier.hoursLabel}</dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">AI agent (LLM-driven sessions)</dt>
                   <dd class="text-right text-ink-secondary">
                     {fmtAiAgent(tier.aiAgent, tier.llmBilling)}
                   </dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Support</dt>
                   <dd class="text-right text-ink-secondary">{tier.support}</dd>
                 </div>
@@ -585,43 +585,43 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
                 )}
               </div>
               <dl class="mt-6 space-y-3 text-sm">
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Browser profiles</dt>
                   <dd class="text-right font-medium text-ink-primary">
                     {sku.profilesMax === null ? 'Unlimited' : sku.profilesMax.toString()}
                   </dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Archetypes</dt>
                   <dd class="text-right text-ink-primary">{fmtArchetypes(sku.archetypesMax)}</dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Software updates</dt>
                   <dd class="text-right text-ink-secondary">{SELF_HOSTED_SOFTWARE_UPDATES[sku.id]}</dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Archetype updates</dt>
                   <dd class="text-right text-ink-secondary">{SELF_HOSTED_ARCHETYPE_UPDATES[sku.id]}</dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Source code access</dt>
                   <dd class="text-right text-ink-secondary">{SELF_HOSTED_SOURCE_ACCESS[sku.id]}</dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Custom archetype dev</dt>
                   <dd class="text-right text-ink-secondary">
                     {fmtCustomArchetypeDev(sku.customArchetypeDevelopment)}
                   </dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Source escrow</dt>
                   <dd class="text-right text-ink-secondary">{sku.sourceEscrow ? 'Yes' : 'No'}</dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Support</dt>
                   <dd class="text-right text-ink-secondary">{fmtSupportTier(sku.supportTier)}</dd>
                 </div>
-                <div class="flex justify-between gap-4 border-t border-slate-100 pt-3">
+                <div class="flex justify-between gap-4 border-t border-white/10 pt-3">
                   <dt class="text-ink-muted">Minimum term</dt>
                   <dd class="text-right text-ink-secondary">{sku.minimumTermMonths.toString()}-month</dd>
                 </div>

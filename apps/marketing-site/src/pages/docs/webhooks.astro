@@ -45,13 +45,13 @@ const EVENT_TYPES = [
         ))}
       </tbody>
     </table>
-    <p class="text-sm text-slate-500">
+    <p class="text-sm text-ink-muted">
       <code>test.ping</code> is a sixth event type that exists only
       for the <code>POST /v1/webhooks/&lt;id&gt;/test</code> endpoint;
       it bypasses subscriptions, so you don't list it under
       <code>events</code> when creating an endpoint.
     </p>
-    <p class="text-sm text-slate-500">
+    <p class="text-sm text-ink-muted">
       Each account can have up to 10 active endpoints. Mint as many
       narrow-purpose endpoints as you need rather than one mega-endpoint
       that fans out — easier to retire individual integrations later.
@@ -113,7 +113,7 @@ X-Driftstack-Signature: t=1747051200,v1=<hex hmac>
   "created_at": "2026-05-12T12:00:00.000Z",
   "data": { /* event-specific payload */ }
 }`}</code></pre>
-    <p class="text-sm text-slate-500">
+    <p class="text-sm text-ink-muted">
       During a secret-rotation grace window the request also carries
       <code>X-Driftstack-Signature-Prev</code> in the same
       <code>t=…,v1=…</code> shape — see

@@ -93,12 +93,10 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
     expect(body).toMatch(/<meta name="twitter:image" content=\{ogImageUrl\} \/>/);
   });
 
-  it('Favicon data-URL + oxblood-tile + Georgia-serif-D framing pinned: \'rel="icon"\' + \'type="image/svg+xml"\' + \'href="data:image/svg+xml,...%23722F37...D...Georgia,serif..."\' — pinned so the favicon-as-inline-data-URL (no external favicon.ico request) + oxblood-722F37 brand color + Georgia-serif-D glyph commitment survives (drift to a different brand color or external favicon.ico would create cross-page brand-color divergence or add an HTTP request)', () => {
+  it('R15 favicon points at /driftstack-mark.svg (the real brand SVG shipped in apps/marketing-site/public/) — replaces the prior inline data-URL placeholder favicon (Georgia-serif white D on oxblood-722F37 tile). Drift to a different brand-mark source would create cross-page brand divergence', () => {
     expect(body).toMatch(/rel="icon"/);
     expect(body).toMatch(/type="image\/svg\+xml"/);
-    expect(body).toMatch(/href="data:image\/svg\+xml,/);
-    expect(body).toMatch(/%23722F37/);
-    expect(body).toMatch(/Georgia,serif/);
+    expect(body).toMatch(/href="\/driftstack-mark\.svg"/);
   });
 
   it('doctype + viewport + canonical-link + Header/Footer-slot framing pinned: \'<!doctype html>\' + \'<html lang="en">\' + \'meta name="viewport" content="width=device-width, initial-scale=1"\' + \'link rel="canonical" href={canonical}\' + Header + main flex-1 + slot + Footer — pinned so the doctype + lang=en + viewport + canonical-link + Header/Footer-shell + main-slot commitment survives', () => {

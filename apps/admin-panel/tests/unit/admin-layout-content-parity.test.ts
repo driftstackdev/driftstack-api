@@ -81,11 +81,9 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     );
   });
 
-  it('V-219* D-badge: bg-oxblood-700 + text-white + rounded-md', () => {
+  it('R15 brand mark: /driftstack-mark.svg <img> (iPhone-D logo) — replaces the prior bg-oxblood-700 + text-white "D" chip placeholder with the real SVG brand asset', () => {
     expect(body).toMatch(/V-219\* — D-badge \+ lowercase font-mono "driftstack" wordmark/);
-    expect(body).toMatch(
-      /<span\s*\n?\s*class="inline-flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700 text-white"\s*\n?\s*>\s*\n?\s*D\s*\n?\s*<\/span>/,
-    );
+    expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg"\s*\n?\s*alt="Driftstack"/);
   });
 
   it('"driftstack" wordmark in lowercase font-mono', () => {
