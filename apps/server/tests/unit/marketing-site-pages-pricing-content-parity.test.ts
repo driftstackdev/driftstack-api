@@ -61,12 +61,12 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     );
   });
 
-  it("Trial pack mechanics framing pinned: '{TRIAL_PACK.creditCents}¢ of pre-paid credit decremented at {TRIAL_PACK.meterRate}.' + 'The trial pack is the only Driftstack product with hour-based metering — paid tiers are concurrent-only.' — pinned so the credit-cents + meter-rate + concurrent-only-paid-tiers commitment survives (drift to dropping the 'only product with hour-based metering' framing would let customers think paid tiers also meter hours)", () => {
+  it("Trial pack mechanics framing pinned (R6 plain-English rewrite): '$2.99 of pre-paid credit, billed at {TRIAL_PACK.meterRate}' + 'The trial is our only product that charges by the hour — paid tiers don't meter usage at all'", () => {
     expect(body).toMatch(
-      /\{TRIAL_PACK\.creditCents\}¢ of pre-paid credit\s*\n?\s*decremented at \{TRIAL_PACK\.meterRate\}\./,
+      /\$2\.99 of pre-paid credit, billed at\s*\n?\s*\{TRIAL_PACK\.meterRate\}\./,
     );
     expect(body).toMatch(
-      /The trial pack is the only\s*\n?\s*Driftstack product with hour-based metering — paid tiers are\s*\n?\s*concurrent-only\./,
+      /The trial is our only product that\s*\n?\s*charges by the hour — paid tiers don't meter usage at all/,
     );
   });
 

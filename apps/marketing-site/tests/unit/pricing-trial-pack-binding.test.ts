@@ -36,7 +36,11 @@ describe('W309.B /pricing trial-pack data binding', () => {
     expect(body).toContain('TRIAL_PACK.windowDays');
   });
 
-  it('binds TRIAL_PACK.creditCents into the mechanics copy', () => {
+  // R6 — removed in-prose creditCents binding in favour of the literal
+  // "$2.99 of pre-paid credit" phrasing for non-technical readers.
+  // The TRIAL_PACK.creditCents constant still drives the underlying
+  // billing logic (asserted below).
+  it.skip('binds TRIAL_PACK.creditCents into the mechanics copy', () => {
     expect(body).toContain('TRIAL_PACK.creditCents');
   });
 

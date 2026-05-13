@@ -130,12 +130,12 @@ describe('W372.A marketing-site /pricing page content parity', () => {
   it('trial-pack header card cross-links: signup + docs', () => {
     expect(body).toMatch(/href="https:\/\/app\.driftstack\.dev\/signup"/);
     expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev"/);
-    expect(body).toMatch(/Get started — \{fmtUsd\(trialPack\.monthlyUsd\)\}/);
+    expect(body).toMatch(/Start for \{fmtUsd\(trialPack\.monthlyUsd\)\}/);
   });
 
-  it('trial-pack hour-based metering exception pinned (only product with hours)', () => {
+  it('trial-pack hour-based metering exception pinned (R6 plain-English rewrite)', () => {
     expect(body).toMatch(
-      /The trial pack is the only\s+Driftstack product with hour-based metering — paid tiers are\s+concurrent-only/,
+      /The trial is our only product that\s+charges by the hour — paid tiers don't meter usage at all/,
     );
   });
 

@@ -41,6 +41,6 @@ describe('W330.B /pricing hero baseline', () => {
   });
 
   it('positions paid tiers as concurrent-only (no hour metering on paid)', () => {
-    expect(body).toMatch(/paid tiers are\s+concurrent-only/i);
+    expect(body).toMatch(/paid tiers don't meter usage at all/i);
   });
 });
