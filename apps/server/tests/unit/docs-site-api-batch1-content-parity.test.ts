@@ -1,0 +1,121 @@
+// W605 — drift guard for apps/docs/src/pages/api batch 1.
+// 8 modules: index + versioning + sessions + profiles + profile-snapshots + api-keys + account + auth.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const P = (rel: string) => resolve(REPO_ROOT, `apps/docs/src/pages/api/${rel}`);
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
+  it('api/index.astro: doc-tree catalogue (12 endpoint links + cross-refs to /quickstart/ + /guides/* + webhooks/events/replay) + OpenAPI Scalar /docs/ render + Bearer auth + ds_live_/ds_test_ key prefixes + 429 retry-after pinned', () => {
+    const body = read(P('index.astro'));
+    expect(body).toMatch(/<DocLayout title="API reference">/);
+    expect(body).toMatch(/<code>https:\/\/api\.driftstack\.dev<\/code>/);
+    expect(body).toMatch(/Every/);
+    expect(body).toMatch(/endpoint is versioned under <code>\/v1\/\*<\/code>;/);
+    expect(body).toMatch(/<a href="\/api\/auth\/">Authentication flows<\/a>/);
+    expect(body).toMatch(/<a href="\/api\/account\/">Account<\/a>/);
+    expect(body).toMatch(/<a href="\/api\/api-keys\/">API keys<\/a>/);
+    expect(body).toMatch(/<a href="\/api\/sessions\/">Sessions<\/a>/);
+    expect(body).toMatch(/<a href="\/api\/profiles\/">Profiles<\/a>/);
+    expect(body).toMatch(/<a href="\/api\/usage\/">Usage<\/a>/);
+    expect(body).toMatch(/<a href="\/api\/audit-log\/">Audit log<\/a>/);
+    expect(body).toMatch(/<a href="\/api\/mfa\/">Two-factor authentication<\/a>/);
+    expect(body).toMatch(/<a href="\/api\/billing\/">Billing<\/a>/);
+    expect(body).toMatch(/<a href="\/api\/team\/">Team RBAC<\/a>/);
+    expect(body).toMatch(/<a href="\/api\/versioning\/">Versioning policy<\/a>/);
+    expect(body).toMatch(/<code>https:\/\/api\.driftstack\.dev\/openapi\.json<\/code>;/);
+    expect(body).toMatch(/rendered via Scalar UI on the API host at <code>\/docs\/<\/code>\./);
+    expect(body).toMatch(/<code>ds_live_…<\/code> for production,/);
+    expect(body).toMatch(/<code>ds_test_…<\/code> for trial-pack tier/);
+    expect(body).toMatch(/x-ratelimit-remaining/);
+    expect(body).toMatch(/<code>retry-after<\/code>/);
+    expect(existsSync(P('index.astro'))).toBe(true);
+  });
+
+  it('versioning.md: HTTP API /v1→/v2 vs SDK versioning split + additive-vs-breaking + deprecation cycle pinned', () => {
+    const body = read(P('versioning.md'));
+    expect(body).toMatch(/^title: API versioning policy$/m);
+    expect(body).toMatch(/^# API versioning strategy$/m);
+    expect(body).toMatch(/Versioning policy for the HTTP API surface \(`\/v1\/\*`, eventually/);
+    expect(body).toMatch(/`\/v2\/\*`\)\./);
+    expect(body).toMatch(/Distinct from the SDK versioning policy at/);
+    expect(existsSync(P('versioning.md'))).toBe(true);
+  });
+
+  it('sessions.md: iPhone Safari WebKit-fork session + concurrent-slot framing + 8-row TIER_CONCURRENT_SESSION_LIMITS table + 429 Retry-After on cap-exceeded + tier-default idle timeout auto-destroy pinned', () => {
+    const body = read(P('sessions.md'));
+    expect(body).toMatch(/^title: Sessions$/m);
+    expect(body).toMatch(/^# Sessions$/m);
+    expect(body).toMatch(/A \*\*session\*\* is one running iPhone Safari instance on the modified/);
+    expect(body).toMatch(/WebKit fork, occupying one of your account's concurrent slots/);
+    expect(body).toMatch(/^## Concurrency$/m);
+    expect(body).toMatch(/`TIER_CONCURRENT_SESSION_LIMITS` constant in/);
+    expect(body).toMatch(/`@driftstack\/api-types`/);
+    expect(body).toMatch(/\| `trial_pack`\s+\|\s+1 \|/);
+    expect(body).toMatch(/\| `api_scale`\s+\|\s+24 \|/);
+    expect(body).toMatch(/\| `enterprise`\s+\|\s+32 \|/);
+    expect(body).toMatch(/Hitting the cap on `POST \/v1\/sessions` returns `429 Too Many/);
+    expect(body).toMatch(/Requests` with a `Retry-After` header\./);
+    expect(body).toMatch(/Sessions auto-destroy after/);
+    expect(body).toMatch(/their tier-default idle timeout \(driver-managed\)\./);
+    expect(existsSync(P('sessions.md'))).toBe(true);
+  });
+
+  it('profiles.md: named persistent browser identity + cookies/localStorage/IndexedDB inheritance + tier-cap-on-create+clone + V-313 clone auto-derived name pinned', () => {
+    const body = read(P('profiles.md'));
+    expect(body).toMatch(/^title: Profiles$/m);
+    expect(body).toMatch(/^# Profiles$/m);
+    expect(body).toMatch(/A \*\*profile\*\* is a named, persistent browser identity Driftstack/);
+    expect(body).toMatch(/remembers between sessions\./);
+    expect(body).toMatch(/Cookies, `localStorage`, `IndexedDB`,/);
+    expect(existsSync(P('profiles.md'))).toBe(true);
+  });
+
+  it('profile-snapshots.md: V-511 immutable point-in-time copy of saved profile + frozen-while-source-evolves + capture/list/restore/delete verbs pinned', () => {
+    const body = read(P('profile-snapshots.md'));
+    expect(body).toMatch(/^title: Profile snapshots$/m);
+    expect(body).toMatch(/^# Profile snapshots$/m);
+    expect(body).toMatch(/V-511 reference\. A \*\*profile snapshot\*\* is an immutable/);
+    expect(body).toMatch(/point-in-time copy of a saved profile\./);
+    expect(body).toMatch(/Snapshots let you freeze a/);
+    expect(existsSync(P('profile-snapshots.md'))).toBe(true);
+  });
+
+  it('api-keys.md: Bearer-token Authorization header + Authorization: Bearer <key> + create/list/rotate/revoke verbs (V-296 24h rotate grace) pinned', () => {
+    const body = read(P('api-keys.md'));
+    expect(body).toMatch(/^title: API keys$/m);
+    expect(body).toMatch(/^# API keys$/m);
+    expect(body).toMatch(/Driftstack uses bearer-token authentication\./);
+    expect(body).toMatch(/Every API request includes/);
+    expect(body).toMatch(/`Authorization: Bearer <key>`\./);
+    expect(body).toMatch(/Keys are issued, listed, rotated, and/);
+    expect(existsSync(P('api-keys.md'))).toBe(true);
+  });
+
+  it('account.md: /v1/account/me self-edit surface + bearer-auth + V-298a slug + V-298b region + V-352b avatar + team-RBAC-immune (never honours X-Driftstack-Account) pinned', () => {
+    const body = read(P('account.md'));
+    expect(body).toMatch(/^title: Account$/m);
+    expect(body).toMatch(/^# Account$/m);
+    expect(body).toMatch(/`\/v1\/account\/me` is the calling account's self-edit surface\./);
+    expect(body).toMatch(/The/);
+    expect(body).toMatch(/endpoint is bearer-authenticated; it never honours the team-RBAC/);
+    expect(existsSync(P('account.md'))).toBe(true);
+  });
+
+  it('auth.md: 2 auth surfaces (customer dashboard vs API-key SDK) + signup/login/verify-email/MFA challenge+step-up/magic-link/password-reset/refresh/logout pinned', () => {
+    const body = read(P('auth.md'));
+    expect(body).toMatch(/^title: Authentication flows$/m);
+    expect(body).toMatch(/^# Authentication flows$/m);
+    expect(body).toMatch(/Driftstack has two auth surfaces:/);
+    expect(existsSync(P('auth.md'))).toBe(true);
+  });
+});
