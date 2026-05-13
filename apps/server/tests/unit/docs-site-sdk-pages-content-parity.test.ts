@@ -18,33 +18,51 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-describe('W601 apps/docs/sdk pages content parity', () => {
-  it('sdk/index.astro: 3-SDK card grid (TypeScript published / Python alpha-pending / Go alpha-pending) + identical-resource-shapes-from-same-Zod-source-of-truth in @driftstack/api-types + Get-started + Reference link sections pinned', () => {
+describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
+  describe('sdk/index.astro — split from W632 from a single 22-assertion it() into 6 per-section blocks', () => {
     const body = read(INDEX);
-    expect(body).toMatch(/<DocLayout title="SDKs">/);
-    expect(body).toMatch(/^\s*<h1>SDKs<\/h1>/m);
-    expect(body).toMatch(
-      /Driftstack ships first-party SDKs for TypeScript, Python, and Go\. All SDKs expose identical/,
-    );
-    expect(body).toMatch(
-      /resource shapes \(sessions, profiles, api-keys, webhooks, usage, account, team\) generated from/,
-    );
-    expect(body).toMatch(/the same Zod single source of truth in/);
-    expect(body).toMatch(/<code>@driftstack\/api-types<\/code>/);
-    expect(body).toMatch(/@driftstack\/sdk/);
-    expect(body).toMatch(/npm install @driftstack\/sdk/);
-    expect(body).toMatch(/Status: published, pre-1\.0/);
-    expect(body).toMatch(/driftstack-sdk/);
-    expect(body).toMatch(/pip install driftstack-sdk/);
-    expect(body).toMatch(/Status: alpha; PyPI tag pending/);
-    expect(body).toMatch(/sdk-go/);
-    expect(body).toMatch(/go get github\.com\/driftstackdev\/\.\.\./);
-    expect(body).toMatch(/Status: alpha; first tag pending/);
-    expect(body).toMatch(/<a href="\/sdk\/installation\/">Installation<\/a>/);
-    expect(body).toMatch(/<a href="\/quickstart\/">Quickstart<\/a>/);
-    expect(body).toMatch(/<a href="\/sdk\/versioning\/">Versioning policy<\/a>/);
-    expect(body).toMatch(/<a href="\/sdk\/error-handling\/">Error handling<\/a>/);
-    expect(existsSync(INDEX)).toBe(true);
+
+    it('file exists + DocLayout wrap + <h1>SDKs</h1> page chrome', () => {
+      expect(existsSync(INDEX)).toBe(true);
+      expect(body).toMatch(/<DocLayout title="SDKs">/);
+      expect(body).toMatch(/^\s*<h1>SDKs<\/h1>/m);
+    });
+
+    it('Intro paragraph — load-bearing "identical resource shapes from the same Zod single source of truth" architectural claim. Drift here would silently break the customer-facing promise that the 3 SDKs are wire-compatible, generated from one canonical schema in @driftstack/api-types.', () => {
+      expect(body).toMatch(
+        /Driftstack ships first-party SDKs for TypeScript, Python, and Go\. All SDKs expose identical/,
+      );
+      expect(body).toMatch(
+        /resource shapes \(sessions, profiles, api-keys, webhooks, usage, account, team\) generated from/,
+      );
+      expect(body).toMatch(/the same Zod single source of truth in/);
+      expect(body).toMatch(/<code>@driftstack\/api-types<\/code>/);
+    });
+
+    it('TypeScript card — @driftstack/sdk, npm install command + status "published, pre-1.0" (the only one of the 3 SDKs in actual public production). Drift here would mislead customers about which SDK is safe to depend on today.', () => {
+      expect(body).toMatch(
+        /<article class="rounded-md border border-white\/10 bg-surface-raised p-5">\s*\n\s*<p class="font-mono text-xs uppercase tracking-wide text-ink-muted">TypeScript<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-ink-primary">@driftstack\/sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-ink-secondary">npm install @driftstack\/sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-ink-muted">Status: published, pre-1\.0<\/p>\s*\n\s*<\/article>/,
+      );
+    });
+
+    it('Python card — driftstack-sdk, pip install command + status "alpha; PyPI tag pending". The "PyPI tag pending" framing is load-bearing because it tells customers the install will need to come from a git ref or wheel during alpha, not pip\'s package index.', () => {
+      expect(body).toMatch(
+        /<p class="font-mono text-xs uppercase tracking-wide text-ink-muted">Python<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-ink-primary">driftstack-sdk<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-ink-secondary">pip install driftstack-sdk<\/p>\s*\n\s*<p class="mt-3 text-xs text-ink-muted">Status: alpha; PyPI tag pending<\/p>/,
+      );
+    });
+
+    it('Go card — sdk-go, go get github.com/driftstackdev/... + status "alpha; first tag pending". "First tag pending" framing tells customers the SDK is still pin-to-sha territory during alpha (no semver tag yet).', () => {
+      expect(body).toMatch(
+        /<p class="font-mono text-xs uppercase tracking-wide text-ink-muted">Go<\/p>\s*\n\s*<p class="mt-2 text-sm font-medium text-ink-primary">sdk-go<\/p>\s*\n\s*<p class="mt-1 font-mono text-xs text-ink-secondary">go get github\.com\/driftstackdev\/\.\.\.<\/p>\s*\n\s*<p class="mt-3 text-xs text-ink-muted">Status: alpha; first tag pending<\/p>/,
+      );
+    });
+
+    it('Get started + Reference link sections — 4 canonical cross-links pinned (Installation, Quickstart, Versioning policy, Error handling). Drift to a different href would orphan customers from these docs surfaces.', () => {
+      expect(body).toMatch(/<a href="\/sdk\/installation\/">Installation<\/a>/);
+      expect(body).toMatch(/<a href="\/quickstart\/">Quickstart<\/a>/);
+      expect(body).toMatch(/<a href="\/sdk\/versioning\/">Versioning policy<\/a>/);
+      expect(body).toMatch(/<a href="\/sdk\/error-handling\/">Error handling<\/a>/);
+    });
   });
 
   it.skip('typescript-quickstart.md: V-504 framing + Node 18+ (22 LTS recommended) + ESM-only + lazy auth (no construct-time network) + try/finally destroy-session-or-idle-timeout pinned', () => {
