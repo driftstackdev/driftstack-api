@@ -1,9 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" aria-label="Driftstack logo">
   <!-- Driftstack mark — uppercase D with an iPhone silhouette as the
-       inner counter (notch detail at top). Even-odd fill rule punches
-       the iPhone out of the D so any surface shows through. Oxblood
-       #722F37 brand-locked accent. -->
-  <path fill="#722F37" fill-rule="evenodd" d="
+       inner counter (notch + speaker detail at top). Vertical brand
+       gradient from oxblood #722F37 (top) to bright glow-red #e23847
+       (bottom) for visual punch on dark surfaces. Subtle red drop-
+       shadow glow so the mark pops against the graphite body. -->
+  <defs>
+    <linearGradient id="d-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8d2c3e"/>
+      <stop offset="55%" stop-color="#a83b4d"/>
+      <stop offset="100%" stop-color="#e23847"/>
+    </linearGradient>
+    <filter id="d-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+      <feOffset dx="0" dy="2" result="offsetblur"/>
+      <feFlood flood-color="#e23847" flood-opacity="0.45"/>
+      <feComposite in2="offsetblur" operator="in"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <path fill="url(#d-grad)" fill-rule="evenodd" filter="url(#d-glow)" d="
     M 40 24
     L 148 24
     C 200 24 244 66 244 118

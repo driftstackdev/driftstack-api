@@ -46,7 +46,13 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
 
   it('generator + favicon.svg + charset/viewport meta pinned', () => {
     expect(body).toMatch(/<meta name="generator" content=\{Astro\.generator\} \/>/);
-    expect(body).toMatch(/<link rel="icon" type="image\/svg\+xml" href="\/favicon\.svg" \/>/);
+    // R17 — status-site favicon swapped from the old /favicon.svg (stale
+    // placeholder file shipped before the brand SVG existed) to
+    // /driftstack-mark.svg so the browser tab icon matches the rest of
+    // the product (marketing-site + docs + customer-dashboard).
+    expect(body).toMatch(
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg" \/>/,
+    );
     expect(body).toMatch(/<meta charset="UTF-8" \/>/);
     expect(body).toMatch(
       /<meta name="viewport" content="width=device-width, initial-scale=1\.0" \/>/,
