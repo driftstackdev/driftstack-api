@@ -1,17 +1,23 @@
-// W428.C — drift guard for packages/sdk-typescript/src/resources/billing.ts.
+// W428.C (W646-deepened) — drift guard for packages/sdk-typescript/src/resources/billing.ts.
 // V-082 BillingResource — subscription mirror + Stripe Checkout +
-// Trial Pack + Customer Portal. Drift here either breaks the trial-
-// pack POST (signup flow blocked) or strips a Stripe redirect URL
-// (customers can't upgrade or manage billing).
+// Trial Pack + Customer Portal.
 //
-//   • Framing pinned: V-082 typed methods for /v1/billing.
-//   • Resource behavior pinned: getState returns subscription mirror
-//     + trial-pack state; createCheckoutSession + startTrialPack
-//     return Stripe Checkout URLs to redirect to;
-//     createPortalSession returns Stripe Customer Portal URL.
-//   • 4 verbs: getState (GET) + createCheckoutSession (POST) +
-//     startTrialPack (POST, default {}) + createPortalSession
-//     (POST no body).
+// W646 splits the 7 it() blocks (one per verb + framing) into 11
+// focused per-concept blocks + pins previously-implicit invariants:
+//
+//   • 6-shape api-types import surface — CreateCheckoutSession Req/
+//     Resp + CreatePortalSessionResponse + GetBillingStateResponse +
+//     StartTrialPack Req/Resp. Drift to hand-rolled types would
+//     diverge from the Zod single-source-of-truth.
+//   • startTrialPack `body: StartTrialPackRequest = {}` default-empty
+//     parameter — callers can write `billing.startTrialPack()` for
+//     the no-options case, mirroring sdk-go's nil-body-default.
+//   • createPortalSession no-body POST + account-scoped via bearer
+//     token (never a body parameter; can never request another
+//     account's portal URL).
+//   • All POST verbs return Stripe redirect URLs the customer
+//     redirects to (NOT direct charge). Customer-redirect-required
+//     framing is load-bearing for the buyer journey.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -29,45 +35,69 @@ function read(p: string): string {
 describe('W428.C packages/sdk-typescript/src/resources/billing.ts content parity', () => {
   const body = read(LIB);
 
-  it('Framing pinned: V-082 typed methods for /v1/billing + getState mirror behavior + Stripe Checkout / Portal redirect URLs', () => {
+  it('file exists at canonical path + module-level V-082 framing on /v1/billing', () => {
+    expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/\/\/ BillingResource — typed methods for \/v1\/billing \(V-082\)\./);
+  });
+
+  it('Behavioural framing — getState mirror + Stripe Checkout/Portal redirect URLs. CRITICAL: "createCheckoutSession and startTrialPack return Stripe Checkout URLs the customer redirects to" — drift to direct-charge semantics would change the buyer journey from redirect-to-Stripe to inline-payment, which would break PCI scope.', () => {
     expect(body).toMatch(
       /\/\/ `getState` returns the current subscription mirror \+ trial-pack\s*\n?\s*\/\/ state\. `createCheckoutSession` and `startTrialPack` return Stripe\s*\n?\s*\/\/ Checkout URLs the customer redirects to\. `createPortalSession`\s*\n?\s*\/\/ returns a Stripe Customer Portal URL\./,
     );
   });
 
-  it('imports: 6 api-types shapes (CreateCheckoutSessionRequest/Response + CreatePortalSessionResponse + GetBillingStateResponse + StartTrialPackRequest/Response) + HttpClient', () => {
+  it('Imports — 6 api-types shapes (multi-line braced) + HttpClient. CRITICAL: 6-shape sorted-alphabetical import block (CreateCheckoutSessionRequest → CreateCheckoutSessionResponse → CreatePortalSessionResponse → GetBillingStateResponse → StartTrialPackRequest → StartTrialPackResponse). Drift to hand-rolled types in this file would diverge from @driftstack/api-types Zod single-source-of-truth.', () => {
     expect(body).toMatch(
       /import type \{\s*\n?\s*CreateCheckoutSessionRequest,\s*\n?\s*CreateCheckoutSessionResponse,\s*\n?\s*CreatePortalSessionResponse,\s*\n?\s*GetBillingStateResponse,\s*\n?\s*StartTrialPackRequest,\s*\n?\s*StartTrialPackResponse,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
   });
 
-  it('getState verb: GET /v1/billing → GetBillingStateResponse (subscription mirror + trial-pack state)', () => {
+  it('BillingResource class shape — single private-readonly http constructor field. Stateless wrapper pattern shared with every other TS SDK resource.', () => {
+    expect(body).toMatch(/^export class BillingResource \{$/m);
+    expect(body).toMatch(/constructor\(private readonly http: HttpClient\) \{\}/);
+  });
+
+  it('getState — GET /v1/billing returns the current-account subscription mirror + trial-pack state. Stripe-of-record snapshot the dashboard uses to render plan / usage state without round-tripping to Stripe on every render.', () => {
     expect(body).toMatch(
       /getState\(\): Promise<GetBillingStateResponse> \{\s*\n?\s*return this\.http\.request<GetBillingStateResponse>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/billing',\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
-  it('createCheckoutSession verb: POST /v1/billing/checkout-session → CreateCheckoutSessionResponse (Stripe Checkout URL)', () => {
+  it('createCheckoutSession — POST /v1/billing/checkout-session returns a Stripe Checkout URL for a tier subscription. Customer-redirect-required: the response carries a URL the customer browser navigates to; the SDK does NOT perform the charge inline. CreateCheckoutSessionRequest body type pinned (drift to `any` would lose static checking on the tier + billing_period fields).', () => {
     expect(body).toMatch(
       /createCheckoutSession\(\s*\n?\s*body: CreateCheckoutSessionRequest,\s*\n?\s*\): Promise<CreateCheckoutSessionResponse> \{\s*\n?\s*return this\.http\.request<CreateCheckoutSessionResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/billing\/checkout-session',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
-  it('startTrialPack verb: POST /v1/billing/trial-pack; default {} body when omitted', () => {
+  it('startTrialPack — POST /v1/billing/trial-pack with `body: StartTrialPackRequest = {}` DEFAULT-EMPTY parameter. Callers can write `billing.startTrialPack()` for the no-options case (mirrors sdk-go nil-body-default + sdk-python `body or {}`). Drift to making body required would break the "I just want to start the trial" call site.', () => {
     expect(body).toMatch(
       /startTrialPack\(body: StartTrialPackRequest = \{\}\): Promise<StartTrialPackResponse> \{\s*\n?\s*return this\.http\.request<StartTrialPackResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/billing\/trial-pack',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
-  it('createPortalSession verb: POST /v1/billing/portal-session; no body (Stripe Customer Portal URL)', () => {
+  it("createPortalSession — POST /v1/billing/portal-session with NO body parameter at all. Account identity comes from the bearer token, never a body field, so customers can never request a portal URL for someone else's account. Drift to accepting a body parameter (even an optional one) would silently widen the auth surface.", () => {
     expect(body).toMatch(
       /createPortalSession\(\): Promise<CreatePortalSessionResponse> \{\s*\n?\s*return this\.http\.request<CreatePortalSessionResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/billing\/portal-session',\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
-  it('file exists at canonical path', () => {
-    expect(existsSync(LIB)).toBe(true);
+  it('4-verb wire-path inventory pinned: 1× GET /v1/billing + 3× POST under /v1/billing/{checkout-session,trial-pack,portal-session}. Drift to a 5th verb on the resource without test coverage would let an untested code path ship.', () => {
+    expect(body).toMatch(/path: '\/v1\/billing'/);
+    expect(body).toMatch(/path: '\/v1\/billing\/checkout-session'/);
+    expect(body).toMatch(/path: '\/v1\/billing\/trial-pack'/);
+    expect(body).toMatch(/path: '\/v1\/billing\/portal-session'/);
+    // Exactly 4 distinct /v1/billing paths.
+    const paths = [...body.matchAll(/'\/v1\/billing(?:\/[a-z-]+)?'/g)].map((m) => m[0]);
+    expect(new Set(paths).size, 'expected exactly 4 distinct /v1/billing paths').toBe(4);
+  });
+
+  it('Method-verb pairing per-route pinned: getState→GET billing root; createCheckoutSession→POST checkout-session; startTrialPack→POST trial-pack; createPortalSession→POST portal-session. Drift to flipping a verb (e.g. GET portal-session) would diverge from the action-side-effecting POST contract for Stripe Checkout creation.', () => {
+    // GET appears exactly once (getState).
+    const gets = body.match(/method: 'GET'/g) ?? [];
+    expect(gets.length, 'expected exactly 1 GET verb (getState)').toBe(1);
+    // POST appears exactly 3 times (the 3 Stripe-creating verbs).
+    const posts = body.match(/method: 'POST'/g) ?? [];
+    expect(posts.length, 'expected exactly 3 POST verbs').toBe(3);
   });
 });
