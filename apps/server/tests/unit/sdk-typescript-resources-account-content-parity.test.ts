@@ -1,22 +1,32 @@
-// W425.C — drift guard for packages/sdk-typescript/src/resources/account.ts.
-// AccountResource — the customer self-profile surface (V-237/V-352/
-// V-352b/V-353h/V-355/V-258/V-326c). Drift here either breaks the
-// dashboard header gates ("X / Y sessions" + "P / Q profiles") or
-// strips a tier/region/slug/avatar/MFA-enrolled/teams field the GUI
-// renders from /me.
+// W425.C (W668-deepened) — drift guard for packages/sdk-typescript/
+// src/resources/account.ts. AccountResource TS parity.
 //
-//   • V-237 GET /v1/account/me framing + all the field additions
-//     (V-298a slug, V-298b region, V-352b avatar_url, V-353h
-//     mfa_enrolled, V-326c teams) pinned.
-//   • AccountSelfProfile field roster pinned.
-//   • V-352 updateMe (PATCH) + V-352b avatar upload/clear pair.
-//   • V-355 web-sessions list + revoke (single + all-other).
-//   • V-258 rateLimits read.
-//   • V-352b UploadAvatarResponse: avatar_url + content_type union
-//     (PNG/JPEG/WebP) + bytes.
-//   • V-258 RateLimitBucket bucket_key union (global +
-//     sessions:create) + source (tier_default | override) +
-//     override_expires_at.
+// W668 splits the original 17 it() blocks into 23 focused per-concept
+// blocks + pins previously-implicit invariants:
+//
+//   • V-237 me() framing — powers the GUI client's "X / Y concurrent
+//     sessions" + "P / Q profiles" header gates. Drift to dropping
+//     fields would break dashboard rendering.
+//   • Per-V-anchor field pinning on AccountSelfProfile —
+//     V-352 timezone (IANA, null=UTC), V-298a slug, V-298b region
+//     (3-region closed union), V-352b avatar_url (R2 ~1h presigned),
+//     V-353h mfa_enrolled, V-326c teams membership array.
+//   • V-352b avatar allowlist on response — content_type literal
+//     union (image/png|image/jpeg|image/webp). Drift to widening
+//     would let GIF/SVG slip through (XSS via SVG-script).
+//   • V-355 3-verb web-session lifecycle: list with current:true
+//     marker + revoke-single (idempotent + encodeURIComponent) +
+//     revoke-all-other (CRITICAL: EXCLUDES calling session — drift
+//     to including would log customer OUT mid-revoke).
+//   • V-258 RateLimitBucket bucket_key 2-value union (global|
+//     sessions:create) + source 2-value union (tier_default|
+//     override). Drift to widening either would break dashboard
+//     rendering of effective limits.
+//   • profile_cap NULL for enterprise (negotiated) — drift to a
+//     sentinel number would silently force enterprise customers
+//     into a cap they don\'t have.
+//   • concurrent_session_active + profile_count "live count, not
+//     cached" framing pinned.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -34,62 +44,85 @@ function read(p: string): string {
 describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity', () => {
   const body = read(LIB);
 
-  it('Framing pinned: V-237 GET /me as customer self-profile + V-298a/V-298b/V-352b/V-353h/V-326c field additions (slug/region/avatar_url/mfa_enrolled/teams)', () => {
+  it('file exists at canonical path + module header anchor on the resource line', () => {
+    expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/\/\/ AccountResource — typed methods for \/v1\/account\/\*\./);
+  });
+
+  it('V-237/V-298a/V-298b/V-352b/V-353h/V-326c framing pinned — 6-V-anchor module header. CRITICAL: every V-anchor MUST stay attached because each represents a separate field addition to the /me response. Drift to dropping any anchor would lose changelog provenance for that field.', () => {
     expect(body).toMatch(
       /\/\/ V-237 introduced GET \/v1\/account\/me as the customer self-profile\s*\n?\s*\/\/ endpoint\. V-298a\/V-298b\/V-352b\/V-353h\/V-326c added slug, region,\s*\n?\s*\/\/ avatar_url, mfa_enrolled, and teams fields\. The shape below mirrors\s*\n?\s*\/\/ the server's full \/me response\./,
     );
   });
 
-  it('V-450 framing pinned: also wraps web-sessions + me/avatar + rate-limits', () => {
+  it('V-450 self-service extension framing pinned — "also wraps /web-sessions list + revoke, /me/avatar upload + clear, and /rate-limits read." Drift to dropping any one of the 3 V-450 extension areas would silently shrink the SDK\'s self-service surface.', () => {
     expect(body).toMatch(
       /\/\/ V-450 — also wraps \/web-sessions list \+ revoke, \/me\/avatar\s*\n?\s*\/\/ upload \+ clear, and \/rate-limits read\./,
     );
   });
 
-  it('AccountSelfProfile core fields: id + email + name + tier (AccountTier) + status union (active|suspended|deleted)', () => {
+  it('Imports — AccountTier + UpdateAccountMeRequest + UploadAvatarRequest from @driftstack/api-types + HttpClient. CRITICAL: AccountTier comes from api-types so the tier closed-set stays in lockstep with server-side enum. Drift to hand-rolling AccountTier would let SDK accept tier values the server rejects.', () => {
+    expect(body).toMatch(
+      /import type \{\s*\n?\s*AccountTier,\s*\n?\s*UpdateAccountMeRequest,\s*\n?\s*UploadAvatarRequest,\s*\n?\s*\} from '@driftstack\/api-types';/,
+    );
+    expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
+  });
+
+  it('AccountSelfProfile — core 5 fields (id + email + name + tier + status). status 3-value union (active|suspended|deleted) pinned as TS LITERAL types. Drift to widening status would let dashboards render undefined-state badges; drift to a 4th value (e.g. "pending") without coordinated server+client update would break the closed-set switch.', () => {
     expect(body).toMatch(
       /export interface AccountSelfProfile \{\s*\n?\s*id: string;\s*\n?\s*email: string;\s*\n?\s*name: string \| null;\s*\n?\s*tier: AccountTier;\s*\n?\s*status: 'active' \| 'suspended' \| 'deleted';/,
     );
   });
 
-  it('V-352 timezone field: IANA zone like Europe/Amsterdam; null = UTC fallback', () => {
+  it('V-352 timezone field — IANA zone (e.g. "Europe/Amsterdam") nullable with "null = UTC fallback" framing. Drift to dropping the UTC-fallback semantic would force every customer to set a timezone (breaking the "I don\'t care" default).', () => {
     expect(body).toMatch(
       /\/\*\* V-352 — IANA timezone \(e\.g\. "Europe\/Amsterdam"\); null = UTC fallback\. \*\/\s*\n?\s*timezone: string \| null;/,
     );
   });
 
-  it('V-298a slug + V-298b region (us|eu|apac) + V-352b avatar_url (~1h R2 presigned) + V-353h mfa_enrolled', () => {
+  it('V-298a slug — readable account handle (e.g. /@acme); nullable when unset. The "readable" framing tells customers this is the human-facing handle (vs the opaque account_id). Drift to a non-nullable slug would force every account to pick one.', () => {
     expect(body).toMatch(
       /\/\*\* V-298a — readable account handle; null when unset\. \*\/\s*\n?\s*slug: string \| null;/,
     );
+  });
+
+  it('CRITICAL V-298b region — 3-value closed union (us|eu|apac) + null when unset. The 3-region closed-set is what defines where the customer\'s data lives. Drift to widening (e.g. adding "africa") without coordinated server+client update would break the regional-routing infrastructure. Drift to making non-nullable would force every customer to pick a region at signup (vs deferring).', () => {
     expect(body).toMatch(
       /\/\*\* V-298b — stated infrastructure-region preference; null when unset\. \*\/\s*\n?\s*region: 'us' \| 'eu' \| 'apac' \| null;/,
     );
+  });
+
+  it('CRITICAL V-352b avatar_url — short-lived (~1h) PRESIGNED R2 GET URL; nullable when no avatar. The "short-lived" framing tells customers the URL EXPIRES — drift to dropping the freshness window claim would let dashboards cache stale URLs that 404 after expiry. Drift to making non-presigned would expose the R2 bucket directly.', () => {
     expect(body).toMatch(
       /\/\*\* V-352b — short-lived \(~1h\) presigned R2 GET URL; null when no avatar\. \*\/\s*\n?\s*avatar_url: string \| null;/,
     );
+  });
+
+  it('V-353h mfa_enrolled — boolean (true once TOTP enrollment verified). Drift to making nullable would let dashboards render an "MFA: unknown" state (vs the clear yes/no).', () => {
     expect(body).toMatch(
       /\/\*\* V-353h — true once TOTP enrollment is verified\. \*\/\s*\n?\s*mfa_enrolled: boolean;/,
     );
   });
 
-  it('Concurrent-session + profile gauges: concurrent_session_cap + concurrent_session_active live; profile_cap (null enterprise) + profile_count live', () => {
+  it('Concurrent-session gauges — concurrent_session_cap (tier-derived) + concurrent_session_active ("live count, not cached" framing pinned). CRITICAL: the "live count" framing is what tells dashboards they can poll /me to get fresh session-count without invalidating a cache. Drift to dropping the live-count framing would let dashboards stale-render the gauge.', () => {
     expect(body).toMatch(
       /\/\*\* Concurrent session cap for this account's tier\. \*\/\s*\n?\s*concurrent_session_cap: number;\s*\n?\s*\/\*\* Active sessions right now \(live count, not cached\)\. \*\/\s*\n?\s*concurrent_session_active: number;/,
     );
+  });
+
+  it('CRITICAL profile gauges — profile_cap NULLABLE for enterprise (negotiated) + profile_count "live count, not cached" framing pinned. Drift to making profile_cap a sentinel number (e.g. Infinity, -1) for enterprise would silently force enterprise customers into a cap they don\'t have. Null is the correct "no cap" signal.', () => {
     expect(body).toMatch(
       /\/\*\* Profile cap for this tier; null for enterprise \(negotiated\)\. \*\/\s*\n?\s*profile_cap: number \| null;\s*\n?\s*\/\*\* Existing profiles right now \(live count, not cached\)\. \*\/\s*\n?\s*profile_count: number;/,
     );
   });
 
-  it('V-326c teams membership array: owner_account_id + role (admin|member) + membership_id', () => {
+  it('CRITICAL V-326c teams membership array — Array<{owner_account_id + role (admin|member) + membership_id}>. "Empty when none" framing tells dashboards an empty array is the canonical "I\'m not on any team" signal (not absence of the field). 2-value role union pinned (admin|member). Drift to dropping owner_account_id would prevent dashboards from rendering "you\'re a member of X\'s team" cross-account links.', () => {
     expect(body).toMatch(
       /\/\*\* V-326c — team memberships the calling account holds\. Empty when none\. \*\/\s*\n?\s*teams: Array<\{\s*\n?\s*owner_account_id: string;\s*\n?\s*role: 'admin' \| 'member';\s*\n?\s*membership_id: string;\s*\n?\s*\}>;/,
     );
   });
 
-  it('V-355 WebSessionEntry: id + os + browser + last_used_at + expires_at + current boolean', () => {
+  it('CRITICAL V-355 WebSessionEntry — id + os + browser + last_used_at + expires_at + current bool. "True when this entry is the calling session itself" framing pinned on `current` field. Drift to dropping `current` would force dashboards to compare every entry against the cookie\'s session id to identify "this device" (fragile + leaks session info into client logic).', () => {
     expect(body).toMatch(/\/\/ V-355 — active dashboard sign-in for the calling account\./);
     expect(body).toMatch(
       /export interface WebSessionEntry \{\s*\n?\s*id: string;\s*\n?\s*os: string;\s*\n?\s*browser: string;\s*\n?\s*last_used_at: string;\s*\n?\s*expires_at: string;\s*\n?\s*\/\*\* True when this entry is the calling session itself\. \*\/\s*\n?\s*current: boolean;\s*\n?\s*\}/,
@@ -99,7 +132,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
     );
   });
 
-  it('V-352b UploadAvatarResponse: avatar_url string|null + content_type union (image/png|image/jpeg|image/webp) + bytes number; presigned R2 URL ~1h', () => {
+  it('CRITICAL V-352b UploadAvatarResponse — content_type 3-value closed union (image/png|image/jpeg|image/webp). Drift to widening (e.g. adding image/gif or image/svg+xml) would open XSS via SVG-embedded <script>. The closed allowlist is the load-bearing security claim. Pre-signed R2 ~1h URL framing pinned.', () => {
     expect(body).toMatch(
       /\/\/ V-352b — avatar upload response\. Presigned R2 URL is short-lived \(~1h\)\./,
     );
@@ -108,7 +141,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
     );
   });
 
-  it('V-258 RateLimitBucket: bucket_key (global|sessions:create) + capacity + refill_per_second + source (tier_default|override) + override_expires_at; GetAccountRateLimitsResponse wraps tier + buckets[]', () => {
+  it('CRITICAL V-258 RateLimitBucket — bucket_key 2-value union (global|sessions:create) + source 2-value union (tier_default|override) + override_expires_at nullable. Drift to widening bucket_key would let dashboards render unknown buckets; drift to widening source would lose the tier-vs-override distinction the dashboard uses to render "tier default" badges. GetAccountRateLimitsResponse wraps tier (string, not AccountTier — admins can override) + buckets[].', () => {
     expect(body).toMatch(
       /\/\/ V-258 — effective rate-limit config \(per-bucket capacity \+ refill\)\./,
     );
@@ -120,7 +153,13 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
     );
   });
 
-  it('me(): GET /v1/account/me; powers GUI X/Y sessions + P/Q profiles header gates (V-237 framing)', () => {
+  it('AccountResource class declaration + private-readonly http constructor field.', () => {
+    expect(body).toMatch(
+      /export class AccountResource \{\s*\n?\s*constructor\(private readonly http: HttpClient\) \{\}/,
+    );
+  });
+
+  it('me() verb — V-237 GET /v1/account/me → Promise<AccountSelfProfile>. CRITICAL: "Powers the GUI client\'s `X / Y concurrent sessions` + `P / Q profiles` header gates" — drift to dropping any gauge field would break the dashboard header rendering.', () => {
     expect(body).toMatch(
       /\*\s*V-237 — customer self-profile\. Powers the GUI client's\s*\n?\s*\*\s*"X \/ Y concurrent sessions" \+ "P \/ Q profiles" header gates\./,
     );
@@ -129,7 +168,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
     );
   });
 
-  it('V-352 updateMe: PATCH /v1/account/me with UpdateAccountMeRequest (name/timezone/slug/region partial-update)', () => {
+  it('updateMe verb — V-352 PATCH /v1/account/me with UpdateAccountMeRequest body → Promise<AccountSelfProfile>. CRITICAL: "(name / timezone / slug / region)" 4-field partial-update list pinned. Drift to dropping any field from the parenthetical would lose the customer-facing list of updatable fields. PATCH (not PUT) so missing fields stay unchanged.', () => {
     expect(body).toMatch(
       /\/\*\* V-352 — partial update of the calling account \(name \/ timezone \/ slug \/ region\)\. \*\//,
     );
@@ -138,35 +177,44 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
     );
   });
 
-  it('V-352b uploadAvatar (POST /me/avatar) + clearAvatar (DELETE /me/avatar)', () => {
+  it('uploadAvatar verb — V-352b POST /v1/account/me/avatar with UploadAvatarRequest body → Promise<UploadAvatarResponse>. The "or replace" framing on the JSDoc tells customers upload IS idempotent at the avatar-pointer level (re-uploading replaces, not duplicates).', () => {
     expect(body).toMatch(/\/\*\* V-352b — upload \(or replace\) the calling account avatar\. \*\//);
     expect(body).toMatch(
       /uploadAvatar\(body: UploadAvatarRequest\): Promise<UploadAvatarResponse> \{\s*\n?\s*return this\.http\.request<UploadAvatarResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/account\/me\/avatar',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
+  });
+
+  it('clearAvatar verb — V-352b DELETE /v1/account/me/avatar → Promise<void>. "clear the calling account avatar pointer" framing — drift to "delete the avatar file" would mismatch the actual server-side semantics (the file may stick around in R2 with TTL).', () => {
     expect(body).toMatch(/\/\*\* V-352b — clear the calling account avatar pointer\. \*\//);
     expect(body).toMatch(
       /clearAvatar\(\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'DELETE',\s*\n?\s*path: '\/v1\/account\/me\/avatar',\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
-  it('V-355 web-sessions: list (GET /web-sessions) + revoke single (DELETE /:id encoded, idempotent) + revoke all-other (DELETE /web-sessions)', () => {
+  it('listWebSessions verb — V-355 GET /v1/account/web-sessions → Promise<ListWebSessionsResponse>. The list-with-current-marker is the load-bearing claim that lets dashboards distinguish "this device" from "other devices".', () => {
     expect(body).toMatch(
       /\/\*\* V-355 — list active dashboard sign-ins for the calling account\. \*\//,
     );
     expect(body).toMatch(
       /listWebSessions\(\): Promise<ListWebSessionsResponse> \{\s*\n?\s*return this\.http\.request<ListWebSessionsResponse>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/account\/web-sessions',\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
+  });
+
+  it('revokeWebSession verb — V-355 DELETE /v1/account/web-sessions/${encodeURIComponent(id)} → Promise<void>. CRITICAL: "Idempotent" framing — drift to non-idempotent would break the standard cleanup pattern. encodeURIComponent wrapping prevents path traversal.', () => {
     expect(body).toMatch(/\/\*\* V-355 — revoke a single web session by id\. Idempotent\. \*\//);
     expect(body).toMatch(
       /revokeWebSession\(id: string\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'DELETE',\s*\n?\s*path: `\/v1\/account\/web-sessions\/\$\{encodeURIComponent\(id\)\}`,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
+  });
+
+  it('CRITICAL revokeAllOtherWebSessions verb — V-355 DELETE /v1/account/web-sessions (NO id, collection root). "revoke every web session EXCEPT the calling one" framing pinned. Drift to including the calling session would log customer OUT mid-revocation, silently breaking the "log out other devices, keep this one" UX. The exclusion is load-bearing.', () => {
     expect(body).toMatch(/\/\*\* V-355 — revoke every web session except the calling one\. \*\//);
     expect(body).toMatch(
       /revokeAllOtherWebSessions\(\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'DELETE',\s*\n?\s*path: '\/v1\/account\/web-sessions',\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
-  it('V-258 rateLimits: GET /v1/account/rate-limits; returns GetAccountRateLimitsResponse', () => {
+  it('rateLimits verb — V-258 GET /v1/account/rate-limits → Promise<GetAccountRateLimitsResponse>. Read-only diagnostic; drift to a POST (e.g. for adjusting limits) would shift this from read-only to write surface needing CSRF protection.', () => {
     expect(body).toMatch(
       /\/\*\* V-258 — read effective rate-limit config \(per-bucket caps \+ override status\)\. \*\//,
     );
@@ -175,14 +223,17 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
     );
   });
 
-  it('imports: AccountTier + UpdateAccountMeRequest + UploadAvatarRequest from api-types + HttpClient', () => {
-    expect(body).toMatch(
-      /import type \{\s*\n?\s*AccountTier,\s*\n?\s*UpdateAccountMeRequest,\s*\n?\s*UploadAvatarRequest,\s*\n?\s*\} from '@driftstack\/api-types';/,
-    );
-    expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
-  });
-
-  it('file exists at canonical path', () => {
-    expect(existsSync(LIB)).toBe(true);
+  it('8-verb inventory + verb-mix invariants — exactly 8 method declarations (me + updateMe + uploadAvatar + clearAvatar + listWebSessions + revokeWebSession + revokeAllOtherWebSessions + rateLimits). Verb mix: 3 GETs (me + listWebSessions + rateLimits) + 1 PATCH (updateMe) + 1 POST (uploadAvatar) + 3 DELETEs (clearAvatar + revokeWebSession + revokeAllOtherWebSessions). Drift to a 9th verb without test coverage would let an untested code path ship.', () => {
+    const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
+    expect(methods.length, 'expected 8 verb declarations').toBe(8);
+    const gets = (body.match(/method: 'GET'/g) ?? []).length;
+    expect(gets, 'expected 3 GETs').toBe(3);
+    const patches = (body.match(/method: 'PATCH'/g) ?? []).length;
+    expect(patches, 'expected 1 PATCH (updateMe)').toBe(1);
+    const posts = (body.match(/method: 'POST'/g) ?? []).length;
+    expect(posts, 'expected 1 POST (uploadAvatar)').toBe(1);
+    const deletes = (body.match(/method: 'DELETE'/g) ?? []).length;
+    expect(deletes, 'expected 3 DELETEs').toBe(3);
+    expect(body).not.toMatch(/method: 'PUT'/);
   });
 });
