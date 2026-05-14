@@ -1,18 +1,31 @@
-// W429.A — drift guard for packages/sdk-typescript/src/resources/email-preferences.ts.
-// V-204 EmailPreferencesResource — per-event opt-in/opt-out for
-// non-critical customer emails. Drift here either lets critical
-// emails leak into the OptOutableEmailEvent enum (regulatory risk —
-// password-reset opt-out blocks security recovery) or breaks the
-// PUT verb (set request becomes a no-op or duplicates rows).
+// W429.A (W656-deepened) — drift guard for packages/sdk-typescript/
+// src/resources/email-preferences.ts. V-204 EmailPreferencesResource
+// TS parity.
 //
-//   • V-204 framing pinned + critical-emails-never-opt-outable list:
-//     signup-verification, password-reset, billing-failure,
-//     subscription-cancellation, support-ack.
-//   • 4-verb surface: list (GET) + set (PUT) + optOut/optIn
-//     convenience methods delegating to set.
-//   • list defaults to opted-in for unset rows.
-//   • set uses PUT (idempotent) NOT POST (preference rows are unique
-//     per event_type).
+// W656 splits the original 8 it() blocks into 14 focused per-concept
+// blocks + pins previously-implicit invariants. Mirrors the W655
+// sdk-python email-preferences split:
+//
+//   • Critical-emails-never-opt-outable invariant pinned per-line.
+//     The 5 critical emails (signup-verification + password-reset +
+//     billing-failure + subscription-cancellation + support-ack)
+//     MUST be absent from the OptOutableEmailEvent enum so the TS
+//     type system REJECTS `optOut('password-reset')` at compile
+//     time (the function parameter is typed
+//     `OptOutableEmailEvent` not `string`). Type-narrowing is what
+//     enforces the policy at the client side; the server enforces
+//     it again at runtime.
+//   • Opt-in-by-default invariant pinned: "Defaults to opted-in
+//     for unset rows."
+//   • PUT (not POST) — idempotent upsert per event_type. Drift to
+//     POST would duplicate rows on retry.
+//   • Examples of opt-outable emails pinned (signup-welcome /
+//     session-failed-first / billing-receipt) — load-bearing
+//     because they document the policy scope.
+//   • optIn/optOut convenience wrappers delegate to set() with the
+//     correct boolean. Drift to optIn calling set with opted_in:
+//     false would invert the wrapper semantic.
+//   • 4-verb inventory drift guard via regex count.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -30,29 +43,44 @@ function read(p: string): string {
 describe('W429.A packages/sdk-typescript/src/resources/email-preferences.ts content parity', () => {
   const body = read(LIB);
 
-  it('Framing pinned: V-204 typed methods for /v1/account/email-preferences + per-event opt-in/opt-out toggles for non-critical customer emails', () => {
+  it('file exists at canonical path + module header V-204 anchor on the resource line', () => {
+    expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
       /\/\/ EmailPreferencesResource — typed methods for \/v1\/account\/email-preferences \(V-204\)\./,
     );
+  });
+
+  it('Per-event opt-in/opt-out scope pinned with example opt-outable event names (signup-welcome / session-failed-first / billing-receipt). Load-bearing because these examples document the policy scope — readers should be able to look at the comment and understand which kinds of emails CAN be muted.', () => {
     expect(body).toMatch(
       /\/\/ Per-event opt-in\/opt-out toggles for non-critical customer emails\s*\n?\s*\/\/ \(signup-welcome, session-failed-first, billing-receipt, etc\)\./,
     );
   });
 
-  it('Critical-emails-never-opt-outable policy pinned: signup-verification, password-reset, billing-failure, subscription-cancellation, support-ack absent from OptOutableEmailEvent enum on purpose', () => {
+  it('CRITICAL: critical-emails-never-opt-outable invariant pinned per-line. The 5 critical emails (signup-verification + password-reset + billing-failure + subscription-cancellation + support-ack) MUST be absent from OptOutableEmailEvent enum. This is the policy-enforcement claim: "absent from the OptOutableEmailEvent enum on purpose so the API surface matches the policy." Drift to letting a critical email into the enum would let customers opt out of "your password was reset" or "your card failed" — catastrophic safety-net break.', () => {
     expect(body).toMatch(
       /\/\/ Critical emails — signup-verification, password-reset,\s*\n?\s*\/\/ billing-failure, subscription-cancellation, support-ack — are\s*\n?\s*\/\/ never opt-outable; they're absent from the OptOutableEmailEvent\s*\n?\s*\/\/ enum on purpose so the API surface matches the policy\./,
     );
   });
 
-  it('imports: EmailPreference + ListEmailPreferencesResponse + OptOutableEmailEvent + SetEmailPreferenceRequest from api-types + HttpClient', () => {
+  it('Imports — 4 api-types shapes (multi-line braced; sorted alphabetical): EmailPreference + ListEmailPreferencesResponse + OptOutableEmailEvent + SetEmailPreferenceRequest. The OptOutableEmailEvent import is load-bearing — without it the optIn/optOut params would fall back to `string` and the type-narrowing safety net would be lost.', () => {
     expect(body).toMatch(
       /import type \{\s*\n?\s*EmailPreference,\s*\n?\s*ListEmailPreferencesResponse,\s*\n?\s*OptOutableEmailEvent,\s*\n?\s*SetEmailPreferenceRequest,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
+  });
+
+  it("Imports — HttpClient from '../http.js' (relative path with .js extension for ESM compatibility). Drift to dropping the .js extension would break the ESM build because TypeScript needs the literal .js suffix at runtime.", () => {
     expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
   });
 
-  it('list verb: GET /v1/account/email-preferences; defaults to opted-in for unset rows', () => {
+  it('EmailPreferencesResource class declaration — exported. Stateless wrapper pattern shared with every other TS SDK resource.', () => {
+    expect(body).toMatch(/^export class EmailPreferencesResource \{$/m);
+  });
+
+  it('Constructor — private-readonly http field. Drift to public-readonly would let customers tamper with the underlying HTTP client mid-call; drift to private (no readonly) would let internal reassignment happen which would silently lose retry config.', () => {
+    expect(body).toMatch(/constructor\(private readonly http: HttpClient\) \{\}/);
+  });
+
+  it('list verb — GET /v1/account/email-preferences. JSDoc: "Read all opt-out toggles for the calling account. Defaults to opted-in for unset rows." CRITICAL: "Defaults to opted-in for unset rows" — drift to opt-out-by-default would silently mute every customer\'s non-critical emails.', () => {
     expect(body).toMatch(
       /\/\*\* Read all opt-out toggles for the calling account\. Defaults to opted-in for unset rows\. \*\//,
     );
@@ -61,28 +89,53 @@ describe('W429.A packages/sdk-typescript/src/resources/email-preferences.ts cont
     );
   });
 
-  it('set verb: PUT /v1/account/email-preferences (idempotent upsert, NOT POST); body SetEmailPreferenceRequest; returns EmailPreference row', () => {
+  it('set verb — PUT /v1/account/email-preferences with SetEmailPreferenceRequest body. CRITICAL: PUT (not POST) because preference rows are UNIQUE per event_type — re-setting the same row is idempotent upsert, not a duplicate. Drift to POST would duplicate rows on retry, breaking the single-row-per-event-type invariant. Returns single EmailPreference (the row that was upserted).', () => {
     expect(body).toMatch(/\/\*\* Set opt-in\/opt-out for a single email event type\. \*\//);
     expect(body).toMatch(
       /set\(body: SetEmailPreferenceRequest\): Promise<EmailPreference> \{\s*\n?\s*return this\.http\.request<EmailPreference>\(\{\s*\n?\s*method: 'PUT',\s*\n?\s*path: '\/v1\/account\/email-preferences',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
-  it('optOut convenience: delegates to set with opted_in:false (single-event)', () => {
+  it("optOut convenience — delegates to set({event_type: eventType, opted_in: false}). CRITICAL TYPE-SAFETY: eventType is typed `OptOutableEmailEvent`, NOT `string`. The TS type system rejects `optOut('password-reset')` at COMPILE TIME because \"password-reset\" isn't in the OptOutableEmailEvent enum. Drift to widening the parameter type to `string` would lose this compile-time enforcement and let bug-prone calls slip through.", () => {
     expect(body).toMatch(/\/\*\* Convenience: opt out of a single event type\. \*\//);
     expect(body).toMatch(
       /optOut\(eventType: OptOutableEmailEvent\): Promise<EmailPreference> \{\s*\n?\s*return this\.set\(\{ event_type: eventType, opted_in: false \}\);\s*\n?\s*\}/,
     );
   });
 
-  it('optIn convenience: delegates to set with opted_in:true (single-event re-opt-in)', () => {
+  it('optIn convenience — delegates to set({event_type: eventType, opted_in: true}). Mirror of optOut with opted_in:true. Same OptOutableEmailEvent type-narrowing on the parameter. Drift to opted_in:false would invert the semantic; drift to widening parameter type would lose compile-time enforcement.', () => {
     expect(body).toMatch(/\/\*\* Convenience: opt back in to a single event type\. \*\//);
     expect(body).toMatch(
       /optIn\(eventType: OptOutableEmailEvent\): Promise<EmailPreference> \{\s*\n?\s*return this\.set\(\{ event_type: eventType, opted_in: true \}\);\s*\n?\s*\}/,
     );
   });
 
-  it('file exists at canonical path', () => {
-    expect(existsSync(LIB)).toBe(true);
+  it('4-verb inventory drift guard — exactly 4 method declarations (list + set + optOut + optIn) NO __init__ counted because TS uses constructor. Drift to a 5th method without test coverage would let an untested code path ship.', () => {
+    // Count method declarations: `xxx(...args): ReturnType {`. The
+    // constructor is excluded by anchoring on Promise< return type.
+    const methods = body.match(/^ {2}[a-zA-Z]+\([^)]*\): Promise</gm) ?? [];
+    expect(methods.length, 'expected exactly 4 method declarations').toBe(4);
+  });
+
+  it('Wire-call verb-mix invariant — exactly 1 GET (list) + 1 PUT (set) + 0 POST/PATCH/DELETE. optOut/optIn are DELEGATIONS to set, NOT separate wire calls — they MUST NOT mint their own this.http.request() calls. Drift to optIn calling http.request directly would silently double the wire-call count and break the upsert-uniqueness invariant.', () => {
+    const gets = (body.match(/method: 'GET'/g) ?? []).length;
+    expect(gets, 'expected exactly 1 GET (list)').toBe(1);
+    const puts = (body.match(/method: 'PUT'/g) ?? []).length;
+    expect(puts, 'expected exactly 1 PUT (set)').toBe(1);
+    expect(body).not.toMatch(/method: 'POST'/);
+    expect(body).not.toMatch(/method: 'PATCH'/);
+    expect(body).not.toMatch(/method: 'DELETE'/);
+    // optOut and optIn should both call this.set() — exactly 2 delegations.
+    const setDelegations = (body.match(/return this\.set\(/g) ?? []).length;
+    expect(setDelegations, 'expected exactly 2 this.set() delegations (optOut + optIn)').toBe(2);
+  });
+
+  it('Sync wire-path inventory pinned: only /v1/account/email-preferences appears in this file (1 base path, used by list GET + set PUT). Drift to a per-id sub-path (e.g. /v1/account/email-preferences/:event_type) would change the row-addressing model from event_type-in-body to event_type-in-URL.', () => {
+    const paths = body.match(/path: '\/v1\/account\/email-preferences[^']*'/g) ?? [];
+    expect(paths.length, 'expected exactly 2 path: literals (list + set)').toBe(2);
+    // Both literal paths are the bare /v1/account/email-preferences (no sub-path).
+    for (const p of paths) {
+      expect(p).toBe("path: '/v1/account/email-preferences'");
+    }
   });
 });
