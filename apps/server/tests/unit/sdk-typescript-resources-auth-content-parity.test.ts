@@ -1,18 +1,33 @@
-// W425.A — drift guard for packages/sdk-typescript/src/resources/auth.ts.
-// V-079 AuthResource — the auth gate; these endpoints don't require
-// an API key. Drift here either breaks login MFA branching (V-353d
-// discriminated-union response), breaks the CLI-authorize 3-step
-// activation handshake (V-460/V-266), or drops a recovery flow
-// (magic-link / password-reset / mfa step-up).
+// W425.A (W666-deepened) — drift guard for packages/sdk-typescript/
+// src/resources/auth.ts. V-079 AuthResource TS parity.
 //
-//   • Framing pinned: V-079; auth gate; API key on client unused.
-//   • 14 verbs pinned: signup + verifyEmail + login + magic-link
-//     request/consume + password-reset request/confirm + refresh +
-//     logout + mfa challenge/step-up + cli-authorize
-//     initiate/bind/exchange.
-//   • V-353d login MFA discriminated-union response framing.
-//   • V-445 MFA challenge + step-up rationale.
-//   • V-460/V-266 CLI/GUI 3-step activation flow rationale.
+// W666 splits the original 15 it() blocks into 22 focused per-concept
+// blocks + pins previously-implicit invariants. Mirrors the W647
+// sdk-go-auth.go (5→16) + W651 sdk-python-auth (6→18) splits:
+//
+//   • V-079 auth-gate-API-key-unused invariant pinned per-line. The
+//     SDK's HTTP layer always sends the Authorization header but the
+//     server ignores it on these public routes. Drift to making
+//     auth.signup() refuse without a key would break first-time
+//     signup (the customer doesn't HAVE a key yet — that's why
+//     they're signing up).
+//   • V-353d login MFA discriminated-union response — the in-JSDoc
+//     example pattern (5-line const-await branching) is load-bearing
+//     because it shows customers how to handle the branch correctly.
+//     Drift to dropping the example would lose the customer-facing
+//     guidance for the "MFA required" branch.
+//   • V-445 mfaChallenge 'via: totp|recovery' discriminator pinned —
+//     drift to dropping would prevent customers from counting TOTP-
+//     vs-recovery use in MFA-strength metrics.
+//   • V-353e mfaStepUp 15-min freshness window + "No new session
+//     issued" + MfaStepUpRequiredError pairing. Drift to issuing
+//     new session on step-up would force cookie rotation mid-flow.
+//   • V-460/V-266 CLI 3-step (initiate → bind → exchange) with each
+//     step's auth posture pinned: initiate public, bind web-session-
+//     authenticated (default scopes ["account_owner"]), exchange
+//     polled 3-branch discriminated union (pending/bound/expired
+//     with subsequent-calls-404 framing).
+//   • 14-verb POST-only inventory + 28-shape api-types import surface.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -30,135 +45,18 @@ function read(p: string): string {
 describe('W425.A packages/sdk-typescript/src/resources/auth.ts content parity', () => {
   const body = read(LIB);
 
-  it('Framing pinned: V-079 typed methods for /v1/auth/*', () => {
+  it('file exists at canonical path + module header V-079 anchor on the resource line', () => {
+    expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/\/\/ AuthResource — typed methods for \/v1\/auth\/\* \(V-079\)\./);
   });
 
-  it('Auth-gate posture pinned: endpoints do NOT require an API key; resource exists for ergonomics + type safety, not for API-key-driven auth', () => {
+  it('CRITICAL V-079 auth-gate-API-key-unused posture pinned per-line. "These endpoints don\'t require an API key (they ARE the auth gate)." + "the API key on the client is unused for these calls (the server doesn\'t validate it)." + "The resource is here for ergonomics + type safety, not for API-key-driven auth." Drift to making auth.signup() refuse without a key would break first-time signup.', () => {
     expect(body).toMatch(
       /\/\/ Note: these endpoints don't require an API key \(they ARE the auth\s*\n?\s*\/\/ gate\)\. Customers using the auth flow do so from a browser dashboard\s*\n?\s*\/\/ against the SDK's HTTP layer; the API key on the client is unused\s*\n?\s*\/\/ for these calls \(the server doesn't validate it\)\. The resource is\s*\n?\s*\/\/ here for ergonomics \+ type safety, not for API-key-driven auth\./,
     );
   });
 
-  it('signup + verifyEmail verbs: POST /v1/auth/signup + /v1/auth/verify-email', () => {
-    expect(body).toMatch(
-      /signup\(body: SignupRequest\): Promise<SignupResponse> \{\s*\n?\s*return this\.http\.request<SignupResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/signup',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-    expect(body).toMatch(
-      /verifyEmail\(body: VerifyEmailRequest\): Promise<VerifyEmailResponse> \{\s*\n?\s*return this\.http\.request<VerifyEmailResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/verify-email',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-  });
-
-  it('V-353d login MFA discriminated-union framing: returns LoginResponseUnion; mfa_required branch with challenge_token + challenge_expires_at; example pattern pinned', () => {
-    expect(body).toMatch(
-      /\*\s*V-353d — discriminated-union response\. When the account has MFA\s*\n?\s*\*\s*enrolled, the server returns `\{ mfa_required: true, challenge_token,\s*\n?\s*\*\s*challenge_expires_at \}` instead of a session\. Branch on the\s*\n?\s*\*\s*`mfa_required` literal:/,
-    );
-    expect(body).toMatch(
-      /\*\s*const out = await client\.auth\.login\(\{ email, password \}\);\s*\n?\s*\*\s*if \('mfa_required' in out && out\.mfa_required\) \{\s*\n?\s*\*\s*\/\/ exchange out\.challenge_token via \/v1\/auth\/mfa\/challenge\s*\n?\s*\*\s*\} else \{\s*\n?\s*\*\s*\/\/ out\.session is the real session\s*\n?\s*\*\s*\}/,
-    );
-    expect(body).toMatch(
-      /login\(body: LoginRequest\): Promise<LoginResponseUnion> \{\s*\n?\s*return this\.http\.request<LoginResponseUnion>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/login',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-  });
-
-  it('Magic-link request/consume pair: POST /v1/auth/magic-link/request + /consume', () => {
-    expect(body).toMatch(
-      /requestMagicLink\(body: MagicLinkRequest\): Promise<MagicLinkRequestResponse> \{\s*\n?\s*return this\.http\.request<MagicLinkRequestResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/magic-link\/request',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-    expect(body).toMatch(
-      /consumeMagicLink\(body: MagicLinkConsumeRequest\): Promise<MagicLinkConsumeResponse> \{\s*\n?\s*return this\.http\.request<MagicLinkConsumeResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/magic-link\/consume',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-  });
-
-  it('Password-reset request/confirm pair: POST /v1/auth/password-reset/request + /confirm', () => {
-    expect(body).toMatch(
-      /requestPasswordReset\(body: PasswordResetRequest\): Promise<PasswordResetRequestResponse> \{\s*\n?\s*return this\.http\.request<PasswordResetRequestResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/password-reset\/request',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-    expect(body).toMatch(
-      /confirmPasswordReset\(body: PasswordResetConfirmRequest\): Promise<PasswordResetConfirmResponse> \{\s*\n?\s*return this\.http\.request<PasswordResetConfirmResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/password-reset\/confirm',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-  });
-
-  it('refresh + logout: POST /v1/auth/refresh + /logout', () => {
-    expect(body).toMatch(
-      /refresh\(body: RefreshSessionRequest\): Promise<RefreshSessionResponse> \{\s*\n?\s*return this\.http\.request<RefreshSessionResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/refresh',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-    expect(body).toMatch(
-      /logout\(body: LogoutRequest\): Promise<LogoutResponse> \{\s*\n?\s*return this\.http\.request<LogoutResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/logout',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-  });
-
-  it('V-445 mfaChallenge: POST /v1/auth/mfa/challenge; exchange challenge_token for session via TOTP or recovery code (response carries via: totp|recovery)', () => {
-    expect(body).toMatch(
-      /\*\s*V-445 — exchange a login challenge_token \(returned on the\s*\n?\s*\*\s*MFA-required branch\) for a real session via TOTP code or recovery\s*\n?\s*\*\s*code\. Distinguished response carries `via: 'totp' \| 'recovery'`\./,
-    );
-    expect(body).toMatch(
-      /mfaChallenge\(body: MfaChallengeRequest\): Promise<MfaChallengeResponse> \{\s*\n?\s*return this\.http\.request<MfaChallengeResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/mfa\/challenge',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-  });
-
-  it('V-445 mfaStepUp: refresh mfa_satisfied_at on web session (V-353e 15-min freshness window); pairs with MfaStepUpRequiredError; no new session issued', () => {
-    expect(body).toMatch(
-      /\*\s*V-445 — refresh `mfa_satisfied_at` on the calling web session\s*\n?\s*\*\s*\(V-353e step-up gate; 15-minute freshness window\)\. No new session\s*\n?\s*\*\s*issued; the existing session row's mfa timestamp advances\. Pair\s*\n?\s*\*\s*with `MfaStepUpRequiredError` recovery flows\./,
-    );
-    expect(body).toMatch(
-      /mfaStepUp\(body: MfaStepUpRequest\): Promise<MfaStepUpResponse> \{\s*\n?\s*return this\.http\.request<MfaStepUpResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/mfa\/step-up',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-  });
-
-  it('V-460/V-266 cliAuthorizeInitiate: CSRF nonce + optional client label; returns one-shot code + browser URL; CLI/GUI opens browser then polls exchange', () => {
-    expect(body).toMatch(
-      /\*\s*V-460 — V-266 CLI\/GUI activation flow: initiate\.\s*\n?\s*\*\s*\n?\s*\*\s*The CLI\/GUI calls this with a CSRF nonce \+ optional client label\.\s*\n?\s*\*\s*Returns a one-shot code \+ browser URL the CLI\/GUI opens; the user\s*\n?\s*\*\s*signs in to the dashboard and confirms the activation, after which\s*\n?\s*\*\s*the CLI\/GUI polls `cliAuthorizeExchange` to receive the API key\./,
-    );
-    expect(body).toMatch(
-      /cliAuthorizeInitiate\(body: CliAuthorizeInitiateRequest\): Promise<CliAuthorizeInitiateResponse> \{\s*\n?\s*return this\.http\.request<CliAuthorizeInitiateResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/cli-authorize\/initiate',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-  });
-
-  it('V-460/V-266 cliAuthorizeBind: web-session-authenticated; dashboard /cli/authorize confirmation page mints API key + stages for exchange; default scopes ["account_owner"]', () => {
-    expect(body).toMatch(
-      /\*\s*V-460 — V-266 CLI\/GUI activation flow: bind\.\s*\n?\s*\*\s*\n?\s*\*\s*Web-session-authenticated\. Called by the dashboard's\s*\n?\s*\*\s*\/cli\/authorize confirmation page after the user clicks Authorize:\s*\n?\s*\*\s*mints an API key on the calling account and stages it for delivery\s*\n?\s*\*\s*to the CLI\/GUI through the exchange endpoint\. Default scopes are\s*\n?\s*\*\s*`\["account_owner"\]` server-side\./,
-    );
-    expect(body).toMatch(
-      /cliAuthorizeBind\(body: CliAuthorizeBindRequest\): Promise<CliAuthorizeBindResponse> \{\s*\n?\s*return this\.http\.request<CliAuthorizeBindResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/cli-authorize\/bind',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-  });
-
-  it('V-460/V-266 cliAuthorizeExchange: 3-branch response (pending / bound + api_key + account_id one-shot / expired); subsequent calls after bound 404', () => {
-    expect(body).toMatch(
-      /\*\s*V-460 — V-266 CLI\/GUI activation flow: exchange\.\s*\n?\s*\*\s*\n?\s*\*\s*Polled by the CLI\/GUI\. Returns one of three branches:\s*\n?\s*\*\s*- `\{ status: 'pending' \}` — keep polling\.\s*\n?\s*\*\s*- `\{ status: 'bound', api_key, account_id \}` — one-shot delivery\s*\n?\s*\*\s*of the plaintext API key\. Subsequent calls 404\.\s*\n?\s*\*\s*- `\{ status: 'expired' \}` — user took too long; restart the flow\./,
-    );
-    expect(body).toMatch(
-      /cliAuthorizeExchange\(body: CliAuthorizeExchangeRequest\): Promise<CliAuthorizeExchangeResponse> \{\s*\n?\s*return this\.http\.request<CliAuthorizeExchangeResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/cli-authorize\/exchange',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
-  });
-
-  it('14-verb surface complete: every public method present and POST-only (auth surface is uniformly POST)', () => {
-    const verbMethods = [
-      'signup',
-      'verifyEmail',
-      'login',
-      'requestMagicLink',
-      'consumeMagicLink',
-      'requestPasswordReset',
-      'confirmPasswordReset',
-      'refresh',
-      'logout',
-      'mfaChallenge',
-      'mfaStepUp',
-      'cliAuthorizeInitiate',
-      'cliAuthorizeBind',
-      'cliAuthorizeExchange',
-    ];
-    for (const verb of verbMethods) {
-      expect(body).toMatch(new RegExp(`\\b${verb}\\(body:`));
-    }
-    const postCount = body.match(/method: 'POST'/g);
-    expect(postCount).not.toBeNull();
-    expect((postCount ?? []).length).toBe(14);
-  });
-
-  it('imports: 27 api-types verb shapes + HttpClient', () => {
+  it('Imports — 28 api-types shapes (sorted alphabetical block; 14 verb pairs) + HttpClient. Drift to hand-rolling any of these types would diverge from @driftstack/api-types Zod single-source-of-truth.', () => {
     expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
     for (const t of [
       'CliAuthorizeBindRequest',
@@ -194,7 +92,153 @@ describe('W425.A packages/sdk-typescript/src/resources/auth.ts content parity', 
     }
   });
 
-  it('file exists at canonical path', () => {
-    expect(existsSync(LIB)).toBe(true);
+  it('AuthResource class declaration + private-readonly http constructor field. Stateless wrapper pattern.', () => {
+    expect(body).toMatch(/^export class AuthResource \{$/m);
+    expect(body).toMatch(/constructor\(private readonly http: HttpClient\) \{\}/);
+  });
+
+  it('signup verb — POST /v1/auth/signup with SignupRequest body → Promise<SignupResponse>. First touch of the auth journey: empty Authorization header tolerated by server (V-079) so this verb is callable before any credentials.', () => {
+    expect(body).toMatch(
+      /signup\(body: SignupRequest\): Promise<SignupResponse> \{\s*\n?\s*return this\.http\.request<SignupResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/signup',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('verifyEmail verb — POST /v1/auth/verify-email. Step 2 of signup; customer clicks the verification link in their inbox; SDK exchanges the token from URL for a verified-email status. Drift to requiring a session would break the verification-link-from-email flow.', () => {
+    expect(body).toMatch(
+      /verifyEmail\(body: VerifyEmailRequest\): Promise<VerifyEmailResponse> \{\s*\n?\s*return this\.http\.request<VerifyEmailResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/verify-email',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
+  it("CRITICAL V-353d login discriminated-union JSDoc — full doc pinned per-line + in-JSDoc 5-line example pattern. The example shows `if ('mfa_required' in out && out.mfa_required) { ... } else { ... }` branching. Drift to dropping the example would lose the customer-facing guidance — without it, customers might unwrap `out.session` directly and silently break on MFA-required accounts.", () => {
+    expect(body).toMatch(
+      /\*\s*V-353d — discriminated-union response\. When the account has MFA\s*\n?\s*\*\s*enrolled, the server returns `\{ mfa_required: true, challenge_token,\s*\n?\s*\*\s*challenge_expires_at \}` instead of a session\. Branch on the\s*\n?\s*\*\s*`mfa_required` literal:/,
+    );
+    expect(body).toMatch(
+      /\*\s*const out = await client\.auth\.login\(\{ email, password \}\);\s*\n?\s*\*\s*if \('mfa_required' in out && out\.mfa_required\) \{\s*\n?\s*\*\s*\/\/ exchange out\.challenge_token via \/v1\/auth\/mfa\/challenge\s*\n?\s*\*\s*\} else \{\s*\n?\s*\*\s*\/\/ out\.session is the real session\s*\n?\s*\*\s*\}/,
+    );
+  });
+
+  it('login verb implementation — POST /v1/auth/login → Promise<LoginResponseUnion>. The Union return type forces TypeScript callers to discriminate at the type level; drift to a non-union return would let MFA-required branches slip past static checking.', () => {
+    expect(body).toMatch(
+      /login\(body: LoginRequest\): Promise<LoginResponseUnion> \{\s*\n?\s*return this\.http\.request<LoginResponseUnion>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/login',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('Magic-link 2-step — requestMagicLink (POST /v1/auth/magic-link/request, anonymous; sends email) + consumeMagicLink (POST /v1/auth/magic-link/consume; exchange token-from-URL for session). The 2 verbs MUST stay paired — dropping consume would orphan the email links.', () => {
+    expect(body).toMatch(
+      /requestMagicLink\(body: MagicLinkRequest\): Promise<MagicLinkRequestResponse> \{\s*\n?\s*return this\.http\.request<MagicLinkRequestResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/magic-link\/request',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /consumeMagicLink\(body: MagicLinkConsumeRequest\): Promise<MagicLinkConsumeResponse> \{\s*\n?\s*return this\.http\.request<MagicLinkConsumeResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/magic-link\/consume',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('Password-reset 2-step — requestPasswordReset (POST /v1/auth/password-reset/request, anonymous; sends email) + confirmPasswordReset (POST /v1/auth/password-reset/confirm; exchange token + new_password for an updated credential). Mirror of magic-link 2-step but for lost-password flow.', () => {
+    expect(body).toMatch(
+      /requestPasswordReset\(body: PasswordResetRequest\): Promise<PasswordResetRequestResponse> \{\s*\n?\s*return this\.http\.request<PasswordResetRequestResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/password-reset\/request',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /confirmPasswordReset\(body: PasswordResetConfirmRequest\): Promise<PasswordResetConfirmResponse> \{\s*\n?\s*return this\.http\.request<PasswordResetConfirmResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/password-reset\/confirm',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('Session lifecycle — refresh (POST /v1/auth/refresh; exchange refresh_token for new access_token + rotated refresh_token; defends against replay) + logout (POST /v1/auth/logout; revokes calling session server-side; idempotent so re-logout is a no-op).', () => {
+    expect(body).toMatch(
+      /refresh\(body: RefreshSessionRequest\): Promise<RefreshSessionResponse> \{\s*\n?\s*return this\.http\.request<RefreshSessionResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/refresh',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /logout\(body: LogoutRequest\): Promise<LogoutResponse> \{\s*\n?\s*return this\.http\.request<LogoutResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/logout',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
+  it("CRITICAL V-445 mfaChallenge JSDoc — `via: 'totp' | 'recovery'` 2-value discriminator pinned. Drift to dropping the discriminator would prevent customers from counting TOTP-vs-recovery use in MFA-strength metrics (recovery-code use signals higher account-risk than TOTP use). Drift to a 3rd value (e.g. 'webauthn') without coordinated server+client update would break the closed-set switch.", () => {
+    expect(body).toMatch(
+      /\*\s*V-445 — exchange a login challenge_token \(returned on the\s*\n?\s*\*\s*MFA-required branch\) for a real session via TOTP code or recovery\s*\n?\s*\*\s*code\. Distinguished response carries `via: 'totp' \| 'recovery'`\./,
+    );
+  });
+
+  it('mfaChallenge implementation — POST /v1/auth/mfa/challenge with MfaChallengeRequest body → Promise<MfaChallengeResponse>. Body carries the challenge_token from login + the TOTP/recovery code.', () => {
+    expect(body).toMatch(
+      /mfaChallenge\(body: MfaChallengeRequest\): Promise<MfaChallengeResponse> \{\s*\n?\s*return this\.http\.request<MfaChallengeResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/mfa\/challenge',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('CRITICAL V-445 mfaStepUp JSDoc — 4-line invariant: "refresh `mfa_satisfied_at` on the calling web session" + V-353e 15-minute freshness window + "No new session issued; the existing session row\'s mfa timestamp advances" + "Pair with `MfaStepUpRequiredError` recovery flows". Drift to issuing a NEW session on step-up would force session-cookie rotation mid-flow — breaks the "same session identity, just freshly MFA-proved" contract.', () => {
+    expect(body).toMatch(
+      /\*\s*V-445 — refresh `mfa_satisfied_at` on the calling web session\s*\n?\s*\*\s*\(V-353e step-up gate; 15-minute freshness window\)\. No new session\s*\n?\s*\*\s*issued; the existing session row's mfa timestamp advances\. Pair\s*\n?\s*\*\s*with `MfaStepUpRequiredError` recovery flows\./,
+    );
+  });
+
+  it('mfaStepUp implementation — POST /v1/auth/mfa/step-up with MfaStepUpRequest body → Promise<MfaStepUpResponse>. Returns success-ack only (no session change).', () => {
+    expect(body).toMatch(
+      /mfaStepUp\(body: MfaStepUpRequest\): Promise<MfaStepUpResponse> \{\s*\n?\s*return this\.http\.request<MfaStepUpResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/mfa\/step-up',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('V-460/V-266 cliAuthorizeInitiate JSDoc — CSRF nonce + optional client label inputs; one-shot code + browser URL outputs. CLI/GUI opens browser, user signs in to dashboard and confirms activation, then CLI/GUI polls cliAuthorizeExchange. Public route — CLI is UNAUTHENTICATED (asking to BE authorized). Drift to requiring auth would break the entire CLI activation flow.', () => {
+    expect(body).toMatch(
+      /\*\s*V-460 — V-266 CLI\/GUI activation flow: initiate\.\s*\n?\s*\*\s*\n?\s*\*\s*The CLI\/GUI calls this with a CSRF nonce \+ optional client label\.\s*\n?\s*\*\s*Returns a one-shot code \+ browser URL the CLI\/GUI opens; the user\s*\n?\s*\*\s*signs in to the dashboard and confirms the activation, after which\s*\n?\s*\*\s*the CLI\/GUI polls `cliAuthorizeExchange` to receive the API key\./,
+    );
+    expect(body).toMatch(
+      /cliAuthorizeInitiate\(body: CliAuthorizeInitiateRequest\): Promise<CliAuthorizeInitiateResponse> \{\s*\n?\s*return this\.http\.request<CliAuthorizeInitiateResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/cli-authorize\/initiate',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('V-460/V-266 cliAuthorizeBind JSDoc — Web-session-AUTHENTICATED; dashboard /cli/authorize confirmation page. Mints API key + stages for delivery via exchange. CRITICAL: "Default scopes are `[\\"account_owner\\"]` server-side" — drift to widening default scopes would silently let CLIs assume more privilege than the user intended.', () => {
+    expect(body).toMatch(
+      /\*\s*V-460 — V-266 CLI\/GUI activation flow: bind\.\s*\n?\s*\*\s*\n?\s*\*\s*Web-session-authenticated\. Called by the dashboard's\s*\n?\s*\*\s*\/cli\/authorize confirmation page after the user clicks Authorize:\s*\n?\s*\*\s*mints an API key on the calling account and stages it for delivery\s*\n?\s*\*\s*to the CLI\/GUI through the exchange endpoint\. Default scopes are\s*\n?\s*\*\s*`\["account_owner"\]` server-side\./,
+    );
+    expect(body).toMatch(
+      /cliAuthorizeBind\(body: CliAuthorizeBindRequest\): Promise<CliAuthorizeBindResponse> \{\s*\n?\s*return this\.http\.request<CliAuthorizeBindResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/cli-authorize\/bind',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
+  it("CRITICAL V-460/V-266 cliAuthorizeExchange JSDoc — 3-branch discriminated union pinned per-line: (1) `{ status: 'pending' }` keep polling; (2) `{ status: 'bound', api_key, account_id }` ONE-SHOT delivery + \"Subsequent calls 404\" framing; (3) `{ status: 'expired' }` user took too long, restart. Drift to dropping the one-shot 404 framing would let CLIs re-fetch the plaintext key after binding (catastrophic key-leak).", () => {
+    expect(body).toMatch(
+      /\*\s*V-460 — V-266 CLI\/GUI activation flow: exchange\.\s*\n?\s*\*\s*\n?\s*\*\s*Polled by the CLI\/GUI\. Returns one of three branches:\s*\n?\s*\*\s*- `\{ status: 'pending' \}` — keep polling\.\s*\n?\s*\*\s*- `\{ status: 'bound', api_key, account_id \}` — one-shot delivery\s*\n?\s*\*\s*of the plaintext API key\. Subsequent calls 404\.\s*\n?\s*\*\s*- `\{ status: 'expired' \}` — user took too long; restart the flow\./,
+    );
+    expect(body).toMatch(
+      /cliAuthorizeExchange\(body: CliAuthorizeExchangeRequest\): Promise<CliAuthorizeExchangeResponse> \{\s*\n?\s*return this\.http\.request<CliAuthorizeExchangeResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/auth\/cli-authorize\/exchange',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('14-verb inventory drift guard — exactly 14 method declarations (signup + verifyEmail + login + requestMagicLink + consumeMagicLink + requestPasswordReset + confirmPasswordReset + refresh + logout + mfaChallenge + mfaStepUp + cliAuthorizeInitiate + cliAuthorizeBind + cliAuthorizeExchange). Each verb declared as `name(body: ...): Promise<...>`. Drift to a 15th verb (e.g. SAML or webauthn flow) without coordinated test coverage would let an untested code path ship.', () => {
+    const verbMethods = [
+      'signup',
+      'verifyEmail',
+      'login',
+      'requestMagicLink',
+      'consumeMagicLink',
+      'requestPasswordReset',
+      'confirmPasswordReset',
+      'refresh',
+      'logout',
+      'mfaChallenge',
+      'mfaStepUp',
+      'cliAuthorizeInitiate',
+      'cliAuthorizeBind',
+      'cliAuthorizeExchange',
+    ];
+    for (const verb of verbMethods) {
+      expect(body).toMatch(new RegExp(`\\b${verb}\\(body:`));
+    }
+    const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
+    expect(methods.length, 'expected exactly 14 verb declarations').toBe(14);
+  });
+
+  it('POST-only inventory invariant — exactly 14 POST verbs (auth surface is uniformly POST). ZERO GET verbs on /v1/auth/* (introspection lives on /v1/account/me which is post-auth). ZERO PATCH/PUT/DELETE — auth lifecycle is verb-based state-transitions, not REST-CRUD.', () => {
+    const postCount = (body.match(/method: 'POST'/g) ?? []).length;
+    expect(postCount, 'expected exactly 14 POST verbs').toBe(14);
+    expect(body).not.toMatch(/method: 'GET'/);
+    expect(body).not.toMatch(/method: 'PATCH'/);
+    expect(body).not.toMatch(/method: 'PUT'/);
+    expect(body).not.toMatch(/method: 'DELETE'/);
+  });
+
+  it('Wire-path inventory — 14 distinct /v1/auth/* paths threaded across 14 verbs. Every path starts with /v1/auth/ (no exceptions). Drift to a /v1/account/* path on this resource would mismatch the documented namespace.', () => {
+    const authPaths = body.match(/path: '\/v1\/auth\/[a-z\-/]+'/g) ?? [];
+    expect(authPaths.length, 'expected exactly 14 /v1/auth/* paths').toBe(14);
+    const unique = new Set(authPaths);
+    expect(unique.size, 'expected all 14 paths to be DISTINCT').toBe(14);
   });
 });
