@@ -1,0 +1,180 @@
+// W852 — WebhookEventType 6-value roster cross-source invariant.
+// One-hundred-seventy-eighth in the drift-guard series. Pins the
+// 6-value WebhookEventType closed-roster:
+//   1. session.completed
+//   2. session.failed
+//   3. quota.warning_80pct
+//   4. quota.exceeded
+//   5. api_key.revoked
+//   6. test.ping (V-356 — server-only, not subscribable).
+// stays in lockstep across:
+//   - packages/api-types/src/webhooks.ts (Zod canonical source).
+//   - apps/server/src/db/schema.ts pgEnum (Postgres runtime enum).
+//   - packages/sdk-go/types.go (Go SDK closed-enum consts).
+//   - apps/customer-dashboard/src/pages/webhooks.astro (5
+//     subscribable checkboxes per V-356; test.ping is NOT
+//     subscribable).
+//
+// Drift in any of these — adding a value to api-types without the
+// pgEnum, or removing from Go SDK without api-types — would
+// silently let webhook deliveries route through unrecognised
+// channels OR let customers subscribe to types the server doesn't
+// emit.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+// V-356 — the canonical 6-value roster + 5-value subscribable subset.
+const ALL_WEBHOOK_EVENTS = [
+  'session.completed',
+  'session.failed',
+  'quota.warning_80pct',
+  'quota.exceeded',
+  'api_key.revoked',
+  'test.ping',
+] as const;
+
+const SUBSCRIBABLE_EVENTS = [
+  'session.completed',
+  'session.failed',
+  'quota.warning_80pct',
+  'quota.exceeded',
+  'api_key.revoked',
+] as const;
+
+describe('W852 WebhookEventType cross-source invariant', () => {
+  // ─── api-types canonical source ──────────────────────────────
+
+  it('CRITICAL packages/api-types/src/webhooks.ts WebhookEventTypeSchema = z.enum([...6 values...]). The 6-value closed-roster is the contract every consumer pivots on.', () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
+    expect(p).toMatch(/export const WebhookEventTypeSchema = z\.enum\(\[/);
+    for (const ev of ALL_WEBHOOK_EVENTS) {
+      expect(p, `WebhookEventTypeSchema must include '${ev}'`).toMatch(
+        new RegExp(`'${ev.replace(/\./g, '\\.')}'`),
+      );
+    }
+  });
+
+  it('CRITICAL packages/api-types/src/webhooks.ts SubscribableWebhookEventTypeSchema is the 5-value subset EXCLUDING test.ping. Per V-356, test.ping is server-only — dispatched ONLY via POST /v1/webhooks/:id/test endpoint, never via subscription.', () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
+    const m = p.match(/SubscribableWebhookEventTypeSchema = z\.enum\(\[([\s\S]+?)\]\)/);
+    expect(m, 'SubscribableWebhookEventTypeSchema declaration must match').not.toBeNull();
+    const body = m![1];
+    for (const ev of SUBSCRIBABLE_EVENTS) {
+      expect(body, `subscribable must include '${ev}'`).toMatch(
+        new RegExp(`'${ev.replace(/\./g, '\\.')}'`),
+      );
+    }
+    // test.ping must NOT be in the subscribable subset.
+    expect(body, 'test.ping must NOT be subscribable per V-356').not.toMatch(/'test\.ping'/);
+  });
+
+  it('CRITICAL types re-export from z.infer (drift-proof). Hand-written union types would drift from runtime enums.', () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
+    expect(p).toMatch(/export type WebhookEventType = z\.infer<typeof WebhookEventTypeSchema>;/);
+    expect(p).toMatch(
+      /export type SubscribableWebhookEventType = z\.infer<typeof SubscribableWebhookEventTypeSchema>;/,
+    );
+  });
+
+  // ─── DB pgEnum lockstep ──────────────────────────────────────
+
+  it("CRITICAL apps/server/src/db/schema.ts webhookEventType pgEnum has the EXACT same 6 values. Postgres rejects INSERTs of values not in the pgEnum — drift to api-types-without-pgEnum would let the server crash on persist. The pgEnum name is the snake-case form: 'webhook_event_type'.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/schema.ts'));
+    expect(p).toMatch(/webhookEventType = pgEnum\('webhook_event_type', \[/);
+    // Extract the body of the webhookEventType pgEnum.
+    const m = p.match(/webhookEventType = pgEnum\('webhook_event_type', \[([\s\S]+?)\]\);/);
+    expect(m, 'webhookEventType pgEnum body must be present').not.toBeNull();
+    const body = m![1];
+    for (const ev of ALL_WEBHOOK_EVENTS) {
+      expect(body, `pgEnum must include '${ev}'`).toMatch(
+        new RegExp(`'${ev.replace(/\./g, '\\.')}'`),
+      );
+    }
+  });
+
+  // ─── Go SDK closed-enum consts ───────────────────────────────
+
+  it('CRITICAL packages/sdk-go/types.go declares 6 WebhookEventType consts — EventSessionCompleted + EventSessionFailed + EventQuotaWarning80Pct + EventQuotaExceeded + EventAPIKeyRevoked + EventTestPing. Each maps to one canonical event string. Drift would break Go customers who pattern-match on consts.', () => {
+    const p = read(resolve(REPO_ROOT, 'packages/sdk-go/types.go'));
+    expect(p).toMatch(/type WebhookEventType string/);
+    expect(p).toMatch(/EventSessionCompleted +WebhookEventType = "session\.completed"/);
+    expect(p).toMatch(/EventSessionFailed +WebhookEventType = "session\.failed"/);
+    expect(p).toMatch(/EventQuotaWarning80Pct WebhookEventType = "quota\.warning_80pct"/);
+    expect(p).toMatch(/EventQuotaExceeded +WebhookEventType = "quota\.exceeded"/);
+    expect(p).toMatch(/EventAPIKeyRevoked +WebhookEventType = "api_key\.revoked"/);
+    expect(p).toMatch(/EventTestPing WebhookEventType = "test\.ping"/);
+  });
+
+  it("CRITICAL Go SDK 'closed enum' framing pinned. The 'closed enum of supported webhook events' comment threads the type-system intent (vs an open-string enum). Drift to weakening the framing would invite a Go SDK consumer to invent their own consts.", () => {
+    const p = read(resolve(REPO_ROOT, 'packages/sdk-go/types.go'));
+    expect(p).toMatch(/closed enum of supported webhook events/);
+  });
+
+  // ─── customer-dashboard subscribable-checkbox rendering ──────
+
+  it('CRITICAL apps/customer-dashboard/src/pages/webhooks.astro renders checkboxes for ALL 5 SUBSCRIBABLE events (NOT test.ping). The form pivots on these exact event-strings as checkbox values; drift to missing a checkbox would silently let customers be unable to subscribe to that event in the dashboard.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/webhooks.astro'));
+    for (const ev of SUBSCRIBABLE_EVENTS) {
+      expect(p, `webhooks.astro missing checkbox value='${ev}'`).toMatch(
+        new RegExp(`value="${ev.replace(/\./g, '\\.')}"`),
+      );
+    }
+    // test.ping must NOT be rendered as a subscribable checkbox.
+    expect(p, 'test.ping must NOT be rendered as a checkbox value').not.toMatch(
+      /name="event" value="test\.ping"/,
+    );
+  });
+
+  // ─── V-356 anchor traceable ─────────────────────────────────
+
+  it("CRITICAL V-356 anchor pinned in api-types/webhooks.ts. The 'V-356' anchor threads the test-ping-only-via-test-endpoint provenance for cross-link discovery.", () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
+    expect(p).toMatch(/V-356/);
+  });
+
+  // ─── 6 + 5 cardinality ───────────────────────────────────────
+
+  it('CRITICAL WebhookEventType = exactly 6 values + SubscribableWebhookEventType = exactly 5 (6 minus test.ping). The 6/5 cardinality is what dashboard form-grids + Go SDK doc comments depend on.', () => {
+    expect(ALL_WEBHOOK_EVENTS.length).toBe(6);
+    expect(SUBSCRIBABLE_EVENTS.length).toBe(5);
+    expect(SUBSCRIBABLE_EVENTS.length).toBe(ALL_WEBHOOK_EVENTS.length - 1);
+  });
+
+  // ─── No forbidden / legacy event names ───────────────────────
+
+  it('CRITICAL no source declares forbidden event names (session.created / webhook.* / *.created / *.deleted). These are common-namespace patterns that V-356 intentionally avoids — the namespace is reserved for the closed 6-value roster.', () => {
+    const apiTypes = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
+    for (const forbidden of [
+      "'session.created'",
+      "'session.deleted'",
+      "'webhook.created'",
+      "'account.created'",
+    ]) {
+      expect(
+        apiTypes,
+        `WebhookEventType must NOT include forbidden event ${forbidden}`,
+      ).not.toMatch(new RegExp(`WebhookEventTypeSchema[\\s\\S]+?${forbidden}[\\s\\S]+?\\]\\)`));
+    }
+  });
+
+  it('test file metadata — file exists at canonical path', () => {
+    expect(
+      existsSync(
+        resolve(
+          REPO_ROOT,
+          'apps/server/tests/unit/webhook-event-type-cross-source-invariant.test.ts',
+        ),
+      ),
+    ).toBe(true);
+  });
+});
