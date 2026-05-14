@@ -1,0 +1,162 @@
+// W842 — cross-SDK V-205 attribution source check. One-hundred-
+// sixty-eighth in the drift-guard series. Pins that no SDK source
+// contains V-205 attribution-leak tokens (Claude / Anthropic /
+// Copilot / GPT-attributed Co-Authored-By trailers / 🤖 robot
+// markers / Generated with [Claude / noreply@anthropic.com /
+// noreply@github.com). Matches V-527 commit-msg hook enforcement
+// (W807) but at the source-tree level — SDK source is public-
+// facing, so attribution to AI tooling would publish that fact
+// globally.
+
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve, relative } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+function listFiles(dir: string, exts: string[]): string[] {
+  const out: string[] = [];
+  if (!statSync(dir, { throwIfNoEntry: false })) return out;
+  for (const entry of readdirSync(dir)) {
+    if (
+      entry === 'node_modules' ||
+      entry === 'dist' ||
+      entry === '.venv' ||
+      entry === '__pycache__' ||
+      entry === '.mypy_cache' ||
+      entry === '.pytest_cache' ||
+      entry === '.ruff_cache' ||
+      entry === '.claude'
+    )
+      continue;
+    const full = resolve(dir, entry);
+    const stat = statSync(full);
+    if (stat.isDirectory()) {
+      out.push(...listFiles(full, exts));
+    } else if (exts.some((ext) => entry.endsWith(ext))) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+// V-205 reject patterns (mirror V-527 hook).
+// Case-insensitive for tooling tokens; the 🤖 emoji is literal.
+const V205_PATTERNS = [
+  { name: 'Co-Authored-By Claude', regex: /Co-Authored-By: Claude/i },
+  { name: 'Co-Authored-By anthropic', regex: /Co-Authored-By:.*anthropic/i },
+  { name: 'Co-Authored-By GPT', regex: /Co-Authored-By:.*GPT/i },
+  { name: 'Co-Authored-By Copilot', regex: /Co-Authored-By:.*Copilot/i },
+  { name: 'robot emoji', regex: /🤖/ },
+  { name: 'Generated with [Claude', regex: /Generated with \[Claude/i },
+  { name: 'noreply@anthropic.com', regex: /noreply@anthropic\.com/i },
+  { name: 'noreply@github.com', regex: /noreply@github\.com/i },
+];
+
+describe('W842 cross-SDK V-205 attribution source check', () => {
+  // ─── SDK source scan ─────────────────────────────────────────
+
+  it('CRITICAL no SDK source contains V-205 attribution-leak tokens (Co-Authored-By: Claude/anthropic/GPT/Copilot + 🤖 + Generated with [Claude + noreply@anthropic.com + noreply@github.com). SDK source is public-facing — attribution to AI tooling would publish that fact globally. Matches V-527 commit-msg hook patterns (W807).', () => {
+    const dirs = [
+      resolve(REPO_ROOT, 'packages/sdk-typescript'),
+      resolve(REPO_ROOT, 'packages/sdk-python'),
+      resolve(REPO_ROOT, 'packages/sdk-go'),
+    ];
+    const files: string[] = [];
+    for (const d of dirs) {
+      files.push(...listFiles(d, ['.ts', '.py', '.go', '.md', '.toml', '.json']));
+    }
+    // Skip lockfiles + dist.
+    const filtered = files.filter(
+      (f) =>
+        !f.endsWith('package-lock.json') &&
+        !f.includes('/dist/') &&
+        !f.includes('/.venv/') &&
+        !f.includes('_pycache__'),
+    );
+
+    for (const f of filtered) {
+      const p = read(f);
+      const rel = relative(REPO_ROOT, f);
+      for (const { name, regex } of V205_PATTERNS) {
+        const m = p.match(regex);
+        expect(m, `${rel} contains V-205 attribution leak '${name}': '${m?.[0] ?? ''}'`).toBeNull();
+      }
+    }
+  });
+
+  // ─── V-527 hook source-consistency ────────────────────────────
+
+  it('CRITICAL V-527 commit-msg hook declares the SAME 9 V-205 reject patterns. Drift between this test and the hook would create an inconsistency where commits get rejected but source slips through (or vice versa).', () => {
+    const hook = read(resolve(REPO_ROOT, 'scripts/git-hooks/commit-msg'));
+    // 9-pattern set from W807.
+    expect(hook).toMatch(/'Co-Authored-By: Claude'/);
+    expect(hook).toMatch(/'Co-Authored-By:\.\*claude'/);
+    expect(hook).toMatch(/'Co-Authored-By:\.\*anthropic'/);
+    expect(hook).toMatch(/'Co-Authored-By:\.\*GPT'/);
+    expect(hook).toMatch(/'Co-Authored-By:\.\*Copilot'/);
+    expect(hook).toMatch(/'🤖'/);
+    expect(hook).toMatch(/'Generated with \\\[Claude'/);
+    expect(hook).toMatch(/'noreply@anthropic\\\.com'/);
+    expect(hook).toMatch(/'noreply@github\\\.com'/);
+  });
+
+  // ─── Sanity check: regex matches the actual violator strings ──
+
+  it('CRITICAL the V-205 regex correctly matches canonical violator strings. Sanity-check against the literal tokens that V-527 hook rejects.', () => {
+    const violators = [
+      'Co-Authored-By: Claude <noreply@anthropic.com>',
+      'Co-Authored-By: anthropic-claude-3-opus',
+      'Co-Authored-By: GPT-4',
+      'Co-Authored-By: GitHub Copilot',
+      '🤖 Generated by AI',
+      'Generated with [Claude Code](...)',
+      'Co-Authored-By: foo <noreply@anthropic.com>',
+      'noreply@github.com',
+    ];
+    for (const v of violators) {
+      let matchedSomething = false;
+      for (const { regex } of V205_PATTERNS) {
+        if (regex.test(v)) {
+          matchedSomething = true;
+          break;
+        }
+      }
+      expect(matchedSomething, `regex failed to match V-205 violator '${v}'`).toBe(true);
+    }
+  });
+
+  // ─── V-205 + V-211 unified policy framing ────────────────────
+
+  it('CRITICAL V-527 hook header documents the 2-policy framing — V-205 attribution (ZERO third-party tooling trailers) + V-211 anonymity (ZERO founder/personal-name strings). Matches W807 + W841 dual coverage.', () => {
+    const hook = read(resolve(REPO_ROOT, 'scripts/git-hooks/commit-msg'));
+    expect(hook).toMatch(/V-205 attribution — Driftstack-only commit attribution\. ZERO third-/);
+    expect(hook).toMatch(/V-211 anonymity\s+— ZERO founder framing/);
+  });
+
+  // ─── AGENTS.md mentions both rules ────────────────────────────
+
+  it('CRITICAL AGENTS.md documents the no-AI-tooling-attribution rule (matching V-205). Drift would let onboarding contributors miss the policy. The rule is stated in plain English (not via V-NNN reference) so contributors understand it without needing to look up the V-anchor.', () => {
+    const agents = read(resolve(REPO_ROOT, 'AGENTS.md'));
+    expect(agents).toMatch(/third-party tooling attribution trailer/);
+    expect(agents).toMatch(/co-authored-by/i);
+    expect(agents).toMatch(/tooling is not part of commit metadata/);
+  });
+
+  it('test file metadata — file exists at canonical path', () => {
+    expect(
+      existsSync(
+        resolve(
+          REPO_ROOT,
+          'apps/server/tests/unit/sdk-v205-attribution-source-cross-sdk-parity.test.ts',
+        ),
+      ),
+    ).toBe(true);
+  });
+});
