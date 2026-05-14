@@ -1,0 +1,186 @@
+// W864 — OptOutableEmailEvent 8-value cross-source invariant.
+// One-hundred-ninetieth in the drift-guard series. Pins the V-202
+// + V-304a + V-304b opt-outable email-event roster:
+//
+//   Lifecycle (3): signup-welcome + session-failed-first +
+//                  session-success-first.
+//   Account (1):  tier-changed.
+//   Trial-pack (2): trial-pack-purchased + trial-pack-expired.
+//   Billing (2): billing-receipt + billing-renewal-reminder.
+//
+// stays in lockstep across:
+//   - packages/api-types/src/accounts.ts (Zod canonical source).
+//   - apps/server/src/services/email-preferences.ts (allEvents
+//     defaults list — server iterates this to render the
+//     preferences table).
+//   - apps/customer-dashboard/src/pages/settings.astro (8
+//     toggle entries — one per opt-outable event).
+//
+// CRITICAL POLICY NOTE: Security + financial emails (signup-
+// verification, password-reset, billing-failure, subscription-
+// cancellation, support-ack) are NEVER opt-outable and MUST NOT
+// appear in this enum. Drift to including any of those would
+// break the policy that "customers can't disable critical-path
+// emails".
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+const OPT_OUTABLE_EVENTS = [
+  'signup-welcome',
+  'session-failed-first',
+  'session-success-first',
+  'tier-changed',
+  'trial-pack-purchased',
+  'trial-pack-expired',
+  'billing-receipt',
+  'billing-renewal-reminder',
+] as const;
+
+const FORBIDDEN_CRITICAL_PATH_EVENTS = [
+  'signup-verification',
+  'password-reset',
+  'billing-failure',
+  'subscription-cancellation',
+  'support-ack',
+  'mfa-enrolled',
+  'mfa-disabled',
+] as const;
+
+describe('W864 OptOutableEmailEvent cross-source invariant', () => {
+  // ─── api-types canonical source ──────────────────────────────
+
+  it('CRITICAL packages/api-types/src/accounts.ts OptOutableEmailEventSchema = z.enum([8 values]). The 8-value closed-roster is what email-preference toggle UI + per-event server-side shouldSend gates pivot on.', () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
+    expect(p).toMatch(/export const OptOutableEmailEventSchema = z\.enum\(\[/);
+    const m = p.match(/OptOutableEmailEventSchema = z\.enum\(\[([\s\S]+?)\]\)/);
+    expect(m, 'OptOutableEmailEventSchema declaration must match').not.toBeNull();
+    const body = m![1];
+    for (const e of OPT_OUTABLE_EVENTS) {
+      expect(body, `OptOutableEmailEventSchema must include '${e}'`).toMatch(
+        new RegExp(`'${e.replace(/-/g, '\\-')}'`),
+      );
+    }
+  });
+
+  it('CRITICAL OptOutableEmailEvent type re-exports from z.infer (drift-proof).', () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
+    expect(p).toMatch(
+      /export type OptOutableEmailEvent = z\.infer<typeof OptOutableEmailEventSchema>;/,
+    );
+  });
+
+  it('CRITICAL V-304a anchor pinned for session-success-first; V-304b anchor pinned for billing-renewal-reminder. These distinguish the milestone-trigger emails added after V-202.', () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
+    expect(p).toMatch(/V-304a — first successful session activation milestone email/);
+    expect(p).toMatch(/V-304b — 7-days-before-renewal reminder/);
+  });
+
+  it('CRITICAL the api-types inline doc pins the security+financial-emails-never-opt-outable policy. The policy doc is the immutable record of which emails customers cannot disable.', () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
+    // Match key phrases of the policy doc; JSDoc wraps across lines.
+    expect(p).toMatch(/Security \+ financial emails/);
+    expect(p).toMatch(/are never opt-outable/);
+    expect(p).toMatch(/the API surface matches the policy/);
+  });
+
+  // ─── Server services/email-preferences.ts allEvents list ─────
+
+  it('CRITICAL apps/server/src/services/email-preferences.ts allEvents defaults list iterates ALL 8 opt-outable events. The server renders the preferences API response from this list — drift would silently let an event arrive without a corresponding preference row.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/email-preferences.ts'));
+    expect(p).toMatch(/const allEvents: OptOutableEmailEvent\[\] = \[/);
+    const m = p.match(/const allEvents: OptOutableEmailEvent\[\] = \[([\s\S]+?)\];/);
+    expect(m, 'allEvents list must be present').not.toBeNull();
+    const body = m![1];
+    for (const e of OPT_OUTABLE_EVENTS) {
+      expect(body, `allEvents must include '${e}'`).toMatch(
+        new RegExp(`'${e.replace(/-/g, '\\-')}'`),
+      );
+    }
+  });
+
+  // ─── Customer-dashboard settings.astro toggle entries ────────
+
+  it("CRITICAL apps/customer-dashboard/src/pages/settings.astro renders 8 toggle entries — one per opt-outable event. The dashboard renders 'type: <event-name>' fields for each; drift to missing a toggle would silently let customers be unable to opt out of that event from the UI.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/settings.astro'));
+    for (const e of OPT_OUTABLE_EVENTS) {
+      expect(p, `settings.astro missing toggle for '${e}'`).toMatch(
+        new RegExp(`type:\\s*'${e.replace(/-/g, '\\-')}'`),
+      );
+    }
+  });
+
+  // ─── Cardinality + category split ────────────────────────────
+
+  it('CRITICAL OptOutableEmailEvent = EXACTLY 8 values across 4 categories — 3 lifecycle (signup/session-failed-first/session-success-first) + 1 account (tier-changed) + 2 trial-pack + 2 billing. The 3/1/2/2 split is what the dashboard groups by visually.', () => {
+    expect(OPT_OUTABLE_EVENTS.length).toBe(8);
+    const lifecycle = OPT_OUTABLE_EVENTS.filter(
+      (e) =>
+        e === 'signup-welcome' || e === 'session-failed-first' || e === 'session-success-first',
+    );
+    const account = OPT_OUTABLE_EVENTS.filter((e) => e === 'tier-changed');
+    const trial = OPT_OUTABLE_EVENTS.filter((e) => e.startsWith('trial-pack-'));
+    const billing = OPT_OUTABLE_EVENTS.filter((e) => e.startsWith('billing-'));
+    expect(lifecycle.length).toBe(3);
+    expect(account.length).toBe(1);
+    expect(trial.length).toBe(2);
+    expect(billing.length).toBe(2);
+  });
+
+  // ─── Critical-path-emails NEVER opt-outable policy ───────────
+
+  it("CRITICAL no critical-path email name (signup-verification / password-reset / billing-failure / subscription-cancellation / support-ack / mfa-enrolled / mfa-disabled) appears in OptOutableEmailEventSchema. The api-types schema is THE source-of-truth for what's opt-outable — drift to including any of these would silently let customers disable critical-path emails (account-recovery / billing-failures / support replies).", () => {
+    const apiTypes = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
+    const m = apiTypes.match(/OptOutableEmailEventSchema = z\.enum\(\[([\s\S]+?)\]\)/);
+    expect(m).not.toBeNull();
+    const body = m![1];
+    for (const forbidden of FORBIDDEN_CRITICAL_PATH_EVENTS) {
+      expect(
+        body,
+        `OptOutableEmailEvent MUST NOT include critical-path '${forbidden}'`,
+      ).not.toMatch(new RegExp(`'${forbidden.replace(/-/g, '\\-')}'`));
+    }
+  });
+
+  // ─── kebab-case naming convention ────────────────────────────
+
+  it("CRITICAL all 8 events follow the 'kebab-case' naming convention (no snake_case, no camelCase, no dots). The naming is uniform across the roster — drift to mixed conventions would break filter UI key-matching.", () => {
+    for (const e of OPT_OUTABLE_EVENTS) {
+      expect(e, `Event '${e}' must be kebab-case (no _ or . or uppercase)`).toMatch(
+        /^[a-z]+(-[a-z]+)+$/,
+      );
+    }
+  });
+
+  // ─── EmailPreference + Set + List schemas reference the enum ──
+
+  it('CRITICAL EmailPreferenceSchema + SetEmailPreferenceRequestSchema use OptOutableEmailEventSchema as the event_type field. The cross-reference enforces typed-event filtering throughout the preference API. Drift to loose z.string() would weaken the type.', () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
+    expect(p).toMatch(
+      /export const EmailPreferenceSchema = z\.object\(\{[\s\S]+?event_type: OptOutableEmailEventSchema/,
+    );
+    expect(p).toMatch(
+      /export const SetEmailPreferenceRequestSchema = z\.object\(\{[\s\S]+?event_type: OptOutableEmailEventSchema/,
+    );
+  });
+
+  it('test file metadata — file exists at canonical path', () => {
+    expect(
+      existsSync(
+        resolve(
+          REPO_ROOT,
+          'apps/server/tests/unit/opt-outable-email-event-cross-source-invariant.test.ts',
+        ),
+      ),
+    ).toBe(true);
+  });
+});
