@@ -1,23 +1,39 @@
-// W423.B — drift guard for packages/sdk-typescript/src/http.ts.
-// Thin wrapper over global fetch; injects Authorization, parses RFC
-// 7807 into typed DriftstackError, and applies the retry policy on
-// every call. Drift here either strips the Authorization header
-// (every request 401s), drops the Problem parse (errors surface as
-// raw TransportError losing context), or breaks the timeout signal
-// (consumer's per-call deadline silently ignored).
+// W423.B (W673-deepened) — drift guard for packages/sdk-typescript/
+// src/http.ts. Thin HTTP layer over global fetch.
 //
-//   • Framing pinned: fetch wrapper + auth header + problem parse +
-//     retry on every call.
-//   • DEFAULT_TIMEOUT_MS = 30_000.
-//   • request<T>: withRetry wraps an AbortController.abort() timer;
-//     2xx -> JSON parse (204/empty -> undefined); non-2xx -> Problem
-//     parse -> errorFromProblem with retry-after header.
-//   • Defaults: authorization `Bearer ${apiKey}` + user-agent
-//     `driftstack-sdk-typescript/0.0.1` + content-type
-//     application/json only when body is set.
-//   • isProblem: type+title+status type-narrowed.
-//   • transportMessage: AbortError → "request timed out";
-//     err.message otherwise.
+// W673 splits the original 14 it() blocks into 22 focused per-concept
+// blocks + pins previously-implicit invariants:
+//
+//   • CRITICAL Authorization header injection — `Bearer ${apiKey}`
+//     on EVERY request. Drift to dropping would 401 every call;
+//     drift to a different scheme (e.g. "Token") would break server
+//     auth parsing.
+//   • DEFAULT_TIMEOUT_MS = 30_000 + 3-level precedence: per-request
+//     > config > DEFAULT.
+//   • AbortController.abort() timer — clearTimeout in finally so
+//     timeout doesn\'t leak. Drift to not clearing would leave a
+//     dangling timer that fires after a fast success.
+//   • 5-method HTTP verb union (GET/POST/DELETE/PUT/PATCH) — drift
+//     to widening would let HEAD/OPTIONS/TRACE leak through.
+//   • Default headers — authorization + user-agent + conditional
+//     content-type-json-when-body. CRITICAL: content-type only set
+//     when body !== undefined (NOT always-set) so GETs don\'t lie
+//     about having a JSON body.
+//   • 2xx response handling — 204 returns undefined + empty-text
+//     returns undefined + JSON.parse with TransportError fallback.
+//   • Non-2xx response handling — try-parse as Problem; if not
+//     parseable OR isProblem fails, throw TransportError; else
+//     throw errorFromProblem(problem, retry-after header).
+//   • retry-after header passthrough — exactly `res.headers.get(
+//     "retry-after")`. Drift to manually parsing here would force
+//     errorFromProblem to be aware of headers (defeating the
+//     separation).
+//   • finally clearTimeout — runs on success AND error paths.
+//   • Per-request retry override — `opts.retry ?? this.config.retry`
+//     defers per-call.
+//   • isProblem type-guard — exact 3-field check (type:string +
+//     title:string + status:number).
+//   • transportMessage AbortError → "request timed out" translation.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -35,108 +51,135 @@ function read(p: string): string {
 describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
   const body = read(LIB);
 
-  it('Framing pinned: thin fetch wrapper + Authorization injection + RFC 7807 problem parse + retry policy applied to every call', () => {
+  it('file exists at canonical path + module framing pinned (thin fetch wrapper + Authorization injection + RFC 7807 problem parse + retry policy on every call)', () => {
+    expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
       /\/\/ HTTP layer — thin wrapper over the global `fetch`\. Injects the\s*\n?\s*\/\/ Authorization header, parses RFC 7807 problem responses into typed\s*\n?\s*\/\/ `DriftstackError` subclasses, and applies the retry policy from\s*\n?\s*\/\/ `\.\/retry\.ts` to every call\./,
     );
   });
 
-  it('imports: Problem (api-types) + errorFromProblem/TransportError (./errors.js) + withRetry/RetryConfig (./retry.js)', () => {
+  it('Imports — Problem (api-types) + errorFromProblem/TransportError (./errors.js) + withRetry/RetryConfig (./retry.js). CRITICAL: the 3 imports represent the 3 cross-module dependencies (api-types for the wire shape, errors for typed parsing, retry for the wrapper).', () => {
     expect(body).toMatch(/import type \{ Problem \} from '@driftstack\/api-types';/);
     expect(body).toMatch(/import \{ errorFromProblem, TransportError \} from '\.\/errors\.js';/);
     expect(body).toMatch(/import \{ withRetry, type RetryConfig \} from '\.\/retry\.js';/);
   });
 
-  it('HttpClientConfig interface: apiKey + baseUrl + retry + fetch override + timeoutMs', () => {
+  it('HttpClientConfig interface — 5-field shape (apiKey required + baseUrl required + retry/fetch/timeoutMs optional). fetch override JSDoc rationale "e.g. for tests" pinned — drift to dropping would let future maintainers forget the test-seam intent.', () => {
     expect(body).toMatch(
       /export interface HttpClientConfig \{\s*\n?\s*apiKey: string;\s*\n?\s*baseUrl: string;\s*\n?\s*retry\?: RetryConfig;\s*\n?\s*\/\*\* Override the global `fetch` \(e\.g\. for tests\)\. \*\/\s*\n?\s*fetch\?: typeof fetch;\s*\n?\s*\/\*\* Default per-request timeout \(ms\)\. \*\/\s*\n?\s*timeoutMs\?: number;\s*\n?\s*\}/,
     );
   });
 
-  it('RequestOptions interface: 5-verb union (GET/POST/DELETE/PUT/PATCH) + path + query + body + retry + timeoutMs + headers (with avoid-authorization note)', () => {
+  it('CRITICAL RequestOptions method union — 5-verb closed set (GET/POST/DELETE/PUT/PATCH). Drift to widening (HEAD/OPTIONS/TRACE/CONNECT) would let unintended verbs leak into the SDK surface. Drift to `string` type would lose static-checking on verbs.', () => {
     expect(body).toMatch(
       /export interface RequestOptions \{\s*\n?\s*method: 'GET' \| 'POST' \| 'DELETE' \| 'PUT' \| 'PATCH';\s*\n?\s*path: string;\s*\n?\s*query\?: Record<string, string \| number \| undefined>;\s*\n?\s*body\?: unknown;/,
     );
+  });
+
+  it('RequestOptions headers JSDoc — pinned per-line: 3 default headers (authorization + user-agent + content-type) + "callers can override but should avoid touching `authorization`". The avoid-authorization advisory is load-bearing — drift to dropping would let customers override the Bearer header (breaking auth).', () => {
     expect(body).toMatch(
       /\/\*\*\s*\n?\s*\*\s*Extra request headers\. Merged on top of the defaults \(authorization,\s*\n?\s*\*\s*user-agent, content-type\); callers can override but should avoid\s*\n?\s*\*\s*touching `authorization`\.\s*\n?\s*\*\/\s*\n?\s*headers\?: Record<string, string>;/,
     );
   });
 
-  it('DEFAULT_TIMEOUT_MS = 30_000', () => {
+  it('CRITICAL DEFAULT_TIMEOUT_MS = 30_000 (numeric separator). Drift to a shorter default would make sessions.capture() time out on heavy screenshots; drift to a longer default would let stuck flows wait minutes.', () => {
     expect(body).toMatch(/const DEFAULT_TIMEOUT_MS = 30_000;/);
   });
 
-  it('HttpClient.request<T>: withRetry wraps AbortController.abort timer; per-request timeoutMs precedence over config over DEFAULT', () => {
+  it('HttpClient class declaration + private-readonly config constructor field. async request<T> generic method signature. Drift to non-generic would force callers to type-assert the response.', () => {
     expect(body).toMatch(
       /export class HttpClient \{\s*\n?\s*constructor\(private readonly config: HttpClientConfig\) \{\}/,
     );
     expect(body).toMatch(/async request<T>\(opts: RequestOptions\): Promise<T> \{/);
+  });
+
+  it('CRITICAL fetch + timeout + URL setup — 3-line setup: (1) `fetchImpl = this.config.fetch ?? fetch` (custom override OR global fetch); (2) `timeoutMs = opts.timeoutMs ?? this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS` (3-level precedence); (3) `url = this.buildUrl(opts.path, opts.query)`. Drift to `||` instead of `??` would let `timeoutMs: 0` (disable-timeout intent) fall through to default.', () => {
     expect(body).toMatch(/const fetchImpl = this\.config\.fetch \?\? fetch;/);
     expect(body).toMatch(
       /const timeoutMs = opts\.timeoutMs \?\? this\.config\.timeoutMs \?\? DEFAULT_TIMEOUT_MS;/,
     );
     expect(body).toMatch(/const url = this\.buildUrl\(opts\.path, opts\.query\);/);
+  });
+
+  it('CRITICAL withRetry-wrapped per-attempt body — opens with AbortController + setTimeout. Drift to creating the controller OUTSIDE withRetry would share ONE timer across retries (cumulative deadline). Drift to dropping the timer would let stuck requests block forever. Drift to using AbortSignal.timeout() (which requires Node 17+) would break older environments.', () => {
     expect(body).toMatch(
       /return withRetry\(async \(\) => \{\s*\n?\s*const controller = new AbortController\(\);\s*\n?\s*const timer = setTimeout\(\(\) => controller\.abort\(\), timeoutMs\);/,
     );
   });
 
-  it('Default headers: authorization Bearer apiKey + user-agent driftstack-sdk-typescript/0.0.1 + content-type JSON only when body !== undefined', () => {
+  it('CRITICAL default headers — 3 headers + spread of opts.headers + conditional content-type-json. Order matters: (1) authorization Bearer, (2) user-agent versioned, (3) content-type when body, (4) opts.headers SPREAD LAST so caller can override custom non-auth headers. Drift to spreading opts.headers BEFORE defaults would let customer headers be silently overwritten.', () => {
     expect(body).toMatch(
       /headers: \{\s*\n?\s*authorization: `Bearer \$\{this\.config\.apiKey\}`,\s*\n?\s*'user-agent': 'driftstack-sdk-typescript\/0\.0\.1',\s*\n?\s*\.\.\.\(opts\.body !== undefined \? \{ 'content-type': 'application\/json' \} : \{\}\),\s*\n?\s*\.\.\.opts\.headers,\s*\n?\s*\},/,
     );
+  });
+
+  it("CRITICAL body serialization — `...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {})` conditional spread. Drift to always-include would force every request to carry a body (even GETs which shouldn't); drift to dropping the JSON.stringify would let the body be `[object Object]` literal string.", () => {
     expect(body).toMatch(
       /\.\.\.\(opts\.body !== undefined \? \{ body: JSON\.stringify\(opts\.body\) \} : \{\}\),/,
     );
+  });
+
+  it('signal hookup — `signal: controller.signal` pinned. This is the load-bearing link between the AbortController + the fetch call. Drift to dropping would let the setTimeout fire but the fetch never abort.', () => {
     expect(body).toMatch(/signal: controller\.signal,/);
   });
 
-  it('fetch try/catch wraps as TransportError(transportMessage(err), 0, err); 2xx body parse: 204 -> undefined / empty -> undefined / JSON.parse with parse-failure → TransportError', () => {
+  it('CRITICAL fetch error catch — wraps native fetch failure as `TransportError(transportMessage(err), 0, err)`. status=0 because no HTTP response received; cause=err preserves the original Error for debug. Drift to swallowing the error would lose the stack trace; drift to re-throwing raw would break the typed-error contract.', () => {
     expect(body).toMatch(
-      /try \{\s*\n?\s*res = await fetchImpl\(url, init\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*throw new TransportError\(transportMessage\(err\), 0, err\);\s*\n?\s*\}/,
+      /let res: Response;\s*\n?\s*try \{\s*\n?\s*res = await fetchImpl\(url, init\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*throw new TransportError\(transportMessage\(err\), 0, err\);\s*\n?\s*\}/,
     );
+  });
+
+  it('CRITICAL 2xx response handling — 3-branch parse: (1) status===204 → undefined (No Content); (2) text.length===0 → undefined (empty body); (3) JSON.parse(text) with TransportError fallback. Drift to dropping branch 1 would crash on DELETE responses (204 is the canonical success status for delete). Drift to dropping branch 2 would crash on POST 200 with no body.', () => {
     expect(body).toMatch(
       /if \(res\.ok\) \{\s*\n?\s*if \(res\.status === 204\) return undefined as T;\s*\n?\s*const text = await res\.text\(\);\s*\n?\s*if \(text\.length === 0\) return undefined as T;\s*\n?\s*try \{\s*\n?\s*return JSON\.parse\(text\) as T;\s*\n?\s*\} catch \(err\) \{\s*\n?\s*throw new TransportError\('failed to parse JSON response body', res\.status, err\);\s*\n?\s*\}\s*\n?\s*\}/,
     );
   });
 
-  it('Non-2xx path: parse body as Problem (or TransportError "non-JSON body"); isProblem check (or TransportError "not a Problem"); throw errorFromProblem(problem, retry-after header)', () => {
+  it('Non-2xx parse rationale comment pinned — "Non-2xx — try to parse problem+json. If the body isn\'t a problem doc, surface as TransportError with status." Drift to silently dropping non-Problem bodies would lose the failure context (customer sees a 500 with no body would just get a generic transport error without the status).', () => {
     expect(body).toMatch(
       /\/\/ Non-2xx — try to parse problem\+json\. If the body isn't a problem\s*\n?\s*\/\/ doc, surface as TransportError with status\./,
     );
+  });
+
+  it('CRITICAL Non-2xx body JSON.parse — wraps a try-catch around `JSON.parse(text) as Problem`. On parse failure throws TransportError with template-literal message including the status. Drift to dropping the try-catch would let a non-JSON 500 response crash with SyntaxError instead of TransportError.', () => {
     expect(body).toMatch(
       /try \{\s*\n?\s*problem = JSON\.parse\(text\) as Problem;\s*\n?\s*\} catch \{\s*\n?\s*throw new TransportError\(\s*\n?\s*`non-2xx response \(\$\{res\.status\.toString\(\)\}\) with non-JSON body`,\s*\n?\s*res\.status,\s*\n?\s*\);\s*\n?\s*\}/,
     );
+  });
+
+  it('CRITICAL isProblem narrowing — guards against malformed JSON that parses but lacks Problem fields. `if (!isProblem(problem)) throw TransportError(...)` then `throw errorFromProblem(problem, res.headers.get("retry-after"))`. The retry-after header passthrough is load-bearing — RateLimitError uses it as a fallback when the body lacks retry_after_seconds.', () => {
     expect(body).toMatch(
       /if \(!isProblem\(problem\)\) \{\s*\n?\s*throw new TransportError\(\s*\n?\s*`non-2xx response \(\$\{res\.status\.toString\(\)\}\) but body is not a Problem`,\s*\n?\s*res\.status,\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*throw errorFromProblem\(problem, res\.headers\.get\('retry-after'\)\);/,
     );
   });
 
-  it('finally clearTimeout(timer) + retry-policy precedence (per-request retry over config retry)', () => {
-    expect(body).toMatch(
-      /\} finally \{\s*\n?\s*clearTimeout\(timer\);\s*\n?\s*\}\s*\n?\s*\}, opts\.retry \?\? this\.config\.retry\);/,
-    );
+  it('CRITICAL finally clearTimeout — `} finally { clearTimeout(timer); }` runs on both success AND error paths. Drift to clearing only on success would leave a dangling timer that fires AFTER the request returned an error. Drift to clearing only on error would let the success path leak.', () => {
+    expect(body).toMatch(/\} finally \{\s*\n?\s*clearTimeout\(timer\);\s*\n?\s*\}/);
   });
 
-  it('buildUrl: new URL(path, baseUrl); searchParams.set per defined query entry; returns toString()', () => {
+  it("Per-request retry override — `withRetry(..., opts.retry ?? this.config.retry)` second argument. CRITICAL: `??` (not `||`) so a deliberately-empty retry config (`{}`) doesn't fall through to the config retry. Drift would let per-call disable-retry intent be silently overridden.", () => {
+    expect(body).toMatch(/\}, opts\.retry \?\? this\.config\.retry\);/);
+  });
+
+  it('CRITICAL buildUrl helper — `new URL(path, this.config.baseUrl)` + query-iteration with `if (v !== undefined) url.searchParams.set(k, String(v))`. The `!== undefined` filter (not falsy check) ensures `query: { limit: 0 }` is sent (drift to `if (v)` would drop limit:0). String(v) coerces numbers to string for URLSearchParams compatibility.', () => {
     expect(body).toMatch(
       /private buildUrl\(path: string, query\?: Record<string, string \| number \| undefined>\): string \{\s*\n?\s*const url = new URL\(path, this\.config\.baseUrl\);\s*\n?\s*if \(query\) \{\s*\n?\s*for \(const \[k, v\] of Object\.entries\(query\)\) \{\s*\n?\s*if \(v !== undefined\) url\.searchParams\.set\(k, String\(v\)\);\s*\n?\s*\}\s*\n?\s*\}\s*\n?\s*return url\.toString\(\);\s*\n?\s*\}/,
     );
   });
 
-  it('isProblem type-guard: object + type:string + title:string + status:number', () => {
+  it('CRITICAL isProblem type-guard — `typeof x !== "object" || x === null` early-return + `typeof r.type === "string" && typeof r.title === "string" && typeof r.status === "number"`. Exact 3-field RFC 7807 minimum (type/title/status). Drift to requiring `detail` or `instance` would falsely reject legitimate Problems that omit them.', () => {
     expect(body).toMatch(
       /function isProblem\(x: unknown\): x is Problem \{\s*\n?\s*if \(typeof x !== 'object' \|\| x === null\) return false;\s*\n?\s*const r = x as Record<string, unknown>;\s*\n?\s*return typeof r\.type === 'string' && typeof r\.title === 'string' && typeof r\.status === 'number';\s*\n?\s*\}/,
     );
   });
 
-  it('transportMessage: AbortError → "request timed out"; other Errors → err.message; non-Error → "network failure"', () => {
+  it('CRITICAL transportMessage — 3-branch translation: (1) Error with name="AbortError" → "request timed out" (CRITICAL: the AbortController.abort() from the setTimeout produces this); (2) other Error → err.message (preserve original); (3) non-Error throws → "network failure". Drift to dropping the AbortError branch would surface a confusing "The operation was aborted." message instead of the user-friendly "request timed out".', () => {
     expect(body).toMatch(
       /function transportMessage\(err: unknown\): string \{\s*\n?\s*if \(err instanceof Error\) \{\s*\n?\s*if \(err\.name === 'AbortError'\) return 'request timed out';\s*\n?\s*return err\.message;\s*\n?\s*\}\s*\n?\s*return 'network failure';\s*\n?\s*\}/,
     );
   });
 
-  it('file exists at canonical path', () => {
-    expect(existsSync(LIB)).toBe(true);
+  it('SDK user-agent version pin — `driftstack-sdk-typescript/0.0.1`. Drift to a different version string would break server-side metric aggregation that buckets by SDK version. The version MUST stay in sync with package.json.', () => {
+    expect(body).toMatch(/'driftstack-sdk-typescript\/0\.0\.1'/);
   });
 });
