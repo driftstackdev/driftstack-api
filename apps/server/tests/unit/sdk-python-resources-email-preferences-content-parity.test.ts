@@ -1,17 +1,32 @@
-// W580.C — drift guard for packages/sdk-python/src/resources/email_preferences.py.
-// V-204/V-449 EmailPreferencesResource Python parity. Drift here
-// either flips opt-in-by-default semantics for unset rows, drops
-// the convenience opt_in/opt_out shortcuts, or accidentally adds
-// a critical-email event_type to the opt-outable surface.
+// W580.C (W655-deepened) — drift guard for packages/sdk-python/src/
+// driftstack/resources/email_preferences.py. V-204/V-449 email-
+// preferences Python parity.
 //
-//   • Two paired classes: EmailPreferencesResource (sync) +
-//     AsyncEmailPreferencesResource.
-//   • Critical emails (verification / password-reset / billing-
-//     failure / subscription-cancellation / support-ack) are NOT
-//     opt-outable — not in OptOutableEmailEvent enum on purpose.
-//   • 4 verbs each: list / set / opt_out / opt_in.
-//   • set body shape: {"event_type": "...", "opted_in": True|False}.
-//   • opt_out + opt_in are convenience wrappers that delegate to set.
+// W655 splits the original 5 it() blocks into 12 focused per-concept
+// blocks + pins previously-implicit invariants:
+//
+//   • Critical-emails-not-opt-outable invariant — the 5 event types
+//     that cannot be opted out of (verification + password-reset +
+//     billing-failure + subscription-cancellation + support-ack)
+//     pinned per-line. Drift to letting any of these into the
+//     OptOutableEmailEvent enum would let customers silently opt
+//     out of receiving "your password was reset" or "your card
+//     failed", catastrophically breaking the safety net.
+//   • Opt-in-by-default invariant pinned: "Defaults opted-in for
+//     unset rows." Drift to opt-out-by-default would silently
+//     mute every customer's non-critical emails (newsletter,
+//     product updates, weekly digest) — they'd never know they
+//     stopped receiving things.
+//   • set body 2-field shape pinned: {"event_type": "...",
+//     "opted_in": True|False}. PUT verb (not PATCH) because the
+//     write replaces the entire row for one event_type, not
+//     partial-update of multiple fields.
+//   • opt_in/opt_out convenience wrappers pinned per-method —
+//     each delegates to .set({"event_type": event_type, "opted_in":
+//     False|True}). Drift to opt_in calling set with opted_in=False
+//     would invert the semantic of the convenience wrapper.
+//   • Sync/async parallel surface — 4-verb count exact across both
+//     classes via regex count.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -29,55 +44,81 @@ function read(p: string): string {
 describe('W580.C packages/sdk-python/src/driftstack/resources/email_preferences.py content parity', () => {
   const body = read(LIB);
 
-  it('Module docstring + V-204/V-449 framing + per-event opt-in/opt-out + critical-emails-not-opt-outable rationale pinned', () => {
+  it('file exists at canonical path + module docstring V-204/V-449 anchor + "Per-event opt-in/opt-out toggles for non-critical customer emails" scope (load-bearing: this is the customer-controlled OPT-OUT surface, not admin-side suppression list)', () => {
+    expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
       /^"""Email preferences resource — \/v1\/account\/email-preferences \(V-204 \/ V-449\)\.\n/,
     );
     expect(body).toMatch(/Per-event opt-in\/opt-out toggles for non-critical customer emails\./);
-    expect(body).toMatch(/Critical emails \(verification \/ password-reset \/ billing-failure \//);
-    expect(body).toMatch(/subscription-cancellation \/ support-ack\) are not opt-outable; they/);
-    expect(body).toMatch(/aren't in the OptOutableEmailEvent enum on purpose\./);
   });
 
-  it('Imports: __future__ + Any + AsyncHttpClient/HttpClient + coerce_body helper pinned', () => {
+  it('CRITICAL: critical-emails-not-opt-outable invariant pinned per-line. The 5 critical event types (verification / password-reset / billing-failure / subscription-cancellation / support-ack) MUST NOT be opt-outable. Drift to letting any of these into OptOutableEmailEvent would silently let customers opt out of "your password was reset" or "your card failed" — catastrophic safety-net break. The enum-naming invariant ("not in the OptOutableEmailEvent enum on purpose") is what enforces this at compile-time on the server side.', () => {
+    expect(body).toMatch(
+      /Critical emails \(verification \/ password-reset \/ billing-failure \/\s*\nsubscription-cancellation \/ support-ack\) are not opt-outable; they\s*\naren't in the OptOutableEmailEvent enum on purpose\./,
+    );
+  });
+
+  it('Imports — __future__ annotations + typing Any + 2-class HTTP client + coerce_body helper. coerce_body is load-bearing because the set() body has a typed shape (event_type + opted_in bool) and customers may pass it as either a dict or a future EmailPreferenceUpdateRequest pydantic model.', () => {
     expect(body).toMatch(/^from __future__ import annotations$/m);
     expect(body).toMatch(/^from typing import Any$/m);
     expect(body).toMatch(/^from driftstack\.http import AsyncHttpClient, HttpClient$/m);
     expect(body).toMatch(/^from driftstack\.resources\._common import coerce_body$/m);
   });
 
-  it('Sync EmailPreferencesResource: 4 verbs (list GET + set PUT + opt_out + opt_in) + opt_out/opt_in delegate to set with opted_in=False/True', () => {
+  it('EmailPreferencesResource (sync) class declaration + __init__(http: HttpClient). Stateless wrapper.', () => {
     expect(body).toMatch(/^class EmailPreferencesResource:$/m);
-    expect(body).toMatch(/"""Synchronous email-preferences resource\."""/);
+    expect(body).toMatch(/^ {4}"""Synchronous email-preferences resource\."""$/m);
     expect(body).toMatch(
-      /def __init__\(self, http: HttpClient\) -> None:\s*\n\s*self\._http = http/,
+      /^ {4}def __init__\(self, http: HttpClient\) -> None:\s*\n\s*self\._http = http$/m,
     );
+  });
+
+  it('Sync list — GET /v1/account/email-preferences. CRITICAL: "Defaults opted-in for unset rows." Drift to opt-out-by-default would silently mute every customer\'s non-critical emails (newsletter / product updates / weekly digest) — they\'d never know they stopped receiving things. This is the load-bearing claim that justifies opt-out rows existing on the row (not absence-of-row).', () => {
     expect(body).toMatch(
       /def list\(self\) -> dict\[str, Any\]:\s*\n\s*"""Read all opt-out toggles\. Defaults opted-in for unset rows\."""\s*\n\s*return self\._http\.request\("GET", "\/v1\/account\/email-preferences"\)/,
     );
+  });
+
+  it('Sync set — PUT /v1/account/email-preferences. CRITICAL: PUT (not PATCH) because the write replaces the entire row for one event_type, not partial-update across multiple fields. Body shape pinned: {"event_type": "...", "opted_in": True|False} — exactly 2 fields. Drift to allowing a `description` or `note` field would silently widen the row and break the simple opt-in toggle UX.', () => {
     expect(body).toMatch(/def set\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/);
-    expect(body).toMatch(/"""Set opt-in\/opt-out for a single event type\./);
-    expect(body).toMatch(/``body``: ``\{"event_type": "\.\.\.", "opted_in": True\|False\}``/);
+    expect(body).toMatch(
+      /"""Set opt-in\/opt-out for a single event type\.\s*\n\s*\n\s*``body``: ``\{"event_type": "\.\.\.", "opted_in": True\|False\}``\s*\n\s*"""/,
+    );
     expect(body).toMatch(
       /return self\._http\.request\(\s*\n\s*"PUT", "\/v1\/account\/email-preferences", json_body=coerce_body\(body\)\s*\n\s*\)/,
     );
+  });
+
+  it('Sync opt_out — convenience wrapper that delegates to self.set({"event_type": event_type, "opted_in": False}). CRITICAL: the delegated dict has opted_in=False — drift to True would silently invert the wrapper\'s semantic (opt_out would actually opt in). The function-rename invariant matters: a future "unsubscribe" alias should also delegate to set with opted_in=False, but the .opt_out name MUST keep that semantic stable.', () => {
     expect(body).toMatch(
       /def opt_out\(self, event_type: str\) -> dict\[str, Any\]:\s*\n\s*"""Convenience: opt out of a single event type\."""\s*\n\s*return self\.set\(\{"event_type": event_type, "opted_in": False\}\)/,
     );
+  });
+
+  it('Sync opt_in — convenience wrapper that delegates to self.set({"event_type": event_type, "opted_in": True}). Mirror of opt_out with opted_in=True. Drift to False would invert the semantic. "Opt back in" framing in docstring acknowledges this is the un-undo of a prior opt_out — load-bearing for the dashboard UX where a customer toggles "re-enable notifications".', () => {
     expect(body).toMatch(
       /def opt_in\(self, event_type: str\) -> dict\[str, Any\]:\s*\n\s*"""Convenience: opt back in to a single event type\."""\s*\n\s*return self\.set\(\{"event_type": event_type, "opted_in": True\}\)/,
     );
   });
 
-  it('Async AsyncEmailPreferencesResource: mirrored awaited 4-verb surface; opt_out/opt_in await self.set', () => {
+  it('AsyncEmailPreferencesResource — class declaration + __init__(http: AsyncHttpClient). Mirrors sync class structure exactly.', () => {
     expect(body).toMatch(/^class AsyncEmailPreferencesResource:$/m);
-    expect(body).toMatch(/"""Async email-preferences resource\."""/);
+    expect(body).toMatch(/^ {4}"""Async email-preferences resource\."""$/m);
+    expect(body).toMatch(
+      /^ {4}def __init__\(self, http: AsyncHttpClient\) -> None:\s*\n\s*self\._http = http$/m,
+    );
+  });
+
+  it('Async list + set — awaited GET/PUT twins with same wire paths + same coerce_body wrapping on set. Drift to a different qs computation or body wrapping in the async path would silently fragment the SDK surface.', () => {
     expect(body).toMatch(
       /async def list\(self\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\("GET", "\/v1\/account\/email-preferences"\)/,
     );
     expect(body).toMatch(
       /async def set\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\(\s*\n\s*"PUT", "\/v1\/account\/email-preferences", json_body=coerce_body\(body\)\s*\n\s*\)/,
     );
+  });
+
+  it("Async opt_out + opt_in — convenience wrappers `await self.set({event_type, opted_in})`. Same delegated-False / delegated-True semantic as sync; await keyword the only difference. Drift to a different opted_in value in the async path would invert the wrapper's semantic.", () => {
     expect(body).toMatch(
       /async def opt_out\(self, event_type: str\) -> dict\[str, Any\]:\s*\n\s*return await self\.set\(\{"event_type": event_type, "opted_in": False\}\)/,
     );
@@ -86,7 +127,24 @@ describe('W580.C packages/sdk-python/src/driftstack/resources/email_preferences.
     );
   });
 
-  it('file exists at canonical path', () => {
-    expect(existsSync(LIB)).toBe(true);
+  it('4-verb inventory drift guard — sync defines exactly 5 method defs (4 verbs + __init__); async defines the same 5. Verb-mix: 2 GETs (list × sync+async), 2 PUTs (set × sync+async), 0 POSTs/PATCHes/DELETEs (opt_in/opt_out are DELEGATIONS to set, not separate wire verbs — they MUST NOT mint their own wire calls). Drift to opt_in calling http.request directly would silently double the wire-call count.', () => {
+    const syncStart = body.indexOf('class EmailPreferencesResource:');
+    const asyncStart = body.indexOf('class AsyncEmailPreferencesResource:');
+    expect(syncStart, 'expected sync class to come first').toBeGreaterThan(0);
+    expect(asyncStart, 'expected async class to come after sync class').toBeGreaterThan(syncStart);
+    const syncBody = body.slice(syncStart, asyncStart);
+    const asyncBody = body.slice(asyncStart);
+    const syncDefs = (syncBody.match(/^ {4}(?:async )?def [a-z_]+\(/gm) ?? []).length;
+    expect(syncDefs, 'expected 5 sync method defs (4 verbs + __init__)').toBe(5);
+    const asyncDefs = (asyncBody.match(/^ {4}(?:async )?def [a-z_]+\(/gm) ?? []).length;
+    expect(asyncDefs, 'expected 5 async method defs (4 verbs + __init__)').toBe(5);
+    // Exactly 2 GETs (list × 2) + 2 PUTs (set × 2). NO POST/PATCH/DELETE.
+    const gets = (body.match(/"GET", "\/v1\/account\/email-preferences"/g) ?? []).length;
+    expect(gets, 'expected 2 GETs').toBe(2);
+    const puts = (body.match(/"PUT", "\/v1\/account\/email-preferences"/g) ?? []).length;
+    expect(puts, 'expected 2 PUTs').toBe(2);
+    expect(body).not.toMatch(/"POST", "\/v1\/account\/email-preferences/);
+    expect(body).not.toMatch(/"PATCH", "\/v1\/account\/email-preferences/);
+    expect(body).not.toMatch(/"DELETE", "\/v1\/account\/email-preferences/);
   });
 });
