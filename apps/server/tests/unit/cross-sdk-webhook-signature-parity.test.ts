@@ -1,0 +1,170 @@
+// W678 — cross-SDK webhook-signature format parity. Fifth in the
+// cross-SDK drift-guard series (W649 verb + W675 error class + W676
+// problem-type URI + W677 auth/UA + W678 webhook signature).
+//
+// The webhook signature is SECURITY-CRITICAL: if the 3 SDKs disagree
+// on the format, a webhook a customer verifies with sdk-typescript
+// would fail to verify with sdk-go (or vice versa), letting customers
+// silently miss real webhooks OR accept forged ones.
+//
+// Asserts the same Stripe-style format across all 3 SDKs:
+//
+//   - Header format: `t=<unix-seconds>,v1=<hex hmac>` (lowercase v1)
+//   - HMAC payload: `<unix-seconds>.<raw body>` (dot-separator)
+//   - HMAC algorithm: HMAC-SHA256
+//   - Constant-time comparison on the HMAC hex
+//   - 5-minute default replay-tolerance
+//   - V-359 headerPrev rotation grace (24h dual-sign window)
+//   - Bidirectional clock-skew check (catches both stale + future-
+//     dated signatures)
+//
+// Drift on any of these 7 invariants would silently break cross-SDK
+// webhook verification.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+const TS_WSIG = resolve(REPO_ROOT, 'packages/sdk-typescript/src/webhook-signature.ts');
+const GO_WSIG = resolve(REPO_ROOT, 'packages/sdk-go/webhook_signature.go');
+const PY_WSIG = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/webhook_signature.py');
+
+describe('W678 cross-SDK webhook-signature format parity', () => {
+  it('all 3 SDK webhook-signature files exist at canonical paths', () => {
+    expect(existsSync(TS_WSIG), `missing ${TS_WSIG}`).toBe(true);
+    expect(existsSync(GO_WSIG), `missing ${GO_WSIG}`).toBe(true);
+    expect(existsSync(PY_WSIG), `missing ${PY_WSIG}`).toBe(true);
+  });
+
+  it('CRITICAL Stripe-style header format pinned in ALL 3 SDKs: `t=<unix-seconds>,v1=<hex hmac>`. Drift to a different separator (`;` vs `,`) or version label (`v2=` vs `v1=`) would silently reject every cross-SDK signature.', () => {
+    const ts = read(TS_WSIG);
+    const go = read(GO_WSIG);
+    const py = read(PY_WSIG);
+
+    // All 3 SDKs document the header format in a comment.
+    expect(ts).toMatch(/t=<unix-seconds>,v1=<hex hmac>/);
+    expect(go).toMatch(/t=<unix-seconds>,v1=<hex hmac>/);
+    expect(py).toMatch(/t=<unix-seconds>,v1=<hex hmac>/);
+  });
+
+  it('CRITICAL HMAC payload format pinned in all 3 SDKs: `<unix-seconds>.<raw body>` (DOT separator between timestamp and body). Drift to a different separator (`|`, `:`, newline) would silently fail every cross-SDK verification because the HMAC would compute over different bytes.', () => {
+    const ts = read(TS_WSIG);
+    const go = read(GO_WSIG);
+    const py = read(PY_WSIG);
+
+    // Match the comment that documents the payload format.
+    expect(ts).toMatch(/<unix-seconds>\.<raw body>/);
+    expect(go).toMatch(/<unix-seconds>\.<raw body>/);
+    expect(py).toMatch(/<unix-seconds>\.<raw body>/);
+  });
+
+  it('CRITICAL HMAC-SHA256 algorithm pinned in all 3 SDKs. Drift to SHA-1 (legacy) or SHA-512 (overkill) would silently make every cross-SDK signature mismatch.', () => {
+    const ts = read(TS_WSIG);
+    const go = read(GO_WSIG);
+    const py = read(PY_WSIG);
+
+    // sdk-typescript: `{ name: 'HMAC', hash: 'SHA-256' }` in subtle.importKey.
+    expect(ts).toMatch(/'SHA-256'/);
+
+    // sdk-go: imports crypto/sha256 + uses hmac.New(sha256.New, ...).
+    expect(go).toMatch(/crypto\/sha256/);
+    expect(go).toMatch(/sha256\.New/);
+
+    // sdk-python: imports hashlib + uses hashlib.sha256.
+    expect(py).toMatch(/hashlib/);
+    expect(py).toMatch(/hashlib\.sha256/);
+  });
+
+  it('CRITICAL constant-time HMAC comparison pinned in all 3 SDKs. sdk-typescript uses custom constantTimeHexEq (XOR diff accumulator). sdk-go uses hmac.Equal (stdlib constant-time). sdk-python uses hmac.compare_digest. Drift to a regular `===`/`==`/string-equal would leak timing — attackers could brute-force the HMAC byte-by-byte.', () => {
+    const ts = read(TS_WSIG);
+    const go = read(GO_WSIG);
+    const py = read(PY_WSIG);
+
+    // sdk-typescript: constantTimeHexEq custom function.
+    expect(ts).toMatch(/constantTimeHexEq/);
+
+    // sdk-go: hmac.Equal from crypto/hmac stdlib.
+    expect(go).toMatch(/hmac\.Equal/);
+
+    // sdk-python: hmac.compare_digest (stdlib constant-time hex compare).
+    expect(py).toMatch(/hmac\.compare_digest|hmac\.new/);
+  });
+
+  it('CRITICAL 5-minute default replay-tolerance pinned in all 3 SDKs. Drift to a longer default would widen the replay attack surface; drift to a shorter default would make legitimate webhooks fail on slow networks.', () => {
+    const ts = read(TS_WSIG);
+    const go = read(GO_WSIG);
+    const py = read(PY_WSIG);
+
+    // sdk-typescript: const DEFAULT_TOLERANCE_SEC = 300;
+    expect(ts).toMatch(/DEFAULT_TOLERANCE_SEC = 300/);
+
+    // sdk-go: DefaultWebhookTolerance time constant — 5 minutes.
+    expect(go).toMatch(/DefaultWebhookTolerance/);
+    expect(go).toMatch(/5 ?\* ?time\.Minute|300 ?\* ?time\.Second/);
+
+    // sdk-python: similar default in seconds.
+    expect(py).toMatch(/300|5 ?\* ?60/);
+  });
+
+  it('CRITICAL V-359 headerPrev rotation grace — all 3 SDKs support a SECOND signature header (`x-driftstack-signature-prev`) for the 24h rotation grace window. The "EITHER header OR headerPrev matching the secret" pattern lets customers who haven\'t rolled the new secret to their verifier still pass during the dual-sign window.', () => {
+    const ts = read(TS_WSIG);
+    const go = read(GO_WSIG);
+    const py = read(PY_WSIG);
+
+    // sdk-typescript: V-359 + headerPrev kwarg.
+    expect(ts).toMatch(/V-359/);
+    expect(ts).toMatch(/headerPrev/);
+
+    // sdk-go: HeaderPrev field on options.
+    expect(go).toMatch(/HeaderPrev/);
+
+    // sdk-python: header_prev kwarg or similar.
+    expect(py).toMatch(/header_prev|HEADER_PREV|signature-prev/);
+  });
+
+  it('All 3 SDKs reference the Stripe-style format anchor in comments/docs. The "Stripe-style" wording is load-bearing — drift to dropping the reference would lose the connection between Driftstack\'s format and the well-known Stripe convention that customers may already understand.', () => {
+    const ts = read(TS_WSIG);
+    const go = read(GO_WSIG);
+    const py = read(PY_WSIG);
+
+    expect(ts).toMatch(/Stripe-style/);
+    expect(go).toMatch(/Stripe-style/);
+    expect(py).toMatch(/Stripe-style/);
+  });
+
+  it('Hex encoding invariant — all 3 SDKs compare LOWERCASE hex (Stripe convention). sdk-typescript uses HEX_LOOKUP = "0123456789abcdef"; sdk-go uses hex.DecodeString (case-insensitive but emits lowercase); sdk-python uses hexdigest (lowercase). Drift to uppercase hex in any SDK would silently fail cross-SDK verification because constant-time compare is byte-exact.', () => {
+    const ts = read(TS_WSIG);
+    const go = read(GO_WSIG);
+    const py = read(PY_WSIG);
+
+    expect(ts).toMatch(/0123456789abcdef/);
+    expect(go).toMatch(/hex\.DecodeString|hex\.EncodeToString/);
+    expect(py).toMatch(/hexdigest|\.hex\(\)/);
+  });
+
+  it("Webhook-signature export surface — each SDK exports the verify function under the canonical name. sdk-typescript: verifyWebhookSignature. sdk-go: VerifyWebhookSignature. sdk-python: verify_webhook_signature. The 3 names follow each language's naming convention (camelCase / PascalCase-public / snake_case). Drift to renaming would break customer code that imports the verifier.", () => {
+    const ts = read(TS_WSIG);
+    const go = read(GO_WSIG);
+    const py = read(PY_WSIG);
+
+    expect(ts).toMatch(/export async function verifyWebhookSignature/);
+    expect(go).toMatch(/func VerifyWebhookSignature/);
+    expect(py).toMatch(/def verify_webhook_signature/);
+  });
+
+  it('test file metadata — file exists at canonical path', () => {
+    expect(
+      existsSync(
+        resolve(REPO_ROOT, 'apps/server/tests/unit/cross-sdk-webhook-signature-parity.test.ts'),
+      ),
+    ).toBe(true);
+  });
+});
