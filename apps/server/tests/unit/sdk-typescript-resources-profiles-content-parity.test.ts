@@ -1,18 +1,33 @@
-// W427.C — drift guard for packages/sdk-typescript/src/resources/profiles.ts.
-// V-081 ProfilesResource — saved-profile lifecycle + V-313 clone.
-// Drift here either drops the tier-cap enforcement framing (TierLimitError
-// rationale on create) or breaks the V-313 server-side auto-name
-// derivation invariant ("(copy)", "(copy 2)", …).
+// W427.C (W664-deepened) — drift guard for packages/sdk-typescript/
+// src/resources/profiles.ts. V-081 profiles TS parity.
 //
-//   • Framing pinned: V-081 typed methods for /v1/profiles.
-//   • ProfilesListPage envelope: data + has_more + next_cursor.
-//   • 7 verbs: create + list + iterate (V-118) + get + update + delete +
-//     V-313 clone.
-//   • create: tier-limit enforced server-side; TierLimitError on cap.
-//   • V-313 clone: auto-derives "(copy)" / "(copy 2)" / ... name when
-//     body.name omitted; tier-cap + name-conflict checks mirror create.
-//   • All :id segments encodeURIComponent-wrapped (4 occurrences:
-//     get + update + delete + clone).
+// W664 splits the original 12 it() blocks into 16 focused per-concept
+// blocks + pins previously-implicit invariants:
+//
+//   • V-081 framing pinned + V-313 clone auto-naming invariant.
+//     The server auto-derives "(copy)" / "(copy 2)" / ... names
+//     when body.name is OMITTED. Drift to requiring body.name on
+//     clone would break the convenience UX (dashboard "duplicate"
+//     button just calls clone(id) without prompting); drift to a
+//     different auto-naming scheme would silently change the
+//     resulting profile names customers see.
+//   • Tier-limit enforcement on create — "TierLimitError on cap"
+//     framing. Drift to skipping the check would let customers
+//     exceed their per-tier profile quota. Same check applies to
+//     V-313 clone (and W663 profile-snapshots.restore) — all 3
+//     "mint a new profile" paths share the same cap.
+//   • V-118 iterate cursor walker over account-wide list.
+//   • Idempotent delete framing pinned — drift to non-idempotent
+//     would break the standard cleanup-in-finally pattern.
+//   • update is PARTIAL (PATCH not PUT) — drift to PUT would force
+//     callers to send the entire profile shape on every edit,
+//     losing field-level partial-update.
+//   • encodeURIComponent on :id (4 occurrences: get + update +
+//     delete + clone). iterate doesn't have a direct call site
+//     because it delegates via this.list().
+//   • CloneProfileRequest default-empty parameter — drift to
+//     required body would force callers to write clone(id, {})
+//     even when they want server-default auto-naming.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -30,11 +45,12 @@ function read(p: string): string {
 describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parity', () => {
   const body = read(LIB);
 
-  it('Framing pinned: V-081 typed methods for /v1/profiles', () => {
+  it('file exists at canonical path + module header V-081 anchor on the resource line', () => {
+    expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/\/\/ ProfilesResource — typed methods for \/v1\/profiles \(V-081\)\./);
   });
 
-  it('imports: CloneProfileRequest + CreateProfileRequest + PaginationQueryInput + Profile + UpdateProfileRequest + HttpClient + iteratePaginated', () => {
+  it('Imports — 5 api-types shapes (CloneProfileRequest + CreateProfileRequest + PaginationQueryInput + Profile + UpdateProfileRequest) + HttpClient + iteratePaginated. CRITICAL: CloneProfileRequest is imported — drift to requiring fields would break the convenience UX where clone(id) duplicates without prompting.', () => {
     expect(body).toMatch(
       /import type \{\s*\n?\s*CloneProfileRequest,\s*\n?\s*CreateProfileRequest,\s*\n?\s*PaginationQueryInput,\s*\n?\s*Profile,\s*\n?\s*UpdateProfileRequest,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
@@ -42,13 +58,18 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     expect(body).toMatch(/import \{ iteratePaginated \} from '\.\.\/pagination\.js';/);
   });
 
-  it('ProfilesListPage envelope: data Profile[] + has_more boolean + next_cursor string|null', () => {
+  it('ProfilesListPage envelope — 3-field cursor pagination (data: Profile[] + has_more: boolean + next_cursor: string | null). Profiles are unbounded per account (subject to tier-cap) so cursor pagination is load-bearing for the list verb.', () => {
     expect(body).toMatch(
       /export interface ProfilesListPage \{\s*\n?\s*data: Profile\[\];\s*\n?\s*has_more: boolean;\s*\n?\s*next_cursor: string \| null;\s*\n?\s*\}/,
     );
   });
 
-  it('create verb: POST /v1/profiles; tier-limit enforced server-side; throws TierLimitError on cap', () => {
+  it('ProfilesResource class declaration + private-readonly http constructor field. Stateless wrapper pattern.', () => {
+    expect(body).toMatch(/^export class ProfilesResource \{$/m);
+    expect(body).toMatch(/constructor\(private readonly http: HttpClient\) \{\}/);
+  });
+
+  it('CRITICAL create verb — POST /v1/profiles with CreateProfileRequest body → Promise<Profile>. "Tier-limit enforced server-side; throws TierLimitError on cap" framing pinned. Drift to skipping the tier-cap check would let customers exceed their per-tier profile quota. Same check is shared with V-313 clone AND profile-snapshots.restore — all 3 "mint a new profile" paths.', () => {
     expect(body).toMatch(
       /\/\*\* Create a new profile\. Tier-limit enforced server-side; throws TierLimitError on cap\. \*\//,
     );
@@ -57,14 +78,14 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     );
   });
 
-  it('list verb: GET /v1/profiles; PaginationQueryInput limit/cursor conditional-spread', () => {
+  it('list verb — GET /v1/profiles with PaginationQueryInput → Promise<ProfilesListPage>. "Cursor-paginated" framing pinned. 2 conditional spreads (limit + cursor) using `!== undefined ? { ... } : {}` pattern — drift to `?? defaults` would client-side-default instead of deferring to server.', () => {
     expect(body).toMatch(/\/\*\* List profiles for the calling account\. Cursor-paginated\. \*\//);
     expect(body).toMatch(
       /list\(query: PaginationQueryInput = \{\}\): Promise<ProfilesListPage> \{\s*\n?\s*return this\.http\.request<ProfilesListPage>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/profiles',\s*\n?\s*query: \{\s*\n?\s*\.\.\.\(query\.limit !== undefined \? \{ limit: query\.limit \} : \{\}\),\s*\n?\s*\.\.\.\(query\.cursor !== undefined \? \{ cursor: query\.cursor \} : \{\}\),\s*\n?\s*\},\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
-  it('iterate verb: V-118 cursor walker; AsyncGenerator<Profile, void, void>', () => {
+  it('V-118 iterate verb — AsyncGenerator<Profile, void, void> via iteratePaginated over this.list(). Delegates to list() (NO direct wire call) so the cursor walking shares the same pagination logic. opts.limit re-threaded per page + cursor !== null guard correctly omits cursor on first page.', () => {
     expect(body).toMatch(
       /\*\s*Lazily iterate every profile for the calling account, walking\s*\n?\s*\*\s*cursor pages automatically\. See `iteratePaginated` for semantics\./,
     );
@@ -73,28 +94,28 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     );
   });
 
-  it('get verb: GET /v1/profiles/:id encoded', () => {
+  it('get verb — GET /v1/profiles/${encodeURIComponent(id)} → Promise<Profile>. Single-line minimalist implementation; encodeURIComponent wrapping prevents path traversal.', () => {
     expect(body).toMatch(/\/\*\* Get a single profile\. \*\//);
     expect(body).toMatch(
       /get\(id: string\): Promise<Profile> \{\s*\n?\s*return this\.http\.request<Profile>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}`,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
-  it('update verb: PATCH /v1/profiles/:id encoded; partial update', () => {
+  it('update verb — PATCH (NOT PUT) /v1/profiles/${encodeURIComponent(id)} with UpdateProfileRequest body. CRITICAL: "(partial)" framing — drift to PUT would force callers to send the entire profile shape on every edit, losing field-level partial-update. The PATCH semantic also means missing fields stay unchanged (vs PUT which would clear them).', () => {
     expect(body).toMatch(/\/\*\* Update a profile \(partial\)\. \*\//);
     expect(body).toMatch(
       /update\(id: string, body: UpdateProfileRequest\): Promise<Profile> \{\s*\n?\s*return this\.http\.request<Profile>\(\{\s*\n?\s*method: 'PATCH',\s*\n?\s*path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}`,\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
-  it('delete verb: DELETE /v1/profiles/:id encoded; idempotent', () => {
+  it('delete verb — DELETE /v1/profiles/${encodeURIComponent(id)} → Promise<void>. CRITICAL "Idempotent" framing — drift to non-idempotent would break the standard cleanup-in-finally pattern where the dashboard fires delete without first checking liveness (e.g. after a customer clicks "Delete" + the request times out + retries).', () => {
     expect(body).toMatch(/\/\*\* Delete a profile\. Idempotent\. \*\//);
     expect(body).toMatch(
       /delete\(id: string\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'DELETE',\s*\n?\s*path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}`,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
-  it('V-313 clone verb: POST /v1/profiles/:id/clone encoded; auto-derives "(copy)" / "(copy 2)" / ... name when body.name omitted; tier-cap + name-conflict mirror create', () => {
+  it('CRITICAL V-313 clone verb — POST /v1/profiles/${encodeURIComponent(id)}/clone with CloneProfileRequest body (DEFAULT `= {}`). The default-empty parameter lets callers write `profiles.clone(id)` without specifying a body — covering the "just duplicate this" UX. Server auto-derives "(copy)" / "(copy 2)" / ... name when body.name is OMITTED. Tier-cap + name-conflict checks mirror create. Drift to requiring body.name would break the convenience UX (dashboard "duplicate" button calls clone(id) without prompting).', () => {
     expect(body).toMatch(
       /\*\s*V-313 — duplicate a profile\. Server auto-derives a "\(copy\)" \/\s*\n?\s*\*\s*"\(copy 2\)" \/ \.\.\. name when `body\.name` is omitted\. Tier-cap \+\s*\n?\s*\*\s*name-conflict checked the same as create\./,
     );
@@ -103,13 +124,38 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     );
   });
 
-  it('All :id path segments encodeURIComponent-wrapped (4 occurrences: get + update + delete + clone)', () => {
-    const matches = body.match(/encodeURIComponent\(id\)/g);
-    expect(matches).not.toBeNull();
-    expect((matches ?? []).length).toBe(4);
+  it('encodeURIComponent invariant — :id escaped EXACTLY 4 times (get + update + delete + clone). iterate doesn\'t escape directly because it delegates via this.list() (which doesn\'t use :id). Drift to dropping any escape would let "abc/../../admin" traverse path segments.', () => {
+    const matches = body.match(/encodeURIComponent\(id\)/g) ?? [];
+    expect(matches.length, 'expected encodeURIComponent(id) 4 times').toBe(4);
   });
 
-  it('file exists at canonical path', () => {
-    expect(existsSync(LIB)).toBe(true);
+  it('7-verb inventory + verb-mix invariants — exactly 7 method declarations (create + list + iterate + get + update + delete + clone). Verb mix: 2 POSTs (create + clone) + 2 GETs (list + get) + 1 PATCH (update) + 1 DELETE (delete) = 6 wire-call verbs (iterate is delegation). NO PUT — partial updates use PATCH; drift to PUT would force whole-document replacement.', () => {
+    const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
+    expect(methods.length, 'expected 7 verb declarations').toBe(7);
+    const posts = (body.match(/method: 'POST'/g) ?? []).length;
+    expect(posts, 'expected 2 POSTs (create + clone)').toBe(2);
+    const gets = (body.match(/method: 'GET'/g) ?? []).length;
+    expect(gets, 'expected 2 GETs (list + get)').toBe(2);
+    const patches = (body.match(/method: 'PATCH'/g) ?? []).length;
+    expect(patches, 'expected 1 PATCH (update)').toBe(1);
+    const deletes = (body.match(/method: 'DELETE'/g) ?? []).length;
+    expect(deletes, 'expected 1 DELETE (delete)').toBe(1);
+    expect(body).not.toMatch(/method: 'PUT'/);
+  });
+
+  it('Wire-path inventory — 3 distinct path templates: bare /v1/profiles (create + list) + /v1/profiles/${id} (get + update + delete) + /v1/profiles/${id}/clone (clone). Drift to a per-action GET (e.g. /v1/profiles/${id}/details) would break the "actions are POST-only" invariant; drift to a PATCH-without-:id would break partial-update addressing.', () => {
+    expect(body).toMatch(/path: '\/v1\/profiles'/);
+    expect(body).toMatch(/path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}`/);
+    expect(body).toMatch(/path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}\/clone`/);
+  });
+
+  it('Tier-cap framing thread — appears in EXACTLY 2 JSDoc blocks (create JSDoc "Tier-limit" + clone JSDoc "Tier-cap"). The connection between create and clone is what tells customers "clone counts against your tier cap" — drift to dropping the cross-reference would silently let customers think they can bypass the cap via clone.', () => {
+    const tierMatches = body.match(/[Tt]ier-(cap|limit)/g) ?? [];
+    expect(
+      tierMatches.length,
+      'expected 2 "Tier-cap" / "Tier-limit" mentions (create + clone)',
+    ).toBe(2);
+    expect(body).toMatch(/Tier-limit enforced server-side; throws TierLimitError on cap/);
+    expect(body).toMatch(/Tier-cap \+\s*\n?\s*\*\s*name-conflict checked the same as create/);
   });
 });
