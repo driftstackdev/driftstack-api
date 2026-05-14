@@ -62,11 +62,13 @@ describe('W539.C /.env.example content parity', () => {
     expect(body).toMatch(/^MOCK_INTERACT_LATENCY_MS=40$/m);
   });
 
-  it("V-079 auth-flow deep-link URL framing pinned: '# V-079 — auth-flow deep-link URLs (emailed to users)' + commented '# AUTH_VERIFY_EMAIL_URL=http://localhost:5173/auth/verify-email' + '# AUTH_MAGIC_LINK_URL=http://localhost:5173/auth/magic-link' + '# AUTH_PASSWORD_RESET_URL=http://localhost:5173/auth/password-reset' — pinned so the V-079 3-deep-link-URL framing + commented-out-by-default (only set in prod) commitment survives (drift to uncommenting these in the example would teach devs to set them in local dev, where they're not needed since debug_token is exposed)", () => {
-    expect(body).toMatch(/# V-079 — auth-flow deep-link URLs \(emailed to users\)/);
-    expect(body).toMatch(/# AUTH_VERIFY_EMAIL_URL=http:\/\/localhost:5173\/auth\/verify-email/);
+  it("V-079 / V-079.C auth-flow deep-link URL framing pinned: V-079.C anchor + commented '# AUTH_VERIFY_EMAIL_URL=http://localhost:5173/verify-email' + commented '# AUTH_MAGIC_LINK_URL=http://localhost:5173/auth/magic-link' + commented '# AUTH_PASSWORD_RESET_URL=http://localhost:5173/reset-password' — V-079.C canonical paths (the legacy /auth/<flow> paths landed on 404s; fix landed 2026-05-12 when Postmark approval hit the first real customer's verify email)", () => {
+    expect(body).toMatch(/V-079 \/ V-079\.C — auth-flow deep-link URLs/);
+    expect(body).toMatch(/# AUTH_VERIFY_EMAIL_URL=http:\/\/localhost:5173\/verify-email/);
     expect(body).toMatch(/# AUTH_MAGIC_LINK_URL=http:\/\/localhost:5173\/auth\/magic-link/);
-    expect(body).toMatch(/# AUTH_PASSWORD_RESET_URL=http:\/\/localhost:5173\/auth\/password-reset/);
+    expect(body).toMatch(/# AUTH_PASSWORD_RESET_URL=http:\/\/localhost:5173\/reset-password/);
+    // 2026-05-12 incident provenance must be preserved.
+    expect(body).toMatch(/2026-05-12/);
   });
 
   it("AUTH_EXPOSE_DEBUG_TOKEN + V-266 DASHBOARD_ORIGIN framing pinned: 'AUTH_EXPOSE_DEBUG_TOKEN — dev/test only. When true, signup / magic-link / password-reset responses include a `debug_token` plaintext field so dev scripts (scripts/dev-bootstrap.sh) can complete the flow without a wired email service. Production MUST leave this false.' + 'AUTH_EXPOSE_DEBUG_TOKEN=true' + 'V-266 — origin of the customer dashboard. Used to build the browser_url returned by /v1/auth/cli-authorize/initiate (browser-OAuth-style GUI activation). Override per environment.' + 'DASHBOARD_ORIGIN=http://localhost:5173' — pinned so the AUTH_EXPOSE_DEBUG_TOKEN-dev-only-prod-false + dev-bootstrap-script-anchor + V-266 CLI-authorize browser_url + per-env-override commitment survives (drift to AUTH_EXPOSE_DEBUG_TOKEN=true leaking into prod would expose plaintext tokens in API responses; drift to dropping DASHBOARD_ORIGIN would break /v1/auth/cli-authorize/initiate browser_url construction)", () => {
