@@ -1,19 +1,34 @@
-// W423.C — drift guard for packages/sdk-typescript/src/client.ts.
-// Single entry point that composes the resources + HTTP layer.
-// Drift here either drops a resource (consumer's client.<name> goes
-// undefined) or breaks the baseUrl normalization (trailing-slash
-// double-pathing).
+// W423.C (W670-deepened) — drift guard for packages/sdk-typescript/
+// src/client.ts. Driftstack single-entry-point composition.
 //
-//   • Framing pinned: single entry point; composes resources +
-//     HttpClient; one Driftstack() per app.
-//   • Resource roster pinned: 15 resources with V-cluster framings
-//     for the post-V-440 additions (profileSnapshots V-312,
-//     cryptoOrders V-666, mfa V-353b, auditLog V-216,
-//     emailPreferences V-204, legal V-049, team V-298c).
-//   • DEFAULT_BASE_URL = https://api.driftstack.dev.
-//   • apiKey guard: throws TypeError on missing/non-string.
-//   • baseUrl normalization: trailing slashes stripped via
-//     /\/+$/.
+// W670 splits the original 9 it() blocks into 16 focused per-concept
+// blocks + pins previously-implicit invariants:
+//
+//   • 15-resource roster pinned PER RESOURCE — drift to dropping any
+//     resource accessor would silently make `client.<name>` undefined
+//     at runtime AND remove the resource from the type system.
+//   • V-cluster JSDoc framings pinned per-resource — V-312
+//     profileSnapshots, V-666 cryptoOrders, V-353b mfa pairs-with-
+//     auth.mfaChallenge/mfaStepUp, V-216 auditLog, V-204 email
+//     preferences, V-049 legal, V-298c/d team. Drift to dropping
+//     any V-anchor would lose changelog provenance.
+//   • DEFAULT_BASE_URL = 'https://api.driftstack.dev' pinned per-
+//     line. Drift to a different default would silently route
+//     production traffic elsewhere.
+//   • apiKey TypeError guard — explicit type-check + descriptive
+//     error message. Drift to a generic Error or silent-pass on
+//     non-string would let customers debug "why is auth failing"
+//     instead of seeing the TypeError early.
+//   • baseUrl trailing-slash normalization — `/\/+$/` regex strips
+//     ALL trailing slashes (not just one). Drift to single-slash
+//     strip would let `https://api.driftstack.dev//` produce
+//     `https://api.driftstack.dev/` (still trailing). Drift to
+//     stripping ALL slashes (no anchor) would mangle the scheme.
+//   • Conditional config spread on retry / timeoutMs / fetch —
+//     `!== undefined ? { key: opts.key } : {}` keeps
+//     undefined-vs-missing-key distinction.
+//   • private readonly http — encapsulated; not exposed publicly.
+//     Drift to public would let customers mutate the HTTP client.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -31,14 +46,18 @@ function read(p: string): string {
 describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
   const body = read(LIB);
 
-  it('Framing pinned: single entry point; composes resources + HTTP layer; resource accessors (sessions/apiKeys/usage)', () => {
+  it('file exists at canonical path + module header pinned (single entry point + composes resources + HTTP layer + resource accessors example)', () => {
+    expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
       /\/\/ Driftstack client — single entry point\. Composes the resources and the\s*\n?\s*\/\/ HTTP layer\. Customers instantiate one of these and use the resource\s*\n?\s*\/\/ accessors \(`client\.sessions`, `client\.apiKeys`, `client\.usage`\)\./,
     );
   });
 
-  it('imports: HttpClient + 15 resources + RetryConfig type', () => {
+  it('Imports — HttpClient + HttpClientConfig type from ./http.js (.js ESM-compat suffix). Drift to dropping HttpClientConfig type-import would force inline typing in the constructor + lose type-checking on the config builder.', () => {
     expect(body).toMatch(/import \{ HttpClient, type HttpClientConfig \} from '\.\/http\.js';/);
+  });
+
+  it('Imports — 15 resource classes (sessions / api-keys / usage / webhooks / profiles / profile-snapshots / billing / crypto-orders / auth / account / audit-log / email-preferences / legal / mfa / team). CRITICAL: every resource MUST be imported here OR the client field is undefined at runtime. Drift to dropping any import would silently make `client.<name>` undefined.', () => {
     expect(body).toMatch(/import \{ SessionsResource \} from '\.\/resources\/sessions\.js';/);
     expect(body).toMatch(/import \{ ApiKeysResource \} from '\.\/resources\/api-keys\.js';/);
     expect(body).toMatch(/import \{ UsageResource \} from '\.\/resources\/usage\.js';/);
@@ -63,31 +82,34 @@ describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
     expect(body).toMatch(/import type \{ RetryConfig \} from '\.\/retry\.js';/);
   });
 
-  it('DriftstackOptions interface: apiKey (ds_live_…/ds_test_…) + baseUrl + retry + timeoutMs (default 30000) + fetch override', () => {
+  it('DriftstackOptions interface — 5-field shape (apiKey required + baseUrl/retry/timeoutMs/fetch optional). CRITICAL: apiKey JSDoc pins the `ds_live_…` / `ds_test_…` prefix convention — drift to a different prefix scheme would break dashboards that detect test-vs-live from the prefix. timeoutMs default 30000 pinned in JSDoc. fetch override JSDoc rationale ("test seams, polyfills") tells customers WHY the override exists.', () => {
     expect(body).toMatch(
       /export interface DriftstackOptions \{\s*\n?\s*\/\*\* Long-lived API key \(`ds_live_…` or `ds_test_…`\)\. \*\/\s*\n?\s*apiKey: string;\s*\n?\s*\/\*\* API base URL\. Defaults to the production URL once it's live\. \*\/\s*\n?\s*baseUrl\?: string;\s*\n?\s*\/\*\* Per-request retry configuration\. \*\/\s*\n?\s*retry\?: RetryConfig;\s*\n?\s*\/\*\* Per-request timeout in ms\. Default 30000\. \*\/\s*\n?\s*timeoutMs\?: number;\s*\n?\s*\/\*\* Override the global fetch implementation \(test seams, polyfills\)\. \*\/\s*\n?\s*fetch\?: typeof fetch;\s*\n?\s*\}/,
     );
   });
 
-  it("DEFAULT_BASE_URL = 'https://api.driftstack.dev'", () => {
+  it('CRITICAL DEFAULT_BASE_URL constant — `https://api.driftstack.dev` (production URL, no trailing slash). Drift to a different domain would silently route production traffic elsewhere; drift to including a trailing slash would interact with the trailing-slash strip regex to double-modify.', () => {
     expect(body).toMatch(/const DEFAULT_BASE_URL = 'https:\/\/api\.driftstack\.dev';/);
   });
 
-  it('Resource roster pinned: 15 resources with V-cluster framings (V-312/V-666/V-353b/V-216/V-204/V-049/V-298c)', () => {
+  it("Driftstack class — 15 readonly resource fields. Resources that don't need V-cluster JSDoc framing (sessions/apiKeys/usage/webhooks/profiles/billing/auth/account) pinned as bare `readonly <name>: <Resource>;` declarations.", () => {
     expect(body).toMatch(/readonly sessions: SessionsResource;/);
     expect(body).toMatch(/readonly apiKeys: ApiKeysResource;/);
     expect(body).toMatch(/readonly usage: UsageResource;/);
     expect(body).toMatch(/readonly webhooks: WebhooksResource;/);
     expect(body).toMatch(/readonly profiles: ProfilesResource;/);
+    expect(body).toMatch(/readonly billing: BillingResource;/);
+    expect(body).toMatch(/readonly auth: AuthResource;/);
+    expect(body).toMatch(/readonly account: AccountResource;/);
+  });
+
+  it('V-cluster JSDoc framings — 7 resource fields carry inline V-anchors: V-312 profileSnapshots + V-666 cryptoOrders + V-353b mfa pairs-with-auth.mfaChallenge/mfaStepUp + V-216 auditLog + V-204 emailPreferences + V-049 legal + V-298c team (auth-integration is V-298d). Drift to dropping any V-anchor would lose the changelog provenance for that resource.', () => {
     expect(body).toMatch(
       /\/\*\* V-312 — immutable point-in-time profile snapshots\. \*\/\s*\n?\s*readonly profileSnapshots: ProfileSnapshotsResource;/,
     );
-    expect(body).toMatch(/readonly billing: BillingResource;/);
     expect(body).toMatch(
       /\/\*\* V-666 — crypto-payment orders \(customer surface\)\. \*\/\s*\n?\s*readonly cryptoOrders: CryptoOrdersResource;/,
     );
-    expect(body).toMatch(/readonly auth: AuthResource;/);
-    expect(body).toMatch(/readonly account: AccountResource;/);
     expect(body).toMatch(
       /\/\*\* V-353b — MFA enrollment management\. Pairs with `auth\.mfaChallenge` \+ `auth\.mfaStepUp`\. \*\/\s*\n?\s*readonly mfa: MfaResource;/,
     );
@@ -105,14 +127,35 @@ describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
     );
   });
 
-  it('Constructor: apiKey type-check (TypeError on missing/non-string) + baseUrl trailing-slash strip + each resource constructed with this.http', () => {
+  it('private readonly http: HttpClient — encapsulated, NOT exposed publicly. CRITICAL: drift to public would let customers mutate the HTTP client (e.g. swap retry config mid-flight) which would surprise resource-level callers that assume stable config. The private+readonly combo is the load-bearing access-control claim.', () => {
+    expect(body).toMatch(/private readonly http: HttpClient;/);
+  });
+
+  it('CRITICAL apiKey TypeError guard — `if (!opts.apiKey || typeof opts.apiKey !== \'string\')` early-throw with descriptive message "Driftstack: apiKey is required and must be a string". Drift to a generic Error would lose the "Driftstack:" prefix that lets customers grep their logs; drift to silent-pass would let customers debug "why is auth failing" instead of seeing the TypeError at construction.', () => {
     expect(body).toMatch(
       /constructor\(opts: DriftstackOptions\) \{\s*\n?\s*if \(!opts\.apiKey \|\| typeof opts\.apiKey !== 'string'\) \{\s*\n?\s*throw new TypeError\('Driftstack: apiKey is required and must be a string'\);\s*\n?\s*\}/,
     );
+  });
+
+  it("CRITICAL baseUrl trailing-slash normalization — `(opts.baseUrl ?? DEFAULT_BASE_URL).replace(/\\/+$/, '')`. The `\\/+$` regex matches ONE OR MORE trailing slashes (the `+` quantifier) so `https://api.driftstack.dev//` becomes `https://api.driftstack.dev`. Drift to single-slash strip would let double-slashes through; drift to dropping the `$` anchor would mangle the scheme (`https://` would lose its slashes).", () => {
     expect(body).toMatch(
       /const httpConfig: HttpClientConfig = \{\s*\n?\s*apiKey: opts\.apiKey,\s*\n?\s*baseUrl: \(opts\.baseUrl \?\? DEFAULT_BASE_URL\)\.replace\(\/\\\/\+\$\/, ''\),/,
     );
+  });
+
+  it('Conditional config spread invariants — retry / timeoutMs / fetch all use `!== undefined ? { key: opts.key } : {}` pattern. CRITICAL: keeps the undefined-vs-missing-key distinction so HttpClient sees `{}` (no key) instead of `{ retry: undefined }` (key with undefined value). Drift to always-spread would silently nullify retry config in HttpClient.', () => {
+    expect(body).toMatch(/\.\.\.\(opts\.retry !== undefined \? \{ retry: opts\.retry \} : \{\}\),/);
+    expect(body).toMatch(
+      /\.\.\.\(opts\.timeoutMs !== undefined \? \{ timeoutMs: opts\.timeoutMs \} : \{\}\),/,
+    );
+    expect(body).toMatch(/\.\.\.\(opts\.fetch !== undefined \? \{ fetch: opts\.fetch \} : \{\}\),/);
+  });
+
+  it('HttpClient instantiation — `this.http = new HttpClient(httpConfig);` ONCE in the constructor. CRITICAL: every resource gets the SAME HttpClient instance (drift to per-resource HttpClient instances would let retry/timeout config drift between resources + multiply network connections).', () => {
     expect(body).toMatch(/this\.http = new HttpClient\(httpConfig\);/);
+  });
+
+  it('Resource instantiation — 15 `this.<name> = new <Resource>(this.http);` lines. Each resource gets `this.http` (the SAME HttpClient instance). Drift to dropping any line would let `client.<name>` be undefined at runtime even if the field declaration exists. Drift to passing a different HttpClient (or null) would crash on first verb call.', () => {
     expect(body).toMatch(/this\.sessions = new SessionsResource\(this\.http\);/);
     expect(body).toMatch(/this\.apiKeys = new ApiKeysResource\(this\.http\);/);
     expect(body).toMatch(/this\.usage = new UsageResource\(this\.http\);/);
@@ -130,19 +173,37 @@ describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
     expect(body).toMatch(/this\.team = new TeamResource\(this\.http\);/);
   });
 
-  it('httpConfig spread guards (conditional include only when defined): retry / timeoutMs / fetch — keeps undefined-vs-missing-key distinction', () => {
-    expect(body).toMatch(/\.\.\.\(opts\.retry !== undefined \? \{ retry: opts\.retry \} : \{\}\),/);
-    expect(body).toMatch(
-      /\.\.\.\(opts\.timeoutMs !== undefined \? \{ timeoutMs: opts\.timeoutMs \} : \{\}\),/,
-    );
-    expect(body).toMatch(/\.\.\.\(opts\.fetch !== undefined \? \{ fetch: opts\.fetch \} : \{\}\),/);
+  it('15-resource count drift guard — count `readonly <name>:` fields + `new <Resource>(this.http)` instantiations. Both must equal 15 (the canonical resource inventory). Drift to a 16th resource without updating both lists would crash at runtime.', () => {
+    const readonlyFields = (body.match(/^ {2}readonly [a-zA-Z]+: [A-Za-z]+Resource;$/gm) ?? [])
+      .length;
+    expect(readonlyFields, 'expected 15 readonly resource fields').toBe(15);
+    const instantiations = (
+      body.match(/this\.[a-zA-Z]+ = new [A-Za-z]+Resource\(this\.http\);/g) ?? []
+    ).length;
+    expect(instantiations, 'expected 15 resource instantiations').toBe(15);
   });
 
-  it('private http: HttpClient (encapsulated — not exposed publicly)', () => {
-    expect(body).toMatch(/private readonly http: HttpClient;/);
-  });
-
-  it('file exists at canonical path', () => {
-    expect(existsSync(LIB)).toBe(true);
+  it('Cross-SDK resource-name invariant — 15-resource roster matches the canonical inventory (account/api-keys/audit-log/auth/billing/crypto-orders/email-preferences/legal/mfa/profile-snapshots/profiles/sessions/team/usage/webhooks). Drift to dropping/renaming any would diverge from the cross-SDK wire-contract pinned in W649 cross-sdk-verb-parity.test.ts.', () => {
+    const fieldNames = [
+      'sessions',
+      'apiKeys',
+      'usage',
+      'webhooks',
+      'profiles',
+      'profileSnapshots',
+      'billing',
+      'cryptoOrders',
+      'auth',
+      'account',
+      'mfa',
+      'auditLog',
+      'emailPreferences',
+      'legal',
+      'team',
+    ];
+    for (const f of fieldNames) {
+      expect(body).toMatch(new RegExp(`readonly ${f}:`));
+      expect(body).toMatch(new RegExp(`this\\.${f} =`));
+    }
   });
 });
