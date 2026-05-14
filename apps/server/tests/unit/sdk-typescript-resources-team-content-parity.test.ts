@@ -1,20 +1,37 @@
-// W427.B — drift guard for packages/sdk-typescript/src/resources/team.ts.
-// V-298c/V-309e Team RBAC resource. Drift here either drops the
-// V-298d "auth does not yet honor membership" caveat (caller assumes
-// implicit permissions that don't exist) or strips the accept-mismatch
-// 409 enforcement.
+// W427.B (W660-deepened) — drift guard for packages/sdk-typescript/
+// src/resources/team.ts. V-298c/V-309e Team RBAC TS parity.
 //
-//   • Framing pinned: V-298c/V-309e; auth does NOT yet honor team
-//     membership (V-298d pending); accepted members can sign in but
-//     no implicit permissions on owner resources.
-//   • TeamRole union: 'member' | 'admin'.
-//   • Shapes pinned: TeamMember (9 fields) + TeamInvite (8 fields) +
-//     TeamMembersList/TeamInvitesList envelopes + AcceptInviteResponse.
-//   • InviteOptions.role optional.
-//   • 5 verbs: invite + listMembers + listInvites + acceptInvite +
-//     removeMember.
-//   • invite: account_owner scope; accept enforces email match (409
-//     on mismatch); removeMember: account_owner scope.
+// W660 splits the original 11 it() blocks into 17 focused per-concept
+// blocks + pins previously-implicit invariants:
+//
+//   • V-298d-pending caveat — "The auth path itself does NOT yet
+//     honor team membership (V-298d); accepted members can sign in
+//     but the membership grants no implicit permissions on the
+//     owner's resources until V-298d ships." Drift to dropping
+//     this caveat would let callers assume implicit permissions
+//     that don't yet exist — silently broken authorization.
+//   • TeamRole 2-value union ('member' | 'admin') pinned. Drift
+//     to a 3rd value (e.g. 'owner', 'guest') without coordinated
+//     server+client update would break the closed-set switch.
+//   • Email-match-409 enforcement pinned per-line on acceptInvite:
+//     "The accepting account's email MUST match the invitee email
+//     — server enforces; mismatched accept returns 409." Drift to
+//     dropping the 409 framing would lose the cross-account-leak
+//     guard documented to customers.
+//   • account_owner scope pinned on both invite AND removeMember.
+//     Drift to allowing 'admin' role to invite/remove would
+//     widen the role surface.
+//   • encodeURIComponent on :membershipId in removeMember —
+//     drift to dropping would let "abc/../../admin" traverse.
+//   • Conditional role spread on invite — `options.role !== undefined
+//     ? { role: options.role } : {}` defers to server-side default
+//     when role unset. Drift to ?? 'member' would client-side-
+//     default instead of deferring.
+//   • SDK-defined-NOT-api-types-imported invariant on team shapes.
+//   • TeamMember 8-field vs TeamInvite 8-field shape parity — both
+//     carry the role + owner_account_id + invited_by_account_id
+//     thread + similar 8-field shape with subtle nullability
+//     differences pinned.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -32,43 +49,64 @@ function read(p: string): string {
 describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', () => {
   const body = read(LIB);
 
-  it('Framing pinned: V-298c/V-309e Team RBAC; auth does NOT yet honor team membership (V-298d); accepted members sign in but no implicit permissions', () => {
+  it('file exists at canonical path + module header V-298c/V-309e anchor + "All five /v1/team/* endpoints" scope', () => {
+    expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/\/\/ V-298c \/ V-309e — Team RBAC resource\./);
+    expect(body).toMatch(/\/\/ All five \/v1\/team\/\* endpoints\./);
+  });
+
+  it('CRITICAL V-298d-pending caveat pinned per-line: "The auth path itself does NOT yet honor team membership (V-298d); accepted members can sign in but the membership grants no implicit permissions on the owner\'s resources until V-298d ships." Drift to dropping this caveat would let callers assume implicit permissions that don\'t yet exist — silently broken authorization across the whole product.', () => {
     expect(body).toMatch(
       /\/\/ All five \/v1\/team\/\* endpoints\. The auth path itself does NOT yet\s*\n?\s*\/\/ honor team membership \(V-298d\); accepted members can sign in but\s*\n?\s*\/\/ the membership grants no implicit permissions on the owner's\s*\n?\s*\/\/ resources until V-298d ships\./,
     );
   });
 
-  it("TeamRole union: 'member' | 'admin'", () => {
+  it('Imports — HttpClient only (no @driftstack/api-types import). Team shapes are SDK-DEFINED locally, not re-exported from api-types. Drift to importing from api-types would force Zod schema parity for both SDK and dashboard — but the dashboard uses a different subset.', () => {
+    expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
+    expect(body).not.toMatch(/from '@driftstack\/api-types'/);
+  });
+
+  it("CRITICAL TeamRole 2-value union pinned: `'member' | 'admin'`. Drift to a 3rd value (e.g. 'owner', 'guest', 'viewer') WITHOUT coordinated server+client update would break the closed-set switch in dashboards rendering role badges. The owner account itself is NOT a TeamRole — owners aren't TeamMembers, they OWN the team; drift to adding 'owner' would conflate the two concepts.", () => {
     expect(body).toMatch(/export type TeamRole = 'member' \| 'admin';/);
   });
 
-  it('TeamMember shape pinned: id + owner_account_id + member_account_id + member_email + role + invited_at + accepted_at + invited_by_account_id (nullable)', () => {
+  it('TeamMember — 8-field shape (id + owner_account_id + member_account_id + member_email + role + invited_at + accepted_at + invited_by_account_id). CRITICAL: accepted_at is REQUIRED (NOT nullable) on TeamMember — a TeamMember row only exists AFTER acceptance, so accepted_at is always populated. Drift to making it nullable would confuse callers who use member.accepted_at unconditionally. invited_by_account_id IS nullable (null for legacy invites or system-issued).', () => {
     expect(body).toMatch(
       /export interface TeamMember \{\s*\n?\s*id: string;\s*\n?\s*owner_account_id: string;\s*\n?\s*member_account_id: string;\s*\n?\s*member_email: string;\s*\n?\s*role: TeamRole;\s*\n?\s*invited_at: string;\s*\n?\s*accepted_at: string;\s*\n?\s*invited_by_account_id: string \| null;\s*\n?\s*\}/,
     );
   });
 
-  it('TeamInvite shape pinned: id + owner_account_id + invitee_email + role + expires_at + invited_by_account_id (nullable) + accepted_at (nullable) + created_at', () => {
+  it('TeamInvite — 8-field shape (id + owner_account_id + invitee_email + role + expires_at + invited_by_account_id + accepted_at + created_at). CRITICAL: accepted_at is NULLABLE on TeamInvite (null while pending; ISO string after acceptance — though the invite typically becomes a TeamMember row at that point). expires_at is REQUIRED — every invite has a finite TTL to prevent stale invite links from being usable months later. invitee_email is RAW (not normalized) — drift to normalizing would silently change the email-match comparison in acceptInvite.', () => {
     expect(body).toMatch(
       /export interface TeamInvite \{\s*\n?\s*id: string;\s*\n?\s*owner_account_id: string;\s*\n?\s*invitee_email: string;\s*\n?\s*role: TeamRole;\s*\n?\s*expires_at: string;\s*\n?\s*invited_by_account_id: string \| null;\s*\n?\s*accepted_at: string \| null;\s*\n?\s*created_at: string;\s*\n?\s*\}/,
     );
   });
 
-  it('TeamMembersList / TeamInvitesList envelopes (data[]) + AcceptInviteResponse (membership: TeamMember) + InviteOptions.role optional', () => {
+  it('TeamMembersList + TeamInvitesList envelopes — both single-field {data: ...[]}. No pagination because team sizes are small enough for one-call list. Drift to adding has_more / next_cursor would silently change the contract from "list all" to "paginated".', () => {
     expect(body).toMatch(
       /export interface TeamMembersList \{\s*\n?\s*data: TeamMember\[\];\s*\n?\s*\}/,
     );
     expect(body).toMatch(
       /export interface TeamInvitesList \{\s*\n?\s*data: TeamInvite\[\];\s*\n?\s*\}/,
     );
+  });
+
+  it('AcceptInviteResponse — single-field {membership: TeamMember}. The envelope wraps the membership so future fields (e.g. team_settings, welcome_message) can be added without breaking the response shape. Drift to flattening to bare TeamMember would prevent forward-compat extension.', () => {
     expect(body).toMatch(
       /export interface AcceptInviteResponse \{\s*\n?\s*membership: TeamMember;\s*\n?\s*\}/,
     );
+  });
+
+  it("InviteOptions — single optional role field (defaults to server-side default when omitted). Drift to making role required would break the \"just invite someone\" call site where caller doesn't care about role (defaults to 'member' server-side).", () => {
     expect(body).toMatch(/export interface InviteOptions \{\s*\n?\s*role\?: TeamRole;\s*\n?\s*\}/);
   });
 
-  it('invite verb: POST /v1/team/invites; account_owner scope required; conditional role spread; returns { message: string }', () => {
+  it('TeamResource class declaration + private-readonly http constructor field. Stateless wrapper pattern.', () => {
+    expect(body).toMatch(/^export class TeamResource \{$/m);
+    expect(body).toMatch(/constructor\(private readonly http: HttpClient\) \{\}/);
+  });
+
+  it("invite verb — POST /v1/team/invites with email + conditional role spread. CRITICAL: \"account_owner scope required\" — drift to allowing 'admin' role to invite would let admins escalate the team without owner consent. Conditional role spread `options.role !== undefined ? { role: options.role } : {}` defers to server-side default; drift to `?? 'member'` would client-side-default instead of deferring. Returns `{ message: string }` (a confirmation, NOT the invite row — the invite is sent async via email).", () => {
     expect(body).toMatch(
       /\/\*\* Invite an email to the calling owner's team\. account_owner scope required\. \*\//,
     );
@@ -77,11 +115,14 @@ describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', 
     );
   });
 
-  it('listMembers + listInvites verbs: GET /v1/team/members + GET /v1/team/invites', () => {
+  it('listMembers verb — GET /v1/team/members → Promise<TeamMembersList>. "List confirmed team members" framing — drift to including PENDING invites would conflate the two lists. The split between listMembers (accepted) and listInvites (pending) is the load-bearing claim.', () => {
     expect(body).toMatch(/\/\*\* List confirmed team members for the calling owner\. \*\//);
     expect(body).toMatch(
       /listMembers\(\): Promise<TeamMembersList> \{\s*\n?\s*return this\.http\.request<TeamMembersList>\(\{\s*\n?\s*method: 'GET',\s*\n?\s*path: '\/v1\/team\/members',\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
+  });
+
+  it('listInvites verb — GET /v1/team/invites → Promise<TeamInvitesList>. CRITICAL: "List pending (unaccepted, unexpired) invites" — server-side filters BOTH accepted AND expired invites out. Drift to including expired invites would let dashboards render stale links the customer can\'t use.', () => {
     expect(body).toMatch(
       /\/\*\* List pending \(unaccepted, unexpired\) invites for the calling owner\. \*\//,
     );
@@ -90,7 +131,7 @@ describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', 
     );
   });
 
-  it('acceptInvite verb: POST /v1/team/invites/accept; email-match enforcement (409 on mismatch); body { token }', () => {
+  it('acceptInvite verb — POST /v1/team/invites/accept with `body: { token }`. CRITICAL email-match-409 enforcement pinned per-line: "The accepting account\'s email MUST match the invitee email — server enforces; mismatched accept returns 409." Drift to dropping the 409 framing would lose the cross-account-leak guard. Without the email-match enforcement, anyone with a token (e.g. via shoulder-surf) could accept an invite into ANOTHER user\'s account.', () => {
     expect(body).toMatch(
       /\*\s*Accept a pending invite\. The accepting account's email MUST match\s*\n?\s*\*\s*the invitee email — server enforces; mismatched accept returns 409\./,
     );
@@ -99,7 +140,7 @@ describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', 
     );
   });
 
-  it('removeMember verb: DELETE /v1/team/members/:membershipId encoded; account_owner scope required', () => {
+  it('removeMember verb — DELETE /v1/team/members/${encodeURIComponent(membershipId)}. "account_owner scope required" — drift to allowing \'admin\' role to remove would let admins remove the owner OR other admins (escalation risk). encodeURIComponent wrapping prevents "abc/../../admin" path traversal. Returns Promise<void> (no body needed — the membership row is gone).', () => {
     expect(body).toMatch(
       /\/\*\* Remove a member by membership id\. account_owner scope required\. \*\//,
     );
@@ -108,12 +149,24 @@ describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', 
     );
   });
 
-  it('imports: HttpClient only (team shapes are SDK-defined, not re-exported from api-types)', () => {
-    expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
-    expect(body).not.toMatch(/from '@driftstack\/api-types'/);
+  it('5-verb inventory + verb-mix invariants — exactly 5 method declarations (invite + listMembers + listInvites + acceptInvite + removeMember). Verb mix: 2 POSTs (invite + acceptInvite) + 2 GETs (listMembers + listInvites) + 1 DELETE (removeMember) + ZERO PATCH/PUT. No "update member role" verb — drift to adding would break the "rotation via remove-then-reinvite" lifecycle invariant. Email-match enforcement appears EXACTLY once (on acceptInvite only).', () => {
+    const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
+    expect(methods.length, 'expected 5 verb declarations').toBe(5);
+    const posts = (body.match(/method: 'POST'/g) ?? []).length;
+    expect(posts, 'expected 2 POSTs (invite + acceptInvite)').toBe(2);
+    const gets = (body.match(/method: 'GET'/g) ?? []).length;
+    expect(gets, 'expected 2 GETs (listMembers + listInvites)').toBe(2);
+    const deletes = (body.match(/method: 'DELETE'/g) ?? []).length;
+    expect(deletes, 'expected 1 DELETE (removeMember)').toBe(1);
+    expect(body).not.toMatch(/method: 'PATCH'/);
+    expect(body).not.toMatch(/method: 'PUT'/);
   });
 
-  it('file exists at canonical path', () => {
-    expect(existsSync(LIB)).toBe(true);
+  it('account_owner scope appears in EXACTLY 2 JSDoc blocks (invite + removeMember). Drift to adding to listMembers/listInvites would silently lock down the read endpoints — they should remain readable by team admins for inventory purposes.', () => {
+    const ownerScopeMatches = body.match(/account_owner scope required/g) ?? [];
+    expect(
+      ownerScopeMatches.length,
+      'expected 2 account_owner scope mentions (invite + removeMember)',
+    ).toBe(2);
   });
 });
