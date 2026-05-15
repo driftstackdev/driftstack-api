@@ -55,6 +55,13 @@ CURRENT=$(curl -fsS "https://$([ "$ENV" = "prod" ] && echo "api" || echo "stagin
 
 echo "[revert] $ENV current /version git_sha = $CURRENT" >&2
 echo "[revert] $ENV last-good-sha           = $LAST_GOOD" >&2
+
+# Surface the last 5 deploy-history entries so the operator sees
+# context — "thrashing on a bad SHA?" / "what was the deploy before
+# the current one?" — without a separate SSH.
+echo "[revert] recent $ENV deploy history (last 5):" >&2
+ssh "root@${HOST}" "tail -5 /opt/driftstack/api/.deploy-history.log 2>/dev/null | sed 's/^/[revert]   /' >&2 || echo '[revert]   (no .deploy-history.log yet)' >&2"
+
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "[revert] DRY-RUN: would fire bash scripts/deploy-bridge.sh $ENV $LAST_GOOD" >&2
   exit 0
