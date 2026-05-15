@@ -39,6 +39,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           <td>Password reset (<code>POST /v1/auth/password-reset/request</code>)</td>
           <td>No — user-triggered.</td>
         </tr>
+        <tr>
+          <td><strong>oauth-pending-verification</strong></td>
+          <td>
+            Sign-in with Google or GitHub using an email that already
+            has a Driftstack account but no link yet — the recipient
+            confirms the new sign-in method via a 60-min single-use
+            link (<code>POST /v1/auth/oauth-client/start</code>
+            → <code>/v1/auth/oauth-client/confirm-merge</code>).
+          </td>
+          <td>No — required for the merge to complete.</td>
+        </tr>
       </tbody>
     </table>
 
