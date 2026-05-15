@@ -27,6 +27,7 @@ COPY tsconfig.base.json tsconfig.json tsconfig.eslint.json ./
 COPY apps/server/package.json ./apps/server/
 COPY packages/api-types/package.json ./packages/api-types/
 COPY packages/sdk-typescript/package.json ./packages/sdk-typescript/
+COPY packages/webhook-delivery/package.json ./packages/webhook-delivery/
 
 # `npm ci` would be ideal but our lockfile-vs-arborist behaviour is
 # flaky in some environments (V-041). `npm install --no-audit` is the
@@ -38,9 +39,11 @@ RUN npm install --no-audit --include=dev
 COPY apps/server ./apps/server
 COPY packages/api-types ./packages/api-types
 COPY packages/sdk-typescript ./packages/sdk-typescript
+COPY packages/webhook-delivery ./packages/webhook-delivery
 
-# Build api-types first (sdk-typescript depends on it), then the server.
-RUN npx tsc --build packages/api-types
+# Build api-types + webhook-delivery first (both are runtime deps of
+# the server's services/durable-webhook-delivery.ts), then the server.
+RUN npx tsc --build packages/api-types packages/webhook-delivery
 RUN npm run build --workspace=@driftstack/server
 
 # Prune dev dependencies for the runtime image.
@@ -63,6 +66,8 @@ COPY --from=builder --chown=driftstack:driftstack /app/apps/server/src/db/migrat
 COPY --from=builder --chown=driftstack:driftstack /app/packages/api-types ./packages/api-types
 COPY --from=builder --chown=driftstack:driftstack /app/packages/sdk-typescript/dist ./packages/sdk-typescript/dist
 COPY --from=builder --chown=driftstack:driftstack /app/packages/sdk-typescript/package.json ./packages/sdk-typescript/
+COPY --from=builder --chown=driftstack:driftstack /app/packages/webhook-delivery/dist ./packages/webhook-delivery/dist
+COPY --from=builder --chown=driftstack:driftstack /app/packages/webhook-delivery/package.json ./packages/webhook-delivery/
 COPY --from=builder --chown=driftstack:driftstack /app/package.json /app/package-lock.json ./
 
 # Legal documents are read at server startup (V-047 LegalDocumentCatalog).
