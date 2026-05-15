@@ -926,12 +926,25 @@ export async function createProductionDeps(
 
   // Log a one-line summary of the SDK init state at boot — easy
   // sanity check in production logs.
+  // V-667.C — log which optional integrations registered at boot so
+  // ops can confirm OAuth-client activation flipped on.
+  const livekitActive =
+    config.livekit?.apiKey !== undefined &&
+    config.livekit?.apiSecret !== undefined &&
+    config.livekit?.wsUrl !== undefined;
+  const oauthClientActive =
+    config.oauthClient !== undefined &&
+    config.oauthClient.signingSecret !== undefined &&
+    config.oauthClient.callbackUrl !== undefined &&
+    (config.oauthClient.google !== undefined || config.oauthClient.github !== undefined);
   logger.info(
     {
       component: 'bootstrap',
       sentry: sentry.isInitialized,
       r2: r2 !== null,
       email: email.isConfigured,
+      livekit: livekitActive,
+      oauthClient: oauthClientActive,
       driver: config.driver,
       env: config.nodeEnv,
     },
