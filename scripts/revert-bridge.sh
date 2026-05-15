@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# V-549.B — manual revert to the last-known-good SHA on a target env.
+#
+# Companion to scripts/deploy-bridge.sh. After every successful
+# deploy-bridge run (post-deploy-verify 8/8 OK), the bridge writes
+# the deployed SHA into /opt/driftstack/api/.last-good-sha. This
+# script reads that file and runs deploy-bridge.sh against the same
+# env with --sha, forcing a fresh clone + build + atomic-swap +
+# health-poll against the previously-confirmed-healthy SHA.
+#
+# Usage:
+#   ./scripts/revert-bridge.sh staging
+#   ./scripts/revert-bridge.sh prod
+#
+# Why a fresh clone + rebuild rather than swapping back to dist.bak.*?
+# - dist.bak.* directories are cleaned up by deploy-bridge after a
+#   successful health-poll (~10s post-restart). They survive only the
+#   in-flight deploy that created them, so a revert hours later has
+#   no .bak to swap from.
+# - Rebuilding from the recorded SHA is slower (~60s) but the
+#   reverted state is byte-identical to the original deploy's build
+#   product. Same npm ci, same tsc --build, same atomic swap.
+
+set -euo pipefail
+
+ENV="${1:-}"
+case "$ENV" in
+  prod) HOST="128.140.37.74" ;;
+  staging) HOST="116.203.22.197" ;;
+  *)
+    echo "usage: $0 <staging|prod>" >&2
+    exit 2
+    ;;
+esac
+
+echo "[revert] reading $ENV last-good-sha…" >&2
+LAST_GOOD=$(ssh "root@${HOST}" "cat /opt/driftstack/api/.last-good-sha 2>/dev/null || echo ''")
+if [ -z "$LAST_GOOD" ]; then
+  echo "[revert] no .last-good-sha on $HOST — nothing to revert to" >&2
+  echo "[revert]   (the file is written by deploy-bridge.sh after a successful deploy;" >&2
+  echo "[revert]    a fresh server / hand-touched .env will not yet have one)" >&2
+  exit 1
+fi
+
+echo "[revert] $ENV last-good-sha = $LAST_GOOD" >&2
+echo "[revert] firing deploy-bridge $ENV $LAST_GOOD" >&2
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+exec bash "$SCRIPT_DIR/deploy-bridge.sh" "$ENV" "$LAST_GOOD"

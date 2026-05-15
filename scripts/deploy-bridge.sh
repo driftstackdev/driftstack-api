@@ -160,3 +160,12 @@ fi
 
 DEPLOY_ELAPSED=$(($(date +%s) - DEPLOY_STARTED_AT))
 echo "[bridge] === $ENV deploy ($EXPECTED_SHORT_SHA) done in ${DEPLOY_ELAPSED}s ===" >&2
+
+# V-549 auto-rollback (skeleton) — only confirmed-healthy SHAs land in
+# /opt/driftstack/api/.last-good-sha, so revert-bridge.sh always
+# reverts to a SHA that previously passed all 8 post-deploy-verify
+# invariants. Idempotent overwrite.
+if [ -n "$EXPECTED_SHORT_SHA" ]; then
+  ssh "root@${HOST}" "echo '$EXPECTED_SHORT_SHA' > /opt/driftstack/api/.last-good-sha && chown driftstack:driftstack /opt/driftstack/api/.last-good-sha"
+  echo "[bridge] recorded $EXPECTED_SHORT_SHA as $ENV last-good-sha" >&2
+fi
