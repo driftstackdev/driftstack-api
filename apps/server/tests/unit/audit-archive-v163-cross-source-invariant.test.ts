@@ -1,0 +1,224 @@
+// W932 — V-163 AuditArchiveService cross-source invariant.
+// Two-hundred-fifty-eighth in the drift-guard series. Pins the
+// audit-archive sweep service per ADR-006:
+//
+//   V-163 anchor — 'AuditArchiveService per ADR-006'.
+//
+//   Sweep semantics — 'rows older than 90 days from the four audit-
+//   shaped Postgres tables into Cloudflare R2 as gzip-compressed
+//   JSON Lines, partitioned by YYYY/MM/. After successful upload +
+//   checksum, DELETEs the archived rows. Records each sweep in
+//   audit_archive_runs'.
+//
+//   HOT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000 (= 90 days).
+//
+//   DEFAULT_BATCH_SIZE = 10_000 — keeps memory bounded on large
+//   windows.
+//
+//   AUDIT_TABLES (4-entry tuple):
+//     - admin_audit_log         (timestamp column).
+//     - processed_stripe_events (received_at column).
+//     - legal_acceptances       (accepted_at column).
+//     - webhook_deliveries      (created_at column).
+//
+//   R2 object key shape per ADR-006 §2:
+//     <prefix>/<table_name>/YYYY/MM/<table_name>_YYYY-MM.jsonl.gz.
+//
+//   Default r2Prefix = 'audit-archive'.
+//
+//   Failure modes (3 per ADR §3):
+//     - R2 upload fails → DELETE skipped; ledger row records
+//       deletedFromPostgres=false. Next run retries.
+//     - DELETE fails → R2 file remains, ledger row records the
+//       upload; next run notices existing R2 key + overwrites
+//       idempotently.
+//     - Partial archive → archive query union may double-count
+//       until cleanup completes. Acceptable for monthly cadence.
+//
+//   Cron cadence — 'External scheduler invokes archiveAll(now) on
+//   the 1st of each month at 02:00 UTC. The service does NOT manage
+//   scheduling'.
+//
+//   rowsToJsonl(rows) — empty input returns '' (no trailing newline).
+//
+//   sha256Checksum — sha256 hex of compressed gzip bytes.
+//
+// stays in lockstep across apps/server/src/services/audit-archive.ts.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import {
+  HOT_RETENTION_MS,
+  DEFAULT_BATCH_SIZE,
+  AUDIT_TABLES,
+  archiveObjectKey,
+  rowsToJsonl,
+} from '../../src/services/audit-archive.js';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W932 V-163 audit-archive cross-source invariant', () => {
+  // ─── V-163 anchor + ADR-006 reference ────────────────────────
+
+  it("CRITICAL apps/server/src/services/audit-archive.ts header pins V-163 anchor — 'V-163 — AuditArchiveService per ADR-006'. The V-163 + ADR-006 chain is the policy provenance.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
+    expect(p).toMatch(/V-163 — AuditArchiveService per ADR-006/);
+  });
+
+  // ─── Sweep semantics framing ─────────────────────────────────
+
+  it("CRITICAL sweep framing — 'Sweeps rows older than 90 days from the four audit-shaped Postgres tables (admin_audit_log / processed_stripe_events / legal_acceptances / webhook_deliveries) into Cloudflare R2 as gzip-compressed JSON Lines, partitioned by YYYY/MM/. After successful upload + checksum, DELETEs the archived rows. Records each sweep in audit_archive_runs'. The 4-table + gzip-JSONL + ledger contract is the V-163 central design.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
+    expect(p).toMatch(/Sweeps rows older than 90 days from the four audit-shaped Postgres/);
+    expect(p).toMatch(/tables \(admin_audit_log \/ processed_stripe_events \/ legal_acceptances/);
+    expect(p).toMatch(/\/ webhook_deliveries\) into Cloudflare R2 as gzip-compressed JSON/);
+    expect(p).toMatch(/Lines, partitioned by YYYY\/MM\/\. After successful upload \+ checksum,/);
+    expect(p).toMatch(/DELETEs the archived rows\. Records each sweep in audit_archive_runs/);
+  });
+
+  // ─── HOT_RETENTION_MS = 90 days ──────────────────────────────
+
+  it('CRITICAL HOT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000 (= 7_776_000_000 ms = 90 days). The 90-day hot retention is the ADR-006 boundary; drift would change R2 archive coverage.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
+    expect(p).toMatch(/90 days in milliseconds — the hot-retention threshold/);
+    expect(p).toMatch(/export const HOT_RETENTION_MS = 90 \* 24 \* 60 \* 60 \* 1000;/);
+    expect(HOT_RETENTION_MS).toBe(90 * 24 * 60 * 60 * 1000);
+    expect(HOT_RETENTION_MS).toBe(7_776_000_000);
+  });
+
+  // ─── DEFAULT_BATCH_SIZE = 10_000 ─────────────────────────────
+
+  it("CRITICAL DEFAULT_BATCH_SIZE = 10_000 — 'keeps memory bounded on large windows'. The 10k batch size is the memory ceiling per sweep tick.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
+    expect(p).toMatch(/Default upload-batch size — keeps memory bounded on large windows/);
+    expect(p).toMatch(/export const DEFAULT_BATCH_SIZE = 10_000;/);
+    expect(DEFAULT_BATCH_SIZE).toBe(10_000);
+  });
+
+  // ─── AUDIT_TABLES 4-entry tuple ──────────────────────────────
+
+  it('CRITICAL AUDIT_TABLES is 4-entry as-const tuple — admin_audit_log/timestamp + processed_stripe_events/received_at + legal_acceptances/accepted_at + webhook_deliveries/created_at. The 4-table set + timestamp-column-name pairs are what window queries gate on.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
+    expect(p).toMatch(/export const AUDIT_TABLES = \[/);
+    expect(p).toMatch(/\{ tableName: 'admin_audit_log', timestampColumn: 'timestamp' \},/);
+    expect(p).toMatch(
+      /\{ tableName: 'processed_stripe_events', timestampColumn: 'received_at' \},/,
+    );
+    expect(p).toMatch(/\{ tableName: 'legal_acceptances', timestampColumn: 'accepted_at' \},/);
+    expect(p).toMatch(/\{ tableName: 'webhook_deliveries', timestampColumn: 'created_at' \},/);
+    expect(p).toMatch(/\] as const;/);
+    expect(AUDIT_TABLES).toHaveLength(4);
+    expect(AUDIT_TABLES.map((t) => t.tableName)).toEqual([
+      'admin_audit_log',
+      'processed_stripe_events',
+      'legal_acceptances',
+      'webhook_deliveries',
+    ]);
+  });
+
+  // ─── 3-failure-mode framing per ADR §3 ───────────────────────
+
+  it('CRITICAL 3 failure modes per ADR §3 — (1) R2 upload fails → DELETE skipped; ledger row records deletedFromPostgres=false. Next run retries. (2) DELETE fails → R2 file remains, ledger row records the upload; next run notices the existing R2 key and overwrites idempotently. (3) Partial archive → both queries still work; archive query union may double-count until cleanup completes. Acceptable edge case for monthly cadence. The 3-mode taxonomy is the failure-handling contract.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
+    expect(p).toMatch(/Failure modes \(per ADR §3\):/);
+    expect(p).toMatch(/- R2 upload fails → DELETE skipped; ledger row records the/);
+    expect(p).toMatch(/attempt with deletedFromPostgres=false\. Next run retries\./);
+    expect(p).toMatch(/- DELETE fails → R2 file remains, ledger row records the upload;/);
+    expect(p).toMatch(/next run notices the existing R2 key and overwrites idempotently\./);
+    expect(p).toMatch(/- Partial archive → both queries still work; archive query/);
+    expect(p).toMatch(/union may double-count until cleanup completes\. Acceptable/);
+    expect(p).toMatch(/edge case for monthly cadence\./);
+  });
+
+  // ─── Cron cadence framing ────────────────────────────────────
+
+  it("CRITICAL cron cadence framing — 'Cron / external scheduler invokes archiveAll(now) on the 1st of each month at 02:00 UTC. The service does NOT manage scheduling'. The external-scheduler design is what keeps the service stateless about time.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
+    expect(p).toMatch(/Cron \/ external scheduler invokes archiveAll\(now\) on the 1st of/);
+    expect(p).toMatch(/each month at 02:00 UTC\. The service does NOT manage scheduling/);
+  });
+
+  // ─── archiveObjectKey ADR-006 §2 shape ───────────────────────
+
+  it("CRITICAL archiveObjectKey JSDoc pins ADR-006 §2 shape — '<prefix>/<table_name>/YYYY/MM/<table_name>_YYYY-MM.jsonl.gz'. The stable-key shape is the R2 partition contract.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
+    expect(p).toMatch(/Compose the R2 object key for a given table \+ window\. Stable shape/);
+    expect(p).toMatch(/per ADR-006 §2:/);
+    expect(p).toMatch(/<prefix>\/<table_name>\/YYYY\/MM\/<table_name>_YYYY-MM\.jsonl\.gz/);
+  });
+
+  it('CRITICAL archiveObjectKey runtime — prefix + table + YYYY/MM partitioning + table_YYYY-MM.jsonl.gz filename. Verified with 2026-05.', () => {
+    const key = archiveObjectKey(
+      'audit-archive',
+      'admin_audit_log',
+      new Date('2026-05-15T00:00:00Z'),
+    );
+    expect(key).toBe('audit-archive/admin_audit_log/2026/05/admin_audit_log_2026-05.jsonl.gz');
+  });
+
+  it('CRITICAL archiveObjectKey zero-pads month — January = 01 not 1; December = 12. The 2-digit padStart prevents the alphabetical sort breaking month order.', () => {
+    const jan = archiveObjectKey('p', 'admin_audit_log', new Date('2026-01-15T00:00:00Z'));
+    expect(jan).toContain('/2026/01/');
+    const dec = archiveObjectKey('p', 'admin_audit_log', new Date('2026-12-15T00:00:00Z'));
+    expect(dec).toContain('/2026/12/');
+  });
+
+  it('CRITICAL archiveObjectKey uses UTC — getUTCFullYear + getUTCMonth. Drift to local-time would let timezone-offset push month boundaries the wrong direction.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
+    expect(p).toMatch(/const yyyy = windowStart\.getUTCFullYear\(\)\.toString\(\);/);
+    expect(p).toMatch(
+      /const mm = \(windowStart\.getUTCMonth\(\) \+ 1\)\.toString\(\)\.padStart\(2, '0'\);/,
+    );
+  });
+
+  // ─── rowsToJsonl runtime ─────────────────────────────────────
+
+  it("CRITICAL rowsToJsonl JSDoc — 'Serialise a batch of rows to newline-delimited JSON. Empty input returns an empty string (no trailing newline)'. The no-trailing-newline contract matches JSONL spec.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
+    expect(p).toMatch(/Serialise a batch of rows to newline-delimited JSON\. Empty input/);
+    expect(p).toMatch(/returns an empty string \(no trailing newline\)/);
+  });
+
+  it('CRITICAL rowsToJsonl runtime — N rows → N JSON.stringify joined by \\n. No trailing newline. Empty array → empty string.', () => {
+    expect(rowsToJsonl([])).toBe('');
+    expect(rowsToJsonl([{ a: 1 }])).toBe('{"a":1}');
+    expect(rowsToJsonl([{ a: 1 }, { b: 2 }, { c: 3 }])).toBe('{"a":1}\n{"b":2}\n{"c":3}');
+    // No trailing newline:
+    expect(rowsToJsonl([{ a: 1 }, { b: 2 }]).endsWith('\n')).toBe(false);
+  });
+
+  // ─── selectArchivableRows stable order framing ───────────────
+
+  it("CRITICAL selectArchivableRows JSDoc — 'Returns rows in stable order (timestamp asc, id asc) so the JSONL output is deterministic for a given window'. The stable-order contract is what makes the sha256 checksum reproducible.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
+    expect(p).toMatch(/Returns rows in stable order \(timestamp asc, id asc\) so the/);
+    expect(p).toMatch(/JSONL output is deterministic for a given window/);
+  });
+
+  // ─── sha256Checksum + gzip framing ───────────────────────────
+
+  it('CRITICAL sha256Checksum computed from compressed gzip bytes — createHash("sha256").update(compressed).digest("hex"). The checksum-of-compressed (not pre-compression) is what lets ledger entries verify R2 bytes exactly.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
+    expect(p).toMatch(
+      /const sha256Checksum = createHash\('sha256'\)\.update\(compressed\)\.digest\('hex'\);/,
+    );
+  });
+
+  it('test file metadata — file exists at canonical path', () => {
+    expect(
+      existsSync(
+        resolve(
+          REPO_ROOT,
+          'apps/server/tests/unit/audit-archive-v163-cross-source-invariant.test.ts',
+        ),
+      ),
+    ).toBe(true);
+  });
+});
