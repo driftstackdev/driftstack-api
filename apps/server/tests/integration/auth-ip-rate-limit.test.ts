@@ -107,6 +107,57 @@ describe('V-251 — IP rate limit on auth endpoints', () => {
     expect(fourth.statusCode).toBe(429);
   });
 
+  it('magic-link/request: 3/IP/min — 4th from same IP returns 429 (#190 2026-05-15 follow-up)', async () => {
+    // Pre-affda641 the route had no rate-limit at all and every call
+    // fired a Postmark send. Same 3/min cap as password-reset since the
+    // abuse profile is identical: anonymous public endpoint, each call
+    // triggers a transactional email.
+    fx = await buildTestApp();
+    const ip = '203.0.113.40';
+    for (let i = 0; i < 3; i++) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/auth/magic-link/request',
+        headers,
+        remoteAddress: ip,
+        payload: { email: 'unknown@example.test' },
+      });
+      expect(res.statusCode).not.toBe(429);
+    }
+    const fourth = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/magic-link/request',
+      headers,
+      remoteAddress: ip,
+      payload: { email: 'unknown@example.test' },
+    });
+    expect(fourth.statusCode).toBe(429);
+    expect(fourth.headers['retry-after']).toBeDefined();
+  });
+
+  it('resend-verification: 3/IP/min — 4th from same IP returns 429 (#187)', async () => {
+    fx = await buildTestApp();
+    const ip = '203.0.113.50';
+    for (let i = 0; i < 3; i++) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/auth/resend-verification',
+        headers,
+        remoteAddress: ip,
+        payload: { email: 'unknown@example.test' },
+      });
+      expect(res.statusCode).not.toBe(429);
+    }
+    const fourth = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/resend-verification',
+      headers,
+      remoteAddress: ip,
+      payload: { email: 'unknown@example.test' },
+    });
+    expect(fourth.statusCode).toBe(429);
+  });
+
   it('verify-email: 10/IP/min — 11th from same IP returns 429', async () => {
     fx = await buildTestApp();
     const ip = '203.0.113.40';
