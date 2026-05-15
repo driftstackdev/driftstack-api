@@ -115,9 +115,9 @@ Run `scripts/sentry-create-per-service-projects.mjs` with the
 
 ## E — LiveKit V-531.B real codec swap
 
-**Status:** surveyed + config-schema groundwork DONE this batch.
+**Status:** config schema + lib/livekit-token + runbook DONE this batch.
 
-**This batch (survey + groundwork):**
+**This batch:**
 
 - Surveyed `packages/webrtc-streaming/`: only mock surface exists today
   (`MockWebRtcStreamingService` + `MockFrameSource` + `EncodePipeline`
@@ -131,22 +131,31 @@ Run `scripts/sentry-create-per-service-projects.mjs` with the
   nowpayments precedent. `LivekitConfig` type exported.
 - `tests/unit/config-lib-cross-source-invariant.test.ts` — drift-guard
   pin for the framing comment + zod block + type export.
+- `lib/livekit-token.ts` — pure-`node:crypto` HS256 JWT minter that
+  mirrors LiveKit's `AccessToken` claim shape (iss/sub/exp/nbf/jti/
+  video). Deliberately avoids the `livekit-server-sdk` dep — the
+  spec is stable + 30-LOC of stdlib beats the transitive footprint.
+- `tests/unit/livekit-token.test.ts` — 13 unit tests covering header
+  shape, payload claims, HMAC signature, ttl default, jti uniqueness,
+  publisher/subscriber role variants, error paths, base64url encoding,
+  deterministic nowMs override.
 
-**Remaining (~3h focused):**
+**Remaining (~2h focused):**
 
-1. Add `livekit-server-sdk` dependency to `apps/server/package.json`.
-2. Build `lib/livekit-token.ts` — wraps `AccessToken` from SDK to mint
-   per-session JWTs (publisher token for the Mac mini fleet, subscriber
-   token for the customer-dashboard preview).
-3. Add route `POST /v1/sessions/:id/livekit-token` (gated on
-   `config.livekit` presence at app.ts).
-4. Build `LiveKitWebRtcStreamingService` (or simpler: skip the
-   StreamingService interface entirely and just have gui-client mint
-   token + open `livekit-client` connection directly).
-5. Wire `gui-client` `LiveSessionView` to use LiveKit subscriber when
-   `config.livekit.wsUrl` is set, fall back to HTTP polling otherwise.
-6. Smoke test WS handshake + first frame render against the pasted
-   LIVEKIT_WS_URL.
+1. Expose a public `requireOwnership(ctx, sessionId)` on the sessions
+   service (or pass `sessionRepo.findSession` directly into the new
+   route deps). Today `requireOwned` is private + couples to driver
+   side-effects.
+2. Add route `routes/sessions-livekit-token.ts` —
+   `POST /v1/sessions/:id/livekit-token` minting a publisher token for
+   the Mac-mini side and a subscriber token for the dashboard. Gated
+   on `config.livekit` presence in app.ts.
+3. Wire `gui-client` `LiveSessionView` to use LiveKit subscriber when
+   `/v1/sessions/:id/livekit-token` responds 200, fall back to HTTP
+   polling on 404 (route unregistered means LiveKit not configured).
+4. Smoke script `scripts/smoke-livekit.mjs` (parallel to
+   `smoke-postmark.mjs`) to verify WS handshake + first frame against
+   the pasted `LIVEKIT_WS_URL`.
 
 ## F — V-278.K Neon prod/staging split + V-278.L Upstash split
 
