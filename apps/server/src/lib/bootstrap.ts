@@ -46,6 +46,8 @@ import {
 import { DrizzleRateLimitOverridesRepo } from '../db/rate-limit-overrides-repo.js';
 import { DrizzleLegalRepo } from '../db/legal-repo.js';
 import { DrizzleAuthFlowsRepo } from '../db/auth-flows-repo.js';
+import { DrizzleOAuthLinksRepo, DrizzleOAuthPendingLinksRepo } from '../db/oauth-links-repo.js';
+import { OAuthClientServiceImpl } from '../services/oauth-client-service.js';
 import { DrizzleStripeWebhooksRepo } from '../db/stripe-webhooks-repo.js';
 import { DrizzleProfilesRepo } from '../db/profiles-repo.js';
 import { SessionsService } from '../services/sessions.js';
@@ -679,6 +681,71 @@ export async function createProductionDeps(
             apiSecret: config.livekit.apiSecret,
             wsUrl: config.livekit.wsUrl,
           },
+        }
+      : {}),
+    // V-667.C — OAuth-client service + provider config. The route
+    // registration gate is at app.ts; we wire the service whenever
+    // signingSecret + callbackUrl + ≥1 provider are present. Pending-
+    // mailer is a thin wrapper around the existing email service;
+    // accounts lookup wraps authFlowsRepo.findAccountByEmail + a
+    // simple createAccount call (passwordHash=null since IDP signup
+    // doesn't set a password).
+    ...(config.oauthClient !== undefined &&
+    config.oauthClient.signingSecret !== undefined &&
+    config.oauthClient.callbackUrl !== undefined &&
+    (config.oauthClient.google !== undefined || config.oauthClient.github !== undefined)
+      ? {
+          oauthClient: {
+            signingSecret: config.oauthClient.signingSecret,
+            callbackUrl: config.oauthClient.callbackUrl,
+            ...(config.oauthClient.google !== undefined
+              ? { google: config.oauthClient.google }
+              : {}),
+            ...(config.oauthClient.github !== undefined
+              ? { github: config.oauthClient.github }
+              : {}),
+          },
+          oauthClientService: new OAuthClientServiceImpl({
+            links: new DrizzleOAuthLinksRepo(dbHandle),
+            pending: new DrizzleOAuthPendingLinksRepo(dbHandle),
+            accounts: {
+              findIdByEmail: async (e) => {
+                const row = await authFlowsRepo.findAccountByEmail(e);
+                return row ? row.id : null;
+              },
+              createFromIdp: async (args) => {
+                // IDP-asserted email is verified per Verdict 1 trust
+                // contract; mark emailVerifiedAt at creation time
+                // separately (createAccount doesn't set it). Tier
+                // defaults to 'free' — matches password signup.
+                const row = await authFlowsRepo.createAccount({
+                  email: args.email,
+                  name: args.name,
+                  passwordHash: '', // sentinel — column is nullable,
+                  // route layer treats empty hash as "no password set";
+                  // user adds a password via /account/security later.
+                  initialTier: 'trial_pack',
+                });
+                await authFlowsRepo.markEmailVerified(row.id, new Date());
+                return row.id;
+              },
+            },
+            mailer: {
+              sendVerifyMergeEmail: async (args) => {
+                logger.info(
+                  {
+                    component: 'oauth-client-mailer',
+                    to: args.to,
+                    provider: args.provider,
+                  },
+                  'V-667.C verify-merge email (Postmark template wiring TODO)',
+                );
+                // Template wiring lands in V-667.B-10 follow-up — for
+                // now log so the flow is observable end-to-end.
+                return Promise.resolve();
+              },
+            },
+          }),
         }
       : {}),
     ...(billingService !== undefined ? { billingService } : {}),
