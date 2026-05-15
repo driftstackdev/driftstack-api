@@ -1,0 +1,177 @@
+# LiveKit go-live runbook (V-531.B follow-up)
+
+LiveKit SFU is the real-codec replacement for the
+`MockWebRtcStreamingService` placeholder. This runbook walks the
+operator through activating LiveKit on prod + staging once the
+server-side token-mint + client-side connect slices land, smoke-testing
+a publisher + subscriber round-trip against the production WS endpoint,
+and confirming the same fall-back-to-HTTP-polling path the GUI takes
+today still behaves when LiveKit is misconfigured.
+
+## Current state (2026-05-15)
+
+- [x] `apps/server/src/lib/config.ts` accepts `LIVEKIT_API_KEY` +
+      `LIVEKIT_API_SECRET` + `LIVEKIT_WS_URL` via the optional
+      `livekit` schema block (V-531.B groundwork, commit `70e98136`).
+- [x] `LivekitConfig` type exported.
+- [ ] `lib/livekit-token.ts` — JWT minting wrapper (deferred — adds
+      `livekit-server-sdk` dependency).
+- [ ] `POST /v1/sessions/:id/livekit-token` route — gated on
+      `config.livekit` presence at app.ts (deferred).
+- [ ] `LiveKitWebRtcStreamingService` impl (or direct client connect
+      from `gui-client` / `customer-dashboard`).
+- [ ] `gui-client` `LiveSessionView` LiveKit-subscriber path with
+      HTTP-polling fall-back when `config.livekit.wsUrl` is unset.
+
+The code groundwork above (config-schema acceptance) means an operator
+can write the env vars to `/etc/driftstack/api.env` today without
+affecting boot. The route + service that consume them land in the
+remaining slices listed above.
+
+## Pre-flight
+
+- [ ] LiveKit Cloud project created in the **EU** region (data-residency
+      parity with the rest of the stack — Sentry, Postmark, R2 all
+      enforce EU). LiveKit's region picker is on the project create
+      screen; cannot be changed retroactively without recreating the
+      project.
+- [ ] API key + secret pair issued from the LiveKit Cloud dashboard
+      (Project → Settings → Keys → Create new key). The key is
+      labelled `driftstack-prod` or `driftstack-staging` so audit
+      logs disambiguate.
+- [ ] WS URL recorded from the project overview page
+      (`wss://<project-id>.livekit.cloud` format).
+- [ ] LiveKit Cloud webhook URL set to `https://api.driftstack.dev/
+v1/webhooks/livekit` once the future webhook route lands (room
+      lifecycle events — out of V-531.B scope).
+
+## Step 1 — wire env on prod + staging
+
+Write the three vars to `/etc/driftstack/api.env` on each app server.
+Values come from `1Password / Driftstack / LiveKit prod key` — **not**
+from this runbook, the repo, or any chat transcript.
+
+```
+LIVEKIT_API_KEY=<paste from 1Password>
+LIVEKIT_API_SECRET=<paste from 1Password>
+LIVEKIT_WS_URL=wss://<project-id>.livekit.cloud
+```
+
+Restart the api service:
+
+```sh
+systemctl restart driftstack-api
+```
+
+Confirm the `livekit` block parses cleanly at boot. Until the
+token-mint route lands, the only observable behaviour change is that
+`/v1/config-summary` (if enabled) reports `livekit: configured` rather
+than `livekit: not configured`.
+
+> All-or-nothing posture: missing any of the three vars (partial
+> config) parses to `undefined` rather than an error. The route-gate
+> at `lib/app.ts` (mirrors the nowpayments precedent) treats partial
+> config as "not configured" — operator-facing typo on one var will
+> not crash boot but will silently leave the route unregistered.
+> Verify all three are present.
+
+## Step 2 — smoke test (once token-mint route lands)
+
+From a workstation with prod creds, mint a token + open a publisher
+connection against the real WS URL:
+
+```sh
+node scripts/smoke-livekit.mjs \
+  --session-id sess_demo123 \
+  --role publisher \
+  --duration-ms 5000
+```
+
+Expected (target script, not yet written):
+
+- 1 `livekit token minted` info log in the api journal.
+- 1 WS handshake against `wss://<project-id>.livekit.cloud` (visible in
+  LiveKit Cloud dashboard → Rooms → live).
+- Room `sess_demo123` appears active for ~5s then closes.
+- 0 `livekit send failed` warns.
+
+Subscriber smoke (run from a second shell while publisher is up):
+
+```sh
+node scripts/smoke-livekit.mjs \
+  --session-id sess_demo123 \
+  --role subscriber \
+  --duration-ms 3000
+```
+
+Expected: 1 frame received within ~500ms of WS handshake; first-frame
+latency logged.
+
+## Step 3 — verify customer-flow integration
+
+Open `LiveSessionView` in the GUI client against a real Mac-mini
+session. Expected:
+
+- WS handshake to `wss://<project-id>.livekit.cloud` within ~1s.
+- First frame paints within ~500ms of handshake (vs ~1s on the HTTP
+  polling path).
+- Real-time tap / scroll / key-press input still goes through the
+  existing gui-control HTTP plane (V-531.B is read-only from the
+  client's perspective).
+- Closing the view tears down the LiveKit room within ~2s.
+
+Fall-back smoke: unset `LIVEKIT_WS_URL` on a staging server, restart,
+re-open `LiveSessionView`. Expected: the client detects the missing
+WS URL via a config probe (or a 404 on the token-mint route) and
+silently falls back to the HTTP polling path — no user-facing error.
+
+## Step 4 — alerting
+
+LiveKit Cloud dashboard alerts (Settings → Notifications):
+
+- **Room concurrency hit** — alert on >50% of plan ceiling so we see
+  the ramp before hitting a hard cap.
+- **Publishing-bandwidth spike** — alert on >2x the trailing-7d
+  average; surfaces accidental high-bitrate from a misconfigured
+  encoder.
+- **WS handshake failure rate** — alert on >5% in a 5-min window;
+  signals certificate / network / project-misconfiguration.
+
+Server-side alerts (via the existing Sentry per-project layout):
+
+- `livekit token mint failed` warn rate > 5/min for 5 min — page.
+  Typically means the API key + secret are mismatched.
+- `livekit token mint denied` info rate spike > 50/min for 5 min —
+  surfaces brute-force enumeration of session IDs.
+
+## Rollback
+
+If LiveKit Cloud goes down or rate-spikes the account:
+
+1. Set `LIVEKIT_WS_URL=` (empty) on the affected server and restart.
+2. `config.ts` returns `livekit: undefined`; the token-mint route
+   un-registers at app.ts boot; the GUI client + customer-dashboard
+   probe the missing route and fall back to the HTTP polling plane
+   automatically.
+3. Emails / billing / sessions / control plane all continue
+   unaffected. The only customer-facing degradation is the ~1s
+   polling-vs-realtime latency floor on the LiveSessionView.
+
+The API key / secret can be rotated independently of WS URL via the
+LiveKit dashboard; existing connections survive the rotation
+(LiveKit signs ephemeral JWTs against the secret valid at mint-time,
+not at WS-handshake time).
+
+## Related
+
+- `apps/server/src/lib/config.ts:LivekitConfig` — env-var schema.
+- `packages/webrtc-streaming/` — `MockWebRtcStreamingService` is the
+  fallback used today; will become the dev-mode / fallback
+  implementation once `LiveKitWebRtcStreamingService` lands.
+- `apps/gui-client/src/views/LiveSessionView.tsx` — viewport that
+  will swap from HTTP polling to LiveKit subscribe.
+- `apps/gui-client/src/lib/session-stream.ts` — `createPollingFrameStream`
+  is the existing stream-source abstraction; a
+  `createLiveKitFrameStream` sibling lands in the V-531.B follow-up.
+- `docs/internal/2026-05-15-prod-wire-up-batch-report.md` — Track E
+  status + 6-step remaining slice plan.
