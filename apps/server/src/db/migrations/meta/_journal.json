@@ -274,6 +274,13 @@
       "when": 1778090429000,
       "tag": "0038_v481_granular_api_key_scopes",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1778090430000,
+      "tag": "0039_v667c_oauth_client_tables",
+      "breakpoints": true
     }
   ]
 }

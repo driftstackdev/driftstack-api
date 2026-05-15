@@ -39,6 +39,12 @@ export const accountStatus = pgEnum('account_status', ['active', 'suspended', 'd
 // sets via PATCH /v1/account/me; null when unset.
 export const accountRegion = pgEnum('account_region', ['us', 'eu', 'apac']);
 
+// V-667.C Verdict 3 — avatar provenance. Set to 'idp' on first OAuth
+// link; flipped to 'user' on user-edit. Once 'user', we never re-pull
+// from the IDP. Defined here (vs alongside accountOauthLinks below)
+// because the accounts table column references it.
+export const accountAvatarSource = pgEnum('account_avatar_source', ['none', 'idp', 'user']);
+
 export const apiKeyScope = pgEnum('api_key_scope', [
   'read',
   'write',
@@ -203,6 +209,12 @@ export const accounts = pgTable(
     // hasn't uploaded one. R2 sub-processor disclosure already covers
     // avatar storage (privacy.md §3.1; sub-processors.ts).
     avatarR2Key: text('avatar_r2_key'),
+    // V-667.C Verdict 3 — where the current avatar value came from.
+    // 'none' = no avatar set, 'idp' = pulled from an OAuth IDP at
+    // first-link, 'user' = user edited (via avatar upload or display-
+    // name change). User-edited values always win; we never re-pull
+    // from the IDP after the first link.
+    avatarSource: accountAvatarSource('avatar_source').notNull().default('none'),
     // V-298a — readable account handle. Lowercase a-z + 0-9 + hyphen
     // (no leading/trailing hyphen, 3-32 chars). Unique-when-set across
     // all accounts. Nullable on creation; customer sets via PATCH
@@ -431,6 +443,93 @@ export const profiles = pgTable(
  * surfaced through the customer API yet); the column exists so a
  * future driver integration can populate it without a migration.
  */
+// V-667.C — OAuth-client (sign-in-with-Google/GitHub) tables. Founder
+// verdicts 2026-05-15:
+//   1. existing-email-collision → merge-with-verification (60-min
+//      single-use token sent to existing email, stored in
+//      oauth_pending_links).
+//   2. IDP revocation → graceful fallback (last_revoked_at marker,
+//      never auto-delete-account).
+//   3. avatar/name sync → first-link-only + user-overridable (driven
+//      by accounts.avatar_source enum NONE/IDP/USER, defined near the
+//      accountRegion enum so the accounts table can reference it).
+//
+// (provider, provider_sub) is the unique IDP identity; one identity
+// maps to exactly one Driftstack account, but an account may have
+// multiple links (one per provider).
+export const accountOauthLinks = pgTable(
+  'account_oauth_links',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    providerSub: text('provider_sub').notNull(),
+    /** Email returned by the IDP at link-time; informational only,
+     *  the trustworthy email lives on accounts.email. */
+    providerEmail: text('provider_email'),
+    providerName: text('provider_name'),
+    providerAvatarUrl: text('provider_avatar_url'),
+    linkedAt: timestamp('linked_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+    /** V-667.C Verdict 2 — set when the user revokes Driftstack from
+     *  their IDP console + we detect it on next login attempt. The
+     *  link row stays so an audit trail survives the revoke. */
+    lastRevokedAt: timestamp('last_revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('account_oauth_links_provider_sub_idx').on(t.provider, t.providerSub),
+    index('account_oauth_links_account_idx').on(t.accountId),
+  ],
+);
+
+// V-667.C Verdict 1 — collision-flow pending links. When an IDP login
+// arrives for an email that already has a password account, we stash a
+// row here + email the existing account a confirmation link. The user
+// clicks → token consumed → matching account_oauth_links row inserted →
+// pending row deleted.
+export const oauthPendingLinks = pgTable(
+  'oauth_pending_links',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    providerSub: text('provider_sub').notNull(),
+    providerEmail: text('provider_email').notNull(),
+    providerName: text('provider_name'),
+    providerAvatarUrl: text('provider_avatar_url'),
+    /** sha256 of the plaintext token sent in the email; plaintext is
+     *  never stored. Same pattern as auth_flow_tokens. */
+    tokenHash: text('token_hash').notNull(),
+    /** Server-side cap: 60 min after row creation. */
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('oauth_pending_links_token_idx').on(t.tokenHash),
+    index('oauth_pending_links_account_idx').on(t.accountId),
+    index('oauth_pending_links_expires_idx').on(t.expiresAt),
+  ],
+);
+
 export const profileSnapshots = pgTable(
   'profile_snapshots',
   {
