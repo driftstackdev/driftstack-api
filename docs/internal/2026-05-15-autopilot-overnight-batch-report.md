@@ -63,10 +63,52 @@ Prod invariants confirmed OK 22:25 UTC after the 28d8fa5 deploy. No revert neede
 
 - **Deploy-bridge SHA-resolution race surfaced** when V-667.C-followup commit was pushed in parallel with the prod-redeploy. Fixed in bdabba6 (fetch origin/main first). Future deploys won't surface this.
 
-## Next wave (1063) targets
+## Wave 1063 update (in flight)
 
-1. Roll prod forward to bdabba6 once push completes (eliminates the race-condition fix's own deployability gap).
-2. Start V-549 auto-rollback design + skeleton implementation.
-3. Start V-660 trust-center sub-processor RSS slice (Tier-2 from Wave 1062+ queue).
+Multi-track HARD ≥3 tracks per wave (Rule M): 5 tracks fired so far —
+deploy-ops + chaos + trust + P-track + Tier-2.
 
-Batch report updated every 2 hours per directive.
+| SHA       | Wave | Track            | Title                                                                                  |
+| --------- | ---- | ---------------- | -------------------------------------------------------------------------------------- |
+| `a083c45` | 1062 | V-549            | feat(deploy): V-549.B auto-rollback skeleton — `.last-good-sha` + revert-bridge.sh     |
+| `6d3e322` | 1062 | Trust            | feat(trust): V-661/V-550 sub-processor RSS feed at /trust/sub-processors/feed.xml      |
+| `f930797` | 1062 | P-track          | docs(deploy): deploy.yml-vs-server verdict design (Option A vs B cost analysis)        |
+| `98f2ede` | 1063 | V-549.B-followup | feat(deploy): V-549.B auto-revert wiring — post-deploy-verify FAIL fires revert-bridge |
+| `63d42e2` | 1063 | V-547.B chaos    | feat(chaos): V-547.B Scenario 4 postgres-restart rehearsal                             |
+
+### Production state (Wave 1063)
+
+- Prod: `98f2edeb` — auto-revert wired; .last-good-sha=`98f2edeb`.
+- Staging: `98f2edeb` — same; .last-good-sha=`98f2edeb`.
+- Both deployed via `deploy-bridge.sh` with inline post-deploy-verify (8/8 OK).
+
+### Auto-rollback now live
+
+`scripts/deploy-bridge.sh` + `scripts/revert-bridge.sh` jointly form
+V-549.B end-to-end:
+
+1. Every successful deploy writes the SHA into
+   `/opt/driftstack/api/.last-good-sha`.
+2. Post-deploy-verify FAIL → deploy-bridge auto-invokes
+   `revert-bridge.sh <env>` (AUTO_REVERT=0 disables; revert-bridge
+   passes this to prevent infinite recursion).
+3. revert-bridge reads `.last-good-sha` via SSH + delegates back to
+   deploy-bridge with that SHA as the explicit target.
+
+End-state guarantee: prod is always at a SHA that passed all 8
+invariants when it landed. The window for badness is the deploy
+duration itself (~30-60s) — during which /health stays 200 (the
+host-side health-poll already passed before public verify runs).
+
+### Next slices (Wave 1064)
+
+- Memory entry refresh (`project_deploy_bridge_pattern.md` to
+  include auto-revert + .last-good-sha + V-549.B end state).
+- More V-547 scenarios as bounded slices allow (5, 7, 8 require
+  mocking infra; defer to a docker-compose-bound rehearsal pass).
+- Tier-2 backlog: V-541 cost monitoring instrumentation, V-552 API
+  ref deep-dive content — multi-wave, will be picked when
+  bounded sub-slice surfaces.
+
+Batch report cadence: updated every 2 hours per directive. Next
+refresh at ~01:30 UTC.
