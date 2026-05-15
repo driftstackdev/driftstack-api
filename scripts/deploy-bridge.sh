@@ -68,6 +68,11 @@ fi
 # operators can spot "this deploy took 2x normal" without grepping.
 DEPLOY_STARTED_AT=$(date +%s)
 
+# Capture the SHA we're replacing so the post-deploy summary can
+# show "X over Y" — answers "what did I just kick off?" without a
+# separate SSH. Empty if no .last-good-sha existed yet (fresh server).
+PREVIOUS_SHA=$(ssh "root@${HOST}" "cat /opt/driftstack/api/.last-good-sha 2>/dev/null || echo ''" 2>/dev/null || echo "")
+
 # All work happens in /tmp/driftstack-deploy-<unix> on the host so we
 # can atomic-swap at the end.
 ssh "root@${HOST}" "set -euo pipefail; \
@@ -181,7 +186,11 @@ if [ "$VERIFY_EXIT" -ne 0 ]; then
   exit "$VERIFY_EXIT"
 fi
 
-echo "[bridge] === $ENV deploy ($EXPECTED_SHORT_SHA) done in ${DEPLOY_ELAPSED}s ===" >&2
+if [ -n "$PREVIOUS_SHA" ] && [ "$PREVIOUS_SHA" != "$EXPECTED_SHORT_SHA" ]; then
+  echo "[bridge] === $ENV deploy ($EXPECTED_SHORT_SHA over $PREVIOUS_SHA) done in ${DEPLOY_ELAPSED}s ===" >&2
+else
+  echo "[bridge] === $ENV deploy ($EXPECTED_SHORT_SHA) done in ${DEPLOY_ELAPSED}s ===" >&2
+fi
 
 # V-549 auto-rollback (skeleton) — only confirmed-healthy SHAs land in
 # /opt/driftstack/api/.last-good-sha, so revert-bridge.sh always
@@ -190,4 +199,14 @@ echo "[bridge] === $ENV deploy ($EXPECTED_SHORT_SHA) done in ${DEPLOY_ELAPSED}s 
 if [ -n "$EXPECTED_SHORT_SHA" ]; then
   ssh "root@${HOST}" "echo '$EXPECTED_SHORT_SHA' > /opt/driftstack/api/.last-good-sha && chown driftstack:driftstack /opt/driftstack/api/.last-good-sha"
   echo "[bridge] recorded $EXPECTED_SHORT_SHA as $ENV last-good-sha" >&2
+fi
+
+# Deploy-history audit log on the host — every successful deploy
+# appends one line "<iso-utc> <SHA> <prev-SHA-or-fresh> <elapsed-s>".
+# Useful for forensics ("what was running at 04:32 UTC?") + spotting
+# recurring rollbacks (same SHA appearing as both new + previous in
+# adjacent rows = thrash). Tail-only — no rotation needed; file is
+# tiny (~80 bytes/deploy × ~10 deploys/day × 365 days ≈ 290 KB/year).
+if [ -n "$EXPECTED_SHORT_SHA" ]; then
+  ssh "root@${HOST}" "echo \"\$(date -u +%Y-%m-%dT%H:%M:%SZ) $EXPECTED_SHORT_SHA ${PREVIOUS_SHA:-fresh} ${DEPLOY_ELAPSED}s\" >> /opt/driftstack/api/.deploy-history.log && chown driftstack:driftstack /opt/driftstack/api/.deploy-history.log"
 fi
