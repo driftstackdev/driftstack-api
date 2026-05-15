@@ -304,7 +304,7 @@ describe('W971 stripe-api V-088 cross-source invariant', () => {
     let observedBody: string | undefined;
     let observedHeaders: Record<string, string> | undefined;
     let observedUrl: string | undefined;
-    const fetchImpl: typeof fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+    const fetchImpl: typeof fetch = (input, init) => {
       observedUrl =
         typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       observedBody = init?.body as string;
