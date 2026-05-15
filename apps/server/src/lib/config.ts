@@ -183,6 +183,38 @@ const ConfigSchema = z.object({
       wsUrl: z.string().url().optional(),
     })
     .optional(),
+
+  /**
+   * V-667.C — OAuth-CLIENT (sign-in-with-Google/GitHub) configuration.
+   * Driftstack-AS-OAuth-client (NOT to be confused with V-667.B
+   * OAuth-server). Per-provider client_id + client_secret are
+   * env-derived; signingSecret (≥32 chars) HMACs both the state JWT
+   * + the PKCE-verifier cookie.
+   *
+   * The /v1/auth/oauth-client/* routes register only when at least
+   * one provider has both clientId + clientSecret + the signingSecret
+   * is set. Otherwise the routes stay unregistered (same all-or-
+   * nothing posture as V-487 NowPayments + V-665 Postmark +
+   * V-531.B LiveKit).
+   */
+  oauthClient: z
+    .object({
+      signingSecret: z.string().min(32).optional(),
+      callbackUrl: z.string().url().optional(),
+      google: z
+        .object({
+          clientId: z.string().min(1),
+          clientSecret: z.string().min(1),
+        })
+        .optional(),
+      github: z
+        .object({
+          clientId: z.string().min(1),
+          clientSecret: z.string().min(1),
+        })
+        .optional(),
+    })
+    .optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -190,6 +222,7 @@ export type R2Config = NonNullable<Config['r2']>;
 export type PostmarkConfig = NonNullable<Config['postmark']>;
 export type SentryConfig = NonNullable<Config['sentry']>;
 export type LivekitConfig = NonNullable<Config['livekit']>;
+export type OAuthClientConfig = NonNullable<Config['oauthClient']>;
 
 function readR2Config(env: NodeJS.ProcessEnv): R2Config | null {
   const accountId = env.R2_ACCOUNT_ID;
@@ -395,6 +428,39 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
             ...(env.LIVEKIT_API_KEY ? { apiKey: env.LIVEKIT_API_KEY } : {}),
             ...(env.LIVEKIT_API_SECRET ? { apiSecret: env.LIVEKIT_API_SECRET } : {}),
             ...(env.LIVEKIT_WS_URL ? { wsUrl: env.LIVEKIT_WS_URL } : {}),
+          }
+        : undefined,
+    // V-667.C — OAuth-CLIENT (sign-in-with-Google/GitHub). All
+    // fields optional; route-registration at app.ts checks at least
+    // one fully-configured provider + signingSecret + callbackUrl.
+    oauthClient:
+      env.OAUTH_CLIENT_SIGNING_SECRET ||
+      env.OAUTH_CLIENT_CALLBACK_URL ||
+      env.GOOGLE_OAUTH_CLIENT_ID ||
+      env.GITHUB_OAUTH_CLIENT_ID
+        ? {
+            ...(env.OAUTH_CLIENT_SIGNING_SECRET
+              ? { signingSecret: env.OAUTH_CLIENT_SIGNING_SECRET }
+              : {}),
+            ...(env.OAUTH_CLIENT_CALLBACK_URL
+              ? { callbackUrl: env.OAUTH_CLIENT_CALLBACK_URL }
+              : {}),
+            ...(env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET
+              ? {
+                  google: {
+                    clientId: env.GOOGLE_OAUTH_CLIENT_ID,
+                    clientSecret: env.GOOGLE_OAUTH_CLIENT_SECRET,
+                  },
+                }
+              : {}),
+            ...(env.GITHUB_OAUTH_CLIENT_ID && env.GITHUB_OAUTH_CLIENT_SECRET
+              ? {
+                  github: {
+                    clientId: env.GITHUB_OAUTH_CLIENT_ID,
+                    clientSecret: env.GITHUB_OAUTH_CLIENT_SECRET,
+                  },
+                }
+              : {}),
           }
         : undefined,
   });
