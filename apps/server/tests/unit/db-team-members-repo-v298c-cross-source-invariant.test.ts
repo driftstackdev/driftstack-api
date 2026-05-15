@@ -1,0 +1,245 @@
+// W1000 — db/team-members-repo V-298c cross-source invariant. Three-
+// hundred-twenty-sixth in the drift-guard series. Milestone wave.
+// Pins the apps/server/src/db/team-members-repo.ts Drizzle team-
+// members repo primitive:
+//
+//   V-298c anchor — 'V-298c — Drizzle-backed TeamMembersRepo'.
+//
+//   DrizzleTeamMembersRepo 7-method surface — upsertInvite +
+//     findInviteByTokenHash + findAccountEmail + upsertMembership +
+//     markInviteAccepted + listMembers + listPendingInvites +
+//     removeMember.
+//
+//   upsertInvite framing — 'Look for an existing pending invite (not
+//   yet accepted) for the (owner, email) pair. If found, refresh the
+//   token + expiry. Otherwise insert a new row'.
+//
+//   upsertInvite pending lookup — and(eq(ownerAccountId), eq
+//   (inviteeEmail), isNull(acceptedAt)) + limit(1).
+//
+//   upsertInvite refresh sets 4 fields — inviteTokenHash +
+//   inviteExpiresAt + role + invitedByAccountId.
+//
+//   upsertMembership framing — 'Use ON CONFLICT (owner, member) DO
+//   NOTHING via INSERT ... .returning() — falls through to a SELECT
+//   on conflict so we always return a TeamMemberRow'.
+//
+//   upsertMembership onConflictDoNothing target — [ownerAccountId,
+//   memberAccountId] compound key.
+//
+//   upsertMembership conflict-fallthrough SELECT to retrieve existing
+//   row.
+//
+//   listMembers innerJoin accounts on memberAccountId + 9-field
+//   projection (includes memberEmail from accounts.email).
+//
+//   listPendingInvites filter — and(eq(ownerAccountId), isNull
+//   (acceptedAt)) + orderBy desc(createdAt).
+//
+//   removeMember scoped delete — and(eq(id), eq(ownerAccountId)) +
+//   returning({memberAccountId}) so V-326 auth-cache invalidation
+//   has the freed memberId.
+//
+//   markInviteAccepted single-field UPDATE — acceptedAt only.
+//
+//   toInviteRow 9-field mapper + attachMemberEmail helper +
+//   memberEmail is caller-supplied (not from DB) on upsertMembership.
+//
+// stays in lockstep across apps/server/src/db/team-members-repo.ts.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W1000 db/team-members-repo V-298c cross-source invariant', () => {
+  // ─── V-298c anchor ───────────────────────────────────────────
+
+  it("CRITICAL apps/server/src/db/team-members-repo.ts header pins V-298c — 'V-298c — Drizzle-backed TeamMembersRepo'. The V-298c anchor is the team-members-repo provenance.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/\/\/ V-298c — Drizzle-backed TeamMembersRepo\./);
+    expect(p).toMatch(/export class DrizzleTeamMembersRepo implements TeamMembersRepo \{/);
+  });
+
+  // ─── 8-method surface ────────────────────────────────────────
+
+  it('CRITICAL 8-method surface — upsertInvite + findInviteByTokenHash + findAccountEmail + upsertMembership + markInviteAccepted + listMembers + listPendingInvites + removeMember. The 8-method TeamMembersRepo covers V-298c invite + membership lifecycle.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/async upsertInvite\(input: \{/);
+    expect(p).toMatch(
+      /async findInviteByTokenHash\(hash: string\): Promise<TeamInviteRow \| null> \{/,
+    );
+    expect(p).toMatch(/async findAccountEmail\(accountId: string\): Promise<string \| null> \{/);
+    expect(p).toMatch(/async upsertMembership\(input: \{/);
+    expect(p).toMatch(/async markInviteAccepted\(inviteId: string, at: Date\): Promise<void> \{/);
+    expect(p).toMatch(/async listMembers\(ownerAccountId: string\): Promise<TeamMemberRow\[\]> \{/);
+    expect(p).toMatch(
+      /async listPendingInvites\(ownerAccountId: string\): Promise<TeamInviteRow\[\]> \{/,
+    );
+    expect(p).toMatch(
+      /async removeMember\(membershipId: string, ownerAccountId: string\): Promise<string \| null> \{/,
+    );
+  });
+
+  // ─── upsertInvite framing ────────────────────────────────────
+
+  it("CRITICAL upsertInvite framing — 'Look for an existing pending invite (not yet accepted) for the (owner, email) pair. If found, refresh the token + expiry. Otherwise insert a new row'. The refresh-or-insert design is the V-298c idempotent-invite contract.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/\/\/ Look for an existing pending invite \(not yet accepted\) for the/);
+    expect(p).toMatch(/\/\/ \(owner, email\) pair\. If found, refresh the token \+ expiry\./);
+    expect(p).toMatch(/\/\/ Otherwise insert a new row\./);
+  });
+
+  it('CRITICAL upsertInvite pending lookup — and(eq(owner), eq(inviteeEmail), isNull(acceptedAt)) + limit(1). The 3-cond ensures only pending-non-accepted invites match.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/eq\(teamInvites\.ownerAccountId, input\.ownerAccountId\),/);
+    expect(p).toMatch(/eq\(teamInvites\.inviteeEmail, input\.inviteeEmail\),/);
+    expect(p).toMatch(/isNull\(teamInvites\.acceptedAt\),/);
+  });
+
+  it('CRITICAL upsertInvite refresh 4-field set — inviteTokenHash + inviteExpiresAt + role + invitedByAccountId. The 4-field refresh is the V-298c reinvite contract.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/inviteTokenHash: input\.inviteTokenHash,/);
+    expect(p).toMatch(/inviteExpiresAt: input\.inviteExpiresAt,/);
+    expect(p).toMatch(/role: input\.role,/);
+    expect(p).toMatch(/invitedByAccountId: input\.invitedByAccountId,/);
+    expect(p).toMatch(/if \(!updated\) throw new Error\('team_invites refresh returned no row'\);/);
+  });
+
+  // ─── upsertMembership onConflictDoNothing ────────────────────
+
+  it("CRITICAL upsertMembership framing — 'Use ON CONFLICT (owner, member) DO NOTHING via INSERT ... .returning() — falls through to a SELECT on conflict so we always return a TeamMemberRow'. The conflict-fallthrough design always returns a row even on conflict.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/\/\/ Use ON CONFLICT \(owner, member\) DO NOTHING via INSERT \.\.\./);
+    expect(p).toMatch(/\/\/ \.returning\(\) — falls through to a SELECT on conflict so we/);
+    expect(p).toMatch(/\/\/ always return a TeamMemberRow\./);
+  });
+
+  it('CRITICAL upsertMembership conflict target is [ownerAccountId, memberAccountId] compound. The compound-key conflict matches the (owner, member) UNIQUE index.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/\.onConflictDoNothing\(\{/);
+    expect(p).toMatch(/target: \[teamMembers\.ownerAccountId, teamMembers\.memberAccountId\],/);
+  });
+
+  it("CRITICAL upsertMembership fallthrough SELECT — 'inserted ?? (await SELECT ... where (owner, member) ...).[0]'. The ?? fallback handles the no-conflict case by reading the existing row.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/const row =/);
+    expect(p).toMatch(/inserted \?\?/);
+    expect(p).toMatch(/eq\(teamMembers\.ownerAccountId, input\.ownerAccountId\),/);
+    expect(p).toMatch(/eq\(teamMembers\.memberAccountId, input\.memberAccountId\),/);
+    expect(p).toMatch(/if \(!row\) throw new Error\('team_members upsert produced no row'\);/);
+  });
+
+  // ─── listMembers innerJoin accounts ──────────────────────────
+
+  it("CRITICAL listMembers innerJoin accounts on memberAccountId — 'Join accounts to surface member email at list-time. The shape matches in-memory repo's TeamMemberRow with memberEmail filled'. The join keeps memberEmail in the response without an N+1 lookup.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/\/\/ Join accounts to surface member email at list-time\. The shape/);
+    expect(p).toMatch(/\/\/ matches in-memory repo's TeamMemberRow with memberEmail filled\./);
+    expect(p).toMatch(/\.innerJoin\(accounts, eq\(accounts\.id, teamMembers\.memberAccountId\)\)/);
+  });
+
+  it('CRITICAL listMembers 9-field projection — id + ownerAccountId + memberAccountId + memberEmail (from accounts) + role + invitedAt + acceptedAt + invitedByAccountId + createdAt + orderBy desc(createdAt). The 9-field projection matches the TeamMemberRow service shape.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/id: teamMembers\.id,/);
+    expect(p).toMatch(/ownerAccountId: teamMembers\.ownerAccountId,/);
+    expect(p).toMatch(/memberAccountId: teamMembers\.memberAccountId,/);
+    expect(p).toMatch(/memberEmail: accounts\.email,/);
+    expect(p).toMatch(/role: teamMembers\.role,/);
+    expect(p).toMatch(/invitedAt: teamMembers\.invitedAt,/);
+    expect(p).toMatch(/acceptedAt: teamMembers\.acceptedAt,/);
+    expect(p).toMatch(/invitedByAccountId: teamMembers\.invitedByAccountId,/);
+    expect(p).toMatch(/createdAt: teamMembers\.createdAt,/);
+    expect(p).toMatch(/\.orderBy\(desc\(teamMembers\.createdAt\)\);/);
+  });
+
+  // ─── listPendingInvites ──────────────────────────────────────
+
+  it('CRITICAL listPendingInvites filter — and(eq(ownerAccountId), isNull(acceptedAt)) + orderBy desc(createdAt). The (owner, pending) filter scopes to outstanding invites only.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(
+      /\.where\(and\(eq\(teamInvites\.ownerAccountId, ownerAccountId\), isNull\(teamInvites\.acceptedAt\)\)\)/,
+    );
+    expect(p).toMatch(/\.orderBy\(desc\(teamInvites\.createdAt\)\);/);
+  });
+
+  // ─── removeMember scoped delete + V-326 cache hint ───────────
+
+  it('CRITICAL removeMember scoped delete — and(eq(id), eq(ownerAccountId)) + returning({memberAccountId}). The owner-scoped guard prevents cross-tenant deletion; the returning() gives the auth-cache invalidator the freed memberId (V-326).', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/\.delete\(teamMembers\)/);
+    expect(p).toMatch(
+      /\.where\(and\(eq\(teamMembers\.id, membershipId\), eq\(teamMembers\.ownerAccountId, ownerAccountId\)\)\)/,
+    );
+    expect(p).toMatch(/\.returning\(\{ memberAccountId: teamMembers\.memberAccountId \}\);/);
+    expect(p).toMatch(
+      /return result\.length > 0 \? \(result\[0\]\?\.memberAccountId \?\? null\) : null;/,
+    );
+  });
+
+  // ─── markInviteAccepted ──────────────────────────────────────
+
+  it("CRITICAL markInviteAccepted single-field UPDATE — 'set({acceptedAt: at}).where(eq(id))'. The single-field set keeps the row otherwise unchanged.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/\.update\(teamInvites\)/);
+    expect(p).toMatch(/\.set\(\{ acceptedAt: at \}\)/);
+    expect(p).toMatch(/\.where\(eq\(teamInvites\.id, inviteId\)\);/);
+  });
+
+  // ─── findAccountEmail narrow projection ──────────────────────
+
+  it('CRITICAL findAccountEmail uses narrow select({email}) projection + returns row?.email ?? null. The narrow projection avoids fetching the full account row.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/\.select\(\{ email: accounts\.email \}\)/);
+    expect(p).toMatch(/return row\?\.email \?\? null;/);
+  });
+
+  // ─── toInviteRow 9-field mapper ──────────────────────────────
+
+  it('CRITICAL toInviteRow 9-field mapper — id + ownerAccountId + inviteeEmail + role + inviteTokenHash + inviteExpiresAt + invitedByAccountId + acceptedAt + createdAt. The 9-field TeamInviteRow is the V-298c service-layer shape.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(/function toInviteRow\(row: InviteDb\): TeamInviteRow \{/);
+    expect(p).toMatch(/id: row\.id,/);
+    expect(p).toMatch(/ownerAccountId: row\.ownerAccountId,/);
+    expect(p).toMatch(/inviteeEmail: row\.inviteeEmail,/);
+    expect(p).toMatch(/role: row\.role,/);
+    expect(p).toMatch(/inviteTokenHash: row\.inviteTokenHash,/);
+    expect(p).toMatch(/inviteExpiresAt: row\.inviteExpiresAt,/);
+    expect(p).toMatch(/invitedByAccountId: row\.invitedByAccountId,/);
+    expect(p).toMatch(/acceptedAt: row\.acceptedAt,/);
+    expect(p).toMatch(/createdAt: row\.createdAt,/);
+  });
+
+  // ─── attachMemberEmail helper ────────────────────────────────
+
+  it("CRITICAL attachMemberEmail helper framing — 'when an upsertMembership returns just the team_members row, we still need memberEmail to populate the TeamMemberRow shape. The caller already has it (passed in input.memberEmail)'. The caller-supplied-email design saves a join on the hot insert path.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/team-members-repo.ts'));
+    expect(p).toMatch(
+      /\/\*\* Helper — when an upsertMembership returns just the team_members row,/,
+    );
+    expect(p).toMatch(/\*\s+we still need memberEmail to populate the TeamMemberRow shape\. The/);
+    expect(p).toMatch(/\*\s+caller already has it \(passed in input\.memberEmail\)\. \*\//);
+    expect(p).toMatch(
+      /private attachMemberEmail\(row: MemberDb, memberEmail: string\): TeamMemberRow \{/,
+    );
+    expect(p).toMatch(/memberEmail,/);
+  });
+
+  it('test file metadata — file exists at canonical path', () => {
+    expect(
+      existsSync(
+        resolve(
+          REPO_ROOT,
+          'apps/server/tests/unit/db-team-members-repo-v298c-cross-source-invariant.test.ts',
+        ),
+      ),
+    ).toBe(true);
+  });
+});
