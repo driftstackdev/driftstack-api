@@ -2629,6 +2629,10 @@ function buildRegistry(): OpenAPIRegistry {
   const StatusIncidentsResponseOpenApi = z.object({
     data: z.array(z.unknown()),
   });
+  const StatusIncidentDetailResponseOpenApi = z.object({
+    incident: z.unknown(),
+    updates: z.array(z.unknown()),
+  });
   const StatusSlaResponseOpenApi = z.object({
     window_days: z.number().int().nonnegative(),
     uptime_percent: z.number(),
@@ -2668,6 +2672,23 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Incidents (most recent first).',
         content: { 'application/json': { schema: StatusIncidentsResponseOpenApi } },
       },
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/status/incidents/{id}',
+    summary: 'Public incident detail with update timeline (V-545.A)',
+    tags: ['status'],
+    request: {
+      params: z.object({ id: z.string().describe('Prefixed id: inc_<uuid>.') }),
+    },
+    responses: {
+      200: {
+        description: 'Incident detail + update timeline (oldest first).',
+        content: { 'application/json': { schema: StatusIncidentDetailResponseOpenApi } },
+      },
+      400: { description: 'Invalid id format. Expected inc_<uuid>.', content: problemContent },
+      404: { description: 'Incident is private or does not exist.', content: problemContent },
     },
   });
   registerRoute(r, {

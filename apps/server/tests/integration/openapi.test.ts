@@ -144,6 +144,7 @@ describe('OpenAPI spec generation', () => {
         // V-459 public status surface
         '/v1/status',
         '/v1/status/incidents',
+        '/v1/status/incidents/{id}',
         '/v1/status/sla',
         '/v1/status/subscribe',
         '/v1/status/subscribe/confirm',
