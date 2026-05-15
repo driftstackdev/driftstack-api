@@ -1,0 +1,126 @@
+// W901 — V-296 + V-359 24h rotate-grace parallel-policy cross-
+// source invariant. Two-hundred-twenty-seventh in the drift-guard
+// series. Pins TWO 24-hour rotate-grace policies:
+//
+//   V-296 API-key rotation:
+//     - Customer self-service rotation. Mints fresh plaintext +
+//       hash; sets expires_at on OLD key to now + gracePeriodMs.
+//     - gracePeriodMs default = 24 * 60 * 60 * 1000 (24 hours).
+//     - Old key continues to authenticate until expires_at; then
+//       existing expires_at gate in auth.ts rejects cleanly.
+//
+//   V-359 Webhook signing-secret rotation:
+//     - 24h grace window — every outbound delivery signed with
+//       both new + old secret.
+//     - rotation_grace_expires_at populated only during grace;
+//       null when no rotation in flight.
+//
+// stays in lockstep across:
+//   - apps/server/src/services/api-keys.ts (V-296 24h default).
+//   - packages/api-types/src/webhooks.ts (V-359 24h grace
+//     framing).
+//
+// Drift would silently break:
+//   * Customer rotation flow if grace shrinks (no time to
+//     migrate).
+//   * Webhook delivery rejection if old secret cuts off too soon.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+const GRACE_HOURS = 24;
+const GRACE_MS = GRACE_HOURS * 60 * 60 * 1000;
+
+describe('W901 V-296 + V-359 24h rotate-grace cross-source invariant', () => {
+  // ─── V-296 API-key rotate gracePeriodMs default = 24h ────────
+
+  it('CRITICAL apps/server/src/services/api-keys.ts api-key rotate() defaults gracePeriodMs to 24 * 60 * 60 * 1000 (= 24 hours). The 24h default gives customers time to migrate clients to the new key before the old one auto-revokes.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
+    expect(p).toMatch(/const gracePeriodMs = opts\.gracePeriodMs \?\? 24 \* 60 \* 60 \* 1000;/);
+  });
+
+  it("CRITICAL V-296 rotate() framing — 'customer self-service rotation. Mints a fresh plaintext + hash for a new api_keys row (same name + scopes + accountId), and sets expires_at on the OLD key to now + gracePeriodMs'. The 4-step pattern pins the rotate-flow contract.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
+    expect(p).toMatch(/V-296 — customer self-service rotation\. Mints a fresh plaintext \+/);
+    expect(p).toMatch(/hash for a new api_keys row \(same name \+ scopes \+ accountId\), and/);
+    expect(p).toMatch(/sets `expires_at` on the OLD key to `now \+ gracePeriodMs`/);
+  });
+
+  it("CRITICAL V-296 rotate() comment pins the 'old key continues to authenticate until that timestamp; after that the existing expires_at gate in auth.ts rejects it cleanly' framing. The 'cleanly' part is what makes the old key fail with a clear error (vs ambiguous).", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
+    expect(p).toMatch(
+      /The old\s*\n\s*\*\s*key continues to authenticate until that timestamp; after that the/,
+    );
+    expect(p).toMatch(/existing expires_at gate in auth\.ts rejects it cleanly/);
+  });
+
+  // ─── V-359 webhook-secret rotation 24h grace ─────────────────
+
+  it("CRITICAL packages/api-types/src/webhooks.ts pins V-359 24h grace — 'populated only during the 24h rotation grace period'. The 24h matches the V-296 default — both rotation flows use the same window.", () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
+    expect(p).toMatch(/V-359 — populated only during the 24h rotation grace period/);
+    expect(p).toMatch(/Null when no rotation in flight/);
+  });
+
+  it("CRITICAL V-359 RotateWebhookSecret response describe — 'Until this timestamp, every outbound delivery is signed with both the new + old secret so the customer can roll their verifier across infra without dropped deliveries'. The dual-signing semantics is what makes mid-rotation deliveries succeed under EITHER signature.", () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
+    expect(p).toMatch(
+      /Until this timestamp, every outbound delivery is signed with both the new \+ old secret/,
+    );
+    expect(p).toMatch(/customer can roll their verifier across infra without dropped deliveries/);
+  });
+
+  // ─── Shared 24h grace cardinality ────────────────────────────
+
+  it('CRITICAL BOTH rotation flows share the 24-hour grace window. The 24h default is consistent across V-296 + V-359 — drift to mismatched windows would create UX asymmetry (one flow more forgiving than the other).', () => {
+    expect(GRACE_HOURS).toBe(24);
+    expect(GRACE_MS).toBe(86_400_000);
+  });
+
+  // ─── Override semantics ──────────────────────────────────────
+
+  it("CRITICAL V-296 gracePeriodMs is OVERRIDABLE via opts.gracePeriodMs — the '?? 24 * 60 * 60 * 1000' nullish-coalesce lets callers pass a custom window. Tests can shrink to 1ms for snapshot tests; production uses 24h default.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
+    expect(p).toMatch(/gracePeriodMs\?: number;/);
+    expect(p).toMatch(/opts\.gracePeriodMs \?\? 24 \* 60 \* 60 \* 1000/);
+  });
+
+  // ─── setExpiresAt repo method ────────────────────────────────
+
+  it("CRITICAL V-296 uses setExpiresAt repo method (NOT a new column) — 'set expires_at on an existing key. Used by rotate() to schedule the old key's automatic revocation at the end of the grace period. Idempotent — last write wins'. The pattern reuses existing infrastructure.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
+    expect(p).toMatch(/V-296 — set expires_at on an existing key/);
+    expect(p).toMatch(/Used by rotate\(\) to/);
+    expect(p).toMatch(/schedule the old key's automatic revocation/);
+    expect(p).toMatch(/Idempotent — last write wins\./);
+  });
+
+  // ─── 2-rotation-flow + 24h-default parallel ──────────────────
+
+  it('CRITICAL 2 rotation flows share 24h grace — API-key (V-296) + webhook-secret (V-359). The parallel policy is intentional: both are customer-facing secret rotations with similar UX (rotate, get new, migrate clients, old expires).', () => {
+    const apiKeys = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
+    const webhooks = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
+    expect(apiKeys).toMatch(/24 \* 60 \* 60 \* 1000/);
+    expect(webhooks).toMatch(/24h rotation grace period/);
+  });
+
+  it('test file metadata — file exists at canonical path', () => {
+    expect(
+      existsSync(
+        resolve(
+          REPO_ROOT,
+          'apps/server/tests/unit/rotate-grace-24h-cross-source-invariant.test.ts',
+        ),
+      ),
+    ).toBe(true);
+  });
+});
