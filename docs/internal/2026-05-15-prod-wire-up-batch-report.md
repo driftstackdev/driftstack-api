@@ -115,7 +115,7 @@ Run `scripts/sentry-create-per-service-projects.mjs` with the
 
 ## E — LiveKit V-531.B real codec swap
 
-**Status:** config schema + lib/livekit-token + runbook DONE this batch.
+**Status:** server-side END-TO-END DONE. Frontend subscriber slice + env wire are the only remaining steps.
 
 **This batch:**
 
@@ -140,22 +140,32 @@ Run `scripts/sentry-create-per-service-projects.mjs` with the
   publisher/subscriber role variants, error paths, base64url encoding,
   deterministic nowMs override.
 
-**Remaining (~2h focused):**
+**Server-side complete (this batch's commits):**
 
-1. Expose a public `requireOwnership(ctx, sessionId)` on the sessions
-   service (or pass `sessionRepo.findSession` directly into the new
-   route deps). Today `requireOwned` is private + couples to driver
-   side-effects.
-2. Add route `routes/sessions-livekit-token.ts` —
-   `POST /v1/sessions/:id/livekit-token` minting a publisher token for
-   the Mac-mini side and a subscriber token for the dashboard. Gated
-   on `config.livekit` presence in app.ts.
-3. Wire `gui-client` `LiveSessionView` to use LiveKit subscriber when
-   `/v1/sessions/:id/livekit-token` responds 200, fall back to HTTP
-   polling on 404 (route unregistered means LiveKit not configured).
-4. Smoke script `scripts/smoke-livekit.mjs` (parallel to
-   `smoke-postmark.mjs`) to verify WS handshake + first frame against
-   the pasted `LIVEKIT_WS_URL`.
+1. ✅ `sessions.service.findOwnedSessionLite` — public ownership
+   check without driver side-effects, landed at 97785484.
+2. ✅ `routes/sessions-livekit-token.ts` — `POST /v1/sessions/:id/
+livekit-token` minting publisher OR subscriber tokens; route stays
+   unregistered when `config.livekit` is absent (404 → client falls
+   back to HTTP polling). Landed at 1eea466d + wired at 97785484.
+3. ✅ `scripts/smoke-livekit.mjs` — operator smoke script (dep-free,
+   Node 22+ WebSocket). Landed at e3662779.
+
+**Frontend remaining (~1h focused):**
+
+- Wire `gui-client` `LiveSessionView` to probe `/v1/sessions/:id/
+livekit-token` once on mount: 200 → open LiveKit subscriber via
+  `livekit-client` (add as dep); 404 → fall back to HTTP polling
+  (current path). The fall-back ensures the dashboard works pre-env-
+  wire-up + during LiveKit outage.
+
+**Operator action remaining (~10 min):**
+
+- Wire `LIVEKIT_API_KEY` + `LIVEKIT_API_SECRET` + `LIVEKIT_WS_URL`
+  to `/etc/driftstack/api.env` on prod + staging.
+- Restart `driftstack-api` on each.
+- Run `scripts/smoke-livekit.mjs --session-id sess_demo --role publisher --duration-ms 5000`
+  from a workstation with prod creds to verify WS handshake.
 
 ## F — V-278.K Neon prod/staging split + V-278.L Upstash split
 
