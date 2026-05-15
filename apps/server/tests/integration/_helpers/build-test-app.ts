@@ -210,6 +210,13 @@ export interface TestAppOptions {
    * unregistered (404) — matches the prod-config-absent posture.
    */
   livekit?: { apiKey: string; apiSecret: string; wsUrl: string };
+  /**
+   * V-666 / V-487 — pass through to AppDeps.nowpaymentsIpnSecret so
+   * /v1/webhooks/nowpayments registers. When omitted, the route stays
+   * unregistered (404) — matches the prod-merchant-account-absent
+   * posture.
+   */
+  nowpaymentsIpnSecret?: string;
 }
 
 export interface SeedAdditionalOpts {
@@ -873,6 +880,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     driver,
     permissiveCors: true,
     ...(opts.livekit !== undefined ? { livekit: opts.livekit } : {}),
+    ...(opts.nowpaymentsIpnSecret !== undefined
+      ? { nowpaymentsIpnSecret: opts.nowpaymentsIpnSecret }
+      : {}),
   });
 
   return {
