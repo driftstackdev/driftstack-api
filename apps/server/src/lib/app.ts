@@ -77,6 +77,8 @@ import { registerAuthCliRoutes } from '../routes/auth-cli.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerNowpaymentsWebhookRoutes } from '../routes/webhooks-nowpayments.js';
 import { registerLivekitTokenRoute } from '../routes/sessions-livekit-token.js';
+import { registerOAuthClientRoutes } from '../routes/auth-oauth-client.js';
+import type { OAuthClientService } from '../services/oauth-client.js';
 import { registerCryptoCheckoutRoutes } from '../routes/billing-crypto.js';
 import { registerCryptoQuoteRoutes } from '../routes/billing-crypto-quote.js';
 import { registerCustomerCryptoOrdersRoutes } from '../routes/billing-crypto-orders.js';
@@ -307,6 +309,20 @@ export interface AppDeps {
     apiKey: string;
     apiSecret: string;
     wsUrl: string;
+  };
+  /**
+   * V-667.C — OAuth-CLIENT routes (/v1/auth/oauth-client/*). When the
+   * service is provided AND the config has at least one fully-
+   * configured provider + signingSecret + callbackUrl, the 3 routes
+   * register. Otherwise stays unregistered (same posture as livekit /
+   * nowpayments).
+   */
+  oauthClientService?: OAuthClientService;
+  oauthClient?: {
+    signingSecret: string;
+    callbackUrl: string;
+    google?: { clientId: string; clientSecret: string };
+    github?: { clientId: string; clientSecret: string };
   };
 }
 
@@ -570,6 +586,24 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         const row = await deps.sessionsService.findOwnedSessionLite(accountId, sessionId);
         return row !== null;
       },
+    });
+  }
+  // V-667.C — OAuth-client routes. Gated on all 4: service wired +
+  // signingSecret + callbackUrl + at least one provider configured.
+  if (
+    deps.oauthClientService !== undefined &&
+    deps.oauthClient !== undefined &&
+    (deps.oauthClient.google !== undefined || deps.oauthClient.github !== undefined)
+  ) {
+    const providers: Record<string, { clientId: string; clientSecret: string }> = {};
+    if (deps.oauthClient.google) providers.google = deps.oauthClient.google;
+    if (deps.oauthClient.github) providers.github = deps.oauthClient.github;
+    registerOAuthClientRoutes(app, {
+      service: deps.oauthClientService,
+      providers: providers,
+      callbackUrl: deps.oauthClient.callbackUrl,
+      signingSecret: deps.oauthClient.signingSecret,
+      logger: deps.logger,
     });
   }
   if (deps.cryptoOrdersService !== undefined) {
