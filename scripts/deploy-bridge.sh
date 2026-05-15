@@ -58,14 +58,18 @@ ssh "root@${HOST}" "set -euo pipefail; \
   git checkout '$SHA'; \
   GIT_SHA=\$(git rev-parse --short HEAD); \
   echo \"[bridge] HEAD=\$GIT_SHA\" >&2; \
-  echo '[bridge] npm install (--include=dev for build)' >&2; \
-  npm install --no-audit --include=dev > /tmp/deploy-install.log 2>&1 || (tail -50 /tmp/deploy-install.log; exit 1); \
+  echo '[bridge] npm ci (lockfile-strict; include dev for build)' >&2; \
+  npm ci --no-audit --include=dev > /tmp/deploy-install.log 2>&1 || (tail -50 /tmp/deploy-install.log; exit 1); \
   echo '[bridge] tsc --build api-types + webhook-delivery' >&2; \
   npx tsc --build packages/api-types packages/webhook-delivery; \
   echo '[bridge] npm run build --workspace=@driftstack/server' >&2; \
   npm run build --workspace=@driftstack/server > /tmp/deploy-build.log 2>&1 || (tail -50 /tmp/deploy-build.log; exit 1); \
-  echo '[bridge] npm prune --omit=dev --workspaces' >&2; \
-  npm prune --omit=dev --workspaces > /dev/null 2>&1; \
+  # NOT pruning dev deps — fresh npm-install diverges from lockfile + drops
+  # transitive runtime deps like require-in-the-middle that the runtime
+  # needs (caught 2026-05-15 first staging-deploy attempt). The runtime
+  # image gets dev + prod deps; slightly bigger but matches lockfile
+  # exactly. Acceptable until docker-compose deploy lands.
+\
   echo '[bridge] swapping artefacts into /opt/driftstack/api' >&2; \
   cd /opt/driftstack/api; \
   for d in node_modules apps/server/dist apps/server/src/db/migrations packages/api-types packages/webhook-delivery; do \
