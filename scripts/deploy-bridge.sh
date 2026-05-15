@@ -150,6 +150,13 @@ ssh "root@${HOST}" "set -euo pipefail; \
 # (not just the SSH-side localhost loopback). Catches route-registration
 # regressions, openapi-spec gaps, version-SHA mismatch — anything the
 # on-host /health-poll can't see.
+#
+# V-549.B auto-revert: post-deploy-verify FAIL → fire revert-bridge.sh
+# against the previously-recorded .last-good-sha. Keeps prod hot at a
+# known-passing SHA without operator intervention. Skip auto-revert
+# when AUTO_REVERT=0 is passed (e.g. revert-bridge.sh itself shouldn't
+# infinitely recurse on a bad last-good-sha).
+set +e
 if [ -n "$EXPECTED_SHORT_SHA" ]; then
   echo "[bridge] post-deploy verify against $PUBLIC_URL (--expected-sha $EXPECTED_SHORT_SHA)" >&2
   node scripts/post-deploy-verify.mjs --base-url "$PUBLIC_URL" --expected-sha "$EXPECTED_SHORT_SHA"
@@ -157,8 +164,23 @@ else
   echo "[bridge] post-deploy verify against $PUBLIC_URL (no --expected-sha)" >&2
   node scripts/post-deploy-verify.mjs --base-url "$PUBLIC_URL"
 fi
+VERIFY_EXIT=$?
+set -e
 
 DEPLOY_ELAPSED=$(($(date +%s) - DEPLOY_STARTED_AT))
+
+if [ "$VERIFY_EXIT" -ne 0 ]; then
+  echo "[bridge] === $ENV deploy ($EXPECTED_SHORT_SHA) FAILED post-deploy-verify after ${DEPLOY_ELAPSED}s ===" >&2
+  if [ "${AUTO_REVERT:-1}" != "0" ]; then
+    echo "[bridge] V-549.B auto-revert firing: bash scripts/revert-bridge.sh $ENV" >&2
+    SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    AUTO_REVERT=0 bash "$SCRIPT_DIR/revert-bridge.sh" "$ENV" || echo "[bridge] revert-bridge.sh ALSO failed — manual intervention required" >&2
+  else
+    echo "[bridge] AUTO_REVERT=0 — skipping auto-revert (operator must investigate)" >&2
+  fi
+  exit "$VERIFY_EXIT"
+fi
+
 echo "[bridge] === $ENV deploy ($EXPECTED_SHORT_SHA) done in ${DEPLOY_ELAPSED}s ===" >&2
 
 # V-549 auto-rollback (skeleton) — only confirmed-healthy SHAs land in
