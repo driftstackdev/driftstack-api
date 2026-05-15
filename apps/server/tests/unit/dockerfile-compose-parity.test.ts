@@ -150,10 +150,11 @@ describe('W727 Dockerfile + docker-compose.yml parity', () => {
     expect(d).toMatch(/CMD \["node", "apps\/server\/dist\/index\.js"\]/);
   });
 
-  it('CRITICAL Dockerfile preserves only production artifacts in runtime (node_modules + dist + migrations + api-types + sdk dist + package.json + legal). Drift to copying source code would leak source maps + unused files into production.', () => {
+  it('CRITICAL Dockerfile preserves only production artifacts in runtime (node_modules + dist + migrations + api-types + webhook-delivery dist + package.json + legal). sdk-typescript runtime COPY dropped 2026-05-15 — server has no production import of @driftstack/sdk (only a comment reference). Drift to copying source code would leak source maps + unused files into production.', () => {
     const d = read(DOCKERFILE);
 
-    // 7-line copy roster from builder stage.
+    // 7-line copy roster from builder stage (sdk-typescript/dist
+    // removed; webhook-delivery added).
     expect(d).toMatch(/\/app\/node_modules \.\/node_modules/);
     expect(d).toMatch(/\/app\/apps\/server\/dist \.\/apps\/server\/dist/);
     expect(d).toMatch(/\/app\/apps\/server\/package\.json \.\/apps\/server\//);
@@ -161,9 +162,11 @@ describe('W727 Dockerfile + docker-compose.yml parity', () => {
       /\/app\/apps\/server\/src\/db\/migrations \.\/apps\/server\/src\/db\/migrations/,
     );
     expect(d).toMatch(/\/app\/packages\/api-types \.\/packages\/api-types/);
-    expect(d).toMatch(/\/app\/packages\/sdk-typescript\/dist \.\/packages\/sdk-typescript\/dist/);
     expect(d).toMatch(
-      /\/app\/packages\/sdk-typescript\/package\.json \.\/packages\/sdk-typescript\//,
+      /\/app\/packages\/webhook-delivery\/dist \.\/packages\/webhook-delivery\/dist/,
+    );
+    expect(d).toMatch(
+      /\/app\/packages\/webhook-delivery\/package\.json \.\/packages\/webhook-delivery\//,
     );
     expect(d).toMatch(/\/app\/package\.json \/app\/package-lock\.json \.\//);
   });
