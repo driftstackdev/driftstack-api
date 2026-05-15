@@ -32,8 +32,7 @@ wire-up 5aab0394 (2026-05-15). Activation is operator-only.
       Authorization callback URL: same as Google.
       Copy Client ID + Client Secret.
 - [ ] Generate a fresh `OAUTH_CLIENT_SIGNING_SECRET` (≥32 chars):
-      `     node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
-    `
+      `    node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`
 
 ## Step 1 — wire env on prod + staging
 
