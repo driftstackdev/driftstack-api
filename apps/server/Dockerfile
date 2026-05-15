@@ -64,10 +64,16 @@ COPY --from=builder --chown=driftstack:driftstack /app/apps/server/dist ./apps/s
 COPY --from=builder --chown=driftstack:driftstack /app/apps/server/package.json ./apps/server/
 COPY --from=builder --chown=driftstack:driftstack /app/apps/server/src/db/migrations ./apps/server/src/db/migrations
 COPY --from=builder --chown=driftstack:driftstack /app/packages/api-types ./packages/api-types
-COPY --from=builder --chown=driftstack:driftstack /app/packages/sdk-typescript/dist ./packages/sdk-typescript/dist
-COPY --from=builder --chown=driftstack:driftstack /app/packages/sdk-typescript/package.json ./packages/sdk-typescript/
 COPY --from=builder --chown=driftstack:driftstack /app/packages/webhook-delivery/dist ./packages/webhook-delivery/dist
 COPY --from=builder --chown=driftstack:driftstack /app/packages/webhook-delivery/package.json ./packages/webhook-delivery/
+# sdk-typescript was previously COPY'd at runtime but the server has
+# no production imports of @driftstack/sdk (only a comment reference
+# in webhook-signing.ts). Dropping the COPY closes the deploy-time
+# error 'failed to compute cache key: packages/sdk-typescript/dist
+# not found' that surfaced once webhook-delivery was added and the
+# build cache no longer masked sdk-typescript not being explicitly
+# built. Builder stage still copies sdk-typescript/package.json so
+# `npm install --workspaces` resolves the workspace symlink.
 COPY --from=builder --chown=driftstack:driftstack /app/package.json /app/package-lock.json ./
 
 # Legal documents are read at server startup (V-047 LegalDocumentCatalog).
