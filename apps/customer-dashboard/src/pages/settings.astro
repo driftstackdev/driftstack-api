@@ -520,6 +520,28 @@ const EMAIL_EVENTS = [
       </p>
     </section>
 
+    <!-- Connected accounts (V-667.C-followup — live-wired) -->
+    <section class="dashboard-card mt-6" data-region="oauth-links">
+      <h2 class="text-lg font-semibold text-ink-primary">Connected accounts</h2>
+      <p class="mt-2 text-sm text-ink-muted">
+        IDPs (Google / GitHub) linked to your account. Each link lets you
+        sign in via that provider. Revoking the link on the provider side
+        (e.g. Google → Security → Third-party access) automatically marks
+        it inactive here on next sign-in attempt; password sign-in
+        continues to work either way.
+      </p>
+      <ul class="mt-6 divide-y divide-slate-100" data-list="oauth-links">
+        <li class="py-3 text-sm text-ink-muted" data-field="oauth-links-empty">
+          Sign in to load your linked accounts.
+        </li>
+      </ul>
+      <p class="mt-3 text-xs text-ink-muted" data-field="oauth-links-disabled" hidden>
+        Sign-in-with-IDP is not enabled on this server yet. Visible only
+        once an operator wires OAUTH_CLIENT_*. Password sign-in continues
+        to work in the meantime.
+      </p>
+    </section>
+
     <!-- Audit log (V-216 — live-wired) -->
     <section class="dashboard-card mt-6" data-region="audit-log">
       <h2 class="text-lg font-semibold text-ink-primary">Recent activity</h2>
@@ -955,6 +977,78 @@ const EMAIL_EVENTS = [
           .catch((err) => {
             const msg = err && err.message ? err.message : 'network error';
             showBanner("Couldn't load audit log (" + msg + ').');
+          });
+      }
+
+      // V-667.C-followup — connected accounts live wire.
+      // Calls /v1/account/me/oauth-links; route returns 404 when the
+      // server hasn't yet been wired with OAUTH_CLIENT_* env vars,
+      // which we surface as the "not yet enabled" empty state rather
+      // than a banner.
+      const oauthLinksList = root.querySelector('[data-list="oauth-links"]');
+      const oauthLinksDisabled = root.querySelector('[data-field="oauth-links-disabled"]');
+
+      function providerLabel(p) {
+        if (p === 'google') return 'Google';
+        if (p === 'github') return 'GitHub';
+        return p;
+      }
+
+      function renderOauthLinks(links) {
+        if (!oauthLinksList) return;
+        if (links.length === 0) {
+          oauthLinksList.innerHTML =
+            '<li class="py-3 text-sm text-ink-muted">No third-party sign-in linked yet. Sign in with Google or GitHub from /login to link.</li>';
+          return;
+        }
+        oauthLinksList.innerHTML = links
+          .map((link) => {
+            const lastLogin = link.last_login_at
+              ? 'last sign-in ' + escapeHtml(fmtRelative(link.last_login_at))
+              : 'never used';
+            const revokedFrag = link.last_revoked_at
+              ? ' · <span class="text-amber-700">revoked upstream — sign in to re-link</span>'
+              : '';
+            return (
+              '<li class="flex items-start justify-between gap-4 py-3">' +
+              '<div class="min-w-0">' +
+              '<p class="text-sm font-medium text-ink-primary">' +
+              escapeHtml(providerLabel(link.provider)) +
+              '</p>' +
+              '<p class="mt-1 text-xs text-ink-muted">' +
+              escapeHtml(link.provider_email || '(email withheld by provider)') +
+              ' · linked ' +
+              escapeHtml(fmtIso(link.linked_at)) +
+              ' · ' +
+              lastLogin +
+              revokedFrag +
+              '</p>' +
+              '</div></li>'
+            );
+          })
+          .join('');
+      }
+
+      function loadOauthLinks() {
+        if (!token || !oauthLinksList) return;
+        authedFetch('/v1/account/me/oauth-links', { method: 'GET' })
+          .then((r) => {
+            if (r.status === 404) {
+              // Route not registered — operator hasn't wired
+              // OAUTH_CLIENT_* yet. Surface a quiet hint, hide the list.
+              if (oauthLinksList) oauthLinksList.hidden = true;
+              if (oauthLinksDisabled) oauthLinksDisabled.hidden = false;
+              return null;
+            }
+            if (!r.ok) return Promise.reject(new Error('HTTP ' + r.status));
+            return r.json();
+          })
+          .then((body) => {
+            if (body) renderOauthLinks(body.data || []);
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't load connected accounts (" + msg + ').');
           });
       }
 
@@ -1471,6 +1565,7 @@ const EMAIL_EVENTS = [
       loadAudit();
       loadWebSessions();
       loadMfa();
+      loadOauthLinks();
     })();
   </script>
 </DashboardLayout>
