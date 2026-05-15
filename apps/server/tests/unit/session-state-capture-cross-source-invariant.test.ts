@@ -112,11 +112,11 @@ describe('W904 SessionState + Capture cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
     const stateM = p.match(/SessionStateSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(stateM).not.toBeNull();
-    const stateFields = (stateM![1].match(/^\s*[a-z_]+:/gm) || []).length;
+    const stateFields = ((stateM![1] ?? '').match(/^\s*[a-z_]+:/gm) || []).length;
     expect(stateFields).toBe(5);
     const capM = p.match(/CaptureResponseSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(capM).not.toBeNull();
-    const capFields = (capM![1].match(/^\s*[a-z_]+:/gm) || []).length;
+    const capFields = ((capM![1] ?? '').match(/^\s*[a-z_]+:/gm) || []).length;
     expect(capFields).toBe(5);
   });
 

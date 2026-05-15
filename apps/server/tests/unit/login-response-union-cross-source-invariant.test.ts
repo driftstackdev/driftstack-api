@@ -124,7 +124,7 @@ describe('W880 LoginResponseUnion cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
     const m = p.match(/LoginResponseUnionSchema = z\.union\(\[([\s\S]+?)\]\)/);
     expect(m).not.toBeNull();
-    const body = m![1];
+    const body = m![1] ?? '';
     const schemas = body.split(',').filter((s) => s.trim() && /Schema$/.test(s.trim()));
     expect(schemas.length).toBe(2);
   });

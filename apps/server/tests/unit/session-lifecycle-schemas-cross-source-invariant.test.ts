@@ -129,7 +129,7 @@ describe('W895 Session lifecycle schemas cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
     const m = p.match(/SessionSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(m).not.toBeNull();
-    const body = m![1];
+    const body = m![1] ?? '';
     const fieldCount = (body.match(/^\s*[a-z_]+:/gm) || []).length;
     expect(fieldCount).toBe(12);
   });

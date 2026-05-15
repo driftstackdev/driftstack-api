@@ -106,7 +106,9 @@ describe('W835 Python SDK __all__ list parity', () => {
     const p = read(PY_INIT);
     const allMatch = p.match(/__all__ = \[([\s\S]+?)\]/);
     expect(allMatch, '__all__ block must parse').not.toBeNull();
-    const entries = (allMatch![1].match(/"([^"]+)"/g) ?? []).map((s) => s.replace(/"/g, ''));
+    const entries = ((allMatch![1] ?? '').match(/"([^"]+)"/g) ?? []).map((s) =>
+      s.replace(/"/g, ''),
+    );
 
     // __version__ first.
     expect(entries[0]).toBe('__version__');
@@ -126,7 +128,9 @@ describe('W835 Python SDK __all__ list parity', () => {
     const p = read(PY_INIT);
     const allMatch = p.match(/__all__ = \[([\s\S]+?)\]/);
     expect(allMatch).not.toBeNull();
-    const entries = (allMatch![1].match(/"([^"]+)"/g) ?? []).map((s) => s.replace(/"/g, ''));
+    const entries = ((allMatch![1] ?? '').match(/"([^"]+)"/g) ?? []).map((s) =>
+      s.replace(/"/g, ''),
+    );
     expect(
       entries.length,
       `Python __all__ has ${entries.length} entries; expected ${REQUIRED_ALL_ENTRIES.length}`,

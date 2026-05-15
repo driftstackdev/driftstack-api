@@ -121,7 +121,7 @@ describe('W898 WebhookDelivery shape + V-512 DLQ cross-source invariant', () => 
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     const m = p.match(/WebhookDeliverySchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(m).not.toBeNull();
-    const body = m![1];
+    const body = m![1] ?? '';
     const fieldCount = (body.match(/^\s*[a-z_]+:/gm) || []).length;
     expect(fieldCount).toBe(12);
   });

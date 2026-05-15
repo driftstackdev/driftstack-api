@@ -137,7 +137,9 @@ describe('W865 CryptoOrderStatus cross-source invariant', () => {
     expect(SERVER_EVENT_SOURCES.length).toBe(5);
     expect(CUSTOMER_EVENT_SOURCES.length).toBe(4);
     expect(SERVER_EVENT_SOURCES.filter((s) => s === 'swept').length).toBe(1);
-    expect(CUSTOMER_EVENT_SOURCES.filter((s) => s === 'swept').length).toBe(0);
+    expect((CUSTOMER_EVENT_SOURCES as readonly string[]).filter((s) => s === 'swept').length).toBe(
+      0,
+    );
   });
 
   // ─── CryptoOrderEvent schema references the enum ─────────────

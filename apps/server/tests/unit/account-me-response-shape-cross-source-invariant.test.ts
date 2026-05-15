@@ -137,7 +137,7 @@ describe('W899 V-386 AccountMeResponse cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
     const m = p.match(/AccountMeResponseSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(m).not.toBeNull();
-    const body = m![1];
+    const body = m![1] ?? '';
     // Count top-level + nested fields together (15 top + 3 nested = 18).
     const fieldCount = (body.match(/^\s*[a-z_]+:/gm) || []).length;
     expect(fieldCount).toBe(18);
