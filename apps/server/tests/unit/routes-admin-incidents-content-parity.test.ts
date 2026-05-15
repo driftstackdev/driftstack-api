@@ -141,10 +141,10 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
     );
   });
 
-  it('V-545.A PUBLIC GET /v1/status/incidents/:id surfaces public-only incidents with their full update timeline — registered + delegates to incidentsService.get(id, {publicOnly:true}) + maps via publicIncidentUpdate', () => {
+  it('V-545.A PUBLIC GET /v1/status/incidents/:id surfaces public-only incidents with their full update timeline — registered + delegates to incidentsService.get(id, {publicOnly:true}) + maps via publicIncidentUpdate + Cache-Control 30s', () => {
     expect(body).toMatch(/V-545\.A — status-page incident-detail view\./);
     expect(body).toMatch(
-      /app\.get<\{ Params: \{ id: string \} \}>\('\/v1\/status\/incidents\/:id', async \(request\) => \{\s*\n?\s*const id = uuidFromPrefixedId\(request\.params\.id, 'inc'\);\s*\n?\s*const result = await incidentsService\.get\(id, \{ publicOnly: true \}\);\s*\n?\s*return \{\s*\n?\s*incident: publicIncident\(result\.incident\),\s*\n?\s*updates: result\.updates\.map\(publicIncidentUpdate\),\s*\n?\s*\};\s*\n?\s*\}\);/,
+      /app\.get<\{ Params: \{ id: string \} \}>\('\/v1\/status\/incidents\/:id', async \(request, reply\) => \{\s*\n?\s*const id = uuidFromPrefixedId\(request\.params\.id, 'inc'\);\s*\n?\s*const result = await incidentsService\.get\(id, \{ publicOnly: true \}\);\s*\n?\s*reply\.header\('cache-control', 'public, max-age=30'\);\s*\n?\s*return \{\s*\n?\s*incident: publicIncident\(result\.incident\),\s*\n?\s*updates: result\.updates\.map\(publicIncidentUpdate\),\s*\n?\s*\};\s*\n?\s*\}\);/,
     );
   });
 

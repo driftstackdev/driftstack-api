@@ -264,9 +264,14 @@ export function registerAdminIncidentsRoutes(
   // posted → expanded scope → fixed). 404 when the incident is not public
   // or doesn't exist; the route deliberately returns the same shape for
   // both so admins probing the surface can't enumerate private incidents.
-  app.get<{ Params: { id: string } }>('/v1/status/incidents/:id', async (request) => {
+  //
+  // Cache-Control: public, max-age=30 — matches /v1/status. The status
+  // site polls every 30s for live updates; CDN coalesces concurrent
+  // viewers onto one origin call.
+  app.get<{ Params: { id: string } }>('/v1/status/incidents/:id', async (request, reply) => {
     const id = uuidFromPrefixedId(request.params.id, 'inc');
     const result = await incidentsService.get(id, { publicOnly: true });
+    reply.header('cache-control', 'public, max-age=30');
     return {
       incident: publicIncident(result.incident),
       updates: result.updates.map(publicIncidentUpdate),
