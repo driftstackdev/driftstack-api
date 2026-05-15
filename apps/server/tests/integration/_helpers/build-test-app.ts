@@ -173,6 +173,10 @@ function createRecordingEmailService(realService: EmailService): {
       record('team-invite', args);
       await realService.sendTeamInvite(args);
     },
+    sendOauthPendingLinkVerification: async (args) => {
+      record('oauth-pending-verification', args);
+      await realService.sendOauthPendingLinkVerification(args);
+    },
   };
   return { service, sends };
 }

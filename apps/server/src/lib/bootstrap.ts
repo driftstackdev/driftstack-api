@@ -731,18 +731,21 @@ export async function createProductionDeps(
               },
             },
             mailer: {
+              // V-667.C — verify-merge email. Builds the confirm
+              // link from the customer-facing dashboard origin so
+              // the recipient lands on the dashboard's confirm-merge
+              // page (which POSTs back to /v1/auth/oauth-client
+              // /confirm-merge). DASHBOARD_ORIGIN strips its trailing
+              // slash at schema-level, so template-literal `/...`
+              // concatenation is safe.
               sendVerifyMergeEmail: async (args) => {
-                logger.info(
-                  {
-                    component: 'oauth-client-mailer',
-                    to: args.to,
-                    provider: args.provider,
-                  },
-                  'V-667.C verify-merge email (Postmark template wiring TODO)',
-                );
-                // Template wiring lands in V-667.B-10 follow-up — for
-                // now log so the flow is observable end-to-end.
-                return Promise.resolve();
+                const confirmLink = `${config.dashboardOrigin}/auth/oauth-client/confirm-merge?token=${encodeURIComponent(args.plaintextToken)}`;
+                await email.sendOauthPendingLinkVerification({
+                  to: args.to,
+                  provider: args.provider,
+                  confirmLink,
+                  expiresAt: args.expiresAt,
+                });
               },
             },
           }),

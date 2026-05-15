@@ -24,6 +24,7 @@
 //   - tier-changed                (V-202)
 //   - trial-pack-purchased        (V-202)
 //   - trial-pack-expired          (V-202)
+//   - oauth-pending-verification  (V-667.C; verdict-1 merge confirm)
 
 import { ServerClient as PostmarkClient } from 'postmark';
 import type { Logger } from '../lib/logger.js';
@@ -118,6 +119,18 @@ export interface EmailService {
     acceptLink: string;
     expiresAt: Date;
     role: 'member' | 'admin';
+  }): Promise<void>;
+  /**
+   * V-667.C — Verdict-1 verify-merge email. Sent to an existing
+   * account's verified email when an IDP sign-in attempt resolves
+   * to that account but no link exists yet. `confirmLink` carries
+   * the plaintext single-use token; clicking it completes the merge.
+   */
+  sendOauthPendingLinkVerification(args: {
+    to: string;
+    provider: 'google' | 'github';
+    confirmLink: string;
+    expiresAt: Date;
   }): Promise<void>;
   /** V-295c3-followup — fires when a public incident is posted or resolved. */
   sendStatusIncidentNotification(args: {
@@ -334,6 +347,19 @@ const TEMPLATES = {
     html: (v) =>
       `<p>You've been invited to join a Driftstack team as a <strong>${v.role}</strong>.</p><p>Accept the invite by clicking the link below. It expires at <strong>${v.expiresAt}</strong> (UTC) and works once.</p><p><a href="${v.acceptLink}">${v.acceptLink}</a></p><p>If you don't have a Driftstack account yet, you'll be prompted to sign up first. The invite must be accepted by the same email address it was sent to.</p><p>— Driftstack</p>`,
   },
+  // V-667.C — Verdict-1 verify-merge. Sent when an IDP sign-in
+  // resolves to an existing email but no link exists; the recipient
+  // must click confirmLink within 60 minutes to complete the merge.
+  // Provider name is rendered into the body so the user can tell
+  // which IDP (Google vs GitHub) initiated the attempt — material
+  // for the "this wasn't me" decision.
+  'oauth-pending-verification': {
+    subject: 'Driftstack — confirm a new sign-in method on your account',
+    text: (v) =>
+      `Someone — probably you — just tried to sign in to your Driftstack account using ${v.provider}.\n\nIf that was you, confirm the new sign-in method by clicking the link below. It expires at ${v.expiresAt} (UTC) and works once.\n\n${v.confirmLink}\n\nIf that wasn't you, ignore this email — no change is made until the link is clicked. Your password (if any) still works.\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Someone — probably you — just tried to sign in to your Driftstack account using <strong>${v.provider}</strong>.</p><p>If that was you, confirm the new sign-in method by clicking the link below. It expires at <strong>${v.expiresAt}</strong> (UTC) and works once.</p><p><a href="${v.confirmLink}">${v.confirmLink}</a></p><p>If that wasn't you, ignore this email — no change is made until the link is clicked. Your password (if any) still works.</p><p>— Driftstack</p>`,
+  },
   // V-295c3-followup — DRAFT copy. Two templates so the subject can vary
   // (a "resolved" email shouldn't read like a fresh outage).
   'status-incident-created': {
@@ -433,6 +459,7 @@ export function createEmailService({
       sendStatusSubscriptionWelcome: async () => {},
       sendStatusIncidentNotification: async () => {},
       sendTeamInvite: async () => {},
+      sendOauthPendingLinkVerification: async () => {},
     };
   }
 
@@ -550,6 +577,12 @@ export function createEmailService({
         acceptLink,
         expiresAt: expiresAt.toISOString(),
         role,
+      }),
+    sendOauthPendingLinkVerification: ({ to, provider, confirmLink, expiresAt }) =>
+      send('oauth-pending-verification', to, {
+        provider,
+        confirmLink,
+        expiresAt: expiresAt.toISOString(),
       }),
   };
 }

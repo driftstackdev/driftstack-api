@@ -14,7 +14,7 @@
 //   Operational (other):
 //     - status-subscription-confirmation, status-subscription-welcome,
 //       team-invite, status-incident-created, status-incident-resolved,
-//       quota-warning, session-event-digest.
+//       quota-warning, session-event-digest, oauth-pending-verification.
 //
 // stays in lockstep across:
 //   - apps/server/src/services/email.ts (TEMPLATES const).
@@ -66,6 +66,7 @@ const OPERATIONAL_TEMPLATES = [
   'status-incident-resolved',
   'quota-warning',
   'session-event-digest',
+  'oauth-pending-verification',
 ] as const;
 
 describe('W883 Email-template registry cross-source invariant', () => {
@@ -101,7 +102,7 @@ describe('W883 Email-template registry cross-source invariant', () => {
 
   // ─── 7 operational templates present ─────────────────────────
 
-  it('CRITICAL apps/server/src/services/email.ts TEMPLATES has 7 operational templates — status-subscription-* + team-invite + status-incident-* + quota-warning + session-event-digest. These are system-initiated emails (incidents, team invites, quota warnings).', () => {
+  it('CRITICAL apps/server/src/services/email.ts TEMPLATES has 8 operational templates — status-subscription-* + team-invite + status-incident-* + quota-warning + session-event-digest + oauth-pending-verification. These are system-initiated emails (incidents, team invites, quota warnings, oauth merge confirms).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/email.ts'));
     for (const t of OPERATIONAL_TEMPLATES) {
       expect(p, `TEMPLATES must include '${t}'`).toMatch(new RegExp(`'${t}': \\{`));
@@ -139,13 +140,13 @@ describe('W883 Email-template registry cross-source invariant', () => {
 
   // ─── Cardinality: 5 + 8 + 7 = 20 → registry has ≥ 20 ─────────
 
-  it('CRITICAL email template registry has at least 20 templates (5 critical + 8 opt-outable + 7 operational). Future templates may add to the operational bucket without breaking this; if total drops below 20, drift dropped a known-required template.', () => {
+  it('CRITICAL email template registry has at least 21 templates (5 critical + 8 opt-outable + 8 operational). Future templates may add to the operational bucket without breaking this; if total drops below 21, drift dropped a known-required template.', () => {
     expect(CRITICAL_PATH_TEMPLATES.length).toBe(5);
     expect(OPT_OUTABLE_TEMPLATES.length).toBe(8);
-    expect(OPERATIONAL_TEMPLATES.length).toBe(7);
+    expect(OPERATIONAL_TEMPLATES.length).toBe(8);
     const totalKnown =
       CRITICAL_PATH_TEMPLATES.length + OPT_OUTABLE_TEMPLATES.length + OPERATIONAL_TEMPLATES.length;
-    expect(totalKnown).toBe(20);
+    expect(totalKnown).toBe(21);
   });
 
   // ─── EmailService interface header pinned ─────────────────────
