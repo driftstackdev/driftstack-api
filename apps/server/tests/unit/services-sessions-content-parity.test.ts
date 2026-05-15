@@ -182,6 +182,21 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
   });
 
+  it('V-531.B findOwnedSessionLite: pure ownership check without driver side-effects, returns null on terminal-state sessions instead of throwing (route-friendly contract)', () => {
+    expect(body).toMatch(
+      /V-531\.B — pure ownership check for routes that only need to know\s*\n?\s*\* "does this account own this session" without the driver side-effects\s*\n?\s*\* the existing `requireOwned` path triggers\. Returns the row when\s*\n?\s*\* owned \+ not in a terminal state, null otherwise\./,
+    );
+    expect(body).toMatch(
+      /async findOwnedSessionLite\(accountId: string, sessionId: string\): Promise<SessionRecord \| null> \{/,
+    );
+    expect(body).toMatch(
+      /const session = await this\.deps\.repo\.findSession\(sessionId, accountId\);/,
+    );
+    expect(body).toMatch(
+      /if \(session\.status === 'destroyed' \|\| session\.status === 'errored'\) return null;/,
+    );
+  });
+
   it("V-326e3 runWithFailureCapture: session.failed webhook + V-202c first-failure email fan-out to session.accountId (OWNER, not caller); audit on OWNER's log", () => {
     expect(body).toMatch(
       /\/\/ V-326e3 — fan-out goes to the SESSION OWNER \(session\.accountId\),\s*\n?\s*\/\/ not the caller\. When a member fails on an owner's session,\s*\n?\s*\/\/ the owner's webhook subscription fires \+ the owner gets the\s*\n?\s*\/\/ first-failure email\. The caller is the actor; the resource's\s*\n?\s*\/\/ owner is the audience\./,
