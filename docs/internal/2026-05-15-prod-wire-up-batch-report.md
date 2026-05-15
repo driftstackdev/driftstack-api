@@ -4,6 +4,32 @@ Surfaced for founder verdict. Tracks listed in the Wave 1038+ HARD
 priority queue, with current status, what was done this batch, what's
 deferred, and an ETA for each deferred slice.
 
+## Wave 1054+ update (SSH-authorized autopilot)
+
+Founder appended autopilot pubkey to `/root/.ssh/authorized_keys` on
+both prod (128.140.37.74) + staging (116.203.22.197) on 2026-05-12.
+SSH verified at start of Wave 1054. Discovered Postmark + NowPayments
+env vars were ALREADY operator-wired in `/opt/driftstack/api/.env`
+(file timestamp 2026-05-11 14:30); Tracks A + B require no further
+env action. Wave 1054 actions:
+
+- Track E env: appended LIVEKIT*API_KEY / LIVEKIT_API_SECRET /
+  LIVEKIT_WS_URL to both servers' `.env`; restarted `driftstack-api`
+  clean on both (3 LIVEKIT*\* keys present). Deployed binary at SHA
+  `85aee83` is pre-Track-E so `/v1/sessions/:id/livekit-token` 404s
+  until next deploy picks up the route.
+- Track C V-667.B-1: schema landed (migration 0039 + Drizzle for
+  account_oauth_links + oauth_pending_links + account_avatar_source
+  enum). Founder verdicts 1+2+3 locked.
+- Track C V-667.B-2 (Wave 1055): `lib/oauth-client-providers.ts` +
+  7-test unit suite covering Google + GitHub provider configs +
+  buildAuthorizeUrl (Google-specific prompt=consent for fresh email
+  trust per Verdict 1).
+- Track F V-278.K design (Wave 1055): `scripts/v278k-neon-split-
+cutover.sh` operator runbook with 10 confirmation-prompted steps
+  (provision → pg_dump → restore → SSH-swap DATABASE_URL → smoke +
+  7-day rollback window).
+
 ## A — Postmark go-live (V-665 + V-486)
 
 **Status:** code DONE. Env wiring pending operator.
