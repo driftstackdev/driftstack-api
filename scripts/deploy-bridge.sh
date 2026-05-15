@@ -53,7 +53,13 @@ echo "=== deploy-bridge: $ENV ($HOST) → $SHA ===" >&2
 # explicit SHA argument we don't shorten (verifier accepts
 # prefix-match).
 if [ "$SHA" = "main" ]; then
-  EXPECTED_SHORT_SHA=$(git rev-parse --short main 2>/dev/null || echo "")
+  # The SSH-side clones origin's main, not the local checkout. Fetch
+  # origin first so the EXPECTED_SHORT_SHA matches what the SSH-side
+  # `git rev-parse --short HEAD` will compute — otherwise local-only
+  # commits that haven't been pushed cause a spurious --expected-sha
+  # mismatch even though the actual deploy succeeded.
+  git fetch origin main --quiet 2>/dev/null || true
+  EXPECTED_SHORT_SHA=$(git rev-parse --short origin/main 2>/dev/null || echo "")
 else
   EXPECTED_SHORT_SHA="$SHA"
 fi
