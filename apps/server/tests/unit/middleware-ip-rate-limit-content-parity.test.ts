@@ -126,13 +126,14 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
     );
   });
 
-  it('AUTH_IP_LIMITS: 6 entries (login 10 / signup 5 / verifyEmail 10 / passwordResetRequest 3 / resendVerification 3 / statusSubscribe 3) with refill = cap/60', () => {
+  it('AUTH_IP_LIMITS: 7 entries (login 10 / signup 5 / verifyEmail 10 / passwordResetRequest 3 / resendVerification 3 / magicLink 3 / statusSubscribe 3) with refill = cap/60; magicLink added 2026-05-15 (#190 follow-up)', () => {
     expect(body).toMatch(/export const AUTH_IP_LIMITS = \{/);
     expect(body).toMatch(/login: \{ capacity: 10, refillPerSecond: 10 \/ 60 \},/);
     expect(body).toMatch(/signup: \{ capacity: 5, refillPerSecond: 5 \/ 60 \},/);
     expect(body).toMatch(/verifyEmail: \{ capacity: 10, refillPerSecond: 10 \/ 60 \},/);
     expect(body).toMatch(/passwordResetRequest: \{ capacity: 3, refillPerSecond: 3 \/ 60 \},/);
     expect(body).toMatch(/resendVerification: \{ capacity: 3, refillPerSecond: 3 \/ 60 \},/);
+    expect(body).toMatch(/magicLink: \{ capacity: 3, refillPerSecond: 3 \/ 60 \},/);
     expect(body).toMatch(/statusSubscribe: \{ capacity: 3, refillPerSecond: 3 \/ 60 \},/);
     expect(body).toMatch(/\} as const;/);
   });

@@ -154,8 +154,10 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     );
   });
 
-  it('Magic-link request: NO preHandler (no IP gate); shape-stable response framing pinned ("client never learns whether the email matched")', () => {
-    expect(body).toMatch(/app\.post\('\/v1\/auth\/magic-link\/request', \{\}, async \(req\) => \{/);
+  it('Magic-link request: magicLinkRequestGate preHandler (3/min IP cap, #190 2026-05-15 follow-up); shape-stable response framing pinned ("client never learns whether the email matched")', () => {
+    expect(body).toMatch(
+      /app\.post\('\/v1\/auth\/magic-link\/request', \{ preHandler: \[magicLinkRequestGate\] \}, async \(req\) => \{/,
+    );
     expect(body).toMatch(
       /\/\/ Always shape-stable: client never learns whether the email\s*\n?\s*\/\/ matched an account from this response\./,
     );
