@@ -36,8 +36,8 @@ ENV="${1:-}"
 SHA="${2:-main}"
 
 case "$ENV" in
-  prod) HOST="128.140.37.74" ;;
-  staging) HOST="116.203.22.197" ;;
+  prod) HOST="128.140.37.74"; PUBLIC_URL="https://api.driftstack.dev" ;;
+  staging) HOST="116.203.22.197"; PUBLIC_URL="https://staging.driftstack.dev" ;;
   *)
     echo "usage: $0 <staging|prod> [<git-sha>]" >&2
     exit 2
@@ -45,6 +45,18 @@ case "$ENV" in
 esac
 
 echo "=== deploy-bridge: $ENV ($HOST) → $SHA ===" >&2
+
+# Resolve the expected SHA locally so the post-deploy verifier can
+# confirm the public /version reports it. `main` resolves via git rev-
+# parse so the verify step uses the same short SHA the SSH-side
+# `git rev-parse --short HEAD` will compute. For a passed-through
+# explicit SHA argument we don't shorten (verifier accepts
+# prefix-match).
+if [ "$SHA" = "main" ]; then
+  EXPECTED_SHORT_SHA=$(git rev-parse --short main 2>/dev/null || echo "")
+else
+  EXPECTED_SHORT_SHA="$SHA"
+fi
 
 # All work happens in /tmp/driftstack-deploy-<unix> on the host so we
 # can atomic-swap at the end.
@@ -123,3 +135,15 @@ ssh "root@${HOST}" "set -euo pipefail; \
   done; \
   systemctl restart driftstack-api; \
   exit 1"
+
+# Post-deploy verification — runs locally against the public origin
+# (not just the SSH-side localhost loopback). Catches route-registration
+# regressions, openapi-spec gaps, version-SHA mismatch — anything the
+# on-host /health-poll can't see.
+if [ -n "$EXPECTED_SHORT_SHA" ]; then
+  echo "[bridge] post-deploy verify against $PUBLIC_URL (--expected-sha $EXPECTED_SHORT_SHA)" >&2
+  node scripts/post-deploy-verify.mjs --base-url "$PUBLIC_URL" --expected-sha "$EXPECTED_SHORT_SHA"
+else
+  echo "[bridge] post-deploy verify against $PUBLIC_URL (no --expected-sha)" >&2
+  node scripts/post-deploy-verify.mjs --base-url "$PUBLIC_URL"
+fi
