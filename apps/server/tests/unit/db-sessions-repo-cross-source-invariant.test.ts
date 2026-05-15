@@ -1,0 +1,207 @@
+// W998 — db/sessions-repo cross-source invariant. Three-hundred-
+// twenty-fourth in the drift-guard series. Pins the apps/server/src/
+// db/sessions-repo.ts Drizzle sessions repo primitive:
+//
+//   Header framing — 'Drizzle-backed implementation of SessionRepo.
+//   The shape mirrors SessionsService expectations exactly; tests
+//   use an in-memory impl from tests/integration/_helpers/in-memory-
+//   sessions-repo.ts'.
+//
+//   DrizzleSessionRepo 8-method surface — insertSession + findSession
+//     (account-scoped) + findSessionUnscoped (admin) +
+//     updateSessionStatus + countActiveSessions + listSessions
+//     (account-scoped paged) + recordEvent + listAllSessions (admin
+//     paged).
+//
+//   insertSession 7-field values — accountId + apiKeyId +
+//     driverSessionId + archetype + purpose + label + metadata.
+//
+//   updateSessionStatus 2-conditional spread — lastStateAt + destroyedAt
+//     each only set when present in extra.
+//
+//   countActiveSessions uses sql<number>`count(*)::int` + isNull
+//     (destroyedAt). The ::int cast keeps Postgres bigint from
+//     becoming a JS string.
+//
+//   listSessions cursor framing — 'Cursor format: ISO timestamp of
+//   the last seen createdAt (descending order)'. cursor → lt
+//   (createdAt, cursorDate).
+//
+//   listAllSessions admin filters — cursor + status + accountId.
+//
+//   recordEvent values 4 fields — sessionId + type + payload +
+//     durationMs.
+//
+//   toSessionRecord 13-field mapper — id + accountId + apiKeyId +
+//     driverSessionId + status + archetype + purpose + label +
+//     metadata ?? null + createdAt + updatedAt + lastStateAt +
+//     destroyedAt.
+//
+// stays in lockstep across apps/server/src/db/sessions-repo.ts.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('W998 db/sessions-repo cross-source invariant', () => {
+  // ─── Header framing ──────────────────────────────────────────
+
+  it("CRITICAL apps/server/src/db/sessions-repo.ts header — 'Drizzle-backed implementation of SessionRepo. The shape mirrors SessionsService expectations exactly; tests use an in-memory impl from tests/integration/_helpers/in-memory-sessions-repo.ts'. The Drizzle + in-memory test-impl pairing is the V-156 sessions-repo contract.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(/Drizzle-backed implementation of SessionRepo\. The shape mirrors/);
+    expect(p).toMatch(/SessionsService expectations exactly; tests use an in-memory impl from/);
+    expect(p).toMatch(/`tests\/integration\/_helpers\/in-memory-sessions-repo\.ts`\./);
+  });
+
+  // ─── 8-method surface ────────────────────────────────────────
+
+  it('CRITICAL 8-method surface — insertSession + findSession + findSessionUnscoped + updateSessionStatus + countActiveSessions + listSessions + recordEvent + listAllSessions. The 8-method SessionRepo covers CRUD + event-recording + admin lookup.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(/async insertSession\(input: NewSessionInput\): Promise<SessionRecord> \{/);
+    expect(p).toMatch(
+      /async findSession\(id: string, accountId: string\): Promise<SessionRecord \| null> \{/,
+    );
+    expect(p).toMatch(/async findSessionUnscoped\(id: string\): Promise<SessionRecord \| null> \{/);
+    expect(p).toMatch(/async updateSessionStatus\(/);
+    expect(p).toMatch(/async countActiveSessions\(accountId: string\): Promise<number> \{/);
+    expect(p).toMatch(/async listSessions\(/);
+    expect(p).toMatch(/async recordEvent\(input: SessionEventInput\): Promise<void> \{/);
+    expect(p).toMatch(/async listAllSessions\(opts: \{/);
+  });
+
+  // ─── insertSession 7-field values ────────────────────────────
+
+  it('CRITICAL insertSession 7-field values — accountId + apiKeyId + driverSessionId + archetype + purpose + label + metadata. The 7-field shape carries identity + driver-binding + per-archetype attrs.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(/accountId: input\.accountId,/);
+    expect(p).toMatch(/apiKeyId: input\.apiKeyId,/);
+    expect(p).toMatch(/driverSessionId: input\.driverSessionId,/);
+    expect(p).toMatch(/archetype: input\.archetype,/);
+    expect(p).toMatch(/purpose: input\.purpose,/);
+    expect(p).toMatch(/label: input\.label,/);
+    expect(p).toMatch(/metadata: input\.metadata,/);
+    expect(p).toMatch(/if \(!row\) throw new Error\('insertSession returned no row'\);/);
+  });
+
+  // ─── findSession + findSessionUnscoped split ─────────────────
+
+  it('CRITICAL findSession + findSessionUnscoped split — tenant-scoped vs admin lookup. The 2-variant design keeps the customer surface tenant-isolated.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(
+      /\.where\(and\(eq\(sessions\.id, id\), eq\(sessions\.accountId, accountId\)\)\)/,
+    );
+    expect(p).toMatch(/\.where\(eq\(sessions\.id, id\)\)/);
+  });
+
+  // ─── updateSessionStatus conditional-spreads ─────────────────
+
+  it("CRITICAL updateSessionStatus 2-conditional spread — lastStateAt + destroyedAt each only set when present in extra. The conditional-spread avoids overwriting timestamps to undefined when caller doesn't pass them.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(/status,/);
+    expect(p).toMatch(/updatedAt: new Date\(\),/);
+    expect(p).toMatch(
+      /\.\.\.\(extra\?\.lastStateAt \? \{ lastStateAt: extra\.lastStateAt \} : \{\}\),/,
+    );
+    expect(p).toMatch(
+      /\.\.\.\(extra\?\.destroyedAt \? \{ destroyedAt: extra\.destroyedAt \} : \{\}\),/,
+    );
+  });
+
+  // ─── countActiveSessions sql cast ────────────────────────────
+
+  it('CRITICAL countActiveSessions uses sql<number>`count(*)::int` + isNull(destroyedAt). The ::int cast keeps Postgres bigint from becoming a JS string.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(/\.select\(\{ count: sql<number>`count\(\*\)::int` \}\)/);
+    expect(p).toMatch(
+      /\.where\(and\(eq\(sessions\.accountId, accountId\), isNull\(sessions\.destroyedAt\)\)\);/,
+    );
+    expect(p).toMatch(/return row\?\.count \?\? 0;/);
+  });
+
+  // ─── listSessions cursor framing ─────────────────────────────
+
+  it("CRITICAL listSessions cursor framing — 'Cursor format: ISO timestamp of the last seen createdAt (descending order)'. The ISO-cursor + desc(createdAt) is the standard keyset-pagination pattern.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(
+      /\/\/ Cursor format: ISO timestamp of the last seen createdAt \(descending order\)\./,
+    );
+    expect(p).toMatch(/const cursorDate = opts\.cursor \? new Date\(opts\.cursor\) : null;/);
+    expect(p).toMatch(
+      /\? and\(eq\(sessions\.accountId, accountId\), lt\(sessions\.createdAt, cursorDate\)\)/,
+    );
+    expect(p).toMatch(/: eq\(sessions\.accountId, accountId\);/);
+  });
+
+  it("CRITICAL listSessions limit+1 hasMore probe + ISO cursor — '.limit(opts.limit + 1)' + 'nextCursor = hasMore && last ? last.createdAt.toISOString() : null'. The +1 probe is the standard keyset-pagination idiom.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(/\.orderBy\(desc\(sessions\.createdAt\)\)/);
+    expect(p).toMatch(/\.limit\(opts\.limit \+ 1\);/);
+    expect(p).toMatch(/const hasMore = rows\.length > opts\.limit;/);
+    expect(p).toMatch(/nextCursor: hasMore && last \? last\.createdAt\.toISOString\(\) : null,/);
+  });
+
+  // ─── recordEvent 4-field values ──────────────────────────────
+
+  it('CRITICAL recordEvent 4-field values — sessionId + type + payload + durationMs. The 4-field shape is the per-event session-history record.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(/sessionId: input\.sessionId,/);
+    expect(p).toMatch(/type: input\.type,/);
+    expect(p).toMatch(/payload: input\.payload,/);
+    expect(p).toMatch(/durationMs: input\.durationMs,/);
+  });
+
+  // ─── listAllSessions admin filters ───────────────────────────
+
+  it('CRITICAL listAllSessions admin 3-filter — cursor (lt createdAt) + status (eq) + accountId (eq). The admin-side filter set covers cross-tenant lookup with optional status/account narrowing.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(/if \(cursorDate\) filters\.push\(lt\(sessions\.createdAt, cursorDate\)\);/);
+    expect(p).toMatch(/if \(opts\.status\) filters\.push\(eq\(sessions\.status, opts\.status\)\);/);
+    expect(p).toMatch(
+      /if \(opts\.accountId\) filters\.push\(eq\(sessions\.accountId, opts\.accountId\)\);/,
+    );
+    expect(p).toMatch(
+      /const whereClause = filters\.length === 0 \? undefined : and\(\.\.\.filters\);/,
+    );
+  });
+
+  // ─── toSessionRecord 13-field mapper ─────────────────────────
+
+  it('CRITICAL toSessionRecord 13-field mapper — id + accountId + apiKeyId + driverSessionId + status + archetype + purpose + label + metadata ?? null + createdAt + updatedAt + lastStateAt + destroyedAt. The 13-field SessionRecord is the SessionsService consumer shape.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(
+      /function toSessionRecord\(r: typeof sessions\.\$inferSelect\): SessionRecord \{/,
+    );
+    expect(p).toMatch(/id: r\.id,/);
+    expect(p).toMatch(/accountId: r\.accountId,/);
+    expect(p).toMatch(/apiKeyId: r\.apiKeyId,/);
+    expect(p).toMatch(/driverSessionId: r\.driverSessionId,/);
+    expect(p).toMatch(/status: r\.status,/);
+    expect(p).toMatch(/archetype: r\.archetype,/);
+    expect(p).toMatch(/purpose: r\.purpose,/);
+    expect(p).toMatch(/label: r\.label,/);
+    expect(p).toMatch(/metadata: r\.metadata \?\? null,/);
+    expect(p).toMatch(/createdAt: r\.createdAt,/);
+    expect(p).toMatch(/updatedAt: r\.updatedAt,/);
+    expect(p).toMatch(/lastStateAt: r\.lastStateAt,/);
+    expect(p).toMatch(/destroyedAt: r\.destroyedAt,/);
+  });
+
+  it('test file metadata — file exists at canonical path', () => {
+    expect(
+      existsSync(
+        resolve(
+          REPO_ROOT,
+          'apps/server/tests/unit/db-sessions-repo-cross-source-invariant.test.ts',
+        ),
+      ),
+    ).toBe(true);
+  });
+});
