@@ -153,7 +153,7 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
       /\/\/ The status page consumes this; no auth required, only public=true rows\s*\n?\s*\/\/ surfaced\. Limited to the last 30 days by default\./,
     );
     expect(body).toMatch(
-      /app\.get\('\/v1\/status\/incidents', async \(request\) => \{\s*\n?\s*const parsed = ListIncidentsQuerySchema\.safeParse\(\{\s*\n?\s*\.\.\.\(request\.query \?\? \{\}\),\s*\n?\s*scope: 'public',\s*\n?\s*\}\);/,
+      /app\.get\('\/v1\/status\/incidents', async \(request, reply\) => \{\s*\n?\s*const parsed = ListIncidentsQuerySchema\.safeParse\(\{\s*\n?\s*\.\.\.\(request\.query \?\? \{\}\),\s*\n?\s*scope: 'public',\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /const since =\s*\n?\s*parsed\.data\.since !== undefined\s*\n?\s*\? new Date\(parsed\.data\.since\)\s*\n?\s*: new Date\(Date\.now\(\) - 30 \* 24 \* 60 \* 60 \* 1000\);/,

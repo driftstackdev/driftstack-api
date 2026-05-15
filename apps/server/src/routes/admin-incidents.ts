@@ -240,7 +240,7 @@ export function registerAdminIncidentsRoutes(
   // ── PUBLIC GET /v1/status/incidents ────────────────────────────────────
   // The status page consumes this; no auth required, only public=true rows
   // surfaced. Limited to the last 30 days by default.
-  app.get('/v1/status/incidents', async (request) => {
+  app.get('/v1/status/incidents', async (request, reply) => {
     const parsed = ListIncidentsQuerySchema.safeParse({
       ...(request.query ?? {}),
       scope: 'public',
@@ -255,6 +255,10 @@ export function registerAdminIncidentsRoutes(
       since,
       limit: parsed.data.limit ?? 50,
     });
+    // Cache-Control: public, max-age=30 — matches /v1/status + the
+    // detail route. Status site polls every 30s for live updates;
+    // CDN coalesces concurrent viewers onto one origin call.
+    reply.header('cache-control', 'public, max-age=30');
     return { data: rows.map(publicIncident) };
   });
 

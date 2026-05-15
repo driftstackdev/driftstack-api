@@ -162,7 +162,7 @@ describe('W1042 routes/admin-incidents V-295a + V-281 cross-source invariant', (
 
   it('CRITICAL public status-incidents path — GET /v1/status/incidents (no auth, NO requireScope preHandler). The lack of any auth gate is what lets the public status page consume this.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts'));
-    expect(p).toMatch(/app\.get\('\/v1\/status\/incidents', async \(request\) => \{/);
+    expect(p).toMatch(/app\.get\('\/v1\/status\/incidents', async \(request, reply\) => \{/);
   });
 
   // ─── Defaults on create ──────────────────────────────────────
