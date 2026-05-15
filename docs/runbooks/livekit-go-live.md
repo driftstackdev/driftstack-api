@@ -10,23 +10,36 @@ today still behaves when LiveKit is misconfigured.
 
 ## Current state (2026-05-15)
 
+Server-side ladder is **end-to-end complete**. The operator can wire
+env + smoke today; the only remaining slice is the customer-side
+subscriber probe.
+
 - [x] `apps/server/src/lib/config.ts` accepts `LIVEKIT_API_KEY` +
       `LIVEKIT_API_SECRET` + `LIVEKIT_WS_URL` via the optional
       `livekit` schema block (V-531.B groundwork, commit `70e98136`).
 - [x] `LivekitConfig` type exported.
-- [ ] `lib/livekit-token.ts` — JWT minting wrapper (deferred — adds
-      `livekit-server-sdk` dependency).
-- [ ] `POST /v1/sessions/:id/livekit-token` route — gated on
-      `config.livekit` presence at app.ts (deferred).
-- [ ] `LiveKitWebRtcStreamingService` impl (or direct client connect
-      from `gui-client` / `customer-dashboard`).
+- [x] `apps/server/src/lib/livekit-token.ts` — pure `node:crypto`
+      HS256 JWT minter mirroring LiveKit's `AccessToken` claim shape
+      (commit `2b92d957`). No `livekit-server-sdk` dependency.
+- [x] `apps/server/src/routes/sessions-livekit-token.ts` —
+      `POST /v1/sessions/:id/livekit-token` route (commit `1eea466d`)
+      with publisher/subscriber role mapping + cross-account 404 +
+      shape-check on session id.
+- [x] `apps/server/src/lib/app.ts` + `bootstrap.ts` — route
+      registration gated on `config.livekit` presence (3-field
+      all-or-nothing), ownership check via the new
+      `sessionsService.findOwnedSessionLite` seam (commit `97785484`).
+- [x] `scripts/smoke-livekit.mjs` — operator smoke script using Node
+      22+ global WebSocket, dep-free (commit `e3662779`).
 - [ ] `gui-client` `LiveSessionView` LiveKit-subscriber path with
       HTTP-polling fall-back when `config.livekit.wsUrl` is unset.
+      Adds `livekit-client` as a dep when this slice lands.
 
-The code groundwork above (config-schema acceptance) means an operator
-can write the env vars to `/etc/driftstack/api.env` today without
-affecting boot. The route + service that consume them land in the
-remaining slices listed above.
+What's already live for the operator: writing the 3 env vars +
+restarting the api service is sufficient to enable the
+`/v1/sessions/:id/livekit-token` endpoint. The gui-client + customer-
+dashboard continue using HTTP polling until the subscriber probe
+lands; LiveKit Cloud usage stays zero until then.
 
 ## Pre-flight
 
