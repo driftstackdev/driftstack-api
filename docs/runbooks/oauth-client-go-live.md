@@ -83,6 +83,13 @@ authorize URL has all expected query params (`client_id`,
 `redirect_uri`, `state`, `code_challenge`, `code_challenge_method=S256`,
 `scope`, `response_type=code`).
 
+The broader `scripts/post-deploy-verify.mjs` covers the same surface
+plus 7 other invariants (/health, /version, /v1/status,
+/v1/status/incidents, /v1/status/incidents/:id, /openapi.json,
+unknown-path 404). `deploy-bridge.sh` auto-runs it after every
+`bash scripts/deploy-bridge.sh {staging,prod}` so a post-OAUTH-wire
+redeploy will catch a misconfigured env automatically.
+
 ## Step 2 — smoke test
 
 From a workstation:
