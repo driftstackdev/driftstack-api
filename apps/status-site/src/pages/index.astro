@@ -142,6 +142,11 @@ const R2_FALLBACK_URL =
       )
       .join('');
     const opacity = inc.status === 'resolved' ? 'opacity-80' : '';
+    // V-545.A — anchor each card title at /incident?id=<inc_uuid> so
+    // visitors can deep-link to the full update timeline. Card body
+    // shows headline + a few inline updates; the linked page shows
+    // the complete chronology + description.
+    const detailHref = inc.id ? `/incident?id=${encodeURIComponent(inc.id)}` : '#';
     return `
       <article class="rounded-lg border border-white/10 bg-surface-raised p-5 shadow-sm ${opacity}">
         <header class="mb-2">
@@ -149,7 +154,9 @@ const R2_FALLBACK_URL =
             ${badge(inc.severity, SEVERITY_BADGE[inc.severity] ?? [])}
             ${badge(inc.status, STATUS_BADGE[inc.status] ?? [])}
           </div>
-          <h3 class="mt-2 text-base font-semibold text-ink-primary">${escapeHtml(inc.title)}</h3>
+          <h3 class="mt-2 text-base font-semibold text-ink-primary">
+            <a href="${detailHref}" class="hover:underline">${escapeHtml(inc.title)}</a>
+          </h3>
           <p class="mt-1 text-xs text-ink-muted">
             Started ${fmtIso(inc.started_at)}${
               inc.resolved_at ? ` · resolved ${fmtIso(inc.resolved_at)}` : ''

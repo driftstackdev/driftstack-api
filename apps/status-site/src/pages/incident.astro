@@ -1,0 +1,196 @@
+---
+import StatusLayout from '../layouts/StatusLayout.astro';
+
+// V-545.A — public incident-detail view. Reads `?id=inc_<uuid>` from
+// the URL on the client and fetches the matching incident + its
+// update timeline from the public API. The endpoint is no-auth so the
+// fetch happens directly from the browser; the page itself sets no
+// cookies and does not log visitors (same posture as index.astro).
+//
+// Static page — Astro static-output mode doesn't allow dynamic
+// `[id].astro` routes without prerendering an enumerated set, and the
+// set of incident ids isn't knowable at build time. Reading `?id=`
+// keeps the page hermetic.
+
+const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.dev';
+---
+
+<StatusLayout title="Driftstack — Incident detail">
+  <nav class="mb-6 text-sm">
+    <a href="/" class="text-ink-muted hover:text-ink-primary">← Back to status</a>
+  </nav>
+
+  <section id="loading" class="mb-12">
+    <div class="rounded-lg border border-white/10 bg-surface-raised p-5 text-sm text-ink-muted">
+      Loading incident…
+    </div>
+  </section>
+
+  <section id="error" class="mb-12 hidden">
+    <div
+      class="rounded-lg border border-red-500/30 bg-red-500/10 p-5 text-sm text-ink-primary"
+      role="alert"
+    >
+      <p id="error-message">Incident not found.</p>
+      <p class="mt-2 text-xs text-ink-muted">
+        The id may be wrong, the incident may have been deleted, or it may be
+        admin-only (not yet public).
+      </p>
+    </div>
+  </section>
+
+  <article id="incident" class="mb-12 hidden">
+    <header class="mb-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <span id="severity-badge"></span>
+        <span id="status-badge"></span>
+      </div>
+      <h1 id="title" class="mt-3 text-xl font-semibold text-ink-primary"></h1>
+      <p id="meta" class="mt-1 text-xs text-ink-muted"></p>
+    </header>
+    <p id="description" class="mb-6 whitespace-pre-wrap text-sm text-ink-secondary"></p>
+
+    <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-muted">
+      Timeline
+    </h2>
+    <ol id="timeline" class="space-y-3"></ol>
+  </article>
+
+  <section class="text-xs text-ink-muted">
+    <p>
+      This page reads from the public no-auth endpoint
+      <code class="font-mono">{API_BASE}/v1/status/incidents/&#123;id&#125;</code>.
+      The page itself stores no cookies and does not log visitors.
+    </p>
+  </section>
+</StatusLayout>
+
+<script is:inline define:vars={{ API_BASE }}>
+  const SEVERITY_BADGE = {
+    minor: ['bg-amber-50', 'text-amber-700'],
+    major: ['bg-orange-50', 'text-orange-700'],
+    outage: ['bg-red-50', 'text-red-700'],
+  };
+  const STATUS_BADGE = {
+    investigating: ['bg-amber-50', 'text-amber-700'],
+    identified: ['bg-blue-50', 'text-blue-700'],
+    monitoring: ['bg-indigo-50', 'text-indigo-700'],
+    resolved: ['bg-emerald-50', 'text-emerald-700'],
+  };
+
+  function fmtIso(iso) {
+    return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+  }
+
+  function badge(text, classes) {
+    const cls = (classes ?? []).join(' ');
+    return `<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ${cls}">${escapeHtml(text)}</span>`;
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) => {
+      switch (c) {
+        case '&':
+          return '&amp;';
+        case '<':
+          return '&lt;';
+        case '>':
+          return '&gt;';
+        case '"':
+          return '&quot;';
+        case "'":
+          return '&#39;';
+        default:
+          return c;
+      }
+    });
+  }
+
+  function show(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('hidden');
+  }
+  function hide(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  }
+
+  function showError(msg) {
+    hide('loading');
+    hide('incident');
+    show('error');
+    const m = document.getElementById('error-message');
+    if (m && msg) m.textContent = msg;
+  }
+
+  function render(inc, updates) {
+    document.getElementById('severity-badge').innerHTML = badge(
+      inc.severity,
+      SEVERITY_BADGE[inc.severity],
+    );
+    document.getElementById('status-badge').innerHTML = badge(
+      inc.status,
+      STATUS_BADGE[inc.status],
+    );
+    document.getElementById('title').textContent = inc.title;
+    const components =
+      Array.isArray(inc.affected_components) && inc.affected_components.length
+        ? ' · affecting ' + inc.affected_components.map(escapeHtml).join(', ')
+        : '';
+    document.getElementById('meta').innerHTML =
+      `Started ${escapeHtml(fmtIso(inc.started_at))}${
+        inc.resolved_at ? ` · resolved ${escapeHtml(fmtIso(inc.resolved_at))}` : ''
+      }${components}`;
+    document.getElementById('description').textContent = inc.description ?? '';
+
+    const timeline = document.getElementById('timeline');
+    timeline.innerHTML = updates
+      .map(
+        (u) => `
+          <li class="relative pl-5 border-l border-white/10">
+            <span class="absolute -left-[5px] top-1 inline-block h-2 w-2 rounded-full bg-oxblood-700"></span>
+            <div class="flex flex-wrap items-baseline gap-2">
+              ${badge(u.status, STATUS_BADGE[u.status])}
+              <span class="text-xs text-ink-muted">${escapeHtml(fmtIso(u.posted_at))}</span>
+            </div>
+            <p class="mt-1 text-sm text-ink-secondary">${escapeHtml(u.message)}</p>
+          </li>
+        `,
+      )
+      .join('');
+
+    hide('loading');
+    hide('error');
+    show('incident');
+    document.title = `${inc.title} — Driftstack status`;
+  }
+
+  async function main() {
+    const params = new URLSearchParams(globalThis.location.search);
+    const id = params.get('id') ?? '';
+    if (!/^inc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+      showError('Missing or malformed incident id. Expected ?id=inc_<uuid>.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/v1/status/incidents/${encodeURIComponent(id)}`, {
+        headers: { accept: 'application/json' },
+        cache: 'no-store',
+      });
+      if (res.status === 404) {
+        showError('Incident not found.');
+        return;
+      }
+      if (!res.ok) {
+        showError(`Unexpected response (HTTP ${res.status}).`);
+        return;
+      }
+      const body = await res.json();
+      render(body.incident, Array.isArray(body.updates) ? body.updates : []);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showError(`Could not reach the status API: ${msg}`);
+    }
+  }
+  main();
+</script>
