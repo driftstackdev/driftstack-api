@@ -20,6 +20,7 @@ SCENARIOS=(
   01-postmark-outage
   02-stripe-bad-signature
   03-nowpayments-bad-signature
+  04-postgres-restart
   06-redis-down
 )
 
