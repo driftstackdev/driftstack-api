@@ -115,18 +115,38 @@ Run `scripts/sentry-create-per-service-projects.mjs` with the
 
 ## E — LiveKit V-531.B real codec swap
 
-**Status:** not surveyed this batch.
+**Status:** surveyed + config-schema groundwork DONE this batch.
 
-**This batch:** none — Track C's gap discovery took the time budget.
+**This batch (survey + groundwork):**
 
-**Next-batch plan:**
+- Surveyed `packages/webrtc-streaming/`: only mock surface exists today
+  (`MockWebRtcStreamingService` + `MockFrameSource` + `EncodePipeline`
+  with `codec='raw'` pass-through). No `livekit-server-sdk` dep, no
+  token-mint endpoint, no `LiveKitWebRtcStreamingService`.
+- `LiveSessionView.tsx` (apps/gui-client) — confirmed still uses HTTP
+  polling of `client.sessions.capture()` at 500ms cadence, not the
+  streaming-service abstraction.
+- `lib/config.ts` — added `livekit.{apiKey,apiSecret,wsUrl}` optional
+  zod block with all-or-nothing route-gate semantics, mirroring the
+  nowpayments precedent. `LivekitConfig` type exported.
+- `tests/unit/config-lib-cross-source-invariant.test.ts` — drift-guard
+  pin for the framing comment + zod block + type export.
 
-1. Survey `webrtc-streaming` service to find the mock-codec wrapper.
-2. Swap to LiveKit SFU client using the pasted credentials.
-3. Activate `gui-client` V-534.E stream view (separate repo / app).
-4. Smoke test WS handshake + first frame render.
+**Remaining (~3h focused):**
 
-**ETA:** ~3h focused once the survey lands.
+1. Add `livekit-server-sdk` dependency to `apps/server/package.json`.
+2. Build `lib/livekit-token.ts` — wraps `AccessToken` from SDK to mint
+   per-session JWTs (publisher token for the Mac mini fleet, subscriber
+   token for the customer-dashboard preview).
+3. Add route `POST /v1/sessions/:id/livekit-token` (gated on
+   `config.livekit` presence at app.ts).
+4. Build `LiveKitWebRtcStreamingService` (or simpler: skip the
+   StreamingService interface entirely and just have gui-client mint
+   token + open `livekit-client` connection directly).
+5. Wire `gui-client` `LiveSessionView` to use LiveKit subscriber when
+   `config.livekit.wsUrl` is set, fall back to HTTP polling otherwise.
+6. Smoke test WS handshake + first frame render against the pasted
+   LIVEKIT_WS_URL.
 
 ## F — V-278.K Neon prod/staging split + V-278.L Upstash split
 
@@ -164,9 +184,38 @@ into a wired-up environment rather than racing the wire-up.
 
 ## H — Tasks #187 (resend-verification) + #190 (magic-link dashboard)
 
-**Status:** queued behind A-F. No work this batch.
+**Status:** server side DONE for both. Frontend slice pending.
 
-**ETA:** ~2h combined as the user's directive estimated.
+**#190 magic-link server (this batch):**
+
+- `routes/auth.ts` — added `magicLinkRequestGate` (3/min IP cap), attached
+  to `POST /v1/auth/magic-link/request`. Pre-this-fix the endpoint had
+  no rate-limit at all — surfaced during the wire-up audit, was a
+  pre-launch abuse vector since each call fires a Postmark send.
+- `middleware/ip-rate-limit.ts` — added `magicLink: 3/min` to the
+  `AUTH_IP_LIMITS` table (7-entry map now).
+- `tests/unit/ip-rate-limit-v251-cross-source-invariant.test.ts` — pinned
+  the 7-entry shape including the new limit.
+
+**#187 resend-verification audit (this batch):**
+
+- Endpoint `POST /v1/auth/resend-verification` already wired with
+  `resendVerificationGate` (3/min). Existed before this audit batch —
+  the wire-up audit was a verification pass.
+- Service `resendSignupVerification` already implements the no-leak
+  flow: same response shape whether the email matched an unverified
+  account, an already-verified account, or no account at all.
+- Postmark integration: `this.email.sendSignupVerification(...)` is
+  fire-and-forget per the rest of the auth-flow service.
+
+**Deferred — both #187 + #190 frontend slices:**
+
+- `apps/customer-dashboard/` — UI affordance on post-signup
+  "check your email" screen (re-trigger button) for #187.
+- `apps/customer-dashboard/` — magic-link request form for #190
+  (server endpoint is live; nothing in the dashboard invokes it yet).
+
+**ETA:** ~2h combined for the two frontend slices.
 
 ## Held tasks for founder verdict (Pasted credentials)
 
