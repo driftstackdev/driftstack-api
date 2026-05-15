@@ -58,6 +58,10 @@ else
   EXPECTED_SHORT_SHA="$SHA"
 fi
 
+# Wall-clock timing for ops visibility — printed at the very end so
+# operators can spot "this deploy took 2x normal" without grepping.
+DEPLOY_STARTED_AT=$(date +%s)
+
 # All work happens in /tmp/driftstack-deploy-<unix> on the host so we
 # can atomic-swap at the end.
 ssh "root@${HOST}" "set -euo pipefail; \
@@ -147,3 +151,6 @@ else
   echo "[bridge] post-deploy verify against $PUBLIC_URL (no --expected-sha)" >&2
   node scripts/post-deploy-verify.mjs --base-url "$PUBLIC_URL"
 fi
+
+DEPLOY_ELAPSED=$(($(date +%s) - DEPLOY_STARTED_AT))
+echo "[bridge] === $ENV deploy ($EXPECTED_SHORT_SHA) done in ${DEPLOY_ELAPSED}s ===" >&2
