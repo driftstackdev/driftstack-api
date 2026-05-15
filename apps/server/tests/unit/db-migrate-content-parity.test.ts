@@ -7,7 +7,10 @@
 //   • CLI framing pinned: `npm run db:migrate` → `tsx src/db/migrate.ts`.
 //   • postgres client max:1 (single connection; migration tooling
 //     contract).
-//   • migrationsFolder resolved relative to this file's dir.
+//   • migrationsFolder resolved relative to this file's dir, with a
+//     src-tree fallback so the compiled prod migrate.js finds the
+//     migrations under apps/server/src/db/migrations (deploy-bridge
+//     pattern; no migrations copied into dist/).
 //   • main().catch → console.error + process.exit(1) on failure.
 //   • Bounded client.end({timeout:5}) — same shutdown contract as
 //     production client.
@@ -34,18 +37,28 @@ describe('W441.A apps/server/src/db/migrate.ts content parity', () => {
     );
   });
 
-  it('imports: migrate from drizzle-orm/postgres-js/migrator + drizzle + postgres + fileURLToPath/dirname/resolve + loadConfig', () => {
+  it('imports: migrate from drizzle-orm/postgres-js/migrator + drizzle + postgres + fs.existsSync + fileURLToPath/dirname/resolve + loadConfig', () => {
     expect(body).toMatch(/import \{ migrate \} from 'drizzle-orm\/postgres-js\/migrator';/);
     expect(body).toMatch(/import \{ drizzle \} from 'drizzle-orm\/postgres-js';/);
     expect(body).toMatch(/import postgres from 'postgres';/);
+    expect(body).toMatch(/import \{ existsSync \} from 'node:fs';/);
     expect(body).toMatch(/import \{ fileURLToPath \} from 'node:url';/);
     expect(body).toMatch(/import \{ dirname, resolve \} from 'node:path';/);
     expect(body).toMatch(/import \{ loadConfig \} from '\.\.\/lib\/config\.js';/);
   });
 
-  it("main(): loadConfig + migrationsFolder resolved via fileURLToPath(import.meta.url) + 'migrations' relative subdir", () => {
+  it('resolveMigrationsFolder helper prefers compiled-neighbour migrations/ when it has meta/_journal.json, falls back to src/db/migrations two dirs up', () => {
+    expect(body).toMatch(/function resolveMigrationsFolder\(here: string\): string \{/);
+    expect(body).toMatch(/const compiledNeighbour = resolve\(here, 'migrations'\);/);
     expect(body).toMatch(
-      /async function main\(\): Promise<void> \{\s*\n?\s*const config = loadConfig\(\);\s*\n?\s*const here = dirname\(fileURLToPath\(import\.meta\.url\)\);\s*\n?\s*const migrationsFolder = resolve\(here, 'migrations'\);/,
+      /if \(existsSync\(resolve\(compiledNeighbour, 'meta\/_journal\.json'\)\)\) \{\s*\n?\s*return compiledNeighbour;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(/return resolve\(here, '\.\.', '\.\.', 'src', 'db', 'migrations'\);/);
+  });
+
+  it('main(): loadConfig + migrationsFolder via resolveMigrationsFolder(here)', () => {
+    expect(body).toMatch(
+      /async function main\(\): Promise<void> \{\s*\n?\s*const config = loadConfig\(\);\s*\n?\s*const here = dirname\(fileURLToPath\(import\.meta\.url\)\);\s*\n?\s*const migrationsFolder = resolveMigrationsFolder\(here\);/,
     );
   });
 

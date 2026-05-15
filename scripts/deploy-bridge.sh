@@ -84,6 +84,13 @@ ssh "root@${HOST}" "set -euo pipefail; \
   cp -r \$BUILD_DIR/packages/webhook-delivery/dist packages/webhook-delivery/dist; \
   cp -r \$BUILD_DIR/packages/webhook-delivery/package.json packages/webhook-delivery/; \
   echo \"GIT_SHA=\$GIT_SHA\" >> /opt/driftstack/api/.env.deploy-marker; \
+  # V-667.C-followup — apply pending DB migrations BEFORE restart so
+  # the new code never sees a schema older than itself. node + the
+  # compiled migrate.js are pinned via DATABASE_URL from .env;
+  # migrate.js bails non-zero on any failure, blocking the restart.
+  echo '[bridge] applying DB migrations (idempotent)' >&2; \
+  sudo -u driftstack bash -c 'set -a; source /opt/driftstack/api/.env; set +a; node /opt/driftstack/api/apps/server/dist/db/migrate.js' > /tmp/deploy-migrate.log 2>&1 \
+    || (tail -30 /tmp/deploy-migrate.log; exit 1); \
   echo '[bridge] systemctl restart driftstack-api' >&2; \
   systemctl restart driftstack-api; \
   for i in 1 2 3 4 5 6 7 8 9 10; do \
