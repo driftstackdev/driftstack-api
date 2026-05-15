@@ -53,12 +53,14 @@
 //   5-field warn log — component:'ip-rate-limit' + bucket_prefix +
 //     ip + tokens_remaining + retry_after_ms.
 //
-//   AUTH_IP_LIMITS 6-entry map per V-251 verdict:
+//   AUTH_IP_LIMITS 7-entry map per V-251 verdict + #190 follow-up:
 //     - login: 10/min.
 //     - signup: 5/min.
 //     - verifyEmail: 10/min.
 //     - passwordResetRequest: 3/min.
 //     - resendVerification: 3/min.
+//     - magicLink: 3/min (#190 — added 2026-05-15; closed the
+//       gap where /v1/auth/magic-link/request was unprotected).
 //     - V-295c3 statusSubscribe: 3/min.
 //
 // stays in lockstep across apps/server/src/middleware/ip-rate-limit.ts.
@@ -216,12 +218,13 @@ describe('W982 ip-rate-limit V-251 cross-source invariant', () => {
     expect(p).toMatch(/the gate; abuser hits it within seconds":/);
   });
 
-  it('CRITICAL AUTH_IP_LIMITS has 6 entries — login 10/min + signup 5/min + verifyEmail 10/min + passwordResetRequest 3/min + resendVerification 3/min + V-295c3 statusSubscribe 3/min. The 6-entry map matches the V-251 per-endpoint policy.', () => {
+  it('CRITICAL AUTH_IP_LIMITS has 7 entries — login 10/min + signup 5/min + verifyEmail 10/min + passwordResetRequest 3/min + resendVerification 3/min + magicLink 3/min + V-295c3 statusSubscribe 3/min. The 7-entry map matches the V-251 per-endpoint policy plus the #190 magic-link gap closure.', () => {
     expect(AUTH_IP_LIMITS.login).toEqual({ capacity: 10, refillPerSecond: 10 / 60 });
     expect(AUTH_IP_LIMITS.signup).toEqual({ capacity: 5, refillPerSecond: 5 / 60 });
     expect(AUTH_IP_LIMITS.verifyEmail).toEqual({ capacity: 10, refillPerSecond: 10 / 60 });
     expect(AUTH_IP_LIMITS.passwordResetRequest).toEqual({ capacity: 3, refillPerSecond: 3 / 60 });
     expect(AUTH_IP_LIMITS.resendVerification).toEqual({ capacity: 3, refillPerSecond: 3 / 60 });
+    expect(AUTH_IP_LIMITS.magicLink).toEqual({ capacity: 3, refillPerSecond: 3 / 60 });
     expect(AUTH_IP_LIMITS.statusSubscribe).toEqual({ capacity: 3, refillPerSecond: 3 / 60 });
   });
 

@@ -136,6 +136,14 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     capacity: AUTH_IP_LIMITS.resendVerification.capacity,
     refillPerSecond: AUTH_IP_LIMITS.resendVerification.refillPerSecond,
   });
+  // #190 — magic-link/request was unprotected pre-2026-05-15. Each
+  // request fires a Postmark send, so the same 3/min IP gate as
+  // resend-verification + password-reset applies.
+  const magicLinkRequestGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'auth-ip:magic-link-request',
+    capacity: AUTH_IP_LIMITS.magicLink.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.magicLink.refillPerSecond,
+  });
 
   app.post('/v1/auth/signup', { preHandler: [signupGate] }, async (req) => {
     const parsed = SignupRequestSchema.safeParse(req.body);
@@ -285,7 +293,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     }
   });
 
-  app.post('/v1/auth/magic-link/request', {}, async (req) => {
+  app.post('/v1/auth/magic-link/request', { preHandler: [magicLinkRequestGate] }, async (req) => {
     const parsed = MagicLinkRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 

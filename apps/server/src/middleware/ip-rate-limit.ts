@@ -114,6 +114,11 @@ export function ipRateLimit(
  *   - password-reset: 3/min — tightest because each fires an email.
  *   - resend-verification: 3/min — same posture as password-reset
  *     (each request fires a Postmark send to the user's address).
+ *   - magic-link: 3/min — same posture as password-reset + resend-
+ *     verification (each request fires a Postmark send). Pre-#190
+ *     this endpoint had no gate at all (oversight surfaced during
+ *     the wire-up audit 2026-05-15); landing this closes the abuse
+ *     vector before Postmark goes live.
  */
 export const AUTH_IP_LIMITS = {
   login: { capacity: 10, refillPerSecond: 10 / 60 },
@@ -121,6 +126,7 @@ export const AUTH_IP_LIMITS = {
   verifyEmail: { capacity: 10, refillPerSecond: 10 / 60 },
   passwordResetRequest: { capacity: 3, refillPerSecond: 3 / 60 },
   resendVerification: { capacity: 3, refillPerSecond: 3 / 60 },
+  magicLink: { capacity: 3, refillPerSecond: 3 / 60 },
   // V-295c3 — public status-page email subscribe. Tighter than
   // signup because we don't create a paying account, and the form is
   // explicitly anonymous (no captcha layer); easier abuse vector.
