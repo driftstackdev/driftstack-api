@@ -27,19 +27,43 @@ posture lives at `/security` (defense-in-depth) and `/trust/incidents`
 
 Per-service projects, all under the same EU region (`ingest.de.sentry.io`):
 
-| Project                         | Source                     | Customer-impacting?        |
-| ------------------------------- | -------------------------- | -------------------------- |
-| `driftstack-server`             | `apps/server/`             | Yes — every API request    |
-| `driftstack-customer-dashboard` | `apps/customer-dashboard/` | Yes — dashboard UI errors  |
-| `driftstack-marketing-site`     | `apps/marketing-site/`     | Lower priority             |
-| `driftstack-docs`               | `apps/docs/`               | Lower priority             |
-| `driftstack-status-site`        | `apps/status-site/`        | Yes — outage-time critical |
-| `driftstack-admin-panel`        | `apps/admin-panel/`        | Internal-only              |
+| Project                  | Source                     | Customer-impacting?        | Status (2026-05-15)  |
+| ------------------------ | -------------------------- | -------------------------- | -------------------- |
+| `driftstack-server`      | `apps/server/`             | Yes — every API request    | pending creation     |
+| `driftstack-gui`         | `apps/gui-client/`         | Yes — desktop GUI errors   | live                 |
+| `driftstack-dashboard`   | `apps/customer-dashboard/` | Yes — dashboard UI errors  | live (created W1039) |
+| `driftstack-marketing`   | `apps/marketing-site/`     | Lower priority             | live (created W1039) |
+| `driftstack-docs`        | `apps/docs/`               | Lower priority             | pending creation     |
+| `driftstack-status-site` | `apps/status-site/`        | Yes — outage-time critical | pending creation     |
+| `driftstack-admin-panel` | `apps/admin-panel/`        | Internal-only              | pending creation     |
 
-Each project has its own DSN (set via `SENTRY_DSN_<service>` env
-var). The validator in `apps/server/src/lib/config.ts:63` enforces
+Each project has its own DSN. Server-side DSNs are read via
+`SENTRY_DSN` (the server only reports its own errors) at boot;
+browser-bundled DSNs are injected at build time via repo secrets:
+
+| Project              | Browser env var                                    | GitHub secret                 |
+| -------------------- | -------------------------------------------------- | ----------------------------- |
+| driftstack-dashboard | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_DASHBOARD` |
+| driftstack-marketing | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_MARKETING` |
+
+The validator in `apps/server/src/lib/config.ts:63` enforces
 the EU region — DSNs without `.de.` or `.ingest.de.sentry.io`
 are rejected at boot.
+
+### Creating additional per-service projects
+
+`scripts/sentry-create-per-service-projects.mjs` is the idempotent
+wire-up — runs against the org's Sentry API, creates missing projects,
+captures DSNs, prints JSON. Edit the `PROJECTS` array, then:
+
+```sh
+SENTRY_AUTH_TOKEN=<1Password / Sentry CI token> \
+  node scripts/sentry-create-per-service-projects.mjs
+```
+
+DSNs are PUBLIC (safe to expose in browser bundles + commit log); the
+auth token is the secret that must stay out of repo / commit message /
+shell history file.
 
 ## Alert rules (per-project recommended)
 
