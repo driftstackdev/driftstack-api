@@ -23,12 +23,21 @@
 
 set -euo pipefail
 
-ENV="${1:-}"
+ENV=""
+DRY_RUN=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1; shift ;;
+    prod|staging) ENV="$1"; shift ;;
+    *) echo "usage: $0 [--dry-run] <staging|prod>" >&2; exit 2 ;;
+  esac
+done
+
 case "$ENV" in
   prod) HOST="128.140.37.74" ;;
   staging) HOST="116.203.22.197" ;;
   *)
-    echo "usage: $0 <staging|prod>" >&2
+    echo "usage: $0 [--dry-run] <staging|prod>" >&2
     exit 2
     ;;
 esac
@@ -42,7 +51,14 @@ if [ -z "$LAST_GOOD" ]; then
   exit 1
 fi
 
-echo "[revert] $ENV last-good-sha = $LAST_GOOD" >&2
+CURRENT=$(curl -fsS "https://$([ "$ENV" = "prod" ] && echo "api" || echo "staging").driftstack.dev/version" 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin).get("git_sha",""))' 2>/dev/null || echo "?")
+
+echo "[revert] $ENV current /version git_sha = $CURRENT" >&2
+echo "[revert] $ENV last-good-sha           = $LAST_GOOD" >&2
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "[revert] DRY-RUN: would fire bash scripts/deploy-bridge.sh $ENV $LAST_GOOD" >&2
+  exit 0
+fi
 echo "[revert] firing deploy-bridge $ENV $LAST_GOOD" >&2
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 exec bash "$SCRIPT_DIR/deploy-bridge.sh" "$ENV" "$LAST_GOOD"
