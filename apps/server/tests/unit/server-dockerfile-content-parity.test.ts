@@ -55,11 +55,12 @@ describe('W538.B apps/server/Dockerfile content parity', () => {
     expect(body).toMatch(/RUN npm install --no-audit --include=dev/);
   });
 
-  it("Build-order + prune-dev-deps framing pinned: '# Build api-types first (sdk-typescript depends on it), then the server.' + 'RUN npx tsc --build packages/api-types' + 'RUN npm run build --workspace=@driftstack/server' + '# Prune dev dependencies for the runtime image.' + 'RUN npm prune --omit=dev --workspaces' — pinned so the api-types-built-first + server-build-via-workspace + prune-dev-deps-for-runtime commitment survives (drift to building server before api-types would fail because sdk-typescript needs api-types' compiled types)", () => {
+  it("Build-order + prune-dev-deps framing pinned: api-types + webhook-delivery built first (both are runtime deps of services/durable-webhook-delivery.ts) + 'RUN npx tsc --build packages/api-types packages/webhook-delivery' + 'RUN npm run build --workspace=@driftstack/server' + '# Prune dev dependencies for the runtime image.' + 'RUN npm prune --omit=dev --workspaces' — pinned so the runtime-deps-built-first + server-build-via-workspace + prune-dev-deps-for-runtime commitment survives (webhook-delivery added 2026-05-15 after CI runs failed 5+ times with 'Cannot find module @driftstack/webhook-delivery')", () => {
+    expect(body).toMatch(/# Build api-types \+ webhook-delivery first \(both are runtime deps of/);
     expect(body).toMatch(
-      /# Build api-types first \(sdk-typescript depends on it\), then the server\./,
+      /# the server's services\/durable-webhook-delivery\.ts\), then the server\./,
     );
-    expect(body).toMatch(/RUN npx tsc --build packages\/api-types/);
+    expect(body).toMatch(/RUN npx tsc --build packages\/api-types packages\/webhook-delivery/);
     expect(body).toMatch(/RUN npm run build --workspace=@driftstack\/server/);
     expect(body).toMatch(/# Prune dev dependencies for the runtime image\./);
     expect(body).toMatch(/RUN npm prune --omit=dev --workspaces/);
