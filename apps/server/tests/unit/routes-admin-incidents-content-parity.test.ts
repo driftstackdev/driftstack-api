@@ -5,7 +5,8 @@
 // incidents 30d default window (status page shows incomplete history).
 //
 //   • V-295a framing pinned: 5 admin routes (create/list/detail/
-//     append-update/resolve) + 1 PUBLIC route (/v1/status/incidents).
+//     append-update/resolve) + 2 PUBLIC routes (/v1/status/incidents
+//     list + /v1/status/incidents/:id detail — V-545.A timeline).
 //   • V-281 dual-write framing pinned: every mutation writes
 //     admin_audit_log; targetResourceId is `inc_<uuid>` (cross-
 //     account audit-log filtering).
@@ -137,6 +138,13 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
     );
     expect(body).toMatch(
       /return reply\.code\(200\)\.send\(\{\s*\n?\s*incident: publicIncident\(resolved\.incident\),\s*\n?\s*update: publicIncidentUpdate\(resolved\.update\),\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('V-545.A PUBLIC GET /v1/status/incidents/:id surfaces public-only incidents with their full update timeline — registered + delegates to incidentsService.get(id, {publicOnly:true}) + maps via publicIncidentUpdate', () => {
+    expect(body).toMatch(/V-545\.A — status-page incident-detail view\./);
+    expect(body).toMatch(
+      /app\.get<\{ Params: \{ id: string \} \}>\('\/v1\/status\/incidents\/:id', async \(request\) => \{\s*\n?\s*const id = uuidFromPrefixedId\(request\.params\.id, 'inc'\);\s*\n?\s*const result = await incidentsService\.get\(id, \{ publicOnly: true \}\);\s*\n?\s*return \{\s*\n?\s*incident: publicIncident\(result\.incident\),\s*\n?\s*updates: result\.updates\.map\(publicIncidentUpdate\),\s*\n?\s*\};\s*\n?\s*\}\);/,
     );
   });
 

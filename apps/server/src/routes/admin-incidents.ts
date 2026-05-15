@@ -6,6 +6,12 @@
 //   POST   /v1/admin/incidents/:id/updates      — append timeline update
 //   POST   /v1/admin/incidents/:id/resolve      — mark resolved with final update
 //
+// Plus two public surfaces (V-295a + V-545.A) at /v1/status/incidents
+// for the status site to consume:
+//
+//   GET    /v1/status/incidents                 — list (public-only, 30d window)
+//   GET    /v1/status/incidents/:id             — detail (incident + updates)
+//
 // Each mutation writes an admin_audit_log row in the same request
 // (V-281 dual-write pattern). Audit row's targetResourceId stores
 // `inc_<uuid>` for cross-account audit-log filtering.
@@ -250,5 +256,20 @@ export function registerAdminIncidentsRoutes(
       limit: parsed.data.limit ?? 50,
     });
     return { data: rows.map(publicIncident) };
+  });
+
+  // ── PUBLIC GET /v1/status/incidents/:id ────────────────────────────────
+  // V-545.A — status-page incident-detail view. Returns the incident plus
+  // the full update timeline so visitors can see what changed (investigation
+  // posted → expanded scope → fixed). 404 when the incident is not public
+  // or doesn't exist; the route deliberately returns the same shape for
+  // both so admins probing the surface can't enumerate private incidents.
+  app.get<{ Params: { id: string } }>('/v1/status/incidents/:id', async (request) => {
+    const id = uuidFromPrefixedId(request.params.id, 'inc');
+    const result = await incidentsService.get(id, { publicOnly: true });
+    return {
+      incident: publicIncident(result.incident),
+      updates: result.updates.map(publicIncidentUpdate),
+    };
   });
 }

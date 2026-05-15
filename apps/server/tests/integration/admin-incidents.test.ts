@@ -6,6 +6,7 @@
 //   POST   /v1/admin/incidents/:id/updates      — append timeline
 //   POST   /v1/admin/incidents/:id/resolve      — mark resolved
 //   GET    /v1/status/incidents                 — public, no-auth
+//   GET    /v1/status/incidents/:id             — public detail w/ updates
 //
 // Each mutation writes an admin_audit_log row (V-281 dual-write).
 // Public endpoint surfaces only public=true incidents.
@@ -256,5 +257,75 @@ describe('GET /v1/status/incidents (public, no-auth)', () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({ method: 'GET', url: '/v1/status/incidents' });
     expect(res.statusCode).toBe(200);
+  });
+});
+
+describe('GET /v1/status/incidents/:id (V-545.A — public detail w/ timeline)', () => {
+  it('returns incident + update timeline for a public incident, no auth', async () => {
+    fx = await buildTestApp();
+    const createRes = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/incidents',
+      headers: { ...headers, ...auth(fx) },
+      payload: {
+        title: 'API slow',
+        description: 'investigating',
+        severity: 'minor',
+      },
+    });
+    const created = createRes.json<CreateResponse>();
+    const incidentId = created.incident.id;
+
+    await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/incidents/${incidentId}/updates`,
+      headers: { ...headers, ...auth(fx) },
+      payload: { message: 'scope expanded to dashboard', status: 'identified' },
+    });
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/status/incidents/${incidentId}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{
+      incident: IncidentResp;
+      updates: { id: string; message: string; status: string }[];
+    }>();
+    expect(body.incident.id).toBe(incidentId);
+    expect(body.incident.title).toBe('API slow');
+    // initial creation already lays down 1 update; plus the 1 we posted = 2.
+    expect(body.updates.length).toBeGreaterThanOrEqual(2);
+    expect(body.updates.some((u) => u.message === 'scope expanded to dashboard')).toBe(true);
+  });
+
+  it('returns 404 for a private incident (no enumeration of admin-only data)', async () => {
+    fx = await buildTestApp();
+    const createRes = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/incidents',
+      headers: { ...headers, ...auth(fx) },
+      payload: {
+        title: 'internal triage',
+        description: 'admin-only',
+        severity: 'minor',
+        public: false,
+      },
+    });
+    const created = createRes.json<CreateResponse>();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/status/incidents/${created.incident.id}`,
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('returns 400 for an id that does not match the inc_<uuid> prefix shape', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/status/incidents/not-an-id',
+    });
+    expect(res.statusCode).toBe(400);
   });
 });
