@@ -101,7 +101,7 @@ describe('W566.B /docs/internal/v547-chaos-engineering-scenarios.md content pari
     expect(body).toMatch(/## Sub-slices/);
     expect(body).toMatch(/- \*\*V-547 \(Wave 23\):\*\* scenario catalogue \(this doc\)\./);
     expect(body).toMatch(/- \*\*V-547\.B \/ V-659 \(Wave 45\):\*\* rehearsal harness landed at/);
-    expect(body).toMatch(/`scripts\/chaos\/`\. Covers scenarios 1, 2, 6/);
+    expect(body).toMatch(/`scripts\/chaos\/`\. Covers scenarios 1, 2, 3, 6/);
     expect(body).toMatch(/Each script defaults to `CHAOS_MODE=dry-run`/);
     expect(body).toMatch(/`CHAOS_MODE=execute` fires the fault injection/);
     expect(body).toMatch(/against a local docker-compose stack\./);

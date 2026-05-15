@@ -227,12 +227,16 @@ V-547.C target.
 
 - **V-547 (Wave 23):** scenario catalogue (this doc).
 - **V-547.B / V-659 (Wave 45):** rehearsal harness landed at
-  `scripts/chaos/`. Covers scenarios 1, 2, 6 (P0 + lowest-risk Stripe
-  signature). Each script defaults to `CHAOS_MODE=dry-run`
+  `scripts/chaos/`. Covers scenarios 1, 2, 3, 6 (P0 + the two webhook
+  signature checks — Stripe + NowPayments).
+  Each script defaults to `CHAOS_MODE=dry-run`
   (touch-nothing); `CHAOS_MODE=execute` fires the fault injection
   against a local docker-compose stack. Scenarios 4, 5, 7, 8 will
   land in V-547.B continuation slices once the rehearsal harness
   pattern is validated against the first paying-customer load.
+  Scenario 3 (NowPayments-bad-signature) added 2026-05-15 to close
+  coverage on the V-487/V-666 crypto rail after the IPN route
+  shipped wire-ready.
 - **V-547.C (later):** scheduled chaos drill cron + post-drill admin
   report.
 
