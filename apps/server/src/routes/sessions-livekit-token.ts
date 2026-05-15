@@ -55,7 +55,10 @@ const BodySchema = z.object({
   role: z.enum(['publisher', 'subscriber']),
 });
 
-const SESSION_ID_RE = /^sess_[0-9a-f]{8,}$/;
+// Customer-facing session ids carry the `ses_` prefix (NOT `sess_`)
+// followed by a UUID-with-dashes. Same shape as the rest of the
+// public-id family (admin-incidents PUBLIC_ID_RE, etc.).
+const SESSION_ID_RE = /^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 function requireCtx(req: FastifyRequest): NonNullable<FastifyRequest['account']> {
   if (!req.account) throw new Error('account context missing after requireAuth');
@@ -81,7 +84,13 @@ export function registerLivekitTokenRoute(
       const parsed = BodySchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
-      const owned = await deps.isSessionOwned(ctx.account.id, sessionId);
+      // Strip the `ses_` prefix before the ownership check — the
+      // sessions repo's findSession() expects a bare uuid. The minted
+      // token + room name keep the public prefix so customer-dashboard
+      // / gui-client clients can address rooms by the same id the rest
+      // of the API uses.
+      const uuid = sessionId.slice('ses_'.length);
+      const owned = await deps.isSessionOwned(ctx.account.id, uuid);
       if (!owned) throw new NotFoundError(`Session "${sessionId}" not found.`);
 
       const token = mintLivekitToken({

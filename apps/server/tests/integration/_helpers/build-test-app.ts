@@ -204,6 +204,12 @@ export interface TestAppOptions {
   broadcastSlackUrl?: string | null;
   /** V-295d — set to a non-null URL to enable generic outbound broadcasts in this fixture. */
   broadcastGenericUrl?: string | null;
+  /**
+   * V-531.B — pass through to AppDeps.livekit so /v1/sessions/:id/
+   * livekit-token registers. When omitted, the route stays
+   * unregistered (404) — matches the prod-config-absent posture.
+   */
+  livekit?: { apiKey: string; apiSecret: string; wsUrl: string };
 }
 
 export interface SeedAdditionalOpts {
@@ -866,6 +872,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     r2Public: r2PublicFake,
     driver,
     permissiveCors: true,
+    ...(opts.livekit !== undefined ? { livekit: opts.livekit } : {}),
   });
 
   return {

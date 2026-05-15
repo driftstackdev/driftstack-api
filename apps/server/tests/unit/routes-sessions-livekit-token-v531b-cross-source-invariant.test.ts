@@ -22,8 +22,8 @@
 //
 //   role enum — 'publisher' | 'subscriber'.
 //
-//   SESSION_ID_RE shape-check — '^sess_[0-9a-f]{8,}$' rejects junk
-//   before the db hit.
+//   SESSION_ID_RE shape-check — '^ses_<uuid>$' (matches the rest of
+//   the prefix-id family, NOT 'sess_'); rejects junk before the db hit.
 //
 //   Default ttl — 600 seconds.
 //
@@ -81,10 +81,18 @@ describe('V-531.B routes/sessions-livekit-token cross-source invariant', () => {
     expect(p).toMatch(/role: z\.enum\(\['publisher', 'subscriber'\]\),/);
   });
 
-  it("CRITICAL SESSION_ID_RE shape-check — '^sess_[0-9a-f]{8,}$' rejects junk before the db hit. The 8+ hex digits floor matches the existing session-id format.", () => {
+  it("CRITICAL SESSION_ID_RE shape-check — '^ses_<uuid>$' (single 's' prefix matching the rest of the public-id family). Initial integration tests caught a 'sess_' typo that would have 404'd every real session id; this pin guards against the regression.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/sessions-livekit-token.ts'));
-    expect(p).toMatch(/const SESSION_ID_RE = \/\^sess_\[0-9a-f\]\{8,\}\$\//);
+    expect(p).toMatch(
+      /const SESSION_ID_RE = \/\^ses_\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\$\//,
+    );
     expect(p).toMatch(/if \(!SESSION_ID_RE\.test\(sessionId\)\) \{/);
+  });
+
+  it("CRITICAL prefix-strip before ownership check — sessionId.slice('ses_'.length) is passed to isSessionOwned (which forwards to the bare-uuid sessionRepo.findSession). Caught by integration test sessions-livekit-token.test.ts; drift would 404 every real session.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/sessions-livekit-token.ts'));
+    expect(p).toMatch(/const uuid = sessionId\.slice\('ses_'\.length\);/);
+    expect(p).toMatch(/await deps\.isSessionOwned\(ctx\.account\.id, uuid\);/);
   });
 
   // ─── Default ttl + token claim wiring ────────────────────────
