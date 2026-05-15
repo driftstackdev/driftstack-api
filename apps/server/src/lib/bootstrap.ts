@@ -656,6 +656,14 @@ export async function createProductionDeps(
           stripeWebhookSigningSecret: config.stripe.webhookSecret,
         }
       : {}),
+    // V-666 / V-487 — NowPayments IPN secret. Without this, the
+    // /v1/webhooks/nowpayments route stays unregistered (route file
+    // header documents the wire-ready posture explicitly). app.ts
+    // gates registration on a non-empty string so the empty-string
+    // accident reads the same as "not configured".
+    ...(config.nowpayments?.ipnSecret !== undefined && config.nowpayments.ipnSecret.length > 0
+      ? { nowpaymentsIpnSecret: config.nowpayments.ipnSecret }
+      : {}),
     ...(billingService !== undefined ? { billingService } : {}),
     costMonitoringService,
     readinessChecks,
