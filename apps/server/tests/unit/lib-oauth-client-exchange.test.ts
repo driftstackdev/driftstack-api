@@ -1,0 +1,221 @@
+// V-667.C — unit tests for code-exchange + userinfo-fetch.
+
+import { describe, expect, it } from 'vitest';
+import { exchangeCodeForTokens, fetchUserInfo } from '../../src/lib/oauth-client-exchange.js';
+
+function mockFetch(
+  responses: Array<{ status: number; body: unknown; headers?: Record<string, string> }>,
+): typeof fetch {
+  let i = 0;
+  return ((_url: string, _init?: RequestInit) => {
+    const r = responses[i] ?? responses[responses.length - 1];
+    i += 1;
+    if (!r) throw new Error('mockFetch: no responses left');
+    const body = typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
+    return Promise.resolve(
+      new Response(body, {
+        status: r.status,
+        headers: r.headers ?? { 'content-type': 'application/json' },
+      }),
+    );
+  }) as unknown as typeof fetch;
+}
+
+const EXCHANGE_OPTS_BASE = {
+  clientId: 'client-id',
+  clientSecret: 'client-secret',
+  callbackUrl: 'https://app.driftstack.dev/auth/oauth-client/callback',
+  code: 'idp-code-12345',
+  codeVerifier: 'verifier-43-chars-min-aaaaaaaaaaaaaaaaaaaaa',
+};
+
+describe('exchangeCodeForTokens — Google', () => {
+  it('200 with access_token + id_token + scope → kind: ok', async () => {
+    const res = await exchangeCodeForTokens({
+      ...EXCHANGE_OPTS_BASE,
+      provider: 'google',
+      fetch: mockFetch([
+        {
+          status: 200,
+          body: {
+            access_token: 'ya29.test-token',
+            id_token: 'eyJ.dummy.id-token',
+            expires_in: 3599,
+            refresh_token: 'refresh-token-1',
+            scope: 'openid email profile',
+            token_type: 'Bearer',
+          },
+        },
+      ]),
+    });
+    expect(res.kind).toBe('ok');
+    if (res.kind === 'ok') {
+      expect(res.tokens.accessToken).toBe('ya29.test-token');
+      expect(res.tokens.idToken).toBe('eyJ.dummy.id-token');
+      expect(res.tokens.expiresIn).toBe(3599);
+      expect(res.tokens.refreshToken).toBe('refresh-token-1');
+      expect(res.tokens.scope).toBe('openid email profile');
+    }
+  });
+
+  it('400 with error=invalid_grant → kind: invalid-grant', async () => {
+    const res = await exchangeCodeForTokens({
+      ...EXCHANGE_OPTS_BASE,
+      provider: 'google',
+      fetch: mockFetch([{ status: 400, body: { error: 'invalid_grant' } }]),
+    });
+    expect(res.kind).toBe('invalid-grant');
+  });
+
+  it('401 with error=invalid_client → kind: invalid-client', async () => {
+    const res = await exchangeCodeForTokens({
+      ...EXCHANGE_OPTS_BASE,
+      provider: 'google',
+      fetch: mockFetch([{ status: 401, body: { error: 'invalid_client' } }]),
+    });
+    expect(res.kind).toBe('invalid-client');
+  });
+
+  it('500 → kind: idp-error with status preserved', async () => {
+    const res = await exchangeCodeForTokens({
+      ...EXCHANGE_OPTS_BASE,
+      provider: 'google',
+      fetch: mockFetch([{ status: 500, body: 'server died' }]),
+    });
+    expect(res.kind).toBe('idp-error');
+    if (res.kind === 'idp-error') expect(res.status).toBe(500);
+  });
+
+  it('network error → kind: network-error', async () => {
+    const res = await exchangeCodeForTokens({
+      ...EXCHANGE_OPTS_BASE,
+      provider: 'google',
+      fetch: () => Promise.reject(new Error('ECONNREFUSED')),
+    });
+    expect(res.kind).toBe('network-error');
+    if (res.kind === 'network-error') expect(res.message).toBe('ECONNREFUSED');
+  });
+});
+
+describe('exchangeCodeForTokens — GitHub', () => {
+  it('200 with error=bad_verification_code body (legacy shape) → invalid-grant', async () => {
+    const res = await exchangeCodeForTokens({
+      ...EXCHANGE_OPTS_BASE,
+      provider: 'github',
+      fetch: mockFetch([{ status: 200, body: { error: 'bad_verification_code' } }]),
+    });
+    expect(res.kind).toBe('invalid-grant');
+  });
+
+  it("200 with access_token → ok with id_token null (GitHub doesn't issue id_token)", async () => {
+    const res = await exchangeCodeForTokens({
+      ...EXCHANGE_OPTS_BASE,
+      provider: 'github',
+      fetch: mockFetch([
+        {
+          status: 200,
+          body: { access_token: 'gho_token', token_type: 'bearer', scope: 'read:user user:email' },
+        },
+      ]),
+    });
+    expect(res.kind).toBe('ok');
+    if (res.kind === 'ok') {
+      expect(res.tokens.accessToken).toBe('gho_token');
+      expect(res.tokens.idToken).toBe(null);
+    }
+  });
+});
+
+describe('fetchUserInfo — Google', () => {
+  it('happy path normalizes sub/email/name/picture', async () => {
+    const res = await fetchUserInfo({
+      provider: 'google',
+      accessToken: 'token',
+      fetch: mockFetch([
+        {
+          status: 200,
+          body: {
+            sub: 'google-sub-12345',
+            email: 'user@example.test',
+            email_verified: true,
+            name: 'Test User',
+            picture: 'https://lh3.googleusercontent.com/a/abc',
+          },
+        },
+      ]),
+    });
+    expect(res.kind).toBe('ok');
+    if (res.kind === 'ok') {
+      expect(res.user.providerSub).toBe('google-sub-12345');
+      expect(res.user.email).toBe('user@example.test');
+      expect(res.user.emailVerified).toBe(true);
+      expect(res.user.name).toBe('Test User');
+      expect(res.user.avatarUrl).toBe('https://lh3.googleusercontent.com/a/abc');
+    }
+  });
+
+  it('email_verified=false → kind: unverified-email (Verdict 1 trust)', async () => {
+    const res = await fetchUserInfo({
+      provider: 'google',
+      accessToken: 'token',
+      fetch: mockFetch([
+        {
+          status: 200,
+          body: { sub: 's', email: 'u@e.test', email_verified: false, name: 'U' },
+        },
+      ]),
+    });
+    expect(res.kind).toBe('unverified-email');
+  });
+
+  it('401 → kind: unauthorized (revoked token)', async () => {
+    const res = await fetchUserInfo({
+      provider: 'google',
+      accessToken: 'revoked-token',
+      fetch: mockFetch([{ status: 401, body: { error: 'invalid_token' } }]),
+    });
+    expect(res.kind).toBe('unauthorized');
+  });
+});
+
+describe('fetchUserInfo — GitHub', () => {
+  it('happy path normalizes numeric id → string providerSub + avatar_url', async () => {
+    const res = await fetchUserInfo({
+      provider: 'github',
+      accessToken: 'gho_token',
+      fetch: mockFetch([
+        {
+          status: 200,
+          body: {
+            id: 987654,
+            login: 'ghuser',
+            name: 'GitHub User',
+            email: 'user@github-verified.test',
+            avatar_url: 'https://avatars.githubusercontent.com/u/987654',
+          },
+        },
+      ]),
+    });
+    expect(res.kind).toBe('ok');
+    if (res.kind === 'ok') {
+      expect(res.user.providerSub).toBe('987654');
+      expect(res.user.email).toBe('user@github-verified.test');
+      expect(res.user.name).toBe('GitHub User');
+      expect(res.user.avatarUrl).toBe('https://avatars.githubusercontent.com/u/987654');
+    }
+  });
+
+  it('email null (private) → kind: unverified-email (caller falls back to /user/emails)', async () => {
+    const res = await fetchUserInfo({
+      provider: 'github',
+      accessToken: 'gho_token',
+      fetch: mockFetch([
+        {
+          status: 200,
+          body: { id: 1, login: 'ghuser', name: 'GitHub User', email: null },
+        },
+      ]),
+    });
+    expect(res.kind).toBe('unverified-email');
+  });
+});

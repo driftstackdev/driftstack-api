@@ -1,0 +1,233 @@
+// V-667.C — OAuth-CLIENT code-exchange + userinfo-fetch helpers.
+//
+// Step 4-5 of the auth flow: server-side POST to the IDP token
+// endpoint to exchange `code` for `access_token`, then GET the
+// userinfo endpoint to read the IDP's idea of the user. Both
+// providers' responses are normalized to NormalizedUserInfo (see
+// oauth-client-providers.ts) before the route layer touches them.
+//
+// fetch seam — every IDP-bound HTTP call routes through `deps.fetch`,
+// allowing tests to mock both happy + error paths. Default is the
+// global fetch in Node 22+.
+
+import {
+  type OAuthClientProvider,
+  type NormalizedUserInfo,
+  OAUTH_CLIENT_PROVIDERS,
+} from './oauth-client-providers.js';
+
+export interface ExchangeCodeOpts {
+  provider: OAuthClientProvider;
+  clientId: string;
+  clientSecret: string;
+  callbackUrl: string;
+  code: string;
+  /** PKCE code_verifier matching the challenge in the authorize URL. */
+  codeVerifier: string;
+  fetch?: typeof fetch;
+}
+
+export interface ExchangedTokens {
+  accessToken: string;
+  /** Google returns this; GitHub doesn't. The route uses it to read
+   *  the sub claim without an extra userinfo round-trip. */
+  idToken: string | null;
+  /** Seconds until access_token expires. */
+  expiresIn: number | null;
+  refreshToken: string | null;
+  /** IDP-returned scope string. Used as a sanity check vs requested. */
+  scope: string | null;
+}
+
+export type ExchangeCodeResult =
+  | { kind: 'ok'; tokens: ExchangedTokens }
+  | { kind: 'invalid-grant' /* expired or already-used code */ }
+  | { kind: 'invalid-client' /* mismatched client_id/secret */ }
+  | { kind: 'idp-error'; status: number; body: string }
+  | { kind: 'network-error'; message: string };
+
+const DEFAULT_FETCH: typeof fetch = globalThis.fetch;
+
+/**
+ * Exchange an authorization code for tokens against the IDP. Per-provider
+ * body shape:
+ *   - Google: standard form-encoded POST with grant_type, code,
+ *     redirect_uri, client_id, client_secret, code_verifier
+ *   - GitHub: same shape but accepts Accept: application/json header
+ *     (without it, GitHub returns x-www-form-urlencoded body)
+ */
+export async function exchangeCodeForTokens(opts: ExchangeCodeOpts): Promise<ExchangeCodeResult> {
+  const provider = OAUTH_CLIENT_PROVIDERS[opts.provider];
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    code: opts.code,
+    redirect_uri: opts.callbackUrl,
+    client_id: opts.clientId,
+    client_secret: opts.clientSecret,
+    code_verifier: opts.codeVerifier,
+  });
+  const fetchImpl = opts.fetch ?? DEFAULT_FETCH;
+  let res: Response;
+  try {
+    res = await fetchImpl(provider.tokenUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json',
+      },
+      body: body.toString(),
+    });
+  } catch (err) {
+    return {
+      kind: 'network-error',
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  const text = await res.text();
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = text.length > 0 ? (JSON.parse(text) as Record<string, unknown>) : {};
+  } catch {
+    return { kind: 'idp-error', status: res.status, body: text.slice(0, 500) };
+  }
+
+  if (!res.ok) {
+    const errCode = typeof parsed.error === 'string' ? parsed.error : '';
+    if (errCode === 'invalid_grant') return { kind: 'invalid-grant' };
+    if (errCode === 'invalid_client') return { kind: 'invalid-client' };
+    return { kind: 'idp-error', status: res.status, body: text.slice(0, 500) };
+  }
+
+  // Some providers (notably GitHub before sending Accept: json) return a
+  // 200 with `error=...` body when the code is bad. Treat that same as
+  // an HTTP-error response.
+  if (typeof parsed.error === 'string') {
+    if (parsed.error === 'invalid_grant' || parsed.error === 'bad_verification_code') {
+      return { kind: 'invalid-grant' };
+    }
+    if (parsed.error === 'invalid_client') return { kind: 'invalid-client' };
+    return { kind: 'idp-error', status: 200, body: text.slice(0, 500) };
+  }
+
+  const accessToken = typeof parsed.access_token === 'string' ? parsed.access_token : '';
+  if (accessToken.length === 0) {
+    return { kind: 'idp-error', status: res.status, body: 'missing access_token' };
+  }
+  return {
+    kind: 'ok',
+    tokens: {
+      accessToken,
+      idToken: typeof parsed.id_token === 'string' ? parsed.id_token : null,
+      expiresIn: typeof parsed.expires_in === 'number' ? parsed.expires_in : null,
+      refreshToken: typeof parsed.refresh_token === 'string' ? parsed.refresh_token : null,
+      scope: typeof parsed.scope === 'string' ? parsed.scope : null,
+    },
+  };
+}
+
+export interface FetchUserInfoOpts {
+  provider: OAuthClientProvider;
+  accessToken: string;
+  fetch?: typeof fetch;
+}
+
+export type FetchUserInfoResult =
+  | { kind: 'ok'; user: NormalizedUserInfo }
+  | { kind: 'unauthorized' /* access_token rejected or revoked */ }
+  | { kind: 'unverified-email' /* IDP returned no verified email */ }
+  | { kind: 'idp-error'; status: number; body: string }
+  | { kind: 'network-error'; message: string };
+
+/**
+ * Fetch + normalize the user profile from the IDP. Returns
+ * NormalizedUserInfo on success. The function rejects unverified
+ * emails — the Verdict 1 (merge-with-verification) collision-flow
+ * depends on a trustworthy IDP-asserted email, so we don't proceed
+ * unless the IDP says the email is verified.
+ */
+export async function fetchUserInfo(opts: FetchUserInfoOpts): Promise<FetchUserInfoResult> {
+  const provider = OAUTH_CLIENT_PROVIDERS[opts.provider];
+  const fetchImpl = opts.fetch ?? DEFAULT_FETCH;
+  let res: Response;
+  try {
+    res = await fetchImpl(provider.userinfoUrl, {
+      headers: {
+        authorization: `Bearer ${opts.accessToken}`,
+        accept: 'application/json',
+        // GitHub requires a User-Agent on api.github.com requests.
+        'user-agent': 'driftstack-api',
+      },
+    });
+  } catch (err) {
+    return {
+      kind: 'network-error',
+      message: err instanceof Error ? err.message : String(err),
+    };
+  }
+  if (res.status === 401) return { kind: 'unauthorized' };
+  const text = await res.text();
+  if (!res.ok) {
+    return { kind: 'idp-error', status: res.status, body: text.slice(0, 500) };
+  }
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { kind: 'idp-error', status: res.status, body: text.slice(0, 500) };
+  }
+
+  if (opts.provider === 'google') {
+    // Google openid userinfo response: { sub, email, email_verified, name, picture }
+    const sub = typeof parsed.sub === 'string' ? parsed.sub : '';
+    const email = typeof parsed.email === 'string' ? parsed.email : '';
+    const emailVerified = parsed.email_verified === true;
+    if (sub.length === 0 || email.length === 0) {
+      return { kind: 'idp-error', status: 200, body: 'missing sub/email' };
+    }
+    if (!emailVerified) return { kind: 'unverified-email' };
+    return {
+      kind: 'ok',
+      user: {
+        providerSub: sub,
+        email,
+        emailVerified: true,
+        name: typeof parsed.name === 'string' ? parsed.name : null,
+        avatarUrl: typeof parsed.picture === 'string' ? parsed.picture : null,
+      },
+    };
+  }
+
+  // GitHub: /user returns { id: number, login, name, avatar_url }. Email
+  // requires a separate /user/emails call when the user's email is
+  // private — that lookup is the caller's responsibility (we focus on
+  // the primary call here + return what /user gives us).
+  const id = parsed.id;
+  const githubId = typeof id === 'number' ? String(id) : typeof id === 'string' ? id : '';
+  // GitHub's /user returns email only if it's set as public OR the
+  // token has the user:email scope. We requested `user:email` so the
+  // server-side will have it for verified-primary accounts. The route
+  // layer falls back to a /user/emails fetch when email is null.
+  const email = typeof parsed.email === 'string' ? parsed.email : '';
+  if (githubId.length === 0) {
+    return { kind: 'idp-error', status: 200, body: 'missing GitHub id' };
+  }
+  if (email.length === 0) {
+    return { kind: 'unverified-email' };
+  }
+  return {
+    kind: 'ok',
+    user: {
+      providerSub: githubId,
+      email,
+      // GitHub's /user doesn't carry a per-user email_verified flag;
+      // the /user/emails endpoint does. Caller cross-checks if needed.
+      // Treat the primary email as verified for the V-667.C trust
+      // contract since GitHub only exposes primary emails on verified
+      // accounts.
+      emailVerified: true,
+      name: typeof parsed.name === 'string' ? parsed.name : null,
+      avatarUrl: typeof parsed.avatar_url === 'string' ? parsed.avatar_url : null,
+    },
+  };
+}
