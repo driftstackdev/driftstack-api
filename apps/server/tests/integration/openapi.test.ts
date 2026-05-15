@@ -66,6 +66,7 @@ describe('OpenAPI spec generation', () => {
         // V-386 / V-387 — account self-edit surface + avatar
         '/v1/account/me',
         '/v1/account/me/avatar',
+        '/v1/account/me/oauth-links',
         // V-353 MFA endpoints
         '/v1/account/mfa',
         '/v1/account/mfa/disable',

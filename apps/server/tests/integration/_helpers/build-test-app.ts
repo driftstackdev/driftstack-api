@@ -298,6 +298,9 @@ export interface TestAppFixture {
   rateLimitOverridesRepo: InMemoryRateLimitOverridesRepo;
   rateLimitStore: MemoryRateLimitStore;
   authFlowsRepo: InMemoryAuthFlowsRepo;
+  /** V-667.C — exposed so tests can seed links directly + read back to
+   *  assert state after route mutations. */
+  oauthLinksRepo: InMemoryOAuthLinksRepo;
   stripeWebhooksRepo: InMemoryStripeWebhooksRepo;
   /** Stripe webhook signing secret used by the test fixture. */
   stripeWebhookSigningSecret: string;
@@ -944,7 +947,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       ? { nowpaymentsIpnSecret: opts.nowpaymentsIpnSecret }
       : {}),
     ...(opts.oauthClient !== undefined && oauthClientService !== undefined
-      ? { oauthClient: opts.oauthClient, oauthClientService }
+      ? { oauthClient: opts.oauthClient, oauthClientService, oauthLinksRepo }
       : {}),
   });
 
@@ -986,6 +989,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     costUsageByAccount,
     cryptoOrdersService,
     cryptoOrdersRepo,
+    oauthLinksRepo,
     plaintext,
     accountId,
     apiKeyId,

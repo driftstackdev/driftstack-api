@@ -694,62 +694,70 @@ export async function createProductionDeps(
     config.oauthClient.signingSecret !== undefined &&
     config.oauthClient.callbackUrl !== undefined &&
     (config.oauthClient.google !== undefined || config.oauthClient.github !== undefined)
-      ? {
-          oauthClient: {
-            signingSecret: config.oauthClient.signingSecret,
-            callbackUrl: config.oauthClient.callbackUrl,
-            ...(config.oauthClient.google !== undefined
-              ? { google: config.oauthClient.google }
-              : {}),
-            ...(config.oauthClient.github !== undefined
-              ? { github: config.oauthClient.github }
-              : {}),
-          },
-          oauthClientService: new OAuthClientServiceImpl({
-            links: new DrizzleOAuthLinksRepo(dbHandle),
-            pending: new DrizzleOAuthPendingLinksRepo(dbHandle),
-            accounts: {
-              findIdByEmail: async (e) => {
-                const row = await authFlowsRepo.findAccountByEmail(e);
-                return row ? row.id : null;
-              },
-              createFromIdp: async (args) => {
-                // IDP-asserted email is verified per Verdict 1 trust
-                // contract; mark emailVerifiedAt at creation time
-                // separately (createAccount doesn't set it). Tier
-                // defaults to 'free' — matches password signup.
-                const row = await authFlowsRepo.createAccount({
-                  email: args.email,
-                  name: args.name,
-                  passwordHash: '', // sentinel — column is nullable,
-                  // route layer treats empty hash as "no password set";
-                  // user adds a password via /account/security later.
-                  initialTier: 'trial_pack',
-                });
-                await authFlowsRepo.markEmailVerified(row.id, new Date());
-                return row.id;
-              },
+      ? (() => {
+          // V-667.C-followup — extract the links repo so it's also
+          // passed as `oauthLinksRepo` for the customer-facing
+          // /v1/account/me/oauth-links read endpoint. Same instance
+          // both sides → no risk of read/write divergence.
+          const oauthLinksRepo = new DrizzleOAuthLinksRepo(dbHandle);
+          return {
+            oauthLinksRepo,
+            oauthClient: {
+              signingSecret: config.oauthClient.signingSecret,
+              callbackUrl: config.oauthClient.callbackUrl,
+              ...(config.oauthClient.google !== undefined
+                ? { google: config.oauthClient.google }
+                : {}),
+              ...(config.oauthClient.github !== undefined
+                ? { github: config.oauthClient.github }
+                : {}),
             },
-            mailer: {
-              // V-667.C — verify-merge email. Builds the confirm
-              // link from the customer-facing dashboard origin so
-              // the recipient lands on the dashboard's confirm-merge
-              // page (which POSTs back to /v1/auth/oauth-client
-              // /confirm-merge). DASHBOARD_ORIGIN strips its trailing
-              // slash at schema-level, so template-literal `/...`
-              // concatenation is safe.
-              sendVerifyMergeEmail: async (args) => {
-                const confirmLink = `${config.dashboardOrigin}/auth/oauth-client/confirm-merge?token=${encodeURIComponent(args.plaintextToken)}`;
-                await email.sendOauthPendingLinkVerification({
-                  to: args.to,
-                  provider: args.provider,
-                  confirmLink,
-                  expiresAt: args.expiresAt,
-                });
+            oauthClientService: new OAuthClientServiceImpl({
+              links: oauthLinksRepo,
+              pending: new DrizzleOAuthPendingLinksRepo(dbHandle),
+              accounts: {
+                findIdByEmail: async (e) => {
+                  const row = await authFlowsRepo.findAccountByEmail(e);
+                  return row ? row.id : null;
+                },
+                createFromIdp: async (args) => {
+                  // IDP-asserted email is verified per Verdict 1 trust
+                  // contract; mark emailVerifiedAt at creation time
+                  // separately (createAccount doesn't set it). Tier
+                  // defaults to 'free' — matches password signup.
+                  const row = await authFlowsRepo.createAccount({
+                    email: args.email,
+                    name: args.name,
+                    passwordHash: '', // sentinel — column is nullable,
+                    // route layer treats empty hash as "no password set";
+                    // user adds a password via /account/security later.
+                    initialTier: 'trial_pack',
+                  });
+                  await authFlowsRepo.markEmailVerified(row.id, new Date());
+                  return row.id;
+                },
               },
-            },
-          }),
-        }
+              mailer: {
+                // V-667.C — verify-merge email. Builds the confirm
+                // link from the customer-facing dashboard origin so
+                // the recipient lands on the dashboard's confirm-merge
+                // page (which POSTs back to /v1/auth/oauth-client
+                // /confirm-merge). DASHBOARD_ORIGIN strips its trailing
+                // slash at schema-level, so template-literal `/...`
+                // concatenation is safe.
+                sendVerifyMergeEmail: async (args) => {
+                  const confirmLink = `${config.dashboardOrigin}/auth/oauth-client/confirm-merge?token=${encodeURIComponent(args.plaintextToken)}`;
+                  await email.sendOauthPendingLinkVerification({
+                    to: args.to,
+                    provider: args.provider,
+                    confirmLink,
+                    expiresAt: args.expiresAt,
+                  });
+                },
+              },
+            }),
+          };
+        })()
       : {}),
     ...(billingService !== undefined ? { billingService } : {}),
     costMonitoringService,

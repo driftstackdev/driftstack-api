@@ -78,6 +78,8 @@ import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerNowpaymentsWebhookRoutes } from '../routes/webhooks-nowpayments.js';
 import { registerLivekitTokenRoute } from '../routes/sessions-livekit-token.js';
 import { registerOAuthClientRoutes } from '../routes/auth-oauth-client.js';
+import { registerAccountOauthLinksRoutes } from '../routes/account-oauth-links.js';
+import type { OAuthLinksRepo } from '../services/oauth-client.js';
 import type { OAuthClientService } from '../services/oauth-client.js';
 import { registerCryptoCheckoutRoutes } from '../routes/billing-crypto.js';
 import { registerCryptoQuoteRoutes } from '../routes/billing-crypto-quote.js';
@@ -324,6 +326,14 @@ export interface AppDeps {
     google?: { clientId: string; clientSecret: string };
     github?: { clientId: string; clientSecret: string };
   };
+  /**
+   * V-667.C-followup — drives the customer-facing
+   * /v1/account/me/oauth-links read endpoint. Always paired with
+   * oauthClientService in bootstrap; tests can wire just this repo
+   * to register the read endpoint without the full OAuth-client
+   * surface.
+   */
+  oauthLinksRepo?: OAuthLinksRepo;
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
@@ -605,6 +615,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       signingSecret: deps.oauthClient.signingSecret,
       logger: deps.logger,
     });
+  }
+  // V-667.C-followup — customer-facing list of linked IDPs. Gated
+  // independently on oauthLinksRepo so tests can probe the read
+  // surface without spinning the full OAuth-client flow.
+  if (deps.oauthLinksRepo !== undefined) {
+    registerAccountOauthLinksRoutes(app, { links: deps.oauthLinksRepo });
   }
   if (deps.cryptoOrdersService !== undefined) {
     registerCryptoCheckoutRoutes(app, { service: deps.cryptoOrdersService });

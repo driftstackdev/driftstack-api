@@ -1128,6 +1128,36 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // V-667.C-followup — customer-facing list of OAuth identities linked
+  // to the calling account. Internal fields (provider_sub,
+  // provider_avatar_url, provider_name) are intentionally omitted.
+  const AccountOauthLinkOpenApi = z.object({
+    id: z.string(),
+    provider: z.string(),
+    provider_email: z.string().nullable(),
+    linked_at: z.string(),
+    last_login_at: z.string().nullable(),
+    last_revoked_at: z.string().nullable(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/me/oauth-links',
+    summary: 'List OAuth-client identity links for the calling account (V-667.C)',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Links for the calling account (empty when none linked).',
+        content: {
+          'application/json': {
+            schema: z.object({ data: z.array(AccountOauthLinkOpenApi) }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+
   const RateLimitBucketOpenApi = z.object({
     bucket_key: z.enum(['global', 'sessions:create']),
     capacity: z.number().int().positive(),
