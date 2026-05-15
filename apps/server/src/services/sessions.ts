@@ -518,6 +518,20 @@ export class SessionsService {
     return this.deps.repo.listAllSessions(opts);
   }
 
+  /**
+   * V-531.B — pure ownership check for routes that only need to know
+   * "does this account own this session" without the driver side-effects
+   * the existing `requireOwned` path triggers. Returns the row when
+   * owned + not in a terminal state, null otherwise. Used by
+   * /v1/sessions/:id/livekit-token to gate token minting.
+   */
+  async findOwnedSessionLite(accountId: string, sessionId: string): Promise<SessionRecord | null> {
+    const session = await this.deps.repo.findSession(sessionId, accountId);
+    if (session === null) return null;
+    if (session.status === 'destroyed' || session.status === 'errored') return null;
+    return session;
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
 
   private async requireOwned(

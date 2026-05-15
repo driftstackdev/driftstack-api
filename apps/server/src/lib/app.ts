@@ -76,6 +76,7 @@ import { registerAuthRoutes } from '../routes/auth.js';
 import { registerAuthCliRoutes } from '../routes/auth-cli.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerNowpaymentsWebhookRoutes } from '../routes/webhooks-nowpayments.js';
+import { registerLivekitTokenRoute } from '../routes/sessions-livekit-token.js';
 import { registerCryptoCheckoutRoutes } from '../routes/billing-crypto.js';
 import { registerCryptoQuoteRoutes } from '../routes/billing-crypto-quote.js';
 import { registerCustomerCryptoOrdersRoutes } from '../routes/billing-crypto-orders.js';
@@ -295,6 +296,18 @@ export interface AppDeps {
   driverName?: 'mock' | 'webkit' | 'playwright';
   /** V-337 — playwright browser channel, surfaced when driverName === 'playwright'. */
   playwrightBrowser?: 'webkit' | 'chromium' | 'firefox';
+  /**
+   * V-531.B — LiveKit access-token mint surface. When all three fields
+   * are present (apiKey + apiSecret + wsUrl), POST /v1/sessions/:id/
+   * livekit-token is registered. Partial config = unregistered route;
+   * client gets a 404 and falls back to the HTTP polling plane.
+   * Same wire-ready posture as V-487 NowPayments + V-665 Postmark.
+   */
+  livekit?: {
+    apiKey: string;
+    apiSecret: string;
+    wsUrl: string;
+  };
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
@@ -542,6 +555,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.cryptoOrdersService !== undefined
         ? { ordersService: deps.cryptoOrdersService }
         : {}),
+    });
+  }
+  // V-531.B — LiveKit token-mint route. Gated on all 3 livekit fields
+  // (apiKey + apiSecret + wsUrl); partial config = unregistered route.
+  // Ownership check uses the sessions-service repo: the route is per-
+  // session and the caller must own the session (cross-account → 404).
+  if (deps.livekit !== undefined) {
+    registerLivekitTokenRoute(app, {
+      apiKey: deps.livekit.apiKey,
+      apiSecret: deps.livekit.apiSecret,
+      wsUrl: deps.livekit.wsUrl,
+      isSessionOwned: async (accountId, sessionId) => {
+        const row = await deps.sessionsService.findOwnedSessionLite(accountId, sessionId);
+        return row !== null;
+      },
     });
   }
   if (deps.cryptoOrdersService !== undefined) {

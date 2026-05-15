@@ -664,6 +664,23 @@ export async function createProductionDeps(
     ...(config.nowpayments?.ipnSecret !== undefined && config.nowpayments.ipnSecret.length > 0
       ? { nowpaymentsIpnSecret: config.nowpayments.ipnSecret }
       : {}),
+    // V-531.B — LiveKit token-mint surface. Same all-or-nothing
+    // semantics as nowpayments: the route only registers when all
+    // three fields are present. Partial config = unregistered route
+    // = 404 = client falls back to HTTP polling. The route's
+    // ownership check uses sessionsService.findOwnedSessionLite (no
+    // driver side-effects).
+    ...(config.livekit?.apiKey !== undefined &&
+    config.livekit?.apiSecret !== undefined &&
+    config.livekit?.wsUrl !== undefined
+      ? {
+          livekit: {
+            apiKey: config.livekit.apiKey,
+            apiSecret: config.livekit.apiSecret,
+            wsUrl: config.livekit.wsUrl,
+          },
+        }
+      : {}),
     ...(billingService !== undefined ? { billingService } : {}),
     costMonitoringService,
     readinessChecks,
