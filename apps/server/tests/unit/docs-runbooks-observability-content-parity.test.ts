@@ -53,31 +53,45 @@ describe('W556.C /docs/runbooks/observability.md content parity', () => {
     expect(body).toMatch(/Audit logs\s+\|\s+`account_audit_log` \+ `admin_audit_log` \(D-025\)/);
   });
 
-  it("Sentry V-469 6-project layout + EU-validator framing pinned: '## Sentry project layout (V-469)' + 'Per-service projects, all under the same EU region (`ingest.de.sentry.io`)' + 'driftstack-server`             | `apps/server/`             | Yes — every API request' + 'driftstack-customer-dashboard` | `apps/customer-dashboard/` | Yes — dashboard UI errors' + 'driftstack-marketing-site`     | `apps/marketing-site/`     | Lower priority' + 'driftstack-docs`               | `apps/docs/`               | Lower priority' + 'driftstack-status-site`        | `apps/status-site/`        | Yes — outage-time critical' + 'driftstack-admin-panel`        | `apps/admin-panel/`        | Internal-only' + 'Each project has its own DSN (set via `SENTRY_DSN_<service>` env var). The validator in `apps/server/src/lib/config.ts:63` enforces the EU region — DSNs without `.de.` or `.ingest.de.sentry.io` are rejected at boot.' — pinned so the 6-project-table (server + customer-dashboard + marketing-site + docs + status-site + admin-panel) + SENTRY_DSN_<service>-per-project + config.ts:63-EU-validator + reject-non-EU-DSN-at-boot commitment survives", () => {
+  it("Sentry V-469 7-project layout + EU-validator framing pinned: '## Sentry project layout (V-469)' + 'Per-service projects, all under the same EU region (`ingest.de.sentry.io`)' + 7-project Status-column table (server + gui + dashboard + marketing + docs + status-site + admin-panel) + 'SENTRY_DSN'-as-server-runtime-env + 'SENTRY_DSN_SERVER'-as-gh-secret-disambiguator + per-app PUBLIC_SENTRY_DSN_* gh-secret mapping + EU-validator '.de.' / '.ingest.de.sentry.io' rejection. Updated 2026-05-15 when remaining 4 projects landed live.", () => {
     expect(body).toMatch(/## Sentry project layout \(V-469\)/);
     expect(body).toMatch(
       /Per-service projects, all under the same EU region \(`ingest\.de\.sentry\.io`\):/,
     );
+    // 7-row project status table
     expect(body).toMatch(
-      /`driftstack-server`\s+\|\s+`apps\/server\/`\s+\|\s+Yes — every API request/,
+      /`driftstack-server`\s+\|\s+`apps\/server\/`\s+\|\s+Yes — every API request\s+\|\s+live/,
     );
     expect(body).toMatch(
-      /`driftstack-customer-dashboard` \| `apps\/customer-dashboard\/` \| Yes — dashboard UI errors/,
+      /`driftstack-gui`\s+\|\s+`apps\/gui-client\/`\s+\|\s+Yes — desktop GUI errors\s+\|\s+live/,
     );
     expect(body).toMatch(
-      /`driftstack-marketing-site`\s+\|\s+`apps\/marketing-site\/`\s+\|\s+Lower priority/,
-    );
-    expect(body).toMatch(/`driftstack-docs`\s+\|\s+`apps\/docs\/`\s+\|\s+Lower priority/);
-    expect(body).toMatch(
-      /`driftstack-status-site`\s+\|\s+`apps\/status-site\/`\s+\|\s+Yes — outage-time critical/,
+      /`driftstack-dashboard`\s+\|\s+`apps\/customer-dashboard\/`\s+\|\s+Yes — dashboard UI errors\s+\|\s+live/,
     );
     expect(body).toMatch(
-      /`driftstack-admin-panel`\s+\|\s+`apps\/admin-panel\/`\s+\|\s+Internal-only/,
+      /`driftstack-marketing`\s+\|\s+`apps\/marketing-site\/`\s+\|\s+Lower priority\s+\|\s+live/,
     );
-    expect(body).toMatch(/Each project has its own DSN \(set via `SENTRY_DSN_<service>` env/);
-    expect(body).toMatch(/var\)\. The validator in `apps\/server\/src\/lib\/config\.ts:63`/);
-    expect(body).toMatch(/the EU region — DSNs without `\.de\.` or `\.ingest\.de\.sentry\.io`/);
-    expect(body).toMatch(/are rejected at boot\./);
+    expect(body).toMatch(
+      /`driftstack-docs`\s+\|\s+`apps\/docs\/`\s+\|\s+Lower priority\s+\|\s+live/,
+    );
+    expect(body).toMatch(
+      /`driftstack-status-site`\s+\|\s+`apps\/status-site\/`\s+\|\s+Yes — outage-time critical\s+\|\s+live/,
+    );
+    expect(body).toMatch(
+      /`driftstack-admin-panel`\s+\|\s+`apps\/admin-panel\/`\s+\|\s+Internal-only\s+\|\s+live/,
+    );
+    // env-var → gh-secret mapping
+    expect(body).toMatch(/Server-side DSNs are read via\s*\n?`SENTRY_DSN`/);
+    expect(body).toMatch(/`SENTRY_DSN_SERVER`/);
+    expect(body).toMatch(/`PUBLIC_SENTRY_DSN_DASHBOARD`/);
+    expect(body).toMatch(/`PUBLIC_SENTRY_DSN_MARKETING`/);
+    expect(body).toMatch(/`PUBLIC_SENTRY_DSN_DOCS`/);
+    expect(body).toMatch(/`PUBLIC_SENTRY_DSN_STATUS_SITE`/);
+    expect(body).toMatch(/`PUBLIC_SENTRY_DSN_ADMIN_PANEL`/);
+    // EU validator
+    expect(body).toMatch(
+      /The validator in `apps\/server\/src\/lib\/config\.ts:63` enforces\s*\n?the EU region — DSNs without `\.de\.` or `\.ingest\.de\.sentry\.io`\s*\n?are rejected at boot\./,
+    );
   });
 
   it("Alert rules + driftstack-server top-priority framing pinned: '### `driftstack-server` (highest signal-to-noise)' + '`*.fatal` events           | Any new event tagged `level:fatal`                               | Page founder phone immediately (P-0 §5.2)' + 'Error spike — auth path    | >10 `level:error` events in 5min on `/v1/auth/*`                 | Slack #alerts (P-1 within 30min)' + 'Error spike — billing path | >5 `level:error` events in 5min on `/v1/billing/*`               | Slack #alerts' + 'Stripe webhook failures    | >3 `level:error` events in 1min from `routes/webhooks-stripe.ts` | Slack #alerts' + 'driftstack-status-site' + 'Higher sensitivity because if the status site itself is broken during an incident, customers can't see what's happening' + 'Any error | >0 events in 5min | Page founder' — pinned so the *.fatal-page-founder-P-0 + auth-path >10/5min + billing-path >5/5min + Stripe-webhook >3/1min + status-site-any-error-page commitment survives", () => {
