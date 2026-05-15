@@ -41,6 +41,11 @@ import { LegalService } from '../../../src/services/legal.js';
 import { buildLegalCatalogFromContent } from '../../../src/services/legal-catalog.js';
 import { EmailPreferencesService } from '../../../src/services/email-preferences.js';
 import { InMemoryEmailPreferencesRepo } from './in-memory-email-preferences-repo.js';
+import { OAuthClientServiceImpl } from '../../../src/services/oauth-client-service.js';
+import {
+  InMemoryOAuthLinksRepo,
+  InMemoryOAuthPendingLinksRepo,
+} from './in-memory-oauth-links-repo.js';
 import { AccountAuditService } from '../../../src/services/account-audit.js';
 import { InMemoryAccountAuditRepo } from './in-memory-account-audit-repo.js';
 import { AccountLifecycleService } from '../../../src/services/account-lifecycle.js';
@@ -221,6 +226,19 @@ export interface TestAppOptions {
    * posture.
    */
   nowpaymentsIpnSecret?: string;
+  /**
+   * V-667.C — pass through to AppDeps.{oauthClient,oauthClientService}
+   * so /v1/auth/oauth-client/* registers. When omitted, the routes
+   * stay unregistered (404) — matches the prod-OAUTH_CLIENT_*-absent
+   * posture. Tests opt in with the minimal shape needed to register
+   * (signing secret + callback + ≥1 provider).
+   */
+  oauthClient?: {
+    signingSecret: string;
+    callbackUrl: string;
+    google?: { clientId: string; clientSecret: string };
+    github?: { clientId: string; clientSecret: string };
+  };
 }
 
 export interface SeedAdditionalOpts {
@@ -840,6 +858,44 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const cryptoOrdersRepo = new InMemoryCryptoOrdersRepo();
   const cryptoOrdersService = new CryptoOrdersService({ repo: cryptoOrdersRepo });
 
+  // V-667.C — OAuth-client service. Only constructed when the test
+  // opts in via opts.oauthClient; matches the prod app.ts gate
+  // (oauthClient + ≥1 provider) so tests that don't pass the option
+  // see the same 404-from-unregistered-route surface prod does
+  // pre-env-wire.
+  const oauthLinksRepo = new InMemoryOAuthLinksRepo();
+  const oauthPendingLinksRepo = new InMemoryOAuthPendingLinksRepo();
+  const oauthClientService =
+    opts.oauthClient !== undefined
+      ? new OAuthClientServiceImpl({
+          links: oauthLinksRepo,
+          pending: oauthPendingLinksRepo,
+          accounts: {
+            findIdByEmail: async (email) => {
+              const row = await authFlowsRepo.findAccountByEmail(email);
+              return row ? row.id : null;
+            },
+            createFromIdp: async (args) => {
+              const created = await authFlowsRepo.createAccount({
+                email: args.email,
+                name: args.name,
+                passwordHash: '',
+                initialTier: 'trial_pack',
+              });
+              await authFlowsRepo.markEmailVerified(created.id, new Date());
+              return created.id;
+            },
+          },
+          mailer: {
+            // Test seam — V-667.C unit tests already cover the
+            // mailer-fired side. Integration tests assert the
+            // pending-row was inserted; the mailer no-op here keeps
+            // tests deterministic without recording fixtures.
+            sendVerifyMergeEmail: () => Promise.resolve(),
+          },
+        })
+      : undefined;
+
   const app = await buildApp({
     logger: testLogger,
     authRepo,
@@ -886,6 +942,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ...(opts.livekit !== undefined ? { livekit: opts.livekit } : {}),
     ...(opts.nowpaymentsIpnSecret !== undefined
       ? { nowpaymentsIpnSecret: opts.nowpaymentsIpnSecret }
+      : {}),
+    ...(opts.oauthClient !== undefined && oauthClientService !== undefined
+      ? { oauthClient: opts.oauthClient, oauthClientService }
       : {}),
   });
 
