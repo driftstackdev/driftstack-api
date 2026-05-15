@@ -149,8 +149,14 @@ async function checkOpenapi() {
   return jsonCheck('/openapi.json', (body, status) => {
     if (status !== 200) return `expected 200, got ${status}`;
     if (!body?.paths || typeof body.paths !== 'object') return '/openapi.json missing .paths';
-    if (!body.paths['/v1/status/incidents']) {
-      return '/openapi.json missing /v1/status/incidents path';
+    const required = [
+      '/v1/status/incidents',
+      // V-545.A — detail endpoint shows up post-aa0d65c0; pre-that
+      // deploys would surface as a /openapi-out-of-date signal here.
+      '/v1/status/incidents/{id}',
+    ];
+    for (const p of required) {
+      if (!body.paths[p]) return `/openapi.json missing path "${p}"`;
     }
     return null;
   });
