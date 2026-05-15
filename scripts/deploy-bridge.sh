@@ -84,6 +84,17 @@ ssh "root@${HOST}" "set -euo pipefail; \
   cp -r \$BUILD_DIR/packages/webhook-delivery/dist packages/webhook-delivery/dist; \
   cp -r \$BUILD_DIR/packages/webhook-delivery/package.json packages/webhook-delivery/; \
   echo \"GIT_SHA=\$GIT_SHA\" >> /opt/driftstack/api/.env.deploy-marker; \
+  # V-667.C-followup#2 — upsert GIT_SHA into /opt/driftstack/api/.env
+  # so /version's git_sha actually reflects the deployed SHA. Old
+  # behaviour baked GIT_SHA at the original /opt/driftstack/api
+  # build time and never refreshed, so /version stayed stale across
+  # bridge deploys. Idempotent: drops any existing GIT_SHA line and
+  # appends the fresh value; preserves file permissions (chmod 600
+  # driftstack:driftstack).
+  sed -i '/^GIT_SHA=/d' /opt/driftstack/api/.env; \
+  echo \"GIT_SHA=\$GIT_SHA\" >> /opt/driftstack/api/.env; \
+  chown driftstack:driftstack /opt/driftstack/api/.env; \
+  chmod 600 /opt/driftstack/api/.env; \
   # V-667.C-followup — apply pending DB migrations BEFORE restart so
   # the new code never sees a schema older than itself. node + the
   # compiled migrate.js are pinned via DATABASE_URL from .env;
