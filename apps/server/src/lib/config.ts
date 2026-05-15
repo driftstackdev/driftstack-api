@@ -160,12 +160,36 @@ const ConfigSchema = z.object({
       cancelUrl: z.string().url().optional(),
     })
     .optional(),
+
+  /**
+   * V-531.B — LiveKit SFU credentials for the real-WebRTC swap.
+   *
+   * `apiKey` + `apiSecret` are issued in the LiveKit Cloud dashboard
+   * (or self-hosted equivalent) and are used to mint short-lived
+   * JWT access tokens via `livekit-server-sdk`. The token-mint
+   * endpoint hands a token to a client (gui-client publisher or
+   * customer-dashboard subscriber) which then opens a WebSocket
+   * directly to `wsUrl` for media exchange.
+   *
+   * `wsUrl` must use the `wss://` scheme — LiveKit refuses plain ws
+   * outside dev. All three fields are required together: the
+   * route-gate at `app.ts` mirrors the nowpayments pattern (route
+   * stays unregistered unless every field is present).
+   */
+  livekit: z
+    .object({
+      apiKey: z.string().min(1).optional(),
+      apiSecret: z.string().min(1).optional(),
+      wsUrl: z.string().url().optional(),
+    })
+    .optional(),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
 export type R2Config = NonNullable<Config['r2']>;
 export type PostmarkConfig = NonNullable<Config['postmark']>;
 export type SentryConfig = NonNullable<Config['sentry']>;
+export type LivekitConfig = NonNullable<Config['livekit']>;
 
 function readR2Config(env: NodeJS.ProcessEnv): R2Config | null {
   const accountId = env.R2_ACCOUNT_ID;
@@ -361,6 +385,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
             ...(env.NOWPAYMENTS_IPN_SECRET ? { ipnSecret: env.NOWPAYMENTS_IPN_SECRET } : {}),
             ...(env.NOWPAYMENTS_SUCCESS_URL ? { successUrl: env.NOWPAYMENTS_SUCCESS_URL } : {}),
             ...(env.NOWPAYMENTS_CANCEL_URL ? { cancelUrl: env.NOWPAYMENTS_CANCEL_URL } : {}),
+          }
+        : undefined,
+    // V-531.B — LiveKit SFU. All three fields must be present together;
+    // route-gate at app.ts treats partial config as "not configured".
+    livekit:
+      env.LIVEKIT_API_KEY || env.LIVEKIT_API_SECRET || env.LIVEKIT_WS_URL
+        ? {
+            ...(env.LIVEKIT_API_KEY ? { apiKey: env.LIVEKIT_API_KEY } : {}),
+            ...(env.LIVEKIT_API_SECRET ? { apiSecret: env.LIVEKIT_API_SECRET } : {}),
+            ...(env.LIVEKIT_WS_URL ? { wsUrl: env.LIVEKIT_WS_URL } : {}),
           }
         : undefined,
   });

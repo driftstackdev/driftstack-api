@@ -190,6 +190,22 @@ describe('W966 config lib cross-source invariant', () => {
     expect(p).toMatch(/launch-day flip the rail on without redeploying\./);
   });
 
+  // ─── V-531.B LiveKit SFU framing ─────────────────────────────
+
+  it("CRITICAL V-531.B livekit framing — 'LiveKit SFU credentials for the real-WebRTC swap. apiKey + apiSecret mint short-lived JWT access tokens via livekit-server-sdk. wsUrl must use wss://. All three fields required together: the route-gate at app.ts mirrors the nowpayments pattern (route stays unregistered unless every field is present)'. The all-or-nothing wire-up posture matches V-487's launch-day flip-on design.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/config.ts'));
+    expect(p).toMatch(/V-531\.B — LiveKit SFU credentials for the real-WebRTC swap\./);
+    expect(p).toMatch(/`apiKey` \+ `apiSecret` are issued in the LiveKit Cloud dashboard/);
+    expect(p).toMatch(/short-lived/);
+    expect(p).toMatch(/JWT access tokens via `livekit-server-sdk`\./);
+    expect(p).toMatch(/`wsUrl` must use the `wss:\/\/` scheme — LiveKit refuses plain ws/);
+    expect(p).toMatch(/outside dev\. All three fields are required together: the/);
+    expect(p).toMatch(/route-gate at `app\.ts` mirrors the nowpayments pattern \(route/);
+    expect(p).toMatch(/stays unregistered unless every field is present\)\./);
+    expect(p).toMatch(/livekit: z/);
+    expect(p).toMatch(/export type LivekitConfig = NonNullable<Config\['livekit'\]>;/);
+  });
+
   // ─── V-113 slow-query log framing ────────────────────────────
 
   it("CRITICAL V-113 slow-query log framing — 'V-113: Slow-query log threshold. When set, queries at or above this duration emit a warn-level structured log via postgres-js client instrumentation. Unset = disabled (default for dev/test)'. The opt-in-via-set design keeps dev/test logs clean.", () => {
