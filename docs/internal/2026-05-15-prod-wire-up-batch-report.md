@@ -4,6 +4,56 @@ Surfaced for founder verdict. Tracks listed in the Wave 1038+ HARD
 priority queue, with current status, what was done this batch, what's
 deferred, and an ETA for each deferred slice.
 
+## Wave 1059+ update — prod deploy LANDED (autopilot, no founder verdict)
+
+The deploy.yml/server-deploy.yml docker-compose mismatch (see
+`2026-05-15-deploy-pipeline-mismatch.md`) is bypassed by a manual
+SSH-deploy bridge: `scripts/deploy-bridge.sh {staging,prod} [<SHA>]`
+clones, builds with `npm ci`, applies pending DB migrations, swaps
+`/opt/driftstack/api/{dist,node_modules,migrations,packages/{api-
+types,webhook-delivery}}` atomically, restarts `driftstack-api`,
+polls `/health`, and auto-rolls-back on any post-restart failure.
+
+Staging green at SHA `5a67945` 2026-05-15 15:36 UTC; prod green at
+SHA `5822e21` 2026-05-15 16:13 UTC after a 2h37m staging soak (V-507
+posture met). Boot log on prod confirms:
+
+```
+"sentry":true, "email":true, "livekit":true, "oauthClient":false
+"env":"production"
+```
+
+Tracks landed in this rollout:
+
+- **Track A** (Sentry) — already live; reconfirmed `sentry:true`.
+- **Track A** (Postmark) — already live; reconfirmed `email:true`.
+- **Track C** (V-667.C OAuth-client lib + routes + DB schema + Postmark
+  verify-merge template) — code on prod, route DORMANT (404) until
+  `OAUTH_CLIENT_*` env wired. Operator action remaining.
+- **Track D** (per-service Sentry projects) — unchanged this rollout
+  (still 2/6 created).
+- **Track E** (V-531.B LiveKit token route) — NOW HOT on prod:
+  `POST /v1/sessions/:id/livekit-token` returns 401 (auth-gated, route
+  REGISTERED) instead of 404 (route absent). LiveKit-aware GUI clients
+  upgrade from HTTP polling on this binary.
+- **Track H** (#190 magic-link IP rate-limit) — landed transparently
+  via the same deploy.
+
+Deploy-bridge improvements in this batch:
+
+- `npm ci` (lockfile-strict) + no `npm prune --omit=dev` — earlier
+  attempt at `npm install + prune` dropped transitive runtime deps
+  like `require-in-the-middle` and crashed the server in MODULE_NOT
+  \_FOUND. The image size penalty (~80MB) is acceptable until docker-
+  compose deploy lands.
+- DB migrations applied between artefact swap and `systemctl restart`
+  so the new code never boots against an older schema (migration 0039
+  needed for V-667.C tables).
+- `apps/server/src/db/migrate.ts` updated to resolve the migrations
+  folder via a compiled-neighbour fast path + src-tree fallback so
+  the compiled prod `migrate.js` finds the source migrations under
+  `apps/server/src/db/migrations` (deploy-bridge layout).
+
 ## Wave 1054+ update (SSH-authorized autopilot)
 
 Founder appended autopilot pubkey to `/root/.ssh/authorized_keys` on
