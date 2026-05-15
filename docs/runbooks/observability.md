@@ -27,24 +27,35 @@ posture lives at `/security` (defense-in-depth) and `/trust/incidents`
 
 Per-service projects, all under the same EU region (`ingest.de.sentry.io`):
 
-| Project                  | Source                     | Customer-impacting?        | Status (2026-05-15)  |
-| ------------------------ | -------------------------- | -------------------------- | -------------------- |
-| `driftstack-server`      | `apps/server/`             | Yes — every API request    | pending creation     |
-| `driftstack-gui`         | `apps/gui-client/`         | Yes — desktop GUI errors   | live                 |
-| `driftstack-dashboard`   | `apps/customer-dashboard/` | Yes — dashboard UI errors  | live (created W1039) |
-| `driftstack-marketing`   | `apps/marketing-site/`     | Lower priority             | live (created W1039) |
-| `driftstack-docs`        | `apps/docs/`               | Lower priority             | pending creation     |
-| `driftstack-status-site` | `apps/status-site/`        | Yes — outage-time critical | pending creation     |
-| `driftstack-admin-panel` | `apps/admin-panel/`        | Internal-only              | pending creation     |
+| Project                  | Source                     | Customer-impacting?        | Status (2026-05-15) |
+| ------------------------ | -------------------------- | -------------------------- | ------------------- |
+| `driftstack-server`      | `apps/server/`             | Yes — every API request    | live                |
+| `driftstack-gui`         | `apps/gui-client/`         | Yes — desktop GUI errors   | live                |
+| `driftstack-dashboard`   | `apps/customer-dashboard/` | Yes — dashboard UI errors  | live                |
+| `driftstack-marketing`   | `apps/marketing-site/`     | Lower priority             | live                |
+| `driftstack-docs`        | `apps/docs/`               | Lower priority             | live                |
+| `driftstack-status-site` | `apps/status-site/`        | Yes — outage-time critical | live                |
+| `driftstack-admin-panel` | `apps/admin-panel/`        | Internal-only              | live                |
 
 Each project has its own DSN. Server-side DSNs are read via
 `SENTRY_DSN` (the server only reports its own errors) at boot;
 browser-bundled DSNs are injected at build time via repo secrets:
 
-| Project              | Browser env var                                    | GitHub secret                 |
-| -------------------- | -------------------------------------------------- | ----------------------------- |
-| driftstack-dashboard | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_DASHBOARD` |
-| driftstack-marketing | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_MARKETING` |
+| Project                | Env var consumed                                   | GitHub secret                   |
+| ---------------------- | -------------------------------------------------- | ------------------------------- |
+| driftstack-server      | `SENTRY_DSN` (on the api server's /etc env file)   | `SENTRY_DSN_SERVER`             |
+| driftstack-dashboard   | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_DASHBOARD`   |
+| driftstack-marketing   | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_MARKETING`   |
+| driftstack-docs        | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_DOCS`        |
+| driftstack-status-site | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_STATUS_SITE` |
+| driftstack-admin-panel | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_ADMIN_PANEL` |
+
+> Naming note: the api server reads `SENTRY_DSN`, but the GitHub
+> secret is `SENTRY_DSN_SERVER` (disambiguated so a future
+> `SENTRY_DSN_DASHBOARD` secret can't collide). The deploy workflow
+> renames it as it pushes to the prod env file. PUBLIC\_\* DSNs are
+> non-secret (browser-shipped), kept as `gh secret` for log-mask
+> hygiene rather than confidentiality.
 
 The validator in `apps/server/src/lib/config.ts:63` enforces
 the EU region — DSNs without `.de.` or `.ingest.de.sentry.io`

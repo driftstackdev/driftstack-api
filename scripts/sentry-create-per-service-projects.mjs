@@ -25,6 +25,10 @@ const REGION_BASE = process.env.SENTRY_REGION_URL ?? 'https://de.sentry.io';
 const PROJECTS = [
   { slug: 'driftstack-dashboard', name: 'driftstack-dashboard', platform: 'javascript-nextjs' },
   { slug: 'driftstack-marketing', name: 'driftstack-marketing', platform: 'javascript-nextjs' },
+  { slug: 'driftstack-server', name: 'driftstack-server', platform: 'node' },
+  { slug: 'driftstack-docs', name: 'driftstack-docs', platform: 'javascript-nextjs' },
+  { slug: 'driftstack-status-site', name: 'driftstack-status-site', platform: 'javascript-nextjs' },
+  { slug: 'driftstack-admin-panel', name: 'driftstack-admin-panel', platform: 'javascript-nextjs' },
 ];
 
 async function sentry(method, path, body) {
