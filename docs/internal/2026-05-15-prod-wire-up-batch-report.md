@@ -184,7 +184,7 @@ into a wired-up environment rather than racing the wire-up.
 
 ## H — Tasks #187 (resend-verification) + #190 (magic-link dashboard)
 
-**Status:** server side DONE for both. Frontend slice pending.
+**Status:** #187 DONE end-to-end. #190 DONE end-to-end as of 4e2513e0.
 
 **#190 magic-link server (this batch):**
 
@@ -208,14 +208,24 @@ into a wired-up environment rather than racing the wire-up.
 - Postmark integration: `this.email.sendSignupVerification(...)` is
   fire-and-forget per the rest of the auth-flow service.
 
-**Deferred — both #187 + #190 frontend slices:**
+**#190 frontend (this batch — 4e2513e0):**
 
-- `apps/customer-dashboard/` — UI affordance on post-signup
-  "check your email" screen (re-trigger button) for #187.
-- `apps/customer-dashboard/` — magic-link request form for #190
-  (server endpoint is live; nothing in the dashboard invokes it yet).
+- `apps/customer-dashboard/src/pages/auth/magic-link-request.astro` —
+  new no-leak request page that mirrors `forgot-password.astro` shape:
+  email-only form, identical success-card regardless of account match,
+  `expires_at` window display, dev-mode `debug_token` paste-into link.
+  Honors `?email=` prefill for the post-failed-password bounce path.
+- `apps/customer-dashboard/src/pages/login.astro` — added "Sign in
+  with a magic link instead" link under "Forgot your password?".
 
-**ETA:** ~2h combined for the two frontend slices.
+**#187 frontend (already shipped, pre-this-batch):**
+
+- `apps/customer-dashboard/src/pages/verify-email.astro` already has
+  the "Resend verification email" button wired against
+  `/v1/auth/resend-verification` with 60s client-side debounce
+  matched to the per-IP 3/min cap. No new work.
+
+**ETA:** complete.
 
 ## Held tasks for founder verdict (Pasted credentials)
 
