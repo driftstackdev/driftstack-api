@@ -201,6 +201,35 @@ hardening, chaos scripts expansion, deploy hardening, trust center,
 NowPayments + Sentry-server-project live) so the V-NNN slices land
 into a wired-up environment rather than racing the wire-up.
 
+## Drift-guard coverage milestone (interleave track)
+
+Interleaved with the wire-up tracks above, this batch added 13
+route-level cross-source invariant tests (W1039–W1051) covering the
+remaining un-pinned high-priority routes:
+
+| Wave  | File                              | V-NNN family            |
+| ----- | --------------------------------- | ----------------------- |
+| W1039 | `routes/webhooks-nowpayments.ts`  | V-666 IPN webhook       |
+| W1040 | `routes/billing-crypto.ts`        | V-666.C customer        |
+| W1041 | `routes/billing-crypto-orders.ts` | V-666.G family customer |
+| W1042 | `routes/admin-incidents.ts`       | V-295a incidents        |
+| W1043 | `routes/admin-webhooks.ts`        | V-281 webhook ops       |
+| W1044 | `routes/billing.ts`               | V-082 + V-248 Stripe    |
+| W1045 | `routes/oauth.ts`                 | V-667.B OAuth-server    |
+| W1046 | `routes/admin-force-actions.ts`   | V-100 + D-020/D-025     |
+| W1047 | `routes/admin-crypto-orders.ts`   | V-666.D admin           |
+| W1048 | `routes/profile-snapshots.ts`     | V-312 + V-326e          |
+| W1049 | `routes/admin.ts`                 | V-326e6 + V-330e        |
+| W1050 | `routes/team.ts`                  | V-298c + V-326c         |
+| W1051 | `routes/profiles.ts`              | V-081 + V-313 + V-480   |
+
+Plus W1042-route-side V-531.B (LiveKit token route) drift-guard at
+1eea466d. Closes coverage on every customer-facing + admin route the
+session touched. The 3 remaining routes (sessions.ts, admin-accounts.ts,
+profiles.ts main CRUD) are either already covered partially via
+adjacent parity tests OR are too large for a single drift-guard wave
+without risking regex churn.
+
 ## H — Tasks #187 (resend-verification) + #190 (magic-link dashboard)
 
 **Status:** #187 DONE end-to-end. #190 DONE end-to-end as of 4e2513e0.
