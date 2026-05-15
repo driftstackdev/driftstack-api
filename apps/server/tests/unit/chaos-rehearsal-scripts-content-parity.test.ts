@@ -201,11 +201,11 @@ describe('W803 chaos rehearsal scripts content parity', () => {
 
   // ─── run-all.sh ───────────────────────────────────────────────
 
-  it('CRITICAL run-all.sh V-659 anchor + 3-scenario set pinned — 01-postmark-outage + 02-stripe-bad-signature + 06-redis-down. The numeric gaps (no 03/04/05) leave room for catalogue growth without renumbering.', () => {
+  it('CRITICAL run-all.sh V-659 anchor + 4-scenario set pinned — 01-postmark-outage + 02-stripe-bad-signature + 03-nowpayments-bad-signature + 06-redis-down. The numeric gaps (no 04/05) leave room for catalogue growth without renumbering. Scenario 03 added 2026-05-15 to parallel Stripe-02 for V-487/V-666 NowPayments rail coverage.', () => {
     const p = read(RUN);
     expect(p).toMatch(/# V-659 \(V-547\.B\) — chaos rehearsal runner\./);
     expect(p).toMatch(
-      /SCENARIOS=\(\s*\n\s+01-postmark-outage\s*\n\s+02-stripe-bad-signature\s*\n\s+06-redis-down\s*\n\)/,
+      /SCENARIOS=\(\s*\n\s+01-postmark-outage\s*\n\s+02-stripe-bad-signature\s*\n\s+03-nowpayments-bad-signature\s*\n\s+06-redis-down\s*\n\)/,
     );
   });
 
