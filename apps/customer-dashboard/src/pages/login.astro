@@ -76,6 +76,28 @@ const apiBaseUrl = resolveApiBaseUrl();
         >.
       </p>
 
+      <!-- V-667.C — sign-in-with-IDP. Buttons trigger a POST to
+           /v1/auth/oauth-client/start which returns an authorize_url;
+           the page redirects window.location to it. -->
+      <div class="mt-5 flex flex-col gap-2" data-oauth-buttons>
+        <button
+          type="button"
+          data-oauth="google"
+          class="btn-secondary w-full text-sm"
+          aria-label="Sign in with Google"
+        >
+          Sign in with Google
+        </button>
+        <button
+          type="button"
+          data-oauth="github"
+          class="btn-secondary w-full text-sm"
+          aria-label="Sign in with GitHub"
+        >
+          Sign in with GitHub
+        </button>
+      </div>
+
       <p class="mt-3 text-xs text-ink-muted">
         No account yet? <a
           data-signup-link
@@ -158,6 +180,48 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch((err) => {
             showBanner(err && err.message ? err.message : 'Sign-in failed.');
           });
+      });
+
+      // V-667.C — bind OAuth provider buttons. On click, POST
+      // /v1/auth/oauth-client/start { provider, redirect_to } → take
+      // the authorize_url and let the browser navigate there. The
+      // server sets the HTTP-only PKCE cookie via Set-Cookie on this
+      // same response. Errors surface in the banner.
+      const oauthButtons = root.querySelectorAll('[data-oauth]');
+      oauthButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          banner.classList.add('hidden');
+          const provider = btn.getAttribute('data-oauth');
+          if (!provider) return;
+          fetch(apiBaseUrl + '/v1/auth/oauth-client/start', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            credentials: 'include', // PKCE cookie round-trip
+            body: JSON.stringify({
+              provider,
+              redirect_to:
+                window.location.origin + (next ? next : '/'),
+            }),
+          })
+            .then((r) =>
+              r.ok
+                ? r.json()
+                : r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+            )
+            .then((body) => {
+              if (typeof body.authorize_url === 'string') {
+                window.location.href = body.authorize_url;
+              } else {
+                showBanner('OAuth start failed: missing authorize_url');
+              }
+            })
+            .catch((err) => {
+              showBanner(err && err.message ? err.message : 'OAuth start failed.');
+            });
+        });
       });
     })();
   </script>
