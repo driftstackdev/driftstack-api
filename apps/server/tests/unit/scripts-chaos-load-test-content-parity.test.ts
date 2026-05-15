@@ -67,6 +67,27 @@ describe('W612 scripts chaos + load-test content parity', () => {
     expect(existsSync(P('chaos/02-stripe-bad-signature.sh'))).toBe(true);
   });
 
+  it('chaos/03-nowpayments-bad-signature.sh: V-659/V-547.B Scenario 3 + /v1/webhooks/nowpayments returns 401 on bad sig + 401-on-missing-sig + parallel-to-Stripe-02 + W1039-warn-log-pin framing pinned', () => {
+    const body = read(P('chaos/03-nowpayments-bad-signature.sh'));
+    expect(body).toMatch(
+      /^# V-659 \/ V-547\.B — Scenario 3: NowPayments IPN webhook with bad sig\.$/m,
+    );
+    expect(body).toMatch(
+      /^# Parallel to scenario 02 \(Stripe bad-sig\) but exercises the V-487\//m,
+    );
+    expect(body).toMatch(/^# V-666 NowPayments IPN handler\./m);
+    expect(body).toMatch(
+      /^#\s+- \/v1\/webhooks\/nowpayments returns 401 \(Unauthorized\) on bad sig\.$/m,
+    );
+    expect(body).toMatch(/^#\s+- No state mutation\. The route only logs at warn-level with$/m);
+    expect(body).toMatch(/^#\s+component=nowpayments-webhooks \(per W1039 drift-guard pin\) so$/m);
+    expect(body).toMatch(
+      /^# Pre-req: prod or staging has NOWPAYMENTS_IPN_SECRET wired \(otherwise$/m,
+    );
+    expect(body).toMatch(/x-nowpayments-sig: \$BAD_SIG/);
+    expect(existsSync(P('chaos/03-nowpayments-bad-signature.sh'))).toBe(true);
+  });
+
   it('chaos/06-redis-down.sh: V-659 Scenario 6 + rate-limit fail-open (allow + log) + session-token cache fallback to direct Postgres lookup + control-plane-HTTP-200 + latency-degrades-no-errors + docker-compose stop redis rehearsal pinned', () => {
     const body = read(P('chaos/06-redis-down.sh'));
     expect(body).toMatch(/^# V-659 \(V-547\.B\) — Scenario 6: Redis container exits\.$/m);
