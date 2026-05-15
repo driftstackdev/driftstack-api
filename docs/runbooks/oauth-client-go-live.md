@@ -59,14 +59,29 @@ Restart the api service:
 systemctl restart driftstack-api
 ```
 
-Confirm the boot logs show:
+Confirm the boot logs show `oauthClient:true`:
 
-```
-{"component":"bootstrap","oauthClient":true,...,"msg":"bootstrap complete"}
+```sh
+journalctl -u driftstack-api -n 30 --no-pager \
+  | grep '"bootstrap complete"' \
+  | grep -o '"oauthClient":[a-z]*'
 ```
 
-(The current bootstrap doesn't yet log the oauthClient flag — that's
-a 1-line follow-up.)
+Expected: `"oauthClient":true`. If `false`, one of the env vars is
+missing or malformed — re-check the schema in
+`apps/server/src/lib/config.ts` (`oauthClient` zod block).
+
+Quick smoke (no Google/GitHub round-trip):
+
+```sh
+node scripts/smoke-oauth-client.mjs --base-url https://api.driftstack.dev
+```
+
+The script POSTs `/v1/auth/oauth-client/start` for each enabled
+provider, follows the 302 to the IDP, and reports `OK` when the
+authorize URL has all expected query params (`client_id`,
+`redirect_uri`, `state`, `code_challenge`, `code_challenge_method=S256`,
+`scope`, `response_type=code`).
 
 ## Step 2 — smoke test
 

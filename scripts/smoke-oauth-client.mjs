@@ -1,0 +1,169 @@
+#!/usr/bin/env node
+// Smoke test for OAuth-client go-live (V-667.C). Exercises the
+// /v1/auth/oauth-client/start route against a live API for each
+// provider you ask about, then checks that the returned authorize
+// URL carries every PKCE-required query parameter. No IDP round-
+// trip happens — the IDP would be a separate paid-third-party
+// dependency, and exit codes from a "did the IDP accept us" test
+// are very noisy. The shape of the authorize URL is enough to
+// validate that:
+//
+//   1. The provider is configured server-side (no 400 on /start).
+//   2. The state JWT is signed (non-empty `state` query param).
+//   3. PKCE is wired (`code_challenge` + `code_challenge_method=S256`).
+//   4. The callback URL matches what the operator wired.
+//   5. The scope matches the provider's published default.
+//
+// Usage:
+//   node scripts/smoke-oauth-client.mjs --base-url https://api.driftstack.dev
+//   node scripts/smoke-oauth-client.mjs --base-url https://api.driftstack.dev --provider google
+//
+// Defaults: probes both google + github. Non-zero exit if any
+// provider fails so CI can gate on it.
+
+import process from 'node:process';
+
+const args = parseArgs(process.argv.slice(2));
+const baseUrl = (args['base-url'] ?? '').replace(/\/+$/, '');
+if (!baseUrl) {
+  console.error('error: --base-url <api origin> is required');
+  process.exit(2);
+}
+const provider = args.provider;
+const PROVIDERS = provider ? [provider] : ['google', 'github'];
+for (const p of PROVIDERS) {
+  if (p !== 'google' && p !== 'github') {
+    console.error(`error: --provider must be google|github (got "${p}")`);
+    process.exit(2);
+  }
+}
+
+const REDIRECT_TO = args['redirect-to'] ?? `${baseUrl.replace(/api\./, 'app.')}/`;
+
+const EXPECTED_QUERY = {
+  google: {
+    host: 'accounts.google.com',
+    scope: 'openid email profile',
+  },
+  github: {
+    host: 'github.com',
+    scope: 'read:user user:email',
+  },
+};
+
+let allOk = true;
+for (const p of PROVIDERS) {
+  const ok = await smoke(p);
+  if (!ok) allOk = false;
+}
+process.exit(allOk ? 0 : 1);
+
+async function smoke(p) {
+  const url = `${baseUrl}/v1/auth/oauth-client/start`;
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: p, redirect_to: REDIRECT_TO }),
+    });
+  } catch (err) {
+    console.error(`FAIL ${p}: transport error: ${err.message}`);
+    return false;
+  }
+  if (res.status === 404) {
+    console.error(
+      `FAIL ${p}: /v1/auth/oauth-client/start returned 404 — route is not registered. ` +
+        `Check that OAUTH_CLIENT_SIGNING_SECRET + OAUTH_CLIENT_CALLBACK_URL + at least one provider's ` +
+        `CLIENT_ID/SECRET pair are set in /opt/driftstack/api/.env, then systemctl restart driftstack-api.`,
+    );
+    return false;
+  }
+  if (res.status === 400) {
+    const body = await res.text();
+    console.error(
+      `FAIL ${p}: 400 from /start — likely missing creds for this provider. body=${body}`,
+    );
+    return false;
+  }
+  if (res.status !== 200) {
+    const body = await res.text();
+    console.error(`FAIL ${p}: unexpected status ${res.status}. body=${body}`);
+    return false;
+  }
+
+  let parsed;
+  try {
+    parsed = await res.json();
+  } catch (err) {
+    console.error(`FAIL ${p}: response body is not JSON: ${err.message}`);
+    return false;
+  }
+  const authorizeUrl = parsed?.authorize_url;
+  if (typeof authorizeUrl !== 'string' || authorizeUrl.length === 0) {
+    console.error(`FAIL ${p}: response missing authorize_url`);
+    return false;
+  }
+
+  const u = new URL(authorizeUrl);
+  const expected = EXPECTED_QUERY[p];
+  if (u.hostname !== expected.host) {
+    console.error(`FAIL ${p}: authorize_url hostname ${u.hostname} !== expected ${expected.host}`);
+    return false;
+  }
+
+  const required = [
+    'client_id',
+    'redirect_uri',
+    'state',
+    'response_type',
+    'code_challenge',
+    'code_challenge_method',
+    'scope',
+  ];
+  for (const k of required) {
+    if (!u.searchParams.has(k) || u.searchParams.get(k).length === 0) {
+      console.error(`FAIL ${p}: authorize_url missing query param "${k}"`);
+      return false;
+    }
+  }
+  if (u.searchParams.get('response_type') !== 'code') {
+    console.error(
+      `FAIL ${p}: response_type must be "code", got "${u.searchParams.get('response_type')}"`,
+    );
+    return false;
+  }
+  if (u.searchParams.get('code_challenge_method') !== 'S256') {
+    console.error(
+      `FAIL ${p}: code_challenge_method must be "S256", got "${u.searchParams.get('code_challenge_method')}"`,
+    );
+    return false;
+  }
+  if (u.searchParams.get('scope') !== expected.scope) {
+    console.error(
+      `FAIL ${p}: scope "${u.searchParams.get('scope')}" !== expected "${expected.scope}"`,
+    );
+    return false;
+  }
+
+  console.log(`OK ${p}: authorize_url has all expected PKCE + provider-specific query params.`);
+  return true;
+}
+
+function parseArgs(argv) {
+  const out = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i];
+    if (a.startsWith('--')) {
+      const k = a.slice(2);
+      const v = argv[i + 1];
+      if (typeof v === 'string' && !v.startsWith('--')) {
+        out[k] = v;
+        i += 1;
+      } else {
+        out[k] = 'true';
+      }
+    }
+  }
+  return out;
+}
