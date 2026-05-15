@@ -92,3 +92,47 @@ autopilot has prepared the Docker image side (Dockerfile fixed at
 The autopilot continues Track C V-667.C OAuth-client implementation
 on the code side. When the deploy gap is fixed, all the code lands
 in one rollout.
+
+## Migration-runner silent-skip (observed 2026-05-15)
+
+While unblocking the staging deploy of `5a67945`, a separate latent
+bug surfaced in `apps/server/src/db/migrate.ts`:
+
+1. The compiled `dist/db/migrate.js` resolved `migrationsFolder`
+   via `here/migrations` — pointing at `dist/db/migrations`, which
+   doesn't exist in the deploy-bridge layout (migrations ship at
+   `apps/server/src/db/migrations` next to the source tree).
+2. After symlinking `dist/db/migrations → ../../src/db/migrations`
+   on staging, the migrator picked up the journal — and reported
+   `"migrations applied"` without iterating, leaving 0038 + 0039
+   pending and `__drizzle_migrations.count = 38`.
+
+`drizzle-orm@^0.36`'s `pg-core/dialect.js#migrate` orders
+`__drizzle_migrations` by `created_at desc limit 1` and applies any
+journal entry with `folderMillis > lastDbMigration.created_at`. With
+0037's `when=1778090428000` matching the latest applied row and
+0038/0039 carrying `when=1778090429000`/`1778090430000`, the math
+should apply both — but didn't. Hypothesis (not confirmed): the
+post-symlink migrate.js triggered a session.transaction that
+rolled back without surfacing the rejection up to the migrate.ts
+main(), so the outer `console.warn("migrations applied")` ran
+despite zero rows being inserted.
+
+Workarounds in place:
+
+- `apps/server/src/db/migrate.ts` now resolves the migrations
+  folder via a compiled-neighbour fast path + src-tree fallback
+  (5822e211). Future builds that pre-copy migrations into `dist/db
+/migrations` automatically prefer the compiled folder; deploy-
+  bridge deploys fall back to the src tree.
+- `scripts/deploy-bridge.sh` runs `node apps/server/dist/db/migrate
+.js` between the artefact swap and `systemctl restart` so the new
+  binary never boots against an older schema.
+- Staging + prod schemas have 0038 + 0039 applied via direct
+  psql + manual `__drizzle_migrations` inserts; `to_regclass(
+'public.account_oauth_links')` returns a non-null oid on both.
+
+Open: replay the silent-skip on a fresh staging Postgres to confirm
+whether the bug reproduces against drizzle-orm's transaction handling.
+The workarounds make this non-blocking — recording for the next
+time a migration appears not to land.
