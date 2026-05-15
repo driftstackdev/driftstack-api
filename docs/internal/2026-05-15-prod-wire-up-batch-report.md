@@ -13,9 +13,9 @@ env vars were ALREADY operator-wired in `/opt/driftstack/api/.env`
 (file timestamp 2026-05-11 14:30); Tracks A + B require no further
 env action. Wave 1054 actions:
 
-- Track E env: appended LIVEKIT*API_KEY / LIVEKIT_API_SECRET /
-  LIVEKIT_WS_URL to both servers' `.env`; restarted `driftstack-api`
-  clean on both (3 LIVEKIT*\* keys present). Deployed binary at SHA
+- Track E env: appended `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` /
+  `LIVEKIT_WS_URL` to both servers' `.env`; restarted `driftstack-api`
+  clean on both (3 `LIVEKIT_*` keys present). Deployed binary at SHA
   `85aee83` is pre-Track-E so `/v1/sessions/:id/livekit-token` 404s
   until next deploy picks up the route.
 - Track C V-667.B-1: schema landed (migration 0039 + Drizzle for
