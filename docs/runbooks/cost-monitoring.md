@@ -67,7 +67,11 @@ over-hard`), and fires an alert through `AlertSink` ONLY when the
 
 1. Open the alert in Sentry / the alert sink and grab `account_id`
    - `severity` + `billing_cycle`.
-2. Pull the breakdown from the admin route:
+2. Pull the breakdown from the admin panel (`/cost` page, V-541.B,
+   landed 2026-05-16): paste the `account_id` + optional billing
+   cycle, hit Query. Reads `/v1/admin/cost/accounts/:id` under the
+   hood, surfaces total + 4-dimension breakdown + threshold state.
+   Or via curl directly:
 
    curl -H "Authorization: Bearer <internal-admin-key>" \
     "$BASE_URL/v1/admin/cost/accounts/<account_id>?billing_cycle=<YYYY-MM>"
