@@ -50,10 +50,19 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     );
   });
 
-  it("EU-resident sub-processor 4-stack: 'Compute in Hetzner Falkenstein. Database on Neon EU. Object storage on Cloudflare R2 EU. Email through Postmark EU sending region. No silent transatlantic data flows.' — pinned so the 4-vendor sub-processor stack stays consistent with the /trust/sub-processors page (drift to dropping a vendor would create cross-page inconsistency; drift to a non-EU vendor would break the EU-resident-by-default commitment)", () => {
+  it("F-5 (Issue 6) EU-resident card no longer names vendors on the about page (moved to /trust/sub-processors). The 'no silent transatlantic data flows' commitment is preserved + a link to the dedicated sub-processor page replaces the vendor enumeration.", () => {
     expect(body).toMatch(
-      /Compute in Hetzner Falkenstein\. Database on Neon EU\. Object\s*\n?\s*storage on Cloudflare R2 EU\. Email through Postmark EU\s*\n?\s*sending region\. No silent transatlantic data flows\./,
+      /Compute, database, object storage, and email all run in\s*\n?\s*the EU\. Single-region — no silent transatlantic data\s*\n?\s*flows\./,
     );
+    expect(body).toMatch(
+      /<a href="\/trust\/sub-processors" class="text-glow-red underline">\/trust\/sub-processors<\/a>/,
+    );
+    // Vendor names must not appear in the about-page splash strip
+    // (still appear in security.astro and /trust/sub-processors, both
+    // legitimate compliance surfaces).
+    expect(body).not.toMatch(/Compute in Hetzner Falkenstein\./);
+    expect(body).not.toMatch(/Database on Neon EU\./);
+    expect(body).not.toMatch(/Object\s*\n?\s*storage on Cloudflare R2 EU\./);
   });
 
   it("'No behavioural data collection' posture: 'We don't log your destination URLs, response bodies, or session content. We don't train models on your traffic. We don't sell datasets. The control plane sees session metadata and license validity — that's the entire surface we touch.' — pinned so the 4-state no-collection commitment (no URL log + no body log + no training + no sale) + the 'metadata + license validity' scope all survive (drift to dropping would weaken the privacy posture marketing customers evaluate Driftstack on)", () => {
