@@ -97,12 +97,12 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     );
   });
 
-  it('SessionRoutesOptions: service + V-326e1 authRepo (owner tier resolution when team member creates session via X-Driftstack-Account)', () => {
+  it('SessionRoutesOptions: service + V-326e1 authRepo (owner tier resolution when team member creates session via X-Driftstack-Account) + EG-API-1.4 egressProxyRequired?: boolean (egress safeguard at API layer)', () => {
     expect(body).toMatch(
       /\*\s*V-326e1 — needed to look up the OWNER's account row \(for tier\s*\n?\s*\*\s*resolution\) when a team member creates a session via\s*\n?\s*\*\s*X-Driftstack-Account\./,
     );
     expect(body).toMatch(
-      /export interface SessionRoutesOptions \{\s*\n?\s*service: SessionsService;[\s\S]*?authRepo: AccountAuthRepo;\s*\n?\s*\}/,
+      /export interface SessionRoutesOptions \{\s*\n?\s*service: SessionsService;[\s\S]*?authRepo: AccountAuthRepo;[\s\S]*?egressProxyRequired\?: boolean;\s*\n?\s*\}/,
     );
   });
 

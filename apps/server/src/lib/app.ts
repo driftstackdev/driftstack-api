@@ -495,7 +495,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     done();
   });
 
-  registerSessionRoutes(app, { service: deps.sessionsService, authRepo: deps.authRepo });
+  registerSessionRoutes(app, {
+    service: deps.sessionsService,
+    authRepo: deps.authRepo,
+    // EG-API-1.4 — egress safeguard at API layer. True iff a session-
+    // egress backend is wired (per planning 133 §"Egress safeguard
+    // enforcement"). False until Phase 1 SOCKS5 lands a concrete
+    // backend (currently the prod posture), so session-create proceeds
+    // unchanged. Once true, every session-create body must carry a
+    // proxy envelope or rejects with 400.
+    egressProxyRequired: deps.sessionEgressService !== undefined,
+  });
   registerAdminRoutes(app, {
     apiKeysService: deps.apiKeysService,
     usageService: deps.usageService,

@@ -104,6 +104,23 @@ export interface SessionRoutesOptions {
    * X-Driftstack-Account.
    */
   authRepo: AccountAuthRepo;
+  /**
+   * EG-API-1.4 — when `true`, POST /v1/sessions refuses any request
+   * whose body lacks a `proxy: ProxyConfig` envelope (per planning 133
+   * §"Egress safeguard enforcement"). The flag is true when AppDeps
+   * has `sessionEgressService` wired (a SOCKS5 / OpenVPN / WireGuard
+   * backend is reachable); it's false otherwise so the pre-launch
+   * posture (no backend wired) doesn't break every session-create.
+   *
+   * The safeguard is one of three defense-in-depth layers (planning
+   * 133 §"Egress safeguard enforcement"):
+   *   1. API layer (this flag) — refuses if no proxy in payload.
+   *   2. Harness layer — refuses to start WebKit if no proxy received.
+   *   3. WebKit fork layer — refuses outbound if no proxy detected.
+   *
+   * Any single layer failure caught by the others.
+   */
+  egressProxyRequired?: boolean;
 }
 
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
@@ -116,6 +133,7 @@ function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['accoun
 
 export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesOptions): void {
   const { service, authRepo } = opts;
+  const egressProxyRequired = opts.egressProxyRequired ?? false;
 
   // ── POST /v1/sessions ──────────────────────────────────────────────────
   // V-326e1 — when X-Driftstack-Account is set, the new session is
@@ -130,6 +148,22 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
     async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = requireCtx(request);
       const body = CreateSessionRequestSchema.parse(request.body ?? {});
+      // EG-API-1.4 — egress safeguard at API layer. When the egress
+      // backend is wired in this deployment, every session-create MUST
+      // carry a proxy envelope. The request body is parsed via
+      // CreateSessionRequestSchema (which does not yet include the
+      // proxy field — that's the EG-API-1.6 sessions-schema extension
+      // slice). For now we inspect the raw body so the safeguard
+      // lands before the SDK contract change.
+      if (egressProxyRequired) {
+        const rawBody = (request.body ?? {}) as Record<string, unknown>;
+        if (rawBody.proxy === undefined || rawBody.proxy === null) {
+          throw new BadRequestError(
+            'A proxy configuration is required to create a session on this deployment. ' +
+              'See https://docs.driftstack.dev/sessions/proxy for the schema (planning 133).',
+          );
+        }
+      }
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
       if (effective.kind === 'team') {
         if (effective.role !== 'admin') {

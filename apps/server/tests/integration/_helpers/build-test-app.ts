@@ -254,6 +254,15 @@ export interface TestAppOptions {
    * Default `false`.
    */
   disableBilling?: boolean;
+  /**
+   * EG-API-1.4 — when `true`, injects a no-op `sessionEgressService`
+   * stub so `egressProxyRequired` flips on in the session-routes wiring
+   * (planning 133 §"Egress safeguard enforcement" defense-in-depth
+   * layer 1). The stub never actually applies/releases anything;
+   * tests exercising the safeguard don't need a real backend.
+   * Default `false`.
+   */
+  enableEgressSafeguard?: boolean;
 }
 
 export interface SeedAdditionalOpts {
@@ -957,6 +966,15 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     profilesService,
     profileSnapshotsService,
     ...(opts.disableBilling === true ? {} : { billingService }),
+    ...(opts.enableEgressSafeguard === true
+      ? {
+          sessionEgressService: {
+            applyToSession: () =>
+              Promise.reject(new Error('test stub: applyToSession not implemented')),
+            releaseFromSession: () => Promise.resolve(),
+          },
+        }
+      : {}),
     costMonitoringService,
     cryptoOrdersService,
     sessionRepo: sessionsRepo,
