@@ -174,6 +174,37 @@ async function smoke(p) {
     return false;
   }
 
+  // Path A (2026-05-16): the redirect_uri value MUST end with
+  // `/${provider}/callback`. If the env wire of
+  // OAUTH_CLIENT_CALLBACK_URL_BASE is missing or wrong (e.g. still
+  // points at the SPA URL), the value will end with the wrong path
+  // and the IDP will reject with redirect_uri_mismatch on the next
+  // user-side authorize. Catch it here instead of at user
+  // browser-time.
+  const redirectUri = u.searchParams.get('redirect_uri');
+  const expectedSuffix = `/${p}/callback`;
+  if (!redirectUri.endsWith(expectedSuffix)) {
+    console.error(
+      `FAIL ${p}: redirect_uri "${redirectUri}" does not end with "${expectedSuffix}" — env OAUTH_CLIENT_CALLBACK_URL_BASE may be wrong (V-667.C Path A requires it to be the per-provider API origin)`,
+    );
+    return false;
+  }
+  // Also: redirect_uri must be on the API origin (api.driftstack.dev),
+  // not the SPA origin (app.driftstack.dev). The pre-Path-A wiring
+  // pointed at the SPA URL; if we see that, fail loud.
+  try {
+    const redirectHost = new URL(redirectUri).hostname;
+    if (redirectHost.startsWith('app.')) {
+      console.error(
+        `FAIL ${p}: redirect_uri "${redirectUri}" is on the SPA origin (app.*) — Path A requires the API origin (api.*). Update OAUTH_CLIENT_CALLBACK_URL_BASE in /opt/driftstack/api/.env.`,
+      );
+      return false;
+    }
+  } catch {
+    console.error(`FAIL ${p}: redirect_uri "${redirectUri}" is not a parseable URL`);
+    return false;
+  }
+
   console.log(`OK ${p}: authorize_url has all expected PKCE + provider-specific query params.`);
   return true;
 }
