@@ -239,6 +239,55 @@ describe('V-553.B-12 IncidentsService.addUpdate', () => {
     expect(state.updates).toHaveLength(2); // initial + this one
     expect(state.incidents[0]?.status).toBe('monitoring');
   });
+
+  it('V-545.B fires onPublicUpdated when the incident is public', async () => {
+    const { repo } = makeRepo();
+    const onPublicUpdated = vi.fn(() => Promise.resolve());
+    const svc = new IncidentsService(repo, { onPublicUpdated });
+    const created = await svc.create(BASE_INPUT);
+    await svc.addUpdate({
+      incidentId: created.incident.id,
+      message: 'monitoring',
+      status: 'monitoring',
+      postedByAdminId: 'adm_1',
+      postedByAdminKeyId: 'key_1',
+    });
+    expect(onPublicUpdated).toHaveBeenCalledTimes(1);
+    const call = onPublicUpdated.mock.calls[0] as [{ id: string }, { message: string }] | undefined;
+    expect(call?.[0]?.id).toBe(created.incident.id);
+    expect(call?.[1]?.message).toBe('monitoring');
+  });
+
+  it('V-545.B does NOT fire onPublicUpdated when the incident is internal (public=false)', async () => {
+    const { repo } = makeRepo();
+    const onPublicUpdated = vi.fn(() => Promise.resolve());
+    const svc = new IncidentsService(repo, { onPublicUpdated });
+    const created = await svc.create({ ...BASE_INPUT, public: false });
+    await svc.addUpdate({
+      incidentId: created.incident.id,
+      message: 'monitoring',
+      status: 'monitoring',
+      postedByAdminId: 'adm_1',
+      postedByAdminKeyId: 'key_1',
+    });
+    expect(onPublicUpdated).not.toHaveBeenCalled();
+  });
+
+  it('V-545.B swallows onPublicUpdated failures — addUpdate write succeeds', async () => {
+    const { repo, state } = makeRepo();
+    const onPublicUpdated = vi.fn(() => Promise.reject(new Error('mailer down')));
+    const svc = new IncidentsService(repo, { onPublicUpdated });
+    const created = await svc.create(BASE_INPUT);
+    const update = await svc.addUpdate({
+      incidentId: created.incident.id,
+      message: 'monitoring',
+      status: 'monitoring',
+      postedByAdminId: 'adm_1',
+      postedByAdminKeyId: 'key_1',
+    });
+    expect(update.status).toBe('monitoring');
+    expect(state.updates).toHaveLength(2);
+  });
 });
 
 describe('V-553.B-12 IncidentsService.resolve', () => {
