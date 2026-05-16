@@ -153,9 +153,10 @@ Each SDK's release process:
 5. GitHub release post with the CHANGELOG-entry copy + migration
    guide if breaking.
 
-Pre-launch (no paying customers yet) the publish steps are gated on
-founder approval. Post-launch, MINOR + PATCH publishes are
-autonomous; MAJOR publishes always require explicit founder approval.
+Publish steps are gated on founder approval at the current scale.
+Once the customer base + release cadence justify it, MINOR + PATCH
+publishes will run autonomously while MAJOR publishes continue to
+require explicit founder approval.
 
 ## Cross-references
 
@@ -168,9 +169,10 @@ autonomous; MAJOR publishes always require explicit founder approval.
 
 ## Out of scope (today)
 
-- **LTS branches**. Pre-launch we don't maintain long-term support
-  branches; only the latest MINOR gets patches. Post-1.0 will
-  introduce LTS for major versions in active customer use.
+- **LTS branches**. The SDKs don't carry long-term support
+  branches; only the latest MINOR receives patches. LTS for major
+  versions in active customer use is something we'll introduce when
+  customer breadth makes it worth the maintenance overhead.
 - **Public deprecation timeline doc**. Customer-facing
   deprecation-window doc (e.g., `docs.driftstack.dev/sdk/deprecations`)
   is a future surface; today the SDK CHANGELOGs are the source of

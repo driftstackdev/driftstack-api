@@ -191,12 +191,12 @@ describe('W777 docs /sdk/versioning content parity', () => {
     expect(p).toMatch(/5\. GitHub release post with the CHANGELOG-entry copy \+ migration/);
   });
 
-  it("CRITICAL pre-launch-founder-approval framing pinned. The 'Pre-launch (no paying customers yet) the publish steps are gated on founder approval. Post-launch, MINOR + PATCH publishes are autonomous; MAJOR publishes always require explicit founder approval' wording is the canonical release-gating policy.", () => {
+  it("F-5 (Issue 5) founder-approval framing — current-scale framing instead of launch-window. The 'Publish steps are gated on founder approval at the current scale. Once the customer base + release cadence justify it, MINOR + PATCH publishes will run autonomously while MAJOR publishes continue to require explicit founder approval.' wording is the canonical release-gating policy. (Refresh of the prior 'Pre-launch / Post-launch' framing stripped per Issue 5.)", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /Pre-launch \(no paying customers yet\) the publish steps are gated on\s*\n?founder approval\. Post-launch, MINOR \+ PATCH publishes are\s*\n?autonomous; MAJOR publishes always require explicit founder approval\./,
-    );
+    expect(p).toMatch(/Publish steps are gated on founder approval at the current scale\./);
+    expect(p).toMatch(/MAJOR publishes continue to\s*\n?require explicit founder approval\./);
+    expect(p).not.toMatch(/Pre-launch \(no paying customers yet\)/);
   });
 
   it('CRITICAL cross-reference set pinned — CHANGELOG.md + D-021 decision + packages/api-types Zod schemas. The 3-link footer threads the load-bearing source-of-truth pointers.', () => {
@@ -210,7 +210,7 @@ describe('W777 docs /sdk/versioning content parity', () => {
   it('CRITICAL out-of-scope 3-item set pinned — LTS branches + public deprecation timeline doc + telemetry on deprecated-call usage. Drift to claiming any of these would over-promise to customers.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/\*\*LTS branches\*\*\. Pre-launch we don't maintain long-term support/);
+    expect(p).toMatch(/\*\*LTS branches\*\*\. The SDKs don't carry long-term support/);
     expect(p).toMatch(/\*\*Public deprecation timeline doc\*\*\./);
     expect(p).toMatch(/\*\*Telemetry on deprecated-call usage\*\*\./);
   });
