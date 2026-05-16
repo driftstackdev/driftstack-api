@@ -18,15 +18,21 @@ const apiBaseUrl = resolveApiBaseUrl();
       Verify your email
     </h1>
     <p class="mt-3 text-sm text-ink-secondary" data-field="intro">
-      We sent a verification token to <span data-field="email" class="font-mono text-glow-red-soft"
+      We sent a verification link to <span data-field="email" class="font-mono text-glow-red-soft"
         >your email</span
-      >. Paste it below to activate your account.
+      >. Click it to activate your account.
     </p>
 
     <div class="auth-card mt-8">
       <div data-banner class="banner-warn mb-5 hidden" role="status"></div>
 
-      <form data-form="verify" class="space-y-5">
+      <!-- Issue 3 wave 1085+ — when ?token= is present in the URL
+           (the link in the verification email), the form below is
+           HIDDEN and the page shows "Verifying… one moment" while
+           the auto-submit completes. The form is revealed as a
+           manual fallback only when auto-verify fails OR when the
+           page is reached without a token in the URL. -->
+      <form data-form="verify" class="space-y-5" data-form-fallback hidden>
         <div>
           <label class="form-label" for="verify-token"> Verification token </label>
           <input
@@ -41,6 +47,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         </div>
         <button type="submit" class="btn-primary w-full">Verify + continue</button>
       </form>
+
+      <!-- Auto-verify in-progress indicator. Visible only while the
+           ?token= URL path is mid-submit. Replaced by the form on
+           failure or by the redirect on success. -->
+      <div data-field="auto-verify-spinner" class="text-center" hidden>
+        <p class="text-sm text-ink-secondary">
+          <span class="inline-block animate-pulse">●</span> Verifying your account…
+        </p>
+      </div>
 
       <div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-ink-muted">
         <span>Token expired or never arrived?</span>
@@ -74,23 +89,38 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       const email = sessionStorage.getItem('ds_signup_email');
       if (email && emailEl) emailEl.textContent = email;
-      // V-184a.B — when the user clicks the link in the verify
-      // email, the token is already in `?token=…`. Pre-fill the
-      // form + auto-submit so they don't have to paste it. The
-      // form stays visible as a fallback for the rare case where
-      // a recipient mail client mangles the link or the page is
-      // hit without the query param.
+      const formEl = root.querySelector('[data-form-fallback]');
+      const spinnerEl = root.querySelector('[data-field="auto-verify-spinner"]');
+      const introEl = root.querySelector('[data-field="intro"]');
+      // Issue 3 wave 1085+ — when the user clicks the link in the verify
+      // email, the token is already in `?token=…`. Auto-submit
+      // immediately and HIDE the form (replace with a spinner). The
+      // form is unhidden as a manual fallback only when:
+      //   (a) auto-submit fails (showFallback() below)
+      //   (b) the page is reached without a token in the URL
       const params = new URLSearchParams(window.location.search);
       const linkToken = params.get('token');
-      // Pre-fill debug_token from signup response in test/dev mode
-      // (kept for back-compat — the URL token wins when both
-      // are present).
       const debugToken = sessionStorage.getItem('ds_debug_verify_token');
       const prefill = linkToken ?? debugToken;
       if (prefill && tokenInput) tokenInput.value = prefill;
       if (linkToken) {
-        const intro = root.querySelector('[data-field="intro"]');
-        if (intro) intro.textContent = 'Verifying your email — one moment…';
+        // Auto-verify path: show spinner, keep form hidden.
+        if (spinnerEl) spinnerEl.hidden = false;
+        if (introEl) introEl.textContent = 'Verifying your account…';
+      } else {
+        // No token in URL: surface the form as the manual fallback.
+        if (formEl) formEl.hidden = false;
+      }
+
+      function showFallback() {
+        // Reveal the manual code-paste form (the auto-verify path failed
+        // OR the user landed without a token).
+        if (formEl) formEl.hidden = false;
+        if (spinnerEl) spinnerEl.hidden = true;
+        if (introEl) {
+          introEl.textContent =
+            'Auto-verify failed. Paste the token from your email below to continue.';
+        }
       }
 
       function showBanner(text) {
@@ -129,6 +159,9 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .catch((err) => {
             showBanner(err && err.message ? err.message : 'Verification failed.');
+            // If auto-verify (link-click) failed, reveal the manual
+            // fallback form so the user has a recovery path.
+            showFallback();
           });
       }
 

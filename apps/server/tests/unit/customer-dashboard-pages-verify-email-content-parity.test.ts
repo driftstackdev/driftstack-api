@@ -40,22 +40,23 @@ describe('W493.C apps/customer-dashboard/src/pages/verify-email.astro content pa
     );
   });
 
-  it("V-184a.B auto-submit framing pinned: 'when the user clicks the link in the verify email, the token is already in ?token=…. Pre-fill the form + auto-submit so they don't have to paste it. The form stays visible as a fallback for the rare case where a recipient mail client mangles the link or the page is hit without the query param.' — pinned so the auto-submit UX + the manual-paste fallback both stay documented (drift to dropping the fallback would break customers with overzealous email clients that strip query params)", () => {
+  it("Issue 3 wave 1085+ auto-submit framing: 'when the user clicks the link in the verify email, the token is already in ?token=…. Auto-submit immediately and HIDE the form (replace with a spinner). The form is unhidden as a manual fallback only when (a) auto-submit fails OR (b) the page is reached without a token in the URL' — Founder feedback: the prior implementation pre-filled the form but kept the code-input visible, which read as a 'type your code' UX even when the link click should be the primary flow.", () => {
     expect(body).toMatch(
-      /\/\/ V-184a\.B — when the user clicks the link in the verify\s*\n?\s*\/\/ email, the token is already in `\?token=…`\. Pre-fill the\s*\n?\s*\/\/ form \+ auto-submit so they don't have to paste it\. The\s*\n?\s*\/\/ form stays visible as a fallback for the rare case where\s*\n?\s*\/\/ a recipient mail client mangles the link or the page is\s*\n?\s*\/\/ hit without the query param\./,
+      /Issue 3 wave 1085\+ — when the user clicks the link in the verify\s*\n?\s*\/\/ email, the token is already in `\?token=…`\. Auto-submit\s*\n?\s*\/\/ immediately and HIDE the form/,
+    );
+    expect(body).toMatch(/showFallback/);
+  });
+
+  it('Pre-fill priority: linkToken ?? debugToken — URL ?token= wins over sessionStorage ds_debug_verify_token (kept for dev-mode back-compat)', () => {
+    expect(body).toMatch(
+      /const debugToken = sessionStorage\.getItem\('ds_debug_verify_token'\);\s*\n?\s*const prefill = linkToken \?\? debugToken;/,
     );
   });
 
-  it('Pre-fill priority: linkToken ?? debugToken — URL ?token= wins over sessionStorage ds_debug_verify_token — pinned so the email-link path takes precedence over the dev-mode paste (drift to debugToken winning would break the live email flow when AUTH_EXPOSE_DEBUG_TOKEN happens to be set)', () => {
-    expect(body).toMatch(
-      /\/\/ Pre-fill debug_token from signup response in test\/dev mode\s*\n?\s*\/\/ \(kept for back-compat — the URL token wins when both\s*\n?\s*\/\/ are present\)\.\s*\n?\s*const debugToken = sessionStorage\.getItem\('ds_debug_verify_token'\);\s*\n?\s*const prefill = linkToken \?\? debugToken;/,
-    );
-  });
-
-  it("Auto-verifying intro swap: linkToken present → intro textContent changes to 'Verifying your email — one moment…' (so customer sees something is happening before the auto-submit fires) — pinned so the auto-flow customer isn't confused by static form copy while their submission is mid-flight", () => {
-    expect(body).toMatch(
-      /if \(linkToken\) \{\s*\n?\s*const intro = root\.querySelector\('\[data-field="intro"\]'\);\s*\n?\s*if \(intro\) intro\.textContent = 'Verifying your email — one moment…';\s*\n?\s*\}/,
-    );
+  it("Issue 3 wave 1085+ auto-verifying spinner: linkToken present → spinnerEl unhidden + intro textContent changes to 'Verifying your account…' + form stays hidden. (Replaces the prior 'Verifying your email — one moment…' intro-only swap; full visual surface is the spinner now.)", () => {
+    expect(body).toMatch(/if \(spinnerEl\) spinnerEl\.hidden = false;/);
+    expect(body).toMatch(/if \(introEl\) introEl\.textContent = 'Verifying your account…';/);
+    expect(body).toMatch(/data-field="auto-verify-spinner"/);
   });
 
   it("Auto-submit trigger: linkToken && linkToken.length > 0 → submitToken(linkToken) at module-init time — pinned so the URL-token path fires automatically (no waiting for form submit) + the length-check guards against ?token= present-but-empty (which the form's submitToken would reject anyway, but cleaner to gate it here)", () => {

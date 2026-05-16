@@ -169,6 +169,43 @@ const apiBaseUrl = resolveApiBaseUrl();
         banner.classList.remove('hidden');
       }
 
+      // Server-side ValidationError carries the zod issues in
+      // `extensions.issues` (shape: { formErrors: string[],
+      // fieldErrors: Record<string, string[]> }). Surface those
+      // per-field instead of the generic "One or more fields failed
+      // validation" detail (Issue 2 — wave 1085+).
+      function formatValidationIssues(issues) {
+        if (!issues || typeof issues !== 'object') return null;
+        const fieldErrors = issues.fieldErrors || {};
+        const formErrors = issues.formErrors || [];
+        const parts = [];
+        for (const [field, msgs] of Object.entries(fieldErrors)) {
+          if (!Array.isArray(msgs) || msgs.length === 0) continue;
+          const label =
+            field === 'email'
+              ? 'Email'
+              : field === 'password'
+                ? 'Password'
+                : field === 'name'
+                  ? 'Name'
+                  : field;
+          const friendly = msgs
+            .map((m) => {
+              // Zod default messages → customer-friendly.
+              if (/Invalid email/i.test(m)) return 'must be a valid email address';
+              if (/at least 12/i.test(m)) return 'must be at least 12 characters';
+              if (/at most 128/i.test(m)) return 'must be at most 128 characters';
+              if (/at most 254/i.test(m)) return 'must be 254 characters or fewer';
+              if (/at most 120/i.test(m)) return 'must be 120 characters or fewer';
+              return m;
+            })
+            .join('; ');
+          parts.push(label + ' ' + friendly + '.');
+        }
+        for (const m of formErrors) parts.push(m);
+        return parts.length > 0 ? parts.join(' ') : null;
+      }
+
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
         banner.classList.add('hidden');
@@ -189,7 +226,12 @@ const apiBaseUrl = resolveApiBaseUrl();
           .then((r) =>
             r.ok
               ? r.json()
-              : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+              : r.json().then((b) => {
+                  // Per-field validation errors take precedence over the
+                  // generic detail string (Issue 2 wave 1085+).
+                  const specific = formatValidationIssues(b.extensions && b.extensions.issues);
+                  return Promise.reject(new Error(specific || b.detail || 'HTTP ' + r.status));
+                }),
           )
           .then((body) => {
             // Stash the email for the verify page (no token yet — that
