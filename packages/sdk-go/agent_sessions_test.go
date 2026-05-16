@@ -85,7 +85,7 @@ func TestAgentSessions_Message_Plan(t *testing.T) {
 			"ok":      true,
 		})
 	})
-	got, err := client.AgentSessions.Message(context.Background(), "agt_1", "open https://example.com")
+	got, err := client.AgentSessions.Message(context.Background(), "agt_1", "open https://example.com", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,12 +107,59 @@ func TestAgentSessions_Message_Refuse(t *testing.T) {
 			"refuse_reason": "AUP violation",
 		})
 	})
-	got, err := client.AgentSessions.Message(context.Background(), "agt_1", "x")
+	got, err := client.AgentSessions.Message(context.Background(), "agt_1", "x", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Kind != "refuse" || got.RefuseReason != "AUP violation" {
 		t.Errorf("unexpected refuse response: %+v", got)
+	}
+}
+
+func TestAgentSessions_Message_ByokOption(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// BYOK convenience: the option must set the
+		// x-byok-anthropic-api-key header. Matches the server-side
+		// header reading at apps/server/src/routes/agent-sessions.ts
+		// (commit 1b97a5e0).
+		if got := r.Header.Get("x-byok-anthropic-api-key"); got != "sk-ant-test-byok" {
+			t.Errorf("byok header=%q", got)
+		}
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"kind":               "clarify",
+			"session":            agentSessionEnvelope,
+			"clarifying_question": "?",
+		})
+	})
+	_, err := client.AgentSessions.Message(
+		context.Background(), "agt_1", "hi",
+		&MessageOptions{ByokAPIKey: "sk-ant-test-byok"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentSessions_Message_NoByokOmitsHeader(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// Omitting the option (nil) sends NO byok header (distinguishes
+		// "no key" from "empty key" at the server boundary).
+		if r.Header.Get("x-byok-anthropic-api-key") != "" {
+			t.Errorf("expected no byok header; got %q", r.Header.Get("x-byok-anthropic-api-key"))
+		}
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"kind":               "clarify",
+			"session":            agentSessionEnvelope,
+			"clarifying_question": "?",
+		})
+	})
+	_, err := client.AgentSessions.Message(context.Background(), "agt_1", "hi", nil)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

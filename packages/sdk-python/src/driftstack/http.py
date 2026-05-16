@@ -212,9 +212,12 @@ class HttpClient:
         params: dict[str, Any] | None = None,
         json_body: Any | None = None,
         retry: RetryConfig | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> Any:
         url = self._base_url + path
         headers = _build_headers(self._api_key, has_body=json_body is not None)
+        if extra_headers:
+            headers.update(extra_headers)
 
         def _do() -> Any:
             try:
@@ -276,9 +279,12 @@ class AsyncHttpClient:
         params: dict[str, Any] | None = None,
         json_body: Any | None = None,
         retry: RetryConfig | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> Any:
         url = self._base_url + path
         headers = _build_headers(self._api_key, has_body=json_body is not None)
+        if extra_headers:
+            headers.update(extra_headers)
 
         async def _do() -> Any:
             try:

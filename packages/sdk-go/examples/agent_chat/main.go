@@ -51,7 +51,7 @@ func main() {
 
 	for _, prompt := range prompts {
 		fmt.Printf("\n→ user: %s\n", prompt)
-		resp, err := client.AgentSessions.Message(ctx, session.ID, prompt)
+		resp, err := client.AgentSessions.Message(ctx, session.ID, prompt, nil)
 		if err != nil {
 			log.Fatalf("Message: %v", err)
 		}

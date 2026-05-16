@@ -104,7 +104,7 @@ describe('W585.C packages/sdk-python/src/driftstack/http.py content parity', () 
     );
     expect(body).toMatch(/def __enter__\(self\) -> HttpClient:\s*\n\s*return self/);
     expect(body).toMatch(
-      /def request\(\s*\n\s*self,\s*\n\s*method: str,\s*\n\s*path: str,\s*\n\s*\*,\s*\n\s*params: dict\[str, Any\] \| None = None,\s*\n\s*json_body: Any \| None = None,\s*\n\s*retry: RetryConfig \| None = None,\s*\n\s*\) -> Any:/,
+      /def request\(\s*\n\s*self,\s*\n\s*method: str,\s*\n\s*path: str,\s*\n\s*\*,\s*\n\s*params: dict\[str, Any\] \| None = None,\s*\n\s*json_body: Any \| None = None,\s*\n\s*retry: RetryConfig \| None = None,\s*\n\s*extra_headers: dict\[str, str\] \| None = None,\s*\n\s*\) -> Any:/,
     );
     expect(body).toMatch(
       /except httpx\.TimeoutException as err:\s*\n\s*raise TransportError\("request timed out", status=0\) from err/,

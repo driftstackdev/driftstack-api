@@ -41,16 +41,31 @@ class AgentSessionsResource:
             "GET", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}"
         )
 
-    def message(self, agent_session_id: str, user_message: str) -> dict[str, Any]:
+    def message(
+        self,
+        agent_session_id: str,
+        user_message: str,
+        *,
+        byok_api_key: str | None = None,
+    ) -> dict[str, Any]:
         """Run one decompose→execute turn against the agent session.
 
         Returns a discriminated body keyed by ``kind``. Closed sessions
         return 409 Conflict — start a new session.
+
+        ``byok_api_key`` (optional, BYOK Tier-3 LOCKED 2026-05-16) is
+        forwarded as the ``x-byok-anthropic-api-key`` request header so
+        callers don't have to construct it by hand. NEVER logged by
+        the SDK; arrives over TLS to the control plane.
         """
+        extra_headers = (
+            {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key is not None else None
+        )
         return self._http.request(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/message",
             json_body=coerce_body({"user_message": user_message}),
+            extra_headers=extra_headers,
         )
 
     def close(self, agent_session_id: str) -> None:
@@ -76,11 +91,21 @@ class AsyncAgentSessionsResource:
             "GET", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}"
         )
 
-    async def message(self, agent_session_id: str, user_message: str) -> dict[str, Any]:
+    async def message(
+        self,
+        agent_session_id: str,
+        user_message: str,
+        *,
+        byok_api_key: str | None = None,
+    ) -> dict[str, Any]:
+        extra_headers = (
+            {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key is not None else None
+        )
         return await self._http.request(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/message",
             json_body=coerce_body({"user_message": user_message}),
+            extra_headers=extra_headers,
         )
 
     async def close(self, agent_session_id: str) -> None:

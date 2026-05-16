@@ -82,16 +82,32 @@ func (r *AgentSessionsResource) Get(ctx context.Context, agentSessionID string) 
 	return &out, nil
 }
 
+// MessageOptions carries optional per-call overrides for Message.
+//
+// ByokAPIKey is the customer-supplied Anthropic API key (BYOK Tier-3
+// LOCKED 2026-05-16). Forwarded as the x-byok-anthropic-api-key
+// request header so callers don't construct it by hand. NEVER logged.
+type MessageOptions struct {
+	ByokAPIKey string
+}
+
 // Message runs one decompose→execute turn. Closed sessions return
 // 409 Conflict (mapped to ConflictError by the SDK).
-func (r *AgentSessionsResource) Message(ctx context.Context, agentSessionID, userMessage string) (*AgentMessageResponse, error) {
+//
+// Pass `nil` for opts when no BYOK key is needed (the deployment
+// fallback path).
+func (r *AgentSessionsResource) Message(ctx context.Context, agentSessionID, userMessage string, opts *MessageOptions) (*AgentMessageResponse, error) {
 	var out AgentMessageResponse
-	if err := r.client.do(ctx, requestOptions{
+	req := requestOptions{
 		method: "POST",
 		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/message",
 		body:   map[string]string{"user_message": userMessage},
 		out:    &out,
-	}); err != nil {
+	}
+	if opts != nil && opts.ByokAPIKey != "" {
+		req.headers = map[string]string{"x-byok-anthropic-api-key": opts.ByokAPIKey}
+	}
+	if err := r.client.do(ctx, req); err != nil {
 		return nil, err
 	}
 	return &out, nil

@@ -82,6 +82,42 @@ def test_sync_message_plan_response() -> None:
         assert route.called
 
 
+def test_sync_message_byok_api_key_sets_header() -> None:
+    """BYOK convenience: passing ``byok_api_key`` sets the
+    ``x-byok-anthropic-api-key`` header so callers don't construct it
+    by hand. Matches the server-side header reading at
+    apps/server/src/routes/agent-sessions.ts (commit 1b97a5e0)."""
+    reply = {
+        "kind": "clarify",
+        "session": SESSION_ENVELOPE,
+        "clarifying_question": "?",
+    }
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions/agt_1/message").mock(
+            return_value=httpx.Response(200, json=reply),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.agent_sessions.message("agt_1", "hi", byok_api_key="sk-ant-test-byok")
+        assert route.called
+        sent_headers = route.calls.last.request.headers
+        assert sent_headers["x-byok-anthropic-api-key"] == "sk-ant-test-byok"
+
+
+def test_sync_message_no_byok_omits_header() -> None:
+    """Omitting ``byok_api_key`` sends NO byok header (distinguishes
+    "no key" from "empty key" at the server boundary)."""
+    reply = {"kind": "clarify", "session": SESSION_ENVELOPE, "clarifying_question": "?"}
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions/agt_1/message").mock(
+            return_value=httpx.Response(200, json=reply),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.agent_sessions.message("agt_1", "hi")
+        assert route.called
+        sent_headers = route.calls.last.request.headers
+        assert "x-byok-anthropic-api-key" not in sent_headers
+
+
 def test_sync_close_delete() -> None:
     with respx.mock(base_url=BASE) as mock:
         route = mock.delete("/v1/agent-sessions/agt_1").mock(
