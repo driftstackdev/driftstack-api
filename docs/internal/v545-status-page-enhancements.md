@@ -107,9 +107,20 @@ table.
 ## Sub-slices
 
 - **V-545.A** — incident-update timeline + schema + admin route to
-  post updates.
+  post updates. **DONE** (2026-05-15 → 2026-05-16). Surface includes:
+  server routes GET /v1/status/incidents (list) + /:id (detail),
+  recent*incidents on /v1/status (top 5), 30s Cache-Control on all
+  three, status-site detail page /incident?id=inc*<uuid> +
+  card-linking on the index, OpenAPI typed responses, 9-invariant
+  post-deploy verifier.
 - **V-545.B** — subscriber notification (3 Postmark templates +
-  throttling).
+  throttling). **Phase 1 DONE** (2026-05-16): `onPublicUpdated`
+  lifecycle hook on IncidentsService fires per-update with the
+  incident + update rows. **Phase 2 DEFERRED**: add the
+  `status-incident-updated` Postmark template + wire bootstrap to
+  use the existing IncidentNotificationsService.fanOut path with
+  per-subscriber-per-incident-per-hour throttling (needs a new
+  dedup table — bigger schema slice).
 - **V-545.C** — status-site history view + permalinks + RSS feed.
 
 Each sub-slice is roughly one wave's work. Land in order.
