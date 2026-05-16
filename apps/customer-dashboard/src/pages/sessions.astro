@@ -119,6 +119,49 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
       </p>
     </div>
 
+    <!-- Wave 1086+ — first-session API key reveal. The first-session
+         flow stashes the auto-minted plaintext in sessionStorage as
+         ds_first_api_key_plaintext + redirects here with ?onboarded=1.
+         If the customer never sees that plaintext we've handed them an
+         account they can't use the SDK from (server returns the key
+         ONCE then hashes it). This reveal surfaces it inline, with
+         the same "shown once" framing as /api-keys. -->
+    <div
+      data-first-key-reveal
+      class="mb-8 hidden rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-6"
+    >
+      <h2 class="text-lg font-semibold text-emerald-200">
+        Your first API key — copy it now
+      </h2>
+      <p class="mt-2 text-sm text-emerald-200">
+        This is the only time the full key is shown. Use it in the
+        <code class="font-mono">Authorization: Bearer …</code> header of every SDK
+        call. Store it in your secret manager
+        (1Password, a git-ignored <code class="font-mono">.env</code>, or similar)
+        before dismissing.
+      </p>
+      <pre
+        data-first-key-plaintext
+        class="mt-4 overflow-x-auto rounded border border-emerald-400/30 bg-surface-raised px-4 py-3 font-mono text-sm text-ink-primary"></pre>
+      <div class="mt-4 flex flex-wrap items-center gap-3">
+        <button type="button" class="btn-primary" data-first-key-copy>Copy to clipboard</button>
+        <button
+          type="button"
+          class="rounded-md border border-emerald-400/40 bg-surface-raised px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-100"
+          data-first-key-dismiss
+        >
+          Dismiss — I've saved it
+        </button>
+        <span data-first-key-copy-feedback class="hidden text-xs text-emerald-300">Copied.</span>
+        <a
+          href="/api-keys"
+          class="ml-auto text-xs text-emerald-300 underline underline-offset-4 hover:text-emerald-200"
+        >
+          Manage API keys →
+        </a>
+      </div>
+    </div>
+
     <!-- Active sessions -->
     <section>
       <h2 class="mb-4 text-lg font-semibold text-ink-primary">
@@ -233,6 +276,39 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
         banner.textContent = text;
         banner.classList.remove('hidden');
       }
+
+      // Wave 1086+ — first-session API key reveal. Reads the plaintext
+      // stashed by /first-session in sessionStorage; surfaces it inline
+      // with copy + dismiss. Cleared from sessionStorage on dismiss so
+      // a subsequent page reload doesn't re-show it (the server has
+      // already hashed the key — there's no recovery if the customer
+      // didn't copy it the first time).
+      (function showFirstKeyReveal() {
+        const stashedKey = sessionStorage.getItem('ds_first_api_key_plaintext');
+        if (!stashedKey) return;
+        const reveal = root.querySelector('[data-first-key-reveal]');
+        const plaintextEl = root.querySelector('[data-first-key-plaintext]');
+        const copyBtn = root.querySelector('[data-first-key-copy]');
+        const copyFb = root.querySelector('[data-first-key-copy-feedback]');
+        const dismissBtn = root.querySelector('[data-first-key-dismiss]');
+        if (!reveal || !plaintextEl || !copyBtn || !dismissBtn) return;
+        plaintextEl.textContent = stashedKey;
+        reveal.classList.remove('hidden');
+        copyBtn.addEventListener('click', () => {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(stashedKey).then(() => {
+              if (copyFb) {
+                copyFb.classList.remove('hidden');
+                window.setTimeout(() => copyFb.classList.add('hidden'), 2000);
+              }
+            });
+          }
+        });
+        dismissBtn.addEventListener('click', () => {
+          sessionStorage.removeItem('ds_first_api_key_plaintext');
+          reveal.classList.add('hidden');
+        });
+      })();
 
       const STATUS_BADGE_CLASS = {
         creating: 'bg-glow-red/10 text-glow-red',
