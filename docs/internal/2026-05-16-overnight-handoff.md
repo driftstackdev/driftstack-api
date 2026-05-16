@@ -133,11 +133,15 @@ cost analysis. Recommendation hinges on launch timeline.
 1206+ unit test files, ~13530 individual tests, 0 failures
 sustained across every commit this block.
 
-## Tracks rotated (Rule M HARD ≥3 per wave)
+## Tracks rotated (Rule M)
 
-Most waves combined 2-3 of: feature / ops / docs / tests / deploy.
-No single-track absorption episodes. Memory entry refreshed twice
-for the deploy-bridge pattern.
+Earlier waves (1062-1073) consistently rotated 3+ tracks per wave
+(feature / ops / docs / tests / deploy). Later waves (1074+) drifted
+to 1-2 tracks each as the substantive scope thinned to small
+follow-ups + doc consolidation. No drift-guard-absorption episodes
+this block. Memory entry for the deploy-bridge pattern refreshed
+twice to keep it current with `--check`, `--quiet`, and `--json`
+flag additions.
 
 ## What's queued but not started
 
