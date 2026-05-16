@@ -46,6 +46,8 @@ import type { ProfilesService } from '../services/profiles.js';
 import type { ProfileSnapshotsService } from '../services/profile-snapshots.js';
 import type { BillingService } from '../services/billing.js';
 import type { SessionEgressService } from '../services/session-egress.js';
+import type { AgentRuntime } from '../services/agent-runtime.js';
+import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import { registerAccountMeRoutes } from '../routes/account-me.js';
@@ -104,6 +106,10 @@ import {
   registerSavedProxiesDisabledRoutes,
   registerSavedProxiesRoutes,
 } from '../routes/saved-proxies.js';
+import {
+  registerAgentSessionsDisabledRoutes,
+  registerAgentSessionsRoutes,
+} from '../routes/agent-sessions.js';
 import { registerAdminForceActionRoutes } from '../routes/admin-force-actions.js';
 import {
   wireSentryErrorHandler,
@@ -251,6 +257,20 @@ export interface AppDeps {
    * SOCKS5-only backend; Phase 2/3 extend to OpenVPN/WireGuard.
    */
   sessionEgressService?: SessionEgressService;
+  /**
+   * AI-D — AgentRuntime composing decomposer + executor + sessions repo
+   * (per AI-COMPOSE slice). Optional. When wired, registers
+   * /v1/agent-sessions/* routes; when omitted, those routes return 503
+   * FeatureUnavailable. Founder reviews + flips on once the LLM key
+   * path (BYOK vs bundled — Tier-3) is decided.
+   */
+  agentRuntime?: AgentRuntime;
+  /**
+   * Paired with `agentRuntime` — the same repo the runtime reads/writes
+   * is reused by the route layer for cross-account auth checks +
+   * create/close paths. When agentRuntime is wired this MUST also be set.
+   */
+  agentSessionsRepo?: AgentSessionsRepo;
   /**
    * V-100: admin force-action route deps. Routes register only when
    * all four are provided (sessionRepo / apiKeysRepo / driver / audit
@@ -711,6 +731,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   } else {
     registerSessionProxyDisabledRoutes(app);
     registerSavedProxiesDisabledRoutes(app);
+  }
+
+  // AI-D — /v1/agent-sessions/* route surface. Same activation gate
+  // as EGRESS: register real routes when both runtime + repo are
+  // wired in AppDeps; otherwise register 503 stubs so SDK + dashboard
+  // see a machine-readable "not yet enabled" signal.
+  if (deps.agentRuntime !== undefined && deps.agentSessionsRepo !== undefined) {
+    registerAgentSessionsRoutes(app, {
+      runtime: deps.agentRuntime,
+      sessions: deps.agentSessionsRepo,
+    });
+  } else {
+    registerAgentSessionsDisabledRoutes(app);
   }
   if (
     deps.sessionRepo !== undefined &&

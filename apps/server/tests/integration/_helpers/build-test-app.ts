@@ -18,6 +18,10 @@ import type { UsageInputs } from '../../../src/lib/cost-estimator.js';
 import { MemoryRateLimitStore } from '../../../src/lib/memory-rate-limit-store.js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../../../src/lib/api-keys.js';
 import { MockDriver } from '../../../src/drivers/mock.js';
+import { AgentRuntime } from '../../../src/services/agent-runtime.js';
+import { DeterministicAgentDecomposer } from '../../../src/services/agent-decomposer-deterministic.js';
+import { StubAgentExecutor } from '../../../src/services/agent-executor.js';
+import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
@@ -263,6 +267,14 @@ export interface TestAppOptions {
    * Default `false`.
    */
   enableEgressSafeguard?: boolean;
+  /**
+   * AI-D — when `true`, wires a deterministic AgentRuntime
+   * (DeterministicAgentDecomposer + StubAgentExecutor +
+   * InMemoryAgentSessionsRepo) so /v1/agent-sessions/* routes
+   * register concretely. Default `false` = activation-gate-off
+   * (matches prod posture until founder flips the LLM key path on).
+   */
+  enableAgentRuntime?: boolean;
 }
 
 export interface SeedAdditionalOpts {
@@ -974,6 +986,18 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
             releaseFromSession: () => Promise.resolve(),
           },
         }
+      : {}),
+    ...(opts.enableAgentRuntime === true
+      ? (() => {
+          const agentSessionsRepo = new InMemoryAgentSessionsRepo();
+          const agentRuntime = new AgentRuntime({
+            decomposer: new DeterministicAgentDecomposer(),
+            executor: new StubAgentExecutor(),
+            sessions: agentSessionsRepo,
+            archetype: 'iphone16pro_ios18_7_safari26_4',
+          });
+          return { agentRuntime, agentSessionsRepo };
+        })()
       : {}),
     costMonitoringService,
     cryptoOrdersService,
