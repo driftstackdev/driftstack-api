@@ -221,6 +221,10 @@ describe('GET /v1/status/incidents (public, no-auth)', () => {
 
     const res = await fx.app.inject({ method: 'GET', url: '/v1/status/incidents' });
     expect(res.statusCode).toBe(200);
+    // V-295a perf — cache-control 30s for CDN coalescing of concurrent
+    // status-site viewers. Asserted here so a future drop of the
+    // header (or change in TTL) breaks loudly.
+    expect(res.headers['cache-control']).toBe('public, max-age=30');
     const body = res.json<{ data: IncidentResp[] }>();
     expect(body.data).toHaveLength(1);
     expect(body.data[0]?.title).toBe('public-x');
@@ -288,6 +292,8 @@ describe('GET /v1/status/incidents/:id (V-545.A — public detail w/ timeline)',
       url: `/v1/status/incidents/${incidentId}`,
     });
     expect(res.statusCode).toBe(200);
+    // V-545.A perf — cache-control 30s on the detail endpoint too.
+    expect(res.headers['cache-control']).toBe('public, max-age=30');
     const body = res.json<{
       incident: IncidentResp;
       updates: { id: string; message: string; status: string }[];
