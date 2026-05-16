@@ -38,6 +38,15 @@ const checks = [
   checkAdminCostConfigRoute,
   checkOpenapi,
   checkUnknownPath404,
+  // Activation-gate posture invariants (Wave 1119+).
+  // Each gated route registers a 503 FeatureUnavailable stub when
+  // its AppDeps service is omitted from bootstrap. Without these
+  // checks, a regression that forgets the `else` branch in app.ts
+  // would leave the routes unregistered (404) and no existing
+  // smoke would catch it.
+  checkEgressSessionProxyGateStub,
+  checkEgressSavedProxiesGateStub,
+  checkAgentSessionsGateStub,
 ].filter(Boolean);
 
 let allOk = true;
@@ -253,6 +262,77 @@ async function checkOpenapi() {
     }
     return null;
   });
+}
+
+// Activation-gate posture checks — each gated feature returns the
+// SAME problem-type URI when the route's AppDeps service is omitted
+// from bootstrap. We assert: status === 503 AND
+// type === `https://errors.driftstack.dev/feature-unavailable`.
+//
+// These checks intentionally do NOT auth — the route handler runs
+// the activation-gate stub BEFORE the requireAuth preHandler in
+// disabled posture, so an anonymous request gets 503 + problem-doc.
+// If a regression flips the gate, the check fails with the actual
+// (wrong) status / type — caller sees the drift at deploy time.
+
+const FEATURE_UNAVAILABLE_TYPE = 'https://errors.driftstack.dev/feature-unavailable';
+
+async function checkEgressSessionProxyGateStub() {
+  return featureGateStub('POST', '/v1/sessions/ses_xxx/proxy', 'EGRESS session-proxy gate', {
+    session_id: 'ses_xxx',
+    proxy: { type: 'socks5', socks5: { host: 'p.example', port: 1080 } },
+  });
+}
+
+async function checkEgressSavedProxiesGateStub() {
+  return featureGateStub('POST', '/v1/proxies', 'EGRESS saved-proxies gate', {
+    label: 'x',
+    proxy: { type: 'socks5', socks5: { host: 'p.example', port: 1080 } },
+  });
+}
+
+async function checkAgentSessionsGateStub() {
+  return featureGateStub('POST', '/v1/agent-sessions', 'AI-CHAT agent-sessions gate', {});
+}
+
+async function featureGateStub(method, path, name, body) {
+  const url = `${baseUrl}${path}`;
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return { ok: false, name, detail: `fetch failed: ${err.message}` };
+  }
+  // Per the activation-gate contract, this MUST be 503. A 200 means
+  // the route went live without our intending it (founder didn't
+  // flip the gate); a 404 means the route doesn't register at all
+  // (broken else branch in app.ts); a 401/403 means an auth hook
+  // ran ahead of the stub (route wiring drift).
+  if (res.status !== 503) {
+    return {
+      ok: false,
+      name,
+      detail: `expected 503 (FeatureUnavailable stub); got ${res.status}`,
+    };
+  }
+  let parsed;
+  try {
+    parsed = await res.json();
+  } catch (err) {
+    return { ok: false, name, detail: `non-JSON 503 body: ${err.message}` };
+  }
+  if (parsed?.type !== FEATURE_UNAVAILABLE_TYPE) {
+    return {
+      ok: false,
+      name,
+      detail: `expected type=${FEATURE_UNAVAILABLE_TYPE}, got ${JSON.stringify(parsed?.type)}`,
+    };
+  }
+  return { ok: true, name, detail: `503 + problem-type FeatureUnavailable as expected` };
 }
 
 async function checkUnknownPath404() {
