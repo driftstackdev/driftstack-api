@@ -16,16 +16,23 @@ set -euo pipefail
 
 JSON=0
 CHECK=0
+QUIET=0
 declare -a TARGETS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --json)  JSON=1; shift ;;
     --check) CHECK=1; shift ;;
+    --quiet) QUIET=1; shift ;;
     prod)    TARGETS+=("prod"); shift ;;
     staging) TARGETS+=("staging"); shift ;;
-    *)       echo "usage: $0 [--json] [--check] [staging|prod]" >&2; exit 2 ;;
+    *)       echo "usage: $0 [--json] [--check] [--quiet] [staging|prod]" >&2; exit 2 ;;
   esac
 done
+
+# --quiet pairs with --check for cron usage. Suppresses the human
+# snapshot; --check FAIL messages still escape to stderr; --json
+# output still goes to stdout. Effectively: "exit code is the
+# signal, output is for failures only".
 if [ "${#TARGETS[@]}" -eq 0 ]; then
   TARGETS=("staging" "prod")
 fi
@@ -46,7 +53,7 @@ for ENV in "${TARGETS[@]}"; do
     staging) HOST="116.203.22.197"; PUBLIC_URL="https://staging.driftstack.dev" ;;
   esac
 
-  if [ "$JSON" -eq 0 ]; then
+  if [ "$JSON" -eq 0 ] && [ "$QUIET" -eq 0 ]; then
     printf '\n\033[1;36m=== %s (%s) ===\033[0m\n' "$ENV" "$HOST"
   fi
   # /version from public URL — surfaces the actually-running SHA.
@@ -79,7 +86,7 @@ except Exception:
   # Most recent boot-complete line — surfaces sentry/email/livekit/oauthClient flags.
   FLAGS=$(ssh "root@${HOST}" "journalctl -u driftstack-api --no-pager 2>/dev/null | grep '\"bootstrap complete\"' | tail -1 | grep -oE '\"sentry\":[a-z]+|\"email\":[a-z]+|\"livekit\":[a-z]+|\"oauthClient\":[a-z]+|\"env\":\"[a-z]+\"' | tr '\\n' ' '" || echo "(no boot log)")
 
-  if [ "$JSON" -eq 0 ]; then
+  if [ "$JSON" -eq 0 ] && [ "$QUIET" -eq 0 ]; then
     echo "  /version           : git_sha=$GIT_SHA uptime=$UPTIME (since $STARTED)"
     echo "  .last-good-sha     : $LAST_GOOD"
     echo "  activation flags   : $FLAGS"
@@ -98,10 +105,10 @@ except Exception:
   fi
 
   # Last 3 deploy-history entries.
-  if [ "$JSON" -eq 0 ]; then
+  if [ "$JSON" -eq 0 ] && [ "$QUIET" -eq 0 ]; then
     echo "  recent deploys     :"
     ssh "root@${HOST}" "tail -3 /opt/driftstack/api/.deploy-history.log 2>/dev/null | sed 's/^/    /' || echo '    (no history yet)'"
-  else
+  elif [ "$JSON" -eq 1 ]; then
     HISTORY=$(ssh "root@${HOST}" "tail -3 /opt/driftstack/api/.deploy-history.log 2>/dev/null || true" | python3 -c '
 import sys, json
 print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))
