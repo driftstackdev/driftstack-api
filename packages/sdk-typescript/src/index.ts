@@ -26,6 +26,11 @@ export type {
 } from './resources/mfa.js';
 export type { AuditLogEntry, AuditLogListPage, AuditLogQuery } from './resources/audit-log.js';
 export type {
+  SessionProxyAttachResponse,
+  SavedProxySummary,
+  ListSavedProxiesResponse,
+} from './resources/egress.js';
+export type {
   LegalDocumentEntry,
   LegalRequiredEntry,
   AcceptLegalDocumentRequest,
@@ -180,4 +185,13 @@ export type {
   Subscription,
   SubscriptionStatus,
   TrialPackState,
+  // EG-API-1.1 — customer-configurable egress (planning 133)
+  EgressSafeguard,
+  OpenVpnProxyConfig,
+  ProxyConfig,
+  ProxyType,
+  SavedProxyConfig,
+  SessionEgressConfig,
+  SocksProxyConfig,
+  WireGuardProxyConfig,
 } from '@driftstack/api-types';

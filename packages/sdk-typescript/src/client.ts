@@ -18,6 +18,7 @@ import { EmailPreferencesResource } from './resources/email-preferences.js';
 import { LegalResource } from './resources/legal.js';
 import { MfaResource } from './resources/mfa.js';
 import { TeamResource } from './resources/team.js';
+import { EgressResource } from './resources/egress.js';
 import type { RetryConfig } from './retry.js';
 
 export interface DriftstackOptions {
@@ -58,6 +59,8 @@ export class Driftstack {
   readonly legal: LegalResource;
   /** V-298c — Team RBAC. Auth path integration is V-298d. */
   readonly team: TeamResource;
+  /** EG-API-1.2/1.3 — customer-configurable egress (planning 133). */
+  readonly egress: EgressResource;
 
   private readonly http: HttpClient;
 
@@ -90,5 +93,6 @@ export class Driftstack {
     this.emailPreferences = new EmailPreferencesResource(this.http);
     this.legal = new LegalResource(this.http);
     this.team = new TeamResource(this.http);
+    this.egress = new EgressResource(this.http);
   }
 }
