@@ -1,0 +1,93 @@
+"""Customer-configurable egress flow — attach a SOCKS5 proxy to a
+session, manage saved proxy configs (planning 133 Phase 1+).
+
+Demonstrates the full egress lifecycle for a single session:
+  - Save a reusable SOCKS5 config to the customer's library.
+  - Create a session (here we assume it already exists; pass via env).
+  - Attach the proxy to the session.
+  - Read the session's proxy summary back (verifies safeguards).
+
+Run::
+
+    DRIFTSTACK_API_KEY=ds_live_… \\
+      DRIFTSTACK_PROXY_HOST=proxy.example.com \\
+      DRIFTSTACK_PROXY_PORT=1080 \\
+      DRIFTSTACK_SESSION_ID=ses_xxx \\
+      python examples/egress_flow.py
+
+The server activation-gates this surface — until the SOCKS5 backend
+is wired on the deployment, calls return 503 FeatureUnavailable
+(machine-readable; the SDK maps to ``FeatureUnavailableError``).
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+from driftstack import Driftstack
+from driftstack.errors import FeatureUnavailableError
+
+
+def main() -> int:
+    api_key = os.environ.get("DRIFTSTACK_API_KEY")
+    proxy_host = os.environ.get("DRIFTSTACK_PROXY_HOST")
+    proxy_port_env = os.environ.get("DRIFTSTACK_PROXY_PORT")
+    session_id = os.environ.get("DRIFTSTACK_SESSION_ID")
+    if not (api_key and proxy_host and proxy_port_env and session_id):
+        print(
+            "DRIFTSTACK_API_KEY + DRIFTSTACK_PROXY_HOST + DRIFTSTACK_PROXY_PORT + "
+            "DRIFTSTACK_SESSION_ID environment variables are required",
+            file=sys.stderr,
+        )
+        return 1
+
+    base_url = os.environ.get("DRIFTSTACK_BASE_URL", "https://api.driftstack.dev")
+    proxy_port = int(proxy_port_env)
+    client = Driftstack(api_key=api_key, base_url=base_url)
+
+    proxy_block = {
+        "type": "socks5",
+        "socks5": {
+            "host": proxy_host,
+            "port": proxy_port,
+            "udp_associate": True,  # Required for WebRTC routing per planning 133.
+        },
+    }
+
+    try:
+        # 1. Save the proxy config to the customer's reusable library.
+        saved = client.egress.save_proxy({"label": f"example {proxy_host}", "proxy": proxy_block})
+        print(f"Saved proxy id={saved['id']} label={saved['label']} type={saved['type']}")
+
+        # 2. Attach the proxy to the existing session.
+        attached = client.egress.attach_to_session(
+            session_id,
+            {
+                "session_id": session_id,
+                "proxy": proxy_block,
+                "egress_safeguard": {
+                    "block_direct_internet": True,
+                    "block_unproxied_dns": True,
+                    "block_webrtc_stun_leakage": True,
+                },
+            },
+        )
+        print(f"Attached proxy type={attached['type']}; safeguards={attached['safeguards']}")
+
+        # 3. Read it back to verify.
+        read = client.egress.get_session_proxy(session_id)
+        print(f"Session proxy summary: {read}")
+    except FeatureUnavailableError as e:
+        print(
+            f"Egress not yet enabled on this deployment: {e}\n"
+            "Pre-launch posture; comes online when the SOCKS5 backend wires up.",
+            file=sys.stderr,
+        )
+        return 2
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
