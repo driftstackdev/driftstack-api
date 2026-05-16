@@ -45,16 +45,19 @@ describe('W519.B apps/marketing-site/src/pages/docs/data-residency.astro content
     );
   });
 
-  it('Short-answer 4-bullet framing pinned: EU-primary Hetzner Falkenstein/Nuremberg + customer-facing API endpoints in same EU region today, multi-region routing on roadmap + region preference (us/eu/apac) via PATCH /v1/account/me informational-only + Object storage R2 geo-replicated EU+US, presigned URL location-agnostic — pinned so the 4-state EU-primary commitment + region-pref enum + R2-replication-EU+US + roadmap-multi-region survives', () => {
+  it('F-5 (Issue 5) short-answer bullet framing: EU-primary Hetzner Falkenstein/Nuremberg + customer-facing API endpoints served from EU (multi-region-on-roadmap framing dropped per Issue 5) + region preference (us/eu/apac) on PATCH /v1/account/me informational-only with explicit "every request served from EU regardless" honesty + Object storage R2 geo-replicated EU+US, presigned URL location-agnostic.', () => {
     expect(body).toMatch(
       /Driftstack runs <strong>primarily in the EU<\/strong>\s*\n?\s*\(Hetzner Falkenstein \/ Nuremberg\)\./,
     );
     expect(body).toMatch(
-      /You can <strong>set a region preference<\/strong> on your\s*\n?\s*account \(<code>us<\/code>, <code>eu<\/code>, or <code>apac<\/code>\)\s*\n?\s*via <code>PATCH \/v1\/account\/me<\/code>\. It's currently\s*\n?\s*informational — region routing will honour it once we have\s*\n?\s*non-EU PoPs\./,
+      /The <code>region<\/code> preference on\s*\n?\s*<code>PATCH \/v1\/account\/me<\/code>[\s\S]*?every request is served from EU regardless of the value\s*\n?\s*stored\./,
     );
     expect(body).toMatch(
       /Object storage \(R2\) is geo-replicated across Cloudflare's\s*\n?\s*EU \+ US regions; presigned URL access is location-agnostic\./,
     );
+    // F-5 — multi-region-on-roadmap framing must not return.
+    expect(body).not.toMatch(/multi-region routing is on the roadmap/);
+    expect(body).not.toMatch(/non-EU PoPs/);
   });
 
   it('Data-categories table 13-row framing pinned: Account row (MFA secret AES-256 + MFA_ENCRYPTION_KEY) + API keys hashed scrypt logN=15 + Sessions metadata + Profile metadata + Profile state blob WebKit driver layer EU host (per-profile encrypted file on disk) + Session recordings R2 EU+US replication (S3-SSE + 1h presigned TTL) + Audit log entries (tier-dependent retention) + Webhook deliveries (7-day retention) + Stripe (US, customer_id linkage, never see card numbers) + NowPayments (EU Estonia, payment_id + status only) + Cache Redis Upstash EU (≤5 min TTL) + Sentry EU (ingest.de.sentry.io, PII filter strips emails) + Postmark (EU sending region) — pinned so the 13-category storage map + key-engineering-claims (MFA-AES-256 + scrypt logN=15 + 1h-presigned-TTL + 7-day webhook retention + ≤5min cache TTL + PII-stripping-Sentry) all survive (drift on any row would create marketing↔sub-processor divergence)', () => {

@@ -21,12 +21,13 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <li>Driftstack runs <strong>primarily in the EU</strong>
         (Hetzner Falkenstein / Nuremberg).</li>
       <li>Customer-facing API endpoints are served from the same
-        EU region today; multi-region routing is on the roadmap.</li>
-      <li>You can <strong>set a region preference</strong> on your
-        account (<code>us</code>, <code>eu</code>, or <code>apac</code>)
-        via <code>PATCH /v1/account/me</code>. It's currently
-        informational — region routing will honour it once we have
-        non-EU PoPs.</li>
+        EU region.</li>
+      <li>The <code>region</code> preference on
+        <code>PATCH /v1/account/me</code> (<code>us</code>,
+        <code>eu</code>, or <code>apac</code>) is currently informational
+        — every request is served from EU regardless of the value
+        stored. The field exists so customers signalling intent can
+        record it now without needing a schema change later.</li>
       <li>Object storage (R2) is geo-replicated across Cloudflare's
         EU + US regions; presigned URL access is location-agnostic.</li>
     </ul>
