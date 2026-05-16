@@ -143,10 +143,10 @@ describe('W933 V-295c3-followup incident-notifications cross-source invariant', 
 
   // ─── Time semantics: startedAt vs resolvedAt ?? now ──────────
 
-  it("CRITICAL time field source — 'kind === created ? incident.startedAt : (incident.resolvedAt ?? new Date())'. The 2-branch + new-Date-fallback handles the resolved-at-null edge case (e.g. fan-out triggered before lifecycle hook sets resolved_at).", () => {
+  it("CRITICAL time field source — 'created' → incident.startedAt; 'resolved' → incident.resolvedAt ?? new Date(); 'updated' → update.postedAt (V-545.B Phase 2). The 3-branch + new-Date-fallback handles the resolved-at-null edge case.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/incident-notifications.ts'));
     expect(p).toMatch(
-      /const time = kind === 'created' \? incident\.startedAt : \(incident\.resolvedAt \?\? new Date\(\)\);/,
+      /const time =\s*\n?\s*kind === 'created'\s*\n?\s*\? incident\.startedAt\s*\n?\s*: kind === 'resolved'\s*\n?\s*\? \(incident\.resolvedAt \?\? new Date\(\)\)\s*\n?\s*: update\.postedAt;/,
     );
   });
 
@@ -170,11 +170,11 @@ describe('W933 V-295c3-followup incident-notifications cross-source invariant', 
 
   // ─── Batch summary INFO log ──────────────────────────────────
 
-  it("CRITICAL batch-summary log — info-level with 5 fields — component + kind + incidentId + ok + failed. 'fan-out complete' message. The 5-field telemetry is what dashboards aggregate.", () => {
+  it("CRITICAL batch-summary log — info-level with 6 fields — component + kind + incidentId + ok + failed + throttled (V-545.B Phase 2). 'fan-out complete' message. The 6-field telemetry is what dashboards aggregate.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/incident-notifications.ts'));
     expect(p).toMatch(/this\.logger\.info\(/);
     expect(p).toMatch(
-      /\{ component: 'incident-notifications', kind, incidentId: incident\.id, ok, failed \}/,
+      /\{ component: 'incident-notifications', kind, incidentId: incident\.id, ok, failed, throttled \}/,
     );
     expect(p).toMatch(/'fan-out complete'/);
   });

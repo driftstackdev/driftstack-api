@@ -26,6 +26,7 @@ import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
 import { IncidentsService } from '../../../src/services/incidents.js';
 import { InMemoryIncidentsRepo } from './in-memory-incidents-repo.js';
+import { InMemoryIncidentUpdateNotificationsRepo } from './in-memory-incident-update-notifications-repo.js';
 import { InMemoryStatusSubscribersRepo } from './in-memory-status-subscribers-repo.js';
 import { StatusSubscribersService } from '../../../src/services/status-subscribers.js';
 import { IncidentNotificationsService } from '../../../src/services/incident-notifications.js';
@@ -521,11 +522,16 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   );
 
   // V-295c3-followup — incident-notification fan-out.
+  // V-545.B Phase 2 — throttle repo wired in by default for test
+  // coverage of notifyUpdated; fixtures that need to disable can
+  // construct their own service instance.
+  const incidentUpdateNotificationsRepo = new InMemoryIncidentUpdateNotificationsRepo();
   const incidentNotifications = new IncidentNotificationsService(
     statusSubscribersService,
     noopEmail,
     testLogger,
     { statusPageBaseUrl: 'https://status.driftstack.test' },
+    incidentUpdateNotificationsRepo,
   );
 
   // V-295e — incident event bus + SLA reporting. Probes repo is also
@@ -573,6 +579,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
         incidentNotifications.notifyResolved(incident, update),
         incidentBroadcast.notifyResolved(incident, update),
       ]);
+    },
+    // V-545.B Phase 2 — mirror prod bootstrap so integration tests
+    // exercising addUpdate fire the throttled notifyUpdated path.
+    onPublicUpdated: async (incident, update) => {
+      await incidentNotifications.notifyUpdated(incident, update);
     },
   });
 

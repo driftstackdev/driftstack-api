@@ -18,6 +18,7 @@
 // with per-subscriber jobs.
 
 import type { Logger } from '../lib/logger.js';
+import type { IncidentUpdateNotificationsRepo } from '../db/incident-update-notifications-repo.js';
 import type { EmailService } from './email.js';
 import type { IncidentRow, IncidentUpdateRow } from './incidents.js';
 import type { StatusSubscribersService } from './status-subscribers.js';
@@ -27,6 +28,11 @@ export interface IncidentNotificationsConfig {
   statusPageBaseUrl: string;
 }
 
+// V-545.B Phase 2 — 1 hour minimum gap between per-subscriber update
+// emails for the same incident. Doc-locked default; could surface as
+// per-account preference later.
+const UPDATE_THROTTLE_MS = 60 * 60 * 1000;
+
 export class IncidentNotificationsService {
   private readonly baseUrl: string;
 
@@ -35,6 +41,9 @@ export class IncidentNotificationsService {
     private readonly email: EmailService,
     private readonly logger: Logger,
     config: IncidentNotificationsConfig,
+    /** V-545.B Phase 2 — optional; when omitted, notifyUpdated is a
+     *  no-op (the throttle table is the gating dependency). */
+    private readonly throttle?: IncidentUpdateNotificationsRepo,
   ) {
     this.baseUrl = config.statusPageBaseUrl.replace(/\/+$/, '');
   }
@@ -47,21 +56,45 @@ export class IncidentNotificationsService {
     await this.fanOut(incident, finalUpdate, 'resolved');
   }
 
+  /** V-545.B Phase 2 — per-update fan-out. Throttled to at most one
+   *  email per subscriber per incident per UPDATE_THROTTLE_MS window.
+   *  No-op when constructed without a throttle repo. */
+  async notifyUpdated(incident: IncidentRow, update: IncidentUpdateRow): Promise<void> {
+    if (!this.throttle) return;
+    await this.fanOut(incident, update, 'updated', this.throttle);
+  }
+
   private async fanOut(
     incident: IncidentRow,
     update: IncidentUpdateRow,
-    kind: 'created' | 'resolved',
+    kind: 'created' | 'updated' | 'resolved',
+    throttle?: IncidentUpdateNotificationsRepo,
   ): Promise<void> {
     const recipients = await this.subscribers.listConfirmed();
     if (recipients.length === 0) return;
-    const time = kind === 'created' ? incident.startedAt : (incident.resolvedAt ?? new Date());
+    const time =
+      kind === 'created'
+        ? incident.startedAt
+        : kind === 'resolved'
+          ? (incident.resolvedAt ?? new Date())
+          : update.postedAt;
+    const now = Date.now();
     let ok = 0;
     let failed = 0;
+    let throttled = 0;
     for (const sub of recipients) {
       // V-295c3-tombstone — listConfirmed only returns rows where
       // unsubscribed_at IS NULL, so email IS NOT NULL by invariant
       // (purge only fires post-unsubscribe). Guard for type-narrowing.
       if (sub.email === null) continue;
+      // V-545.B Phase 2 — throttle check for the 'updated' kind only.
+      if (throttle && kind === 'updated') {
+        const lastSent = await throttle.findLastSentAt(sub.id, incident.id);
+        if (lastSent && now - lastSent.getTime() < UPDATE_THROTTLE_MS) {
+          throttled += 1;
+          continue;
+        }
+      }
       try {
         const unsubPlaintext = await this.subscribers.rotateUnsubscribeToken(sub.id);
         const unsubscribeLink = `${this.baseUrl}/subscribe/unsubscribe?token=${encodeURIComponent(
@@ -79,6 +112,9 @@ export class IncidentNotificationsService {
           unsubscribeLink,
         });
         ok += 1;
+        if (throttle && kind === 'updated') {
+          await throttle.markSent(sub.id, incident.id, new Date(now));
+        }
       } catch (err) {
         failed += 1;
         this.logger.warn(
@@ -93,7 +129,7 @@ export class IncidentNotificationsService {
       }
     }
     this.logger.info(
-      { component: 'incident-notifications', kind, incidentId: incident.id, ok, failed },
+      { component: 'incident-notifications', kind, incidentId: incident.id, ok, failed, throttled },
       'fan-out complete',
     );
   }

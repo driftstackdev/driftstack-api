@@ -61,6 +61,7 @@ import { AdminAuditService } from '../services/admin-audit.js';
 import { AccountsAdminService } from '../services/admin-accounts.js';
 import { IncidentsService } from '../services/incidents.js';
 import { DrizzleIncidentsRepo } from '../db/incidents-repo.js';
+import { DrizzleIncidentUpdateNotificationsRepo } from '../db/incident-update-notifications-repo.js';
 import { FetchProber, HealthProbeService } from '../services/health-probe.js';
 import { DrizzleProbesRepo } from '../db/health-probes-repo.js';
 import { StatusSnapshotService } from '../services/status-snapshot.js';
@@ -312,11 +313,16 @@ export async function createProductionDeps(
   // V-295c3-followup — incident-notification fan-out. Wired into the
   // IncidentsService lifecycle below so admin-posted AND auto-created
   // public incidents both fan out emails to confirmed subscribers.
+  // V-545.B Phase 2 — throttle repo passed so notifyUpdated enforces
+  // the 1-per-subscriber-per-incident-per-hour cap on per-update
+  // emails.
+  const incidentUpdateNotificationsRepo = new DrizzleIncidentUpdateNotificationsRepo(dbHandle);
   const incidentNotifications = new IncidentNotificationsService(
     statusSubscribersService,
     email,
     logger,
     { statusPageBaseUrl },
+    incidentUpdateNotificationsRepo,
   );
 
   // V-295d — outbound incident broadcasts (Slack incoming-webhook +
@@ -354,6 +360,13 @@ export async function createProductionDeps(
         incidentNotifications.notifyResolved(incident, update),
         incidentBroadcast.notifyResolved(incident, update),
       ]);
+    },
+    // V-545.B Phase 2 — per-update fan-out. notifyUpdated enforces
+    // the throttle internally so a long-running incident can't spam
+    // subscribers. Broadcast surface unchanged (Slack/generic webhooks
+    // don't have the per-recipient throttle semantics email does).
+    onPublicUpdated: async (incident, update) => {
+      await incidentNotifications.notifyUpdated(incident, update);
     },
   });
 

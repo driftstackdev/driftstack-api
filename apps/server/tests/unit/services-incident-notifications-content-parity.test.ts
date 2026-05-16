@@ -67,19 +67,22 @@ describe('W398.B apps/server/src/services/incident-notifications.ts content pari
     expect(body).toMatch(/statusPageBaseUrl: string;/);
   });
 
-  it('Constructor: 4 deps (subscribers / email / logger / config) + baseUrl trailing-slash strip', () => {
+  it('Constructor: 4 required deps + optional V-545.B Phase 2 throttle repo; baseUrl trailing-slash strip', () => {
     expect(body).toMatch(/private readonly baseUrl: string;/);
     expect(body).toMatch(
-      /constructor\(\s*\n?\s*private readonly subscribers: StatusSubscribersService,\s*\n?\s*private readonly email: EmailService,\s*\n?\s*private readonly logger: Logger,\s*\n?\s*config: IncidentNotificationsConfig,\s*\n?\s*\) \{\s*\n?\s*this\.baseUrl = config\.statusPageBaseUrl\.replace\(\/\\\/\+\$\/, ''\);\s*\n?\s*\}/,
+      /constructor\(\s*\n?\s*private readonly subscribers: StatusSubscribersService,\s*\n?\s*private readonly email: EmailService,\s*\n?\s*private readonly logger: Logger,\s*\n?\s*config: IncidentNotificationsConfig,\s*\n?\s*\/\*\*[\s\S]+?\*\/\s*\n?\s*private readonly throttle\?: IncidentUpdateNotificationsRepo,\s*\n?\s*\) \{\s*\n?\s*this\.baseUrl = config\.statusPageBaseUrl\.replace\(\/\\\/\+\$\/, ''\);\s*\n?\s*\}/,
     );
   });
 
-  it('notifyCreated / notifyResolved: delegate to fanOut with kind="created"|"resolved"', () => {
+  it('notifyCreated / notifyResolved / notifyUpdated (V-545.B Phase 2): delegate to fanOut', () => {
     expect(body).toMatch(
       /async notifyCreated\(incident: IncidentRow, initialUpdate: IncidentUpdateRow\): Promise<void> \{\s*\n?\s*await this\.fanOut\(incident, initialUpdate, 'created'\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(
       /async notifyResolved\(incident: IncidentRow, finalUpdate: IncidentUpdateRow\): Promise<void> \{\s*\n?\s*await this\.fanOut\(incident, finalUpdate, 'resolved'\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /async notifyUpdated\(incident: IncidentRow, update: IncidentUpdateRow\): Promise<void> \{\s*\n?\s*if \(!this\.throttle\) return;\s*\n?\s*await this\.fanOut\(incident, update, 'updated', this\.throttle\);\s*\n?\s*\}/,
     );
   });
 
@@ -88,9 +91,9 @@ describe('W398.B apps/server/src/services/incident-notifications.ts content pari
     expect(body).toMatch(/if \(recipients\.length === 0\) return;/);
   });
 
-  it('Time-pick: created→startedAt; resolved→resolvedAt ?? new Date() fallback', () => {
+  it('Time-pick: created→startedAt; resolved→resolvedAt ?? new Date() fallback; updated→update.postedAt (V-545.B Phase 2)', () => {
     expect(body).toMatch(
-      /const time = kind === 'created' \? incident\.startedAt : \(incident\.resolvedAt \?\? new Date\(\)\);/,
+      /const time =\s*\n?\s*kind === 'created'\s*\n?\s*\? incident\.startedAt\s*\n?\s*: kind === 'resolved'\s*\n?\s*\? \(incident\.resolvedAt \?\? new Date\(\)\)\s*\n?\s*: update\.postedAt;/,
     );
   });
 
@@ -121,9 +124,9 @@ describe('W398.B apps/server/src/services/incident-notifications.ts content pari
     );
   });
 
-  it('Post-fanout: info log with ok / failed counts + incidentId', () => {
+  it('Post-fanout: info log with ok / failed / throttled counts + incidentId (V-545.B Phase 2)', () => {
     expect(body).toMatch(
-      /this\.logger\.info\(\s*\n?\s*\{ component: 'incident-notifications', kind, incidentId: incident\.id, ok, failed \},\s*\n?\s*'fan-out complete',\s*\n?\s*\);/,
+      /this\.logger\.info\(\s*\n?\s*\{ component: 'incident-notifications', kind, incidentId: incident\.id, ok, failed, throttled \},\s*\n?\s*'fan-out complete',\s*\n?\s*\);/,
     );
   });
 
