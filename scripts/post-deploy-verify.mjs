@@ -35,6 +35,7 @@ const checks = [
   checkStatusIncidentsList,
   checkStatusIncidentDetailRoute,
   checkAccountOauthLinksRoute,
+  checkAdminCostConfigRoute,
   checkOpenapi,
   checkUnknownPath404,
 ].filter(Boolean);
@@ -201,6 +202,39 @@ async function checkAccountOauthLinksRoute() {
     ok: true,
     name: '/v1/account/me/oauth-links',
     detail: 'route registered (V-667.C-followup) — 401 confirms requireAuth gate',
+  };
+}
+
+async function checkAdminCostConfigRoute() {
+  // V-541.B — /v1/admin/cost/config is admin-scoped (requireScope
+  // 'driftstack_internal_admin'). An unauthed request returns 401
+  // when registered + auth-gated. 404 would indicate AppDeps.cost-
+  // monitoring service isn't wired.
+  const url = `${baseUrl}/v1/admin/cost/config`;
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    return { ok: false, name: '/v1/admin/cost/config', detail: `fetch failed: ${err.message}` };
+  }
+  if (res.status === 404) {
+    return {
+      ok: false,
+      name: '/v1/admin/cost/config',
+      detail: '404 — cost-monitoring service not wired into AppDeps',
+    };
+  }
+  if (res.status !== 401) {
+    return {
+      ok: false,
+      name: '/v1/admin/cost/config',
+      detail: `expected 401 (auth-gated), got ${res.status}`,
+    };
+  }
+  return {
+    ok: true,
+    name: '/v1/admin/cost/config',
+    detail: 'route registered (V-541.B) — 401 confirms admin scope gate',
   };
 }
 
