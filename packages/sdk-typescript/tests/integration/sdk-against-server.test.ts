@@ -4,7 +4,12 @@
 // server agree on the contract end-to-end.
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { Driftstack, NotFoundError, ValidationError } from '../../src/index.js';
+import {
+  Driftstack,
+  FeatureUnavailableError,
+  NotFoundError,
+  ValidationError,
+} from '../../src/index.js';
 import {
   buildTestApp,
   type TestAppFixture,
@@ -303,5 +308,93 @@ describe('@driftstack/sdk against real server', () => {
     });
     expect(result.checkout_url).toMatch(/^https:\/\//);
     expect(result.checkout_session_id).toMatch(/^cs_test_/);
+  });
+
+  // ─── EG-API-1.2/1.3 + AI-D — activation-gated route surfaces ────────
+  // These tests exercise the SDK's error mapping on 503 FeatureUnavailable
+  // (the disabled-stub posture that lives in prod until the
+  // corresponding AppDeps service is wired on).
+
+  it('SDK error mapping: egress.attachToSession on no-backend deployment → FeatureUnavailableError', async () => {
+    fx = await buildTestApp();
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+    await expect(
+      sdk.egress.attachToSession('ses_xxx', {
+        session_id: 'ses_xxx',
+        proxy: { type: 'socks5', socks5: { host: 'p.example', port: 1080, udp_associate: true } },
+        egress_safeguard: {
+          block_direct_internet: true,
+          block_unproxied_dns: true,
+          block_webrtc_stun_leakage: true,
+        },
+      }),
+    ).rejects.toBeInstanceOf(FeatureUnavailableError);
+  });
+
+  it('SDK error mapping: egress.listSavedProxies on no-backend deployment → 200 empty list (read-only listing stays 200 across postures)', async () => {
+    fx = await buildTestApp();
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+    const result = await sdk.egress.listSavedProxies();
+    expect(result.data).toEqual([]);
+  });
+
+  it('SDK error mapping: agentSessions.create on disabled-stub deployment → FeatureUnavailableError', async () => {
+    fx = await buildTestApp();
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+    await expect(sdk.agentSessions.create()).rejects.toBeInstanceOf(FeatureUnavailableError);
+  });
+
+  it('SDK end-to-end: agentSessions.create + message + close (wired runtime)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+    const created = await sdk.agentSessions.create({ token_budget: 25_000 });
+    expect(created.id).toMatch(/^agt_inmem_/);
+    expect(created.status).toBe('active');
+
+    const turn = await sdk.agentSessions.message(
+      created.id,
+      'open https://example.com and capture',
+    );
+    expect(turn.kind).toBe('plan-executed');
+    if (turn.kind !== 'plan-executed') throw new Error('type narrow');
+    expect(turn.ok).toBe(true);
+    expect(turn.intents.length).toBeGreaterThan(0);
+
+    const read = await sdk.agentSessions.get(created.id);
+    expect(read.transcript_length).toBe(2);
+    expect(read.token_budget_remaining).toBeLessThan(25_000);
+
+    await sdk.agentSessions.close(created.id);
+  });
+
+  it('SDK end-to-end: agentSessions.get on a never-existed id → NotFoundError (caught the ab69eb17 503-vs-404 bug at the SDK layer)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+    await expect(sdk.agentSessions.get('agt_inmem_99999999')).rejects.toBeInstanceOf(NotFoundError);
   });
 });
