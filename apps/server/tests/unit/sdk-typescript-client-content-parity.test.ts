@@ -173,14 +173,14 @@ describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
     expect(body).toMatch(/this\.team = new TeamResource\(this\.http\);/);
   });
 
-  it('15-resource count drift guard — count `readonly <name>:` fields + `new <Resource>(this.http)` instantiations. Both must equal 15 (the canonical resource inventory). Drift to a 16th resource without updating both lists would crash at runtime.', () => {
+  it('16-resource count drift guard — count `readonly <name>:` fields + `new <Resource>(this.http)` instantiations. Both must equal 16 (the canonical resource inventory). Drift to a 17th resource without updating both lists would crash at runtime. Wave 1119 EG-API-1.2/1.3 SDK slice added `egress` (TS-only for now; Python + Go follow-ups separate).', () => {
     const readonlyFields = (body.match(/^ {2}readonly [a-zA-Z]+: [A-Za-z]+Resource;$/gm) ?? [])
       .length;
-    expect(readonlyFields, 'expected 15 readonly resource fields').toBe(15);
+    expect(readonlyFields, 'expected 16 readonly resource fields').toBe(16);
     const instantiations = (
       body.match(/this\.[a-zA-Z]+ = new [A-Za-z]+Resource\(this\.http\);/g) ?? []
     ).length;
-    expect(instantiations, 'expected 15 resource instantiations').toBe(15);
+    expect(instantiations, 'expected 16 resource instantiations').toBe(16);
   });
 
   it('Cross-SDK resource-name invariant — 15-resource roster matches the canonical inventory (account/api-keys/audit-log/auth/billing/crypto-orders/email-preferences/legal/mfa/profile-snapshots/profiles/sessions/team/usage/webhooks). Drift to dropping/renaming any would diverge from the cross-SDK wire-contract pinned in W649 cross-sdk-verb-parity.test.ts.', () => {
