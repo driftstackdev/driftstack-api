@@ -114,8 +114,11 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
     );
   });
 
-  it('"Cancel anytime; pro-rated refunds within the first 14 days" framing pinned', () => {
-    expect(body).toMatch(/Cancel anytime; pro-rated refunds within the first 14 days\./);
+  it('Cancel + pro-rata refund framing pinned (2026-05-16 enhancement-review C4: vague "Cancel anytime; pro-rated refunds within the first 14 days" → explicit mechanism "Cancel or downgrade anytime; if you cancel within the first 14 days of a billing cycle we refund the unused remainder pro-rated to the day.")', () => {
+    expect(body).toMatch(
+      /Cancel or downgrade anytime; if you cancel within the\s+first 14 days of a billing cycle we refund the unused remainder\s+pro-rated to the day\./,
+    );
+    expect(body).not.toMatch(/Cancel anytime; pro-rated refunds within the first 14 days\./);
   });
 
   it("change-plan-reuse comment pinned (page reachable from /billing 'Change plan' too)", () => {

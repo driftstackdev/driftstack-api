@@ -81,10 +81,11 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     );
   });
 
-  it("Hero framing: 'All tiers run the same engine. Only concurrent caps and profile counts change between them — there's no fingerprint or feature gating. Cancel anytime; pro-rated refunds within the first 14 days.' — pinned so the 'no feature gating' value-prop survives (drift to feature-gating would change the entire sales narrative) + the 14-day pro-rated refund window stays explicit", () => {
+  it("Hero framing + 2026-05-16 enhancement-review C4 refund-clarity update: 'no feature gating' value-prop preserved + the 14-day pro-rated refund window stays explicit with the new mechanism-clear copy ('Cancel or downgrade anytime; if you cancel within the first 14 days of a billing cycle we refund the unused remainder pro-rated to the day.').", () => {
     expect(body).toMatch(
-      /All tiers run the same engine\. Only concurrent caps and profile\s*\n?\s*counts change between them — there's no fingerprint or feature\s*\n?\s*gating\. Cancel anytime; pro-rated refunds within the first 14 days\./,
+      /All tiers run the same engine\. Only concurrent caps and profile\s*\n?\s*counts change between them — there's no fingerprint or feature\s*\n?\s*gating\. Cancel or downgrade anytime; if you cancel within the\s*\n?\s*first 14 days of a billing cycle we refund the unused remainder\s*\n?\s*pro-rated to the day\./,
     );
+    expect(body).not.toMatch(/Cancel anytime; pro-rated refunds within the first 14 days\./);
   });
 
   it("V-501 withBusy wrapper: btn.disabled = true + textContent = 'Redirecting…' + restore original on error + early-bail if btn.disabled — pinned so double-clicks don't fire two POST /v1/billing/* calls (which would create two Stripe checkout sessions for the same intent)", () => {

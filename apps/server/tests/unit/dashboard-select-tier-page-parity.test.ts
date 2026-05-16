@@ -90,12 +90,15 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     );
   });
 
-  it('CRITICAL "All tiers run the same engine" no-fingerprint/feature-gating framing pinned. The wording — "Only concurrent caps and profile counts change between them — there\'s no fingerprint or feature gating" — is the load-bearing customer-facing claim.', () => {
+  it('CRITICAL "All tiers run the same engine" no-fingerprint/feature-gating framing pinned + 2026-05-16 enhancement-review C4 refund-clarity update. The "no fingerprint or feature gating" customer-facing claim is unchanged; the prior "Cancel anytime; pro-rated refunds within the first 14 days" replaced with mechanism-clear "Cancel or downgrade anytime; if you cancel within the first 14 days of a billing cycle we refund the unused remainder pro-rated to the day."', () => {
     const p = read(PAGE);
     expect(p).toMatch(
       /All tiers run the same engine\. Only concurrent caps and profile\s*\n\s+counts change between them — there's no fingerprint or feature\s*\n\s+gating/,
     );
-    expect(p).toMatch(/Cancel anytime; pro-rated refunds within the first 14 days/);
+    expect(p).toMatch(
+      /Cancel or downgrade anytime; if you cancel within the\s+first 14 days of a billing cycle we refund the unused remainder\s+pro-rated to the day/,
+    );
+    expect(p).not.toMatch(/Cancel anytime; pro-rated refunds within the first 14 days/);
   });
 
   it('CRITICAL trial-pack POST /v1/billing/trial-pack contract pinned — body {success_url, cancel_url}. success_url lands on /first-session?trial=ok; cancel_url returns to /select-tier. Drift would break the post-checkout return path.', () => {
