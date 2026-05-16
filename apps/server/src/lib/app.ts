@@ -45,6 +45,7 @@ import type { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import type { ProfilesService } from '../services/profiles.js';
 import type { ProfileSnapshotsService } from '../services/profile-snapshots.js';
 import type { BillingService } from '../services/billing.js';
+import type { SessionEgressService } from '../services/session-egress.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import { registerAccountMeRoutes } from '../routes/account-me.js';
@@ -95,6 +96,10 @@ import type { CostMonitoringService } from '../services/cost-monitoring.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
 import { registerProfileSnapshotsRoutes } from '../routes/profile-snapshots.js';
 import { registerBillingDisabledRoutes, registerBillingRoutes } from '../routes/billing.js';
+import {
+  registerSessionProxyDisabledRoutes,
+  registerSessionProxyRoutes,
+} from '../routes/session-proxy.js';
 import { registerAdminForceActionRoutes } from '../routes/admin-force-actions.js';
 import {
   wireSentryErrorHandler,
@@ -234,6 +239,14 @@ export interface AppDeps {
   profileSnapshotsService?: ProfileSnapshotsService;
   /** V-082: billing service (Stripe checkout / portal / trial-pack). Optional. */
   billingService?: BillingService;
+  /**
+   * EG-API-1.2 — customer-configurable egress service per planning 133.
+   * Optional. When wired, registers POST /v1/sessions/{id}/proxy etc.;
+   * when omitted, those routes register as 503 FeatureUnavailable stubs
+   * (same activation-gate posture as billing). Phase 1 SOCKS5 wires a
+   * SOCKS5-only backend; Phase 2/3 extend to OpenVPN/WireGuard.
+   */
+  sessionEgressService?: SessionEgressService;
   /**
    * V-100: admin force-action route deps. Routes register only when
    * all four are provided (sessionRepo / apiKeysRepo / driver / audit
@@ -672,6 +685,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // the routes unregistered (which 404s). See registerBilling-
     // DisabledRoutes for the full reason.
     registerBillingDisabledRoutes(app);
+  }
+
+  // EG-API-1.2 — customer-configurable egress route surface. Same
+  // activation-gate posture as billing above: registered route returns
+  // 503 FeatureUnavailable when no backend is wired so SDK clients and
+  // the dashboard get a machine-readable "not yet shipped" signal.
+  if (deps.sessionEgressService !== undefined) {
+    registerSessionProxyRoutes(app, { service: deps.sessionEgressService });
+  } else {
+    registerSessionProxyDisabledRoutes(app);
   }
   if (
     deps.sessionRepo !== undefined &&
