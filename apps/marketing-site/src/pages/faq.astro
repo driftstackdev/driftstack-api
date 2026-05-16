@@ -182,7 +182,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'Where do my sessions actually run?',
-        a: 'EU production runs in Hetzner Falkenstein (Germany). Staging is the same. Customer data — accounts, profiles, audit logs, session recordings — sits in Neon (EU region) and Cloudflare R2 (EU bucket). The <a href="/trust/sub-processors" class="text-glow-red underline">sub-processor list</a> has the full breakdown with each provider\'s region. Latency from EU customer locations is typically &lt;30ms to the API control plane and &lt;100ms session round-trip on the data plane. US/APAC customers see proportionally higher session round-trip; multi-region rollout is on the <a href="/roadmap" class="text-glow-red underline">roadmap</a> for post-Series A.',
+        a: 'EU production runs single-region. Customer data — accounts, profiles, audit logs, session recordings — stays in the EU. The <a href="/trust/sub-processors" class="text-glow-red underline">sub-processor list</a> has the full breakdown with each provider\'s region. Latency from EU customer locations is typically &lt;30ms to the API control plane and &lt;100ms session round-trip on the data plane. US/APAC customers see proportionally higher session round-trip from the EU origin.',
       },
     ],
   },
