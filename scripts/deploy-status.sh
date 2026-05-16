@@ -15,13 +15,15 @@
 set -euo pipefail
 
 JSON=0
+CHECK=0
 declare -a TARGETS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --json)  JSON=1; shift ;;
+    --check) CHECK=1; shift ;;
     prod)    TARGETS+=("prod"); shift ;;
     staging) TARGETS+=("staging"); shift ;;
-    *)       echo "usage: $0 [--json] [staging|prod]" >&2; exit 2 ;;
+    *)       echo "usage: $0 [--json] [--check] [staging|prod]" >&2; exit 2 ;;
   esac
 done
 if [ "${#TARGETS[@]}" -eq 0 ]; then
@@ -32,6 +34,11 @@ if [ "$JSON" -eq 1 ]; then
   printf '['
 fi
 FIRST=1
+# V-549.B-followup — --check exits non-zero if any monitored
+# activation flag drops to false on any target. Designed for cron /
+# health-monitor wiring: `bash scripts/deploy-status.sh --check ||
+# alert`.
+CHECK_FAIL=0
 
 for ENV in "${TARGETS[@]}"; do
   case "$ENV" in
@@ -78,6 +85,18 @@ except Exception:
     echo "  activation flags   : $FLAGS"
   fi
 
+  # --check assertion: every monitored flag is "true". Catches a
+  # post-restart regression where env vars were dropped or rotation
+  # left a service mis-wired.
+  if [ "$CHECK" -eq 1 ]; then
+    for flag in sentry email livekit oauthClient; do
+      if ! printf '%s' "$FLAGS" | grep -q "\"$flag\":true"; then
+        echo "  [check] FAIL — \"$flag\":true not present in $ENV bootstrap log" >&2
+        CHECK_FAIL=1
+      fi
+    done
+  fi
+
   # Last 3 deploy-history entries.
   if [ "$JSON" -eq 0 ]; then
     echo "  recent deploys     :"
@@ -97,4 +116,9 @@ if [ "$JSON" -eq 1 ]; then
   printf ']\n'
 else
   echo
+fi
+
+# Exit non-zero if --check was passed and any target had a flag off.
+if [ "$CHECK" -eq 1 ] && [ "$CHECK_FAIL" -ne 0 ]; then
+  exit 1
 fi
