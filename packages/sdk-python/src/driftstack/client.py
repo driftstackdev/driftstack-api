@@ -21,6 +21,7 @@ from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
 from driftstack.resources.audit_log import AsyncAuditLogResource, AuditLogResource
 from driftstack.resources.auth import AsyncAuthResource, AuthResource
 from driftstack.resources.billing import AsyncBillingResource, BillingResource
+from driftstack.resources.egress import AsyncEgressResource, EgressResource
 from driftstack.resources.crypto_orders import (
     AsyncCryptoOrdersResource,
     CryptoOrdersResource,
@@ -108,6 +109,8 @@ class Driftstack:
         self.legal = LegalResource(self._http)
         # V-298c — Team RBAC. Auth path integration is V-298d.
         self.team = TeamResource(self._http)
+        # EG-API-1.2/1.3 — customer-configurable egress (planning 133).
+        self.egress = EgressResource(self._http)
 
     def close(self) -> None:
         self._http.close()
@@ -167,6 +170,8 @@ class AsyncDriftstack:
         self.legal = AsyncLegalResource(self._http)
         # V-298c — Team RBAC. Auth path integration is V-298d.
         self.team = AsyncTeamResource(self._http)
+        # EG-API-1.2/1.3 — customer-configurable egress (planning 133).
+        self.egress = AsyncEgressResource(self._http)
 
     async def aclose(self) -> None:
         await self._http.aclose()
