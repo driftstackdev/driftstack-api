@@ -140,8 +140,12 @@ describe('OpenAPI spec generation', () => {
         '/v1/sessions/{id}/capture',
         '/v1/sessions/{id}/interact',
         '/v1/sessions/{id}/navigate',
+        '/v1/sessions/{id}/proxy',
         '/v1/sessions/{id}/state',
         '/v1/sessions/{id}/wait',
+        // EG-API-1.2 + 1.3 — customer-configurable egress (planning 133)
+        '/v1/proxies',
+        '/v1/proxies/{id}',
         // V-459 public status surface
         '/v1/status',
         '/v1/status/incidents',

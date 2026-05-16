@@ -117,6 +117,8 @@ import {
   WebhookEndpointSchema,
   UpdateWebhookRequestSchema,
   SessionStateSchema,
+  SessionEgressConfigSchema,
+  SavedProxyConfigSchema,
 } from '@driftstack/api-types';
 
 const PaginatedSessionsSchema = z.object({
@@ -2003,6 +2005,148 @@ function buildRegistry(): OpenAPIRegistry {
         content: { 'application/json': { schema: GetBillingStateResponseSchema } },
       },
       ...errors4xx,
+    },
+  });
+
+  // ── EG-API-1.2 + 1.3 — customer-configurable egress (planning 133) ──────
+  // All four routes register as 503 FeatureUnavailable stubs until the
+  // EG-API-1.6 propagation slice lands a concrete SOCKS5 backend; the
+  // OpenAPI spec describes the wired-backend behavior so SDK consumers
+  // can generate the right client surface ahead of time.
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/sessions/{id}/proxy',
+    summary: 'Set customer-configurable proxy for a session (planning 133 Phase 1+)',
+    tags: ['egress'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: SessionEgressConfigSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Proxy configured; safeguards applied.',
+        content: {
+          'application/json': {
+            schema: z.object({
+              type: z.enum(['socks5', 'openvpn', 'wireguard']),
+              safeguards: z.object({
+                block_direct_internet: z.boolean(),
+                block_unproxied_dns: z.boolean(),
+                block_webrtc_stun_leakage: z.boolean(),
+              }),
+            }),
+          },
+        },
+      },
+      ...errors4xx,
+      503: {
+        description: 'Egress backend not yet wired on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/sessions/{id}/proxy',
+    summary: "Read a session's current proxy config (type + safeguards only — no secret material)",
+    tags: ['egress'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Proxy summary (NO raw secret material).',
+        content: {
+          'application/json': {
+            schema: z.object({
+              type: z.enum(['socks5', 'openvpn', 'wireguard']),
+              safeguards: z.object({
+                block_direct_internet: z.boolean(),
+                block_unproxied_dns: z.boolean(),
+                block_webrtc_stun_leakage: z.boolean(),
+              }),
+            }),
+          },
+        },
+      },
+      404: {
+        description: 'No proxy attached to this session yet.',
+        content: problemContent,
+      },
+      ...errors4xx,
+      503: {
+        description: 'Egress backend not yet wired on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/proxies',
+    summary: 'Save a reusable customer proxy config (SOCKS5/OpenVPN/WireGuard)',
+    tags: ['egress'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: SavedProxyConfigSchema } } },
+    },
+    responses: {
+      201: {
+        description: 'Proxy config saved; raw secrets are NEVER echoed back.',
+        content: {
+          'application/json': {
+            schema: z.object({
+              id: z.string(),
+              label: z.string(),
+              type: z.enum(['socks5', 'openvpn', 'wireguard']),
+            }),
+          },
+        },
+      },
+      ...errors4xx,
+      503: {
+        description: 'Egress backend not yet wired on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/proxies',
+    summary: 'List the calling account saved proxy configs (no secret material)',
+    tags: ['egress'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'List of saved proxy summaries.',
+        content: {
+          'application/json': {
+            schema: z.object({
+              data: z.array(
+                z.object({
+                  id: z.string(),
+                  label: z.string(),
+                  type: z.enum(['socks5', 'openvpn', 'wireguard']),
+                }),
+              ),
+            }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/proxies/{id}',
+    summary: 'Remove a saved proxy config',
+    tags: ['egress'],
+    security: auth,
+    responses: {
+      204: { description: 'Deleted.' },
+      404: { description: 'Proxy not found.', content: problemContent },
+      ...errors4xx,
+      503: {
+        description: 'Egress backend not yet wired on this deployment.',
+        content: problemContent,
+      },
     },
   });
 
