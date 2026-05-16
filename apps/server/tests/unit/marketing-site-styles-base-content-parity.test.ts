@@ -61,10 +61,11 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
     expect(body).toMatch(/background-attachment: fixed;/);
   });
 
-  it('code/pre/kbd Berkeley-Mono framing pinned', () => {
+  it('code/pre/kbd Berkeley-Mono framing pinned (F-1 also adds overflow-wrap:anywhere + word-break:break-word + pre overflow-x:auto so long strings wrap or scroll internally on iPhone Safari)', () => {
     expect(body).toMatch(
-      /code,\s*\n?\s*pre,\s*\n?\s*kbd \{\s*\n?\s*font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;\s*\n?\s*font-feature-settings: normal;\s*\n?\s*\}/,
+      /code,\s*\n?\s*pre,\s*\n?\s*kbd \{\s*\n?\s*font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;\s*\n?\s*font-feature-settings: normal;[\s\S]*?overflow-wrap: anywhere;\s*\n?\s*word-break: break-word;\s*\n?\s*\}/,
     );
+    expect(body).toMatch(/pre \{[\s\S]*?overflow-x: auto;\s*\n?\s*\}/);
   });
 
   it('::selection oxblood framing pinned (brand-locked selection)', () => {

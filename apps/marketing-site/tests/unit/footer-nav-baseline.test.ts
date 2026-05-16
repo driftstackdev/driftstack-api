@@ -45,11 +45,11 @@ describe('W337.B BaseLayout (Header + Footer) nav baseline', () => {
   const header = read(HEADER);
   const pageUrls = buildPageUrls();
 
-  it('Footer contains the canonical product nav', () => {
+  it('Footer contains the canonical product nav (F-3 — /roadmap removed per Issue 5)', () => {
     expect(footer).toContain('href="/pricing"');
     expect(footer).toContain('href="/comparison"');
-    expect(footer).toContain('href="/roadmap"');
     expect(footer).toContain('href="/self-hosted"');
+    expect(footer).not.toContain('href="/roadmap"');
   });
 
   it('Footer contains the canonical trust nav', () => {

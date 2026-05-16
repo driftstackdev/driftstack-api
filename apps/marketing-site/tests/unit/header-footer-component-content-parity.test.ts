@@ -1,13 +1,24 @@
 // W382.C — drift guard for marketing-site Header.astro + Footer.
 // astro components. Existing footer-nav-baseline checks href
 // integrity; this guard pins the load-bearing structure + copy
-// that every marketing-site page renders:
+// that every marketing-site page renders.
+//
+// 2026-05-16 F-3 (Issue 7) revisions:
+//   • Header: mobileExtraItems now empty (Roadmap link removed per
+//     Issue 5 — no aspirational nav at launch).
+//   • Footer: 4-column grid collapsed to 2-column (Product/Company);
+//     Trust + Legal links moved to a bottom meta-link row; compliance
+//     badge strip (Stripe-billed/GDPR-aware/EU-resident/Article 28)
+//     replaced with product-focused signals; VAT/BTW notice removed
+//     from prominent bar; brand tagline updated to "Pixel-identical
+//     iPhone Safari sessions in the cloud. API, SDK, or GUI." per
+//     Issue 4 framing (outcome > implementation, GUI added).
 //
 // Header:
 //   • V-133 mobile-responsive framing pinned in comment.
 //   • 5 desktop navItems in canonical order: Pricing / Compare /
 //     Self-hosted / FAQ / Docs(external).
-//   • Mobile-extra navItem: Roadmap.
+//   • mobileExtraItems is now an empty array (F-3).
 //   • V-219* D-badge + lowercase font-mono "driftstack".
 //   • "Sign in" link to https://app.driftstack.dev/login.
 //   • "Get started" btn-primary to /pricing#trial-pack.
@@ -15,17 +26,19 @@
 //   • aria-label="Open navigation menu" on summary.
 //
 // Footer:
-//   • 4 columns: Product / Company / Trust / Legal.
-//   • Product (7 links): Pricing / Comparison / Roadmap / Self-
-//     hosted / Docs(external) / Sign up / Sign in.
+//   • 2 columns: Product / Company.
+//   • Product (6 links, F-3): Pricing / Comparison / Self-hosted /
+//     Docs(external) / Sign up / Sign in. /roadmap removed.
 //   • Company (5 links): About / FAQ / Changelog / support@ /
 //     sales@.
-//   • Trust (5 links): Trust center / Security / Sub-processors /
-//     Incidents / Status(external).
-//   • Legal (4 links): Terms / Privacy / DPA / Acceptable Use.
-//   • Tagline: "iPhone Safari sessions, on demand."
-//   • VAT/BTW disclosure: "All prices in USD. VAT/BTW added per
-//     region per applicable EU rules."
+//   • Meta link row: legal/privacy / legal/terms / legal/dpa /
+//     legal/aup / trust / security / trust/sub-processors /
+//     status(external).
+//   • Product signal strip: bit-identical iPhone Safari fingerprint
+//     + SOCKS5/WireGuard/OpenVPN proxies + API/SDK/GUI access +
+//     EU-hosted.
+//   • Tagline: "Pixel-identical iPhone Safari sessions in the cloud.
+//     API, SDK, or GUI."
 //   • StatusBadge embed (live platform health on every page).
 //   • {year} dynamic copyright.
 
@@ -65,10 +78,11 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     );
   });
 
-  it('mobileExtraItems: Roadmap (mobile-only, not on desktop)', () => {
+  it('mobileExtraItems: empty array (F-3 — /roadmap removed per Issue 5)', () => {
     expect(body).toMatch(
-      /const mobileExtraItems = \[\s*\{ href: '\/roadmap', label: 'Roadmap' \},?\s*\];/,
+      /const mobileExtraItems: Array<\{ href: string; label: string \}> = \[\];/,
     );
+    expect(body).not.toMatch(/\{ href: '\/roadmap', label: 'Roadmap' \}/);
   });
 
   it('R15 brand mark in header: /driftstack-mark.svg <img> (iPhone-D logo) + lowercase "driftstack" wordmark — replaces the prior bg-gradient-accent D-tile chip with the real SVG brand asset', () => {
@@ -111,14 +125,14 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     expect(body).toMatch(/const year = new Date\(\)\.getUTCFullYear\(\);/);
   });
 
-  it('tagline: "iPhone Safari sessions, on demand. Premium fidelity for the device that matters."', () => {
+  it('tagline (F-3): "Pixel-identical iPhone Safari sessions in the cloud. API, SDK, or GUI."', () => {
     expect(body).toMatch(
-      /iPhone Safari sessions, on demand\. Premium fidelity for the device that matters\./,
+      /Pixel-identical iPhone Safari sessions in the cloud\. API, SDK, or GUI\./,
     );
   });
 
-  it('4 column headings in canonical order: Product / Company / Trust / Legal', () => {
-    const expected = ['Product', 'Company', 'Trust', 'Legal'];
+  it('2 column headings in canonical order: Product / Company (F-3 — Trust + Legal moved to meta-link row)', () => {
+    const expected = ['Product', 'Company'];
     let lastIdx = -1;
     for (const heading of expected) {
       const idx = body.indexOf(
@@ -127,12 +141,19 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
       expect(idx, `column heading out of order: ${heading}`).toBeGreaterThan(lastIdx);
       lastIdx = idx;
     }
+    // Trust + Legal sub-headed columns must NOT exist any more.
+    expect(body).not.toMatch(
+      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Trust<\/h3>/,
+    );
+    expect(body).not.toMatch(
+      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Legal<\/h3>/,
+    );
   });
 
-  it('Product column 7 links pinned (Pricing / Comparison / Roadmap / Self-hosted / Docs[ext] / Sign up / Sign in)', () => {
+  it('Product column 6 links pinned (F-3 — /roadmap removed): Pricing / Comparison / Self-hosted / Docs[ext] / Sign up / Sign in', () => {
     expect(body).toMatch(/<a href="\/pricing" class="nav-link">Pricing<\/a>/);
     expect(body).toMatch(/<a href="\/comparison" class="nav-link">Comparison<\/a>/);
-    expect(body).toMatch(/<a href="\/roadmap" class="nav-link">Roadmap<\/a>/);
+    expect(body).not.toMatch(/<a href="\/roadmap"/);
     expect(body).toMatch(/<a href="\/self-hosted" class="nav-link">Self-hosted<\/a>/);
     expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev"[\s\S]+?Docs/);
     expect(body).toMatch(
@@ -155,23 +176,31 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     );
   });
 
-  it('Trust column: Trust center / Security / Sub-processors / Incidents / Status[external]', () => {
-    expect(body).toMatch(/<a href="\/trust" class="nav-link">Trust center<\/a>/);
+  it('Trust meta-row links present (F-3 — moved out of headed column): Trust / Security / Sub-processors / Status[external]', () => {
+    expect(body).toMatch(/<a href="\/trust" class="nav-link">Trust<\/a>/);
     expect(body).toMatch(/<a href="\/security" class="nav-link">Security<\/a>/);
     expect(body).toMatch(/<a href="\/trust\/sub-processors" class="nav-link">Sub-processors<\/a>/);
-    expect(body).toMatch(/<a href="\/trust\/incidents" class="nav-link">Incidents<\/a>/);
     expect(body).toMatch(/href="https:\/\/status\.driftstack\.dev"[\s\S]+?Status/);
   });
 
-  it('Legal column 4 links pinned (Terms / Privacy / DPA / Acceptable Use)', () => {
+  it('Legal meta-row links present (F-3 — moved out of headed column): Terms / Privacy / DPA / Acceptable Use', () => {
     expect(body).toMatch(/<a href="\/legal\/terms" class="nav-link">Terms<\/a>/);
     expect(body).toMatch(/<a href="\/legal\/privacy" class="nav-link">Privacy<\/a>/);
     expect(body).toMatch(/<a href="\/legal\/dpa" class="nav-link">DPA<\/a>/);
     expect(body).toMatch(/<a href="\/legal\/aup" class="nav-link">Acceptable Use<\/a>/);
   });
 
-  it('VAT/BTW disclosure pinned: "All prices in USD. VAT/BTW added per region per applicable EU rules."', () => {
-    expect(body).toMatch(/All prices in USD\. VAT\/BTW added per region per applicable EU rules\./);
+  it('VAT/BTW disclosure removed from footer prominent bar per F-3 (Issue 7) — that detail belongs on /pricing context, not on every page', () => {
+    expect(body).not.toMatch(
+      /All prices in USD\. VAT\/BTW added per region per applicable EU rules\./,
+    );
+  });
+
+  it('F-3 product-focused signal strip present (replaced compliance badges): bit-identical fingerprint + SOCKS5/WireGuard/OpenVPN + API/SDK/GUI + EU-hosted', () => {
+    expect(body).toMatch(/Bit-identical iPhone Safari fingerprint/);
+    expect(body).toMatch(/SOCKS5 · WireGuard · OpenVPN proxies/);
+    expect(body).toMatch(/API · SDK · GUI access/);
+    expect(body).toMatch(/EU-hosted/);
   });
 
   it('<StatusBadge /> embed (live platform health on every page footer)', () => {

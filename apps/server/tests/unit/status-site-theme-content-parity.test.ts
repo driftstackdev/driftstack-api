@@ -162,19 +162,19 @@ describe('W794 status-site theme content parity', () => {
     expect(p).toMatch(/:root \{\s*\n\s+color-scheme: dark;\s*\n\s+\}/);
   });
 
-  it('CRITICAL html font-family + base @apply pinned. Geist + ui-sans-serif fallback chain + bg-surface-base + text-ink-primary @apply matches cross-app base-style contract.', () => {
+  it('CRITICAL html font-family + base @apply pinned. Geist + ui-sans-serif fallback chain + bg-surface-base + text-ink-primary @apply matches cross-app base-style contract. F-1 also adds overflow-x:clip to prevent iPhone Safari horizontal scroll.', () => {
     const p = read(GLOBAL_CSS);
 
     expect(p).toMatch(
-      /html \{\s*\n\s+font-family: Geist, ui-sans-serif, system-ui, sans-serif;\s*\n\s+@apply bg-surface-base text-ink-primary;\s*\n\s+\}/,
+      /html \{\s*\n\s+font-family: Geist, ui-sans-serif, system-ui, sans-serif;\s*\n\s+@apply bg-surface-base text-ink-primary;[\s\S]*?overflow-x: clip;\s*\n\s+\}/,
     );
   });
 
-  it("CRITICAL body min-h-screen + antialiased pinned. The 'min-h-screen' class ensures the status-page background extends to viewport edge; 'antialiased' enables font smoothing for sharper text.", () => {
+  it("CRITICAL body min-h-screen + antialiased pinned. The 'min-h-screen' class ensures the status-page background extends to viewport edge; 'antialiased' enables font smoothing for sharper text. F-1 adds max-width:100vw + overflow-x:clip to contain horizontal overflow.", () => {
     const p = read(GLOBAL_CSS);
 
     expect(p).toMatch(
-      /body \{\s*\n\s+@apply min-h-screen bg-surface-base text-ink-primary antialiased;\s*\n\s+\}/,
+      /body \{\s*\n\s+@apply min-h-screen bg-surface-base text-ink-primary antialiased;\s*\n\s+max-width: 100vw;\s*\n\s+overflow-x: clip;\s*\n\s+\}/,
     );
   });
 
