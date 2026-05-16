@@ -156,3 +156,51 @@ flag additions.
 
 Each is a 1+ wave dedicated effort. Autopilot stayed within
 bounded slices this block.
+
+## Update — 2026-05-16 morning foreground session
+
+After the ScheduleWakeup-broken overnight gap, founder returned at
+09:37 UTC and re-engaged. 17 additional commits shipped in foreground
+between 09:37 and ~11:00 UTC:
+
+| SHA        | What                                                                       |
+| ---------- | -------------------------------------------------------------------------- |
+| `d8151f55` | V-545.B Phase 2 throttle table migration (`incident_update_notifications`) |
+| `d9b10631` | V-545.B Phase 2.5 wire — repo + `notifyUpdated` + bootstrap                |
+| `d8af7127` | V-545.B Phase 2 empirical throttle integration tests (2 cases)             |
+| `e2c122b1` | V-545 incident-notification operator runbook                               |
+| `1f0b415b` | `migrate.ts` post-condition assertion (drizzle silent-skip guard)          |
+| `3838e810` | V-541.B admin-panel `/cost` page                                           |
+| `d9e3515f` | Admin nav `Cost` entry (W381.B parity refresh)                             |
+| `16439c27` | `post-deploy-verify` 10th invariant (`/v1/admin/cost/config`)              |
+| `c4943da7` | Doc count refresh 9 → 10 invariants                                        |
+| `4c36ab31` | `cost-monitoring.md` cross-refs admin /cost page                           |
+| `0f9b4cb3` | `revert-bridge --to-sha <sha>` operator override                           |
+| `d9915103` | Admin /cost prefix-strip on pasted account ID                              |
+| `626f7e89` | Admin /cost "Top accounts by cost" section                                 |
+| `98867a99` | `deploy-status` migration-drift detection (pre-deploy silent-skip catch)   |
+| `7bb22aa4` | `deploy-status --json` includes migrations field                           |
+
+**Two-layer silent-skip defense now in place**:
+
+- **Pre-deploy**: `bash scripts/deploy-status.sh --check` flags
+  `DRIFT expected=N actual=M` when `_journal.json` and
+  `drizzle.__drizzle_migrations` disagree. Cron-wirable via
+  `bash scripts/deploy-status.sh --quiet --check || alert`.
+- **Deploy-time**: `apps/server/src/db/migrate.ts` post-condition
+  exits 2 on count mismatch → `deploy-bridge.sh` auto-reverts to
+  `.last-good-sha` (V-549.B).
+
+**V-545.B implementation arc closed**: Phase 1 hook → Phase 2
+template + dispatch → Phase 2 throttle table → Phase 2.5 service
+
+- bootstrap wire → empirical proof via 2-case integration test
+  ("throttled at 0 emails on the second update within 1h").
+
+**V-541.B has full admin UI**: config inspector (rate card + tier
+thresholds), per-account query with prefix-stripping, top-N by
+cost (existing service-layer `getOverview` already sorts desc).
+
+Production state at 11:00 UTC: prod + staging both at `16439c27`
+with all 10 invariants OK on every deploy. Migrations 41/41 OK.
+Test suite: 1246 files, 13844 cases, 0 failures.
