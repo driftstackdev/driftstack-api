@@ -8,9 +8,9 @@
 //   close(id)
 //
 // The activation gate on the server (route registers as 503 stub
-// until founder flips the LLM key path on) means callers should
-// expect FeatureUnavailableError until AI chat ships. SDK surface
-// is stable so dashboard + e2e tests can compile against it now.
+// until the LLM key path is enabled for the deployment) means callers
+// should expect FeatureUnavailableError until AI chat ships. SDK
+// surface is stable so dashboard + e2e tests can compile against it now.
 
 import type { HttpClient } from '../http.js';
 
