@@ -164,7 +164,7 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       expect(body).toMatch(/href="\/trust\/security-overview"/);
     });
 
-    it('6-signal table rows pinned (User-agent / Canvas hash / WebGL renderer / AudioContext / Core Text metrics / JS engine timing) + 6 Driftstack-column values', () => {
+    it('7-signal table rows pinned (User-agent / Canvas hash / WebGL renderer / AudioContext / Core Text metrics / JS engine timing / Hash uniqueness across sessions — the 7th row added 2026-05-16 to make the population-stable claim concrete) + Driftstack-column values', () => {
       // Left-column signal names.
       expect(body).toMatch(/<span class="text-ink-primary">User-agent<\/span>/);
       expect(body).toMatch(/<span class="text-ink-primary">Canvas hash<\/span>/);
@@ -172,15 +172,20 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       expect(body).toMatch(/<span class="text-ink-primary">AudioContext<\/span>/);
       expect(body).toMatch(/<span class="text-ink-primary">Core Text metrics<\/span>/);
       expect(body).toMatch(/<span class="text-ink-primary">JS engine timing<\/span>/);
+      expect(body).toMatch(
+        /<span class="text-ink-primary">Hash uniqueness across sessions<\/span>/,
+      );
       // Right-column Driftstack values — concrete brand/engine references.
       expect(body).toMatch(/Apple GPU/);
       expect(body).toMatch(/JSCore/);
+      expect(body).toMatch(/population-stable/);
     });
 
-    it('Stealth-Chromium comparison column pinned (spoofed user-agent / 3x leaks Chromium / leaks system / V8 fingerprint) — the contrast that makes the matrix visually load-bearing', () => {
+    it('Stealth-Chromium comparison column pinned (spoofed user-agent / 3x leaks Chromium / leaks system / V8 fingerprint / 100% unique hashes per session — the explicit fingerprint-uniqueness contrast added 2026-05-16)', () => {
       expect(body).toMatch(/Stealth Chromium/);
       expect(body).toMatch(/leaks Chromium/);
       expect(body).toMatch(/V8 fingerprint/);
+      expect(body).toMatch(/100% unique/);
     });
   });
 
