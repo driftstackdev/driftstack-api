@@ -25,20 +25,17 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     );
   });
 
-  it('F-2 hero copy + 2026-05-16 fingerprint-claim sharpening: revised headline ("Pixel-identical iPhone Safari. Cloud-hosted. API, SDK, or GUI.") + sub-paragraph that frames every signal as hashing to the real-iPhone population (not unique-per-session like every other browser API) + explicit competitor contrast naming 100% unique canvas/WebGL hashes as the literal opposite of an iPhone returning the same hash as millions of other iPhones', () => {
-    expect(body).toMatch(/Pixel-identical iPhone Safari\. Cloud-hosted\. API, SDK, or GUI\./);
-    expect(body).toMatch(/Spin up a session in seconds\. Drive it from TypeScript, Python,/);
-    expect(body).toMatch(/or skip the code entirely and use the\s*\n?\s*GUI/);
+  it('Hero copy 2026-05-16 founder rewrite — strong + fancy, two paragraphs collapsed to one, "pixel-identical" dropped. Two-line H1: "Indistinguishable iPhone Safari." (gradient-coloured span) + "Programmable from any language." Single sub-paragraph names Real WebKit, the canvas+WebGL hash match against millions of real iPhones, and the four access paths.', () => {
+    expect(body).toMatch(/Indistinguishable iPhone Safari\./);
+    expect(body).toMatch(/Programmable from any language\./);
     expect(body).toMatch(
-      /hashes to the real-iPhone population, not to a\s*\n?\s*unique-per-session value like every other browser API on\s*\n?\s*the market/,
+      /Real WebKit — the engine every iPhone ships\. Canvas \+ WebGL\s*\n?\s*hashes match the millions of iPhones in the wild, not the\s*\n?\s*unique-per-session leak every Chromium-stealth API surfaces\./,
     );
-    expect(body).toMatch(/Other API browsers patch JavaScript at runtime/);
-    expect(body).toMatch(
-      /the canvas and\s*\n?\s*WebGL hashes they return are 100% unique per session — the\s*\n?\s*literal opposite of an iPhone, which returns the same hash\s*\n?\s*as millions of other iPhones/,
-    );
-    expect(body).toMatch(
-      /Driftstack builds from Apple's\s*\n?\s*WebKit source directly\. Nothing is rewritten, so there's\s*\n?\s*nothing for fingerprinters to spot\./,
-    );
+    expect(body).toMatch(/Drive sessions from TypeScript, Python, Go, or the GUI\./);
+    // Pre-rewrite framings must not return.
+    expect(body).not.toMatch(/Pixel-identical iPhone Safari\. Cloud-hosted\. API, SDK, or GUI\./);
+    expect(body).not.toMatch(/Spin up a session in seconds\. Drive it from TypeScript, Python,/);
+    expect(body).not.toMatch(/Other API browsers patch JavaScript at runtime/);
   });
 
   it('R12 "Indistinguishable from a real iPhone." giant-headline framing (plain-English replacement for the prior "Bit-identical" jargon) + iPhone 16 Pro / iOS 18.7 / Safari 26.4 reference + launch-blocking-bug fidelity commitment', () => {

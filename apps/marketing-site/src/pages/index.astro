@@ -17,24 +17,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             class="mt-5 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl lg:text-6xl"
             style="letter-spacing: -0.02em;"
           >
-            Pixel-identical iPhone Safari. Cloud-hosted. API, SDK, or GUI.
+            <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+              Indistinguishable iPhone Safari.
+            </span><br />
+            Programmable from any language.
           </h1>
-          <p class="mt-5 max-w-prose text-lg text-ink-secondary leading-relaxed">
-            Spin up a session in seconds. Drive it from TypeScript, Python,
-            Go, or any HTTP client — or skip the code entirely and use the
-            GUI. Every signal — user-agent, canvas, WebGL, audio
-            fingerprint — hashes to the real-iPhone population, not to a
-            unique-per-session value like every other browser API on
-            the market.
-          </p>
-          <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
-            Other API browsers patch JavaScript at runtime and leak the
-            underlying Chromium engine in the next hash; the canvas and
-            WebGL hashes they return are 100% unique per session — the
-            literal opposite of an iPhone, which returns the same hash
-            as millions of other iPhones. Driftstack builds from Apple's
-            WebKit source directly. Nothing is rewritten, so there's
-            nothing for fingerprinters to spot.
+          <p class="mt-6 max-w-prose text-lg text-ink-secondary leading-relaxed">
+            Real WebKit — the engine every iPhone ships. Canvas + WebGL
+            hashes match the millions of iPhones in the wild, not the
+            unique-per-session leak every Chromium-stealth API surfaces.
+            Drive sessions from TypeScript, Python, Go, or the GUI.
           </p>
           <div class="mt-8 flex flex-wrap items-center gap-4">
             <a href="/pricing#trial-pack" class="btn-primary">Start for $2.99</a>

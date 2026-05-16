@@ -32,21 +32,18 @@ function read(p: string): string {
 describe('W371.A marketing-site /index (homepage) content parity', () => {
   const body = read(PAGE);
 
-  it('F-2 hero positioning revised + 2026-05-16 fingerprint-claim strengthening: "Pixel-identical iPhone Safari. Cloud-hosted. API, SDK, or GUI." headline + sub-line names every signal hashing to the real-iPhone population (not unique-per-session like every other browser API on the market) + the JS-runtime-patching contrast names competitors\' 100% unique canvas+WebGL hashes as the literal opposite of an iPhone returning the same hash as millions of other iPhones', () => {
-    expect(body).toMatch(/Pixel-identical iPhone Safari\. Cloud-hosted\. API, SDK, or GUI\./);
-    expect(body).toMatch(/Spin up a session in seconds\. Drive it from TypeScript, Python,/);
+  it('Hero positioning (2026-05-16 founder rewrite — strong + fancy, two paragraphs collapsed to one, "pixel-identical" dropped): two-line H1 "Indistinguishable iPhone Safari." (gradient span) + "Programmable from any language." Sub-paragraph names Real WebKit, the canvas+WebGL hash match against millions of real iPhones (vs the unique-per-session leak every Chromium-stealth API surfaces), and the four access paths.', () => {
+    expect(body).toMatch(/Indistinguishable iPhone Safari\./);
+    expect(body).toMatch(/Programmable from any language\./);
+    expect(body).toMatch(/Real WebKit — the engine every iPhone ships/);
     expect(body).toMatch(
-      /hashes to the real-iPhone population, not to a\s+unique-per-session value like every other browser API on\s+the market/,
+      /Canvas \+ WebGL\s+hashes match the millions of iPhones in the wild, not the\s+unique-per-session leak every Chromium-stealth API surfaces/,
     );
-    expect(body).toMatch(/Other API browsers patch JavaScript at runtime/);
-    expect(body).toMatch(/the canvas and\s+WebGL hashes they return are 100% unique per session/);
-    expect(body).toMatch(/the same hash\s+as millions of other iPhones/);
-  });
-
-  it('F-2 WebKit-source-instead differentiator framing: "Driftstack builds from Apple\'s WebKit source directly" preserved through the 2026-05-16 sub-paragraph rewrite', () => {
-    expect(body).toMatch(
-      /Driftstack builds from Apple's\s+WebKit source directly\. Nothing is rewritten, so there's\s+nothing for fingerprinters to spot\./,
-    );
+    expect(body).toMatch(/Drive sessions from TypeScript, Python, Go, or the GUI\./);
+    // The pre-rewrite framings must not return.
+    expect(body).not.toMatch(/Pixel-identical iPhone Safari\. Cloud-hosted\. API, SDK, or GUI\./);
+    expect(body).not.toMatch(/Spin up a session in seconds\. Drive it from TypeScript, Python,/);
+    expect(body).not.toMatch(/Other API browsers patch JavaScript at runtime/);
   });
 
   it('trial-pack CTA + figures pinned: $2.99 / 16h / 14-day / once-per-account', () => {
