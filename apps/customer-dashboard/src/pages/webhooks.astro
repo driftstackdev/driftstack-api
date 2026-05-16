@@ -1343,7 +1343,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             wireRotateButtons();
           }
           showBanner(
-            'Live data loaded. Aggregate delivery counts (delivered/failed/DLQ) not yet exposed via /v1/webhooks — coming soon.',
+            'Live data loaded. Aggregate delivery counts (delivered/failed/DLQ) are not exposed via /v1/webhooks; inspect /v1/webhooks/{id}/deliveries for per-event detail.',
           );
         })
         .catch((err) => {
