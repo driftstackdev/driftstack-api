@@ -545,7 +545,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // V-176 — public-facing status endpoint. Reuses the readinessChecks
   // already supplied to /ready; no additional wiring needed at deps
   // level. /v1/status has no auth (public status pages are public).
-  registerStatusRoutes(app, { readinessChecks: deps.readinessChecks ?? [] });
+  registerStatusRoutes(app, {
+    readinessChecks: deps.readinessChecks ?? [],
+    ...(deps.incidentsService ? { incidentsService: deps.incidentsService } : {}),
+  });
   if (deps.authFlowsService !== undefined) {
     registerAuthRoutes(app, {
       service: deps.authFlowsService,

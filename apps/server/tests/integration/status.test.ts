@@ -36,4 +36,36 @@ describe('GET /v1/status', () => {
     const res = await fx.app.inject({ method: 'GET', url: '/v1/status' });
     expect(res.headers['cache-control']).toBe('public, max-age=30');
   });
+
+  it('V-545.A — recent_incidents surfaces public incidents (up to 5, last 30d)', async () => {
+    fx = await buildTestApp();
+    // Seed a public incident + a private one. Only the public one
+    // should appear in recent_incidents.
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/incidents',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+      },
+      payload: { title: 'visible', description: 'public', severity: 'minor' },
+    });
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/incidents',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'content-type': 'application/json',
+      },
+      payload: { title: 'hidden', description: 'admin', severity: 'minor', public: false },
+    });
+    const res = await fx.app.inject({ method: 'GET', url: '/v1/status' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{
+      recent_incidents: Array<{ id: string; title: string; severity: string }>;
+    }>();
+    expect(body.recent_incidents).toHaveLength(1);
+    expect(body.recent_incidents[0]?.title).toBe('visible');
+    expect(body.recent_incidents[0]?.id).toMatch(/^inc_/);
+  });
 });

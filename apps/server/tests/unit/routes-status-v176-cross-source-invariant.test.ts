@@ -108,14 +108,12 @@ describe('W1033 routes/status V-176 cross-source invariant', () => {
     );
   });
 
-  it('CRITICAL response shape — { overall_status: aggregateOverall(components), components, recent_incidents: [] placeholder }.', () => {
+  it('CRITICAL response shape — { overall_status: aggregateOverall(components), components, recent_incidents: PublicIncidentSummary[] (V-545.A — populated from incidentsService when wired) }.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/status.ts'));
     expect(p).toMatch(/overall_status: aggregateOverall\(components\),/);
     expect(p).toMatch(/components,/);
-    expect(p).toMatch(/recent_incidents: \[\],/);
-    expect(p).toMatch(
-      /recent_incidents: readonly never\[\]; \/\/ placeholder until incidents service lands/,
-    );
+    expect(p).toMatch(/recent_incidents: recentIncidents,/);
+    expect(p).toMatch(/recent_incidents: readonly PublicIncidentSummary\[\];/);
   });
 
   it('CRITICAL endpoint runs Promise.all(opts.readinessChecks.map(runComponentCheck)) — parallel per-check execution.', () => {

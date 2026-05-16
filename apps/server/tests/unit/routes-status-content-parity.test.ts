@@ -22,8 +22,10 @@
 //   • Cache framing pinned: caller (Cloudflare Pages, future) caches
 //     ~30s; CACHE_MAX_AGE_SEC = 30; Cache-Control: public, max-age=30
 //     header set on every response.
-//   • recent_incidents: readonly never[] placeholder until incidents
-//     service wires.
+//   • recent_incidents: readonly PublicIncidentSummary[]; populated
+//     from optional incidentsService (last 5 public incidents from
+//     30d window). Empty array when service is undefined (fresh
+//     fixtures) or list() throws (fail-open posture).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -80,13 +82,11 @@ describe('W412.C apps/server/src/routes/status.ts content parity', () => {
     expect(body).toMatch(/last_checked_at: string;/);
   });
 
-  it('StatusResponse: overall_status + components + recent_incidents readonly never[] placeholder', () => {
+  it('StatusResponse: overall_status + components + recent_incidents (V-545.A — readonly PublicIncidentSummary[])', () => {
     expect(body).toMatch(/interface StatusResponse \{/);
     expect(body).toMatch(/overall_status: ComponentStatus;/);
     expect(body).toMatch(/components: ComponentResult\[\];/);
-    expect(body).toMatch(
-      /recent_incidents: readonly never\[\];\s*\/\/\s*placeholder until incidents service lands/,
-    );
+    expect(body).toMatch(/recent_incidents: readonly PublicIncidentSummary\[\];/);
   });
 
   it('runComponentCheck: per-check timeoutMs override fallback to COMPONENT_TIMEOUT_MS; Promise.race timeout; catch → degraded', () => {
@@ -110,21 +110,34 @@ describe('W412.C apps/server/src/routes/status.ts content parity', () => {
     );
   });
 
-  it('Route handler: Promise.all parallel runComponentCheck + body assembly + cache-control header + return body', () => {
+  it('Route handler: Promise.all parallel runComponentCheck + body assembly + cache-control header + return body; recent_incidents wired via incidentsService.list when present', () => {
     expect(body).toMatch(
-      /app\.get\('\/v1\/status', async \(_request, reply\) => \{\s*\n?\s*const components = await Promise\.all\(opts\.readinessChecks\.map\(runComponentCheck\)\);\s*\n?\s*const body: StatusResponse = \{\s*\n?\s*overall_status: aggregateOverall\(components\),\s*\n?\s*components,\s*\n?\s*recent_incidents: \[\],\s*\n?\s*\};\s*\n?\s*reply\.header\('cache-control', `public, max-age=\$\{CACHE_MAX_AGE_SEC\.toString\(\)\}`\);\s*\n?\s*return body;/,
+      /app\.get\('\/v1\/status', async \(_request, reply\) => \{\s*\n?\s*const components = await Promise\.all\(opts\.readinessChecks\.map\(runComponentCheck\)\);/,
+    );
+    expect(body).toMatch(
+      /const recentIncidents: PublicIncidentSummary\[\] = \[\];\s*\n?\s*if \(opts\.incidentsService\) \{/,
+    );
+    expect(body).toMatch(
+      /const rows = await opts\.incidentsService\.list\(\{\s*\n?\s*scope: 'public',\s*\n?\s*since: new Date\(Date\.now\(\) - RECENT_INCIDENTS_WINDOW_MS\),\s*\n?\s*limit: RECENT_INCIDENTS_LIMIT,\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(
+      /reply\.header\('cache-control', `public, max-age=\$\{CACHE_MAX_AGE_SEC\.toString\(\)\}`\);/,
     );
   });
 
-  it('StatusRoutesOptions: readinessChecks readonly ReadinessCheck[]', () => {
+  it('StatusRoutesOptions: readinessChecks readonly + optional incidentsService (V-545.A)', () => {
     expect(body).toMatch(
-      /export interface StatusRoutesOptions \{\s*\n?\s*readinessChecks: readonly ReadinessCheck\[\];\s*\n?\s*\}/,
+      /export interface StatusRoutesOptions \{\s*\n?\s*readinessChecks: readonly ReadinessCheck\[\];/,
     );
+    expect(body).toMatch(/incidentsService\?: IncidentsService;/);
   });
 
-  it('imports: FastifyInstance + ReadinessCheck from lib/app', () => {
+  it('imports: FastifyInstance + ReadinessCheck + IncidentsService', () => {
     expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
     expect(body).toMatch(/import type \{ ReadinessCheck \} from '\.\.\/lib\/app\.js';/);
+    expect(body).toMatch(
+      /import type \{ IncidentRow, IncidentsService \} from '\.\.\/services\/incidents\.js';/,
+    );
   });
 
   it('file exists at canonical path', () => {
