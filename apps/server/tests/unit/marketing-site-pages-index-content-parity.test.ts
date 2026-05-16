@@ -25,16 +25,19 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     );
   });
 
-  it('F-2 (Issue 4) Hero copy: section label + revised "Pixel-identical iPhone Safari. Cloud-hosted. API, SDK, or GUI." headline (drops "Real" + "API-first" exclusive); sub-paragraph names GUI alongside TypeScript/Python/Go and replaces "matches a physical iPhone, because it runs the same engine" with "bit-identical to a physical iPhone running the same iOS Safari build" (more honest about WebKit-fork-not-literal-Safari posture)', () => {
+  it('F-2 hero copy + 2026-05-16 fingerprint-claim sharpening: revised headline ("Pixel-identical iPhone Safari. Cloud-hosted. API, SDK, or GUI.") + sub-paragraph that frames every signal as hashing to the real-iPhone population (not unique-per-session like every other browser API) + explicit competitor contrast naming 100% unique canvas/WebGL hashes as the literal opposite of an iPhone returning the same hash as millions of other iPhones', () => {
     expect(body).toMatch(/Pixel-identical iPhone Safari\. Cloud-hosted\. API, SDK, or GUI\./);
     expect(body).toMatch(/Spin up a session in seconds\. Drive it from TypeScript, Python,/);
     expect(body).toMatch(/or skip the code entirely and use the\s*\n?\s*GUI/);
     expect(body).toMatch(
-      /is bit-identical to a physical iPhone running\s*\n?\s*the same iOS Safari build\./,
+      /hashes to the real-iPhone population, not to a\s*\n?\s*unique-per-session value like every other browser API on\s*\n?\s*the market/,
     );
-    expect(body).toMatch(/Most stealth tools rewrite JavaScript at runtime/);
+    expect(body).toMatch(/Other API browsers patch JavaScript at runtime/);
     expect(body).toMatch(
-      /Driftstack builds from\s*\n?\s*Apple's WebKit source directly\. Nothing is rewritten, so there's\s*\n?\s*nothing for detection systems to spot\./,
+      /the canvas and\s*\n?\s*WebGL hashes they return are 100% unique per session — the\s*\n?\s*literal opposite of an iPhone, which returns the same hash\s*\n?\s*as millions of other iPhones/,
+    );
+    expect(body).toMatch(
+      /Driftstack builds from Apple's\s*\n?\s*WebKit source directly\. Nothing is rewritten, so there's\s*\n?\s*nothing for fingerprinters to spot\./,
     );
   });
 

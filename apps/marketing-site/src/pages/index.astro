@@ -23,14 +23,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             Spin up a session in seconds. Drive it from TypeScript, Python,
             Go, or any HTTP client — or skip the code entirely and use the
             GUI. Every signal — user-agent, canvas, WebGL, audio
-            fingerprint — is bit-identical to a physical iPhone running
-            the same iOS Safari build.
+            fingerprint — hashes to the real-iPhone population, not to a
+            unique-per-session value like every other browser API on
+            the market.
           </p>
           <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
-            Most stealth tools rewrite JavaScript at runtime and leak the
-            underlying engine in the next hash. Driftstack builds from
-            Apple's WebKit source directly. Nothing is rewritten, so there's
-            nothing for detection systems to spot.
+            Other API browsers patch JavaScript at runtime and leak the
+            underlying Chromium engine in the next hash; the canvas and
+            WebGL hashes they return are 100% unique per session — the
+            literal opposite of an iPhone, which returns the same hash
+            as millions of other iPhones. Driftstack builds from Apple's
+            WebKit source directly. Nothing is rewritten, so there's
+            nothing for fingerprinters to spot.
           </p>
           <div class="mt-8 flex flex-wrap items-center gap-4">
             <a href="/pricing#trial-pack" class="btn-primary">Start for $2.99</a>
@@ -141,20 +145,20 @@ const result = await session.result();
       </p>
       <div class="mt-6 grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-4">
         <div class="flex flex-col items-center gap-1.5 text-center">
-          <span class="text-base font-semibold text-ink-primary">Bit-identical</span>
-          <span class="text-xs text-ink-muted">Canvas · WebGL · audio · UA</span>
+          <span class="text-base font-semibold text-ink-primary">Indistinguishable</span>
+          <span class="text-xs text-ink-muted">Canvas + WebGL hashes match the real-iPhone population — not unique-per-session like every other API</span>
         </div>
         <div class="flex flex-col items-center gap-1.5 text-center">
-          <span class="text-base font-semibold text-ink-primary">Three proxies</span>
-          <span class="text-xs text-ink-muted">SOCKS5 · WireGuard · OpenVPN</span>
+          <span class="text-base font-semibold text-ink-primary">Zero detection surface</span>
+          <span class="text-xs text-ink-muted">No runtime JS patching, no stealth bundle for fingerprinters to spot</span>
         </div>
         <div class="flex flex-col items-center gap-1.5 text-center">
-          <span class="text-base font-semibold text-ink-primary">Three access paths</span>
-          <span class="text-xs text-ink-muted">API · SDK · GUI</span>
+          <span class="text-base font-semibold text-ink-primary">Apple's WebKit, not Chromium</span>
+          <span class="text-xs text-ink-muted">Built from Apple's WebKit source — same engine your iOS users actually run</span>
         </div>
         <div class="flex flex-col items-center gap-1.5 text-center">
-          <span class="text-base font-semibold text-ink-primary">EU-hosted</span>
-          <span class="text-xs text-ink-muted">Single-region data residency</span>
+          <span class="text-base font-semibold text-ink-primary">API · SDK · GUI</span>
+          <span class="text-xs text-ink-muted">TypeScript, Python, Go, or the dashboard — same engine, three access paths</span>
         </div>
       </div>
     </div>

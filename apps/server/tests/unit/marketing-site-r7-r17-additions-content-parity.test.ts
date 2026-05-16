@@ -58,28 +58,34 @@ describe('W627 R7-R17 marketing additions content parity', () => {
     // paths / EU-hosted) under "What sets us apart". Vendor names
     // (Hetzner FSN / Neon EU / R2 EU) moved to /trust/sub-processors
     // per Issue 6. "Pre-launch" framing dropped per Issue 5.
-    it('"What sets us apart" eyebrow + 4 product-differentiator labels pinned (Bit-identical / Three proxies / Three access paths / EU-hosted)', () => {
+    it('"What sets us apart" eyebrow + 4 fingerprint-leading differentiator labels pinned (Indistinguishable / Zero detection surface / Apple\'s WebKit not Chromium / API · SDK · GUI) — strip rewritten 2026-05-16 to lead with the canvas+WebGL-hash claim against competitors\' unique-per-session leakage', () => {
       expect(body).toMatch(/What sets us apart/);
       expect(body).not.toMatch(/Pre-launch trust signals/);
       expect(body).toMatch(
-        /<span class="text-base font-semibold text-ink-primary">Bit-identical<\/span>/,
+        /<span class="text-base font-semibold text-ink-primary">Indistinguishable<\/span>/,
       );
       expect(body).toMatch(
-        /<span class="text-base font-semibold text-ink-primary">Three proxies<\/span>/,
+        /<span class="text-base font-semibold text-ink-primary">Zero detection surface<\/span>/,
       );
       expect(body).toMatch(
-        /<span class="text-base font-semibold text-ink-primary">Three access paths<\/span>/,
+        /<span class="text-base font-semibold text-ink-primary">Apple's WebKit, not Chromium<\/span>/,
       );
       expect(body).toMatch(
-        /<span class="text-base font-semibold text-ink-primary">EU-hosted<\/span>/,
+        /<span class="text-base font-semibold text-ink-primary">API · SDK · GUI<\/span>/,
       );
     });
 
-    it('Each differentiator-card sub-claim pinned (Canvas · WebGL · audio · UA + SOCKS5 · WireGuard · OpenVPN + API · SDK · GUI + Single-region data residency)', () => {
-      expect(body).toMatch(/Canvas · WebGL · audio · UA/);
-      expect(body).toMatch(/SOCKS5 · WireGuard · OpenVPN/);
-      expect(body).toMatch(/API · SDK · GUI/);
-      expect(body).toMatch(/Single-region data residency/);
+    it('Each differentiator-card sub-claim pinned (canvas+WebGL real-iPhone-population hash + no-runtime-JS-patching + Apple WebKit source + same engine 3 access paths)', () => {
+      expect(body).toMatch(
+        /Canvas \+ WebGL hashes match the real-iPhone population — not unique-per-session like every other API/,
+      );
+      expect(body).toMatch(/No runtime JS patching, no stealth bundle for fingerprinters to spot/);
+      expect(body).toMatch(
+        /Built from Apple's WebKit source — same engine your iOS users actually run/,
+      );
+      expect(body).toMatch(
+        /TypeScript, Python, Go, or the dashboard — same engine, three access paths/,
+      );
     });
 
     it('Vendor names removed from homepage splash strip per Issue 6 (moved to /trust/sub-processors)', () => {

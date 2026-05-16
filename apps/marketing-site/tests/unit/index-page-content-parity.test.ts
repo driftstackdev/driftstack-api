@@ -32,16 +32,20 @@ function read(p: string): string {
 describe('W371.A marketing-site /index (homepage) content parity', () => {
   const body = read(PAGE);
 
-  it('F-2 hero positioning revised: "Pixel-identical iPhone Safari. Cloud-hosted. API, SDK, or GUI." + sub-line names GUI alongside TS/Python/Go + "stealth tools rewrite JavaScript at runtime and leak the underlying engine in the next hash" framing kept', () => {
+  it('F-2 hero positioning revised + 2026-05-16 fingerprint-claim strengthening: "Pixel-identical iPhone Safari. Cloud-hosted. API, SDK, or GUI." headline + sub-line names every signal hashing to the real-iPhone population (not unique-per-session like every other browser API on the market) + the JS-runtime-patching contrast names competitors\' 100% unique canvas+WebGL hashes as the literal opposite of an iPhone returning the same hash as millions of other iPhones', () => {
     expect(body).toMatch(/Pixel-identical iPhone Safari\. Cloud-hosted\. API, SDK, or GUI\./);
     expect(body).toMatch(/Spin up a session in seconds\. Drive it from TypeScript, Python,/);
-    expect(body).toMatch(/Most stealth tools rewrite JavaScript at runtime/);
-    expect(body).toMatch(/leak the\s*\n?\s*underlying engine in the next hash/);
+    expect(body).toMatch(
+      /hashes to the real-iPhone population, not to a\s+unique-per-session value like every other browser API on\s+the market/,
+    );
+    expect(body).toMatch(/Other API browsers patch JavaScript at runtime/);
+    expect(body).toMatch(/the canvas and\s+WebGL hashes they return are 100% unique per session/);
+    expect(body).toMatch(/the same hash\s+as millions of other iPhones/);
   });
 
-  it('F-2 WebKit-source-instead differentiator framing revised: "Driftstack builds from Apple\'s WebKit source directly" (was "runs Apple\'s WebKit source code directly" — honest about the build-from-source posture, not literal Apple binary)', () => {
+  it('F-2 WebKit-source-instead differentiator framing: "Driftstack builds from Apple\'s WebKit source directly" preserved through the 2026-05-16 sub-paragraph rewrite', () => {
     expect(body).toMatch(
-      /Driftstack builds from\s+Apple's WebKit source directly\. Nothing is rewritten, so there's\s+nothing for detection systems to spot\./,
+      /Driftstack builds from Apple's\s+WebKit source directly\. Nothing is rewritten, so there's\s+nothing for fingerprinters to spot\./,
     );
   });
 
