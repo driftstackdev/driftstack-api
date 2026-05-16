@@ -36,14 +36,15 @@ function read(p: string): string {
 describe('W371.B customer-dashboard /verify-email page content parity', () => {
   const body = read(PAGE);
 
-  it('V-184a.B URL-token pre-fill + auto-submit pinned (mail-client link short-circuit)', () => {
-    expect(body).toMatch(/V-184a\.B/);
+  it('Issue 3 wave 1085+ URL-token pre-fill + auto-submit pinned (mail-client link short-circuit) — form is HIDDEN by default and a spinner shows during auto-verify; the form is revealed via showFallback() only when auto-verify fails OR no ?token= URL param is present', () => {
+    expect(body).toMatch(/Issue 3 wave 1085\+|V-184a\.B/);
     expect(body).toMatch(/const linkToken = params\.get\('token'\);/);
     expect(body).toMatch(
       /if \(linkToken && linkToken\.length > 0\) \{\s*\n?\s*submitToken\(linkToken\);/,
     );
-    // Form-as-fallback framing pinned (so a future "auto-submit only" change is deliberate).
-    expect(body).toMatch(/form stays visible as a fallback/);
+    // showFallback() reveals the manual code-paste form on failure or no-token.
+    expect(body).toMatch(/function showFallback\(\)/);
+    expect(body).toMatch(/data-form-fallback/);
   });
 
   it('POST /v1/auth/verify-email wired client + registered server-side (credentials:"include")', () => {
@@ -92,17 +93,14 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
     expect(body).toMatch(/Token expired or never arrived\?/);
   });
 
-  it('linkToken-wins-over-debugToken fallback chain pinned', () => {
-    // V-184a backcompat: dev paste-in is kept for back-compat, but
-    // URL token always wins when both are present.
-    expect(body).toMatch(/the URL token wins when both\s*\n?\s*\/\/\s*are present/);
+  it('linkToken-wins-over-debugToken fallback chain pinned (URL token always wins when both present; dev paste-in kept for back-compat)', () => {
     expect(body).toMatch(/const prefill = linkToken \?\? debugToken/);
   });
 
-  it('"Verifying your email — one moment…" intro swap when auto-submitting', () => {
-    // Load-bearing UX claim — the user sees confirmation that
-    // auto-submit happened, not a stale "paste your token" prompt.
-    expect(body).toMatch(/intro\.textContent = 'Verifying your email — one moment…'/);
+  it('Issue 3 wave 1085+ — "Verifying your account…" intro swap + spinner-shown when auto-submitting (replaces the prior "Verifying your email — one moment…" intro-only swap; full visual surface is the spinner now)', () => {
+    expect(body).toMatch(/introEl\.textContent = 'Verifying your account…'/);
+    expect(body).toMatch(/spinnerEl\.hidden = false/);
+    expect(body).toMatch(/data-field="auto-verify-spinner"/);
   });
 
   it('session-token persistence on success: localStorage ds_web_session_token (matches /login + /signup)', () => {

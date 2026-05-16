@@ -36,33 +36,28 @@ describe('W735 customer-dashboard verify-email.astro page parity', () => {
     expect(p).toMatch(/<p class="section-label">Step 2 of 4<\/p>/);
   });
 
-  it("CRITICAL V-184a.B URL-token auto-prefill pinned — `new URLSearchParams(window.location.search).get('token')` reads the link token. The form is pre-filled + auto-submitted; form stays mounted as fallback for mail-client mangling.", () => {
+  it("V-184a.B + Issue 3 wave 1085+ URL-token auto-prefill pinned — reads the link token via new URLSearchParams(window.location.search).get('token'). The form is HIDDEN by default and a spinner shows during auto-verify; the form is revealed only as a fallback when auto-verify fails or when the page is reached without a token (founder feedback: prior implementation kept the code-input visible during auto-verify which read as 'type your code' UX).", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/V-184a\.B — when the user clicks the link in the verify/);
+    expect(p).toMatch(/Issue 3 wave 1085\+ — when the user clicks the link in the verify/);
     expect(p).toMatch(/email, the token is already in `\?token=…`/);
-    expect(p).toMatch(
-      /Pre-fill the\s*\n\s+\/\/ form \+ auto-submit so they don't have to paste it/,
-    );
+    expect(p).toMatch(/Auto-submit\s*\n?\s*\/\/ immediately and HIDE the form/);
 
     // Implementation matches the framing.
     expect(p).toMatch(/const params = new URLSearchParams\(window\.location\.search\)/);
     expect(p).toMatch(/const linkToken = params\.get\('token'\)/);
   });
 
-  it('CRITICAL form stays mounted even when auto-submitting ("The\\n form stays visible as a fallback"). Drift to hiding the form would lock out customers whose mail-client mangled the link or whose page hit without query param.', () => {
+  it('Issue 3 wave 1085+ — form is hidden by default + revealed via showFallback() when auto-verify fails OR when no ?token= URL param is present. Replaces the prior "form stays mounted as fallback" pattern where the code input was always visible.', () => {
     const p = read(PAGE);
-    expect(p).toMatch(/The\s*\n\s+\/\/ form stays visible as a fallback for the rare case where/);
-    expect(p).toMatch(
-      /a recipient mail client mangles the link or the page is\s*\n\s+\/\/ hit without the query param/,
-    );
+    expect(p).toMatch(/data-form-fallback/);
+    expect(p).toMatch(/function showFallback\(\)/);
+    expect(p).toMatch(/if \(formEl\) formEl\.hidden = false/);
   });
 
-  it('CRITICAL ds_debug_verify_token sessionStorage back-compat pinned — URL token wins when both present. The dev-mode debug-token path is kept for back-compat; URL token has priority.', () => {
+  it('ds_debug_verify_token sessionStorage back-compat pinned — URL token wins when both present (the dev-mode debug-token path is kept for back-compat; URL token has priority).', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Pre-fill debug_token from signup response in test\/dev mode/);
-    expect(p).toMatch(/kept for back-compat — the URL token wins when both/);
     expect(p).toMatch(/const debugToken = sessionStorage\.getItem\('ds_debug_verify_token'\)/);
     expect(p).toMatch(/const prefill = linkToken \?\? debugToken/);
   });

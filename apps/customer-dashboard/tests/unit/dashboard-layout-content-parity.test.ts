@@ -63,7 +63,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/const fullTitle = `\$\{title\} · Driftstack`;/);
   });
 
-  it('11 navItems pinned in canonical order', () => {
+  it('12 navItems pinned in canonical order (2026-05-16 enhancement-review A1: added /subscription between /billing and /webhooks — /subscription page exists but was undiscoverable from the sidebar; only reachable via "Back" link from /billing)', () => {
     const block = body.match(/const navItems = \[([\s\S]+?)\];/);
     expect(block).not.toBeNull();
     const entries = Array.from(block![1]!.matchAll(/\{ href: '([^']+)', label: '([^']+)' \}/g)).map(
@@ -77,6 +77,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
       { href: '/api-keys', label: 'API keys' },
       { href: '/usage', label: 'Usage' },
       { href: '/billing', label: 'Billing' },
+      { href: '/subscription', label: 'Subscription' },
       { href: '/webhooks', label: 'Webhooks' },
       { href: '/audit-log', label: 'Audit log' },
       { href: '/team', label: 'Team' },

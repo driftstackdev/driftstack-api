@@ -47,24 +47,30 @@ describe('W741 dashboard first-session V-184a + V-501 parity', () => {
     expect(p).toMatch(/if \(submitBtn\.disabled\) return; \/\/ — guard against double-mint/);
   });
 
-  it('CRITICAL LOCKED_ARCHETYPE_DISPLAY_LABEL api-types import pinned. The locked-archetype display name comes from api-types (single source of truth) — drift to inlining would let dashboard show a different label than what the SDK + marketing claim.', () => {
+  it('CRITICAL LOCKED_ARCHETYPE_DISPLAY_LABEL api-types import pinned + surfaced in the archetype explanation paragraph (single source of truth — drift to inlining would let dashboard show a different label than what the SDK + marketing claim). 2026-05-16 enhancement-review A2: the prior bare "Default archetype: <strong>{LABEL}</strong>." was replaced with a plain-English explanation of what archetype means + why this default.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/import \{ LOCKED_ARCHETYPE_DISPLAY_LABEL \} from '@driftstack\/api-types'/);
-    expect(p).toMatch(/Default archetype: <strong>\{LOCKED_ARCHETYPE_DISPLAY_LABEL\}<\/strong>/);
-  });
-
-  it('CRITICAL \'real iOS Safari instance\' canonical product claim pinned. The wording — "same WebKit, same fingerprint surface as a physical iPhone" — matches W739 welcome.astro + marketing site canonical positioning.', () => {
-    const p = read(PAGE);
     expect(p).toMatch(
-      /A session is a real iOS Safari instance running on Driftstack's\s*\n\s+fleet — same WebKit, same fingerprint surface as a physical iPhone/,
+      /You're starting with\s*\n?\s*<strong>\{LOCKED_ARCHETYPE_DISPLAY_LABEL\}<\/strong>/,
+    );
+    expect(p).toMatch(
+      /<strong>Archetype<\/strong> defines the iPhone model, iOS version,\s*\n?\s*and Safari build/,
     );
   });
 
-  it('CRITICAL plaintext-once framing pinned for the auto-minted API key. The wording — "The key is shown once; copy it somewhere safe" — matches W701 + W707 plaintext-once invariant.', () => {
+  it("'iOS Safari instance' canonical product claim pinned + EU-fleet clarification (2026-05-16 honesty pass: 'a real iOS Safari instance' → 'an iOS Safari instance' since we run a WebKit fork, not the literal Safari binary; matches the welcome.astro + marketing-site rewrite). 'same WebKit, same fingerprint surface as a physical iPhone' wording preserved.", () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /We'll mint your first API key in the background — you'll see it on\s*\n\s+the next page\. The key is shown once; copy it somewhere safe/,
+      /A session is an iOS Safari instance running on Driftstack's\s+EU fleet — same WebKit, same fingerprint surface as a physical\s+iPhone/,
+    );
+    expect(p).not.toMatch(/A session is a real iOS Safari instance/);
+  });
+
+  it("Plaintext-once framing pinned for the auto-minted API key (2026-05-16 enhancement-review A3: copy expanded with plain-English 'a secret token your code uses to call the SDK' + safe-storage hints — 1Password / git-ignored .env / similar). 'shown once; copy it somewhere safe' contract preserved + matches W701 + W707 plaintext-once invariant.", () => {
+    const p = read(PAGE);
+    expect(p).toMatch(
+      /We'll create your first <strong>API key<\/strong> in the background —\s*\n?\s*a secret token your code uses to call the SDK\. It's shown once on\s*\n?\s*the next page; copy it somewhere safe \(1Password, a git-ignored/,
     );
   });
 

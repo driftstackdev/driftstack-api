@@ -39,11 +39,16 @@ describe('W492.C apps/customer-dashboard/src/pages/first-session.astro content p
     expect(body).toMatch(/\/\/ V-501 — disabled-while-pending guard \+ clearer status copy\./);
   });
 
-  it('LOCKED_ARCHETYPE_DISPLAY_LABEL import from @driftstack/api-types — pinned so the displayed default archetype stays in sync with the canonical server-side constant (drift to a hardcoded string here would diverge from /v1/sessions create-time default + create confusion if the locked archetype changes)', () => {
+  it('LOCKED_ARCHETYPE_DISPLAY_LABEL import from @driftstack/api-types + surfaced in the archetype explanation paragraph (single source of truth; drift to a hardcoded string would diverge from /v1/sessions create-time default). 2026-05-16 enhancement-review A2: the prior "Default archetype: <strong>{LABEL}</strong>." was expanded to a plain-English explanation of what archetype means + why this default — first-time customers had no idea what "archetype" was as bare jargon.', () => {
     expect(body).toMatch(
       /import \{ LOCKED_ARCHETYPE_DISPLAY_LABEL \} from '@driftstack\/api-types';/,
     );
-    expect(body).toMatch(/Default archetype: <strong>\{LOCKED_ARCHETYPE_DISPLAY_LABEL\}<\/strong>/);
+    expect(body).toMatch(
+      /You're starting with\s*\n?\s*<strong>\{LOCKED_ARCHETYPE_DISPLAY_LABEL\}<\/strong>/,
+    );
+    expect(body).toMatch(
+      /<strong>Archetype<\/strong> defines the iPhone model, iOS version,\s*\n?\s*and Safari build/,
+    );
   });
 
   it.skip("V-168 two-phase mint framing pinned: '1. Mint a default API key via web session. 2. Use that API key to create the session. 3. Stash the new API key plaintext in sessionStorage so the /first-session redirect to /sessions can show it.' + 'V-184b can refine the UX (e.g. dedicated your first key step).' — pinned so the two-token-type flow (web session for /v1/api-keys; API key for /v1/sessions) stays documented", () => {
@@ -83,13 +88,14 @@ describe('W492.C apps/customer-dashboard/src/pages/first-session.astro content p
     );
   });
 
-  it("Key-mint framing pinned: 'We'll mint your first API key in the background — you'll see it on the next page. The key is shown once; copy it somewhere safe.' + Session purpose framing 'A session is a real iOS Safari instance running on Driftstack's fleet — same WebKit, same fingerprint surface as a physical iPhone.' — pinned so the customer sees the 'shown once + copy safely' contract before the next page shows the plaintext, plus the brand value-prop framing", () => {
+  it("Key-mint + session framing (2026-05-16 enhancement-review A2 + A3 + honesty pass): key-mint copy expanded with plain-English 'a secret token your code uses to call the SDK' + safe-storage hints (1Password / git-ignored .env / similar); session copy: 'an iOS Safari instance running on Driftstack's EU fleet' (drops 'a real iOS Safari instance' overclaim per the honesty pass) + 'same WebKit, same fingerprint surface as a physical iPhone' preserved.", () => {
     expect(body).toMatch(
-      /We'll mint your first API key in the background — you'll see it on\s*\n?\s*the next page\. The key is shown once; copy it somewhere safe\./,
+      /We'll create your first <strong>API key<\/strong> in the background —\s*\n?\s*a secret token your code uses to call the SDK\. It's shown once on\s*\n?\s*the next page; copy it somewhere safe \(1Password, a git-ignored/,
     );
     expect(body).toMatch(
-      /A session is a real iOS Safari instance running on Driftstack's\s*\n?\s*fleet — same WebKit, same fingerprint surface as a physical iPhone\./,
+      /A session is an iOS Safari instance running on Driftstack's\s+EU fleet — same WebKit, same fingerprint surface as a physical\s+iPhone\./,
     );
+    expect(body).not.toMatch(/A session is a real iOS Safari instance/);
   });
 
   it("Error-detail surfacing on both phases: errBody.detail || 'mint key HTTP N' / errBody.detail || 'create session HTTP N' — pinned so each phase's failure surfaces its own problem+json detail (drift to merging the two error paths would obscure which phase failed and lose the diagnostic context)", () => {

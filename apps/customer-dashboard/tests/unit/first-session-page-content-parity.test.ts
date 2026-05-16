@@ -44,11 +44,13 @@ describe('W373.B customer-dashboard /first-session page content parity', () => {
     expect(body).toMatch(/V-501 — disabled-while-pending guard \+ clearer status copy/);
   });
 
-  it('LOCKED_ARCHETYPE_DISPLAY_LABEL imported from @driftstack/api-types (schema-aligned default)', () => {
+  it('LOCKED_ARCHETYPE_DISPLAY_LABEL imported from @driftstack/api-types + surfaced in the archetype explanation paragraph (2026-05-16 enhancement-review A2: prior bare "Default archetype: <strong>{LABEL}</strong>." replaced with plain-English explanation)', () => {
     expect(body).toMatch(
       /import \{ LOCKED_ARCHETYPE_DISPLAY_LABEL \} from '@driftstack\/api-types';/,
     );
-    expect(body).toMatch(/Default archetype: <strong>\{LOCKED_ARCHETYPE_DISPLAY_LABEL\}<\/strong>/);
+    expect(body).toMatch(
+      /You're starting with\s+<strong>\{LOCKED_ARCHETYPE_DISPLAY_LABEL\}<\/strong>/,
+    );
     // The label imported must be non-empty (sanity check that the
     // schema source-of-truth resolves).
     expect(typeof LOCKED_ARCHETYPE_DISPLAY_LABEL).toBe('string');
@@ -77,9 +79,9 @@ describe('W373.B customer-dashboard /first-session page content parity', () => {
     );
   });
 
-  it('"shown once; copy it somewhere safe" customer-facing copy pinned', () => {
+  it('"shown once; copy it somewhere safe" customer-facing copy pinned (2026-05-16 enhancement-review A3: expanded with plain-English "a secret token your code uses to call the SDK" + safe-storage hint examples (1Password / git-ignored .env / similar))', () => {
     expect(body).toMatch(
-      /We'll mint your first API key in the background — you'll see it on\s+the next page\. The key is shown once; copy it somewhere safe\./,
+      /We'll create your first <strong>API key<\/strong> in the background —\s+a secret token your code uses to call the SDK\. It's shown once on\s+the next page; copy it somewhere safe \(1Password, a git-ignored/,
     );
   });
 
@@ -116,10 +118,11 @@ describe('W373.B customer-dashboard /first-session page content parity', () => {
     );
   });
 
-  it('"real iOS Safari instance" + "same WebKit, same fingerprint surface" framing pinned', () => {
+  it('iOS Safari instance + "same WebKit, same fingerprint surface" framing pinned (2026-05-16 honesty pass: "a real iOS Safari instance" → "an iOS Safari instance" since we run a WebKit fork, not the literal Safari binary; matches the welcome.astro + marketing-site rewrite). EU-fleet clarification added.', () => {
     expect(body).toMatch(
-      /A session is a real iOS Safari instance running on Driftstack's\s+fleet — same WebKit, same fingerprint surface as a physical iPhone\./,
+      /A session is an iOS Safari instance running on Driftstack's\s+EU fleet — same WebKit, same fingerprint surface as a physical\s+iPhone\./,
     );
+    expect(body).not.toMatch(/A session is a real iOS Safari instance/);
   });
 
   it('credentials:"include" on both fetches (cookie-session post-issuance)', () => {
