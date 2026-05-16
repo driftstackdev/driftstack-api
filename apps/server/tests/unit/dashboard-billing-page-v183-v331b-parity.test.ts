@@ -215,12 +215,13 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
     );
   });
 
-  it('CRITICAL invoices-section placeholder framing pinned. The "Live invoice list endpoint TODO — accessible via Stripe Customer Portal in the meantime" wording explains the partial state without leaving customers wondering where invoices are.', () => {
+  it('F-7 invoices-section placeholder framing — the prior "(Live invoice list endpoint TODO — accessible via Stripe Customer Portal in the meantime)" wording was a developer-comment leaking into customer copy. Reframed to describe the Stripe Customer Portal path as a feature rather than a workaround for a missing endpoint.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /No invoices yet\. Once your subscription renews or the trial pack is\s*\n\s+purchased, invoices appear here\. Each invoice carries a permanent\s*\n\s+URL — bookmark for accounting\. \(Live invoice list endpoint TODO —\s*\n\s+accessible via Stripe Customer Portal in the meantime\.\)/,
+      /No invoices yet\. Once your subscription renews or the trial pack is\s*\n\s+purchased, invoices appear here\. Each invoice carries a permanent\s*\n\s+URL — bookmark for accounting\. The full invoice history is also\s*\n\s+accessible via the Stripe Customer Portal link above\./,
     );
+    expect(p).not.toMatch(/Live invoice list endpoint TODO/);
   });
 
   it('CRITICAL resolveApiBaseUrl + DashboardLayout used (no withSidebar={false}). Billing IS sidebar-enabled.', () => {
