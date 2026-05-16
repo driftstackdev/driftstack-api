@@ -4,7 +4,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 <BaseLayout
   title="About"
-  description="Driftstack is a solo-founder Dutch BV building iPhone Safari sessions on demand. EU-resident infrastructure, no behavioural data collection. Customer-configurable egress is on the roadmap."
+  description="Driftstack builds pixel-identical iPhone Safari sessions on demand. EU-resident infrastructure, no behavioural data collection, customer-configurable egress (SOCKS5 · WireGuard · OpenVPN)."
 >
   <!-- Header -->
   <section class="relative overflow-hidden">
@@ -60,13 +60,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             arms race that always favoured the detector. We think the
             next decade looks different: real browser engines, real
             device profiles, transparent metering, customer-configurable
-            egress (the last is on the roadmap; see
+            egress (SOCKS5 · WireGuard · OpenVPN — see
             <a
               href="/trust/security-overview"
               class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
               >/trust/security-overview</a
             >
-            for what's shipped today). Driftstack ships that future for
+            for the security posture). Driftstack ships that future for
             iPhone Safari first, because that's the device that matters
             most for commerce, ticketing, and account workflows.
           </p>
@@ -129,17 +129,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         What we promise to do.
       </h2>
       <p class="mt-4 max-w-3xl text-sm text-ink-secondary">
-        Pre-launch is the time when promises matter most — once
-        you're paying for production access, you can't unwind a
-        commitment. So we publish the operating commitments that
-        every customer can hold us to, with the public links to
-        verify each one.
+        Promises matter most once you're paying for production access
+        and can't unwind a commitment. So we publish the operating
+        commitments every customer can hold us to, with public links
+        to verify each one.
       </p>
 
       <div class="mt-10 grid gap-6 md:grid-cols-2">
         <div class="rounded-lg border border-white/10 bg-surface-raised p-5">
           <h3 class="font-semibold text-ink-primary">
-            Pre-launch security audit, on a cadence
+            Per-merge security audit, on a cadence
           </h3>
           <p class="mt-2 text-sm text-ink-secondary">
             Every meaningful slice of code merged is re-audited
@@ -149,13 +148,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             with closure status published at
             <a href="/security" class="text-glow-red underline">
               /security
-            </a>. Pre-paying-customer deep audit happens before
-            commercial activation.
+            </a>. A deeper pre-flight audit precedes each new
+            customer's first production billing cycle.
           </p>
         </div>
         <div class="rounded-lg border border-white/10 bg-surface-raised p-5">
           <h3 class="font-semibold text-ink-primary">
-            Disaster recovery rehearsed pre-launch
+            Disaster recovery, rehearseable on staging
           </h3>
           <p class="mt-2 text-sm text-ink-secondary">
             Eleven DR scenarios documented with concrete recovery

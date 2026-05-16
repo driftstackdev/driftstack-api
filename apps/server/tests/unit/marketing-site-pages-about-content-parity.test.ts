@@ -83,15 +83,18 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     );
   });
 
-  it('V-506 4-card commitments grid: Pre-launch security audit cadence (→ /security) + DR rehearsed (→ /trust/incidents) + sub-processor change-log per Article 28(2) (→ /trust/sub-processors) + Source escrow for Enterprise + Self-hosted (→ /faq#acceptable-use) — pinned so the 4 trust signals + their canonical destination links all survive (drift to dropping any card would orphan customers from that trust commitment; drift to a different href would break the click-through)', () => {
-    expect(body).toMatch(/Pre-launch security audit, on a cadence/);
-    expect(body).toMatch(/Disaster recovery rehearsed pre-launch/);
+  it('V-506 4-card commitments grid (F-5 — "Pre-launch" framing dropped per Issue 5; card titles now describe the ongoing cadence, not the launch-window milestone): Per-merge security audit (→ /security) + DR rehearseable on staging (→ /trust/incidents) + Sub-processor change-log per Article 28(2) (→ /trust/sub-processors) + Source escrow for Enterprise + Self-hosted (→ /faq#acceptable-use)', () => {
+    expect(body).toMatch(/Per-merge security audit, on a cadence/);
+    expect(body).toMatch(/Disaster recovery, rehearseable on staging/);
     expect(body).toMatch(/Sub-processor change-log per Article 28\(2\)/);
     expect(body).toMatch(/Source escrow for Enterprise \+ Self-hosted/);
     expect(body).toMatch(/href="\/security"/);
     expect(body).toMatch(/href="\/trust\/incidents"/);
     expect(body).toMatch(/href="\/trust\/sub-processors"/);
     expect(body).toMatch(/href="\/faq#acceptable-use"/);
+    // F-5 — "Pre-launch" prefix must not return on these card titles.
+    expect(body).not.toMatch(/Pre-launch security audit, on a cadence/);
+    expect(body).not.toMatch(/Disaster recovery rehearsed pre-launch/);
   });
 
   it("11-scenario DR framing pinned: 'Eleven DR scenarios documented with concrete recovery commands — host loss, Postgres corruption, Redis loss, R2 object loss, signing-key rotation under attack, bad deploys, cert renewal failures, Cloudflare Pages regressions, multi-day Hetzner regional outage. Every scenario is rehearseable on staging before commercial activation.' — pinned so the 11-DR-scenario commitment stays explicit (drift to dropping the count would let the customer wonder how thorough the DR rehearsal is)", () => {
