@@ -44,6 +44,18 @@ function handleError(
     );
   }
 
+  // RFC 7231 §7.1.3: 429 + 503 responses SHOULD carry the Retry-After
+  // header so client SDKs can implement standards-conformant backoff
+  // without parsing the problem-body. Read from the source extensions
+  // (toProblem() spreads extensions at top-level of the body but the
+  // typed access is cleaner against the ApiError instance).
+  if (apiError.status === 429 || apiError.status === 503) {
+    const retryAfter = apiError.extensions['retry_after_seconds'];
+    if (typeof retryAfter === 'number' && retryAfter >= 0) {
+      reply.header('retry-after', Math.ceil(retryAfter).toString());
+    }
+  }
+
   return replyWithProblem(reply, apiError.toProblem(request.id));
 }
 
