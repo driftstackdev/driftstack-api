@@ -47,6 +47,7 @@ const checks = [
   checkEgressSessionProxyGateStub,
   checkEgressSavedProxiesGateStub,
   checkAgentSessionsGateStub,
+  checkFleetEventsGateStub,
 ].filter(Boolean);
 
 let allOk = true;
@@ -293,6 +294,48 @@ async function checkEgressSavedProxiesGateStub() {
 
 async function checkAgentSessionsGateStub() {
   return featureGateStub('POST', '/v1/agent-sessions', 'AI-CHAT agent-sessions gate', {});
+}
+
+async function checkFleetEventsGateStub() {
+  // V-820 /v1/fleet/events is a GET (WebSocket upgrade in the wired
+  // posture; plain GET in the stub posture). Body irrelevant; we
+  // just need to provoke the route handler.
+  const url = `${baseUrl}/v1/fleet/events`;
+  let res;
+  try {
+    res = await fetch(url, { method: 'GET' });
+  } catch (err) {
+    return { ok: false, name: 'V-820 fleet-events gate', detail: `fetch failed: ${err.message}` };
+  }
+  if (res.status !== 503) {
+    return {
+      ok: false,
+      name: 'V-820 fleet-events gate',
+      detail: `expected 503 (FeatureUnavailable stub); got ${res.status}`,
+    };
+  }
+  let parsed;
+  try {
+    parsed = await res.json();
+  } catch (err) {
+    return {
+      ok: false,
+      name: 'V-820 fleet-events gate',
+      detail: `non-JSON 503 body: ${err.message}`,
+    };
+  }
+  if (parsed?.type !== FEATURE_UNAVAILABLE_TYPE) {
+    return {
+      ok: false,
+      name: 'V-820 fleet-events gate',
+      detail: `expected type=${FEATURE_UNAVAILABLE_TYPE}, got ${JSON.stringify(parsed?.type)}`,
+    };
+  }
+  return {
+    ok: true,
+    name: 'V-820 fleet-events gate',
+    detail: '503 + problem-type FeatureUnavailable as expected',
+  };
 }
 
 async function featureGateStub(method, path, name, body) {

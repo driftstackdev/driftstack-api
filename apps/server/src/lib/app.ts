@@ -112,6 +112,10 @@ import {
   registerAgentSessionsDisabledRoutes,
   registerAgentSessionsRoutes,
 } from '../routes/agent-sessions.js';
+import {
+  registerFleetEventsDisabledRoutes,
+  registerFleetEventsRoutes,
+} from '../routes/fleet-events.js';
 import { registerAdminForceActionRoutes } from '../routes/admin-force-actions.js';
 import {
   wireSentryErrorHandler,
@@ -762,6 +766,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
   } else {
     registerAgentSessionsDisabledRoutes(app);
+  }
+
+  // V-820 — /v1/fleet/events route stub. Activation gate matches the
+  // rest of Wave 1119: when fleetNodeAuth + fleetNonceCache are both
+  // wired, registerFleetEventsRoutes runs (currently still 503-stubs
+  // pending the WebSocket handler + Cloudflare AOP). When omitted,
+  // registerFleetEventsDisabledRoutes surfaces 503 + planning-doc
+  // pointer in detail.
+  if (deps.fleetNodeAuth !== undefined && deps.fleetNonceCache !== undefined) {
+    registerFleetEventsRoutes(app, {
+      auth: deps.fleetNodeAuth,
+      nonceCache: deps.fleetNonceCache,
+    });
+  } else {
+    registerFleetEventsDisabledRoutes(app);
   }
   if (
     deps.sessionRepo !== undefined &&

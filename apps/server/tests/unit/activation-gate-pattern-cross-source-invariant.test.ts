@@ -74,6 +74,13 @@ const FEATURES: GatedFeature[] = [
     disabledFn: 'registerAgentSessionsDisabledRoutes',
     depsField: 'agentRuntime',
   },
+  {
+    name: 'fleet-events (V-820)',
+    routesFile: 'apps/server/src/routes/fleet-events.ts',
+    wiredFn: 'registerFleetEventsRoutes',
+    disabledFn: 'registerFleetEventsDisabledRoutes',
+    depsField: 'fleetNodeAuth',
+  },
 ];
 
 const APP_TS = resolve(REPO_ROOT, 'apps/server/src/lib/app.ts');

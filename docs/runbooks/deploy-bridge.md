@@ -63,7 +63,7 @@ Exit 2 from migrate triggers the auto-revert path. This catches the
 drizzle-orm silent-skip class where `migrate()` returns success
 without actually running every pending migration.
 
-End-state guarantee: prod is always at a SHA that passed all 13
+End-state guarantee: prod is always at a SHA that passed all 14
 post-deploy-verify invariants when it landed AND whose migrations
 matched the on-disk journal exactly.
 
