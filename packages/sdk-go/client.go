@@ -53,6 +53,8 @@ type Client struct {
 	Legal *LegalResource
 	// V-298c — Team RBAC. Auth path integration is V-298d.
 	Team *TeamResource
+	// EG-API-1.2/1.3 — customer-configurable egress (planning 133).
+	Egress *EgressResource
 }
 
 // Option is the functional-options shape for [New].
@@ -116,6 +118,7 @@ func New(apiKey string, opts ...Option) *Client {
 	c.EmailPreferences = &EmailPreferencesResource{client: c}
 	c.Legal = &LegalResource{client: c}
 	c.Team = &TeamResource{client: c}
+	c.Egress = &EgressResource{client: c}
 	return c
 }
 

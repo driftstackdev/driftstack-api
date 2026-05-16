@@ -39,6 +39,7 @@ const REQUIRED_RESOURCES = [
   ['emailPreferences', 'EmailPreferencesResource', 'EmailPreferences'],
   ['legal', 'LegalResource', 'Legal'],
   ['team', 'TeamResource', 'Team'],
+  ['egress', 'EgressResource', 'Egress'],
 ] as const;
 
 describe('W819 cross-SDK client constructor parity', () => {
@@ -75,7 +76,7 @@ describe('W819 cross-SDK client constructor parity', () => {
 
   // ─── 15-required-resource-accessor set ────────────────────────
 
-  it('CRITICAL all 15 required resource accessors exist on each SDK client. Drift to dropping any would orphan a documented customer surface (sessions / apiKeys / usage / webhooks / profiles / profileSnapshots / billing / cryptoOrders / auth / account / mfa / auditLog / emailPreferences / legal / team).', () => {
+  it('CRITICAL all 16 required resource accessors exist on each SDK client. Drift to dropping any would orphan a documented customer surface (sessions / apiKeys / usage / webhooks / profiles / profileSnapshots / billing / cryptoOrders / auth / account / mfa / auditLog / emailPreferences / legal / team / egress). Wave 1119 added EGRESS Phase 1 (planning 133); commits 041ef7a9 (TS) + 939548b2 (Py) + this slice (Go) lifted all 3 SDKs together.', () => {
     const ts = read(TS);
     const py = read(PY);
     const go = read(GO);
@@ -92,12 +93,15 @@ describe('W819 cross-SDK client constructor parity', () => {
       // Python imports the AsyncXxxResource + XxxResource pair.
       // Skip apiKeys (Python uses snake_case: api_keys) — handled separately below.
     }
-    // Python's 15-resource sync + async dual import set.
+    // Python's 16-resource sync + async dual import set.
     expect(py).toMatch(
       /from driftstack\.resources\.sessions import AsyncSessionsResource, SessionsResource/,
     );
     expect(py).toMatch(
       /from driftstack\.resources\.billing import AsyncBillingResource, BillingResource/,
+    );
+    expect(py).toMatch(
+      /from driftstack\.resources\.egress import AsyncEgressResource, EgressResource/,
     );
   });
 
