@@ -240,7 +240,8 @@ export interface TestAppOptions {
    */
   oauthClient?: {
     signingSecret: string;
-    callbackUrl: string;
+    callbackUrlBase: string;
+    dashboardOrigin: string;
     google?: { clientId: string; clientSecret: string };
     github?: { clientId: string; clientSecret: string };
   };

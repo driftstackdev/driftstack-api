@@ -1,15 +1,30 @@
 // V-667.C — OAuth-client (sign-in-with-Google/GitHub) routes.
 //
-//   POST /v1/auth/oauth-client/start          — issue authorize URL
-//   GET  /v1/auth/oauth-client/callback       — IDP redirect lands here
-//   POST /v1/auth/oauth-client/confirm-merge  — Verdict 1 collision-
-//                                                flow completion
+//   POST /v1/auth/oauth-client/start           — issue authorize URL
+//   GET  /v1/auth/oauth/:provider/callback     — IDP redirects here;
+//                                                 302 to SPA callback
+//   GET  /v1/auth/oauth-client/callback        — SPA-side exchange
+//                                                 (existing flow)
+//   POST /v1/auth/oauth-client/confirm-merge   — Verdict 1 collision-
+//                                                 flow completion
+//
+// Path A (2026-05-16): the IDP redirect target moved from the SPA
+// origin (`${dashboardOrigin}/auth/oauth-client/callback`) to the API
+// per-provider path (`${callbackUrlBase}/${provider}/callback`) so the
+// `redirect_uri` Google + GitHub Consoles registered actually matches
+// what the IDP sees. The per-provider API route only does a 302 to
+// the SPA, preserving the IDP's query string — so the existing SPA
+// fetch flow against /v1/auth/oauth-client/callback is unchanged
+// (PKCE cookie path scope still aligns).
 //
 // PKCE verifier storage: HTTP-only secure cookie keyed on the state
 // nonce. The cookie is HMAC-signed via the same OAUTH_CLIENT_STATE_
 // SIGNING_SECRET used to sign the state JWT; tampering is detected.
 // Cookie path is restricted to /v1/auth/oauth-client and 5-min Max-
-// Age matches the state TTL.
+// Age matches the state TTL. The IDP-direct redirect path (/v1/auth
+// /oauth/:provider/callback) doesn't need the cookie — it just 302s
+// to the SPA which then fetches /v1/auth/oauth-client/callback where
+// the cookie IS in scope.
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -39,13 +54,30 @@ export interface RegisterOAuthClientRoutesDeps {
   /** Per-provider client_id + client_secret. When a provider's creds
    *  are missing, /start with that provider returns 400. */
   providers: Partial<Record<OAuthClientProvider, { clientId: string; clientSecret: string }>>;
-  /** Public-facing callback URL — same across all providers. */
-  callbackUrl: string;
+  /** Base origin+prefix for per-provider callback URL derivation.
+   *  Full URL: `${callbackUrlBase}/${provider}/callback`. Must match
+   *  the IDP-Console-registered redirect URI per provider. Should NOT
+   *  end with a trailing slash; schema-level transform strips it. */
+  callbackUrlBase: string;
+  /** Dashboard origin for the post-IDP 302 redirect from
+   *  /v1/auth/oauth/:provider/callback to the SPA exchange page. */
+  dashboardOrigin: string;
   /** HMAC-SHA256 key for state JWT + cookie signing (≥32 chars). */
   signingSecret: string;
   logger: Logger;
   /** Test seam — defaults to Date.now() / randomBytes. */
   nowMs?: () => number;
+}
+
+/**
+ * Derive the IDP-facing callback URL for a given provider. Both
+ * `buildAuthorizeUrl` (sent to IDP at authorize time) and
+ * `exchangeCodeForTokens` (sent to IDP at token-exchange time) MUST
+ * pass the same value — IDPs reject the token exchange if the
+ * `redirect_uri` differs from what they saw at authorize.
+ */
+function callbackUrlFor(provider: OAuthClientProvider, base: string): string {
+  return `${base}/${provider}/callback`;
 }
 
 export function registerOAuthClientRoutes(
@@ -76,7 +108,7 @@ export function registerOAuthClientRoutes(
     const authorizeUrl = buildAuthorizeUrl({
       provider,
       clientId: creds.clientId,
-      callbackUrl: deps.callbackUrl,
+      callbackUrl: callbackUrlFor(provider, deps.callbackUrlBase),
       state,
       codeChallenge: challenge,
     });
@@ -126,12 +158,13 @@ export function registerOAuthClientRoutes(
         throw new BadRequestError(`Provider "${provider}" is not configured.`);
       }
 
-      // Exchange the code for tokens.
+      // Exchange the code for tokens. callbackUrl MUST equal the
+      // per-provider URL we sent to authorize — IDPs reject mismatches.
       const tokens = await exchangeCodeForTokens({
         provider,
         clientId: creds.clientId,
         clientSecret: creds.clientSecret,
-        callbackUrl: deps.callbackUrl,
+        callbackUrl: callbackUrlFor(provider, deps.callbackUrlBase),
         code,
         codeVerifier: verifier,
       });
@@ -186,6 +219,36 @@ export function registerOAuthClientRoutes(
       });
     },
   );
+
+  // ── GET /v1/auth/oauth/:provider/callback ─────────────────────
+  // Path A (2026-05-16): the IDP redirects the browser here with
+  // ?code=...&state=... after the consent screen. This route does
+  // NOT do the token exchange — it just 302s to the SPA callback
+  // page preserving the query string. The SPA then fetches the
+  // existing /v1/auth/oauth-client/callback endpoint (where the
+  // PKCE cookie is in scope) to do the real exchange.
+  //
+  // Why the bounce: the IDP-Console-registered redirect_uri must
+  // match what the SPA + API see at exchange time. Registering the
+  // API URL keeps that contract clean (API owns its routes); the
+  // 302-then-SPA-fetch shape lets the existing PKCE cookie scope
+  // (`Path=/v1/auth/oauth-client`) stay valid without widening it.
+  for (const provider of ['google', 'github'] as const) {
+    app.get<{ Querystring: Record<string, string> }>(
+      `/v1/auth/oauth/${provider}/callback`,
+      async (req, reply) => {
+        // Forward the IDP's entire query string verbatim. Includes
+        // code+state on success or error+error_description on consent
+        // denial — the SPA exchange route handles both.
+        const qs = new URLSearchParams();
+        for (const [k, v] of Object.entries(req.query)) {
+          if (typeof v === 'string') qs.append(k, v);
+        }
+        const target = `${deps.dashboardOrigin}/auth/oauth-client/callback?${qs.toString()}`;
+        return reply.redirect(target, 302);
+      },
+    );
+  }
 
   // ── POST /v1/auth/oauth-client/confirm-merge ──────────────────
   app.post('/v1/auth/oauth-client/confirm-merge', async (req, reply) => {

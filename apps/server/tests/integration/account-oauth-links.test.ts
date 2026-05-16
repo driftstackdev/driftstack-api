@@ -16,7 +16,8 @@ afterEach(async () => {
 
 const OAUTH = {
   signingSecret: 'b'.repeat(32),
-  callbackUrl: 'https://app.driftstack.test/auth/oauth-client/callback',
+  callbackUrlBase: 'https://api.driftstack.test/v1/auth/oauth',
+  dashboardOrigin: 'https://app.driftstack.test',
   google: { clientId: 'g-id', clientSecret: 'g-secret' },
 };
 

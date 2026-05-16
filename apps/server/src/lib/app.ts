@@ -313,16 +313,23 @@ export interface AppDeps {
     wsUrl: string;
   };
   /**
-   * V-667.C — OAuth-CLIENT routes (/v1/auth/oauth-client/*). When the
-   * service is provided AND the config has at least one fully-
-   * configured provider + signingSecret + callbackUrl, the 3 routes
-   * register. Otherwise stays unregistered (same posture as livekit /
-   * nowpayments).
+   * V-667.C — OAuth-CLIENT routes (/v1/auth/oauth-client/* + per-
+   * provider /v1/auth/oauth/{provider}/callback). When the service is
+   * provided AND the config has at least one fully-configured
+   * provider + signingSecret + callbackUrlBase, the routes register.
+   *
+   * `dashboardOrigin` is consumed by the per-provider IDP-redirect
+   * landing routes to 302 the browser back to the SPA callback page
+   * (`${dashboardOrigin}/auth/oauth-client/callback`).
    */
   oauthClientService?: OAuthClientService;
   oauthClient?: {
     signingSecret: string;
-    callbackUrl: string;
+    /** Base origin+prefix for per-provider callback URL derivation.
+     *  Full URL passed to the IDP: `${callbackUrlBase}/${provider}/callback`. */
+    callbackUrlBase: string;
+    /** Dashboard origin for the post-IDP 302 redirect target. */
+    dashboardOrigin: string;
     google?: { clientId: string; clientSecret: string };
     github?: { clientId: string; clientSecret: string };
   };
@@ -602,7 +609,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
   }
   // V-667.C — OAuth-client routes. Gated on all 4: service wired +
-  // signingSecret + callbackUrl + at least one provider configured.
+  // signingSecret + callbackUrlBase + at least one provider configured.
   if (
     deps.oauthClientService !== undefined &&
     deps.oauthClient !== undefined &&
@@ -614,7 +621,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerOAuthClientRoutes(app, {
       service: deps.oauthClientService,
       providers: providers,
-      callbackUrl: deps.oauthClient.callbackUrl,
+      callbackUrlBase: deps.oauthClient.callbackUrlBase,
+      dashboardOrigin: deps.oauthClient.dashboardOrigin,
       signingSecret: deps.oauthClient.signingSecret,
       logger: deps.logger,
     });

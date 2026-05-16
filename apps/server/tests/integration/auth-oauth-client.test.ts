@@ -28,10 +28,15 @@ const headers = { 'content-type': 'application/json' };
 
 const OAUTH = {
   signingSecret: 'a'.repeat(32),
-  callbackUrl: 'https://app.driftstack.test/auth/oauth-client/callback',
+  callbackUrlBase: 'https://api.driftstack.test/v1/auth/oauth',
+  dashboardOrigin: 'https://app.driftstack.test',
   google: { clientId: 'google-test-id', clientSecret: 'google-test-secret' },
   github: { clientId: 'github-test-id', clientSecret: 'github-test-secret' },
 };
+
+// Per-provider URL derivation — must equal what auth-oauth-client.ts
+// computes for the IDP redirect_uri parameter.
+const callbackFor = (p: 'google' | 'github') => `${OAUTH.callbackUrlBase}/${p}/callback`;
 
 describe('POST /v1/auth/oauth-client/start (V-667.C)', () => {
   it('returns 200 + authorize_url with all PKCE + state params when google is configured', async () => {
@@ -47,7 +52,7 @@ describe('POST /v1/auth/oauth-client/start (V-667.C)', () => {
     const url = new URL(body.authorize_url);
     expect(url.hostname).toBe('accounts.google.com');
     expect(url.searchParams.get('client_id')).toBe('google-test-id');
-    expect(url.searchParams.get('redirect_uri')).toBe(OAUTH.callbackUrl);
+    expect(url.searchParams.get('redirect_uri')).toBe(callbackFor('google'));
     expect(url.searchParams.get('response_type')).toBe('code');
     expect(url.searchParams.get('code_challenge_method')).toBe('S256');
     expect(url.searchParams.get('code_challenge')?.length ?? 0).toBeGreaterThan(20);
@@ -98,7 +103,8 @@ describe('POST /v1/auth/oauth-client/start (V-667.C)', () => {
     fx = await buildTestApp({
       oauthClient: {
         signingSecret: OAUTH.signingSecret,
-        callbackUrl: OAUTH.callbackUrl,
+        callbackUrlBase: OAUTH.callbackUrlBase,
+        dashboardOrigin: OAUTH.dashboardOrigin,
         github: OAUTH.github,
       },
     });
@@ -149,5 +155,62 @@ describe('POST /v1/auth/oauth-client/confirm-merge (V-667.C)', () => {
     expect(res.statusCode).toBe(400);
     const body = res.json<{ detail?: string }>();
     expect(String(body.detail ?? '')).toMatch(/invalid, expired, or already used/);
+  });
+});
+
+describe('GET /v1/auth/oauth/:provider/callback — Path A IDP-direct redirect', () => {
+  // Path A (2026-05-16): IDP redirects browser to the API per-provider
+  // path; API 302s to the SPA exchange page preserving the query
+  // string. This proves the bounce works for both providers and
+  // forwards arbitrary query keys (code, state, error, scope, etc.).
+
+  it('google: 302 to dashboard SPA callback preserving code + state', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/auth/oauth/google/callback?code=abc123&state=xyz789',
+    });
+    expect(res.statusCode).toBe(302);
+    const loc = res.headers.location;
+    expect(typeof loc).toBe('string');
+    const url = new URL(String(loc));
+    expect(url.origin).toBe(OAUTH.dashboardOrigin);
+    expect(url.pathname).toBe('/auth/oauth-client/callback');
+    expect(url.searchParams.get('code')).toBe('abc123');
+    expect(url.searchParams.get('state')).toBe('xyz789');
+  });
+
+  it('github: 302 to dashboard SPA callback preserving forwarded query string', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/auth/oauth/github/callback?code=g0d&state=s7t&scope=read%3Auser',
+    });
+    expect(res.statusCode).toBe(302);
+    const url = new URL(String(res.headers.location));
+    expect(url.searchParams.get('code')).toBe('g0d');
+    expect(url.searchParams.get('state')).toBe('s7t');
+    expect(url.searchParams.get('scope')).toBe('read:user');
+  });
+
+  it('forwards an error-denial query param verbatim (?error=access_denied)', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/auth/oauth/google/callback?error=access_denied&error_description=User+denied',
+    });
+    expect(res.statusCode).toBe(302);
+    const url = new URL(String(res.headers.location));
+    expect(url.searchParams.get('error')).toBe('access_denied');
+    expect(url.searchParams.get('error_description')).toBe('User denied');
+  });
+
+  it('returns 404 for an unsupported provider segment (only google + github registered)', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/auth/oauth/facebook/callback?code=x&state=y',
+    });
+    expect(res.statusCode).toBe(404);
   });
 });

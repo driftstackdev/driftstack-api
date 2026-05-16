@@ -705,7 +705,7 @@ export async function createProductionDeps(
     // doesn't set a password).
     ...(config.oauthClient !== undefined &&
     config.oauthClient.signingSecret !== undefined &&
-    config.oauthClient.callbackUrl !== undefined &&
+    config.oauthClient.callbackUrlBase !== undefined &&
     (config.oauthClient.google !== undefined || config.oauthClient.github !== undefined)
       ? (() => {
           // V-667.C-followup — extract the links repo so it's also
@@ -717,7 +717,8 @@ export async function createProductionDeps(
             oauthLinksRepo,
             oauthClient: {
               signingSecret: config.oauthClient.signingSecret,
-              callbackUrl: config.oauthClient.callbackUrl,
+              callbackUrlBase: config.oauthClient.callbackUrlBase,
+              dashboardOrigin: config.dashboardOrigin,
               ...(config.oauthClient.google !== undefined
                 ? { google: config.oauthClient.google }
                 : {}),
@@ -959,7 +960,7 @@ export async function createProductionDeps(
   const oauthClientActive =
     config.oauthClient !== undefined &&
     config.oauthClient.signingSecret !== undefined &&
-    config.oauthClient.callbackUrl !== undefined &&
+    config.oauthClient.callbackUrlBase !== undefined &&
     (config.oauthClient.google !== undefined || config.oauthClient.github !== undefined);
   logger.info(
     {

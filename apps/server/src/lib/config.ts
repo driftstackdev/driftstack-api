@@ -200,7 +200,20 @@ const ConfigSchema = z.object({
   oauthClient: z
     .object({
       signingSecret: z.string().min(32).optional(),
-      callbackUrl: z.string().url().optional(),
+      /**
+       * Base origin+prefix the per-provider callback URL is derived
+       * from. The full URL passed to the IDP at authorize time is
+       * `${callbackUrlBase}/${provider}/callback`. Must match the
+       * redirect URL registered in each provider's developer console.
+       *
+       * Production: `https://api.driftstack.dev/v1/auth/oauth`.
+       * Trailing slash is normalised away at parse time.
+       */
+      callbackUrlBase: z
+        .string()
+        .url()
+        .optional()
+        .transform((v) => (typeof v === 'string' ? v.replace(/\/+$/, '') : v)),
       google: z
         .object({
           clientId: z.string().min(1),
@@ -432,9 +445,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         : undefined,
     // V-667.C — OAuth-CLIENT (sign-in-with-Google/GitHub). All
     // fields optional; route-registration at app.ts checks at least
-    // one fully-configured provider + signingSecret + callbackUrl.
+    // one fully-configured provider + signingSecret + callbackUrlBase.
+    //
+    // ENV migration (2026-05-16): callback URL switched from a single
+    // SPA URL (`OAUTH_CLIENT_CALLBACK_URL`) to a per-provider URL
+    // derived from a base (`OAUTH_CLIENT_CALLBACK_URL_BASE`). The new
+    // value MUST match the provider-console redirect registration:
+    //   https://api.driftstack.dev/v1/auth/oauth
+    // The old env name still parses for one release cycle so an
+    // operator who SSH-updates env vars after the code deploy doesn't
+    // immediately disable OAuth — see boot-time deprecation warning.
     oauthClient:
       env.OAUTH_CLIENT_SIGNING_SECRET ||
+      env.OAUTH_CLIENT_CALLBACK_URL_BASE ||
       env.OAUTH_CLIENT_CALLBACK_URL ||
       env.GOOGLE_OAUTH_CLIENT_ID ||
       env.GITHUB_OAUTH_CLIENT_ID
@@ -442,9 +465,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
             ...(env.OAUTH_CLIENT_SIGNING_SECRET
               ? { signingSecret: env.OAUTH_CLIENT_SIGNING_SECRET }
               : {}),
-            ...(env.OAUTH_CLIENT_CALLBACK_URL
-              ? { callbackUrl: env.OAUTH_CLIENT_CALLBACK_URL }
-              : {}),
+            ...(env.OAUTH_CLIENT_CALLBACK_URL_BASE
+              ? { callbackUrlBase: env.OAUTH_CLIENT_CALLBACK_URL_BASE }
+              : env.OAUTH_CLIENT_CALLBACK_URL
+                ? { callbackUrlBase: env.OAUTH_CLIENT_CALLBACK_URL }
+                : {}),
             ...(env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET
               ? {
                   google: {

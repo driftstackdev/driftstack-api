@@ -42,16 +42,30 @@ this runbook, the repo, or any chat transcript.
 
 ```
 OAUTH_CLIENT_SIGNING_SECRET=<32+ char random base64url>
-OAUTH_CLIENT_CALLBACK_URL=https://app.driftstack.dev/auth/oauth-client/callback
+OAUTH_CLIENT_CALLBACK_URL_BASE=https://api.driftstack.dev/v1/auth/oauth
 GOOGLE_OAUTH_CLIENT_ID=<from Google Cloud Console>
 GOOGLE_OAUTH_CLIENT_SECRET=<from Google Cloud Console>
 GITHUB_OAUTH_CLIENT_ID=<from GitHub OAuth Apps>
 GITHUB_OAUTH_CLIENT_SECRET=<from GitHub OAuth Apps>
 ```
 
+**Path A note (2026-05-16):** `OAUTH_CLIENT_CALLBACK_URL_BASE` replaces
+the previous `OAUTH_CLIENT_CALLBACK_URL` (which pointed at the SPA).
+The per-provider URL is now derived as
+`${OAUTH_CLIENT_CALLBACK_URL_BASE}/${provider}/callback`, which MUST
+match each provider's Console-registered redirect URI:
+
+- Google Cloud Console: `https://api.driftstack.dev/v1/auth/oauth/google/callback`
+- GitHub OAuth App: `https://api.driftstack.dev/v1/auth/oauth/github/callback`
+
+For one release cycle the old `OAUTH_CLIENT_CALLBACK_URL` env name
+still parses (treated as the base) so an operator who updates the
+env after the code deploy doesn't immediately disable OAuth. Drop
+the old name once both servers are on the new value.
+
 Both providers can be activated independently — the route gate at
 `lib/app.ts` registers when ≥1 provider has both clientId +
-clientSecret AND the signing secret + callback URL are set.
+clientSecret AND the signing secret + callback URL base are set.
 
 Restart the api service:
 
