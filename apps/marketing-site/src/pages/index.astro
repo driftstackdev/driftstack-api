@@ -443,24 +443,25 @@ const result = await session.result();
             Customer data stays in the EU.
           </h2>
           <p class="mt-6 max-w-prose text-base text-ink-secondary leading-relaxed">
-            Database, object storage, and compute all run in the EU on
-            Hetzner Falkenstein, Neon EU, and Cloudflare R2. We log
-            session metadata only — when a session ran, how long, which
-            device archetype. The pages your session visits are never
-            stored or read by the control plane. Outbound traffic can
-            route through proxy regions you choose;
-            full sub-processor list at
+            Database, object storage, and compute all run in the EU,
+            single-region. We log session metadata only — when a
+            session ran, how long, which device archetype. The pages
+            your session visits are never stored or read by the
+            control plane. Outbound traffic can route through proxy
+            regions you choose; per-vendor sub-processor breakdown
+            at
             <a href="/trust/sub-processors" class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
               >/trust/sub-processors</a
             >.
           </p>
           <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
             Customer-configurable egress (SOCKS5 / WireGuard / OpenVPN)
-            is on the roadmap — see
+            — see
             <a href="/trust/security-overview" class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
               >/trust/security-overview</a
             >
-            for what's live today.
+            for the current implementation state and the security
+            posture across each proxy type.
           </p>
         </div>
         <div class="md:col-span-2">
@@ -653,7 +654,7 @@ const result = await session.result();
             Direct engineer access
           </h3>
           <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
-            Pre-launch customers get a Slack channel shared with the engineer
+            Design-partner customers get a Slack channel shared with the engineer
             who writes the code. Bug → fix → deploy in the same week, not the
             same quarter. No tier-1 support gauntlet.
           </p>

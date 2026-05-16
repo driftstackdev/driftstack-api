@@ -81,13 +81,17 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/Visit\s*\n?\s*200 pages on one session for the cost of visiting one\./);
   });
 
-  it('R12 EU compliance framing pinned: "Customer data stays in the EU." headline + named "Hetzner Falkenstein, Neon EU, and Cloudflare R2" stack + "We log session metadata only" commitment + customer-configurable egress roadmap — replaces the prior "EU-resident infrastructure." + "All customer data … sits in the EU" copy', () => {
+  it('F-5 (Issue 5 + 6) EU compliance framing: "Customer data stays in the EU." headline + single-region framing (vendor names moved to /trust/sub-processors per Issue 6) + "We log session metadata only" commitment + customer-configurable egress card no longer claims "on the roadmap" (Issue 5; the security.astro card retains its honest "not shipped today" disclaimer where the W499.D parity test gates on actual server source).', () => {
     expect(body).toMatch(/Customer data stays in the EU\./);
-    expect(body).toMatch(/Hetzner\s*\n?\s*Falkenstein, Neon EU, and Cloudflare R2/);
-    expect(body).toMatch(/We log\s*\n?\s*session metadata only/);
     expect(body).toMatch(
-      /Customer-configurable egress \(SOCKS5 \/ WireGuard \/ OpenVPN\)\s*\n?\s*is on the roadmap/,
+      /Database, object storage, and compute all run in the EU,\s*\n?\s*single-region\./,
     );
+    expect(body).toMatch(/We log session metadata only/);
+    expect(body).toMatch(
+      /Customer-configurable egress \(SOCKS5 \/ WireGuard \/ OpenVPN\)\s*\n?\s*— see/,
+    );
+    expect(body).not.toMatch(/Hetzner\s*\n?\s*Falkenstein, Neon EU, and Cloudflare R2/);
+    expect(body).not.toMatch(/is on the roadmap/);
   });
 
   it('Manual ladder framing: $79/$249/$699 + 1/3/8 concurrent + unlimited hours within cap', () => {

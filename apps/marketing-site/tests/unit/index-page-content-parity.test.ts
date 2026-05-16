@@ -76,18 +76,22 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).toMatch(/Visit\s+200 pages on one session for the cost of visiting one\./);
   });
 
-  it('R12 EU-resident compliance section: "Customer data stays in the EU." headline + Hetzner Falkenstein / Neon EU / Cloudflare R2 named stack + session-metadata-only commitment + sub-processors cross-link', () => {
+  it('F-5 (Issue 5 + 6) EU-resident compliance section: "Customer data stays in the EU." headline + single-region framing (vendor names moved to /trust/sub-processors per Issue 6) + session-metadata-only commitment + sub-processors cross-link', () => {
     expect(body).toMatch(/Customer data stays in the EU\./);
-    expect(body).toMatch(/Hetzner\s+Falkenstein, Neon EU, and Cloudflare R2/);
-    expect(body).toMatch(/We log\s+session metadata only/);
+    expect(body).toMatch(
+      /Database, object storage, and compute all run in the EU,\s+single-region\./,
+    );
+    expect(body).toMatch(/We log session metadata only/);
     expect(body).toMatch(/href="\/trust\/sub-processors"/);
+    expect(body).not.toMatch(/Hetzner\s+Falkenstein, Neon EU, and Cloudflare R2/);
   });
 
-  it('egress roadmap claim aligned with /security (SOCKS5 / WireGuard / OpenVPN, not shipped)', () => {
-    expect(body).toMatch(
+  it('egress card body no longer claims "on the roadmap" prose (F-5 Issue 5); the small "# Roadmap — customer-configurable egress" inline comment in the EU-residency code-preview is the canonical honest disclosure, gated by W499.D against the server source state', () => {
+    expect(body).toMatch(/Customer-configurable egress \(SOCKS5 \/ WireGuard \/ OpenVPN\)\s+— see/);
+    expect(body).toMatch(/SOCKS5 \/ WireGuard \/ OpenVPN \(not shipped\)/);
+    expect(body).not.toMatch(
       /Customer-configurable egress \(SOCKS5 \/ WireGuard \/ OpenVPN\)\s+is on the roadmap/,
     );
-    expect(body).toMatch(/SOCKS5 \/ WireGuard \/ OpenVPN \(not shipped\)/);
   });
 
   it('two-ladder pricing teaser pinned: Manual $79/$249/$699 + API $149/$499/$1,499', () => {
