@@ -110,5 +110,57 @@ host-side health-poll already passed before public verify runs).
   ref deep-dive content — multi-wave, will be picked when
   bounded sub-slice surfaces.
 
+## Wave 1064-1067 update — deploy-bridge hardening + perf + dashboard wire
+
+| SHA       | Wave | Track         | Title                                                            |
+| --------- | ---- | ------------- | ---------------------------------------------------------------- |
+| `5cec805` | 1064 | revert-bridge | feat: --dry-run mode + current-vs-last-good SHA comparison       |
+| `8b66a8d` | 1064 | deploy-bridge | feat: previous-SHA in summary line + .deploy-history.log         |
+| `4451d49` | 1064 | docs          | runbook: deploy-bridge + revert-bridge operator runbook          |
+| `7ba6fc7` | 1065 | Dashboard     | feat: V-667.C-followup Connected accounts section on /settings   |
+| `097cc98` | 1065 | Server-perf   | perf: cache-control 30s on /v1/status/incidents/:id (V-545.A)    |
+| `b0d0663` | 1066 | revert-bridge | feat: show last 5 deploy-history entries in --dry-run + execute  |
+| `d235988` | 1066 | Server-perf   | perf: cache-control 30s on /v1/status/incidents list (V-295a)    |
+| `8812cc7` | 1067 | tests         | test: assert cache-control 30s header on list + detail responses |
+
+### Wave 1064-1067 production state
+
+- Prod: `d235988` — V-549.B auto-revert + .deploy-history.log writing,
+  Cache-Control headers live on both /v1/status/incidents list + detail.
+  Empirical: `curl -I https://api.driftstack.dev/v1/status/incidents`
+  returns `cache-control: public, max-age=30`.
+- Staging: `097cc98` (V-545.A detail caching landed but list still
+  pre-d235988 — will roll forward in Wave 1068).
+- `.last-good-sha` on prod: `d235988`. `.deploy-history.log` shows
+  3 successful deploys this autopilot block.
+
+### Wave 1064-1067 verified deploys
+
+| Time (UTC)        | Env     | SHA     | Prev SHA | Elapsed | Verify |
+| ----------------- | ------- | ------- | -------- | ------- | ------ |
+| 2026-05-15 23:28Z | prod    | 8b66a8d | 98f2edeb | 30s     | 8/8 OK |
+| 2026-05-15 23:28Z | staging | 8b66a8d | (fresh)  | 31s     | 8/8 OK |
+| 2026-05-15 23:50Z | prod    | 097cc98 | 8b66a8d7 | 30s     | 8/8 OK |
+| 2026-05-15 23:50Z | staging | 097cc98 | (fresh)  | 30s     | 8/8 OK |
+| 2026-05-16 00:20Z | prod    | d235988 | 097cc987 | 30s     | 8/8 OK |
+
+(Source: `/opt/driftstack/api/.deploy-history.log` on prod.)
+
+### Tier-2 backlog status (unchanged)
+
+- V-541 cost monitoring instrumentation — multi-wave, deferred.
+- V-552 API ref deep-dive content — content work, deferred.
+- V-543 customer-success email templates — multi-wave parity churn,
+  deferred (existing templates cover 90% of the V-663 catalogue).
+- V-500 / V-501 / V-503 — large feature slices, deferred.
+
+### Bounded ops + perf + tests landed instead
+
+The cadence shifted to small high-density slices around the
+deploy-bridge + V-545.A + V-667.C-followup surfaces, since those
+have direct customer-visible value once OAUTH-activation completed
+(which happened in Wave 1062). Multi-track HARD ≥3 tracks per wave
+still satisfied via deploy + tests + docs + perf rotation.
+
 Batch report cadence: updated every 2 hours per directive. Next
-refresh at ~01:30 UTC.
+refresh at ~03:30 UTC.
