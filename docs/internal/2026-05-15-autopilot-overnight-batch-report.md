@@ -164,3 +164,67 @@ still satisfied via deploy + tests + docs + perf rotation.
 
 Batch report cadence: updated every 2 hours per directive. Next
 refresh at ~03:30 UTC.
+
+## Wave 1068-1072 update — tooling + V-545.A complete
+
+| SHA       | Wave | Track             | Title                                                                           |
+| --------- | ---- | ----------------- | ------------------------------------------------------------------------------- |
+| `b3ba08b` | 1068 | ops               | feat: deploy-status.sh read-only snapshot tool                                  |
+| `66b53b5` | 1068 | docs              | runbook: TL;DR section pointing at deploy-status/bridge/revert-bridge           |
+| `3375b1c` | 1069 | ops               | feat: deploy-status uptime computation                                          |
+| `7dc5a8b` | 1069 | tests             | test: account-oauth-links — multi-provider + Verdict-2 last_revoked_at          |
+| `a29c5cd` | 1069 | deploy-hardening  | feat: 9th invariant in post-deploy-verify (V-667.C-followup route)              |
+| `fed61d9` | 1070 | revert-bridge     | feat: --dry-run exits 2 when revert is needed, 0 when no-op                     |
+| `bbfedc9` | 1070 | ops               | feat: deploy-status --json mode for tooling consumers                           |
+| `4e2c199` | 1071 | feature (V-545.A) | feat(status): V-545.A wire recent_incidents in /v1/status (up to 5 public, 30d) |
+| `90d6371` | 1072 | openapi+verify    | feat: tighten recent_incidents shape after V-545.A wire                         |
+
+### V-545.A scope CLOSED end-to-end
+
+After 1071-1072, V-545.A surface is complete:
+
+- Server: GET /v1/status/incidents (list, 30d window) + /:id (detail
+  with timeline) + /v1/status.recent_incidents (top-5 summaries).
+- Caching: 30s Cache-Control on all three.
+- OpenAPI: full schema for incident summary + detail.
+- Status-site: home index + per-incident detail page + index→detail
+  card linking.
+- Verifier: route registration confirmed across the 9 invariants.
+
+### Production state (Wave 1072)
+
+- Prod: `90d6371` (in flight at time of report; verifier will record
+  on .last-good-sha once 9/9 passes).
+- Staging: `8b0b8cd` (rolled forward post-deploy on Wave 1068, see
+  .deploy-history.log).
+- .last-good-sha tracking confirmed working: prod's history shows
+  `8b66a8d7 → 097cc987 → d235988d → 4e2c1996` chain with each row
+  recording elapsed + prev SHA.
+
+### Tools shipped in the deploy-bridge surface
+
+| Script                                 | Purpose                                                |
+| -------------------------------------- | ------------------------------------------------------ |
+| scripts/deploy-bridge.sh               | Clone+build+swap+restart+verify+auto-revert            |
+| scripts/revert-bridge.sh               | Revert to .last-good-sha (--dry-run / exit-code aware) |
+| scripts/post-deploy-verify.mjs         | 9 invariants vs public origin                          |
+| scripts/deploy-status.sh               | Read-only snapshot (--json mode for tooling)           |
+| scripts/v278k-neon-split-cutover.sh    | V-278.K Neon split runbook                             |
+| scripts/v278l-upstash-split-cutover.sh | V-278.L Upstash split runbook                          |
+| scripts/smoke-oauth-client.mjs         | V-667.C OAuth /start smoke                             |
+| scripts/chaos/run-all.sh               | 5 chaos scenarios (01/02/03/04/06)                     |
+
+### Test count
+
+1206 unit test files. Integration suite + parity gates intact. No
+regressions across Wave 1062-1072.
+
+### Open follow-ups
+
+- V-541 cost monitoring instrumentation (multi-wave; deferred).
+- V-552 API ref deep-dive (content; deferred).
+- V-547 Scenarios 5/7/8 (need infra mocking; deferred to
+  docker-compose-bound rehearsal pass).
+- Operator action: Track F-Neon + Track F-Upstash split execution
+  via the dry-run scripts (still operator-gated by Neon + Upstash
+  console auth).
