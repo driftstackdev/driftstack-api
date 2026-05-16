@@ -12,14 +12,21 @@ interface RecordedRequest {
   method: string;
   path: string;
   body?: unknown;
+  headers?: Record<string, string>;
 }
 
 function makeFakeHttp<T>(reply: T): { http: HttpClient; calls: RecordedRequest[] } {
   const calls: RecordedRequest[] = [];
   const http = {
-    request: <R>(opts: { method: string; path: string; body?: unknown }) => {
+    request: <R>(opts: {
+      method: string;
+      path: string;
+      body?: unknown;
+      headers?: Record<string, string>;
+    }) => {
       const recorded: RecordedRequest = { method: opts.method, path: opts.path };
       if (opts.body !== undefined) recorded.body = opts.body;
+      if (opts.headers !== undefined) recorded.headers = opts.headers;
       calls.push(recorded);
       return Promise.resolve(reply as unknown as R);
     },
@@ -100,6 +107,37 @@ describe('AgentSessionsResource', () => {
       },
     ]);
     expect(out.kind).toBe('plan-executed');
+  });
+
+  it('message with opts.byokApiKey sets the x-byok-anthropic-api-key header so callers do not have to construct the header by hand (BYOK convenience layer; matches the server-side header reading at apps/server/src/routes/agent-sessions.ts)', async () => {
+    const reply = {
+      kind: 'clarify' as const,
+      session: {
+        id: 'agt_1',
+        account_id: 'acc_1',
+        driftstack_session_id: null,
+        status: 'active' as const,
+        closed_reason: null,
+        token_budget_total: 100_000,
+        token_budget_remaining: 99_000,
+        transcript_length: 2,
+        created_at: '2026-05-16T00:00:00Z',
+        updated_at: '2026-05-16T00:00:01Z',
+      },
+      clarifying_question: 'be specific',
+    };
+    const { http, calls } = makeFakeHttp(reply);
+    const res = new AgentSessionsResource(http);
+    await res.message('agt_1', 'hi', { byokApiKey: 'sk-ant-test-byok' });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.headers).toEqual({ 'x-byok-anthropic-api-key': 'sk-ant-test-byok' });
+  });
+
+  it('message without opts omits the byok header entirely (does NOT send an empty x-byok-anthropic-api-key — would mask "no key" vs "empty key" at the server)', async () => {
+    const { http, calls } = makeFakeHttp({});
+    const res = new AgentSessionsResource(http);
+    await res.message('agt_1', 'hi');
+    expect(calls[0]?.headers).toBeUndefined();
   });
 
   it('close DELETEs /v1/agent-sessions/{id} (URL-encoded)', async () => {

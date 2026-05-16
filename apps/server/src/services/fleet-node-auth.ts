@@ -26,6 +26,7 @@
 //     above).
 
 import { webcrypto } from 'node:crypto';
+import type { FleetNonceCache } from './fleet-nonce-cache.js';
 
 const subtle = webcrypto.subtle;
 
@@ -66,7 +67,8 @@ export type FleetJwtVerifyError =
   | 'signature_invalid'
   | 'expired'
   | 'too_long_lived'
-  | 'iss_sub_mismatch';
+  | 'iss_sub_mismatch'
+  | 'replayed_nonce';
 
 export type FleetJwtVerifyResult =
   | { ok: true; claims: FleetNodeJwtClaims }
@@ -110,7 +112,23 @@ function tryParseClaims(payloadJson: string): FleetNodeJwtClaims | null {
 }
 
 export class FleetNodeAuthImpl implements FleetNodeAuth {
-  constructor(private readonly repo: FleetNodesRepo) {}
+  /**
+   * Optional nonce cache for replay defence. When provided, verify()
+   * rejects any JWT whose `(iss, nonce)` pair has been seen within
+   * the JWT's lifetime. When omitted, verify() still rejects
+   * malformed / expired / wrong-signature JWTs but a stolen JWT
+   * within its 5-min window CAN be replayed — production deployments
+   * MUST inject the cache.
+   *
+   * Wired separately so unit tests for the signature/expiry paths
+   * stay simple (no nonce-cache fixture needed) and so the Redis
+   * impl can land later without changing the verifier's constructor
+   * signature again.
+   */
+  constructor(
+    private readonly repo: FleetNodesRepo,
+    private readonly nonceCache?: FleetNonceCache,
+  ) {}
 
   async verify(rawJwt: string, now: Date = new Date()): Promise<FleetJwtVerifyResult> {
     const parts = rawJwt.split('.');
@@ -161,6 +179,16 @@ export class FleetNodeAuthImpl implements FleetNodeAuth {
     }
     const sigOk = await subtle.verify('Ed25519', publicKey, sigBytes, signed);
     if (!sigOk) return { ok: false, reason: 'signature_invalid' };
+
+    // Replay defence — happens AFTER signature + expiry so we don't
+    // burn nonce-cache writes on garbage requests. TTL = remaining
+    // JWT lifetime (so even if the cache is asked about a JWT later
+    // than `exp`, the entry has already evicted).
+    if (this.nonceCache !== undefined) {
+      const ttlSeconds = Math.max(1, claims.exp - nowSeconds);
+      const firstSight = await this.nonceCache.checkAndRecord(claims.iss, claims.nonce, ttlSeconds);
+      if (!firstSight) return { ok: false, reason: 'replayed_nonce' };
+    }
 
     return { ok: true, claims };
   }

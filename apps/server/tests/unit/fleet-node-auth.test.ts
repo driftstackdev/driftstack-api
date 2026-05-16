@@ -4,6 +4,7 @@
 import { webcrypto } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FleetNodeAuthImpl, InMemoryFleetNodesRepo } from '../../src/services/fleet-node-auth.js';
+import { InMemoryFleetNonceCache } from '../../src/services/fleet-nonce-cache.js';
 
 const subtle = webcrypto.subtle;
 
@@ -157,5 +158,70 @@ describe('V-820 FleetNodeAuthImpl.verify', () => {
     });
     const res = await auth.verify(jwt, NOW);
     expect(res).toEqual({ ok: false, reason: 'signature_invalid' });
+  });
+
+  it('replay defence: with FleetNonceCache wired, a second JWT carrying the same (iss, nonce) → ok=false reason replayed_nonce; first JWT still passes', async () => {
+    const nonceCache = new InMemoryFleetNonceCache(() => NOW);
+    const replayAuth = new FleetNodeAuthImpl(repo, nonceCache);
+    const jwt = await signJwt(pair.privateKey, {
+      iss: NODE_ID,
+      sub: NODE_ID,
+      iat: NOW_S,
+      exp: NOW_S + 60,
+      nonce: 'replay-target',
+    });
+    const first = await replayAuth.verify(jwt, NOW);
+    expect(first.ok).toBe(true);
+    // Same JWT again → replay rejected.
+    const second = await replayAuth.verify(jwt, NOW);
+    expect(second).toEqual({ ok: false, reason: 'replayed_nonce' });
+  });
+
+  it('replay defence: a DIFFERENT nonce from the same node still accepts (cache scope is per-(iss, nonce), not per-node)', async () => {
+    const nonceCache = new InMemoryFleetNonceCache(() => NOW);
+    const replayAuth = new FleetNodeAuthImpl(repo, nonceCache);
+    const jwtA = await signJwt(pair.privateKey, {
+      iss: NODE_ID,
+      sub: NODE_ID,
+      iat: NOW_S,
+      exp: NOW_S + 60,
+      nonce: 'fresh-1',
+    });
+    const jwtB = await signJwt(pair.privateKey, {
+      iss: NODE_ID,
+      sub: NODE_ID,
+      iat: NOW_S,
+      exp: NOW_S + 60,
+      nonce: 'fresh-2',
+    });
+    expect((await replayAuth.verify(jwtA, NOW)).ok).toBe(true);
+    expect((await replayAuth.verify(jwtB, NOW)).ok).toBe(true);
+  });
+
+  it('replay defence: nonce-cache write happens AFTER signature verification (a JWT that fails signature does not poison the cache; a subsequent valid JWT with the same nonce still passes)', async () => {
+    const nonceCache = new InMemoryFleetNonceCache(() => NOW);
+    const replayAuth = new FleetNodeAuthImpl(repo, nonceCache);
+
+    // First: a JWT signed by the WRONG key → signature_invalid.
+    const otherPair = await makeKeyPair();
+    const wrongSigJwt = await signJwt(otherPair.privateKey, {
+      iss: NODE_ID,
+      sub: NODE_ID,
+      iat: NOW_S,
+      exp: NOW_S + 60,
+      nonce: 'poisoned-test',
+    });
+    expect((await replayAuth.verify(wrongSigJwt, NOW)).ok).toBe(false);
+
+    // Second: the SAME nonce but properly signed → passes (cache was
+    // never written for the failing signature path).
+    const validJwt = await signJwt(pair.privateKey, {
+      iss: NODE_ID,
+      sub: NODE_ID,
+      iat: NOW_S,
+      exp: NOW_S + 60,
+      nonce: 'poisoned-test',
+    });
+    expect((await replayAuth.verify(validJwt, NOW)).ok).toBe(true);
   });
 });

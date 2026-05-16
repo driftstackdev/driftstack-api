@@ -89,14 +89,27 @@ export class AgentSessionsResource {
    * Returns a discriminated union — callers MUST branch on
    * `kind` before reading the variant-specific fields.
    *
+   * `byokApiKey` (optional) is the customer-supplied Anthropic API
+   * key (BYOK Tier-3 LOCKED 2026-05-16). Forwarded via the
+   * `x-byok-anthropic-api-key` request header so callers don't have
+   * to construct it by hand. NEVER logged by the SDK; the key
+   * arrives over TLS to the control plane.
+   *
    * A closed session returns a 409 ConflictError; the chat UI
    * should prompt the customer to start a new agent session.
    */
-  message(id: string, userMessage: string): Promise<AgentMessageResponse> {
+  message(
+    id: string,
+    userMessage: string,
+    opts?: { byokApiKey?: string },
+  ): Promise<AgentMessageResponse> {
     return this.http.request<AgentMessageResponse>({
       method: 'POST',
       path: `/v1/agent-sessions/${encodeURIComponent(id)}/message`,
       body: { user_message: userMessage },
+      ...(opts?.byokApiKey !== undefined
+        ? { headers: { 'x-byok-anthropic-api-key': opts.byokApiKey } }
+        : {}),
     });
   }
 
