@@ -31,6 +31,13 @@ export type {
   ListSavedProxiesResponse,
 } from './resources/egress.js';
 export type {
+  AgentSession,
+  CreateAgentSessionRequest,
+  AgentIntent,
+  AgentIntentResult,
+  AgentMessageResponse,
+} from './resources/agent-sessions.js';
+export type {
   LegalDocumentEntry,
   LegalRequiredEntry,
   AcceptLegalDocumentRequest,

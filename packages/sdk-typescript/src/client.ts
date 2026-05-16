@@ -19,6 +19,7 @@ import { LegalResource } from './resources/legal.js';
 import { MfaResource } from './resources/mfa.js';
 import { TeamResource } from './resources/team.js';
 import { EgressResource } from './resources/egress.js';
+import { AgentSessionsResource } from './resources/agent-sessions.js';
 import type { RetryConfig } from './retry.js';
 
 export interface DriftstackOptions {
@@ -61,6 +62,8 @@ export class Driftstack {
   readonly team: TeamResource;
   /** EG-API-1.2/1.3 — customer-configurable egress (planning 133). */
   readonly egress: EgressResource;
+  /** AI-D — agent chat sessions (decompose → execute → transcript). */
+  readonly agentSessions: AgentSessionsResource;
 
   private readonly http: HttpClient;
 
@@ -94,5 +97,6 @@ export class Driftstack {
     this.legal = new LegalResource(this.http);
     this.team = new TeamResource(this.http);
     this.egress = new EgressResource(this.http);
+    this.agentSessions = new AgentSessionsResource(this.http);
   }
 }
