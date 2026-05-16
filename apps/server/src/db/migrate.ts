@@ -3,8 +3,9 @@
 
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { drizzle } from 'drizzle-orm/postgres-js';
+import { sql } from 'drizzle-orm';
 import postgres from 'postgres';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { loadConfig } from '../lib/config.js';
@@ -29,12 +30,48 @@ async function main(): Promise<void> {
   const here = dirname(fileURLToPath(import.meta.url));
   const migrationsFolder = resolveMigrationsFolder(here);
 
+  // Count journal entries up front — this is the expected post-state
+  // for __drizzle_migrations after migrate() returns. Drift between
+  // these counts is the "silent-skip" class of bug (drizzle-orm's
+  // migrator has historically reported "migrations applied" without
+  // actually inserting all rows in some transaction-rollback states;
+  // see 2026-05-15-deploy-pipeline-mismatch.md). The post-condition
+  // check below makes that failure mode loudly observable.
+  const journalPath = resolve(migrationsFolder, 'meta/_journal.json');
+  const journalRaw = readFileSync(journalPath, 'utf8');
+  const journal = JSON.parse(journalRaw) as { entries: unknown[] };
+  const expectedCount = journal.entries.length;
+
   const client = postgres(config.databaseUrl, { max: 1 });
   const db = drizzle(client);
 
-  console.warn(JSON.stringify({ msg: 'applying migrations', migrationsFolder }));
+  console.warn(JSON.stringify({ msg: 'applying migrations', migrationsFolder, expectedCount }));
   await migrate(db, { migrationsFolder });
-  console.warn(JSON.stringify({ msg: 'migrations applied' }));
+
+  // Post-condition: row count in drizzle.__drizzle_migrations must
+  // match the journal. Exit non-zero on mismatch so deploy-bridge's
+  // auto-revert fires (the new code IS deployed, but the schema is
+  // out of step; reverting to the prior SHA is safer than booting on
+  // a half-applied state).
+  const result = await db.execute<{ count: string }>(
+    sql`SELECT count(*)::text AS count FROM drizzle.__drizzle_migrations`,
+  );
+  const rows = result as unknown as Array<{ count: string }>;
+  const actualCount = Number(rows[0]?.count ?? '0');
+  if (actualCount !== expectedCount) {
+    console.error(
+      JSON.stringify({
+        msg: 'migration post-condition FAIL',
+        expectedCount,
+        actualCount,
+        gap: expectedCount - actualCount,
+        hint: 'drizzle.__drizzle_migrations row count does not match _journal.json entry count. Likely silent-skip from drizzle-orm migrator. Run the pending migrations manually via psql -f and INSERT the corresponding hashes into drizzle.__drizzle_migrations.',
+      }),
+    );
+    await client.end({ timeout: 5 });
+    process.exit(2);
+  }
+  console.warn(JSON.stringify({ msg: 'migrations applied', appliedCount: actualCount }));
 
   await client.end({ timeout: 5 });
 }

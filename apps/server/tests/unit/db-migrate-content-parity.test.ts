@@ -37,11 +37,12 @@ describe('W441.A apps/server/src/db/migrate.ts content parity', () => {
     );
   });
 
-  it('imports: migrate from drizzle-orm/postgres-js/migrator + drizzle + postgres + fs.existsSync + fileURLToPath/dirname/resolve + loadConfig', () => {
+  it('imports: migrate + sql + drizzle + postgres + fs.{existsSync,readFileSync} + fileURLToPath/dirname/resolve + loadConfig', () => {
     expect(body).toMatch(/import \{ migrate \} from 'drizzle-orm\/postgres-js\/migrator';/);
     expect(body).toMatch(/import \{ drizzle \} from 'drizzle-orm\/postgres-js';/);
+    expect(body).toMatch(/import \{ sql \} from 'drizzle-orm';/);
     expect(body).toMatch(/import postgres from 'postgres';/);
-    expect(body).toMatch(/import \{ existsSync \} from 'node:fs';/);
+    expect(body).toMatch(/import \{ existsSync, readFileSync \} from 'node:fs';/);
     expect(body).toMatch(/import \{ fileURLToPath \} from 'node:url';/);
     expect(body).toMatch(/import \{ dirname, resolve \} from 'node:path';/);
     expect(body).toMatch(/import \{ loadConfig \} from '\.\.\/lib\/config\.js';/);
@@ -67,10 +68,15 @@ describe('W441.A apps/server/src/db/migrate.ts content parity', () => {
     expect(body).toMatch(/const db = drizzle\(client\);/);
   });
 
-  it("console.warn JSON before+after migrate; 'applying migrations' with folder + 'migrations applied' completion line", () => {
+  it("console.warn JSON before+after migrate; 'applying migrations' with folder + expectedCount; 'migrations applied' with appliedCount; post-condition assertion exits 2 on silent-skip drift", () => {
     expect(body).toMatch(
-      /console\.warn\(JSON\.stringify\(\{ msg: 'applying migrations', migrationsFolder \}\)\);\s*\n?\s*await migrate\(db, \{ migrationsFolder \}\);\s*\n?\s*console\.warn\(JSON\.stringify\(\{ msg: 'migrations applied' \}\)\);/,
+      /console\.warn\(JSON\.stringify\(\{ msg: 'applying migrations', migrationsFolder, expectedCount \}\)\);\s*\n?\s*await migrate\(db, \{ migrationsFolder \}\);/,
     );
+    expect(body).toMatch(
+      /console\.warn\(JSON\.stringify\(\{ msg: 'migrations applied', appliedCount: actualCount \}\)\);/,
+    );
+    expect(body).toMatch(/if \(actualCount !== expectedCount\) \{\s*\n?\s*console\.error\(/);
+    expect(body).toMatch(/process\.exit\(2\);/);
   });
 
   it('bounded shutdown: await client.end({timeout:5}) (matches createDb close contract)', () => {
