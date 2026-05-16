@@ -284,7 +284,10 @@ const result = await session.result();
         font rendering, GPU details, JavaScript timing — to decide what
         kind of device is visiting. Driftstack matches every signal
         against a reference iPhone, exactly. Not approximate, not "within
-        tolerance".
+        tolerance". The canvas + WebGL hashes you return are the same
+        hashes millions of real iPhones return — so when a fingerprinter
+        groups visitors by hash, your session lands in the iPhone bucket
+        with everyone else.
       </p>
       <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
         Reference device: iPhone 16 Pro, iOS 18.7, Safari 26.4. If any
