@@ -39,7 +39,7 @@ export function registerAccountOauthLinksRoutes(
   app: FastifyInstance,
   opts: AccountOauthLinksRoutesOptions,
 ): void {
-  app.get(
+  app.get<{ Querystring: { active_only?: string } }>(
     '/v1/account/me/oauth-links',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
     async (request) => {
@@ -50,7 +50,14 @@ export function registerAccountOauthLinksRoutes(
       // only IDP signals (Verdict 3) and used internally; not surfaced
       // on this customer-facing endpoint so a future re-link change
       // doesn't leak as a profile update.
-      return { data: rows.map(publicLink) };
+      //
+      // ?active_only=true filters Verdict-2 revoked links so the
+      // dashboard's "Connected accounts" UI doesn't have to filter
+      // client-side. Defaults to false (show all) so audit views see
+      // the full history.
+      const activeOnly = request.query.active_only === 'true';
+      const filtered = activeOnly ? rows.filter((r) => r.lastRevokedAt === null) : rows;
+      return { data: filtered.map(publicLink) };
     },
   );
 }

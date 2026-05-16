@@ -160,6 +160,33 @@ describe('GET /v1/account/me/oauth-links (V-667.C-followup)', () => {
     expect(body.data.map((l) => l.provider).sort()).toEqual(['github', 'google']);
   });
 
+  it('?active_only=true hides Verdict-2 revoked links; default shows them', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const link = await fx.oauthLinksRepo.insertLink({
+      accountId: fx.accountId,
+      provider: 'google',
+      providerSub: 'g-rev',
+      providerEmail: 'tester@driftstack.local',
+      providerName: 'Tester',
+      providerAvatarUrl: null,
+    });
+    await fx.oauthLinksRepo.markRevokedAt(link.id, new Date());
+
+    const both = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/oauth-links',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(both.json<{ data: unknown[] }>().data).toHaveLength(1);
+
+    const activeOnly = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/oauth-links?active_only=true',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(activeOnly.json<{ data: unknown[] }>().data).toHaveLength(0);
+  });
+
   it('surfaces last_revoked_at when the link was marked revoked (Verdict 2 fallback)', async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });
     const link = await fx.oauthLinksRepo.insertLink({
