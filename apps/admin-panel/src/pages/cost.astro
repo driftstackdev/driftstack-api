@@ -90,11 +90,40 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </section>
 
+    <!-- Top accounts by cost -->
+    <section class="mb-6">
+      <div class="flex items-end justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-900">Top accounts by cost</h2>
+          <p class="mt-1 text-sm text-slate-500">
+            Sorted descending by total cents in the current cycle. Fetches the
+            first <code class="font-mono text-xs">limit=50</code> accounts then
+            asks <code class="font-mono text-xs">/v1/admin/cost/overview</code>
+            (which already returns sorted by total cost desc).
+          </p>
+        </div>
+        <button
+          type="button"
+          data-button="refresh-top"
+          class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm shadow-sm hover:bg-slate-50"
+        >
+          Refresh
+        </button>
+      </div>
+      <div
+        data-field="top-result"
+        class="mt-4 dashboard-card"
+      >
+        <p class="text-sm text-slate-500">Click Refresh to fetch the top accounts.</p>
+      </div>
+    </section>
+
     <p class="mt-12 text-xs text-slate-500">
       Endpoints consumed:
       <code class="font-mono">{apiBaseUrl}/v1/admin/cost/config</code>,
       <code class="font-mono">{apiBaseUrl}/v1/admin/cost/accounts/:id</code>,
-      <code class="font-mono">{apiBaseUrl}/v1/admin/cost/overview</code>.
+      <code class="font-mono">{apiBaseUrl}/v1/admin/cost/overview</code>,
+      <code class="font-mono">{apiBaseUrl}/v1/admin/accounts</code>.
     </p>
   </div>
 </AdminLayout>
@@ -200,6 +229,70 @@ const apiBaseUrl = resolveApiBaseUrl();
       const msg = err && err.message ? err.message : 'network error';
       showBanner('Could not load cost config (' + msg + ').');
     }
+  }
+
+  const topResult = root.querySelector('[data-field="top-result"]');
+  const refreshTopBtn = root.querySelector('[data-button="refresh-top"]');
+
+  function renderTopAccounts(rows) {
+    if (!topResult) return;
+    const cents = (n) => '$' + (Number(n ?? 0) / 100).toFixed(2);
+    if (!Array.isArray(rows) || rows.length === 0) {
+      topResult.innerHTML = '<p class="text-sm text-slate-500">No accounts with usage in the current cycle.</p>';
+      return;
+    }
+    const top = rows.slice(0, 10);
+    topResult.innerHTML =
+      '<table class="w-full text-sm">' +
+      '<thead><tr class="text-left text-xs uppercase tracking-widest text-slate-500"><th class="py-1">Account</th><th>Tier</th><th class="text-right">Total</th><th class="text-right">Soft warn</th><th class="text-right">Hard cap</th><th>State</th></tr></thead>' +
+      '<tbody>' +
+      top
+        .map(
+          (r) =>
+            `<tr class="border-t border-slate-100"><td class="py-2 font-mono text-xs">${escapeHtml(r.accountId ?? '—')}</td><td class="text-xs">${escapeHtml(r.tier ?? '—')}</td><td class="text-right font-mono text-xs">${cents((r.breakdown ?? r.estimated ?? {}).totalCents)}</td><td class="text-right font-mono text-xs">${cents(r.softWarningCents)}</td><td class="text-right font-mono text-xs">${cents(r.hardCapCents)}</td><td class="text-xs">${escapeHtml(r.thresholdState ?? '—')}</td></tr>`,
+        )
+        .join('') +
+      '</tbody></table>';
+  }
+
+  async function loadTopAccounts() {
+    if (!topResult) return;
+    topResult.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
+    try {
+      // Step 1 — pull first 50 accounts.
+      const accountsRes = await authedFetch('/v1/admin/accounts?limit=50');
+      if (!accountsRes.ok) {
+        topResult.innerHTML = `<p class="text-sm text-red-600">/v1/admin/accounts returned ${accountsRes.status}</p>`;
+        return;
+      }
+      const accountsBody = await accountsRes.json();
+      const ids = (accountsBody.data ?? [])
+        .map((a) => (a.id ?? '').startsWith('acc_') ? (a.id ?? '').slice(4) : a.id)
+        .filter(Boolean);
+      if (ids.length === 0) {
+        topResult.innerHTML = '<p class="text-sm text-slate-500">No accounts found.</p>';
+        return;
+      }
+      // Step 2 — overview is already sorted by total cost desc.
+      const overviewRes = await authedFetch(
+        '/v1/admin/cost/overview?account_ids=' + encodeURIComponent(ids.join(',')),
+      );
+      if (!overviewRes.ok) {
+        topResult.innerHTML = `<p class="text-sm text-red-600">/v1/admin/cost/overview returned ${overviewRes.status}</p>`;
+        return;
+      }
+      const overviewBody = await overviewRes.json();
+      renderTopAccounts(overviewBody.summaries ?? []);
+    } catch (err) {
+      const msg = err && err.message ? err.message : 'network error';
+      topResult.innerHTML = `<p class="text-sm text-red-600">Could not load top accounts (${escapeHtml(msg)}).</p>`;
+    }
+  }
+
+  if (refreshTopBtn) {
+    refreshTopBtn.addEventListener('click', () => {
+      void loadTopAccounts();
+    });
   }
 
   if (accountForm) {
