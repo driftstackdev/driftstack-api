@@ -8,16 +8,23 @@ toolchain that bridges the docker-compose-vs-systemd mismatch (see
 
 ```sh
 bash scripts/deploy-status.sh                # read-only snapshot of both servers
-bash scripts/deploy-status.sh --check        # exit non-zero if any activation flag is off
+bash scripts/deploy-status.sh --check        # exit non-zero if activation flag off OR migration drift
 bash scripts/deploy-bridge.sh staging        # deploy origin/main to staging
 bash scripts/revert-bridge.sh --dry-run prod # preview revert target + recent history
+bash scripts/revert-bridge.sh --to-sha <sha> prod  # operator override: revert to an explicit SHA
 ```
 
 `deploy-status.sh` is read-only and always safe. `--check` is the
-shape to wire into cron / monitoring (`|| alert`).
+shape to wire into cron / monitoring (`|| alert`). It enforces two
+invariants: every activation flag (`sentry`/`email`/`livekit`/
+`oauthClient`) is `true` AND the on-disk `_journal.json` entry count
+matches `drizzle.__drizzle_migrations` row count (catches the drizzle
+silent-skip class — see "Migration drift" below).
 
 `--json` is supported on both `deploy-status.sh` and
-`scripts/post-deploy-verify.mjs` for structured tooling output.
+`scripts/post-deploy-verify.mjs` for structured tooling output. The
+`deploy-status.sh --json` row includes `"migrations":"N/N OK"` or
+`"DRIFT expected=N actual=M"`.
 
 ## When to use
 
@@ -49,8 +56,16 @@ upserts `GIT_SHA` into `.env`, restarts the systemd unit, polls
 public origin. On post-deploy-verify FAIL, **auto-fires
 `revert-bridge.sh`** to roll back to the last-known-good SHA.
 
-End-state guarantee: prod is always at a SHA that passed all 8
-post-deploy-verify invariants when it landed.
+`apps/server/src/db/migrate.ts` carries a post-condition assertion:
+after `migrate()` returns, it compares `_journal.json` entries vs the
+`drizzle.__drizzle_migrations` row count and exits 2 on mismatch.
+Exit 2 from migrate triggers the auto-revert path. This catches the
+drizzle-orm silent-skip class where `migrate()` returns success
+without actually running every pending migration.
+
+End-state guarantee: prod is always at a SHA that passed all 10
+post-deploy-verify invariants when it landed AND whose migrations
+matched the on-disk journal exactly.
 
 ## Revert (manual; auto-revert handles regression cases)
 
@@ -58,14 +73,23 @@ post-deploy-verify invariants when it landed.
 # Preview what SHA revert would target:
 bash scripts/revert-bridge.sh --dry-run prod
 
-# Actually revert:
+# Actually revert to last-known-good:
 bash scripts/revert-bridge.sh prod
+
+# Operator override — revert to an explicit SHA (bypasses .last-good-sha):
+bash scripts/revert-bridge.sh --to-sha abc1234 prod
 ```
 
 `revert-bridge.sh` reads `/opt/driftstack/api/.last-good-sha` from
 the target host and delegates back to `deploy-bridge.sh` with that
 SHA as the explicit argument. AUTO_REVERT=0 is set inside the
 revert so a bad last-good-sha doesn't recurse infinitely.
+
+Use `--to-sha` when `.last-good-sha` itself points to a bad SHA
+(e.g. a regression slipped past post-deploy-verify, became the new
+last-good, and the next deploy must skip back two generations).
+`--dry-run` exits 0 if no revert is needed (current SHA already
+matches last-good) and 2 if a revert is pending.
 
 ## Deploy history
 
@@ -108,6 +132,43 @@ status, then `bash scripts/deploy-bridge.sh prod`.
   `/opt/driftstack/api/.deploy-history.log` to confirm the revert
   succeeded, then investigate the verify failure (likely route
   registration / openapi drift / version mismatch).
+- **`migrate exit 2 — migration post-condition FAIL`**: the drizzle
+  silent-skip class bit (see "Migration drift" below). The
+  deploy-bridge auto-reverts on exit 2. Investigate by SSHing to the
+  host, running the failing migration manually with `psql -f`, then
+  inserting the matching row into `drizzle.__drizzle_migrations` with
+  the same hash. Re-run the deploy once the on-disk journal and the
+  DB row count agree.
+
+## Migration drift
+
+The drizzle-orm migrate runtime occasionally returns success without
+actually applying every pending migration on disk — leaving
+`_journal.json` ahead of `drizzle.__drizzle_migrations`. Two layers
+guard against this:
+
+- **Pre-deploy (cron)**: `bash scripts/deploy-status.sh --quiet --check`
+  reports `DRIFT expected=N actual=M` when journal vs DB disagree.
+  Cron-wirable: `*/5 * * * * bash scripts/deploy-status.sh --quiet --check || curl …slack…`.
+- **Deploy-time**: `apps/server/src/db/migrate.ts` post-condition
+  exits 2 when its own migrate() call leaves the counts mismatched.
+  `deploy-bridge.sh` auto-reverts on exit 2 via the V-549.B
+  `.last-good-sha` path.
+
+Manual recovery procedure if drift is detected:
+
+```sh
+ssh root@<host>
+sudo -u driftstack bash
+set -a; source /opt/driftstack/api/.env; set +a
+# Find the missing migration:
+psql $DATABASE_URL -c 'select hash from drizzle.__drizzle_migrations order by created_at'
+# Compare against _journal.json + meta/0NNN_*.json hashes.
+# Apply the missing migration:
+psql $DATABASE_URL -f /opt/driftstack/api/apps/server/src/db/migrations/0NNN_<name>.sql
+# Insert the row so future migrate() runs skip it correctly:
+psql $DATABASE_URL -c "INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('<hash>', $(date +%s%3N))"
+```
 
 ## What's NOT this script
 
