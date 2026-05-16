@@ -119,6 +119,24 @@ describe('W496.A apps/customer-dashboard/src/pages/sessions.astro content parity
     );
   });
 
+  it('Wave 1119 / Slice 1119.5 B3 — "what to do next" post-onboarding banner is pinned: trigger conditions (URL ?onboarded=1 OR sessionStorage ds_first_api_key_plaintext) + dismiss persistence (ds_next_steps_dismissed sessionStorage flag) + 3 concrete next actions (SDK quickstart link to docs.driftstack.dev/quickstart/, browse captures link to /captures, API reference link to docs.driftstack.dev/api/). Drift to dropping the banner reintroduces the post-onboarding cliff (customer lands on /sessions with their first key but no guidance on what to actually DO with it); drift to coupling trigger to localStorage instead of sessionStorage would re-show on subsequent days even after dismissal.', () => {
+    // Banner element + 3 next-step links.
+    expect(body).toMatch(/<div\s+data-next-steps\s+class="[^"]*\bhidden\b[^"]*"/);
+    expect(body).toMatch(/Next steps — your account is ready to drive/);
+    expect(body).toMatch(
+      /href="https:\/\/docs\.driftstack\.dev\/quickstart\/"[\s\S]*?SDK quickstart/,
+    );
+    expect(body).toMatch(/href="\/captures"[\s\S]*?Browse captures/);
+    expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev\/api\/"[\s\S]*?API reference/);
+    // Trigger + dismiss wiring.
+    expect(body).toMatch(
+      /new URLSearchParams\(window\.location\.search\)\.get\('onboarded'\) === '1'/,
+    );
+    expect(body).toMatch(/sessionStorage\.getItem\('ds_first_api_key_plaintext'\)/);
+    expect(body).toMatch(/sessionStorage\.getItem\('ds_next_steps_dismissed'\) === '1'/);
+    expect(body).toMatch(/sessionStorage\.setItem\('ds_next_steps_dismissed', '1'\);/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

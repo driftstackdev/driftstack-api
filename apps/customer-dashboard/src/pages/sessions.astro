@@ -162,6 +162,84 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
       </div>
     </div>
 
+    <!-- Wave 1119 / Slice 1119.5 B3 — "what to do next" banner. Surfaces
+         right after the customer completes the /first-session flow
+         (?onboarded=1 query param OR ds_first_api_key_plaintext present
+         in sessionStorage). Without this the post-onboarding cliff was
+         steep — the customer landed on /sessions seeing the first-key
+         reveal but no guidance on what to actually DO with the key.
+         Three concrete next actions: (1) wire the key into the SDK
+         quickstart, (2) drive the session via the GUI client, (3)
+         browse the SDK reference. Dismissal persists via sessionStorage
+         flag so a page reload doesn't re-show. -->
+    <div
+      data-next-steps
+      class="mb-8 hidden rounded-lg border border-glow-red/30 bg-glow-red/5 p-6"
+    >
+      <h2 class="text-lg font-semibold text-ink-primary">
+        Next steps — your account is ready to drive
+      </h2>
+      <p class="mt-2 text-sm text-ink-secondary">
+        Your first session is live and your API key is saved. Pick one of
+        these to take the next step:
+      </p>
+      <ul class="mt-4 space-y-3 text-sm text-ink-secondary">
+        <li class="flex items-start gap-3">
+          <span class="mt-0.5 font-mono text-xs text-glow-red">→</span>
+          <span>
+            <a
+              href="https://docs.driftstack.dev/quickstart/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-medium text-ink-primary underline underline-offset-4 hover:text-glow-red"
+            >
+              SDK quickstart
+            </a>
+            — paste your API key into a 10-line snippet and watch the
+            session navigate, fill a form, and return the page state.
+          </span>
+        </li>
+        <li class="flex items-start gap-3">
+          <span class="mt-0.5 font-mono text-xs text-glow-red">→</span>
+          <span>
+            <a
+              href="/captures"
+              class="font-medium text-ink-primary underline underline-offset-4 hover:text-glow-red"
+            >
+              Browse captures
+            </a>
+            — every SDK call returns a capture (HTML / DOM / network
+            / screenshot). Review them as you build to catch surprises
+            early.
+          </span>
+        </li>
+        <li class="flex items-start gap-3">
+          <span class="mt-0.5 font-mono text-xs text-glow-red">→</span>
+          <span>
+            <a
+              href="https://docs.driftstack.dev/api/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-medium text-ink-primary underline underline-offset-4 hover:text-glow-red"
+            >
+              API reference
+            </a>
+            — the full intent vocabulary (navigate / fill_form / login /
+            search / extract) and what each capture surfaces.
+          </span>
+        </li>
+      </ul>
+      <div class="mt-4 flex items-center gap-3">
+        <button
+          type="button"
+          class="rounded-md border border-white/15 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-secondary hover:border-white/25 hover:text-ink-primary"
+          data-next-steps-dismiss
+        >
+          Got it — dismiss
+        </button>
+      </div>
+    </div>
+
     <!-- Active sessions -->
     <section>
       <h2 class="mb-4 text-lg font-semibold text-ink-primary">
@@ -276,6 +354,28 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
         banner.textContent = text;
         banner.classList.remove('hidden');
       }
+
+// Wave 1119 / Slice 1119.5 B3 — post-onboarding "what to do next"
+      // banner. Trigger: URL ?onboarded=1 (set by the /first-session
+      // redirect) OR the presence of ds_first_api_key_plaintext in
+      // sessionStorage (same window, fallback for non-URL-driven nav).
+      // Dismissal persists via ds_next_steps_dismissed in
+      // sessionStorage so a refresh doesn't re-show the banner.
+      (function showNextStepsBanner() {
+        const urlOnboarded = new URLSearchParams(window.location.search).get('onboarded') === '1';
+        const stashedKey = sessionStorage.getItem('ds_first_api_key_plaintext');
+        const dismissed = sessionStorage.getItem('ds_next_steps_dismissed') === '1';
+        if (dismissed) return;
+        if (!urlOnboarded && !stashedKey) return;
+        const banner = root.querySelector('[data-next-steps]');
+        const dismissBtn = root.querySelector('[data-next-steps-dismiss]');
+        if (!banner || !dismissBtn) return;
+        banner.classList.remove('hidden');
+        dismissBtn.addEventListener('click', () => {
+          sessionStorage.setItem('ds_next_steps_dismissed', '1');
+          banner.classList.add('hidden');
+        });
+      })();
 
       // Wave 1086+ — first-session API key reveal. Reads the plaintext
       // stashed by /first-session in sessionStorage; surfaces it inline
