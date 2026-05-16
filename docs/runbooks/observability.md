@@ -201,9 +201,29 @@ Required at boot (per `apps/server/src/lib/config.ts`):
 Customer-dashboard / marketing-site / docs / status-site each
 load their own DSN at build time via Astro's `import.meta.env`.
 
+## Deploy-state cron (V-549.B follow-up)
+
+Wire `deploy-status --quiet --check` into cron for an out-of-band
+alert if a server restart loses an activation flag (rare but the
+exact class of regression the 4-flag check exists to catch):
+
+```cron
+# Every 5 minutes, exit non-zero if any of sentry/email/livekit/
+# oauthClient is :false on either prod or staging. Pipe to your
+# alert channel of choice.
+*/5 * * * * cd /opt/driftstack-api && bash scripts/deploy-status.sh --quiet --check || curl -s -X POST $SLACK_WEBHOOK -d '{"text":"deploy-status --check FAILED"}'
+```
+
+For dashboards: `bash scripts/deploy-status.sh --json | jq …`
+emits stable JSON shape per env (git_sha + started_at + uptime
+
+- last_good_sha + recent_deploys[]). Runbook:
+  `docs/runbooks/deploy-bridge.md`.
+
 ## Cross-references
 
 - DR procedures: `docs/deployment/dr-runbook.md`
 - Incident triage: `docs/runbooks/incidents.md`
 - Launch-day playbook: `docs/operations/launch-day-runbook.md`
 - Customer-facing security: `apps/marketing-site/src/pages/security.astro`
+- Deploy + revert + status tooling: `docs/runbooks/deploy-bridge.md`
