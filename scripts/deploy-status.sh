@@ -86,10 +86,32 @@ except Exception:
   # Most recent boot-complete line — surfaces sentry/email/livekit/oauthClient flags.
   FLAGS=$(ssh "root@${HOST}" "journalctl -u driftstack-api --no-pager 2>/dev/null | grep '\"bootstrap complete\"' | tail -1 | grep -oE '\"sentry\":[a-z]+|\"email\":[a-z]+|\"livekit\":[a-z]+|\"oauthClient\":[a-z]+|\"env\":\"[a-z]+\"' | tr '\\n' ' '" || echo "(no boot log)")
 
+  # Migration-count drift detection — compares the journal entry
+  # count on disk to drizzle.__drizzle_migrations.count. Drift means
+  # the migrate.js silent-skip class has bitten (see V-549.B
+  # post-condition assertion).
+  MIGRATION_DRIFT=$(ssh "root@${HOST}" "
+    journal=/opt/driftstack/api/apps/server/src/db/migrations/meta/_journal.json
+    expected=\$(grep -c '\"tag\":' \$journal 2>/dev/null || echo 0)
+    actual=\$(sudo -u driftstack bash -c 'set -a; source /opt/driftstack/api/.env; set +a; psql \$DATABASE_URL -tA -c \"select count(*) from drizzle.__drizzle_migrations\" 2>/dev/null' || echo 0)
+    if [ \"\$expected\" = \"\$actual\" ]; then
+      echo \"\$expected/\$actual OK\"
+    else
+      echo \"DRIFT expected=\$expected actual=\$actual\"
+    fi
+  ")
+
   if [ "$JSON" -eq 0 ] && [ "$QUIET" -eq 0 ]; then
     echo "  /version           : git_sha=$GIT_SHA uptime=$UPTIME (since $STARTED)"
     echo "  .last-good-sha     : $LAST_GOOD"
     echo "  activation flags   : $FLAGS"
+    echo "  migrations         : $MIGRATION_DRIFT"
+  fi
+
+  # --check assertion #2: migration drift is a hard fail.
+  if [ "$CHECK" -eq 1 ] && [[ "$MIGRATION_DRIFT" == DRIFT* ]]; then
+    echo "  [check] FAIL — $ENV migration drift: $MIGRATION_DRIFT" >&2
+    CHECK_FAIL=1
   fi
 
   # --check assertion: every monitored flag is "true". Catches a
