@@ -173,4 +173,35 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(body.kind).toBe('refuse');
     expect(body.refuse_reason).toMatch(/AUP/);
   });
+
+  it('not-found: GET on a never-existed id → 404 (NOT 503 — 503 is for activation-gate-off only)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions/agt_inmem_99999999',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('not-found: DELETE on a never-existed id → 404', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'DELETE',
+      url: '/v1/agent-sessions/agt_inmem_99999999',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('not-found: POST /:id/message on a never-existed id → 404 (cross-account guard fires before runtime.runTurn)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions/agt_inmem_99999999/message',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { user_message: 'anything' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
 });
