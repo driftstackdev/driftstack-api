@@ -150,6 +150,8 @@ describe('OpenAPI spec generation', () => {
         '/v1/agent-sessions',
         '/v1/agent-sessions/{id}',
         '/v1/agent-sessions/{id}/message',
+        // V-820 — operator-only fleet event stream
+        '/v1/fleet/events',
         // V-459 public status surface
         '/v1/status',
         '/v1/status/incidents',
@@ -214,6 +216,11 @@ describe('OpenAPI spec generation', () => {
       // V-459 — /v1/status/* is also public-by-design (status pages
       // and uptime monitors must work without an API key).
       if (path.startsWith('/v1/status')) continue;
+      // V-820 — /v1/fleet/* uses signed Ed25519 JWT in a custom
+      // header at WebSocket handshake (gated by mTLS at the edge),
+      // not customer-API Bearer. Operator-only surface; not
+      // customer-facing.
+      if (path.startsWith('/v1/fleet/')) continue;
       const ops = methods as Record<string, { security?: unknown[] }>;
       for (const [method, op] of Object.entries(ops)) {
         if (!['get', 'post', 'delete', 'put', 'patch'].includes(method)) continue;

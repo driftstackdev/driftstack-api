@@ -2282,6 +2282,34 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // ── V-820 — fleet events stream (operator-only; not customer-facing) ──
+  // Currently registers as a 503 FeatureUnavailable stub regardless of
+  // AppDeps wiring — the WebSocket handler + fastify-websocket plugin +
+  // Cloudflare AOP layer are pending. SDK code generators reading this
+  // surface should NOT generate a customer-facing fleet client; the
+  // intended consumer is the Mac fleet itself (Agent 1 / harness).
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/fleet/events',
+    summary:
+      'Fleet-node WebSocket event stream (operator-only; mTLS + signed JWT auth per docs/network-architecture.md)',
+    tags: ['fleet'],
+    // No `security: auth` — fleet auth runs via signed JWT in a custom
+    // header at WebSocket handshake, gated by mTLS at the edge. The
+    // customer-API Bearer token has no role here.
+    responses: {
+      101: {
+        description:
+          'WebSocket protocol upgrade — handshake authenticated via mTLS + signed Ed25519 JWT in the `x-fleet-jwt` header. Currently NOT IMPLEMENTED; see 503 below.',
+      },
+      503: {
+        description:
+          'Fleet events stream not yet implemented. Both the AppDeps-wired path and the activation-gate-off path return 503 in this slice — the WebSocket handler + Cloudflare AOP + fleet_nodes SQL migration are pending (see docs/internal/fleet-nodes-sql-migration-design.md + docs/internal/cross-agent-control-plane-contract.md).',
+        content: problemContent,
+      },
+    },
+  });
+
   // ── V-666 — crypto-orders surface. Crypto payments are non-refundable.
   registerRoute(r, {
     method: 'post',
