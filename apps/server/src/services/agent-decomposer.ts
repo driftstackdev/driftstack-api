@@ -116,6 +116,23 @@ export interface DecomposeArgs {
    *  B3 design). When 0, calls return a refuse with reason
    *  "token budget exhausted; start a new session". */
   budgetTokensRemaining: number;
+  /**
+   * BYOK Anthropic API key (Tier-3 verdict LOCKED 2026-05-16:
+   * BYOK for v1.0; bundled-LLM billing deferred to v1.1).
+   *
+   * The runtime resolves this in priority order:
+   *   1. Customer-supplied key (stored encrypted per-account; passed
+   *      through here per request — never persisted in transcript).
+   *   2. Deployment fallback (`config.byokAnthropic.fallbackApiKey`,
+   *      env `DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY`) — for the
+   *      founder's own demos + integration tests.
+   *
+   * The DeterministicAgentDecomposer ignores this (no LLM call); the
+   * real Claude-wired AI-B1.b impl uses it as the Authorization
+   * header `x-api-key` value when calling Anthropic. NEVER logged,
+   * NEVER echoed into transcript or error responses.
+   */
+  byokAnthropicApiKey?: string;
 }
 
 /**

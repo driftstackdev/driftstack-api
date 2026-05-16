@@ -81,4 +81,20 @@ describe('EG-API-1.5 apps/customer-dashboard/src/pages/proxies.astro content par
   it("UDP ASSOCIATE hint text is the WebRTC rationale (not a stylistic note) — pins the planning-133 reason so a future copy-edit doesn't lose the signal that disabling UDP ASSOCIATE breaks WebRTC routing", () => {
     expect(body).toMatch(/Required for WebRTC/);
   });
+
+  it('Wave 1119+ founder-priority OpenVPN form (2026-05-16 founder verdict: focus OpenVPN/SOCKS5 over WireGuard). Form fields pinned: label (maxlength=120), .ovpn config_blob textarea (maxlength=262144 = 256KB), optional username/password inputs, save button with data-action="save-openvpn", + a server-side 400-handler with the api-types directive-rejection message ("`client` and `remote <host> <port>` directives" framing matches the egress.ts refine message).', () => {
+    expect(body).toMatch(/<section[^>]*data-create-openvpn-form/);
+    expect(body).toMatch(/<input\s+id="ovpn-label"[^>]*maxlength="120"/);
+    expect(body).toMatch(/<textarea\s+id="ovpn-blob"[^>]*maxlength="262144"/);
+    expect(body).toMatch(
+      /<input\s+id="ovpn-password"[^>]*type="password"[^>]*autocomplete="new-password"/,
+    );
+    expect(body).toMatch(/data-action="save-openvpn"/);
+    expect(body).toMatch(/type: 'openvpn',\s*\n?\s+openvpn: \{/);
+    expect(body).toMatch(/config_blob: blob/);
+    expect(body).toMatch(/`client`\s+and\s+`remote <host> <port>` directives/);
+    // 400-branch surfaces the server-side .ovpn-validation reject with
+    // a user-actionable hint pointing at the missing directive.
+    expect(body).toMatch(/res\.status === 400/);
+  });
 });

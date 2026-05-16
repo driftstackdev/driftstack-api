@@ -1,9 +1,25 @@
 # Wave 1119+ Agent 2 session handoff (2026-05-16)
 
-Session continuation after context compaction. **26 commits** landed on
-`origin/main` between `d1b425e3` (pre-resume) and `f5aea2de` (current
-HEAD) across Tier-1 launch fixes + EGRESS Phase 1 SOCKS5 + AI-CHAT
-full vertical.
+Session continuation after context compaction. **52 commits** landed
+on `origin/main` between `d1b425e3` (pre-resume) and the current HEAD
+across Tier-1 launch fixes + EGRESS Phase 1 SOCKS5 + AI-CHAT full
+vertical + V-820 fleet-node-auth + cross-SDK parity lift (15→17) +
+sample programs (3 languages) + post-context-refresh wave (4 tracks).
+
+Parallel-agent activity landed:
+
+- `b6ebf433` CLAUDE.md session-start protocol (companion to AGENTS.md
+  pointing at ORCHESTRATOR-STATE.md). Not authored by this session;
+  the founder's parallel orchestrator pushed it during my SDK-Python
+  push.
+
+Founder context-refresh 2026-05-16:
+
+- ORCHESTRATOR-STATE.md is now authoritative for cross-session decisions.
+- Tier-3 BYOK Anthropic for v1.0 LOCKED.
+- EGRESS founder priority shift: OpenVPN/SOCKS5 over WireGuard.
+- AI chat moved v1.1 → v1.0 launch arc (referenced earlier; ORCHESTRATOR-STATE
+  formalizes it).
 
 ## Tier-1 launch fixes — DONE 5/5 (+ 1119.1 prepared)
 
@@ -98,6 +114,20 @@ Founder should merge `claude/busy-satoshi-5fc161` to `main` so future Agent-2 se
 - 26 commits landed across ~3.5 hours wall-clock.
 - 0 production-affecting changes (all behind activation gates).
 - 0 commits with banned trailers, 0 secrets echoed.
+
+## Post-handoff-refresh waves (after 26-commit baseline)
+
+| Wave                          | Commits                                           | Detail                                                                                                                                  |
+| ----------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| V-820                         | `95353f2a`                                        | Ed25519 JWT verifier for fleet-node auth (foundation); 8 unit tests covering 7 reject reasons                                           |
+| SDK 3-language EGRESS         | `041ef7a9` + `939548b2` + `b4c27598`              | TS + Python + Go all at EGRESS parity; W819 REQUIRED_RESOURCES 15→16                                                                    |
+| SDK 3-language agent-sessions | `aadc3ffb` + `d2c85e21`                           | TS + Python + Go all at agent-sessions parity; W819 16→17                                                                               |
+| Cross-source invariant        | `e074fcf6`                                        | Activation-gate pattern pinned across billing + session-proxy + saved-proxies + agent-sessions; 21 cases                                |
+| OpenAPI + handoff doc         | `91802305` + `d4ae328a` + `556ce978` + `6fb4813e` | EGRESS + AI-CHAT OpenAPI specs; handoff doc refresh; ai-chat-agent-layer-design.md status header refresh                                |
+| Sample programs               | `a8141d3b` + `bd7d4117` + `40fc965a`              | Python + TS + Go egress + agent-chat example programs                                                                                   |
+| 404 fix + regression tests    | `ab69eb17` + `f4342ce9`                           | agent-sessions cross-account NotFoundError fix + 3 regression tests                                                                     |
+| **Context-refresh wave**      | `43b5a4a6`                                        | OpenVPN `.ovpn` directive validation + BYOK Anthropic config schema + cross-agent-control-plane-contract.md + V-820 SQL design proposal |
+| **OpenVPN dashboard wave**    | this wave                                         | `/proxies` page lit with OpenVPN config form + SDK directive-validation regression test + DecomposeArgs.byokAnthropicApiKey plumbing    |
 
 ## Activation-gate inventory
 

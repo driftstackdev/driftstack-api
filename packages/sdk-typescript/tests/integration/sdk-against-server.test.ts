@@ -348,6 +348,29 @@ describe('@driftstack/sdk against real server', () => {
     expect(result.data).toEqual([]);
   });
 
+  it('SDK error mapping: egress.saveProxy with malformed OpenVPN .ovpn (no `client` directive) → ValidationError on wired posture; the api-types directive-validation 400 bites at the API boundary (regression coverage for the OpenVpnProxyConfigSchema .refine() pair landed 43b5a4a6)', async () => {
+    // Wired posture (enableEgressSafeguard injects a stub
+    // sessionEgressService so the REAL saveProxy route registers + the
+    // Zod body validation runs). Without this opt-in, the disabled-stub
+    // route 503s before reading the body.
+    fx = await buildTestApp({ enableEgressSafeguard: true });
+    const sdk = new Driftstack({
+      apiKey: fx.plaintext,
+      baseUrl: 'http://test.local',
+      fetch: fetchAdapter(fx),
+      retry: { maxAttempts: 0 },
+    });
+    await expect(
+      sdk.egress.saveProxy({
+        label: 'no-client-test',
+        proxy: {
+          type: 'openvpn',
+          openvpn: { config_blob: 'remote vpn.example.com 1194\ndev tun\n' },
+        },
+      }),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
   it('SDK error mapping: agentSessions.create on disabled-stub deployment → FeatureUnavailableError', async () => {
     fx = await buildTestApp();
     const sdk = new Driftstack({
