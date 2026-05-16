@@ -118,7 +118,7 @@ func main() {
 ## 4. What happened
 
 - `client.sessions.create()` reserved one of your account's concurrent session slots. Each tier has a concurrent cap (Trial pack: 1, API Starter: 2, API Builder: 8, API Scale: 24 — see [pricing](https://driftstack.dev/pricing)). Exceeding the cap returns 429.
-- `client.sessions.navigate()` drove the iPhone Safari runtime to the URL on the modified WebKit fork. The runtime is real Safari on real iOS — not a desktop browser pretending.
+- `client.sessions.navigate()` drove the iPhone Safari runtime to the URL on Driftstack's WebKit build. The runtime is built from Apple's WebKit source directly — not a Chromium-stealth shim pretending to be Safari.
 - `client.sessions.capture()` returned a screenshot of the rendered page.
 - `client.sessions.destroy()` released the concurrent slot. Sessions also auto-expire after the per-tier idle timeout if you forget to destroy them.
 

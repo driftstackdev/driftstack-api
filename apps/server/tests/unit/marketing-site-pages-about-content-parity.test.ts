@@ -34,14 +34,15 @@ function read(p: string): string {
 describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () => {
   const body = read(LIB);
 
-  it("R9 hero framing (capability-led, no solo-founder identity): 'One engine. One product. Engineered for fidelity.' + 'real iPhone Safari sessions on demand — same engine as a physical iPhone, with nothing patched at runtime' positioning + 'EU-resident infrastructure, deliberately narrow scope: one product, two ways to use it, no land-grab' — replaces the prior 'small Dutch company' + 'solo-founded, EU-based' identity copy that read as indie-builder rather than enterprise-grade", () => {
+  it("R9 hero framing (capability-led, no solo-founder identity) + 2026-05-16 honesty pass: 'One engine. One product. Engineered for fidelity.' + 'iPhone Safari sessions on demand, built on real WebKit — the same engine on every physical iPhone, with nothing patched at runtime' positioning (was 'real iPhone Safari sessions' — reframed to 'real WebKit' since we build the WebKit engine, not the literal Safari binary) + 'EU-resident infrastructure, deliberately narrow scope' framing.", () => {
     expect(body).toMatch(/One engine\. One product\. Engineered for fidelity\./);
     expect(body).toMatch(
-      /Driftstack ships real iPhone Safari sessions on demand — same\s*\n?\s*engine as a physical iPhone, with nothing patched at runtime that\s*\n?\s*detection systems could spot/,
+      /Driftstack ships iPhone Safari sessions on demand, built on\s*\n?\s*real WebKit — the same engine on every physical iPhone, with\s*\n?\s*nothing patched at runtime that detection systems could spot/,
     );
     expect(body).toMatch(
-      /EU-resident infrastructure,\s*\n?\s*deliberately narrow scope: one product, two ways to use it, no\s*\n?\s*land-grab\./,
+      /EU-resident infrastructure, deliberately narrow scope: one\s*\n?\s*product, two ways to use it, no land-grab\./,
     );
+    expect(body).not.toMatch(/Driftstack ships real iPhone Safari sessions/);
   });
 
   it("WebKit source-code framing pinned (R6 plain-English rewrite + 2026-05-16 unique-per-session contrast): 'we run Apple's WebKit source code, the same engine that ships on every real iPhone' kept; the contrast paragraph now names the 100% unique canvas/WebGL hashes competitors leak as the literal opposite of a real iPhone returning the same hash as millions of others", () => {
