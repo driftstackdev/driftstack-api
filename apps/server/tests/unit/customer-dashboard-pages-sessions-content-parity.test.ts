@@ -126,7 +126,7 @@ describe('W496.A apps/customer-dashboard/src/pages/sessions.astro content parity
     expect(body).toMatch(
       /href="https:\/\/docs\.driftstack\.dev\/quickstart\/"[\s\S]*?SDK quickstart/,
     );
-    expect(body).toMatch(/href="\/captures"[\s\S]*?Browse captures/);
+    expect(body).toMatch(/href="\/usage"[\s\S]*?Track usage/);
     expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev\/api\/"[\s\S]*?API reference/);
     // Trigger + dismiss wiring.
     expect(body).toMatch(
