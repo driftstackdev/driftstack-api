@@ -137,7 +137,7 @@ print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))
 ')
     if [ "$FIRST" -eq 0 ]; then printf ','; fi
     FIRST=0
-    printf '{"env":"%s","host":"%s","git_sha":"%s","started_at":"%s","uptime":"%s","last_good_sha":"%s","recent_deploys":%s}' "$ENV" "$HOST" "$GIT_SHA" "$STARTED" "$UPTIME" "$LAST_GOOD" "$HISTORY"
+    printf '{"env":"%s","host":"%s","git_sha":"%s","started_at":"%s","uptime":"%s","last_good_sha":"%s","migrations":"%s","recent_deploys":%s}' "$ENV" "$HOST" "$GIT_SHA" "$STARTED" "$UPTIME" "$LAST_GOOD" "$MIGRATION_DRIFT" "$HISTORY"
   fi
 done
 
