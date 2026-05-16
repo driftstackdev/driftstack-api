@@ -91,6 +91,11 @@ async function checkStatusEndpoint() {
     if (status !== 200) return `expected 200, got ${status}`;
     if (typeof body?.overall_status !== 'string') return '/v1/status missing overall_status';
     if (!Array.isArray(body?.components)) return '/v1/status missing components[]';
+    // V-545.A — recent_incidents is now a populated PublicIncidentSummary
+    // array (was a never[] placeholder pre-4e2c199). Empty array is
+    // valid (no public incidents); array of objects with the expected
+    // keys is valid. Anything else (string, undefined, object) is drift.
+    if (!Array.isArray(body?.recent_incidents)) return '/v1/status missing recent_incidents[]';
     return null;
   });
 }

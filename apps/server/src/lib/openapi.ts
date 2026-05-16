@@ -2651,10 +2651,21 @@ function buildRegistry(): OpenAPIRegistry {
     status: z.enum(['operational', 'degraded', 'major_outage']),
     last_checked_at: z.string(),
   });
+  // V-545.A — recent_incidents item shape (latest ≤5 public
+  // incidents from the last 30d). Mirror of PublicIncidentSummary in
+  // routes/status.ts; drift caught by W412.C parity test.
+  const StatusRecentIncidentOpenApi = z.object({
+    id: z.string(),
+    title: z.string(),
+    severity: z.string(),
+    status: z.string(),
+    started_at: z.string(),
+    resolved_at: z.string().nullable(),
+  });
   const StatusResponseOpenApi = z.object({
     overall_status: z.enum(['operational', 'degraded', 'major_outage']),
     components: z.array(StatusComponentResultOpenApi),
-    recent_incidents: z.array(z.unknown()),
+    recent_incidents: z.array(StatusRecentIncidentOpenApi),
   });
   const StatusIncidentsResponseOpenApi = z.object({
     data: z.array(z.unknown()),
