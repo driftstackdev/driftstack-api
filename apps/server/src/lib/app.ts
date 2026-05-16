@@ -48,6 +48,8 @@ import type { BillingService } from '../services/billing.js';
 import type { SessionEgressService } from '../services/session-egress.js';
 import type { AgentRuntime } from '../services/agent-runtime.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
+import type { FleetNodeAuth } from '../services/fleet-node-auth.js';
+import type { FleetNonceCache } from '../services/fleet-nonce-cache.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import { registerAccountMeRoutes } from '../routes/account-me.js';
@@ -271,6 +273,22 @@ export interface AppDeps {
    * create/close paths. When agentRuntime is wired this MUST also be set.
    */
   agentSessionsRepo?: AgentSessionsRepo;
+  /**
+   * V-820 — fleet-node JWT verifier (foundation slice 95353f2a +
+   * nonce-cache integration f2a6c603). Optional. When wired,
+   * registers `/v1/fleet/events` WebSocket route (pending the SQL
+   * migration; see docs/internal/fleet-nodes-sql-migration-design.md
+   * for the Tier-2 founder review proposal). Until then leave
+   * undefined.
+   */
+  fleetNodeAuth?: FleetNodeAuth;
+  /**
+   * V-820 — JWT replay-defence nonce cache (commit 1b97a5e0). Paired
+   * with `fleetNodeAuth`; production injects the Redis-backed impl
+   * + the `FleetNodeAuthImpl` constructor receives this here. When
+   * omitted, JWT verification still works but loses replay defence.
+   */
+  fleetNonceCache?: FleetNonceCache;
   /**
    * V-100: admin force-action route deps. Routes register only when
    * all four are provided (sessionRepo / apiKeysRepo / driver / audit

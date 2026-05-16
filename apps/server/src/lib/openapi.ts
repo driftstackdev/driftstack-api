@@ -2211,6 +2211,13 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['agent-chat'],
     security: auth,
     request: {
+      headers: z.object({
+        // BYOK Anthropic key (Tier-3 LOCKED 2026-05-16). Optional;
+        // when set, forwards to the decomposer's Anthropic API call.
+        // Customer-stored keys (per-account) override the deployment
+        // fallback. NEVER logged server-side.
+        'x-byok-anthropic-api-key': z.string().min(1).optional(),
+      }),
       body: {
         content: {
           'application/json': {
