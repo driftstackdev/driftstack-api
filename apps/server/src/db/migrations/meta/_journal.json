@@ -281,6 +281,13 @@
       "when": 1778090430000,
       "tag": "0039_v667c_oauth_client_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1778090431000,
+      "tag": "0040_v545b_incident_notification_throttle",
+      "breakpoints": true
     }
   ]
 }

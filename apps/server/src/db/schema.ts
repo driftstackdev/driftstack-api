@@ -1421,6 +1421,37 @@ export type NewIncident = typeof incidents.$inferInsert;
 export type IncidentUpdate = typeof incidentUpdates.$inferSelect;
 export type NewIncidentUpdate = typeof incidentUpdates.$inferInsert;
 
+// V-545.B Phase 2 — per-subscriber per-incident throttle marker.
+// One row per (subscriber, incident); IncidentNotificationsService
+// consults this before dispatching a `status-incident-updated` email
+// to enforce the 1-per-hour cap. Cascade-delete from either side so
+// purged subscribers / deleted incidents don't leave orphan rows.
+// Forward declaration of statusSubscribers reference resolves at
+// table-creation time per Drizzle's lazy FK resolution.
+export const incidentUpdateNotifications = pgTable(
+  'incident_update_notifications',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    subscriberId: uuid('subscriber_id').notNull(),
+    incidentId: uuid('incident_id')
+      .notNull()
+      .references(() => incidents.id, { onDelete: 'cascade' }),
+    lastSentAt: timestamp('last_sent_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    // UNIQUE (subscriber_id, incident_id) — one row per pair. Also
+    // serves as the lookup index for the throttle check.
+    uniqueIndex('incident_update_notifications_unique_idx').on(t.subscriberId, t.incidentId),
+  ],
+);
+
+export type IncidentUpdateNotification = typeof incidentUpdateNotifications.$inferSelect;
+export type NewIncidentUpdateNotification = typeof incidentUpdateNotifications.$inferInsert;
+
 // V-295b — health probe history.
 //
 // Each row is one probe attempt against a configured target (e.g. 'api'
