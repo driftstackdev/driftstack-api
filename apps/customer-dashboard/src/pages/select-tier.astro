@@ -160,21 +160,32 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
               cancel_url: window.location.origin + '/select-tier',
             }),
           })
-            .then((r) =>
-              r.ok
+            .then((r) => {
+              // Wave 1086+ B1 client-side leg: 404/503 on /v1/billing/*
+              // means billing isn't wired (STRIPE_TRIAL_PACK_PRICE_ID +
+              // DRIFTSTACK_TIER_PRICE_IDS env vars missing — see
+              // docs/internal/2026-05-16-wave-1085-diagnostics.md).
+              // Surface a customer-friendly message instead of
+              // "HTTP 404", which reads as a broken site.
+              if (r.status === 404 || r.status === 503) {
+                return Promise.reject(
+                  new Error(
+                    'Billing setup is still in progress on this server. Check back shortly — you can keep exploring the dashboard in the meantime.',
+                  ),
+                );
+              }
+              return r.ok
                 ? r.json()
-                : r
-                    .json()
-                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
-            )
+                : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+            })
             .then((body) => {
               if (body.checkout_url) window.location.href = body.checkout_url;
             })
           ).catch((err) => {
             showBanner(
-              "Couldn't start trial-pack checkout (" +
-                (err && err.message ? err.message : 'network error') +
-                ').',
+              err && err.message
+                ? err.message
+                : "Couldn't start trial-pack checkout (network error).",
             );
           });
         });
@@ -198,13 +209,19 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
                 cancel_url: window.location.origin + '/select-tier',
               }),
             })
-              .then((r) =>
-                r.ok
+              .then((r) => {
+                // Same B1 client-side leg as the trial-pack handler.
+                if (r.status === 404 || r.status === 503) {
+                  return Promise.reject(
+                    new Error(
+                      'Billing setup is still in progress on this server. Check back shortly — you can keep exploring the dashboard in the meantime.',
+                    ),
+                  );
+                }
+                return r.ok
                   ? r.json()
-                  : r
-                      .json()
-                      .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
-              )
+                  : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+              })
               .then((body) => {
                 if (body.checkout_url) window.location.href = body.checkout_url;
               }),
