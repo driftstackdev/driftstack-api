@@ -75,6 +75,7 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
   });
 
   it('OpenVpnProxyConfig fields: config_blob string min 1 max 256KB (per planning 133 abuse cap) / username + password optional auth-user-pass', () => {
+    // Valid minimal .ovpn — has both `client` + `remote` directives.
     expect(
       OpenVpnProxyConfigSchema.safeParse({ config_blob: 'client\nremote x.y.z 1194' }).success,
     ).toBe(true);
@@ -82,9 +83,46 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
     expect(
       OpenVpnProxyConfigSchema.safeParse({ config_blob: 'a'.repeat(256 * 1024 + 1) }).success,
     ).toBe(false);
-    expect(
-      OpenVpnProxyConfigSchema.safeParse({ config_blob: 'a'.repeat(256 * 1024) }).success,
-    ).toBe(true);
+    // A 256KB blob that lacks the required directives still rejects on
+    // shape (the refines run after the .max). Use a near-max-size
+    // blob that carries the required directives.
+    const padded = 'client\nremote x.y.z 1194\n' + '#'.padEnd(256 * 1024 - 100, '#');
+    expect(OpenVpnProxyConfigSchema.safeParse({ config_blob: padded }).success).toBe(true);
+  });
+
+  it('OpenVpnProxyConfig directive validation (founder priority focus area): `client` + `remote <host> <port>` required, blob without either rejects with a clear-shape message', () => {
+    // No `client` directive → reject.
+    const noClient = OpenVpnProxyConfigSchema.safeParse({
+      config_blob: 'remote vpn.example.com 1194\ndev tun\n',
+    });
+    expect(noClient.success).toBe(false);
+    if (!noClient.success) {
+      expect(noClient.error.issues.some((i) => /client/i.test(i.message))).toBe(true);
+    }
+
+    // No `remote` directive → reject.
+    const noRemote = OpenVpnProxyConfigSchema.safeParse({
+      config_blob: 'client\ndev tun\n',
+    });
+    expect(noRemote.success).toBe(false);
+    if (!noRemote.success) {
+      expect(noRemote.error.issues.some((i) => /remote/i.test(i.message))).toBe(true);
+    }
+
+    // Leading whitespace + comment lines tolerated (real .ovpn files
+    // routinely have these). Both `client` + `remote` indented +
+    // surrounded by # comments → still passes.
+    const withComments =
+      '# This is a generated config\n;another style of comment\n  client\nremote vpn.example.com 1194\n';
+    expect(OpenVpnProxyConfigSchema.safeParse({ config_blob: withComments }).success).toBe(true);
+
+    // The word `client` appearing in a comment line MUST NOT count —
+    // only the directive form (start-of-line + word-boundary).
+    const clientOnlyInComment =
+      '# this references the client directive but is just a comment\nremote vpn.example.com 1194\n';
+    expect(OpenVpnProxyConfigSchema.safeParse({ config_blob: clientOnlyInComment }).success).toBe(
+      false,
+    );
   });
 
   it('WireGuardProxyConfig fields: private_key + peer_public_key 44-char base64 curve25519 / endpoint host:port / allowed_ips default 0.0.0.0/0 / dns optional', () => {

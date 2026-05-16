@@ -63,24 +63,45 @@ export const SocksProxyConfigSchema = z.object({
 export type SocksProxyConfig = z.infer<typeof SocksProxyConfigSchema>;
 
 /**
- * OpenVPN proxy config (Phase 2).
+ * OpenVPN proxy config (Phase 2 — founder priority focus area
+ * 2026-05-16 per planning 133 + ORCHESTRATOR-STATE Tier-3 verdicts).
  *
  * `config_blob` is the full .ovpn file contents (uploaded by the
  * customer; the dashboard does NOT introspect it server-side beyond
  * a syntactic well-formedness check). The harness materializes the
  * blob into a tmpfs file inside the per-session Lightweight VM and
- * invokes OpenVPN client against it (per planning 133 Phase 2
- * "Apple Virtualization.framework Lightweight VMs per session").
+ * invokes OpenVPN client against it.
  *
  * Max blob size 256 KB — large enough for any realistic .ovpn
  * (typical 5-20 KB; inline certificates push to ~100 KB) and small
  * enough to prevent abuse.
+ *
+ * Required-directive heuristic: a real .ovpn always declares
+ * `client` (we're the client, not a server) and `remote <host> <port>`.
+ * Without either, the OpenVPN client inside the per-session VM rejects
+ * the config — so we may as well 400 at the API boundary with a clear
+ * message instead of letting it fail at session-create. This is
+ * defence-in-depth: the harness owns the real .ovpn parse; this is a
+ * shape-only sanity check so customers fix typos before they get a
+ * mysterious VM-start failure.
+ *
+ * Comments + blank lines are allowed everywhere in .ovpn so the regex
+ * tolerates surrounding whitespace + comment lines starting with `#`
+ * or `;`.
  */
+const OVPN_CLIENT_DIRECTIVE_RE = /^[ \t]*client\b/m;
+const OVPN_REMOTE_DIRECTIVE_RE = /^[ \t]*remote\s+\S+/m;
 export const OpenVpnProxyConfigSchema = z.object({
   config_blob: z
     .string()
     .min(1)
-    .max(256 * 1024),
+    .max(256 * 1024)
+    .refine((blob) => OVPN_CLIENT_DIRECTIVE_RE.test(blob), {
+      message: 'OpenVPN config must contain a `client` directive (received a non-client .ovpn).',
+    })
+    .refine((blob) => OVPN_REMOTE_DIRECTIVE_RE.test(blob), {
+      message: 'OpenVPN config must contain a `remote <host> <port>` directive.',
+    }),
   username: z.string().min(1).max(256).optional(),
   password: z.string().min(1).max(256).optional(),
 });

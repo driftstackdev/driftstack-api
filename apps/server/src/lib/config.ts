@@ -92,6 +92,25 @@ const ConfigSchema = z.object({
       portalReturnUrl: z.string().url().optional(),
     })
     .optional(),
+  // AI-D — AI chat agent layer (planning 132 §"Phase 7"; founder
+  // 2026-05-16 BYOK Anthropic locked for v1.0 launch).
+  //
+  // `byokAnthropic.fallbackApiKey` is the optional Driftstack-side
+  // fallback key used ONLY when a customer hasn't supplied their
+  // own. Per the Tier-3 verdict, BYOK is the v1.0 path — most
+  // customers bring their own; the fallback is for the founder's
+  // own demos + integration tests. Bundled-LLM billing (where
+  // Driftstack absorbs the cost + bills the customer) is deferred
+  // to v1.1.
+  //
+  // Until the founder shares the actual key, this stays unset; the
+  // AgentRuntime stays activation-gated (503 stub posture).
+  byokAnthropic: z
+    .object({
+      fallbackApiKey: z.string().min(1).optional(),
+      model: z.string().min(1).optional(),
+    })
+    .optional(),
   // V-079: where the user-facing auth-flow links point. The plaintext
   // single-use token gets appended as `?token=<...>` to each. Defaults
   // are dev-friendly localhost URLs; production sets these to the real
@@ -414,6 +433,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
             ...(env.STRIPE_PORTAL_RETURN_URL
               ? { portalReturnUrl: env.STRIPE_PORTAL_RETURN_URL }
               : {}),
+          }
+        : undefined,
+    // AI-D BYOK Anthropic — read from env only (per memory rule
+    // "Credentials via env vars only"). Founder will share the
+    // fallback key when ready; until then `byokAnthropic` stays
+    // undefined and the AgentRuntime activation-gate keeps the
+    // /v1/agent-sessions/* routes on the 503-stub path.
+    byokAnthropic:
+      env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY || env.DRIFTSTACK_ANTHROPIC_MODEL
+        ? {
+            ...(env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY
+              ? { fallbackApiKey: env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY }
+              : {}),
+            ...(env.DRIFTSTACK_ANTHROPIC_MODEL ? { model: env.DRIFTSTACK_ANTHROPIC_MODEL } : {}),
           }
         : undefined,
     authFlowUrls: deriveAuthFlowUrls(env),
