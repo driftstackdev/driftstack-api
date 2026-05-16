@@ -59,10 +59,24 @@ match each provider's Console-registered redirect URI:
 - Google Cloud Console: `https://api.driftstack.dev/v1/auth/oauth/google/callback`
 - GitHub OAuth App: `https://api.driftstack.dev/v1/auth/oauth/github/callback`
 
-For one release cycle the old `OAUTH_CLIENT_CALLBACK_URL` env name
-still parses (treated as the base) so an operator who updates the
-env after the code deploy doesn't immediately disable OAuth. Drop
-the old name once both servers are on the new value.
+**No silent fallback** from the old env name. The OLD env value is
+the wrong shape for the new field (would compose wrong per-provider
+URLs and reproduce the redirect_uri_mismatch bug from a different
+code path), so we'd rather flip `oauthClient:false` (route
+un-registers, login buttons surface "OAuth start failed" banner)
+than silently send broken URLs to the IDP.
+
+**Safe rollout sequence:**
+
+1. SSH both servers: **add** `OAUTH_CLIENT_CALLBACK_URL_BASE=...` to
+   `/opt/driftstack/api/.env` alongside the existing
+   `OAUTH_CLIENT_CALLBACK_URL`. No restart needed — live code reads
+   the old name, doesn't know about the new one.
+2. Deploy new code via `bash scripts/deploy-bridge.sh staging` then
+   `bash scripts/deploy-bridge.sh prod`. The deploy-bridge restarts
+   the service; new code reads the new env name.
+3. After confirming `oauthClient:true` on both servers, optionally
+   remove the now-unused `OAUTH_CLIENT_CALLBACK_URL` line.
 
 Both providers can be activated independently — the route gate at
 `lib/app.ts` registers when ≥1 provider has both clientId +

@@ -452,13 +452,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // derived from a base (`OAUTH_CLIENT_CALLBACK_URL_BASE`). The new
     // value MUST match the provider-console redirect registration:
     //   https://api.driftstack.dev/v1/auth/oauth
-    // The old env name still parses for one release cycle so an
-    // operator who SSH-updates env vars after the code deploy doesn't
-    // immediately disable OAuth — see boot-time deprecation warning.
+    //
+    // No silent fallback from the old env name to the new field: the
+    // OLD env value (an SPA URL ending in `/auth/oauth-client/callback`)
+    // is the wrong SHAPE for the new field — using it would compose
+    // wrong per-provider URLs (`SPA/google/callback`) and reproduce
+    // the redirect_uri_mismatch bug via a different code path. Safer
+    // to flip oauthClient to false (route un-registers) until the
+    // operator updates env than to silently produce broken URLs.
     oauthClient:
       env.OAUTH_CLIENT_SIGNING_SECRET ||
       env.OAUTH_CLIENT_CALLBACK_URL_BASE ||
-      env.OAUTH_CLIENT_CALLBACK_URL ||
       env.GOOGLE_OAUTH_CLIENT_ID ||
       env.GITHUB_OAUTH_CLIENT_ID
         ? {
@@ -467,9 +471,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
               : {}),
             ...(env.OAUTH_CLIENT_CALLBACK_URL_BASE
               ? { callbackUrlBase: env.OAUTH_CLIENT_CALLBACK_URL_BASE }
-              : env.OAUTH_CLIENT_CALLBACK_URL
-                ? { callbackUrlBase: env.OAUTH_CLIENT_CALLBACK_URL }
-                : {}),
+              : {}),
             ...(env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET
               ? {
                   google: {
