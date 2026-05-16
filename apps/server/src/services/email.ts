@@ -132,11 +132,15 @@ export interface EmailService {
     confirmLink: string;
     expiresAt: Date;
   }): Promise<void>;
-  /** V-295c3-followup — fires when a public incident is posted or resolved. */
+  /** V-295c3-followup + V-545.B — fires when a public incident is posted,
+   *  updated, or resolved. The 'updated' kind is wired-but-deferred:
+   *  the template is shipped so subscribers receive it once the V-545.B
+   *  throttling-table follow-up lands. Until then, callers default to
+   *  'created' / 'resolved'. */
   sendStatusIncidentNotification(args: {
     to: string;
-    /** 'created' or 'resolved'. */
-    kind: 'created' | 'resolved';
+    /** 'created' | 'updated' | 'resolved'. */
+    kind: 'created' | 'updated' | 'resolved';
     title: string;
     severity: string;
     status: string;
@@ -376,6 +380,19 @@ const TEMPLATES = {
     html: (v) =>
       `<p>Driftstack has resolved the open service-status incident.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Incident:</strong></td><td>${v.title}</td></tr><tr><td><strong>Resolved at:</strong></td><td>${v.incidentTime} (UTC)</td></tr></table><p><strong>Resolution notes:</strong><br />${v.message}</p><p>Live status: <a href="${v.statusPageUrl}">${v.statusPageUrl}</a><br />Unsubscribe: <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
   },
+  // V-545.B — DRAFT copy. Per-update notification (Phase 2 wire-up
+  // pending throttling table; the template is shipped so the bootstrap
+  // wire can land in a single follow-up wave). Subject distinguishes
+  // updates from the initial "incident posted" to avoid confusing
+  // subscribers who'd otherwise read repeated "[posted]" subjects on
+  // a long-running incident.
+  'status-incident-updated': {
+    subject: '[Driftstack status] Incident update',
+    text: (v) =>
+      `Driftstack posted an update on an open service-status incident.\n\nIncident: ${v.title}\nSeverity: ${v.severity}\nCurrent status: ${v.status}\nUpdate posted: ${v.incidentTime} (UTC)\n\nUpdate:\n${v.message}\n\nLive status: ${v.statusPageUrl}\nUnsubscribe: ${v.unsubscribeLink}\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Driftstack posted an update on an open service-status incident.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Incident:</strong></td><td>${v.title}</td></tr><tr><td><strong>Severity:</strong></td><td>${v.severity}</td></tr><tr><td><strong>Current status:</strong></td><td>${v.status}</td></tr><tr><td><strong>Update posted:</strong></td><td>${v.incidentTime} (UTC)</td></tr></table><p><strong>Update:</strong><br />${v.message}</p><p>Live status: <a href="${v.statusPageUrl}">${v.statusPageUrl}</a><br />Unsubscribe: <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
+  },
   // V-486 — DRAFT copy. Quota-warning fires once per account per
   // billing period when concurrent-cap utilisation crosses 80%, OR
   // when trial-pack credit drops below 20% of the original 299¢.
@@ -563,15 +580,23 @@ export function createEmailService({
       statusPageUrl,
       unsubscribeLink,
     }) =>
-      send(kind === 'created' ? 'status-incident-created' : 'status-incident-resolved', to, {
-        title,
-        severity,
-        status,
-        message,
-        incidentTime: incidentTime.toISOString(),
-        statusPageUrl,
-        unsubscribeLink,
-      }),
+      send(
+        kind === 'created'
+          ? 'status-incident-created'
+          : kind === 'updated'
+            ? 'status-incident-updated'
+            : 'status-incident-resolved',
+        to,
+        {
+          title,
+          severity,
+          status,
+          message,
+          incidentTime: incidentTime.toISOString(),
+          statusPageUrl,
+          unsubscribeLink,
+        },
+      ),
     sendTeamInvite: ({ to, acceptLink, expiresAt, role }) =>
       send('team-invite', to, {
         acceptLink,

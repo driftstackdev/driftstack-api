@@ -124,10 +124,19 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           <td>Unsubscribe link in body.</td>
         </tr>
         <tr>
+          <td><strong>status-incident-updated</strong></td>
+          <td>
+            Operator posted an update on an open incident (V-545.B).
+            Throttled to at most 1 per subscriber per incident per
+            hour to prevent inbox flood on long-running incidents.
+          </td>
+          <td>Unsubscribe link in body.</td>
+        </tr>
+        <tr>
           <td><strong>status-incident-resolved</strong></td>
           <td>Same incident resolved.</td>
           <td>Unsubscribe link in body (single subscription
-            covers both create + resolve).</td>
+            covers create + update + resolve).</td>
         </tr>
         <tr>
           <td><strong>session-event-digest</strong></td>

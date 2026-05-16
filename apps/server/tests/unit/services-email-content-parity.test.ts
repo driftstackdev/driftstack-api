@@ -130,7 +130,7 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
     expect(body).toMatch(/sendStatusSubscriptionWelcome\(args: \{/);
     expect(body).toMatch(/V-298b — team invite email[\s\S]+?sendTeamInvite\(args: \{/);
     expect(body).toMatch(
-      /V-295c3-followup — fires when a public incident is posted or resolved[\s\S]+?sendStatusIncidentNotification\(args: \{/,
+      /V-295c3-followup \+ V-545\.B — fires when a public incident is posted,[\s\S]+?sendStatusIncidentNotification\(args: \{/,
     );
     expect(body).toMatch(/readonly isConfigured: boolean;/);
   });
@@ -188,9 +188,9 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
     );
   });
 
-  it("sendStatusIncidentNotification: kind 'created' → 'status-incident-created' template; 'resolved' → 'status-incident-resolved' template", () => {
+  it("sendStatusIncidentNotification: kind 'created' → 'status-incident-created' template; 'updated' → 'status-incident-updated' (V-545.B); 'resolved' → 'status-incident-resolved' template", () => {
     expect(body).toMatch(
-      /send\(kind === 'created' \? 'status-incident-created' : 'status-incident-resolved', to, \{/,
+      /send\(\s*\n?\s*kind === 'created'\s*\n?\s*\? 'status-incident-created'\s*\n?\s*: kind === 'updated'\s*\n?\s*\? 'status-incident-updated'\s*\n?\s*: 'status-incident-resolved',/,
     );
   });
 

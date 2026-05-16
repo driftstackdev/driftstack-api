@@ -92,7 +92,7 @@ describe('W519.C apps/marketing-site/src/pages/docs/emails-reference.astro conte
     expect(body).toMatch(/<td>Subscription cancellation processed\.<\/td>/);
   });
 
-  it("Status + ops 6-template framing pinned: status-subscription-confirmation (Email-list opt-in confirmation from status page, link IS the opt-in confirmation, one-click unsubscribe) + status-subscription-welcome (first 'you're subscribed') + status-incident-created (Incident filed) + status-incident-resolved (single subscription covers both create + resolve) + session-event-digest (Weekly summary of sessions run + outcomes, unsubscribe link in body) + quota-warning (Approaching tier's concurrency / minute cap, NOT opt-outable, guards against accidental overage) — pinned so the 6-status+ops template + status-page-opt-in + single-subscription-create+resolve + quota-warning-no-opt-out commitment survives", () => {
+  it('Status + ops 7-template framing pinned: status-subscription-confirmation + status-subscription-welcome + status-incident-{created,updated,resolved} (status-incident-updated added 2026-05-16 for V-545.B Phase 2) + session-event-digest + quota-warning', () => {
     expect(body).toMatch(/<strong>status-subscription-confirmation<\/strong>/);
     expect(body).toMatch(
       /<td>Email-list opt-in confirmation from\s*\n?\s*<a href="https:\/\/status\.driftstack\.dev">status page<\/a>\.<\/td>/,
@@ -102,9 +102,10 @@ describe('W519.C apps/marketing-site/src/pages/docs/emails-reference.astro conte
     );
     expect(body).toMatch(/<strong>status-subscription-welcome<\/strong>/);
     expect(body).toMatch(/<strong>status-incident-created<\/strong>/);
+    expect(body).toMatch(/<strong>status-incident-updated<\/strong>/);
     expect(body).toMatch(/<strong>status-incident-resolved<\/strong>/);
     expect(body).toMatch(
-      /<td>Unsubscribe link in body \(single subscription\s*\n?\s*covers both create \+ resolve\)\.<\/td>/,
+      /<td>Unsubscribe link in body \(single subscription\s*\n?\s*covers create \+ update \+ resolve\)\.<\/td>/,
     );
     expect(body).toMatch(/<strong>session-event-digest<\/strong>/);
     expect(body).toMatch(/<td>Weekly summary of sessions run \+ outcomes\.<\/td>/);
