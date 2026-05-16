@@ -61,9 +61,12 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     expect(body).toMatch(
       /We'll send you to Stripe to confirm payment\. Your card details\s+stay between you and Stripe — we never see them/,
     );
-    // Step 2 — first session = real iPhone Safari on the fleet.
+    // Step 2 — first session = iPhone Safari instance on the EU fleet.
+    // 2026-05-16 honesty pass: "a real iPhone Safari instance" → "an
+    // iPhone Safari instance" (drop "real" implying literal binary;
+    // surrounding context establishes WebKit-on-our-fleet posture).
     expect(body).toMatch(
-      /you'll create your first session — a real iPhone\s+Safari instance running on our fleet/,
+      /you'll create your first session — an iPhone\s+Safari instance running on our EU fleet/,
     );
     // Step 3 — first API key auto-created + revocable.
     expect(body).toMatch(
@@ -99,10 +102,11 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     expect(body).toMatch(/R6 polish/);
   });
 
-  it('hero claim (R6 plain-English rewrite): real iPhone Safari sessions + same browser engine + indistinguishable from a physical iPhone', () => {
+  it('hero claim (R6 + 2026-05-16 honesty pass): iPhone Safari sessions on real WebKit + same engine + indistinguishable from a physical phone (was "real iPhone Safari sessions" — reframed to "real WebKit" since we build the WebKit engine, not the literal Safari binary; matches the homepage hero at 2d0deca0)', () => {
     expect(body).toMatch(
-      /Driftstack runs real iPhone Safari sessions — the same browser engine\s+every iPhone uses, so your sessions look indistinguishable from a\s+physical phone/,
+      /Driftstack runs iPhone Safari sessions on real WebKit — the same\s+engine every iPhone uses, so your sessions look indistinguishable\s+from a physical phone/,
     );
+    expect(body).not.toMatch(/Driftstack runs real iPhone Safari sessions/);
   });
 
   it('layout uses withSidebar={false} (welcome surface is pre-tier-selection)', () => {
