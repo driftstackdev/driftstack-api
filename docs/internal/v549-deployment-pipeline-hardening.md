@@ -34,6 +34,33 @@ V-549 closes these gaps with minimal infra change.
 in `.github/workflows/server-deploy.yml`. V-549.C remains design-only
 until multi-instance landing.
 
+**V-549.B end-to-end (2026-05-16):** the manual `scripts/deploy-bridge.sh`
+toolchain now provides V-549.B equivalents at the deploy-bridge level
+(the deploy-bridge is the actual prod-deploy path today; the GitHub
+Actions workflows still build images but the docker-compose runtime
+mismatch makes them non-functional, see
+`docs/internal/2026-05-15-deploy-pipeline-mismatch.md`):
+
+- `scripts/post-deploy-verify.mjs` — 9 invariants against the public
+  origin (health / version / version-SHA matches expected / status /
+  status incidents list / status incident detail / account oauth-links
+  route registered / openapi / unknown-path 404).
+- `/opt/driftstack/api/.last-good-sha` — written on every successful
+  deploy by `scripts/deploy-bridge.sh`. Only confirmed-healthy SHAs
+  land there.
+- `scripts/revert-bridge.sh [--dry-run]` — reads `.last-good-sha`,
+  redeploys it via deploy-bridge. `--dry-run` previews + exits 0/2
+  based on whether revert is needed.
+- Auto-revert: `deploy-bridge.sh` invokes revert-bridge on
+  post-deploy-verify FAIL (AUTO_REVERT=0 disables to prevent
+  recursion).
+- `/opt/driftstack/api/.deploy-history.log` — append-only audit log
+  of every successful deploy with elapsed-time + previous SHA.
+- `scripts/deploy-status.sh [--check] [--quiet] [--json]` — read-only
+  snapshot for cron monitoring + ad-hoc forensics.
+
+Operator runbook: `docs/runbooks/deploy-bridge.md`.
+
 ## Three hardening layers
 
 ### V-549.A — pre-deploy smoke
