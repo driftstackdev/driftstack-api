@@ -8,11 +8,16 @@ toolchain that bridges the docker-compose-vs-systemd mismatch (see
 
 ```sh
 bash scripts/deploy-status.sh                # read-only snapshot of both servers
+bash scripts/deploy-status.sh --check        # exit non-zero if any activation flag is off
 bash scripts/deploy-bridge.sh staging        # deploy origin/main to staging
 bash scripts/revert-bridge.sh --dry-run prod # preview revert target + recent history
 ```
 
-`deploy-status.sh` is read-only and always safe.
+`deploy-status.sh` is read-only and always safe. `--check` is the
+shape to wire into cron / monitoring (`|| alert`).
+
+`--json` is supported on both `deploy-status.sh` and
+`scripts/post-deploy-verify.mjs` for structured tooling output.
 
 ## When to use
 
