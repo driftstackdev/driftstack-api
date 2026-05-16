@@ -115,7 +115,7 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
     expect(body).toMatch(/findOpenAutoIncident\(target: string\): Promise<IncidentRow \| null>;/);
   });
 
-  it('V-295c3-followup IncidentsLifecycle: onPublicCreated + onPublicResolved; throw logged+swallowed (never roll back)', () => {
+  it('V-295c3-followup IncidentsLifecycle: onPublicCreated + onPublicResolved + V-545.B onPublicUpdated; throw logged+swallowed (never roll back)', () => {
     expect(body).toMatch(
       /V-295c3-followup — lifecycle callbacks\.\s*\n?\s*\*\s*\n?\s*\*\s*Both fire AFTER the incident write commits successfully\. Callbacks\s*\n?\s*\*\s*are awaited; a throw is logged \+ swallowed by the IncidentsService\s*\n?\s*\*\s*\(we never want a notification failure to roll back an incident\s*\n?\s*\*\s*write — the incident IS the source of truth, the email is best-effort\)\./,
     );
@@ -125,6 +125,9 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
     );
     expect(body).toMatch(
       /onPublicResolved\?: \(incident: IncidentRow, finalUpdate: IncidentUpdateRow\) => Promise<void>;/,
+    );
+    expect(body).toMatch(
+      /onPublicUpdated\?: \(incident: IncidentRow, update: IncidentUpdateRow\) => Promise<void>;/,
     );
   });
 

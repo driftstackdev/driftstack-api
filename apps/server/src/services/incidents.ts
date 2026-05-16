@@ -119,6 +119,15 @@ export interface IncidentsRepo {
 export interface IncidentsLifecycle {
   onPublicCreated?: (incident: IncidentRow, initialUpdate: IncidentUpdateRow) => Promise<void>;
   onPublicResolved?: (incident: IncidentRow, finalUpdate: IncidentUpdateRow) => Promise<void>;
+  /**
+   * V-545.B — invoked per `addUpdate` call on a public incident,
+   * with the parent incident + the just-posted update. Hook target
+   * decides whether to fan out to subscribers (throttled per the
+   * V-545.B doc — 1 email per subscriber per incident per hour).
+   * Failure is swallowed by the service (notification never rolls
+   * back an incident write).
+   */
+  onPublicUpdated?: (incident: IncidentRow, update: IncidentUpdateRow) => Promise<void>;
 }
 
 export class IncidentsService {
@@ -166,7 +175,25 @@ export class IncidentsService {
   }
 
   async addUpdate(input: AddUpdateInput): Promise<IncidentUpdateRow> {
-    return this.repo.addUpdate(input);
+    const update = await this.repo.addUpdate(input);
+    if (this.lifecycle.onPublicUpdated) {
+      // V-545.B — fetch parent incident to determine public flag.
+      // The repo.addUpdate already mutated incident.status as a side-
+      // effect; we read the post-update incident so the hook sees
+      // the freshest state. Failure here is swallowed (same posture
+      // as onPublicCreated / onPublicResolved).
+      try {
+        const incident = await this.repo.get(input.incidentId);
+        if (incident && incident.public) {
+          await this.lifecycle.onPublicUpdated(incident, update).catch(() => {
+            // Notification failures must never roll back addUpdate.
+          });
+        }
+      } catch {
+        // Swallow — onPublicUpdated is best-effort.
+      }
+    }
+    return update;
   }
 
   async resolve(
