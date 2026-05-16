@@ -1,8 +1,55 @@
-# AI chat agent layer — design (post-launch v1.1)
+# AI chat agent layer — design (v1.0 launch arc per founder 2026-05-16)
 
-**Status:** DESIGN only. Implementation deferred to v1.1 sprint after
-the v1 launch ladder (V-500 pricing detail, V-501 onboarding wizard,
-real-IDP smoke) settles.
+**Status:** Implementation IN PROGRESS for v1.0. Scope reversal —
+founder verdict 2026-05-16 pulled this from v1.1 → v1.0 launch arc
+("close to finishing all tasks earlier on, and can work on these things
+just fine, so we should just do it before launch — a great feature
+that can attract many customers"). Tier-3 BYOK-Anthropic decision
+LOCKED 2026-05-16.
+
+**Shipped this Wave (1119+):**
+
+- AI-A — `AgentSessionsRepo` interface + `InMemoryAgentSessionsRepo`
+  (commit `cc876a49`). 11 unit tests. SQL migration deferred to AI-A.b
+  (Tier-2 founder review).
+- AI-B1 — `DeterministicAgentDecomposer` (commit `b4caffa4`) covering
+  token-budget refuse / AUP refuse (5-pattern launch corpus) /
+  ambiguity clarify / bounded plan. 13 unit tests. **AI-B1.b** (real
+  Anthropic Claude wire) unblocked by BYOK lock — pending dedicated
+  focused session.
+- AI-B2 — `AgentExecutor` interface + `StubAgentExecutor` +
+  `runResultToTranscriptEntry` (commit `3a0b9469`). 7 unit tests.
+  Real harness-wired executor (AI-B2.b) pending.
+- AI-COMPOSE — `AgentRuntime` composes all three primitives
+  end-to-end (commit `09487cc6`). 6 unit tests cover all 4 outcome
+  branches.
+- AI-D — `/v1/agent-sessions/*` routes wiring AgentRuntime
+  (activation-gated; commit `611ddc8f`). 7 integration tests.
+  OpenAPI specs in `d4ae328a`. SDK-TS (`aadc3ffb`) + SDK-Py / SDK-Go
+  (`d2c85e21`) at full parity. Sample programs (`a8141d3b` + `bd7d4117`
+  - `40fc965a`).
+- Cross-source activation-gate invariant (commit `e074fcf6`) covers
+  the AI-D routes alongside billing + EGRESS.
+
+**Pending (founder-review-blocked or focused-session):**
+
+- AI-A.b — SQL migration for `agent_sessions` table (Tier-2 founder
+  review for column shape).
+- AI-A.c — `DrizzleAgentSessionsRepo` backed by Postgres (depends on
+  AI-A.b).
+- AI-B1.b — Real Anthropic Claude Opus 4.7 wire against the documented
+  prompt template (unblocked by BYOK lock 2026-05-16; substantial
+  focused session).
+- AI-B2.b — Real harness-wired intent executor (in-process
+  SessionsService dispatch + capture aggregator).
+- A1-A4 (UI surface) — customer-dashboard chat composer + transcript
+  - live preview pane + "Get code" export modal + recipe save flow.
+- B3 — Per-session token budget enforcer (default `DEFAULT_TOKEN_BUDGET
+= 100_000` is a v0 placeholder until tier-derived caps land).
+- B4 — Recipe-library writer.
+- C1/C2/C3 — Billing integration (BYOK + bundled + token-usage
+  metering).
+- D1/D2/D3 — Recipe library back-end.
 
 **References:**
 
