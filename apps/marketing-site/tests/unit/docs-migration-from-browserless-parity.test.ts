@@ -93,10 +93,13 @@ describe('W357.A /docs/migration-from-browserless parity', () => {
     expect(body).toMatch(/api_scale/);
   });
 
-  it('"WebKit only" + "Cloud only today" negative claims pinned', () => {
-    expect(body).toMatch(/Self-hosted on-prem\. Cloud only today\./);
-    expect(body).toMatch(/WebKit only\./);
-    expect(body).toMatch(/Chrome \+ Firefox are\s+on the roadmap/);
+  it('F-5 (Issue 5) negative-scope claims reframed: Cloud-only + Enterprise self-hosted-on-request callout; WebKit-only + Chrome/Firefox-not-a-planned-capability (was "on the roadmap" — reframed per Issue 5 so Chromium shops self-select out fast)', () => {
+    expect(body).toMatch(/Self-hosted on-prem \(cloud-only today; Self-hosted SKU/);
+    expect(body).toMatch(/Driftstack is WebKit\/iOS Safari\s+only by product scope/);
+    expect(body).toMatch(
+      /Chrome \/ Firefox automation is not\s+a planned capability of this product/,
+    );
+    expect(body).not.toMatch(/Chrome \+ Firefox are\s+on the roadmap/);
   });
 
   it('"no /function-style endpoint" claim pinned (negative server-side guard)', () => {

@@ -45,13 +45,15 @@ describe('W367.A marketing-site /about page content parity', () => {
     expect(body).toMatch(/<h3 class="font-semibold text-ink-primary">Honest scope<\/h3>/);
   });
 
-  it('EU stack pinned: Hetzner FSN / Neon EU / Cloudflare R2 EU / Postmark EU', () => {
-    // Load-bearing residency claim. A future migration off any
-    // of these must update this page first.
-    expect(body).toMatch(/Compute in Hetzner Falkenstein/);
-    expect(body).toMatch(/Database on Neon EU/);
-    expect(body).toMatch(/Object\s+storage on Cloudflare R2 EU/);
-    expect(body).toMatch(/Email through Postmark EU\s+sending region/);
+  it('F-5 (Issue 6) EU stack reframed: vendor names moved to /trust/sub-processors. Page commits to the residency posture ("Compute, database, object storage, and email all run in the EU") without naming vendors on the about-page splash. Vendor migration discussions belong on the dedicated sub-processor page.', () => {
+    expect(body).toMatch(
+      /Compute, database, object storage, and email all run in\s+the EU\. Single-region — no silent transatlantic data\s+flows\./,
+    );
+    expect(body).toMatch(/href="\/trust\/sub-processors"/);
+    expect(body).not.toMatch(/Compute in Hetzner Falkenstein/);
+    expect(body).not.toMatch(/Database on Neon EU/);
+    expect(body).not.toMatch(/Object\s+storage on Cloudflare R2 EU/);
+    expect(body).not.toMatch(/Email through Postmark EU\s+sending region/);
   });
 
   it('no-behavioural-data 4 specifics pinned (URLs / bodies / training / sale)', () => {
@@ -67,10 +69,10 @@ describe('W367.A marketing-site /about page content parity', () => {
     expect(body).toMatch(/SOC 2 is a future-revenue milestone, not\s+today's marketing line/);
   });
 
-  it('V-506 operating-commitments 4 cards pinned + each has a verifiable public URL', () => {
+  it('F-5 (Issue 5) V-506 operating-commitments 4 cards pinned (current-scale framing, no "Pre-launch" labels per Issue 5) + each has a verifiable public URL', () => {
     expect(body).toContain('Operating commitments');
-    expect(body).toMatch(/Pre-launch security audit, on a cadence/);
-    expect(body).toMatch(/Disaster recovery rehearsed pre-launch/);
+    expect(body).toMatch(/Per-merge security audit, on a cadence/);
+    expect(body).toMatch(/Disaster recovery, rehearseable on staging/);
     expect(body).toMatch(/Sub-processor change-log per Article 28\(2\)/);
     expect(body).toMatch(/Source escrow for Enterprise \+ Self-hosted/);
     // Each card cross-links to a verifiable public page.
@@ -78,6 +80,9 @@ describe('W367.A marketing-site /about page content parity', () => {
     expect(body).toMatch(/href="\/trust\/incidents"/);
     expect(body).toMatch(/href="\/trust\/sub-processors"/);
     expect(body).toMatch(/href="\/faq#acceptable-use"/);
+    // F-5 — "Pre-launch" labels must not return.
+    expect(body).not.toMatch(/Pre-launch security audit, on a cadence/);
+    expect(body).not.toMatch(/Disaster recovery rehearsed pre-launch/);
   });
 
   it('DR runbook scope pinned: 11 rehearsable scenarios (host loss / Postgres / R2 / cert / multi-day Hetzner)', () => {

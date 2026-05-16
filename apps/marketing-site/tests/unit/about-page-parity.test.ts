@@ -21,20 +21,22 @@ function read(p: string): string {
 describe('W262.B /about ↔ live posture parity', () => {
   const page = read(PAGE);
 
-  it('EU-resident sub-processor names cited match the live SUB_PROCESSORS list', () => {
-    // The "EU-resident, by default" card mentions Hetzner, Neon, Cloudflare, Postmark.
-    const cited = ['Hetzner', 'Neon', 'Cloudflare', 'Postmark'];
+  it('F-5 (Issue 6) about page links to /trust/sub-processors for the live SUB_PROCESSORS list (vendor names moved off the about page splash); the sub-processor data module is still the source of truth and must contain the four vendors that previously appeared inline', () => {
+    // The about page now points to /trust/sub-processors rather than
+    // enumerating vendors inline. Verify the link exists.
+    expect(page).toContain('/trust/sub-processors');
+    // And the source-of-truth data still includes the four cited vendors
+    // (so the cross-page sub-processor surface stays consistent).
+    const expected = ['Hetzner', 'Neon', 'Cloudflare', 'Postmark'];
     const liveBases = new Set(SUB_PROCESSORS.map((sp) => sp.name.split(' ')[0]!).filter(Boolean));
-    for (const name of cited) {
-      expect(page).toContain(name);
+    for (const name of expected) {
       expect(liveBases.has(name)).toBe(true);
     }
   });
 
-  it('customer-configurable egress is framed as roadmap, not shipped', () => {
-    // The page must explicitly say it's on the roadmap and not advertise it as live.
-    expect(page).toMatch(/customer-configurable\s+egress/);
-    expect(page).toMatch(/on (?:our|the) roadmap/i);
+  it('F-5 (Issue 5) customer-configurable egress framing on the about page: the prior "on the roadmap" parenthetical was replaced (commit 87e37383) with explicit SOCKS5/WireGuard/OpenVPN listing + cross-link to /trust/security-overview for "the security posture". The honest-disclosure surface for the impl state has moved to security.astro (gated by W499.D against actual server source).', () => {
+    expect(page).toMatch(/customer-configurable\s+egress \(SOCKS5 · WireGuard · OpenVPN/);
+    expect(page).not.toMatch(/customer-configurable\s+egress[\s\S]{0,80}on (?:our|the) roadmap/i);
   });
 
   it('does not advertise SOC 2 as a live certification', () => {

@@ -120,14 +120,15 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
     expect(body).toMatch(/Standard SCCs apply for any non-EU\s+transfer named in Annex 3/);
   });
 
-  it('pre-launch SLA honesty pinned ("don\'t publish a contractual SLA")', () => {
+  it('F-5 (Issue 5) self-serve-tier SLA honesty pinned: "Self-serve tiers operate without a contractual uptime SLA" (was "Pre-launch we don\'t publish a contractual SLA" — reframed per Issue 5 to drop the launch-window label; same scope-limit on the SLA promise)', () => {
     // Load-bearing honesty claim — contractual SLAs only on Self-
     // hosted SKUs + Enterprise. A future "we have an SLA"
     // softening must update this copy first.
     expect(body).toMatch(
-      /Pre-launch we don't publish a contractual SLA — we publish\s+incidents at/,
+      /Self-serve tiers operate without a contractual uptime SLA —\s+we publish incidents at/,
     );
     expect(body).toMatch(/Self-hosted SKUs and Enterprise\s+tiers carry contractual SLA terms/);
+    expect(body).not.toMatch(/Pre-launch we don't publish a contractual SLA/);
   });
 
   it('CAIQ / VSAQ / vendor-portal questionnaire-welcome claim pinned', () => {

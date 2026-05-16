@@ -57,7 +57,7 @@ describe('W247.A marketing-site egress-claim drift sweep', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('SOCKS5 / WireGuard / OpenVPN only appear in roadmap or third-party-proxy context', () => {
+  it('SOCKS5 / WireGuard / OpenVPN only appear in honest-disclosure context (roadmap label OR cross-link to /trust/security-overview)', () => {
     if (hasEgressImpl) return;
     const offenders: string[] = [];
     for (const p of pages) {
@@ -69,9 +69,15 @@ describe('W247.A marketing-site egress-claim drift sweep', () => {
       const body = readFileSync(p, 'utf8');
       const hasProxyMention = /SOCKS5|WireGuard|OpenVPN/.test(body);
       if (!hasProxyMention) continue;
-      // Allow the mention as long as the surrounding doc flags "roadmap"
-      // somewhere (case-insensitive).
-      if (!/roadmap/i.test(body)) {
+      // Allow the mention if EITHER the doc still flags "roadmap" inline
+      // OR the doc cross-links to /trust/security-overview (the canonical
+      // honest-disclosure surface for the egress impl state; F-5 Issue 5
+      // reframe — pages no longer label features "on the roadmap" inline
+      // but they DO point at the surface that holds the impl-state
+      // disclosure, which is gated by W499.D against actual server source).
+      const hasRoadmap = /roadmap/i.test(body);
+      const hasSecOverviewLink = /\/trust\/security-overview/.test(body);
+      if (!hasRoadmap && !hasSecOverviewLink) {
         offenders.push(p.replace(REPO + '/', ''));
       }
     }

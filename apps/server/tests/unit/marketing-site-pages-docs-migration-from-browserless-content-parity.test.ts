@@ -128,20 +128,25 @@ describe('W521.B apps/marketing-site/src/pages/docs/migration-from-browserless.a
     expect(body).toMatch(/<li><strong>QA \/ E2E test infrastructure<\/strong> — api_scale\.<\/li>/);
   });
 
-  it("5-NOT-do list pinned: 'Raw WebSocket / CDP passthrough. The action endpoints are the contract; arbitrary CDP messages are blocked on purpose to keep the per-request cost predictable.' + 'Server-side JS execution. There is no /function-style endpoint; express your flow as actions or do the extraction client-side off the state response.' + 'Self-hosted on-prem. Cloud only today.' + 'Browser type selection. WebKit only. Chrome + Firefox are on the roadmap.' + 'Session recordings — see /docs/recordings for status.' — pinned so the 5-NOT-do enumeration + cost-predictability rationale + WebKit-only-cloud-only commitment survives", () => {
+  it('F-5 (Issue 5) 5-NOT-do list pinned with current-state framing: CDP-passthrough blocked + /function endpoint absent + Self-hosted cloud-only-today (Enterprise on request) + WebKit/iOS Safari only by product scope (Chrome / Firefox not a planned capability) + Session recordings status page', () => {
     expect(body).toMatch(
       /<li>Raw WebSocket \/ CDP passthrough\. The action endpoints are\s*\n?\s*the contract; arbitrary CDP messages are blocked on purpose\s*\n?\s*to keep the per-request cost predictable\.<\/li>/,
     );
     expect(body).toMatch(
       /<li>Server-side JS execution\. There is no\s*\n?\s*<code>\/function<\/code>-style endpoint; express your flow as\s*\n?\s*actions or do the extraction client-side off the\s*\n?\s*<code>state<\/code> response\.<\/li>/,
     );
-    expect(body).toMatch(/<li>Self-hosted on-prem\. Cloud only today\.<\/li>/);
     expect(body).toMatch(
-      /<li>Browser type selection\. WebKit only\. Chrome \+ Firefox are\s*\n?\s*on the roadmap\.<\/li>/,
+      /<li>Self-hosted on-prem \(cloud-only today; Self-hosted SKU\s*\n?\s*available to Enterprise on request\)\.<\/li>/,
+    );
+    expect(body).toMatch(
+      /<li>Browser type selection — Driftstack is WebKit\/iOS Safari\s*\n?\s*only by product scope\. Chrome \/ Firefox automation is not\s*\n?\s*a planned capability of this product\.<\/li>/,
     );
     expect(body).toMatch(
       /<li>Session recordings — see\s*\n?\s*<a href="\/docs\/recordings">\/docs\/recordings<\/a> for status\.<\/li>/,
     );
+    // F-5 — the prior "Chrome + Firefox are on the roadmap" framing
+    // must not return.
+    expect(body).not.toMatch(/Chrome \+ Firefox are\s*\n?\s*on the roadmap/);
   });
 
   it("5-step migration checklist pinned: 1) Inventory /function vs /screenshot vs raw CDP + 2) 'If /function bodies do non-trivial JS evaluation or raw CDP > 10% of calls: get in touch before starting; the action-based surface may not cover you yet.' + 3) Port one job (TypeScript SDK or Python SDK takes a couple of hours per job) + 4) Set up webhooks for session-completed events — replace polling loops + 5) Wire cost monitoring alerts before flipping production traffic — pinned so the 5-step migration + 10%-CDP threshold + 'couple of hours per job' commitment survives", () => {

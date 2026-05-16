@@ -31,11 +31,13 @@ describe('W334.B /about narrative baseline', () => {
     expect(body).toMatch(/we run Apple's WebKit\s+source code/);
   });
 
-  it('EU-resident posture lists Hetzner / Neon / Cloudflare R2 / Postmark', () => {
-    expect(body).toMatch(/Hetzner\s+Falkenstein/);
-    expect(body).toMatch(/Neon\s+EU/);
-    expect(body).toMatch(/Cloudflare\s+R2\s+EU/);
-    expect(body).toMatch(/Postmark\s+EU/);
+  it('F-5 (Issue 6) EU-resident posture: vendor names moved to /trust/sub-processors; the about-page card now links there instead of enumerating vendors inline', () => {
+    expect(body).toMatch(/Compute, database, object storage, and email all run in\s+the EU/);
+    expect(body).toMatch(/href="\/trust\/sub-processors"/);
+    expect(body).not.toMatch(/Hetzner\s+Falkenstein/);
+    expect(body).not.toMatch(/Neon\s+EU/);
+    expect(body).not.toMatch(/Cloudflare\s+R2\s+EU/);
+    expect(body).not.toMatch(/Postmark\s+EU/);
   });
 
   it('no-behavioural-data-collection commitment', () => {
@@ -44,11 +46,12 @@ describe('W334.B /about narrative baseline', () => {
     expect(body).toMatch(/We don't train models on your traffic/);
   });
 
-  it("honest scope: SOC 2 framed as future-revenue milestone, not today's marketing", () => {
+  it("honest scope: SOC 2 framed as future-revenue milestone, not today's marketing (the about page still pins this string; the parallel security.astro 'SOC 2 is on the roadmap' was reframed per F-5 to 'SOC 2 is not yet certified' but the about-page wording is independent)", () => {
     expect(body).toMatch(/SOC 2 is a future-revenue milestone, not\s+today's marketing/i);
   });
 
-  it('roadmap honesty: customer-configurable egress NOT framed as shipped', () => {
-    expect(body).toMatch(/customer-configurable\s+egress[\s\S]{0,80}roadmap/i);
+  it('F-5 (Issue 5) customer-configurable egress framing on about page: the prior "(the last is on the roadmap; see /trust/security-overview for what\'s shipped today)" parenthetical was rewritten in scoped commit 87e37383 to "(SOCKS5 · WireGuard · OpenVPN — see /trust/security-overview for the security posture)". Aspirational "on the roadmap" language is gone from this page; the honest-disclosure surface for the egress impl state is now security.astro (gated by W499.D against actual server source).', () => {
+    expect(body).toMatch(/customer-configurable\s+egress \(SOCKS5 · WireGuard · OpenVPN/);
+    expect(body).not.toMatch(/customer-configurable\s+egress[\s\S]{0,80}roadmap/i);
   });
 });
