@@ -44,7 +44,7 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
     );
   });
 
-  it('6 canonical trust-hub cards pinned with cross-links to companion pages', () => {
+  it('7 canonical trust-hub cards pinned with cross-links to companion pages (Cumulative rig card added 2026-05-16 when /trust/cumulative-rig methodology page shipped)', () => {
     for (const [href, heading] of [
       ['/security', 'Architecture + posture →'],
       ['/trust/sub-processors', 'Live list + regions →'],
@@ -52,6 +52,7 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
       ['/legal/dpa', 'DPA · Privacy · Terms · AUP →'],
       ['/trust/compliance', 'Certifications + pen-test + disclosure →'],
       ['/trust/security-overview', "Evaluator's checklist →"],
+      ['/trust/cumulative-rig', 'Signal-by-signal methodology →'],
     ] as const) {
       expect(body, `card cross-link missing: ${href}`).toMatch(
         new RegExp(`href="${href.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}"`),
@@ -67,6 +68,7 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
       'apps/marketing-site/src/pages/trust/incidents.astro',
       'apps/marketing-site/src/pages/legal/dpa.md',
       'apps/marketing-site/src/pages/trust/compliance.astro',
+      'apps/marketing-site/src/pages/trust/cumulative-rig.astro',
       'apps/marketing-site/src/pages/trust/security-overview.astro',
     ]) {
       expect(existsSync(resolve(REPO_ROOT, path)), `companion page missing: ${path}`).toBe(true);
