@@ -52,9 +52,15 @@ describe('W353.B status-site /subscribe parity', () => {
     // Double-opt-in means the server returns 202 on a queued email,
     // not 200. Pin so a future server flip to 200 forces the page
     // copy to update.
+    // Wave 1119 / Slice 1119.3 C1 — the 202 branch now swaps the form
+    // for a dedicated confirm pane (see status-site-subscribe-page-
+    // content-parity.test.ts for the full pane assertions); the
+    // "confirmation email" + "Confirmation email sent" strings still
+    // anchor the success surface so a server-side flip would still
+    // force a copy review.
     expect(body).toMatch(/res\.status === 202/);
-    expect(body).toMatch(/Check your inbox/);
-    expect(body).toMatch(/confirmation email/);
+    expect(body).toMatch(/Confirmation email sent to/);
+    expect(body).toMatch(/confirmation/i);
   });
 
   it('handles 400 (invalid email) + 429 (rate-limited) explicitly', () => {

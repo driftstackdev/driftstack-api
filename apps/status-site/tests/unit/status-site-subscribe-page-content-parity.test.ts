@@ -68,14 +68,41 @@ describe('W369.C status-site /subscribe page content parity', () => {
 
   it('status-code branches: 202 success / 400 invalid email / 429 rate-limit / default error', () => {
     expect(body).toMatch(/res\.status === 202/);
-    expect(body).toMatch(
-      /Check your inbox — click the link in the confirmation email to finish subscribing/,
-    );
+    // Wave 1119 / Slice 1119.3 C1 — the 202 branch swaps the form for a
+    // dedicated confirm pane (separate assertion below); no longer
+    // surfaces a single setStatus("Check your inbox…") line.
     expect(body).toMatch(/res\.status === 400/);
     expect(body).toMatch(/That doesn't look like a valid email address/);
     expect(body).toMatch(/res\.status === 429/);
     expect(body).toMatch(/Too many subscribe attempts from this IP/);
     expect(body).toMatch(/Subscribe failed \(HTTP \$\{res\.status\}\)\./);
+  });
+
+  it('Wave 1119 / Slice 1119.3 C1 — dedicated confirm pane replaces form on 202 (states the address, the sender to look for status@driftstack.dev, the spam-folder hint, the volume-promise reminder + a "Subscribe another address" affordance)', () => {
+    // The pane is hidden initially + revealed on 202.
+    expect(body).toMatch(
+      /<div\s+id="subscribe-confirm"[\s\S]*?class="[^"]*\bhidden\b[^"]*"[\s\S]*?role="status"[\s\S]*?aria-live="polite"/,
+    );
+    // Address echo span (so the customer sees which address it was sent to).
+    expect(body).toMatch(/Confirmation email sent to <span id="confirm-email"[^>]*><\/span>/);
+    // Sender hint (so spam-filter survivors know what to look for).
+    expect(body).toMatch(
+      /Look for a message from <span class="font-mono">status@driftstack\.dev<\/span>/,
+    );
+    // Spam-folder fallback.
+    expect(body).toMatch(/check your\s+spam folder/);
+    // Volume-promise reminder so the customer doesn't need to scroll back up to verify.
+    expect(body).toMatch(/2 emails per incident maximum/);
+    // "Subscribe another address" button (lets a customer add a teammate without page reload).
+    expect(body).toMatch(/<button\s+id="subscribe-another-btn"[\s\S]*?Subscribe another address/);
+    // 202 handler swaps the form for the pane.
+    expect(body).toMatch(/if \(confirmEmail\) confirmEmail\.textContent = email;/);
+    expect(body).toMatch(/if \(confirmPane\) confirmPane\.classList\.remove\('hidden'\);/);
+    expect(body).toMatch(/if \(form\) form\.classList\.add\('hidden'\);/);
+    // "Subscribe another address" reverts.
+    expect(body).toMatch(
+      /subscribeAnotherBtn\?\.addEventListener\('click', \(\) => \{\s*\n?\s*if \(confirmPane\) confirmPane\.classList\.add\('hidden'\);\s*\n?\s*if \(form\) form\.classList\.remove\('hidden'\);/,
+    );
   });
 
   it('V-540.B double-opt-in framing pinned (confirmation email before list-add)', () => {

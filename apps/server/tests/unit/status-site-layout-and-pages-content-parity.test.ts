@@ -209,13 +209,14 @@ describe('W790 status-site src content parity bundle', () => {
     );
   });
 
-  it('CRITICAL subscribe 202+400+429 status-code branches pinned. 202=confirmation-sent, 400=invalid-email, 429=rate-limit-by-IP. Drift to dropping any would lose customer-facing recoverability.', () => {
+  it('CRITICAL subscribe 202+400+429 status-code branches pinned. 202=confirmation-sent, 400=invalid-email, 429=rate-limit-by-IP. Drift to dropping any would lose customer-facing recoverability. Wave 1119 / Slice 1119.3 C1: 202 branch swaps the form for a dedicated confirm pane with sender hint + spam-folder fallback + "subscribe another address" affordance (replaces the prior single setStatus line). 400 + 429 still surface inline status text.', () => {
     const p = read(PAGE_SUB);
 
     expect(p).toMatch(/if \(res\.status === 202\) \{/);
-    expect(p).toMatch(
-      /"Check your inbox — click the link in the confirmation email to finish subscribing\."/,
-    );
+    // C1 confirm-pane swap (was: setStatus("Check your inbox…")).
+    expect(p).toMatch(/if \(confirmEmail\) confirmEmail\.textContent = email;/);
+    expect(p).toMatch(/if \(confirmPane\) confirmPane\.classList\.remove\('hidden'\);/);
+    expect(p).toMatch(/if \(form\) form\.classList\.add\('hidden'\);/);
     expect(p).toMatch(/\} else if \(res\.status === 400\) \{/);
     expect(p).toMatch(/"That doesn't look like a valid email address\."/);
     expect(p).toMatch(/\} else if \(res\.status === 429\) \{/);

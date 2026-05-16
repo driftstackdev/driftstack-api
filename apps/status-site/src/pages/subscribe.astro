@@ -54,6 +54,45 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
       </button>
       <p id="subscribe-status" class="mt-3 hidden text-sm" role="status"></p>
     </form>
+
+    <!-- Wave 1119 / Slice 1119.3 C1 — dedicated confirm pane that replaces
+         the form when the 202 fires. The previous UX was a single status
+         line which buried the next action ("check inbox + click link")
+         in a small italic line below the form. Customers told us they
+         weren't sure if the click had taken effect. The pane states
+         (a) the address it was sent to, (b) the sender to look for, (c)
+         the spam-folder hint, and (d) a "subscribe another address"
+         affordance so the customer can subscribe their team without a
+         page reload. -->
+    <div
+      id="subscribe-confirm"
+      class="mt-6 hidden rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-6 shadow-sm"
+      role="status"
+      aria-live="polite"
+    >
+      <p class="text-sm font-medium text-emerald-300">
+        Confirmation email sent to <span id="confirm-email" class="font-mono"></span>.
+      </p>
+      <p class="mt-3 text-sm text-ink-secondary">
+        Look for a message from <span class="font-mono">status@driftstack.dev</span>
+        in the next minute or two and click the confirmation link to finish
+        subscribing. We won't add your address to the notification list
+        until you click. If it doesn't arrive within 5 minutes, check your
+        spam folder.
+      </p>
+      <p class="mt-3 text-xs text-ink-muted">
+        Already confirmed? You can close this page. We'll only email you
+        when we post an incident (2 emails per incident maximum) and
+        every email carries a one-click unsubscribe link.
+      </p>
+      <button
+        id="subscribe-another-btn"
+        type="button"
+        class="mt-4 inline-flex items-center rounded-md border border-white/15 px-3 py-1.5 text-xs font-medium text-ink-secondary hover:border-white/25 hover:text-ink-primary"
+      >
+        Subscribe another address
+      </button>
+    </div>
   </section>
 
   <section class="text-xs text-ink-muted">
@@ -70,6 +109,10 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   const form = document.getElementById('subscribe-form');
   const status = document.getElementById('subscribe-status');
   const submitBtn = document.getElementById('submit-btn');
+  // Wave 1119 / Slice 1119.3 C1 — dedicated confirm pane elements.
+  const confirmPane = document.getElementById('subscribe-confirm');
+  const confirmEmail = document.getElementById('confirm-email');
+  const subscribeAnotherBtn = document.getElementById('subscribe-another-btn');
 
   function setStatus(message, kind) {
     if (!status) return;
@@ -106,10 +149,12 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
         body: JSON.stringify({ email }),
       });
       if (res.status === 202) {
-        setStatus(
-          "Check your inbox — click the link in the confirmation email to finish subscribing.",
-          'success',
-        );
+        // Wave 1119 / Slice 1119.3 C1 — swap form for confirm pane so
+        // the next action is unmissable + state the sender to look for.
+        if (confirmEmail) confirmEmail.textContent = email;
+        if (confirmPane) confirmPane.classList.remove('hidden');
+        if (form) form.classList.add('hidden');
+        if (status) status.classList.add('hidden');
         form.reset();
       } else if (res.status === 400) {
         setStatus("That doesn't look like a valid email address.", 'error');
@@ -129,5 +174,15 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     } finally {
       submitBtn.removeAttribute('disabled');
     }
+  });
+
+  // Wave 1119 / Slice 1119.3 C1 — "subscribe another address" reverts
+  // the confirm pane to the empty form so the customer can add a
+  // teammate without a page reload.
+  subscribeAnotherBtn?.addEventListener('click', () => {
+    if (confirmPane) confirmPane.classList.add('hidden');
+    if (form) form.classList.remove('hidden');
+    const input = document.getElementById('email-input');
+    if (input) input.focus();
   });
 </script>
