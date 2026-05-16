@@ -72,4 +72,18 @@ describe('cross-SDK BYOK Anthropic header invariant', () => {
     const routes = read(resolve(REPO_ROOT, 'apps/server/src/routes/agent-sessions.ts'));
     expect(routes).toMatch(/BYOK[\s\S]{0,100}Tier-3 LOCKED 2026-05-16/);
   });
+
+  it(`OpenAPI spec documents the ${HEADER_NAME} request header on /v1/agent-sessions/{id}/message — SDK code generators that read the OpenAPI surface must learn about the BYOK header, not just the 3 hand-written SDKs in this repo`, () => {
+    const openapi = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
+    // The /v1/agent-sessions/{id}/message route entry must list the
+    // header. Slice from the route path to the next registerRoute
+    // boundary so we don't accidentally match a different route's
+    // header section.
+    const routeIdx = openapi.indexOf("path: '/v1/agent-sessions/{id}/message'");
+    expect(routeIdx, 'message route not registered in openapi.ts').toBeGreaterThan(-1);
+    const tail = openapi.slice(routeIdx);
+    const sectionEnd = tail.indexOf('registerRoute(', 1);
+    const section = sectionEnd === -1 ? tail : tail.slice(0, sectionEnd);
+    expect(section).toContain(`'${HEADER_NAME}'`);
+  });
 });
