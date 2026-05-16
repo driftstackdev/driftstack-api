@@ -163,21 +163,27 @@ describe('W627 R7-R17 marketing additions content parity', () => {
     });
   });
 
-  describe('R7 Footer trust strip (compliance signals above the copyright)', () => {
+  describe('F-3 Footer signal strip — product-focused (replaced R7 compliance badges)', () => {
     const body = read(FOOTER);
 
-    it('All 4 footer trust signals pinned (Stripe-billed · SCA/3DS + GDPR-aware · DPA on request + EU-resident infrastructure + Article 28(2) sub-processor change-log)', () => {
-      expect(body).toMatch(/Stripe-billed · SCA \/ 3DS/);
-      expect(body).toMatch(/GDPR-aware · DPA on request/);
-      expect(body).toMatch(/EU-resident infrastructure/);
-      expect(body).toMatch(/Article 28\(2\) sub-processor change-log/);
+    // 2026-05-16 F-3 (Issue 7): the original R7 compliance badge row
+    // (Stripe-billed / GDPR-aware / EU-resident / Article 28(2)) was
+    // replaced with product-focused differentiators on founder direction
+    // — "footer splash position is for product signals, not paperwork."
+    // Legal/compliance copy still lives at /trust + /legal pages and on
+    // the consolidated meta-link row in the footer bottom.
+    it('All 4 product-focused signals pinned (bit-identical iPhone Safari fingerprint + SOCKS5/WireGuard/OpenVPN proxies + API/SDK/GUI access + EU-hosted)', () => {
+      expect(body).toMatch(/Bit-identical iPhone Safari fingerprint/);
+      expect(body).toMatch(/SOCKS5 · WireGuard · OpenVPN proxies/);
+      expect(body).toMatch(/API · SDK · GUI access/);
+      expect(body).toMatch(/EU-hosted/);
     });
 
-    it('R7 trust-strip doc-comment pinned (placement rationale: "just above the copyright so prospects who scroll the full footer see the trust band before they leave")', () => {
-      expect(body).toMatch(/R7 — Trust strip\. Outseta-style row of compliance\/payment/);
-      expect(body).toMatch(
-        /so prospects who scroll the full footer see the trust band\s*\n?\s*before they leave/,
-      );
+    it('R7 compliance badges no longer in footer splash position (moved to /trust + /legal)', () => {
+      expect(body).not.toMatch(/Stripe-billed · SCA \/ 3DS/);
+      expect(body).not.toMatch(/GDPR-aware · DPA on request/);
+      expect(body).not.toMatch(/EU-resident infrastructure/);
+      expect(body).not.toMatch(/Article 28\(2\) sub-processor change-log/);
     });
   });
 

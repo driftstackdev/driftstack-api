@@ -1,21 +1,26 @@
 // W522.B — drift guard for apps/marketing-site/src/components/Footer.astro.
-// Marketing-site footer with 4-category nav grid + status badge + EU-VAT
-// notice + auto-year copyright. Drift here either changes a footer-link
-// destination (would create marketing↔site-route divergence) or breaks
-// the 4-category-grid + EU-VAT commitment (would mislead pricing reviewers).
+// Marketing-site footer with 2-category nav grid + product-focused signal
+// strip + consolidated meta link row + status badge + auto-year copyright.
+//
+// F-3 (Issue 7, 2026-05-16): four-column grid (Product/Company/Trust/Legal)
+// collapsed to two-column (Product/Company); compliance badges replaced
+// with product-focused differentiators; trust + legal links moved to a
+// small bottom meta-link row; /roadmap link removed (Issue 5 — no
+// aspirational language at launch); EU-VAT/BTW notice removed from
+// prominent position.
 //
 //   • Auto-year copyright via new Date().getUTCFullYear() (UTC-pinned).
-//   • Brand tagline: 'iPhone Safari sessions, on demand. Premium fidelity
-//     for the device that matters.'.
-//   • 4-category nav grid: Product / Company / Trust / Legal.
-//   • Product 7-link: /pricing + /comparison + /roadmap + /self-hosted +
+//   • Brand tagline: 'Pixel-identical iPhone Safari sessions in the cloud.
+//     API, SDK, or GUI.'.
+//   • 2-category nav grid: Product / Company.
+//   • Product 6-link: /pricing + /comparison + /self-hosted +
 //     docs.driftstack.dev (external) + app/signup + app/login.
 //   • Company 5-link: /about + /faq + /changelog + support@ + sales@.
-//   • Trust 5-link: /trust + /security + /trust/sub-processors +
-//     /trust/incidents + status.driftstack.dev (external).
-//   • Legal 4-link: /legal/terms + /legal/privacy + /legal/dpa + /legal/aup.
-//   • EU-VAT notice: 'All prices in USD. VAT/BTW added per region per
-//     applicable EU rules.'.
+//   • Meta link row: /legal/privacy + /legal/terms + /legal/dpa +
+//     /legal/aup + /trust + /security + /trust/sub-processors +
+//     status.driftstack.dev (external).
+//   • Product signal strip: bit-identical iPhone Safari fingerprint +
+//     SOCKS5/WireGuard/OpenVPN proxies + API/SDK/GUI access + EU-hosted.
 //   • StatusBadge component embedded.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -34,22 +39,22 @@ function read(p: string): string {
 describe('W522.B apps/marketing-site/src/components/Footer.astro content parity', () => {
   const body = read(LIB);
 
-  it("Auto-year UTC + StatusBadge import + brand tagline framing pinned: 'const year = new Date().getUTCFullYear();' + StatusBadge import + 'iPhone Safari sessions, on demand. Premium fidelity for the device that matters.' tagline + '&copy; {year} Driftstack. All rights reserved.' — pinned so the UTC-year-pin + StatusBadge embed + canonical-tagline + copyright commitment survives (drift to non-UTC year would create date-boundary divergence in non-UTC zones; drift to a different tagline would erode the marketing-positioning consistency)", () => {
+  it("Auto-year UTC + StatusBadge import + revised brand tagline framing pinned: 'const year = new Date().getUTCFullYear();' + StatusBadge import + 'Pixel-identical iPhone Safari sessions in the cloud. API, SDK, or GUI.' tagline + '&copy; {year} Driftstack. All rights reserved.'", () => {
     expect(body).toMatch(/import StatusBadge from '\.\/StatusBadge\.astro';/);
     expect(body).toMatch(/const year = new Date\(\)\.getUTCFullYear\(\);/);
     expect(body).toMatch(
-      /iPhone Safari sessions, on demand\. Premium fidelity for the device that matters\./,
+      /Pixel-identical iPhone Safari sessions in the cloud\. API, SDK, or GUI\./,
     );
     expect(body).toMatch(/&copy; \{year\} Driftstack\. All rights reserved\./);
   });
 
-  it("Product-category 7-link framing pinned: /pricing Pricing + /comparison Comparison + /roadmap Roadmap + /self-hosted Self-hosted + https://docs.driftstack.dev Docs (external, noopener noreferrer, target=_blank) + https://app.driftstack.dev/signup 'Sign up' + https://app.driftstack.dev/login 'Sign in' — pinned so the 7-product-link surface + Docs-external-safety + auth-URL-dashboard-routes commitment survives", () => {
+  it('Product-category 6-link framing pinned (F-3 — /roadmap removed per Issue 5 no-aspirational-language): /pricing + /comparison + /self-hosted + docs.driftstack.dev (external) + app/signup + app/login', () => {
     expect(body).toMatch(
       /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Product<\/h3>/,
     );
     expect(body).toMatch(/<li><a href="\/pricing" class="nav-link">Pricing<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/comparison" class="nav-link">Comparison<\/a><\/li>/);
-    expect(body).toMatch(/<li><a href="\/roadmap" class="nav-link">Roadmap<\/a><\/li>/);
+    expect(body).not.toMatch(/<li><a href="\/roadmap"/);
     expect(body).toMatch(/<li><a href="\/self-hosted" class="nav-link">Self-hosted<\/a><\/li>/);
     expect(body).toMatch(
       /<a\s*\n?\s*href="https:\/\/docs\.driftstack\.dev"\s*\n?\s*class="nav-link"\s*\n?\s*target="_blank"\s*\n?\s*rel="noopener noreferrer">Docs<\/a/,
@@ -77,34 +82,43 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
     );
   });
 
-  it("Trust-category 5-link framing pinned: /trust 'Trust center' + /security Security + /trust/sub-processors Sub-processors + /trust/incidents Incidents + https://status.driftstack.dev Status (external, noopener noreferrer, target=_blank) — pinned so the 5-trust-link surface + status.driftstack.dev-external safety commitment survives", () => {
-    expect(body).toMatch(
+  it('F-3 meta link row (Trust + Legal collapsed): /legal/privacy + /legal/terms + /legal/dpa + /legal/aup + /trust + /security + /trust/sub-processors + status.driftstack.dev (external). Trust/Legal sub-headed columns removed; surfaces these as a single small bottom link row.', () => {
+    // Trust + Legal grid columns must NOT exist as headed sub-blocks.
+    expect(body).not.toMatch(
       /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Trust<\/h3>/,
     );
-    expect(body).toMatch(/<li><a href="\/trust" class="nav-link">Trust center<\/a><\/li>/);
-    expect(body).toMatch(/<li><a href="\/security" class="nav-link">Security<\/a><\/li>/);
-    expect(body).toMatch(
-      /<li><a href="\/trust\/sub-processors" class="nav-link">Sub-processors<\/a><\/li>/,
+    expect(body).not.toMatch(
+      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Legal<\/h3>/,
     );
-    expect(body).toMatch(/<li><a href="\/trust\/incidents" class="nav-link">Incidents<\/a><\/li>/);
+    // But the links must still be present as nav-links somewhere
+    // (the meta-link row).
+    expect(body).toMatch(/<a href="\/legal\/privacy" class="nav-link">Privacy<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/terms" class="nav-link">Terms<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/dpa" class="nav-link">DPA<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/aup" class="nav-link">Acceptable Use<\/a>/);
+    expect(body).toMatch(/<a href="\/trust" class="nav-link">Trust<\/a>/);
+    expect(body).toMatch(/<a href="\/security" class="nav-link">Security<\/a>/);
+    expect(body).toMatch(/<a href="\/trust\/sub-processors" class="nav-link">Sub-processors<\/a>/);
     expect(body).toMatch(
       /<a\s*\n?\s*href="https:\/\/status\.driftstack\.dev"\s*\n?\s*class="nav-link"\s*\n?\s*target="_blank"\s*\n?\s*rel="noopener noreferrer">Status<\/a/,
     );
   });
 
-  it("Legal-category 4-link framing pinned: /legal/terms Terms + /legal/privacy Privacy + /legal/dpa DPA + /legal/aup 'Acceptable Use' — pinned so the 4-legal-link surface stays consistent with the W506-pinned legal/ docs (drift to dropping any legal page from the footer would orphan it from compliance review-discovery)", () => {
-    expect(body).toMatch(
-      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Legal<\/h3>/,
-    );
-    expect(body).toMatch(/<li><a href="\/legal\/terms" class="nav-link">Terms<\/a><\/li>/);
-    expect(body).toMatch(/<li><a href="\/legal\/privacy" class="nav-link">Privacy<\/a><\/li>/);
-    expect(body).toMatch(/<li><a href="\/legal\/dpa" class="nav-link">DPA<\/a><\/li>/);
-    expect(body).toMatch(/<li><a href="\/legal\/aup" class="nav-link">Acceptable Use<\/a><\/li>/);
+  it("F-3 product-focused signal strip replaces R7 compliance-badge strip: 'Bit-identical iPhone Safari fingerprint' + 'SOCKS5 · WireGuard · OpenVPN proxies' + 'API · SDK · GUI access' + 'EU-hosted'. Stripe-billed/GDPR-aware/Article 28(2) badges removed from the splash row (legal copy lives on /trust + /legal pages).", () => {
+    expect(body).toMatch(/Bit-identical iPhone Safari fingerprint/);
+    expect(body).toMatch(/SOCKS5 · WireGuard · OpenVPN proxies/);
+    expect(body).toMatch(/API · SDK · GUI access/);
+    expect(body).toMatch(/EU-hosted/);
+    // Old splash badges must NOT reappear in the footer prominent position.
+    expect(body).not.toMatch(/Stripe-billed · SCA \/ 3DS/);
+    expect(body).not.toMatch(/GDPR-aware · DPA on request/);
+    expect(body).not.toMatch(/EU-resident infrastructure/);
+    expect(body).not.toMatch(/Article 28\(2\) sub-processor change-log/);
   });
 
-  it("StatusBadge embed + EU-VAT notice framing pinned: <StatusBadge /> embedded in bottom bar + 'All prices in USD. VAT/BTW added per region per applicable EU rules.' — pinned so the StatusBadge embed + USD-with-EU-VAT/BTW notice survives (drift to dropping the VAT/BTW notice would mislead EU customers on tax handling)", () => {
+  it('StatusBadge embed + VAT notice removal: <StatusBadge /> still present; F-3 strips the prominent VAT/BTW line (moved to /pricing context).', () => {
     expect(body).toMatch(/<StatusBadge \/>/);
-    expect(body).toMatch(
+    expect(body).not.toMatch(
       /<p>All prices in USD\. VAT\/BTW added per region per applicable EU rules\.<\/p>/,
     );
   });

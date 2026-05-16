@@ -20,16 +20,15 @@ const year = new Date().getUTCFullYear();
         <span class="tracking-tight">driftstack</span>
       </div>
       <p class="mt-4 max-w-prose text-sm text-ink-secondary">
-        iPhone Safari sessions, on demand. Premium fidelity for the device that matters.
+        Pixel-identical iPhone Safari sessions in the cloud. API, SDK, or GUI.
       </p>
     </div>
-    <div class="grid grid-cols-2 gap-8 text-sm md:grid-cols-4">
+    <div class="grid grid-cols-2 gap-8 text-sm md:grid-cols-2">
       <div>
         <h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Product</h3>
         <ul class="mt-4 space-y-2.5 text-ink-secondary">
           <li><a href="/pricing" class="nav-link">Pricing</a></li>
           <li><a href="/comparison" class="nav-link">Comparison</a></li>
-          <li><a href="/roadmap" class="nav-link">Roadmap</a></li>
           <li><a href="/self-hosted" class="nav-link">Self-hosted</a></li>
           <li>
             <a
@@ -61,57 +60,58 @@ const year = new Date().getUTCFullYear();
           </li>
         </ul>
       </div>
-      <div>
-        <h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Trust</h3>
-        <ul class="mt-4 space-y-2.5 text-ink-secondary">
-          <li><a href="/trust" class="nav-link">Trust center</a></li>
-          <li><a href="/security" class="nav-link">Security</a></li>
-          <li><a href="/trust/sub-processors" class="nav-link">Sub-processors</a></li>
-          <li><a href="/trust/incidents" class="nav-link">Incidents</a></li>
-          <li>
-            <a
-              href="https://status.driftstack.dev"
-              class="nav-link"
-              target="_blank"
-              rel="noopener noreferrer">Status</a
-            >
-          </li>
-        </ul>
-      </div>
-      <div>
-        <h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Legal</h3>
-        <ul class="mt-4 space-y-2.5 text-ink-secondary">
-          <li><a href="/legal/terms" class="nav-link">Terms</a></li>
-          <li><a href="/legal/privacy" class="nav-link">Privacy</a></li>
-          <li><a href="/legal/dpa" class="nav-link">DPA</a></li>
-          <li><a href="/legal/aup" class="nav-link">Acceptable Use</a></li>
-        </ul>
-      </div>
     </div>
   </div>
-  <!-- R7 — Trust strip. Outseta-style row of compliance/payment
-       signals: Stripe-verified, GDPR-aware, status page link, and
-       the existing live status badge. Sits just above the copyright
-       so prospects who scroll the full footer see the trust band
-       before they leave. -->
+  <!-- F-3 (Issue 7) — replaced the compliance badge strip
+       (Stripe-billed / GDPR-aware / EU-resident / Article 28(2))
+       with product-focused signals. Legal/trust details live on the
+       /legal and /trust pages and in the meta-link row below; the
+       splash position is for differentiators, not paperwork. -->
   <div class="border-t border-white/10">
     <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-6 gap-y-3 px-6 py-5 text-xs text-ink-muted">
       <span class="inline-flex items-center gap-1.5">
         <span class="h-1.5 w-1.5 rounded-full bg-glow-red"></span>
-        Stripe-billed · SCA / 3DS
+        Bit-identical iPhone Safari fingerprint
       </span>
       <span class="inline-flex items-center gap-1.5">
         <span class="h-1.5 w-1.5 rounded-full bg-glow-red"></span>
-        GDPR-aware · DPA on request
+        SOCKS5 · WireGuard · OpenVPN proxies
       </span>
       <span class="inline-flex items-center gap-1.5">
         <span class="h-1.5 w-1.5 rounded-full bg-glow-red"></span>
-        EU-resident infrastructure
+        API · SDK · GUI access
       </span>
       <span class="inline-flex items-center gap-1.5">
         <span class="h-1.5 w-1.5 rounded-full bg-glow-red"></span>
-        Article 28(2) sub-processor change-log
+        EU-hosted
       </span>
+    </div>
+  </div>
+  <!-- F-3 (Issue 7) — meta link row: legal + trust + status
+       consolidated into one small bottom-most row, replacing the
+       four separate footer columns that previously displayed them. -->
+  <div class="border-t border-white/10">
+    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-4 gap-y-2 px-6 py-4 text-xs text-ink-muted">
+      <a href="/legal/privacy" class="nav-link">Privacy</a>
+      <span aria-hidden="true">·</span>
+      <a href="/legal/terms" class="nav-link">Terms</a>
+      <span aria-hidden="true">·</span>
+      <a href="/legal/dpa" class="nav-link">DPA</a>
+      <span aria-hidden="true">·</span>
+      <a href="/legal/aup" class="nav-link">Acceptable Use</a>
+      <span aria-hidden="true">·</span>
+      <a href="/trust" class="nav-link">Trust</a>
+      <span aria-hidden="true">·</span>
+      <a href="/security" class="nav-link">Security</a>
+      <span aria-hidden="true">·</span>
+      <a href="/trust/sub-processors" class="nav-link">Sub-processors</a>
+      <span aria-hidden="true">·</span>
+      <a
+        href="https://status.driftstack.dev"
+        class="nav-link"
+        target="_blank"
+        rel="noopener noreferrer">Status</a
+      >
     </div>
   </div>
   <div class="border-t border-white/10">
@@ -121,7 +121,6 @@ const year = new Date().getUTCFullYear();
       <p>&copy; {year} Driftstack. All rights reserved.</p>
       <div class="flex flex-wrap items-center gap-3">
         <StatusBadge />
-        <p>All prices in USD. VAT/BTW added per region per applicable EU rules.</p>
       </div>
     </div>
   </div>

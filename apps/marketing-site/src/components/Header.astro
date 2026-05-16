@@ -13,9 +13,10 @@ const navItems = [
   { href: 'https://docs.driftstack.dev', label: 'Docs', external: true },
 ];
 
-// Mobile-menu list mirrors desktop + adds the secondary pages that
-// don't earn a top-level desktop slot (currently: Roadmap).
-const mobileExtraItems = [{ href: '/roadmap', label: 'Roadmap' }];
+// Mobile-menu list mirrors desktop + adds secondary pages that don't
+// earn a top-level desktop slot. Empty at launch (F-3 / Issue 5 —
+// /roadmap link removed; no aspirational pages in nav).
+const mobileExtraItems: Array<{ href: string; label: string }> = [];
 const pathname = Astro.url.pathname;
 ---
 

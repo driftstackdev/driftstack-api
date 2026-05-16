@@ -37,7 +37,7 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     );
   });
 
-  it("5-item navItems array pinned: /pricing Pricing + /comparison Compare + /self-hosted Self-hosted + /faq FAQ + https://docs.driftstack.dev Docs (external) + 'Mobile-menu list mirrors desktop + adds the secondary pages that don't earn a top-level desktop slot (currently: Roadmap).' + /roadmap Roadmap in mobileExtraItems — pinned so the 5-nav + 1-mobile-extra commitment + Docs-as-external + Roadmap-as-mobile-only-secondary commitment survives (drift to a different nav destination would create marketing↔site-route divergence)", () => {
+  it("5-item navItems array pinned: /pricing Pricing + /comparison Compare + /self-hosted Self-hosted + /faq FAQ + https://docs.driftstack.dev Docs (external). F-3 (Issue 5): mobileExtraItems is now empty — /roadmap link removed because aspirational pages don't belong in nav at launch.", () => {
     expect(body).toMatch(/\{ href: '\/pricing', label: 'Pricing' \},/);
     expect(body).toMatch(/\{ href: '\/comparison', label: 'Compare' \},/);
     expect(body).toMatch(/\{ href: '\/self-hosted', label: 'Self-hosted' \},/);
@@ -46,11 +46,9 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
       /\{ href: 'https:\/\/docs\.driftstack\.dev', label: 'Docs', external: true \},/,
     );
     expect(body).toMatch(
-      /\/\/ Mobile-menu list mirrors desktop \+ adds the secondary pages that\s*\n?\s*\/\/ don't earn a top-level desktop slot \(currently: Roadmap\)\./,
+      /const mobileExtraItems: Array<\{ href: string; label: string \}> = \[\];/,
     );
-    expect(body).toMatch(
-      /const mobileExtraItems = \[\s*\{ href: '\/roadmap', label: 'Roadmap' \},?\s*\];/,
-    );
+    expect(body).not.toMatch(/\{ href: '\/roadmap',/);
   });
 
   it("Active-link styling + pathname-match framing pinned: 'pathname === item.href && text-oxblood-700 font-medium' + Astro.url.pathname source-of-truth — pinned so the active-link styling pattern + pathname source commitment survives (drift to claiming external active state would mislead users about their current location)", () => {
