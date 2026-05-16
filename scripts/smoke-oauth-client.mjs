@@ -56,7 +56,35 @@ for (const p of PROVIDERS) {
   const ok = await smoke(p);
   if (!ok) allOk = false;
 }
+// V-667.C-followup — also probe the customer-facing
+// /v1/account/me/oauth-links route. 401 confirms route is registered
+// + auth-gated as designed (the smoke doesn't have an account
+// token, so 401 IS the right answer here).
+const linksOk = await smokeAccountLinks();
+if (!linksOk) allOk = false;
 process.exit(allOk ? 0 : 1);
+
+async function smokeAccountLinks() {
+  const url = `${baseUrl}/v1/account/me/oauth-links`;
+  try {
+    const res = await fetch(url);
+    if (res.status === 404) {
+      console.error(
+        `FAIL /v1/account/me/oauth-links: 404 — AppDeps.oauthLinksRepo not wired (V-667.C-followup gate failed).`,
+      );
+      return false;
+    }
+    if (res.status !== 401) {
+      console.error(`FAIL /v1/account/me/oauth-links: expected 401, got ${res.status}`);
+      return false;
+    }
+    console.log('OK /v1/account/me/oauth-links: 401 (route registered + auth-gated)');
+    return true;
+  } catch (err) {
+    console.error(`FAIL /v1/account/me/oauth-links: transport error: ${err.message}`);
+    return false;
+  }
+}
 
 async function smoke(p) {
   const url = `${baseUrl}/v1/auth/oauth-client/start`;
