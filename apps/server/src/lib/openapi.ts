@@ -2229,12 +2229,28 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          'Turn result — discriminated by `kind`: plan-executed (intents + results + ok) / clarify (clarifying_question) / refuse (refuse_reason).',
+          'Turn result — discriminated by `kind`: plan-executed (intents + results + ok) / clarify (clarifying_question) / refuse (refuse_reason). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters.',
         content: {
           'application/json': {
-            schema: z.object({
-              kind: z.enum(['plan-executed', 'clarify', 'refuse']),
-            }),
+            schema: z.union([
+              z.object({
+                kind: z.literal('plan-executed'),
+                session: z.object({}),
+                intents: z.array(z.object({})),
+                results: z.array(z.object({})),
+                ok: z.boolean(),
+              }),
+              z.object({
+                kind: z.literal('clarify'),
+                session: z.object({}),
+                clarifying_question: z.string(),
+              }),
+              z.object({
+                kind: z.literal('refuse'),
+                session: z.object({}),
+                refuse_reason: z.string(),
+              }),
+            ]),
           },
         },
       },
