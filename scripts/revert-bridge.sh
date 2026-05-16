@@ -25,11 +25,13 @@ set -euo pipefail
 
 ENV=""
 DRY_RUN=0
+TO_SHA=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
+    --to-sha) TO_SHA="${2:-}"; shift 2 ;;
     prod|staging) ENV="$1"; shift ;;
-    *) echo "usage: $0 [--dry-run] <staging|prod>" >&2; exit 2 ;;
+    *) echo "usage: $0 [--dry-run] [--to-sha <sha>] <staging|prod>" >&2; exit 2 ;;
   esac
 done
 
@@ -42,13 +44,22 @@ case "$ENV" in
     ;;
 esac
 
-echo "[revert] reading $ENV last-good-sha…" >&2
-LAST_GOOD=$(ssh "root@${HOST}" "cat /opt/driftstack/api/.last-good-sha 2>/dev/null || echo ''")
-if [ -z "$LAST_GOOD" ]; then
-  echo "[revert] no .last-good-sha on $HOST — nothing to revert to" >&2
-  echo "[revert]   (the file is written by deploy-bridge.sh after a successful deploy;" >&2
-  echo "[revert]    a fresh server / hand-touched .env will not yet have one)" >&2
-  exit 1
+if [ -n "$TO_SHA" ]; then
+  # Explicit operator override — use --to-sha and skip the .last-good
+  # discovery. Useful when the last-good-sha is itself the regression
+  # (e.g. a subtle bug shipped and passed the 10-invariant smoke).
+  LAST_GOOD="$TO_SHA"
+  echo "[revert] $ENV revert TARGET = $LAST_GOOD (from --to-sha)" >&2
+else
+  echo "[revert] reading $ENV last-good-sha…" >&2
+  LAST_GOOD=$(ssh "root@${HOST}" "cat /opt/driftstack/api/.last-good-sha 2>/dev/null || echo ''")
+  if [ -z "$LAST_GOOD" ]; then
+    echo "[revert] no .last-good-sha on $HOST — nothing to revert to" >&2
+    echo "[revert]   (the file is written by deploy-bridge.sh after a successful deploy;" >&2
+    echo "[revert]    a fresh server / hand-touched .env will not yet have one)" >&2
+    echo "[revert]   use --to-sha <sha> to explicitly target a SHA" >&2
+    exit 1
+  fi
 fi
 
 CURRENT=$(curl -fsS "https://$([ "$ENV" = "prod" ] && echo "api" || echo "staging").driftstack.dev/version" 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin).get("git_sha",""))' 2>/dev/null || echo "?")
