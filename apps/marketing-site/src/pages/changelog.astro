@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 const ENTRIES: readonly ChangelogEntry[] = [
   {
+    date: '2026-05-16',
+    category: 'launch',
+    title: 'Sign in with Google or GitHub',
+    body: 'One-click sign-in + signup with Google or GitHub now live on /login and /signup. Existing-email collisions get a verify-merge email (60-minute single-use link) so the IDP-supplied email is confirmed against the existing password account before the link lands. Revoked IDP links surface a "re-link or sign in with password" prompt instead of silently failing. Avatar + display name pull from the first IDP linked and become user-overridable from /settings.',
+  },
+  {
     date: '2026-05-09',
     category: 'launch',
     title: 'Profile snapshots: immutable point-in-time copies',
