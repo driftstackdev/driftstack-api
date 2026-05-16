@@ -21,7 +21,12 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AgentRuntime } from '../services/agent-runtime.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-sessions.js';
-import { ConflictError, FeatureUnavailableError, ValidationError } from '../lib/errors.js';
+import {
+  ConflictError,
+  FeatureUnavailableError,
+  NotFoundError,
+  ValidationError,
+} from '../lib/errors.js';
 
 const DEFAULT_TOKEN_BUDGET = 100_000;
 
@@ -103,7 +108,7 @@ export function registerAgentSessionsRoutes(
       const ctx = requireCtx(req);
       const rec = await sessions.get(req.params.id);
       if (rec === null || rec.accountId !== ctx.account.id) {
-        throw new FeatureUnavailableError(`AgentSession ${req.params.id} not found.`);
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
       return publicAgentSession(rec);
     },
@@ -121,7 +126,7 @@ export function registerAgentSessionsRoutes(
       // "not found" generic.
       const pre = await sessions.get(req.params.id);
       if (pre === null || pre.accountId !== ctx.account.id) {
-        throw new FeatureUnavailableError(`AgentSession ${req.params.id} not found.`);
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
       const result = await runtime.runTurn({
         agentSessionId: req.params.id,
@@ -170,7 +175,7 @@ export function registerAgentSessionsRoutes(
       const ctx = requireCtx(req);
       const pre = await sessions.get(req.params.id);
       if (pre === null || pre.accountId !== ctx.account.id) {
-        throw new FeatureUnavailableError(`AgentSession ${req.params.id} not found.`);
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
       await sessions.closeWithReason(req.params.id, 'customer-closed');
       return reply.code(204).send();
