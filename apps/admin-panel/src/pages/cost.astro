@@ -62,7 +62,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           <input
             type="text"
             name="account_id"
-            placeholder="acct_…"
+            placeholder="acc_… or raw UUID"
             class="mt-1 w-72 rounded-md border border-slate-300 px-3 py-2 font-mono text-xs shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
             required
           />
@@ -206,7 +206,11 @@ const apiBaseUrl = resolveApiBaseUrl();
     accountForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       const fd = new FormData(accountForm);
-      const accountId = String(fd.get('account_id') ?? '').trim();
+      const rawInput = String(fd.get('account_id') ?? '').trim();
+      // Strip the public 'acc_' prefix if present — the cost endpoint
+      // expects raw UUIDs (the operator typically pastes from the
+      // /accounts admin page which surfaces 'acc_<uuid>').
+      const accountId = rawInput.startsWith('acc_') ? rawInput.slice(4) : rawInput;
       const billingCycle = String(fd.get('billing_cycle') ?? '').trim();
       if (!accountId) return;
       try {
