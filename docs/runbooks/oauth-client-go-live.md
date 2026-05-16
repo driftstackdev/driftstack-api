@@ -5,8 +5,19 @@ customer signup/login. Sister runbook to
 `docs/runbooks/postmark-go-live.md` (Track A),
 `docs/runbooks/livekit-go-live.md` (Track E).
 
-Track C V-667.C is **code-side COMPLETE end-to-end** as of bootstrap
-wire-up 5aab0394 (2026-05-15). Activation is operator-only.
+**Status (2026-05-16):** V-667.C is **LIVE on staging + prod** under
+Path A (per-provider redirect_uri matching Google + GitHub Console
+registrations). Both servers boot with `oauthClient:true`;
+`smoke-oauth-client.mjs` returns OK for both providers against both
+origins. Real-IDP browser click-through from
+https://app.driftstack.dev/login is the remaining founder-side
+validation step.
+
+The sections below document the activation procedure for the next
+operator who needs to re-run it (recovery scenario, new provider
+addition, signing-secret rotation, etc.). The 2026-05-16 deploy
+followed this exact sequence end-to-end (waves 16+ in the session
+log).
 
 ## Founder verdicts (locked 2026-05-15)
 
