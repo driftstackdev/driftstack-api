@@ -107,36 +107,44 @@ is a founder decision flagged for the next iteration.
 - `feedback_schedulewakeup_does_not_run_overnight` — no
   ScheduleWakeup; foreground-only across all 7 waves.
 
-## OAuth V-667.C Path A status
+## OAuth V-667.C Path A status — LIVE on prod (2026-05-16)
 
-Code-side **complete** at `952a2216` + `bdd246e0` + `aba44a9f`:
+Code-side complete at `952a2216` + `bdd246e0` + `aba44a9f`;
+operator-side complete in wave 16:
 
-- Per-provider callback URLs derived from `OAUTH_CLIENT_CALLBACK_URL_BASE`
-- New `/v1/auth/oauth/{google,github}/callback` routes that 302 to
-  the SPA exchange page preserving the IDP's query string
-- Token-exchange `redirect_uri` matches what authorize sent
-- Login + signup pages have brand-icon SVG OAuth buttons
-- No silent fallback from the old env var (would have reproduced the
-  redirect_uri_mismatch bug from a different code path — see
-  `aba44a9f`)
-- Runbook updated with safe rollout sequence at
-  `docs/runbooks/oauth-client-go-live.md`
+**Staging** (deployed `b48f557`, 34s, 10/10 invariants OK):
 
-**Operator next steps (Tier-1 authorized per founder):**
+- env wired: `OAUTH_CLIENT_CALLBACK_URL_BASE=https://api.driftstack.dev/v1/auth/oauth`
+- boot log: `sentry:true email:true livekit:true oauthClient:true env:production`
+- smoke-oauth-client.mjs: google + github both OK; redirect_uri
+  shape matches per-provider Console registration
 
-1. SSH both servers: ADD `OAUTH_CLIENT_CALLBACK_URL_BASE=https://api.driftstack.dev/v1/auth/oauth`
-   to `/opt/driftstack/api/.env` alongside the existing
-   `OAUTH_CLIENT_CALLBACK_URL` (no restart yet — live code reads old
-   name).
-2. `bash scripts/deploy-bridge.sh staging` — deploys new code, picks
-   up new env name on restart, oauthClient:true on boot log.
-3. Real-IDP smoke on https://app.driftstack.dev/login (staging).
-4. Repeat for prod: `bash scripts/deploy-bridge.sh prod`.
-5. Real-IDP smoke at https://app.driftstack.dev/login (prod).
-6. Optionally remove the now-unused `OAUTH_CLIENT_CALLBACK_URL` var.
+**Prod** (deployed `b48f557`, 30s, 10/10 invariants OK):
 
-This sequence has **zero OAuth-downtime window** — at no point are
-both env vars absent.
+- env wired: same shape as staging
+- boot log: identical four-flags-true state
+- smoke-oauth-client.mjs: google + github both OK against
+  https://api.driftstack.dev
+- `/v1/account/me/oauth-links` returns 401 (route registered +
+  auth-gated)
+
+**What's verified:** the `redirect_uri` value the server sends to
+Google + GitHub at authorize time now matches the URL registered
+in each provider's developer console. The Error 400
+`redirect_uri_mismatch` that triggered this entire Path A refactor
+should no longer fire.
+
+**What's NOT yet verified** (founder-side browser test, can't be
+done from terminal): real-IDP click-through from
+https://app.driftstack.dev/login through Google + GitHub consent
+screens. The smoke validates the URL shape; only a browser session
+validates Google + GitHub actually accept it end-to-end.
+
+**Old env cleanup** (optional, low-priority): `OAUTH_CLIENT_CALLBACK_URL=`
+is still in both servers' .env alongside the new var. Live code
+ignores it (config.ts no longer reads the old name per `aba44a9f`),
+but removing it is a future tidy-up that doesn't affect anything
+functionally.
 
 ## What's queued but not started
 
