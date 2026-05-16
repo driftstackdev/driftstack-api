@@ -10,6 +10,10 @@
 //
 //   STRIPE_SECRET_KEY=sk_live_xxx node scripts/stripe-bootstrap-prices.mjs
 //
+// Add --dry-run to preview the plan against an empty account without
+// creating anything (GET search calls still hit Stripe so a partially-
+// populated account shows reuse vs new-create per row).
+//
 // Or with sk_test_xxx against test mode. The script:
 //   1. Looks up existing products by metadata.driftstack_tier; reuses if found.
 //   2. Looks up existing prices by metadata.driftstack_tier + .billing_period;
@@ -59,8 +63,33 @@ function envOrDie(name) {
 }
 
 const SECRET_KEY = envOrDie('STRIPE_SECRET_KEY');
+const DRY_RUN = process.argv.includes('--dry-run');
 
 async function stripeRequest(method, path, params, idempotencyKey) {
+  // Dry-run mutates nothing — POST requests are simulated with
+  // a synthetic `dryrun_<tier>_<period>` id so the rest of the
+  // script can run end-to-end and print the env-block preview.
+  // GET (search) calls still hit Stripe so the dry-run reflects
+  // the actual state of the target account.
+  if (DRY_RUN && method === 'POST') {
+    const isProduct = path === '/products';
+    const isPrice = path === '/prices';
+    if (isProduct) {
+      const tier = params.metadata.driftstack_tier;
+      const id = `prod_dryrun_${tier}`;
+      process.stdout.write(`  [dry-run] would create product ${tier} → ${id}\n`);
+      return { id };
+    }
+    if (isPrice) {
+      const tier = params.metadata.driftstack_tier;
+      const period = params.metadata.billing_period;
+      const id = `price_dryrun_${tier}_${period}`;
+      process.stdout.write(
+        `  [dry-run] would create price ${tier}/${period} (${params.unit_amount}¢) → ${id}\n`,
+      );
+      return { id };
+    }
+  }
   const url = STRIPE_API_BASE + path;
   const body =
     params !== undefined
@@ -154,7 +183,13 @@ async function ensurePrice(tier, period, productId, amountCents, recurring) {
 
 async function main() {
   process.stdout.write('Driftstack Stripe bootstrap — Wave 1119 / Slice 1119.1\n');
-  process.stdout.write(`Using key prefix: ${SECRET_KEY.slice(0, 7)}…\n\n`);
+  process.stdout.write(`Using key prefix: ${SECRET_KEY.slice(0, 7)}…\n`);
+  if (DRY_RUN) {
+    process.stdout.write(
+      'Dry-run mode: GET (search) calls hit Stripe; POST calls are simulated.\n',
+    );
+  }
+  process.stdout.write('\n');
 
   const tierPrices = {};
 
