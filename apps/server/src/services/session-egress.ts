@@ -1,71 +1,47 @@
 // V-540.E — Customer-configurable egress (SOCKS5 / WireGuard /
 // OpenVPN). E1 slice = interface + types scaffold; concrete
-// backends land in follow-up slices (E2 SOCKS5, E3 WireGuard,
-// E4 OpenVPN).
+// backends land in follow-up slices (EG-API-1.6 SOCKS5 propagation,
+// later phases for OpenVPN + WireGuard per planning 133).
 //
-// Design doc: docs/internal/customer-configurable-egress-design.md
+// Design source of truth: `docs/planning/133-egress-architecture-
+// cross-agent.md` in the driftstack repo (founder-locked 2026-05-16).
+// The earlier `docs/internal/customer-configurable-egress-design.md`
+// was SUPERSEDED by planning 133 (~56h Agent-2-only estimate was
+// undersized; real cross-agent + harness scope is 7-12 weeks per
+// planning 133).
 //
 // Activation pattern follows the same all-or-nothing posture as
 // Postmark / LiveKit / OAuth-client — bootstrap wires
-// `sessionEgressService` into AppDeps only when all backends are
-// reachable; until then the `proxy` body field on POST /v1/sessions
-// is silently stripped by the schema (the field isn't yet in the
-// public sessions-schema discriminated union; lands in E6).
+// `sessionEgressService` into AppDeps only when a concrete backend
+// is reachable; until then the routes registered by
+// `registerSessionProxyDisabledRoutes` (EG-API-1.2) return 503
+// FeatureUnavailable.
 //
-// Schema-side: tokens `socks5` / `wireguard` / `openvpn` and the
-// interface name `SessionEgressService` are intentionally surfaced
-// in source so the marketing-egress-claim parity sweep
-// (apps/server/tests/unit/marketing-egress-claim-sweep.test.ts)
-// can detect the impl-in-progress state and start to relax the
-// "must say roadmap" assertion as backends land.
+// Schema-side: the proxy-config DISCRIMINATED UNION + per-protocol
+// shapes live in `@driftstack/api-types/egress` (EG-API-1.1, commit
+// 555d8001). This file no longer redeclares them — it re-exports
+// `SessionEgressConfig` + `ProxyConfig` for legacy callers and types
+// `EgressHandle` against `ProxyType` from api-types so the cross-
+// agent contract has one source of truth.
 
-/**
- * Per-session proxy configuration the customer passes on
- * POST /v1/sessions. Discriminated union by `type`; each variant
- * carries the credentials shape required by its corresponding
- * backend.
- *
- * SECURITY: every variant carries customer secrets. Configs live
- * on tmpfs (V-353b AES-256-GCM at-rest envelope) for the lifetime
- * of the session and are zeroed at session-end. Driftstack staff
- * never see the cleartext — config_hash (sha256 of the config) is
- * what lands in session_egress_log for audit (E5).
- */
-export type SessionProxyConfig =
-  | {
-      type: 'socks5';
-      /** Proxy URL — `socks5://user:pass@host:port` or
-       *  `socks5h://...` for remote DNS. */
-      url: string;
-      /** Optional auth (alternative to baking credentials into url). */
-      username?: string;
-      password?: string;
-    }
-  | {
-      type: 'wireguard';
-      /** Full wg-quick(8) config file contents. Includes
-       *  [Interface] + [Peer] sections, customer's PrivateKey,
-       *  PublicKey of remote peer, allowed IPs, endpoint. */
-      wg_quick_config: string;
-    }
-  | {
-      type: 'openvpn';
-      /** Full .ovpn config file contents. */
-      ovpn_config: string;
-      /** Optional username + password for auth-user-pass setups. */
-      auth_user?: string;
-      auth_pass?: string;
-    };
+import type { ProxyType, SessionEgressConfig } from '@driftstack/api-types';
+
+// Re-export so the consumers that imported these from this file
+// before EG-API-1.1 keep working without touching their imports.
+export type { ProxyType, SessionEgressConfig } from '@driftstack/api-types';
 
 /**
  * Returned by `applyToSession`; opaque to callers. Carries the
  * per-session resources the backend created (env-var dict for
  * SOCKS5, network-namespace name for WireGuard / OpenVPN) so
  * `releaseFromSession` can tear them down in one call.
+ *
+ * `type` mirrors the discriminator from the canonical
+ * `ProxyConfig` schema in `@driftstack/api-types/egress`.
  */
 export interface EgressHandle {
   sessionId: string;
-  type: SessionProxyConfig['type'];
+  type: ProxyType;
   /** Backend-specific cleanup payload. Consumers MUST treat this
    *  as opaque and hand it back to releaseFromSession verbatim. */
   cleanup: {
@@ -79,9 +55,14 @@ export interface EgressHandle {
 }
 
 /**
- * Service interface; implementations land in E2 (SOCKS5) +
- * E3 (WireGuard) + E4 (OpenVPN). Bootstrap wires the
- * orchestrating concrete class once all three are ready (E8).
+ * Service interface; impl lands in EG-API-1.6 propagation slice
+ * (concrete SocksProxyBackend implements SessionEgressService +
+ * bootstrap wiring + storage layer). Bootstrap wires the
+ * orchestrating concrete class once Phase 1 SOCKS5 is reachable.
+ *
+ * Args shape matches the cross-agent contract from planning 133's
+ * §"Per-session config schema" — a SessionEgressConfig envelope with
+ * session_id + proxy discriminator + egress_safeguard.
  */
 export interface SessionEgressService {
   /**
@@ -93,7 +74,7 @@ export interface SessionEgressService {
    * `https://errors.driftstack.dev/egress-tunnel-unreachable` or
    * `…/egress-config-invalid`.
    */
-  applyToSession(args: { sessionId: string; proxy: SessionProxyConfig }): Promise<EgressHandle>;
+  applyToSession(args: { config: SessionEgressConfig }): Promise<EgressHandle>;
 
   /**
    * Tear down the per-session egress resources. Called by
