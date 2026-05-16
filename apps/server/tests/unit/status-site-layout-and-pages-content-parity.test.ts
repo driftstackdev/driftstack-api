@@ -267,6 +267,25 @@ describe('W790 status-site src content parity bundle', () => {
     );
   });
 
+  it('Wave 1119 / Slice 1119.4 B4 — month-grouping presentation polish: humanized month label (humanizeMonth + MONTH_LABELS lookup, e.g. "May 2026" not "2026-05"); per-month incident-count chip (pluralizeIncidents — singular handled); render as <details> blocks with the newest month open-by-default + older months collapsed (so 90 days does not dump as one wall of cards); group-open chevron rotates via Tailwind group-open: utility.', () => {
+    const p = read(PAGE_HIST);
+
+    // Human-readable month + count helpers.
+    expect(p).toMatch(
+      /const MONTH_LABELS = \[\s*\n\s+'January',\s*\n\s+'February',\s*\n\s+'March',\s*\n\s+'April',\s*\n\s+'May',\s*\n\s+'June',\s*\n\s+'July',\s*\n\s+'August',\s*\n\s+'September',\s*\n\s+'October',\s*\n\s+'November',\s*\n\s+'December',\s*\n\s+\];/,
+    );
+    expect(p).toMatch(/function humanizeMonth\(monthKey\) \{/);
+    expect(p).toMatch(
+      /function pluralizeIncidents\(n\) \{\s*\n\s+return n === 1 \? '1 incident' : `\$\{n\} incidents`;/,
+    );
+    // <details>/<summary> render with newest-open + collapsed-older pattern.
+    expect(p).toMatch(/<details \$\{i === 0 \? 'open' : ''\}/);
+    expect(p).toMatch(/<summary class="[^"]*cursor-pointer[^"]*"/);
+    expect(p).toMatch(/humanizeMonth\(g\.month\)/);
+    expect(p).toMatch(/pluralizeIncidents\(g\.items\.length\)/);
+    expect(p).toMatch(/group-open:rotate-180/);
+  });
+
   it("CRITICAL history trust-evaluation-record framing pinned. The 'Resolved incidents stay listed indefinitely so customers evaluating reliability can see the full record. The live status page shows the last 30 days with an active/resolved split — this page is the complete record.' wording is the canonical 30-vs-90-day discrimination.", () => {
     const p = read(PAGE_HIST);
 

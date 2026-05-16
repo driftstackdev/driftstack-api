@@ -124,6 +124,33 @@ const R2_FALLBACK_URL =
     `;
   }
 
+  // Wave 1119 / Slice 1119.4 B4 — month-key uses the started_at date
+  // truncated to YYYY-MM. The display label is humanized below
+  // (e.g. "May 2026") so the section headings scan as English instead
+  // of as a sortable ISO token.
+  const MONTH_LABELS = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  function humanizeMonth(monthKey) {
+    const [y, m] = monthKey.split('-');
+    const idx = Number(m) - 1;
+    return `${MONTH_LABELS[idx] ?? monthKey} ${y}`;
+  }
+  function pluralizeIncidents(n) {
+    return n === 1 ? '1 incident' : `${n} incidents`;
+  }
+
   function groupByMonth(incidents) {
     const byMonth = {};
     for (const inc of incidents) {
@@ -169,14 +196,29 @@ const R2_FALLBACK_URL =
         `;
         return;
       }
+      // Wave 1119 / Slice 1119.4 B4 — render each month group as a
+      // <details> block. The newest month is open by default (the
+      // "what's been happening lately" frame) and older months are
+      // collapsed so 90 days of history doesn't dump as one wall of
+      // cards. Each <summary> shows the humanized month + the per-
+      // month incident count so the customer can scan density at a
+      // glance before expanding.
       const grouped = groupByMonth(incidents);
       list.innerHTML = grouped
         .map(
-          (g) => `
-            <h2 class="mb-2 mt-6 text-sm font-semibold uppercase tracking-wide text-ink-muted">
-              ${g.month}
-            </h2>
-            <div class="space-y-3">${g.items.map(renderIncident).join('')}</div>
+          (g, i) => `
+            <details ${i === 0 ? 'open' : ''} class="group rounded-lg border border-white/10 bg-surface-raised">
+              <summary class="flex cursor-pointer items-center justify-between gap-4 px-5 py-3 text-sm font-semibold text-ink-primary hover:bg-white/5">
+                <span class="flex items-baseline gap-3">
+                  <span>${humanizeMonth(g.month)}</span>
+                  <span class="text-xs font-normal text-ink-muted">${pluralizeIncidents(g.items.length)}</span>
+                </span>
+                <span class="text-xs text-ink-muted transition group-open:rotate-180" aria-hidden="true">▾</span>
+              </summary>
+              <div class="space-y-3 border-t border-white/10 p-5">
+                ${g.items.map(renderIncident).join('')}
+              </div>
+            </details>
           `,
         )
         .join('');
