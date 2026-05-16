@@ -23,10 +23,11 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     expect(body).toMatch(/Onboarding step 3 — brief intro \+ CTA to tier-select\. R6 polish/);
   });
 
-  it("Brand intro (R6 plain-English rewrite): 'real iPhone Safari sessions — the same browser engine every iPhone uses, so your sessions look indistinguishable from a physical phone.'", () => {
+  it("Brand intro (R6 + 2026-05-16 honesty pass): 'iPhone Safari sessions on real WebKit — the same engine every iPhone uses, so your sessions look indistinguishable from a physical phone.' Aligned with the homepage hero rewrite at 2d0deca0 — 'real WebKit' (engine, which we DO build from Apple's source) rather than 'real iPhone Safari' (binary, which we don't run literally).", () => {
     expect(body).toMatch(
-      /Driftstack runs real iPhone Safari sessions — the same browser engine\s*\n?\s*every iPhone uses, so your sessions look indistinguishable from a\s*\n?\s*physical phone\./,
+      /Driftstack runs iPhone Safari sessions on real WebKit — the same\s*\n?\s*engine every iPhone uses, so your sessions look indistinguishable\s*\n?\s*from a physical phone\./,
     );
+    expect(body).not.toMatch(/Driftstack runs real iPhone Safari sessions/);
   });
 
   it('Trial-pack framing pinned: $2.99 · one-time + 16h + 14d + recommended-first-step language', () => {
@@ -59,9 +60,12 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     expect(body).toMatch(
       /We'll send you to Stripe to confirm payment\. Your card details\s*\n?\s*stay between you and Stripe — we never see them\./,
     );
-    // Step 2 — first session = real iPhone Safari on the fleet.
+    // Step 2 — first session = iPhone Safari instance on our EU fleet.
+    // 2026-05-16 honesty pass: "a real iPhone Safari instance" → "an
+    // iPhone Safari instance" (drop "real" implying literal binary;
+    // surrounding context establishes WebKit-on-our-fleet posture).
     expect(body).toMatch(
-      /Back here, you'll create your first session — a real iPhone\s*\n?\s*Safari instance running on our fleet\./,
+      /Back here, you'll create your first session — an iPhone\s*\n?\s*Safari instance running on our EU fleet\./,
     );
     // Step 3 — first API key auto-created + revocable.
     expect(body).toMatch(

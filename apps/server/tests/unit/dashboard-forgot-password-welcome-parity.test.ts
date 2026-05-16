@@ -128,7 +128,7 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
       /We'll send you to Stripe to confirm payment\. Your card details\s*\n\s+stay between you and Stripe — we never see them/,
     );
     expect(w).toMatch(
-      /Back here, you'll create your first session — a real iPhone\s*\n\s+Safari instance running on our fleet/,
+      /Back here, you'll create your first session — an iPhone\s*\n\s+Safari instance running on our EU fleet/,
     );
     expect(w).toMatch(
       /We'll create your first API key automatically\. You can revoke\s*\n\s+or rotate it any time on the API keys page/,
@@ -146,11 +146,12 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
     );
   });
 
-  it('CRITICAL welcome "real iPhone Safari" canonical positioning pinned. The wording — "Driftstack runs real iPhone Safari sessions — the same browser engine every iPhone uses" — is the load-bearing product claim. Drift to a different positioning would mismatch the marketing site.', () => {
+  it('CRITICAL welcome canonical positioning pinned (2026-05-16 honesty pass): "Driftstack runs iPhone Safari sessions on real WebKit — the same engine every iPhone uses, so your sessions look indistinguishable from a physical phone." Aligned with the homepage hero rewrite at 2d0deca0 — "real WebKit" (engine, which we DO build from Apple\'s source) rather than "real iPhone Safari" (binary, which we don\'t literally run).', () => {
     const w = read(WELCOME);
     expect(w).toMatch(
-      /Driftstack runs real iPhone Safari sessions — the same browser engine\s*\n\s+every iPhone uses, so your sessions look indistinguishable from a\s*\n\s+physical phone/,
+      /Driftstack runs iPhone Safari sessions on real WebKit — the same\s*\n\s+engine every iPhone uses, so your sessions look indistinguishable\s*\n\s+from a physical phone/,
     );
+    expect(w).not.toMatch(/Driftstack runs real iPhone Safari sessions/);
   });
 
   it('CRITICAL welcome PCI-out-of-scope framing pinned. The wording — "Your card details stay between you and Stripe — we never see them" — is the customer-facing PCI claim. Matches ADR-002 (W733) Stripe-only fiat rail.', () => {
