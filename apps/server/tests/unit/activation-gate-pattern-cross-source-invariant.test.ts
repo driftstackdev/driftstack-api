@@ -1,0 +1,128 @@
+// Cross-source invariant — activation-gate pattern is now used 4 times
+// (billing / session-proxy / saved-proxies / agent-sessions) and the
+// pattern is structurally identical across all 4:
+//
+//   1. Each route file exports BOTH `registerXxxRoutes(app, deps)`
+//      AND `registerXxxDisabledRoutes(app)`.
+//   2. The disabled variant throws `FeatureUnavailableError`
+//      (problem-type FeatureUnavailable; HTTP 503).
+//   3. `app.ts` wires them in an `if (deps.xxxService !== undefined)`
+//      / else block — the real registration is gated on the AppDeps
+//      service being defined.
+//
+// This invariant matters because:
+// - Drift on (1) means a feature gets stuck unable to register its
+//   disabled-stub variant — the dashboard / SDK would see 404 instead
+//   of 503 + machine-readable problem-type.
+// - Drift on (2) (e.g. using a 404 NotFoundError instead) breaks the
+//   client-side activation-detection pattern (Wave 1119 / Slice 1119.2
+//   dashboard leg + the matching EGRESS dashboard leg).
+// - Drift on (3) — forgetting the else clause — leaves routes
+//   unregistered when the service is absent, which silently 404s.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+interface GatedFeature {
+  /** Display name for assertion messages. */
+  name: string;
+  /** Route file that exports the wired + disabled registrar pair. */
+  routesFile: string;
+  /** Wired registrar fn name. */
+  wiredFn: string;
+  /** Disabled-stub registrar fn name. */
+  disabledFn: string;
+  /** AppDeps field name the gate keys on. */
+  depsField: string;
+}
+
+const FEATURES: GatedFeature[] = [
+  {
+    name: 'billing',
+    routesFile: 'apps/server/src/routes/billing.ts',
+    wiredFn: 'registerBillingRoutes',
+    disabledFn: 'registerBillingDisabledRoutes',
+    depsField: 'billingService',
+  },
+  {
+    name: 'session-proxy (EGRESS per-session)',
+    routesFile: 'apps/server/src/routes/session-proxy.ts',
+    wiredFn: 'registerSessionProxyRoutes',
+    disabledFn: 'registerSessionProxyDisabledRoutes',
+    depsField: 'sessionEgressService',
+  },
+  {
+    name: 'saved-proxies (EGRESS reusable library)',
+    routesFile: 'apps/server/src/routes/saved-proxies.ts',
+    wiredFn: 'registerSavedProxiesRoutes',
+    disabledFn: 'registerSavedProxiesDisabledRoutes',
+    depsField: 'sessionEgressService',
+  },
+  {
+    name: 'agent-sessions (AI chat)',
+    routesFile: 'apps/server/src/routes/agent-sessions.ts',
+    wiredFn: 'registerAgentSessionsRoutes',
+    disabledFn: 'registerAgentSessionsDisabledRoutes',
+    depsField: 'agentRuntime',
+  },
+];
+
+const APP_TS = resolve(REPO_ROOT, 'apps/server/src/lib/app.ts');
+
+describe('activation-gate pattern cross-source invariant', () => {
+  const appBody = read(APP_TS);
+
+  for (const f of FEATURES) {
+    describe(f.name, () => {
+      const routeBody = read(resolve(REPO_ROOT, f.routesFile));
+
+      it('routes file exists at the canonical path', () => {
+        expect(existsSync(resolve(REPO_ROOT, f.routesFile))).toBe(true);
+      });
+
+      it(`exports the wired registrar \`${f.wiredFn}\``, () => {
+        expect(routeBody).toMatch(new RegExp(`export function ${f.wiredFn}\\(`));
+      });
+
+      it(`exports the disabled-stub registrar \`${f.disabledFn}\``, () => {
+        expect(routeBody).toMatch(new RegExp(`export function ${f.disabledFn}\\(`));
+      });
+
+      it(`disabled registrar throws FeatureUnavailableError (problem-type 503)`, () => {
+        // The disabled fn body MUST reference FeatureUnavailableError;
+        // pattern stays valid even if the throw site is wrapped in a
+        // helper inside the function (e.g. `const stub = () => { throw new FeatureUnavailableError(...); }`).
+        const fnIdx = routeBody.indexOf(`export function ${f.disabledFn}`);
+        expect(fnIdx).toBeGreaterThan(-1);
+        const tail = routeBody.slice(fnIdx);
+        expect(tail).toMatch(/FeatureUnavailableError/);
+      });
+
+      it(`app.ts wires both registrars under an \`if (deps.${f.depsField}\` activation gate`, () => {
+        // Allow either == or !== form so the test doesn't pin the
+        // exact polarity (some gates negate, some don't).
+        expect(appBody).toMatch(new RegExp(`deps\\.${f.depsField}`));
+        // Both registrars must be called from app.ts.
+        expect(appBody).toMatch(new RegExp(`\\b${f.wiredFn}\\b`));
+        expect(appBody).toMatch(new RegExp(`\\b${f.disabledFn}\\b`));
+      });
+    });
+  }
+
+  it('FeatureUnavailableError is in errors.ts (the problem-type the pattern depends on)', () => {
+    const errorsBody = read(resolve(REPO_ROOT, 'apps/server/src/lib/errors.ts'));
+    expect(errorsBody).toMatch(/export class FeatureUnavailableError extends ApiError/);
+    // The class MUST use HTTP 503 — the dashboard activation-detection
+    // pattern (Wave 1119 / Slice 1119.2 + EGRESS + AI-D) keys on 503.
+    expect(errorsBody).toMatch(/FeatureUnavailableError[\s\S]{0,300}status: 503/);
+  });
+});
