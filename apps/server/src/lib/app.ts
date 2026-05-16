@@ -100,6 +100,10 @@ import {
   registerSessionProxyDisabledRoutes,
   registerSessionProxyRoutes,
 } from '../routes/session-proxy.js';
+import {
+  registerSavedProxiesDisabledRoutes,
+  registerSavedProxiesRoutes,
+} from '../routes/saved-proxies.js';
 import { registerAdminForceActionRoutes } from '../routes/admin-force-actions.js';
 import {
   wireSentryErrorHandler,
@@ -693,8 +697,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // the dashboard get a machine-readable "not yet shipped" signal.
   if (deps.sessionEgressService !== undefined) {
     registerSessionProxyRoutes(app, { service: deps.sessionEgressService });
+    registerSavedProxiesRoutes(app, { service: deps.sessionEgressService });
   } else {
     registerSessionProxyDisabledRoutes(app);
+    registerSavedProxiesDisabledRoutes(app);
   }
   if (
     deps.sessionRepo !== undefined &&
