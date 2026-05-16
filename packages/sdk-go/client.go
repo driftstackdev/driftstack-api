@@ -55,6 +55,8 @@ type Client struct {
 	Team *TeamResource
 	// EG-API-1.2/1.3 — customer-configurable egress (planning 133).
 	Egress *EgressResource
+	// AI-D — agent chat sessions (planning 132 §"Phase 7").
+	AgentSessions *AgentSessionsResource
 }
 
 // Option is the functional-options shape for [New].
@@ -119,6 +121,7 @@ func New(apiKey string, opts ...Option) *Client {
 	c.Legal = &LegalResource{client: c}
 	c.Team = &TeamResource{client: c}
 	c.Egress = &EgressResource{client: c}
+	c.AgentSessions = &AgentSessionsResource{client: c}
 	return c
 }
 

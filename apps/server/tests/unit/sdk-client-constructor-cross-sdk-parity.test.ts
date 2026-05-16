@@ -40,6 +40,7 @@ const REQUIRED_RESOURCES = [
   ['legal', 'LegalResource', 'Legal'],
   ['team', 'TeamResource', 'Team'],
   ['egress', 'EgressResource', 'Egress'],
+  ['agentSessions', 'AgentSessionsResource', 'AgentSessions'],
 ] as const;
 
 describe('W819 cross-SDK client constructor parity', () => {
@@ -76,7 +77,7 @@ describe('W819 cross-SDK client constructor parity', () => {
 
   // ─── 15-required-resource-accessor set ────────────────────────
 
-  it('CRITICAL all 16 required resource accessors exist on each SDK client. Drift to dropping any would orphan a documented customer surface (sessions / apiKeys / usage / webhooks / profiles / profileSnapshots / billing / cryptoOrders / auth / account / mfa / auditLog / emailPreferences / legal / team / egress). Wave 1119 added EGRESS Phase 1 (planning 133); commits 041ef7a9 (TS) + 939548b2 (Py) + this slice (Go) lifted all 3 SDKs together.', () => {
+  it('CRITICAL all 17 required resource accessors exist on each SDK client. Drift to dropping any would orphan a documented customer surface. Wave 1119: EGRESS (egress, all 3 SDKs at commit b4c27598) + AI-CHAT (agentSessions, all 3 SDKs at this slice).', () => {
     const ts = read(TS);
     const py = read(PY);
     const go = read(GO);
@@ -93,7 +94,7 @@ describe('W819 cross-SDK client constructor parity', () => {
       // Python imports the AsyncXxxResource + XxxResource pair.
       // Skip apiKeys (Python uses snake_case: api_keys) — handled separately below.
     }
-    // Python's 16-resource sync + async dual import set.
+    // Python's 17-resource sync + async dual import set.
     expect(py).toMatch(
       /from driftstack\.resources\.sessions import AsyncSessionsResource, SessionsResource/,
     );
@@ -102,6 +103,9 @@ describe('W819 cross-SDK client constructor parity', () => {
     );
     expect(py).toMatch(
       /from driftstack\.resources\.egress import AsyncEgressResource, EgressResource/,
+    );
+    expect(py).toMatch(
+      /from driftstack\.resources\.agent_sessions import\s+\(\s+AgentSessionsResource,\s+AsyncAgentSessionsResource,\s+\)/,
     );
   });
 

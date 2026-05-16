@@ -21,6 +21,10 @@ from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
 from driftstack.resources.audit_log import AsyncAuditLogResource, AuditLogResource
 from driftstack.resources.auth import AsyncAuthResource, AuthResource
 from driftstack.resources.billing import AsyncBillingResource, BillingResource
+from driftstack.resources.agent_sessions import (
+    AgentSessionsResource,
+    AsyncAgentSessionsResource,
+)
 from driftstack.resources.egress import AsyncEgressResource, EgressResource
 from driftstack.resources.crypto_orders import (
     AsyncCryptoOrdersResource,
@@ -111,6 +115,8 @@ class Driftstack:
         self.team = TeamResource(self._http)
         # EG-API-1.2/1.3 — customer-configurable egress (planning 133).
         self.egress = EgressResource(self._http)
+        # AI-D — agent chat sessions (planning 132 §"Phase 7").
+        self.agent_sessions = AgentSessionsResource(self._http)
 
     def close(self) -> None:
         self._http.close()
@@ -172,6 +178,8 @@ class AsyncDriftstack:
         self.team = AsyncTeamResource(self._http)
         # EG-API-1.2/1.3 — customer-configurable egress (planning 133).
         self.egress = AsyncEgressResource(self._http)
+        # AI-D — agent chat sessions (planning 132 §"Phase 7").
+        self.agent_sessions = AsyncAgentSessionsResource(self._http)
 
     async def aclose(self) -> None:
         await self._http.aclose()
