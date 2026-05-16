@@ -41,10 +41,11 @@ Actions workflows still build images but the docker-compose runtime
 mismatch makes them non-functional, see
 `docs/internal/2026-05-15-deploy-pipeline-mismatch.md`):
 
-- `scripts/post-deploy-verify.mjs` — 9 invariants against the public
+- `scripts/post-deploy-verify.mjs` — 10 invariants against the public
   origin (health / version / version-SHA matches expected / status /
   status incidents list / status incident detail / account oauth-links
-  route registered / openapi / unknown-path 404).
+  route registered / admin cost-config route registered / openapi /
+  unknown-path 404).
 - `/opt/driftstack/api/.last-good-sha` — written on every successful
   deploy by `scripts/deploy-bridge.sh`. Only confirmed-healthy SHAs
   land there.

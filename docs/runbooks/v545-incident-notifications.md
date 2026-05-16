@@ -81,8 +81,9 @@ ssh root@128.140.37.74 'sudo -u driftstack bash -c "set -a; source /opt/driftsta
 
 # 3. The smoke (read-only):
 bash scripts/post-deploy-verify.mjs --base-url https://api.driftstack.dev
-#  expected: 9/9 OK (includes /v1/status recent_incidents shape +
-#  /v1/status/incidents/:id route registration)
+#  expected: 10/10 OK (includes /v1/status recent_incidents shape +
+#  /v1/status/incidents/:id route registration + /v1/admin/cost/config
+#  V-541.B gate)
 ```
 
 ## Cross-references
