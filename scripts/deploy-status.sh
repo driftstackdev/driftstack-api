@@ -33,7 +33,28 @@ for ENV in "${TARGETS[@]}"; do
   VERSION=$(curl -fsS "$PUBLIC_URL/version" 2>/dev/null || echo "{}")
   GIT_SHA=$(echo "$VERSION" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("git_sha","?"))' 2>/dev/null || echo "?")
   STARTED=$(echo "$VERSION" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("started_at","?"))' 2>/dev/null || echo "?")
-  echo "  /version           : git_sha=$GIT_SHA started_at=$STARTED"
+
+  # Compute uptime in human-friendly format. Surfaces "did my restart
+  # take?" (uptime < 30s after env-wire) + "is the process leaky?"
+  # (uptime > weeks).
+  UPTIME=$(python3 -c "
+import sys, datetime
+started = '$STARTED'
+if started == '?':
+    print('?')
+    sys.exit()
+try:
+    s = datetime.datetime.fromisoformat(started.replace('Z', '+00:00'))
+    delta = datetime.datetime.now(datetime.timezone.utc) - s
+    secs = int(delta.total_seconds())
+    if secs < 60: print(f'{secs}s')
+    elif secs < 3600: print(f'{secs // 60}m')
+    elif secs < 86400: print(f'{secs // 3600}h {(secs % 3600) // 60}m')
+    else: print(f'{secs // 86400}d {(secs % 86400) // 3600}h')
+except Exception:
+    print('?')
+" 2>/dev/null || echo "?")
+  echo "  /version           : git_sha=$GIT_SHA uptime=$UPTIME (since $STARTED)"
 
   # .last-good-sha — what revert-bridge would target.
   LAST_GOOD=$(ssh "root@${HOST}" "cat /opt/driftstack/api/.last-good-sha 2>/dev/null || echo '(none)'")
