@@ -33,14 +33,14 @@ describe('deploy-bridge runbook content parity', () => {
     // included in the published count because deploy-bridge always
     // passes --expected-sha.
     const block = verify.match(/const checks = \[([\s\S]*?)\];/);
-    expect(block).not.toBeNull();
-    const inner = block![1];
-    const checkCount = (inner.match(/check[A-Z]\w+/g) ?? []).length;
+    const inner = block?.[1];
+    expect(inner).toBeDefined();
+    const checkCount = (inner!.match(/check[A-Z]\w+/g) ?? []).length;
 
     expect(checkCount).toBeGreaterThanOrEqual(10);
 
     const runbookCount = runbook.match(/(\d+)\s+post-deploy-verify invariants/);
-    expect(runbookCount).not.toBeNull();
+    expect(runbookCount?.[1]).toBeDefined();
     expect(Number(runbookCount![1])).toBe(checkCount);
   });
 
@@ -73,8 +73,9 @@ describe('deploy-bridge runbook content parity', () => {
     // deploy-status.sh --check iterates over these four flags. If a
     // flag is added/removed there, the runbook list must follow.
     const scriptFlags = status.match(/for flag in ([\w ]+); do/);
-    expect(scriptFlags).not.toBeNull();
-    const flags = scriptFlags![1].trim().split(/\s+/);
+    const flagsBlock = scriptFlags?.[1];
+    expect(flagsBlock).toBeDefined();
+    const flags = (flagsBlock ?? '').trim().split(/\s+/);
     for (const flag of flags) {
       expect(runbook).toMatch(new RegExp(`\\b${flag}\\b`));
     }
