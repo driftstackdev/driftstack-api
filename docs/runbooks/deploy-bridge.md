@@ -4,6 +4,16 @@ Operator-facing summary of the manual-SSH-deploy + auto-revert
 toolchain that bridges the docker-compose-vs-systemd mismatch (see
 `docs/internal/2026-05-15-deploy-pipeline-mismatch.md`).
 
+## TL;DR — three commands
+
+```sh
+bash scripts/deploy-status.sh                # read-only snapshot of both servers
+bash scripts/deploy-bridge.sh staging        # deploy origin/main to staging
+bash scripts/revert-bridge.sh --dry-run prod # preview revert target + recent history
+```
+
+`deploy-status.sh` is read-only and always safe.
+
 ## When to use
 
 - Shipping any code change that needs to be live on prod or staging,
