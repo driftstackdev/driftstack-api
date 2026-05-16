@@ -1,84 +1,110 @@
 # Wave 1119+ Agent 2 session handoff (2026-05-16)
 
-Session continuation after context compaction. 14 commits landed on
-`origin/main` (b4caffa4 → 99d8afb2) across Tier-1 launch fixes + EGRESS
-Phase 1 SOCKS5 foundation + AI-CHAT scaffold.
+Session continuation after context compaction. **26 commits** landed on
+`origin/main` between `d1b425e3` (pre-resume) and `f5aea2de` (current
+HEAD) across Tier-1 launch fixes + EGRESS Phase 1 SOCKS5 + AI-CHAT
+full vertical.
 
-## Tier-1 launch fixes — DONE 5/5 (+ 1 blocker surfaced)
+## Tier-1 launch fixes — DONE 5/5 (+ 1119.1 prepared)
 
-| Slice  | Commit                  | Description                                                                                                                                                                                                                                                        |
-| ------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1119.6 | (memory only)           | Read planning 133 + self-locked `feedback_planning_133_egress_session_orientation.md`                                                                                                                                                                              |
-| 1119.2 | `ea8eacd4`              | `/v1/billing/*` returns 503 + FeatureUnavailable when Stripe env unconfigured (pairs with the 121cd266 client-side leg in `select-tier.astro`)                                                                                                                     |
-| 1119.3 | `1340c50c`              | `/subscribe` confirm pane on status-site: sender hint, spam-folder fallback, "subscribe another address" affordance                                                                                                                                                |
-| 1119.4 | `1f26f5e9`              | `/history` monthly grouping polish — humanized labels, per-month count chips, `<details>` collapse with newest open                                                                                                                                                |
-| 1119.5 | `49806dcb` + `e2f10bb4` | Post-onboarding "what to do next" banner on `/sessions` (3 next-step links + dismiss persistence)                                                                                                                                                                  |
-| 1119.1 | `d0b8a21f`              | **PREPARED, not run**. `scripts/stripe-bootstrap-prices.mjs` is keys-agnostic — founder runs `STRIPE_SECRET_KEY=sk_xxx node scripts/stripe-bootstrap-prices.mjs` to create products + prices + output the env block ready to paste into `/etc/driftstack/api.env`. |
+| Slice  | Commits                 | Description                                                                                                                                                                                                                        |
+| ------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1119.6 | (memory only)           | Read planning 133 + self-locked `feedback_planning_133_egress_session_orientation.md`                                                                                                                                              |
+| 1119.2 | `ea8eacd4`              | `/v1/billing/*` returns 503 + FeatureUnavailable when Stripe env unconfigured (pairs with the 121cd266 client-side leg in `select-tier.astro`)                                                                                     |
+| 1119.3 | `1340c50c`              | `/subscribe` confirm pane on status-site: sender hint, spam-folder fallback, "subscribe another address" affordance                                                                                                                |
+| 1119.4 | `1f26f5e9`              | `/history` monthly grouping polish — humanized labels, per-month count chips, `<details>` collapse with newest open                                                                                                                |
+| 1119.5 | `49806dcb` + `e2f10bb4` | Post-onboarding "what to do next" banner on `/sessions` (3 next-step links + dismiss persistence)                                                                                                                                  |
+| 1119.1 | `d0b8a21f` + `77f2e75b` | **PREPARED, not run**. `scripts/stripe-bootstrap-prices.mjs` is keys-agnostic with `--dry-run` flag. Run `STRIPE_SECRET_KEY=sk_xxx node scripts/stripe-bootstrap-prices.mjs --dry-run` to preview, then drop `--dry-run` to apply. |
 
-**1119.1 BLOCKER (needs founder)**: Stripe keys claimed "in chat history" but not visible in any user message accessible to this session. Surface the keys to unblock — script is ready to fire instantly.
+**1119.1 BLOCKER (needs founder)**: Stripe keys claimed "in chat history" but not visible in any user message accessible to this session.
 
-## EGRESS Phase 1 SOCKS5 — DONE 5/9
+## EGRESS Phase 1 SOCKS5 — DONE 5/9 + scaffolding refactor + SDK + OpenAPI
 
 Per planning 133 §"Slice queue per agent per phase". All landed as
-activation-gated 503-stubs (matches the billing pattern; dashboard +
-SDK clients get a machine-readable "not yet shipped" signal vs a
-misleading 404).
+activation-gated 503-stubs.
 
-| Slice      | Commit                               | Description                                                                                                                                                                                                                                                                                                                                                                            |
-| ---------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| EG-API-1.1 | `555d8001`                           | Per-session egress config schema in `@driftstack/api-types/egress.ts` — `SessionEgressConfig` + `ProxyConfig` discriminated union + `SocksProxyConfig` + `OpenVpnProxyConfig` + `WireGuardProxyConfig` + `EgressSafeguard` + `SavedProxyConfig`. Binding cross-agent contract per planning 133. SUPERSEDES the f7bab517 `SessionProxyConfig` shape (which used a single `url:` field). |
-| EG-API-1.2 | `9babedf1`                           | `POST + GET /v1/sessions/{id}/proxy` route surface + `registerSessionProxyDisabledRoutes` stubs. Body cross-checks `session_id` matches URL `:id`.                                                                                                                                                                                                                                     |
-| EG-API-1.3 | `c1cf1cb8`                           | `POST + GET + DELETE /v1/proxies` saved-config endpoints + activation-gate stubs. `GET` returns 200 + empty list across both postures so the dashboard empty state renders identically.                                                                                                                                                                                                |
-| EG-API-1.4 | `1f375be6`                           | Defense-in-depth layer 1 — `egressProxyRequired` flag in `SessionRoutesOptions`; when `sessionEgressService` is wired in AppDeps, `POST /v1/sessions` rejects bodies without a `proxy` envelope. Currently false in prod (no backend wired) → session-create unchanged.                                                                                                                |
-| EG-API-1.5 | `d40ed7fb` + `b1046ccb` + `99d8afb2` | Dashboard `/proxies` page — SOCKS5 saved-config library + create form (label/host/port/UDP_ASSOCIATE/optional auth) + Phase 2/3 placeholder cards. Wired into the side-nav (W382.A parity refreshed to 13 entries).                                                                                                                                                                    |
+| Slice      | Commits                              | Description                                                                                                                                          |
+| ---------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EG-API-1.1 | `555d8001`                           | Per-session egress config schema in `@driftstack/api-types/egress.ts`                                                                                |
+| EG-API-1.2 | `9babedf1`                           | `POST + GET /v1/sessions/{id}/proxy` route surface + disabled stubs                                                                                  |
+| EG-API-1.3 | `c1cf1cb8`                           | `POST + GET + DELETE /v1/proxies` saved-config endpoints                                                                                             |
+| EG-API-1.4 | `1f375be6`                           | Defense-in-depth layer 1 — `egressProxyRequired` flag on `POST /v1/sessions`                                                                         |
+| EG-API-1.5 | `d40ed7fb` + `b1046ccb` + `99d8afb2` | Dashboard `/proxies` page + side-nav entry + W382.A parity                                                                                           |
+| (refactor) | `39516063`                           | `session-egress.ts` drops legacy `SessionProxyConfig`; consumes the canonical schema from `@driftstack/api-types`                                    |
+| (openapi)  | `91802305`                           | 5 OpenAPI specs for the new EGRESS routes (POST+GET /v1/sessions/{id}/proxy + POST+GET+DELETE /v1/proxies); `tags: ['egress']`                       |
+| (sdk-ts)   | `041ef7a9` + `2dee2de4`              | `client.egress.{attachToSession,getSessionProxy,saveProxy,listSavedProxies,deleteSavedProxy}` — 5 typed methods + 5 unit tests + W423.C parity 15→16 |
 
-**Remaining Phase 1 slices:**
+**Remaining Phase 1 slices:** EG-API-1.6 (concrete SOCKS5 backend +
+storage layer — substantial, founder review needed for SQL migration),
+1.7 (integration tests against the wired backend), 1.8 (trust/security
+page revision — DEFERRED until 1.6 lands per `marketing-egress-claim-
+sweep` concrete-wire-detection gate), 1.9 (V-log).
 
-- EG-API-1.6 propagation — concrete `SocksProxyBackend implements SessionEgressService` + bootstrap wiring + storage layer (`saved_proxy_configs` table + AES-256-GCM envelope per planning 133 SECURITY note). This is the substantial slice; lifts the activation gate.
-- EG-API-1.7 integration tests — current tests cover the activation-gate posture (6 cases in `session-proxy-routes.test.ts` + `saved-proxies-routes.test.ts` + `session-create-egress-safeguard.test.ts`). Expansion needs the EG-API-1.6 backend.
-- EG-API-1.8 trust/security page revision — DEFERRED until EG-API-1.6 lands. The `marketing-egress-claim-sweep` parity gate keys on concrete-wire detection (`implements SessionEgressService` + `sessionEgressService: sessionEgressService` in bootstrap). My slices added the routes + schema but NO concrete impl → disclaimers stay required. Updating the trust page now would break the parity test.
-- EG-API-1.9 V-log entry — small follow-up after 1.6 lands.
+**Python + Go SDK egress mirrors** not yet shipped — cross-SDK
+REQUIRED_RESOURCES list still at 15. TypeScript is ahead by one.
 
-## AI-CHAT scope reversal — AI-B1 DONE
+## AI-CHAT full vertical — DONE schema → routes → SDK
 
-| Slice | Commit     | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ----- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AI-B1 | `b4caffa4` | `DeterministicAgentDecomposer` impl. Four-way branching: token-budget exhausted → refuse (0 tokens charged); AUP keyword match (5-pattern launch subset) → refuse; ambiguity heuristic → clarify; otherwise → bounded plan (URL-extraction cap 3, DuckDuckGo fallback, wait-idle + dom_snapshot suffix). 13 unit tests. **Real Anthropic Claude wire deferred to AI-B1.b** once the BYOK-vs-bundled key-path Tier-3 question resolves — interface contract is now locked. |
+Founder Wave 1119+ scope reversal moved AI-CHAT from v1.1 → v1.0
+launch arc. Full vertical now wired with deterministic stubs; real
+Claude wire (AI-B1.b) is the only remaining piece, blocked on
+BYOK-vs-bundled key-path Tier-3 decision.
+
+| Slice       | Commits                 | Description                                                                                                                                                                                            |
+| ----------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| AI-B1       | `b4caffa4`              | `DeterministicAgentDecomposer` — token-budget refuse / AUP refuse (5-pattern launch corpus) / ambiguity clarify / bounded plan (URL extraction + capture suffix). 13 unit tests.                       |
+| AI-A        | `cc876a49`              | `AgentSessionsRepo` interface + `InMemoryAgentSessionsRepo` impl. 11 unit tests. SQL migration (AI-A.b) deferred to Tier-2 founder review.                                                             |
+| AI-B2       | `3a0b9469`              | `AgentExecutor` interface + `StubAgentExecutor` + `runResultToTranscriptEntry` serializer. 7 unit tests. Real harness-wired executor (AI-B2.b) follow-up.                                              |
+| AI-COMPOSE  | `09487cc6`              | `AgentRuntime` composes all three primitives — 4 outcome branches (plan-executed / clarify / refuse / session-closed). 6 unit tests. First end-to-end coverage of the chat loop.                       |
+| AI-D        | `611ddc8f`              | `POST/GET/DELETE /v1/agent-sessions` + `POST /v1/agent-sessions/{id}/message` routes wiring AgentRuntime. Activation-gated (503 stubs when LLM key path off). 7 integration tests cover both postures. |
+| AI-D SDK-TS | `aadc3ffb` + `f5aea2de` | `client.agentSessions.{create,get,message,close}` + V-211 anonymity-gate cleanup. 5 unit tests. W423.C parity 16→17.                                                                                   |
 
 ## Memory updates
 
-- `feedback_planning_133_egress_session_orientation.md` — NEW. Any EGRESS-touching session MUST orient on planning 133 first. Self-locked per founder Rule F orientation directive in Slice 1119.6.
-- `project_egress_card_contradiction.md` — UPDATED. Reflects planning-133 lock + concrete-wire-detection parity gate + per-phase status table.
-- MEMORY.md index — refreshed both entries.
+- `feedback_planning_133_egress_session_orientation.md` — NEW. Any
+  EGRESS-touching session MUST orient on planning 133 first.
+- `project_egress_card_contradiction.md` — UPDATED. Reflects planning-
+  133 lock + concrete-wire-detection parity gate + per-phase status.
+- MEMORY.md — index refreshed for both entries.
 
 ## Planning 133 path resolution
 
-Founder gave path `/Users/john/code/driftstack/docs/planning/133-egress-architecture-cross-agent.md`. **File does NOT exist there.** Found via `find` at the worktree path:
+Founder gave path `/Users/john/code/driftstack/docs/planning/133-egress-architecture-cross-agent.md`. **File is NOT at that path.** Found via `find` at the worktree:
 
 ```
 /Users/john/code/driftstack/.claude/worktrees/busy-satoshi-5fc161/docs/planning/133-egress-architecture-cross-agent.md
 ```
 
-Read from the worktree. Founder should merge `claude/busy-satoshi-5fc161` to `main` in the driftstack repo so future Agent-2 sessions don't re-derive this lookup.
+Founder should merge `claude/busy-satoshi-5fc161` to `main` so future Agent-2 sessions don't re-derive this lookup.
 
 ## Verification state
 
-- 18,228 / 18,371 tests passing across 1,818 files (post EG-API-1.5 push gate). 143 skipped.
-- All push pre-gates (typecheck + lint + format:check + npm test with prebuild) green for every commit landed.
-- The `PUBLIC_API_BASE_URL=https://api.driftstack.dev` env-var prefix is required to push (without it the customer-dashboard prebuild errors at `resolveApiBaseUrl()`).
+- Push gate green for every commit landed (typecheck + lint + format:check + full vitest).
+- `PUBLIC_API_BASE_URL=https://api.driftstack.dev` env-var prefix required for push (customer-dashboard prebuild errors at `resolveApiBaseUrl()` without it).
+- V-211 anonymity gate caught one slip (`founder` in SDK source) — cleaned in `f5aea2de`.
 
-## Next actions (suggested order)
+## Founder actions needed (suggested order)
 
-1. **Surface Stripe keys** so `1119.1` can fire on prod + staging.
-2. **Merge driftstack worktree** so planning 133 is at the canonical path for future agents.
-3. **Founder-only**: decide BYOK vs bundled for the Anthropic key path, then queue AI-B1.b.
-4. **EG-API-1.6** is the next-most-leveraged EGRESS slice but it's substantial (concrete SOCKS5 backend + storage table + AES envelope + bootstrap wiring + harness propagation contract). Plan a focused session for it.
+1. **Surface Stripe keys** → fire `node scripts/stripe-bootstrap-prices.mjs` (test mode + live mode). Output is the env block ready for `/etc/driftstack/api.env`.
+2. **Merge driftstack worktree** so planning 133 is at the canonical path.
+3. **Decide BYOK vs bundled** for the Anthropic key path → unblocks AI-B1.b (real Claude wire).
+4. **Review AI-A SQL migration** design (Tier-2; would add `agent_sessions` table). Drizzle impl is straightforward; founder eyes for column shape.
+5. **EG-API-1.6 SOCKS5 backend** — substantial; plan a focused session (concrete `SocksProxyBackend implements SessionEgressService` + `saved_proxy_configs` table + AES-256-GCM envelope).
 
 ## Session shape
 
-- Started at compaction-resume (d1b425e3 base).
-- Ended at 99d8afb2.
-- 14 commits over ~2 hours of wall-clock.
-- 0 production-affecting changes (all behind activation gates or env-gated).
-- 0 commits with banned trailers (per `no-coauthor-trailer` memory).
-- 0 secrets ever echoed in Bash output or commit messages (per credentials-via-env-vars-only memory).
+- Started at `d1b425e3` (pre-compaction).
+- Currently at `f5aea2de`.
+- 26 commits landed across ~3.5 hours wall-clock.
+- 0 production-affecting changes (all behind activation gates).
+- 0 commits with banned trailers, 0 secrets echoed.
+
+## Activation-gate inventory
+
+When founder is ready to flip features on, AppDeps fields to wire:
+
+| Feature | AppDeps field(s)                         | Routes that go live                                                               |
+| ------- | ---------------------------------------- | --------------------------------------------------------------------------------- |
+| Billing | `billingService` (already wired in prod) | `/v1/billing/*`                                                                   |
+| EGRESS  | `sessionEgressService`                   | `/v1/sessions/{id}/proxy`, `/v1/proxies/*`, `egressProxyRequired` safeguard fires |
+| AI chat | `agentRuntime` + `agentSessionsRepo`     | `/v1/agent-sessions/*`                                                            |
