@@ -2150,6 +2150,115 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // ── AI-D — agent chat sessions ──────────────────────────────────
+  // All four routes register as 503 FeatureUnavailable stubs until the
+  // LLM key path is enabled on the deployment; the OpenAPI spec
+  // describes the wired-runtime behavior so SDK consumers compile
+  // ahead of time.
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/agent-sessions',
+    summary: 'Create a new agent chat session',
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      body: {
+        content: {
+          'application/json': {
+            schema: z.object({
+              driftstack_session_id: z.string().min(1).optional(),
+              token_budget: z.number().int().positive().optional(),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      201: {
+        description: 'Agent session created; transcript empty + full budget remaining.',
+        content: { 'application/json': { schema: z.object({}) } },
+      },
+      ...errors4xx,
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/agent-sessions/{id}',
+    summary: 'Read agent session state (transcript_length + budget + status)',
+    tags: ['agent-chat'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Agent session envelope.',
+        content: { 'application/json': { schema: z.object({}) } },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/agent-sessions/{id}/message',
+    summary: 'Run one decompose→execute turn against the agent session',
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      body: {
+        content: {
+          'application/json': {
+            schema: z.object({ user_message: z.string().min(1).max(8000) }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description:
+          'Turn result — discriminated by `kind`: plan-executed (intents + results + ok) / clarify (clarifying_question) / refuse (refuse_reason).',
+        content: {
+          'application/json': {
+            schema: z.object({
+              kind: z.enum(['plan-executed', 'clarify', 'refuse']),
+            }),
+          },
+        },
+      },
+      ...errors4xx,
+      409: {
+        description: 'Agent session is closed or paused; start a new session.',
+        content: problemContent,
+      },
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/agent-sessions/{id}',
+    summary: 'Close the agent session (idempotent)',
+    tags: ['agent-chat'],
+    security: auth,
+    responses: {
+      204: { description: 'Closed.' },
+      404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+
   // ── V-666 — crypto-orders surface. Crypto payments are non-refundable.
   registerRoute(r, {
     method: 'post',

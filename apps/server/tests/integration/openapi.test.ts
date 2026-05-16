@@ -146,6 +146,10 @@ describe('OpenAPI spec generation', () => {
         // EG-API-1.2 + 1.3 — customer-configurable egress (planning 133)
         '/v1/proxies',
         '/v1/proxies/{id}',
+        // AI-D — agent chat sessions
+        '/v1/agent-sessions',
+        '/v1/agent-sessions/{id}',
+        '/v1/agent-sessions/{id}/message',
         // V-459 public status surface
         '/v1/status',
         '/v1/status/incidents',
