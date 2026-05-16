@@ -63,8 +63,12 @@ echo "[revert] recent $ENV deploy history (last 5):" >&2
 ssh "root@${HOST}" "tail -5 /opt/driftstack/api/.deploy-history.log 2>/dev/null | sed 's/^/[revert]   /' >&2 || echo '[revert]   (no .deploy-history.log yet)' >&2"
 
 if [ "$DRY_RUN" -eq 1 ]; then
-  echo "[revert] DRY-RUN: would fire bash scripts/deploy-bridge.sh $ENV $LAST_GOOD" >&2
-  exit 0
+  if [ "$CURRENT" = "$LAST_GOOD" ] || [ "${CURRENT:0:7}" = "${LAST_GOOD:0:7}" ]; then
+    echo "[revert] DRY-RUN: current already matches last-good; no revert needed (exit 0)" >&2
+    exit 0
+  fi
+  echo "[revert] DRY-RUN: current $CURRENT != last-good $LAST_GOOD — would fire bash scripts/deploy-bridge.sh $ENV $LAST_GOOD (exit 2 signals revert-required)" >&2
+  exit 2
 fi
 echo "[revert] firing deploy-bridge $ENV $LAST_GOOD" >&2
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
