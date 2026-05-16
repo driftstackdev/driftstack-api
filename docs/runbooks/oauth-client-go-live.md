@@ -26,10 +26,11 @@ wire-up 5aab0394 (2026-05-15). Activation is operator-only.
 
 - [ ] Google Cloud Console: create an OAuth 2.0 client (Web
       application). Authorized redirect URI:
-      `https://app.driftstack.dev/auth/oauth-client/callback`.
+      `https://api.driftstack.dev/v1/auth/oauth/google/callback`.
       Copy Client ID + Client Secret.
 - [ ] GitHub Developer Settings → OAuth Apps → New OAuth App.
-      Authorization callback URL: same as Google.
+      Authorization callback URL:
+      `https://api.driftstack.dev/v1/auth/oauth/github/callback`.
       Copy Client ID + Client Secret.
 - [ ] Generate a fresh `OAUTH_CLIENT_SIGNING_SECRET` (≥32 chars):
       `    node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`
@@ -111,9 +112,15 @@ From a workstation:
 1. Visit `https://app.driftstack.dev/login`. Confirm the
    "Sign in with Google" + "Sign in with GitHub" buttons appear.
 2. Click "Sign in with Google". Browser should redirect to
-   `https://accounts.google.com/o/oauth2/v2/auth?...`.
-3. Complete consent. Browser should land at
-   `https://app.driftstack.dev/auth/oauth-client/callback?...`.
+   `https://accounts.google.com/o/oauth2/v2/auth?...`. The
+   `redirect_uri` query param MUST be
+   `https://api.driftstack.dev/v1/auth/oauth/google/callback`
+   (matches Google Cloud Console registration).
+3. Complete consent. Browser briefly hits
+   `https://api.driftstack.dev/v1/auth/oauth/google/callback?...`
+   (302 from IDP), which 302s to
+   `https://app.driftstack.dev/auth/oauth-client/callback?...`
+   (final landing).
 4. The callback page POSTs to the server. Three possible outcomes:
    - **New account** (your email isn't in our DB): page redirects to
      `/`. Confirm the dashboard recognises you as signed in.
