@@ -1,0 +1,236 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+
+// V-541.B — admin cost dashboard. Static shell + progressive-enhanced
+// inline JS that fetches /v1/admin/cost/config (rate card + tier
+// thresholds, no usage data) on load, then lets the operator query
+// /v1/admin/cost/accounts/:id for a per-account breakdown.
+//
+// Pre-launch posture: tile values come from the same admin token the
+// rest of the admin panel uses (V-100 internal_admin scope). 401/403
+// surfaces a banner, not silent failure.
+
+const apiBaseUrl = resolveApiBaseUrl();
+---
+
+<AdminLayout title="Cost">
+  <div class="mx-auto max-w-6xl px-6 py-10" data-page="admin-cost">
+    <div
+      data-banner
+      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    >
+    </div>
+
+    <header class="mb-10">
+      <p class="text-sm text-slate-500">Driftstack admin · staff-only</p>
+      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Cost (V-541)</h1>
+      <p class="mt-2 max-w-prose text-sm text-slate-500">
+        Per-account cost estimate for the current billing cycle. Numbers
+        come from <code class="font-mono text-xs">/v1/admin/cost/*</code>;
+        config tile shows the wired rate card so operators can sanity-check
+        the deploy before trusting the dollar numbers.
+      </p>
+    </header>
+
+    <!-- Config inspector tile -->
+    <section class="mb-8 grid gap-4 md:grid-cols-2">
+      <div class="dashboard-card">
+        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Rate card (per unit)</p>
+        <dl class="mt-4 space-y-2 text-sm" data-field="rate-card">
+          <div class="text-slate-500">Loading…</div>
+        </dl>
+      </div>
+      <div class="dashboard-card">
+        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Tier thresholds</p>
+        <dl class="mt-4 space-y-2 text-sm" data-field="tier-thresholds">
+          <div class="text-slate-500">Loading…</div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- Per-account query -->
+    <section class="mb-6">
+      <h2 class="text-lg font-semibold text-slate-900">Per-account breakdown</h2>
+      <form
+        data-form="account-query"
+        class="mt-3 flex flex-wrap items-end gap-3"
+      >
+        <label class="flex flex-col text-sm">
+          <span class="text-slate-600">Account ID</span>
+          <input
+            type="text"
+            name="account_id"
+            placeholder="acct_…"
+            class="mt-1 w-72 rounded-md border border-slate-300 px-3 py-2 font-mono text-xs shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+            required
+          />
+        </label>
+        <label class="flex flex-col text-sm">
+          <span class="text-slate-600">Billing cycle</span>
+          <input
+            type="text"
+            name="billing_cycle"
+            placeholder="YYYY-MM (default current)"
+            class="mt-1 w-44 rounded-md border border-slate-300 px-3 py-2 font-mono text-xs shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+          />
+        </label>
+        <button
+          type="submit"
+          class="rounded-md bg-oxblood-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-oxblood-800"
+        >
+          Query
+        </button>
+      </form>
+      <div
+        data-field="account-result"
+        class="mt-6 hidden dashboard-card"
+      >
+      </div>
+    </section>
+
+    <p class="mt-12 text-xs text-slate-500">
+      Endpoints consumed:
+      <code class="font-mono">{apiBaseUrl}/v1/admin/cost/config</code>,
+      <code class="font-mono">{apiBaseUrl}/v1/admin/cost/accounts/:id</code>,
+      <code class="font-mono">{apiBaseUrl}/v1/admin/cost/overview</code>.
+    </p>
+  </div>
+</AdminLayout>
+
+<script is:inline define:vars={{ apiBaseUrl }}>
+  const root = document.querySelector('[data-page="admin-cost"]');
+  if (!root) throw new Error('admin-cost root missing');
+  const banner = root.querySelector('[data-banner]');
+  const rateCard = root.querySelector('[data-field="rate-card"]');
+  const tierThresholds = root.querySelector('[data-field="tier-thresholds"]');
+  const accountForm = root.querySelector('[data-form="account-query"]');
+  const accountResult = root.querySelector('[data-field="account-result"]');
+
+  function showBanner(msg) {
+    if (!banner) return;
+    banner.textContent = msg;
+    banner.classList.remove('hidden');
+  }
+
+  function adminToken() {
+    return globalThis.localStorage?.getItem('driftstack:admin_token') ?? '';
+  }
+
+  async function authedFetch(path, init = {}) {
+    const token = adminToken();
+    if (!token) {
+      showBanner(
+        'No admin token in localStorage. Mint via /v1/admin/login then localStorage.setItem("driftstack:admin_token", "<token>").',
+      );
+      throw new Error('no admin token');
+    }
+    return fetch(apiBaseUrl + path, {
+      ...init,
+      headers: { ...(init.headers ?? {}), authorization: 'Bearer ' + token },
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+    );
+  }
+
+  function renderRateCard(rates) {
+    if (!rateCard) return;
+    const entries = [
+      ['Compute', 'computeCentsPerMinute', 'cents / minute'],
+      ['Storage', 'storageCentsPerGbMonth', 'cents / GB-month'],
+      ['Egress', 'egressCentsPerGb', 'cents / GB'],
+      ['Email', 'emailCentsPerSend', 'cents / send'],
+      ['LLM (input)', 'llmCentsPer1kInputTokens', 'cents / 1k tokens'],
+      ['LLM (output)', 'llmCentsPer1kOutputTokens', 'cents / 1k tokens'],
+    ];
+    rateCard.innerHTML = entries
+      .map(
+        ([label, key, unit]) =>
+          `<div class="flex justify-between gap-4"><dt class="text-slate-600">${escapeHtml(label)}</dt><dd class="font-mono text-xs text-slate-900">${escapeHtml(String(rates[key] ?? '—'))} <span class="text-slate-400">${escapeHtml(unit)}</span></dd></div>`,
+      )
+      .join('');
+  }
+
+  function renderTierThresholds(tiers) {
+    if (!tierThresholds) return;
+    const rows = Object.entries(tiers ?? {}).map(
+      ([tier, t]) =>
+        `<div class="flex justify-between gap-4"><dt class="text-slate-600">${escapeHtml(tier)}</dt><dd class="font-mono text-xs text-slate-900">soft $${escapeHtml(String((t.softWarningCents ?? 0) / 100))} · hard $${escapeHtml(String((t.hardCapCents ?? 0) / 100))}</dd></div>`,
+    );
+    tierThresholds.innerHTML =
+      rows.length > 0
+        ? rows.join('')
+        : '<div class="text-slate-500">No tier thresholds configured.</div>';
+  }
+
+  function renderAccountSummary(body) {
+    if (!accountResult) return;
+    const cents = (n) => '$' + (Number(n ?? 0) / 100).toFixed(2);
+    accountResult.classList.remove('hidden');
+    accountResult.innerHTML =
+      '<div class="space-y-2 text-sm">' +
+      `<p class="font-mono text-xs text-slate-500">account_id: ${escapeHtml(body.accountId ?? '—')} · cycle: ${escapeHtml(body.billingCycle ?? '—')} · tier: ${escapeHtml(body.tier ?? '—')}</p>` +
+      `<p class="text-base font-medium text-slate-900">Total: ${cents((body.estimated ?? {}).totalCents)}</p>` +
+      '<dl class="grid grid-cols-2 gap-2 text-xs">' +
+      `<div><dt class="text-slate-500">Compute</dt><dd class="font-mono text-slate-900">${cents((body.estimated ?? {}).computeCents)}</dd></div>` +
+      `<div><dt class="text-slate-500">Storage</dt><dd class="font-mono text-slate-900">${cents((body.estimated ?? {}).storageCents)}</dd></div>` +
+      `<div><dt class="text-slate-500">Egress</dt><dd class="font-mono text-slate-900">${cents((body.estimated ?? {}).egressCents)}</dd></div>` +
+      `<div><dt class="text-slate-500">Sub-processor</dt><dd class="font-mono text-slate-900">${cents((body.estimated ?? {}).subprocessorCents)}</dd></div>` +
+      '</dl>' +
+      `<p class="text-xs text-slate-500">soft warn ${cents(body.softWarningCents)} · hard cap ${cents(body.hardCapCents)} · state ${escapeHtml(body.thresholdState ?? '—')}</p>` +
+      '</div>';
+  }
+
+  async function loadConfig() {
+    try {
+      const res = await authedFetch('/v1/admin/cost/config');
+      if (!res.ok) {
+        showBanner(`/v1/admin/cost/config returned ${res.status}`);
+        return;
+      }
+      const body = await res.json();
+      renderRateCard(body.rates ?? {});
+      renderTierThresholds(body.tiers ?? {});
+    } catch (err) {
+      const msg = err && err.message ? err.message : 'network error';
+      showBanner('Could not load cost config (' + msg + ').');
+    }
+  }
+
+  if (accountForm) {
+    accountForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const fd = new FormData(accountForm);
+      const accountId = String(fd.get('account_id') ?? '').trim();
+      const billingCycle = String(fd.get('billing_cycle') ?? '').trim();
+      if (!accountId) return;
+      try {
+        const qs = billingCycle ? `?billing_cycle=${encodeURIComponent(billingCycle)}` : '';
+        const res = await authedFetch(
+          `/v1/admin/cost/accounts/${encodeURIComponent(accountId)}${qs}`,
+        );
+        if (res.status === 404) {
+          showBanner('Account has no usage in the requested cycle.');
+          accountResult?.classList.add('hidden');
+          return;
+        }
+        if (!res.ok) {
+          showBanner(`/v1/admin/cost/accounts/${accountId} returned ${res.status}`);
+          return;
+        }
+        const body = await res.json();
+        renderAccountSummary(body);
+      } catch (err) {
+        const msg = err && err.message ? err.message : 'network error';
+        showBanner('Could not load account cost (' + msg + ').');
+      }
+    });
+  }
+
+  void loadConfig();
+</script>
