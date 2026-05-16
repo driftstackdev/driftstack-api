@@ -170,7 +170,11 @@ function createRecordingEmailService(realService: EmailService): {
     },
     sendStatusIncidentNotification: async (args) => {
       record(
-        args.kind === 'created' ? 'status-incident-created' : 'status-incident-resolved',
+        args.kind === 'created'
+          ? 'status-incident-created'
+          : args.kind === 'updated'
+            ? 'status-incident-updated'
+            : 'status-incident-resolved',
         args,
       );
       await realService.sendStatusIncidentNotification(args);

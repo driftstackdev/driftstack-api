@@ -157,6 +157,67 @@ describe('IncidentNotificationsService — fan-out via lifecycle hooks', () => {
     expect(stale.statusCode).toBe(404);
   });
 
+  it('V-545.B Phase 2 — fires a "status-incident-updated" email on addUpdate of a public incident', async () => {
+    fx = await buildTestApp();
+    await subscribeAndConfirm(fx, 'a@example.test');
+    const createRes = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/incidents',
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}` },
+      payload: { title: 'API slow', description: 'Investigating.', severity: 'major' },
+    });
+    const incidentId = createRes.json<{ incident: { id: string } }>().incident.id;
+    const beforeUpdate = fx.emailSends.length;
+
+    await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/incidents/${incidentId}/updates`,
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}` },
+      payload: { message: 'Scope expanded to dashboard.', status: 'identified' },
+    });
+
+    const after = fx.emailSends.slice(beforeUpdate);
+    const updates = after.filter((s) => s.template === 'status-incident-updated');
+    expect(updates).toHaveLength(1);
+    expect(updates[0]?.to).toBe('a@example.test');
+  });
+
+  it('V-545.B Phase 2 — throttles a second update within the 1-hour window (same subscriber, same incident)', async () => {
+    fx = await buildTestApp();
+    await subscribeAndConfirm(fx, 'a@example.test');
+    const createRes = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/incidents',
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}` },
+      payload: { title: 'API slow', description: 'Investigating.', severity: 'major' },
+    });
+    const incidentId = createRes.json<{ incident: { id: string } }>().incident.id;
+
+    // First update — should send.
+    await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/incidents/${incidentId}/updates`,
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}` },
+      payload: { message: 'still investigating', status: 'identified' },
+    });
+    const firstUpdateCount = fx.emailSends.filter(
+      (s) => s.template === 'status-incident-updated' && s.to === 'a@example.test',
+    ).length;
+    expect(firstUpdateCount).toBe(1);
+
+    // Second update — should be throttled (no second email).
+    await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/incidents/${incidentId}/updates`,
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}` },
+      payload: { message: 'still investigating, slower', status: 'identified' },
+    });
+    const secondCount = fx.emailSends.filter(
+      (s) => s.template === 'status-incident-updated' && s.to === 'a@example.test',
+    ).length;
+    expect(secondCount).toBe(1);
+  });
+
   it('skips unsubscribed recipients on subsequent fan-outs', async () => {
     fx = await buildTestApp();
     await subscribeAndConfirm(fx, 'a@example.test');
