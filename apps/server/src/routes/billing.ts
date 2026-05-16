@@ -14,7 +14,7 @@ import {
   StartTrialPackRequestSchema,
 } from '@driftstack/api-types';
 import type { BillingService, SubscriptionMirror } from '../services/billing.js';
-import { BadRequestError, ValidationError } from '../lib/errors.js';
+import { BadRequestError, FeatureUnavailableError, ValidationError } from '../lib/errors.js';
 
 // V-248 / V-246-P1-001 — Stripe checkout return URL allowlist.
 // Customer-supplied success_url + cancel_url are passed through to
@@ -169,4 +169,38 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
       };
     },
   );
+}
+
+// Wave 1119 / Slice 1119.2 B1 server-side leg — when Stripe env is not
+// configured (no STRIPE_SECRET_KEY / DRIFTSTACK_TIER_PRICE_IDS /
+// STRIPE_TRIAL_PACK_PRICE_ID), `registerBillingRoutes` doesn't run and
+// the four `/v1/billing/*` paths fall through to the global 404 handler.
+// That's the wrong signal for an *intentionally unconfigured* feature:
+// 404 reads as "this endpoint doesn't exist" (typo? wrong version?) when
+// the right read is "this server isn't wired for billing yet."
+//
+// `registerBillingDisabledRoutes` wires the same four paths to 503 +
+// `FeatureUnavailable` problem-type bodies so the dashboard's existing
+// 503-detection leg (apps/customer-dashboard/src/pages/select-tier.astro
+// since 121cd266) gets a machine-readable signal + a clear human message.
+// The Retry-After header is emitted automatically by the error-handler
+// middleware when extensions.retry_after_seconds is set (B5 / 020fbeaf);
+// we don't set one here because there's no ETA — the fix is a deploy.
+//
+// Stays unauthed-but-stubbed: returning 503 from `/v1/billing/checkout-
+// session` etc. before requireAuth means even a typo-token customer hits
+// the right error instead of a 401 (which would suggest they need to fix
+// their token, not contact support about a server-side billing gap).
+export function registerBillingDisabledRoutes(app: FastifyInstance): void {
+  const detail =
+    'Billing is not configured on this server. Reach out to support@driftstack.dev if you expected to use this endpoint.';
+
+  const stub = (): never => {
+    throw new FeatureUnavailableError(detail);
+  };
+
+  app.post('/v1/billing/checkout-session', stub);
+  app.post('/v1/billing/trial-pack', stub);
+  app.post('/v1/billing/portal-session', stub);
+  app.get('/v1/billing', stub);
 }

@@ -146,8 +146,27 @@ describe('W418.C apps/server/src/routes/billing.ts content parity', () => {
       /import type \{ BillingService, SubscriptionMirror \} from '\.\.\/services\/billing\.js';/,
     );
     expect(body).toMatch(
-      /import \{ BadRequestError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ BadRequestError, FeatureUnavailableError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
     );
+  });
+
+  it('Wave 1119 / Slice 1119.2 B1 server-side leg: registerBillingDisabledRoutes wires the same 4 paths to 503 FeatureUnavailable stubs when Stripe env is unconfigured (so the customer dashboard 503-detection leg in select-tier.astro gets a machine-readable signal instead of 404)', () => {
+    expect(body).toMatch(
+      /\/\/ Wave 1119 \/ Slice 1119\.2 B1 server-side leg — when Stripe env is not\s*\n?\s*\/\/ configured \(no STRIPE_SECRET_KEY \/ DRIFTSTACK_TIER_PRICE_IDS \/\s*\n?\s*\/\/ STRIPE_TRIAL_PACK_PRICE_ID\), `registerBillingRoutes` doesn't run and\s*\n?\s*\/\/ the four `\/v1\/billing\/\*` paths fall through to the global 404 handler\./,
+    );
+    expect(body).toMatch(
+      /export function registerBillingDisabledRoutes\(app: FastifyInstance\): void \{/,
+    );
+    expect(body).toMatch(
+      /const detail =\s*\n?\s*'Billing is not configured on this server\. Reach out to support@driftstack\.dev if you expected to use this endpoint\.';/,
+    );
+    expect(body).toMatch(
+      /const stub = \(\): never => \{\s*\n?\s*throw new FeatureUnavailableError\(detail\);\s*\n?\s*\};/,
+    );
+    expect(body).toMatch(/app\.post\('\/v1\/billing\/checkout-session', stub\);/);
+    expect(body).toMatch(/app\.post\('\/v1\/billing\/trial-pack', stub\);/);
+    expect(body).toMatch(/app\.post\('\/v1\/billing\/portal-session', stub\);/);
+    expect(body).toMatch(/app\.get\('\/v1\/billing', stub\);/);
   });
 
   it('file exists at canonical path', () => {

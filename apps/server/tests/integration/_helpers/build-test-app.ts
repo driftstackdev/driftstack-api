@@ -245,6 +245,15 @@ export interface TestAppOptions {
     google?: { clientId: string; clientSecret: string };
     github?: { clientId: string; clientSecret: string };
   };
+  /**
+   * Wave 1119 / Slice 1119.2 — when `true`, omits `billingService` from
+   * the AppDeps so `registerBillingDisabledRoutes` runs in place of
+   * `registerBillingRoutes`. Matches the prod posture before
+   * STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS +
+   * STRIPE_TRIAL_PACK_PRICE_ID land in `/etc/driftstack/api.env`.
+   * Default `false`.
+   */
+  disableBilling?: boolean;
 }
 
 export interface SeedAdditionalOpts {
@@ -947,7 +956,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     stripeWebhookSigningSecret,
     profilesService,
     profileSnapshotsService,
-    billingService,
+    ...(opts.disableBilling === true ? {} : { billingService }),
     costMonitoringService,
     cryptoOrdersService,
     sessionRepo: sessionsRepo,

@@ -94,7 +94,7 @@ import { registerAccountCostRoutes } from '../routes/account-cost.js';
 import type { CostMonitoringService } from '../services/cost-monitoring.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
 import { registerProfileSnapshotsRoutes } from '../routes/profile-snapshots.js';
-import { registerBillingRoutes } from '../routes/billing.js';
+import { registerBillingDisabledRoutes, registerBillingRoutes } from '../routes/billing.js';
 import { registerAdminForceActionRoutes } from '../routes/admin-force-actions.js';
 import {
   wireSentryErrorHandler,
@@ -666,6 +666,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   }
   if (deps.billingService !== undefined) {
     registerBillingRoutes(app, { service: deps.billingService });
+  } else {
+    // Wave 1119 / Slice 1119.2 — when Stripe env is missing, expose
+    // 503 + FeatureUnavailable on /v1/billing/* instead of leaving
+    // the routes unregistered (which 404s). See registerBilling-
+    // DisabledRoutes for the full reason.
+    registerBillingDisabledRoutes(app);
   }
   if (
     deps.sessionRepo !== undefined &&
