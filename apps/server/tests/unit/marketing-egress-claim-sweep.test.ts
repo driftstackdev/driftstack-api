@@ -42,7 +42,14 @@ function serverSourceMatches(re: RegExp): boolean {
 }
 
 describe('W247.A marketing-site egress-claim drift sweep', () => {
-  const hasEgressImpl = serverSourceMatches(/customerEgress|egress_config|proxyUrl|SOCKS5/i);
+  // V-540.E (2026-05-16): gate now requires the CONCRETE wire — the
+  // SessionEgressService must be wired in AppDeps via bootstrap, AND
+  // at least one backend impl class must exist. The interface-alone
+  // scaffolding (E1) is intentionally NOT a gate trip; only the full
+  // E2/E3/E4 backend + E8 bootstrap wire flips the gate.
+  const hasEgressImpl =
+    serverSourceMatches(/sessionEgressService:\s*sessionEgressService/) &&
+    serverSourceMatches(/implements SessionEgressService\b/);
   const pages = walk(PAGES, ['.astro', '.md']);
 
   it('no page asserts "customer-controlled egress" as a shipped feature', () => {

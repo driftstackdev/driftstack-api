@@ -43,7 +43,12 @@ describe('W246.A /security page doc parity', () => {
   });
 
   it('flags customer-controlled egress as roadmap while no impl exists', () => {
-    const hasEgressImpl = serverSourceMatches(/customerEgress|egress_config|proxyUrl|SOCKS5/i);
+    // V-540.E (2026-05-16): gate now requires the CONCRETE wire — the
+    // interface-alone scaffolding (E1) is NOT a gate trip; only the
+    // full backend (E2/E3/E4) + bootstrap wire (E8) flips it.
+    const hasEgressImpl =
+      serverSourceMatches(/sessionEgressService:\s*sessionEgressService/) &&
+      serverSourceMatches(/implements SessionEgressService\b/);
     if (!hasEgressImpl) {
       // Must NOT call it shipped.
       expect(doc).not.toMatch(/Customer-controlled\.?\s*Always\./);

@@ -35,7 +35,11 @@ describe('W245.D trust/index doc parity', () => {
   const doc = read();
 
   it('does not claim customer-controlled egress while no impl exists', () => {
-    const hasEgressImpl = serverSourceMatches(/customerEgress|egress_config|proxyUrl|SOCKS5/i);
+    // V-540.E (2026-05-16): gate requires the CONCRETE wire — the
+    // interface-alone scaffolding (E1) is NOT a gate trip.
+    const hasEgressImpl =
+      serverSourceMatches(/sessionEgressService:\s*sessionEgressService/) &&
+      serverSourceMatches(/implements SessionEgressService\b/);
     if (!hasEgressImpl) {
       // Must not assert as a current pillar.
       expect(doc).not.toMatch(/customer-controlled egress/i);
