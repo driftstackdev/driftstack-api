@@ -128,9 +128,20 @@ export function registerAgentSessionsRoutes(
       if (pre === null || pre.accountId !== ctx.account.id) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
+      // BYOK Anthropic key resolution (Tier-3 LOCKED 2026-05-16). For
+      // v1.0 the header is the channel — customer-stored per-account
+      // keys land in a follow-up slice. Until then any header value
+      // passes through to AgentRuntime which threads to the decomposer.
+      // NEVER logged, NEVER echoed; the header itself is plain HTTP
+      // and lives only for the request lifetime.
+      const headerByokKey =
+        typeof req.headers['x-byok-anthropic-api-key'] === 'string'
+          ? req.headers['x-byok-anthropic-api-key']
+          : undefined;
       const result = await runtime.runTurn({
         agentSessionId: req.params.id,
         userMessage: parsed.data.user_message,
+        ...(headerByokKey !== undefined ? { byokApiKey: headerByokKey } : {}),
       });
       if (result.kind === 'session-closed') {
         throw new ConflictError(
