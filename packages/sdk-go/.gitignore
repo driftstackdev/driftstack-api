@@ -1,0 +1,16 @@
+# Local `go build ./examples/<name>` output — the compiled binary
+# lands as packages/sdk-go/<name> (a plain Mach-O / ELF, no extension).
+# Listing each example explicitly so a stray file with a meaningful
+# name (e.g. someone adding a Go module) doesn't get silently ignored.
+/agent_chat
+/billing_flow
+/crypto_checkout
+/egress_flow
+/egress_openvpn
+/error_handling
+/goroutine_pool
+/pagination
+/profile_management
+/quickstart
+/scraping_pipeline
+/webhook_receiver
