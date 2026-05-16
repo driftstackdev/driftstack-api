@@ -22,6 +22,7 @@ if (!baseUrl) {
   process.exit(2);
 }
 const expectedSha = args['expected-sha'] ?? null;
+const jsonOut = args.json === 'true';
 
 // Each check returns { ok, name, detail }; the verifier collects all
 // results and exits non-zero only at the end so a single failure
@@ -39,13 +40,35 @@ const checks = [
 ].filter(Boolean);
 
 let allOk = true;
+const results = [];
 for (const fn of checks) {
   const r = await fn();
-  if (r.ok) {
-    console.log(`OK  ${r.name}${r.detail ? ` — ${r.detail}` : ''}`);
-  } else {
-    console.error(`FAIL ${r.name} — ${r.detail}`);
-    allOk = false;
+  results.push(r);
+  if (!r.ok) allOk = false;
+}
+
+if (jsonOut) {
+  console.log(
+    JSON.stringify(
+      {
+        base_url: baseUrl,
+        expected_sha: expectedSha,
+        ok: allOk,
+        pass: results.filter((r) => r.ok).length,
+        fail: results.filter((r) => !r.ok).length,
+        checks: results,
+      },
+      null,
+      2,
+    ),
+  );
+} else {
+  for (const r of results) {
+    if (r.ok) {
+      console.log(`OK  ${r.name}${r.detail ? ` — ${r.detail}` : ''}`);
+    } else {
+      console.error(`FAIL ${r.name} — ${r.detail}`);
+    }
   }
 }
 process.exit(allOk ? 0 : 1);
