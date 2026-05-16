@@ -47,30 +47,45 @@ function read(p: string): string {
 }
 
 describe('W627 R7-R17 marketing additions content parity', () => {
-  describe('R7 Pre-launch trust signals 4-up strip (homepage)', () => {
+  describe('F-2/F-5 "What sets us apart" product-differentiator 4-up strip (homepage)', () => {
     const body = read(INDEX);
 
-    it('"Pre-launch trust signals" eyebrow + 4 trust-card labels pinned (EU-resident / Stripe-billed / GDPR DPA / Source escrow)', () => {
-      expect(body).toMatch(/Pre-launch trust signals/);
+    // 2026-05-16 F-2 (Issue 5) + F-5 (Issue 6) + F-7 (Issue 7): the
+    // homepage strip was repurposed. Was: 4 compliance signals
+    // (EU-resident / Stripe-billed / GDPR DPA / Source escrow) under
+    // a "Pre-launch trust signals" eyebrow. Now: 4 product
+    // differentiators (Bit-identical / Three proxies / Three access
+    // paths / EU-hosted) under "What sets us apart". Vendor names
+    // (Hetzner FSN / Neon EU / R2 EU) moved to /trust/sub-processors
+    // per Issue 6. "Pre-launch" framing dropped per Issue 5.
+    it('"What sets us apart" eyebrow + 4 product-differentiator labels pinned (Bit-identical / Three proxies / Three access paths / EU-hosted)', () => {
+      expect(body).toMatch(/What sets us apart/);
+      expect(body).not.toMatch(/Pre-launch trust signals/);
       expect(body).toMatch(
-        /<span class="text-base font-semibold text-ink-primary">EU-resident<\/span>/,
+        /<span class="text-base font-semibold text-ink-primary">Bit-identical<\/span>/,
       );
       expect(body).toMatch(
-        /<span class="text-base font-semibold text-ink-primary">Stripe-billed<\/span>/,
+        /<span class="text-base font-semibold text-ink-primary">Three proxies<\/span>/,
       );
       expect(body).toMatch(
-        /<span class="text-base font-semibold text-ink-primary">GDPR DPA<\/span>/,
+        /<span class="text-base font-semibold text-ink-primary">Three access paths<\/span>/,
       );
       expect(body).toMatch(
-        /<span class="text-base font-semibold text-ink-primary">Source escrow<\/span>/,
+        /<span class="text-base font-semibold text-ink-primary">EU-hosted<\/span>/,
       );
     });
 
-    it('Each trust-card sub-claim pinned (Hetzner FSN · Neon EU · R2 EU + SCA/3DS · 14-day window + Article 28(2) change-log + Enterprise + Self-hosted)', () => {
-      expect(body).toMatch(/Hetzner FSN · Neon EU · R2 EU/);
-      expect(body).toMatch(/SCA \/ 3DS · 14-day window/);
-      expect(body).toMatch(/Article 28\(2\) change-log/);
-      expect(body).toMatch(/Enterprise \+ Self-hosted/);
+    it('Each differentiator-card sub-claim pinned (Canvas · WebGL · audio · UA + SOCKS5 · WireGuard · OpenVPN + API · SDK · GUI + Single-region data residency)', () => {
+      expect(body).toMatch(/Canvas · WebGL · audio · UA/);
+      expect(body).toMatch(/SOCKS5 · WireGuard · OpenVPN/);
+      expect(body).toMatch(/API · SDK · GUI/);
+      expect(body).toMatch(/Single-region data residency/);
+    });
+
+    it('Vendor names removed from homepage splash strip per Issue 6 (moved to /trust/sub-processors)', () => {
+      expect(body).not.toMatch(/Hetzner FSN · Neon EU · R2 EU/);
+      expect(body).not.toMatch(/SCA \/ 3DS · 14-day window/);
+      expect(body).not.toMatch(/Article 28\(2\) change-log/);
     });
   });
 

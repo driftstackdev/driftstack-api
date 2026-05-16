@@ -19,18 +19,22 @@ function read(p: string): string {
 describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () => {
   const body = read(LIB);
 
-  it("R12 BaseLayout title='Driftstack' + new SEO description: 'Real iPhone Safari sessions, on demand. The same WebKit engine every iPhone ships — no patches at runtime, no stealth plugins, nothing for detection to find. Try it for $2.99.' — replaces the prior 'Pixel-perfect device fingerprints with no detectable software fingerprint' copy", () => {
+  it("F-2 (Issue 4) BaseLayout title='Driftstack' + revised SEO description leads with 'Pixel-identical' outcome (drops 'Real iPhone Safari' implementation-leak claim) and lists API/SDK/GUI access paths", () => {
     expect(body).toMatch(
-      /<BaseLayout\s*\n?\s*title="Driftstack"\s*\n?\s*description="Real iPhone Safari sessions, on demand\. The same WebKit engine every iPhone ships — no patches at runtime, no stealth plugins, nothing for detection to find\. Try it for \$2\.99\."/,
+      /<BaseLayout\s*\n?\s*title="Driftstack"\s*\n?\s*description="Pixel-identical iPhone Safari sessions in the cloud\. Bit-identical canvas, WebGL, audio, and user-agent — no runtime patching, no stealth plugins, nothing for detection to find\. API, SDK, or GUI\. Try it for \$2\.99\."/,
     );
   });
 
-  it('R12 Hero copy: section label + new "Real iPhone Safari. Cloud-hosted. API-first." headline + sub-paragraph listing every-signal fidelity + "stealth tools rewrite JavaScript at runtime and leak the underlying engine in the next hash" framing — replaces the prior "iPhone Safari sessions that look like a real iPhone." + "Most stealth browsers modify JavaScript at runtime" copy', () => {
-    expect(body).toMatch(/Real iPhone Safari\. Cloud-hosted\. API-first\./);
+  it('F-2 (Issue 4) Hero copy: section label + revised "Pixel-identical iPhone Safari. Cloud-hosted. API, SDK, or GUI." headline (drops "Real" + "API-first" exclusive); sub-paragraph names GUI alongside TypeScript/Python/Go and replaces "matches a physical iPhone, because it runs the same engine" with "bit-identical to a physical iPhone running the same iOS Safari build" (more honest about WebKit-fork-not-literal-Safari posture)', () => {
+    expect(body).toMatch(/Pixel-identical iPhone Safari\. Cloud-hosted\. API, SDK, or GUI\./);
     expect(body).toMatch(/Spin up a session in seconds\. Drive it from TypeScript, Python,/);
+    expect(body).toMatch(/or skip the code entirely and use the\s*\n?\s*GUI/);
+    expect(body).toMatch(
+      /is bit-identical to a physical iPhone running\s*\n?\s*the same iOS Safari build\./,
+    );
     expect(body).toMatch(/Most stealth tools rewrite JavaScript at runtime/);
     expect(body).toMatch(
-      /Driftstack runs Apple's\s*\n?\s*WebKit source code directly\. Nothing is rewritten, so there's\s*\n?\s*nothing for detection systems to spot\./,
+      /Driftstack builds from\s*\n?\s*Apple's WebKit source directly\. Nothing is rewritten, so there's\s*\n?\s*nothing for detection systems to spot\./,
     );
   });
 

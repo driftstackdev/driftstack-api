@@ -32,16 +32,16 @@ function read(p: string): string {
 describe('W371.A marketing-site /index (homepage) content parity', () => {
   const body = read(PAGE);
 
-  it('R12 hero positioning pinned: "Real iPhone Safari. Cloud-hosted. API-first." + sub-line lists every-signal fidelity + "stealth tools rewrite JavaScript at runtime and leak the underlying engine in the next hash" framing', () => {
-    expect(body).toMatch(/Real iPhone Safari\. Cloud-hosted\. API-first\./);
+  it('F-2 hero positioning revised: "Pixel-identical iPhone Safari. Cloud-hosted. API, SDK, or GUI." + sub-line names GUI alongside TS/Python/Go + "stealth tools rewrite JavaScript at runtime and leak the underlying engine in the next hash" framing kept', () => {
+    expect(body).toMatch(/Pixel-identical iPhone Safari\. Cloud-hosted\. API, SDK, or GUI\./);
     expect(body).toMatch(/Spin up a session in seconds\. Drive it from TypeScript, Python,/);
     expect(body).toMatch(/Most stealth tools rewrite JavaScript at runtime/);
     expect(body).toMatch(/leak the\s*\n?\s*underlying engine in the next hash/);
   });
 
-  it('R12 WebKit-source-instead differentiator pinned (no JS-runtime patches): "Driftstack runs Apple\'s WebKit source code directly. Nothing is rewritten, so there\'s nothing for detection systems to spot."', () => {
+  it('F-2 WebKit-source-instead differentiator framing revised: "Driftstack builds from Apple\'s WebKit source directly" (was "runs Apple\'s WebKit source code directly" — honest about the build-from-source posture, not literal Apple binary)', () => {
     expect(body).toMatch(
-      /Driftstack runs Apple's\s+WebKit source code directly\. Nothing is rewritten, so there's\s+nothing for detection systems to spot\./,
+      /Driftstack builds from\s+Apple's WebKit source directly\. Nothing is rewritten, so there's\s+nothing for detection systems to spot\./,
     );
   });
 

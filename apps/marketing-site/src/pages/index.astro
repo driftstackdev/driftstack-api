@@ -4,7 +4,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 <BaseLayout
   title="Driftstack"
-  description="Real iPhone Safari sessions, on demand. The same WebKit engine every iPhone ships — no patches at runtime, no stealth plugins, nothing for detection to find. Try it for $2.99."
+  description="Pixel-identical iPhone Safari sessions in the cloud. Bit-identical canvas, WebGL, audio, and user-agent — no runtime patching, no stealth plugins, nothing for detection to find. API, SDK, or GUI. Try it for $2.99."
 >
   <!-- Hero -->
   <section class="relative overflow-hidden">
@@ -17,18 +17,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             class="mt-5 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl lg:text-6xl"
             style="letter-spacing: -0.02em;"
           >
-            Real iPhone Safari. Cloud-hosted. API-first.
+            Pixel-identical iPhone Safari. Cloud-hosted. API, SDK, or GUI.
           </h1>
           <p class="mt-5 max-w-prose text-lg text-ink-secondary leading-relaxed">
             Spin up a session in seconds. Drive it from TypeScript, Python,
-            Go, or any HTTP client. Every signal — user-agent, canvas,
-            WebGL, audio fingerprint — matches a physical iPhone, because
-            it runs the same engine.
+            Go, or any HTTP client — or skip the code entirely and use the
+            GUI. Every signal — user-agent, canvas, WebGL, audio
+            fingerprint — is bit-identical to a physical iPhone running
+            the same iOS Safari build.
           </p>
           <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
             Most stealth tools rewrite JavaScript at runtime and leak the
-            underlying engine in the next hash. Driftstack runs Apple's
-            WebKit source code directly. Nothing is rewritten, so there's
+            underlying engine in the next hash. Driftstack builds from
+            Apple's WebKit source directly. Nothing is rewritten, so there's
             nothing for detection systems to spot.
           </p>
           <div class="mt-8 flex flex-wrap items-center gap-4">
@@ -67,33 +68,35 @@ await session.destroy();`}</code></pre>
     </div>
   </section>
 
-  <!-- R7 — Trust strip. Outseta-style row of "what serious-buyer
-       signals do we already have shipped" so a prospect doesn't have
-       to dig through /trust to find them. Pre-launch honest framing:
-       we don't claim SOC 2 we don't have, but we do show real,
-       verifiable trust signals (EU residency, Stripe-of-record,
-       30-day sub-processor change-log, source escrow). -->
+  <!-- F-2 / F-5 (Issue 4 + 5 + 6 + 7) — replaces the prior R7
+       compliance-badges 4-up strip (EU-resident / Stripe-billed /
+       GDPR DPA / Source escrow) with product-differentiator signals.
+       Compliance copy lives on /trust + /legal pages and on the
+       footer meta-link row; the homepage's splash slot below the
+       hero is for differentiators a competitor can't claim. The
+       prior aspirational-launch eyebrow was stripped per Issue 5
+       (launch-only framing — no "Pre-launch" labelling). -->
   <section class="relative border-t border-white/10">
     <div class="mx-auto max-w-6xl px-6 py-10">
       <p class="text-center font-mono text-xs uppercase tracking-[0.2em] text-ink-muted">
-        Pre-launch trust signals
+        What sets us apart
       </p>
       <div class="mt-6 grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-4">
         <div class="flex flex-col items-center gap-1.5 text-center">
-          <span class="text-base font-semibold text-ink-primary">EU-resident</span>
-          <span class="text-xs text-ink-muted">Hetzner FSN · Neon EU · R2 EU</span>
+          <span class="text-base font-semibold text-ink-primary">Bit-identical</span>
+          <span class="text-xs text-ink-muted">Canvas · WebGL · audio · UA</span>
         </div>
         <div class="flex flex-col items-center gap-1.5 text-center">
-          <span class="text-base font-semibold text-ink-primary">Stripe-billed</span>
-          <span class="text-xs text-ink-muted">SCA / 3DS · 14-day window</span>
+          <span class="text-base font-semibold text-ink-primary">Three proxies</span>
+          <span class="text-xs text-ink-muted">SOCKS5 · WireGuard · OpenVPN</span>
         </div>
         <div class="flex flex-col items-center gap-1.5 text-center">
-          <span class="text-base font-semibold text-ink-primary">GDPR DPA</span>
-          <span class="text-xs text-ink-muted">Article 28(2) change-log</span>
+          <span class="text-base font-semibold text-ink-primary">Three access paths</span>
+          <span class="text-xs text-ink-muted">API · SDK · GUI</span>
         </div>
         <div class="flex flex-col items-center gap-1.5 text-center">
-          <span class="text-base font-semibold text-ink-primary">Source escrow</span>
-          <span class="text-xs text-ink-muted">Enterprise + Self-hosted</span>
+          <span class="text-base font-semibold text-ink-primary">EU-hosted</span>
+          <span class="text-xs text-ink-muted">Single-region data residency</span>
         </div>
       </div>
     </div>
