@@ -59,15 +59,18 @@ storage layer — substantial, founder review needed for SQL migration),
 page revision — DEFERRED until 1.6 lands per `marketing-egress-claim-
 sweep` concrete-wire-detection gate), 1.9 (V-log).
 
-**Python + Go SDK egress mirrors** not yet shipped — cross-SDK
-REQUIRED_RESOURCES list still at 15. TypeScript is ahead by one.
+**Python + Go SDK egress mirrors** SHIPPED — cross-SDK
+REQUIRED_RESOURCES list lifted 15 → 16 (egress) → 17 (agent-sessions)
+at `b4c27598` + `d2c85e21`. All 3 SDKs at parity.
 
 ## AI-CHAT full vertical — DONE schema → routes → SDK
 
 Founder Wave 1119+ scope reversal moved AI-CHAT from v1.1 → v1.0
-launch arc. Full vertical now wired with deterministic stubs; real
-Claude wire (AI-B1.b) is the only remaining piece, blocked on
-BYOK-vs-bundled key-path Tier-3 decision.
+launch arc. Full vertical now wired with deterministic stubs +
+BYOK chain end-to-end (HTTP header → route → AgentRuntime →
+DecomposeArgs). Tier-3 BYOK-vs-bundled LOCKED 2026-05-16 (BYOK for
+v1.0; bundled deferred to v1.1). Real Claude wire (AI-B1.b) is the
+only remaining piece, waits the Anthropic API key share.
 
 | Slice       | Commits                 | Description                                                                                                                                                                                            |
 | ----------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
