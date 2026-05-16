@@ -8,9 +8,10 @@
 //
 //   • <meta name="robots" content="noindex,nofollow"> — admin
 //     panel must NEVER be indexed (load-bearing security claim).
-//   • 10 navItems in canonical order (Overview / Accounts / Audit
-//     log / Incidents / Status subs / Leads / Sessions / API keys
-//     / Webhook DLQ / Rate limits).
+//   • 11 navItems in canonical order (Overview / Accounts / Cost /
+//     Audit log / Incidents / Status subs / Leads / Sessions /
+//     API keys / Webhook DLQ / Rate limits). Cost added 2026-05-16
+//     for V-541.B.
 //   • Active-route highlighting: pathname === href OR pathname
 //     startsWith href + '/' → oxblood-50 bg + oxblood-700 text.
 //   • V-219* D-badge + lowercase font-mono "driftstack" wordmark
@@ -55,7 +56,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     expect(body).toMatch(/description = 'Driftstack admin panel — Driftstack staff only\.',/);
   });
 
-  it('10 navItems in canonical order pinned', () => {
+  it('11 navItems in canonical order pinned (Cost added 2026-05-16 for V-541.B)', () => {
     const block = body.match(/const navItems = \[([\s\S]+?)\];/);
     expect(block).not.toBeNull();
     const entries = Array.from(block![1]!.matchAll(/\{ href: '([^']+)', label: '([^']+)' \}/g)).map(
@@ -64,6 +65,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     expect(entries).toEqual([
       { href: '/', label: 'Overview' },
       { href: '/accounts', label: 'Accounts' },
+      { href: '/cost', label: 'Cost' },
       { href: '/audit-log', label: 'Audit log' },
       { href: '/incidents', label: 'Incidents' },
       { href: '/status-subscribers', label: 'Status subs' },
