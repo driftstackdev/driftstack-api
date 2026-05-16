@@ -130,4 +130,57 @@ describe('GET /v1/account/me/oauth-links (V-667.C-followup)', () => {
     });
     expect(res.statusCode).toBe(404);
   });
+
+  it('returns multiple links when an account has both providers linked', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    await fx.oauthLinksRepo.insertLink({
+      accountId: fx.accountId,
+      provider: 'google',
+      providerSub: 'g-1',
+      providerEmail: 'tester@driftstack.local',
+      providerName: 'Tester',
+      providerAvatarUrl: null,
+    });
+    await fx.oauthLinksRepo.insertLink({
+      accountId: fx.accountId,
+      provider: 'github',
+      providerSub: 'gh-1',
+      providerEmail: 'tester@driftstack.local',
+      providerName: 'Tester',
+      providerAvatarUrl: null,
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/oauth-links',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ data: Array<{ provider: string }> }>();
+    expect(body.data).toHaveLength(2);
+    expect(body.data.map((l) => l.provider).sort()).toEqual(['github', 'google']);
+  });
+
+  it('surfaces last_revoked_at when the link was marked revoked (Verdict 2 fallback)', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const link = await fx.oauthLinksRepo.insertLink({
+      accountId: fx.accountId,
+      provider: 'google',
+      providerSub: 'g-revoked',
+      providerEmail: 'tester@driftstack.local',
+      providerName: 'Tester',
+      providerAvatarUrl: null,
+    });
+    const revokedAt = new Date('2026-05-10T12:00:00Z');
+    await fx.oauthLinksRepo.markRevokedAt(link.id, revokedAt);
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/oauth-links',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ data: Array<{ last_revoked_at: string | null }> }>();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]?.last_revoked_at).toBe(revokedAt.toISOString());
+  });
 });
