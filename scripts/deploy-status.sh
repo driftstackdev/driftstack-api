@@ -14,13 +14,24 @@
 
 set -euo pipefail
 
-declare -a TARGETS
-case "${1:-}" in
-  prod)    TARGETS=("prod") ;;
-  staging) TARGETS=("staging") ;;
-  "")      TARGETS=("staging" "prod") ;;
-  *)       echo "usage: $0 [staging|prod]" >&2; exit 2 ;;
-esac
+JSON=0
+declare -a TARGETS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json)  JSON=1; shift ;;
+    prod)    TARGETS+=("prod"); shift ;;
+    staging) TARGETS+=("staging"); shift ;;
+    *)       echo "usage: $0 [--json] [staging|prod]" >&2; exit 2 ;;
+  esac
+done
+if [ "${#TARGETS[@]}" -eq 0 ]; then
+  TARGETS=("staging" "prod")
+fi
+
+if [ "$JSON" -eq 1 ]; then
+  printf '['
+fi
+FIRST=1
 
 for ENV in "${TARGETS[@]}"; do
   case "$ENV" in
@@ -28,7 +39,9 @@ for ENV in "${TARGETS[@]}"; do
     staging) HOST="116.203.22.197"; PUBLIC_URL="https://staging.driftstack.dev" ;;
   esac
 
-  printf '\n\033[1;36m=== %s (%s) ===\033[0m\n' "$ENV" "$HOST"
+  if [ "$JSON" -eq 0 ]; then
+    printf '\n\033[1;36m=== %s (%s) ===\033[0m\n' "$ENV" "$HOST"
+  fi
   # /version from public URL — surfaces the actually-running SHA.
   VERSION=$(curl -fsS "$PUBLIC_URL/version" 2>/dev/null || echo "{}")
   GIT_SHA=$(echo "$VERSION" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("git_sha","?"))' 2>/dev/null || echo "?")
@@ -54,19 +67,34 @@ try:
 except Exception:
     print('?')
 " 2>/dev/null || echo "?")
-  echo "  /version           : git_sha=$GIT_SHA uptime=$UPTIME (since $STARTED)"
-
   # .last-good-sha — what revert-bridge would target.
   LAST_GOOD=$(ssh "root@${HOST}" "cat /opt/driftstack/api/.last-good-sha 2>/dev/null || echo '(none)'")
-  echo "  .last-good-sha     : $LAST_GOOD"
-
   # Most recent boot-complete line — surfaces sentry/email/livekit/oauthClient flags.
   FLAGS=$(ssh "root@${HOST}" "journalctl -u driftstack-api --no-pager 2>/dev/null | grep '\"bootstrap complete\"' | tail -1 | grep -oE '\"sentry\":[a-z]+|\"email\":[a-z]+|\"livekit\":[a-z]+|\"oauthClient\":[a-z]+|\"env\":\"[a-z]+\"' | tr '\\n' ' '" || echo "(no boot log)")
-  echo "  activation flags   : $FLAGS"
+
+  if [ "$JSON" -eq 0 ]; then
+    echo "  /version           : git_sha=$GIT_SHA uptime=$UPTIME (since $STARTED)"
+    echo "  .last-good-sha     : $LAST_GOOD"
+    echo "  activation flags   : $FLAGS"
+  fi
 
   # Last 3 deploy-history entries.
-  echo "  recent deploys     :"
-  ssh "root@${HOST}" "tail -3 /opt/driftstack/api/.deploy-history.log 2>/dev/null | sed 's/^/    /' || echo '    (no history yet)'"
+  if [ "$JSON" -eq 0 ]; then
+    echo "  recent deploys     :"
+    ssh "root@${HOST}" "tail -3 /opt/driftstack/api/.deploy-history.log 2>/dev/null | sed 's/^/    /' || echo '    (no history yet)'"
+  else
+    HISTORY=$(ssh "root@${HOST}" "tail -3 /opt/driftstack/api/.deploy-history.log 2>/dev/null || true" | python3 -c '
+import sys, json
+print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))
+')
+    if [ "$FIRST" -eq 0 ]; then printf ','; fi
+    FIRST=0
+    printf '{"env":"%s","host":"%s","git_sha":"%s","started_at":"%s","uptime":"%s","last_good_sha":"%s","recent_deploys":%s}' "$ENV" "$HOST" "$GIT_SHA" "$STARTED" "$UPTIME" "$LAST_GOOD" "$HISTORY"
+  fi
 done
 
-echo
+if [ "$JSON" -eq 1 ]; then
+  printf ']\n'
+else
+  echo
+fi
