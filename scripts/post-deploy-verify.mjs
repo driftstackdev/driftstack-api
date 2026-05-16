@@ -33,6 +33,7 @@ const checks = [
   checkStatusEndpoint,
   checkStatusIncidentsList,
   checkStatusIncidentDetailRoute,
+  checkAccountOauthLinksRoute,
   checkOpenapi,
   checkUnknownPath404,
 ].filter(Boolean);
@@ -142,6 +143,36 @@ async function checkStatusIncidentDetailRoute() {
     ok: true,
     name: '/v1/status/incidents/:id',
     detail: 'route registered (V-545.A) — 404 carries ProblemJson detail',
+  };
+}
+
+async function checkAccountOauthLinksRoute() {
+  // V-667.C-followup — verifies /v1/account/me/oauth-links is
+  // registered (returns 401 without auth, not 404). 404 would
+  // indicate AppDeps.oauthLinksRepo wasn't passed; 401 means the
+  // route is mounted and protected as designed.
+  const url = `${baseUrl}/v1/account/me/oauth-links`;
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    return {
+      ok: false,
+      name: '/v1/account/me/oauth-links',
+      detail: `fetch failed: ${err.message}`,
+    };
+  }
+  if (res.status !== 401) {
+    return {
+      ok: false,
+      name: '/v1/account/me/oauth-links',
+      detail: `expected 401 (route registered + auth-gated), got ${res.status}`,
+    };
+  }
+  return {
+    ok: true,
+    name: '/v1/account/me/oauth-links',
+    detail: 'route registered (V-667.C-followup) — 401 confirms requireAuth gate',
   };
 }
 
