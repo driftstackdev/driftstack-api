@@ -44,9 +44,9 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     );
   });
 
-  it("WebKit source-code framing pinned (R6 plain-English rewrite): 'we run Apple's WebKit source code, the same engine that ships on every real iPhone' replaces the prior C++/modify-source jargon while preserving the source-vs-runtime distinction", () => {
+  it("WebKit source-code framing pinned (R6 plain-English rewrite + 2026-05-16 unique-per-session contrast): 'we run Apple's WebKit source code, the same engine that ships on every real iPhone' kept; the contrast paragraph now names the 100% unique canvas/WebGL hashes competitors leak as the literal opposite of a real iPhone returning the same hash as millions of others", () => {
     expect(body).toMatch(
-      /Most stealth browsers fake an iPhone by rewriting JavaScript\s*\n?\s*at runtime\. Detection systems are built to catch exactly that\.\s*\n?\s*Driftstack takes a different approach: we run Apple's WebKit\s*\n?\s*source code, the same engine that ships on every real iPhone\./,
+      /Most stealth browsers fake an iPhone by rewriting JavaScript\s*\n?\s*at runtime\. Detection systems are built to catch exactly that —\s*\n?\s*the canvas and WebGL hashes those tools return are 100% unique\s*\n?\s*per session, the literal opposite of a real iPhone returning\s*\n?\s*the same hash as millions of other iPhones\. Driftstack takes\s*\n?\s*a different approach: we run Apple's WebKit source code, the\s*\n?\s*same engine that ships on every real iPhone\./,
     );
   });
 

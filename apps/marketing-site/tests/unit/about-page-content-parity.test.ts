@@ -138,7 +138,7 @@ describe('W367.A marketing-site /about page content parity', () => {
     // plugin competitor. A future copy softening to "stealth
     // bundles" would break the entire positioning.
     expect(body).toMatch(/we run Apple's WebKit\s+source code/);
-    expect(body).toMatch(/there's nothing for\s+detection to find/);
+    expect(body).toMatch(/there's nothing for detection to\s+find/);
   });
 
   it('R9 hero claim pinned: "One engine. One product. Engineered for fidelity." + capability-led "EU-resident infrastructure, deliberately narrow scope" — replaces the prior solo-Dutch-founder identity framing', () => {
