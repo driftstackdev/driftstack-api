@@ -25,6 +25,15 @@ export interface RunTurnArgs {
    * `new Date()` by callers; injected here for deterministic tests.
    */
   now?: Date;
+  /**
+   * BYOK Anthropic API key threaded through from the route layer
+   * (resolved from per-customer storage or the deployment fallback;
+   * see `DecomposeArgs.byokAnthropicApiKey` JSDoc for the priority
+   * order). NEVER logged, NEVER persisted into the transcript.
+   * DeterministicAgentDecomposer ignores it; AI-B1.b Claude wire
+   * forwards as the `x-api-key` header on the Anthropic API call.
+   */
+  byokApiKey?: string;
 }
 
 export type RunTurnResult =
@@ -91,6 +100,7 @@ export class AgentRuntime {
       archetype: this.deps.archetype,
       history: sessionWithUser.transcript,
       budgetTokensRemaining: sessionWithUser.tokenBudgetRemaining,
+      ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
     });
 
     // Always debit the decomposer's tokens (even on refuse —

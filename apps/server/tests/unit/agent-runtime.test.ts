@@ -10,6 +10,7 @@ import { AgentRuntime } from '../../src/services/agent-runtime.js';
 import { DeterministicAgentDecomposer } from '../../src/services/agent-decomposer-deterministic.js';
 import { StubAgentExecutor } from '../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
+import type { DecomposeArgs } from '../../src/services/agent-decomposer.js';
 
 function fixedNow(iso: string): Date {
   return new Date(iso);
@@ -104,6 +105,76 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     await expect(
       runtime.runTurn({ agentSessionId: 'agt_inmem_99999999', userMessage: 'x' }),
     ).rejects.toThrow(/not found/);
+  });
+
+  it('BYOK threading: byokApiKey passed via RunTurnArgs reaches DecomposeArgs.byokAnthropicApiKey but NEVER lands in the transcript (audit invariant — secret material must not leak into stored history)', async () => {
+    // Recording decomposer captures the args it receives so we can
+    // assert byokAnthropicApiKey arrived intact. Returns a clarify so
+    // the transcript path runs (clarify still appends a transcript
+    // entry; we verify the entry body doesn't contain the key).
+    const seenCalls: Array<{ byok?: string }> = [];
+    const recordingDecomposer = {
+      decompose: (args: DecomposeArgs) => {
+        seenCalls.push({ byok: args.byokAnthropicApiKey });
+        return Promise.resolve({
+          kind: 'clarify' as const,
+          clarifyingQuestion: 'be more specific',
+          tokensConsumed: 100,
+        });
+      },
+    };
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const runtime = new AgentRuntime({
+      decomposer: recordingDecomposer,
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const SECRET = 'sk-ant-test-NEVER-LEAK-THIS';
+    await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'a sufficiently long task description for clarity',
+      byokApiKey: SECRET,
+    });
+    expect(seenCalls).toHaveLength(1);
+    expect(seenCalls[0]?.byok).toBe(SECRET);
+
+    // Audit invariant: the secret MUST NOT appear in any transcript
+    // body. This is the load-bearing leakage check — if a future
+    // refactor accidentally serializes RunTurnArgs into the entry
+    // body, this test catches it before the secret hits storage.
+    const final = await sessions.get(seed.id);
+    for (const entry of final?.transcript ?? []) {
+      expect(entry.body).not.toContain(SECRET);
+    }
+  });
+
+  it('BYOK threading: when byokApiKey is omitted, DecomposeArgs.byokAnthropicApiKey is undefined (does NOT default to empty string, which would break the LLM auth path)', async () => {
+    const seenCalls: Array<{ byok: string | undefined }> = [];
+    const recordingDecomposer = {
+      decompose: (args: DecomposeArgs) => {
+        seenCalls.push({ byok: args.byokAnthropicApiKey });
+        return Promise.resolve({
+          kind: 'clarify' as const,
+          clarifyingQuestion: '?',
+          tokensConsumed: 1,
+        });
+      },
+    };
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const runtime = new AgentRuntime({
+      decomposer: recordingDecomposer,
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'a sufficiently long task description for clarity',
+    });
+    expect(seenCalls[0]?.byok).toBeUndefined();
   });
 
   it('token budget exhausted before turn: returns refuse with 0 tokens charged (interface contract from decomposer threads through)', async () => {
