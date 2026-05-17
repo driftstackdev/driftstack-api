@@ -174,9 +174,9 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     );
   });
 
-  it('toEndpointRow: 16-field WebhookEndpointRow (id + accountId + url + secret + secretPrefix + secretPrev + secretPrevExpiresAt + events + description + active + consecutiveFailures + lastSuccessAt + lastFailureAt + disabledAt + 2 timestamps)', () => {
+  it('toEndpointRow: 18-field WebhookEndpointRow (id + accountId + url + secret + secretPrefix + secretPrev + secretPrevExpiresAt + secretCreatedAt + lastReminderSentAt + events + description + active + consecutiveFailures + lastSuccessAt + lastFailureAt + disabledAt + 2 timestamps; secretCreatedAt + lastReminderSentAt added in v2-#10 migration 0048)', () => {
     expect(body).toMatch(
-      /function toEndpointRow\(r: typeof webhookEndpoints\.\$inferSelect\): WebhookEndpointRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*url: r\.url,\s*\n?\s*secret: r\.secret,\s*\n?\s*secretPrefix: r\.secretPrefix,\s*\n?\s*secretPrev: r\.secretPrev,\s*\n?\s*secretPrevExpiresAt: r\.secretPrevExpiresAt,\s*\n?\s*events: r\.events,\s*\n?\s*description: r\.description,\s*\n?\s*active: r\.active,\s*\n?\s*consecutiveFailures: r\.consecutiveFailures,\s*\n?\s*lastSuccessAt: r\.lastSuccessAt,\s*\n?\s*lastFailureAt: r\.lastFailureAt,\s*\n?\s*disabledAt: r\.disabledAt,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toEndpointRow\(r: typeof webhookEndpoints\.\$inferSelect\): WebhookEndpointRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*url: r\.url,\s*\n?\s*secret: r\.secret,\s*\n?\s*secretPrefix: r\.secretPrefix,\s*\n?\s*secretPrev: r\.secretPrev,\s*\n?\s*secretPrevExpiresAt: r\.secretPrevExpiresAt,\s*\n?\s*secretCreatedAt: r\.secretCreatedAt,\s*\n?\s*lastReminderSentAt: r\.lastReminderSentAt,\s*\n?\s*events: r\.events,\s*\n?\s*description: r\.description,\s*\n?\s*active: r\.active,\s*\n?\s*consecutiveFailures: r\.consecutiveFailures,\s*\n?\s*lastSuccessAt: r\.lastSuccessAt,\s*\n?\s*lastFailureAt: r\.lastFailureAt,\s*\n?\s*disabledAt: r\.disabledAt,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
     );
   });
 

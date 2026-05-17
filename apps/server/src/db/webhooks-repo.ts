@@ -149,6 +149,12 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
         secretPrefix: input.newPrefix,
         secretPrev: sql`${webhookEndpoints.secret}`,
         secretPrevExpiresAt: input.graceExpiresAt,
+        // v2-#10 — new secret is fresh; reset the rotation clock so
+        // the 90d nag starts over from this rotation. Also clear the
+        // reminder dedupe column so the next rotation cycle can fire
+        // reminders without being blocked by a stale send.
+        secretCreatedAt: input.now,
+        lastReminderSentAt: null,
         updatedAt: input.now,
       })
       .where(
@@ -407,6 +413,8 @@ function toEndpointRow(r: typeof webhookEndpoints.$inferSelect): WebhookEndpoint
     secretPrefix: r.secretPrefix,
     secretPrev: r.secretPrev,
     secretPrevExpiresAt: r.secretPrevExpiresAt,
+    secretCreatedAt: r.secretCreatedAt,
+    lastReminderSentAt: r.lastReminderSentAt,
     events: r.events,
     description: r.description,
     active: r.active,

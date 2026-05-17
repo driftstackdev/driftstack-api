@@ -34,6 +34,8 @@ function baseRow(overrides: Partial<WebhookEndpointRow> = {}): WebhookEndpointRo
     secretPrefix: 'whsec_v1_aaaa',
     secretPrev: null,
     secretPrevExpiresAt: null,
+    secretCreatedAt: new Date('2026-05-01Z'),
+    lastReminderSentAt: null,
     events: ['session.completed'],
     description: null,
     active: true,

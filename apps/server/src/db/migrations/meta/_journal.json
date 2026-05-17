@@ -337,6 +337,13 @@
       "when": 1778090438000,
       "tag": "0047_agent_sessions_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1778090439000,
+      "tag": "0048_webhook_secret_rotation_policy",
+      "breakpoints": true
     }
   ]
 }

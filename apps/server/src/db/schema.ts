@@ -898,6 +898,17 @@ export const webhookEndpoints = pgTable(
     // cleanup on the next rotate (lazy expiry — no background sweep).
     secretPrev: text('secret_prev'),
     secretPrevExpiresAt: timestamp('secret_prev_expires_at', { withTimezone: true }),
+    // v2-#10 — when the active secret was minted. Drives the 90d
+    // rotation reminder banner + email. Reset on every rotate. Backfill
+    // on existing rows = now() at migration time (so we don't fire a
+    // wave of "rotate now" emails on deploy).
+    secretCreatedAt: timestamp('secret_created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    // v2-#10 — dedupe column for the daily rotation-reminder job. Null
+    // = never sent. Job sets to now() when it fires the email; queries
+    // skip rows whose reminder was sent in the last 7d.
+    lastReminderSentAt: timestamp('last_reminder_sent_at', { withTimezone: true }),
     events: webhookEventType('events').array().notNull(),
     description: text('description'),
     active: boolean('active').notNull().default(true),

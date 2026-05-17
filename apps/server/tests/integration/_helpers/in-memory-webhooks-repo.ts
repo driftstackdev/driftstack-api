@@ -27,6 +27,8 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       secretPrefix: input.secretPrefix,
       secretPrev: null,
       secretPrevExpiresAt: null,
+      secretCreatedAt: now,
+      lastReminderSentAt: null,
       events: input.events,
       description: input.description,
       active: true,
@@ -106,6 +108,8 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       secretPrefix: input.newPrefix,
       secretPrev: r.secret,
       secretPrevExpiresAt: input.graceExpiresAt,
+      secretCreatedAt: input.now,
+      lastReminderSentAt: null,
       updatedAt: input.now,
     };
     this.endpoints.set(input.id, updated);

@@ -43,6 +43,11 @@ export interface WebhookEndpointRow {
    *  and `secretPrev` while `secretPrevExpiresAt > now`. */
   secretPrev: string | null;
   secretPrevExpiresAt: Date | null;
+  /** v2-#10 — when the active secret was minted. Drives the 90d
+   *  rotation reminder banner + email. Reset on every rotate. */
+  secretCreatedAt: Date;
+  /** v2-#10 — dedupe for the daily reminder job. Null = never sent. */
+  lastReminderSentAt: Date | null;
   events: WebhookEventType[];
   description: string | null;
   active: boolean;
