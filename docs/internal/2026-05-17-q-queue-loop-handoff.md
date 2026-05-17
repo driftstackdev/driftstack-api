@@ -295,6 +295,93 @@ verdicts, Stripe Dashboard env vars, Agent 1 progress, prod
 deploy), invoke the /loop Skill with `3m` interval per
 locked memory `feedback_agent2_loop_skill_only_no_schedulewakeup`.
 
+## Q.1 verdicts received + implementation slices landing (2026-05-17 ~19:15 UTC)
+
+Orchestrator delivered verdicts on all 6 Q.1 design questions per
+docs/internal/ai-b1b-activation-design.md (founder ack on all six).
+Implementation gate CLEAR; the Q.1 wire fires as a multi-slice arc.
+
+Slices landed so far:
+
+- **Slice 1 (`1fc40421`)** — bootstrap selection logic. New
+  `selectAgentDecomposer()` helper picks Claude / Deterministic /
+  forced-deterministic per Q.1.a verdict option 4 + open-answer
+  escape hatch via `DRIFTSTACK_AGENT_DECOMPOSER_FORCE=deterministic`.
+  AgentRuntime + AgentSessionsRepo wired unconditionally in
+  AppDeps; /v1/agent-sessions/\* + /v1/recipes routes activate
+  from process start. 8 selection-matrix tests.
+
+- **Slice 2 (`3b4cd9bd`)** — AgentRuntime hybrid error
+  classification per Q.1.b verdict option 4. 5xx + network →
+  refuse with `agent-unavailable` reason (session stays active);
+  credential + malformed → re-throw (route 502). New
+  `classifyDecomposerError()` exported. 15 new tests pin the
+  classification matrix + 4 e2e cases.
+
+- **Slice 3 (`c2ad507e`)** — route key-resolution chain per Q.1.c
+  - Q.1.d. New `InMemoryByokKeyCache` (decrypt-on-create,
+    per-session plaintext stash). Route resolves: header > cache >
+    deployment-fallback (gated by Q.1.d
+    `allowFallbackForUnconfiguredCustomers`). New
+    `ByokAnthropicRequiredError` (502 + new problem-type
+    `byok-anthropic-required`) when nothing resolves AND deployment
+    is wired for Claude. PROBLEM_TYPES roster grew 24 → 25;
+    errors.ts subclass count grew 24 → 25. Cross-SDK error-class
+    mapping updated in @driftstack/sdk. 7 cache tests +
+    cross-source-invariant parity tests updated.
+
+Q.1.f audit-logging slice + Q.1.e cost-tracking slice +
+post-deploy-verify slot for the new gate are remaining
+follow-ups (not yet shipped).
+
+## STRATEGIC DIRECTIVES (orchestrator paste 2026-05-17 19:15Z)
+
+Four founder-locked decisions delivered post-Q.1 landing.
+Saved as cross-session memory
+`project_strategic_directives_2026_05_17.md`. Summary:
+
+1. **NO credits abstraction** — USD direct billing. Current
+   concurrent-tier subscription pricing unchanged.
+2. **Own LLM SKIPPED** through v1.x. Re-evaluate at v2.0 only.
+3. **AI chat + manual live feature APPROVED for v1.0** —
+   primary differentiator. 4-7 week engineering arc gated on
+   Q.4 verdicts (see below).
+4. **Bundled LLM opt-in** as a parallel 1-2 week arc. Opt-in at
+   signup; default unchanged (BYOK). Pay-per-use in USD.
+
+Explicit OUT-OF-SCOPE: credits abstraction layer, own LLM
+training, pricing system migration, free credit signup bonus.
+
+## Q.4 OPEN QUESTIONS — surfaced for founder verdict
+
+Required before AI-B2.b implementation fires (and therefore
+before the AI chat + manual live feature can fully ship). Five
+questions are already in
+`docs/internal/ai-b2b-harness-executor-design.md` (commit
+`2e0fff78`); listing here as a single front-of-queue summary
+so the orchestrator/founder can verdict in one pass:
+
+- **Q.4.a Halt-on-first-failure semantics** — discard plan on
+  failure (orchestrator-recommended) / resume from failed intent /
+  hybrid by failure mode
+- **Q.4.b Latency budget** — no executor budget / total-plan
+  deadline 90s default (orchestrator-recommended) / per-intent
+  enforced; also tier-tiered?
+- **Q.4.c Capture aggregation** — inline only / aggregated
+  `captureIds: string[]` / hybrid both (orchestrator-recommended)
+- **Q.4.d Cross-context with EGRESS Phase 1** — use
+  driftstack-default egress (orchestrator-recommended) /
+  hard-fail / plan-time refuse
+- **Q.4.e Mid-plan session destruction** — halt + transcript
+  (orchestrator-recommended) / halt + close agent session /
+  let plan crash
+
+Q.4.a + Q.4.b are load-bearing. Q.4.c + Q.4.e have safer
+defaults that could ship without explicit verdicts but
+Q.4.a + Q.4.b drive the runtime + executor shape; gates
+on those keep the rest of the implementation in design-doc
+status.
+
 ## Orchestrator disengage + Agent 1 Wave 29-360 Item 1 (2026-05-17 18:38 UTC)
 
 A follow-up orchestrator paste arrived with three new state items:
