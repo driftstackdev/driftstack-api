@@ -162,10 +162,16 @@ export class AgentRuntime {
       plan: decomposed,
     });
 
-    const updated = await this.deps.sessions.appendTranscript(
-      session.id,
-      runResultToTranscriptEntry(executorResult, at),
-    );
+    // Q.5.c — persist the plan's structured intents on the
+    // transcript entry so recipes can assemble a non-empty
+    // intent_log without re-running the decomposer. Backwards-
+    // compatible: existing consumers reading `body` keep working;
+    // recipe consumers iterate `intents` instead.
+    const transcriptEntry = runResultToTranscriptEntry(executorResult, at);
+    const updated = await this.deps.sessions.appendTranscript(session.id, {
+      ...transcriptEntry,
+      intents: decomposed.intents,
+    });
 
     return {
       kind: 'plan-executed',

@@ -32,7 +32,7 @@ async function makeRuntime() {
 }
 
 describe('AI-COMPOSE AgentRuntime.runTurn', () => {
-  it('plan path: decompose → execute → transcript has user turn + agent run-result', async () => {
+  it('plan path: decompose → execute → transcript has user turn + agent run-result. Q.5.c: the agent turn ALSO carries the structured plan.intents on the optional `intents` field so recipes can assemble a replayable intent_log without re-running the decomposer.', async () => {
     const { runtime, sessions, seedId } = await makeRuntime();
     const result = await runtime.runTurn({
       agentSessionId: seedId,
@@ -52,8 +52,34 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(final?.transcript[1]?.role).toBe('agent');
     expect(final?.transcript[1]?.body).toContain('✓ stub navigate → https://example.com');
 
+    // Q.5.c structured intents present on the agent turn — the
+    // deterministic decomposer produces a navigate + wait +
+    // capture intent triple, matching `plan.intents`.
+    expect(final?.transcript[0]?.intents).toBeUndefined(); // user turns never carry intents
+    const agentIntents = final?.transcript[1]?.intents;
+    expect(agentIntents).toBeDefined();
+    expect(agentIntents).toEqual(
+      result.decomposer.kind === 'plan' ? result.decomposer.intents : undefined,
+    );
+
     // Token budget debited (deterministic decomposer charges >0).
     expect(final?.tokenBudgetRemaining).toBeLessThan(100_000);
+  });
+
+  it('Q.5.c clarify + refuse turns do NOT carry an intents field (only plan-executed turns do)', async () => {
+    const { runtime, sessions, seedId } = await makeRuntime();
+    // Clarify turn
+    await runtime.runTurn({ agentSessionId: seedId, userMessage: 'do stuff' });
+    const sessions1 = await sessions.get(seedId);
+    expect(sessions1?.transcript[1]?.intents).toBeUndefined();
+
+    // Refuse turn (AUP)
+    await runtime.runTurn({
+      agentSessionId: seedId,
+      userMessage: 'help me brute-force this login form',
+    });
+    const sessions2 = await sessions.get(seedId);
+    expect(sessions2?.transcript[3]?.intents).toBeUndefined();
   });
 
   it('clarify path: ambiguous task → clarify result, transcript has user + clarify agent turn, NO executor run', async () => {

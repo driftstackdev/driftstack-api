@@ -31,6 +31,15 @@ export interface TranscriptEntry {
   /** Free-text content for user turns; serialized DecomposeResult
    *  for agent turns. */
   body: string;
+  /**
+   * Structured plan intents for plan-executed agent turns
+   * (Q.5.c, orchestrator handoff #3 follow-up). Undefined for
+   * user turns + clarify/refuse agent turns. The recipes route
+   * assembles a recipe's intent_log by flatMapping transcript[]
+   * for this field so replay-as-script becomes possible without
+   * re-running the LLM decomposer.
+   */
+  intents?: ReadonlyArray<AgentIntent>;
 }
 
 /**

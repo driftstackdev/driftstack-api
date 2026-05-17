@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { FeatureUnavailableError, NotFoundError, ValidationError } from '../lib/errors.js';
 import type { RecipesRepo, RecipeRecord } from '../services/recipes.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
+import type { AgentIntent } from '../services/agent-decomposer.js';
 
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
   if (!request.account) throw new Error('account context missing after requireAuth');
@@ -72,18 +73,14 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
         throw new NotFoundError(`AgentSession ${parsed.data.agent_session_id} not found.`);
       }
 
-      // Extract the intents from the transcript's plan-executed
-      // entries. The transcript stores agent-side bodies as either
-      // 'refused: ...' / 'clarify: ...' / a multi-line executor
-      // summary; the plan intents themselves aren't easily recoverable
-      // from the transcript alone. For v1.0 we snapshot the
-      // transcript + an EMPTY intent_log; a follow-up extracts the
-      // plan-intents from the agent-side transcript entries that
-      // carry them in machine-readable form (a separate slice will
-      // change AgentRuntime to persist intents inline; until then,
-      // recipes are a stored conversation snapshot, not a replayable
-      // intent list).
-      const intentLog = [] as const;
+      // Q.5.c — assemble intent_log from the transcript's
+      // plan-executed agent turns. AgentRuntime persists each
+      // plan's structured intent array on the transcript entry's
+      // optional `intents` field (Q.5.c follow-up). flatMap
+      // produces a concatenated intent_log in turn order so
+      // replay walks them in the same sequence the customer's
+      // session originally executed.
+      const intentLog: AgentIntent[] = source.transcript.flatMap((entry) => entry.intents ?? []);
 
       const created = await recipes.create({
         accountId: ctx.account.id,
