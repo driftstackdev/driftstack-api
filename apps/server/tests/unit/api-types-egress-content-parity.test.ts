@@ -211,34 +211,75 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
     ).toBe(false);
   });
 
-  it('EgressCapabilities: harness-reported per-session SOCKS5 capability shape (cross-agent contract 7d5992d9, migration 0045) — udp_associate boolean + quic_route 3-enum (proxy|direct|disabled) + warnings string-array default []', () => {
+  it('EgressCapabilities: harness-reported per-session SOCKS5 capability shape (cross-agent contract 7d5992d9 + EG-WK-1.9 dns_remote_resolve extension, migration 0045) — udp_associate boolean + quic_route 3-enum (proxy|direct|disabled) + dns_remote_resolve boolean + warnings string-array default []', () => {
     const parsed = EgressCapabilitiesSchema.parse({
       udp_associate: true,
       quic_route: 'proxy',
+      dns_remote_resolve: true,
     });
     expect(parsed.udp_associate).toBe(true);
     expect(parsed.quic_route).toBe('proxy');
+    expect(parsed.dns_remote_resolve).toBe(true);
     expect(parsed.warnings).toEqual([]);
     // quic_route enum.
     expect(
-      EgressCapabilitiesSchema.safeParse({ udp_associate: false, quic_route: 'direct' }).success,
+      EgressCapabilitiesSchema.safeParse({
+        udp_associate: false,
+        quic_route: 'direct',
+        dns_remote_resolve: false,
+      }).success,
     ).toBe(true);
     expect(
-      EgressCapabilitiesSchema.safeParse({ udp_associate: false, quic_route: 'disabled' }).success,
+      EgressCapabilitiesSchema.safeParse({
+        udp_associate: false,
+        quic_route: 'disabled',
+        dns_remote_resolve: false,
+      }).success,
     ).toBe(true);
     expect(
-      EgressCapabilitiesSchema.safeParse({ udp_associate: false, quic_route: 'bogus' }).success,
+      EgressCapabilitiesSchema.safeParse({
+        udp_associate: false,
+        quic_route: 'bogus',
+        dns_remote_resolve: false,
+      }).success,
     ).toBe(false);
     // warnings as opaque string array — unknown codes pass through.
     const withWarnings = EgressCapabilitiesSchema.parse({
       udp_associate: false,
       quic_route: 'disabled',
-      warnings: ['udp_unsupported_by_proxy', 'quic_disabled_fallback_http2', 'novel_code_xyz'],
+      dns_remote_resolve: false,
+      warnings: [
+        'udp_unsupported_by_proxy',
+        'quic_disabled_fallback_http2',
+        'dns_remote_resolve_unsupported_by_proxy',
+        'novel_code_xyz',
+      ],
     });
-    expect(withWarnings.warnings).toHaveLength(3);
-    // udp_associate + quic_route required.
-    expect(EgressCapabilitiesSchema.safeParse({ quic_route: 'proxy' }).success).toBe(false);
-    expect(EgressCapabilitiesSchema.safeParse({ udp_associate: true }).success).toBe(false);
+    expect(withWarnings.warnings).toHaveLength(4);
+    // udp_associate + quic_route + dns_remote_resolve all required.
+    expect(
+      EgressCapabilitiesSchema.safeParse({
+        quic_route: 'proxy',
+        dns_remote_resolve: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      EgressCapabilitiesSchema.safeParse({ udp_associate: true, dns_remote_resolve: true }).success,
+    ).toBe(false);
+    expect(
+      EgressCapabilitiesSchema.safeParse({ udp_associate: true, quic_route: 'proxy' }).success,
+    ).toBe(false);
+  });
+
+  it('SocksProxyConfig: EG-WK-1.9 require_remote_dns boolean (default false) — when true the harness routes DNS via SOCKS5 ATYP DOMAINNAME and reports actual mode in EgressCapabilities.dns_remote_resolve', () => {
+    const defaulted = SocksProxyConfigSchema.parse({ host: 'proxy.example.com', port: 1080 });
+    expect(defaulted.require_remote_dns).toBe(false);
+    const optedIn = SocksProxyConfigSchema.parse({
+      host: 'proxy.example.com',
+      port: 1080,
+      require_remote_dns: true,
+    });
+    expect(optedIn.require_remote_dns).toBe(true);
   });
 
   it("imports z from 'zod' only (no cross-package leakage)", () => {

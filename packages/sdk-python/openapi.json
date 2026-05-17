@@ -315,6 +315,9 @@
                 "type": "string",
                 "enum": ["proxy", "direct", "disabled"]
               },
+              "dns_remote_resolve": {
+                "type": "boolean"
+              },
               "warnings": {
                 "type": "array",
                 "items": {
@@ -323,7 +326,7 @@
                 "default": []
               }
             },
-            "required": ["udp_associate", "quic_route"]
+            "required": ["udp_associate", "quic_route", "dns_remote_resolve"]
           },
           "created_at": {
             "type": "string",
@@ -590,6 +593,9 @@
                 "type": "string",
                 "enum": ["proxy", "direct", "disabled"]
               },
+              "dns_remote_resolve": {
+                "type": "boolean"
+              },
               "warnings": {
                 "type": "array",
                 "items": {
@@ -598,7 +604,7 @@
                 "default": []
               }
             },
-            "required": ["udp_associate", "quic_route"]
+            "required": ["udp_associate", "quic_route", "dns_remote_resolve"]
           },
           "created_at": {
             "type": "string",
@@ -1787,6 +1793,9 @@
                           "type": "string",
                           "enum": ["proxy", "direct", "disabled"]
                         },
+                        "dns_remote_resolve": {
+                          "type": "boolean"
+                        },
                         "warnings": {
                           "type": "array",
                           "items": {
@@ -1795,7 +1804,7 @@
                           "default": []
                         }
                       },
-                      "required": ["udp_associate", "quic_route"]
+                      "required": ["udp_associate", "quic_route", "dns_remote_resolve"]
                     },
                     "created_at": {
                       "type": "string",
@@ -1968,6 +1977,9 @@
                                 "type": "string",
                                 "enum": ["proxy", "direct", "disabled"]
                               },
+                              "dns_remote_resolve": {
+                                "type": "boolean"
+                              },
                               "warnings": {
                                 "type": "array",
                                 "items": {
@@ -1976,7 +1988,7 @@
                                 "default": []
                               }
                             },
-                            "required": ["udp_associate", "quic_route"]
+                            "required": ["udp_associate", "quic_route", "dns_remote_resolve"]
                           },
                           "created_at": {
                             "type": "string",
@@ -2666,6 +2678,9 @@
                           "type": "string",
                           "enum": ["proxy", "direct", "disabled"]
                         },
+                        "dns_remote_resolve": {
+                          "type": "boolean"
+                        },
                         "warnings": {
                           "type": "array",
                           "items": {
@@ -2674,7 +2689,7 @@
                           "default": []
                         }
                       },
-                      "required": ["udp_associate", "quic_route"]
+                      "required": ["udp_associate", "quic_route", "dns_remote_resolve"]
                     },
                     "created_at": {
                       "type": "string",
@@ -8219,6 +8234,9 @@
                                 "type": "string",
                                 "enum": ["proxy", "direct", "disabled"]
                               },
+                              "dns_remote_resolve": {
+                                "type": "boolean"
+                              },
                               "warnings": {
                                 "type": "array",
                                 "items": {
@@ -8227,7 +8245,7 @@
                                 "default": []
                               }
                             },
-                            "required": ["udp_associate", "quic_route"]
+                            "required": ["udp_associate", "quic_route", "dns_remote_resolve"]
                           },
                           "created_at": {
                             "type": "string",
@@ -11416,6 +11434,10 @@
                               "udp_associate": {
                                 "type": "boolean",
                                 "default": true
+                              },
+                              "require_remote_dns": {
+                                "type": "boolean",
+                                "default": false
                               }
                             },
                             "required": ["host", "port"]
@@ -11771,6 +11793,10 @@
                               "udp_associate": {
                                 "type": "boolean",
                                 "default": true
+                              },
+                              "require_remote_dns": {
+                                "type": "boolean",
+                                "default": false
                               }
                             },
                             "required": ["host", "port"]

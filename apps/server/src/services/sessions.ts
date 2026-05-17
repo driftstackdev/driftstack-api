@@ -65,13 +65,15 @@ export interface SessionRecord {
   metadata: Record<string, unknown> | null;
   /**
    * Harness-reported egress capabilities for SOCKS5 sessions (migration
-   * 0045, cross-agent contract commit 7d5992d9). Null until the harness
-   * emits the `egress.capability_report` event after proxy wire-up;
-   * non-SOCKS5 sessions stay null permanently.
+   * 0045, cross-agent contract commit 7d5992d9; EG-WK-1.9 extension
+   * 2026-05-17 adds dns_remote_resolve). Null until the harness emits
+   * the `egress.capability_report` event after proxy wire-up; non-
+   * SOCKS5 sessions stay null permanently.
    */
   egressCapabilities: {
     udp_associate: boolean;
     quic_route: 'proxy' | 'direct' | 'disabled';
+    dns_remote_resolve: boolean;
     warnings: string[];
   } | null;
   createdAt: Date;

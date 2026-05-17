@@ -261,13 +261,15 @@ type Session struct {
 }
 
 // EgressCapabilities is the harness-reported per-session SOCKS5
-// capability shape (cross-agent contract 7d5992d9, migration 0045).
-// Null until the harness emits `egress.capability_report`; non-SOCKS5
-// sessions stay null permanently.
+// capability shape (cross-agent contract 7d5992d9 + EG-WK-1.9
+// dns_remote_resolve extension, migration 0045). Null until the
+// harness emits `egress.capability_report`; non-SOCKS5 sessions stay
+// null permanently.
 type EgressCapabilities struct {
-	UDPAssociate bool     `json:"udp_associate"`
-	QUICRoute    string   `json:"quic_route"` // "proxy" | "direct" | "disabled"
-	Warnings     []string `json:"warnings"`
+	UDPAssociate     bool     `json:"udp_associate"`
+	QUICRoute        string   `json:"quic_route"` // "proxy" | "direct" | "disabled"
+	DNSRemoteResolve bool     `json:"dns_remote_resolve"`
+	Warnings         []string `json:"warnings"`
 }
 
 // CreateSessionRequest. The `Archetype` and `Purpose` fields are

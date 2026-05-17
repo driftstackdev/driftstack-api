@@ -59,6 +59,18 @@ export const SocksProxyConfigSchema = z.object({
   username: z.string().min(1).max(256).optional(),
   password: z.string().min(1).max(256).optional(),
   udp_associate: z.boolean().default(true),
+  /**
+   * EG-WK-1.9 (founder verdict 2026-05-17 ~20:15 UTC) — when `true`,
+   * the harness uses SOCKS5 ATYP DOMAINNAME (0x03) so DNS lookups
+   * resolve through the proxy's resolver instead of the local host's.
+   * Defaults to `false` (local resolution) for backwards compatibility
+   * with the pre-EG-WK-1.9 behavior. If `true` but the proxy doesn't
+   * support DOMAINNAME, the harness emits the warning code
+   * `dns_remote_resolve_unsupported_by_proxy` and falls back per
+   * safeguard policy. The actual mode used is reported back in
+   * `egress_capabilities.dns_remote_resolve`.
+   */
+  require_remote_dns: z.boolean().default(false),
 });
 export type SocksProxyConfig = z.infer<typeof SocksProxyConfigSchema>;
 
@@ -238,6 +250,16 @@ export type SavedProxyConfig = z.infer<typeof SavedProxyConfigSchema>;
  *   QUIC bypasses safeguard — only reachable in opt-out configs;
  *   default safeguard blocks this), or `disabled` (QUIC support turned
  *   off, all traffic falls back to HTTP/2 over TCP).
+ * - `dns_remote_resolve` — added by founder verdict EG-WK-1.9 2026-05-17
+ *   ~20:15 UTC ("proxy-only DNS"). Whether DNS lookups are being
+ *   resolved THROUGH the SOCKS5 proxy server (`true`) or via the local
+ *   host's resolver (`false`). When the session's
+ *   `proxy.require_remote_dns` flag is set, the harness verifies the
+ *   proxy supports SOCKS5 ATYP DOMAINNAME (0x03) and reports here;
+ *   if the proxy can't, the harness emits warning
+ *   `dns_remote_resolve_unsupported_by_proxy` and falls back to local
+ *   resolution (or refuses to wire egress, depending on safeguard
+ *   policy).
  * - `warnings` — string codes from a closed enum the harness may report
  *   alongside the capability result. Known codes:
  *     - `udp_unsupported_by_proxy` (SOCKS5 server returned a non-success
@@ -245,6 +267,9 @@ export type SavedProxyConfig = z.infer<typeof SavedProxyConfigSchema>;
  *     - `quic_disabled_fallback_http2` (QUIC was disabled at session
  *       create time; emitted for parity with `udp_unsupported_by_proxy`
  *       so dashboards can render a uniform "why no QUIC?" hint)
+ *     - `dns_remote_resolve_unsupported_by_proxy` (proxy returned a
+ *       non-success reply for an ATYP DOMAINNAME request, falling
+ *       back to local resolution per EG-WK-1.9)
  *
  * Unknown warning codes are passed through verbatim — the SDK does not
  * narrow to a Zod enum so the harness can ship new codes without an
@@ -253,6 +278,7 @@ export type SavedProxyConfig = z.infer<typeof SavedProxyConfigSchema>;
 export const EgressCapabilitiesSchema = z.object({
   udp_associate: z.boolean(),
   quic_route: z.enum(['proxy', 'direct', 'disabled']),
+  dns_remote_resolve: z.boolean(),
   warnings: z.array(z.string()).default([]),
 });
 export type EgressCapabilities = z.infer<typeof EgressCapabilitiesSchema>;
