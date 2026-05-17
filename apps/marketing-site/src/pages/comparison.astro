@@ -160,7 +160,15 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   <!-- Comparison table -->
   <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <div class="overflow-x-auto">
+      <!-- M.5 (Part F2) mobile scroll-cue: the 6-column competitor
+           table forces a min-width of 900px (below that it would
+           collapse to unreadable). The overflow-x-auto wrapper lets
+           the table pan horizontally on smaller viewports, and the
+           right-edge gradient fade signals "you can pan this" so
+           the affordance isn't silent. md:hidden on the fade because
+           the desktop view shows the whole table in-frame. -->
+      <div class="relative">
+        <div class="overflow-x-auto">
         <table class="w-full min-w-[900px] border-collapse text-sm">
           <thead>
             <tr class="border-b-2 border-oxblood-700">
@@ -218,6 +226,13 @@ const COMPARISON_ROWS: ComparisonRow[] = [
             }
           </tbody>
         </table>
+        </div>
+        <!-- Mobile-only scroll-cue gradient on the right edge.
+             Hidden at md+ where the table fits in-viewport. -->
+        <div
+          class="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-surface-raised to-transparent md:hidden"
+          aria-hidden="true"
+        ></div>
       </div>
       <p class="mt-6 max-w-prose text-xs text-ink-muted">
         Last reviewed 2026-05-10. If a competitor row drifts from current
