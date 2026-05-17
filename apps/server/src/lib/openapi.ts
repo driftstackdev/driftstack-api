@@ -2282,6 +2282,53 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // ── AI-B4 recipe library (write-only at v1.0) ──
+  //
+  // POST /v1/recipes snapshots a finished agent_session's intent_log
+  // + transcript so customers can replay the same flow later without
+  // re-paying the LLM decomposition cost. Read / list / execute /
+  // delete surfaces are v1.1 D2/D3 scope; only the POST is documented
+  // here. Server registers as 503 FeatureUnavailable when either
+  // recipesRepo or agentSessionsRepo is missing from AppDeps.
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/recipes',
+    summary: 'Snapshot an agent session as a replayable recipe',
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      body: {
+        content: {
+          'application/json': {
+            schema: z.object({
+              agent_session_id: z.string().min(1),
+              label: z.string().min(1).max(120),
+              description: z.string().max(2000).optional(),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      201: {
+        description:
+          'Recipe created. The `intent_count` field is the length of the assembled intent_log (flatMap of plan-executed transcript turns).',
+        content: { 'application/json': { schema: z.object({}) } },
+      },
+      404: {
+        description:
+          'Agent session not found (also returned for cross-account access — existence is not leaked).',
+        content: problemContent,
+      },
+      ...errors4xx,
+      503: {
+        description:
+          'Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.',
+        content: problemContent,
+      },
+    },
+  });
+
   // ── V-820 — fleet events stream (operator-only; not customer-facing) ──
   // Currently registers as a 503 FeatureUnavailable stub regardless of
   // AppDeps wiring — the WebSocket handler + fastify-websocket plugin +
