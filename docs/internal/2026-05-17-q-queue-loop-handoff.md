@@ -215,6 +215,57 @@ is almost exhaustively addressed within the available gate
 constraints. When all gates clear, a fresh wave of substantive
 work opens up.
 
+## Orchestrator AUTO #3 paste (2026-05-17 18:00 UTC)
+
+A follow-up orchestrator paste arrived mid-loop with three new
+state items the next session should know:
+
+### V2 customer warm-up arc PARKED
+
+Per Wave 29-358 empirical: V-405 Text closure went from 1.4% →
+32.0% with Family-B-only V-583K atlas alone — 22.9× breakthrough.
+Customer warm-up is no longer the load-bearing closure path. ALL
+of Layer C BS oracle dispatch wiring + customer `warmUp()` SDK
+method + dashboard warm-up UI + marketing warm-up reframe DEFERRED
+to v1.1+. Re-enable trigger: novel arbitrary-text probe vendor.
+"Bit-identical from the first request" is the correct positioning.
+
+Saved as cross-session memory `project_v2_warmup_parked.md`.
+
+### Multi-archetype coordination — Agent 2 queued behind Agent 1
+
+After Agent 1 lands multi-archetype items 1-5 fork-side
+(est. 3-5 days from 2026-05-17), Agent 2's slot:
+
+- SDK archetype parameter narrowed to a union of literals
+  (`iphone16pro_ios18_7_safari26_4 | iphone17_ios18_7_safari26_4 |
+iphone16pro_ios18_6_safari18_6`), cross-SDK lift (TS + Python +
+  Go) in lockstep.
+- Dashboard archetype selector in session-create flow.
+- NO marketing copy reframe — M.6 Path A already landed the
+  multi-archetype framing in `index.astro`, `comparison.astro`,
+  `roadmap.astro`, `trust/cumulative-rig.astro`.
+
+**Don't pre-emptively type-narrow the SDK before Agent 1 confirms
+the actual archetype IDs in the WebKit fork** — pre-narrowing risks
+breaking customer code if the IDs differ from what the paste lists.
+
+Saved as `project_multi_archetype_coordination_queued.md`.
+
+### Stripe LIVE post-BV-KvK is no-code
+
+After founder closes BV KvK (~2026-05-21) and swaps
+`STRIPE_SECRET_KEY` from `sk_test_*` to `sk_live_*` in
+`/opt/driftstack/api/.env`, the bootstrap safety guard
+(`validateStripeKeyForLaunch`) lets the live key through because
+the cutover date passed. No Agent-2 code change.
+
+Test-mode activation Q.2 full flip is a SEPARATE founder action
+(still needs the 3 Dashboard env vars listed in §"Q.2 founder
+dependency").
+
+Saved as `project_stripe_live_post_bv_kvk.md`.
+
 ## Memory + cross-session continuity
 
 Cross-session memory entries updated this session:
@@ -224,7 +275,11 @@ Cross-session memory entries updated this session:
   avoid push-protection regex matches on test-only fake keys.
 - `project_activation_gate_pattern.md` — count grew 5 → 7
   features; 31 → 43 test cases.
-- `MEMORY.md` index — both entries above appended/updated.
+- `project_v2_warmup_parked.md` — NEW (orchestrator AUTO #3).
+- `project_multi_archetype_coordination_queued.md` — NEW
+  (orchestrator AUTO #3).
+- `project_stripe_live_post_bv_kvk.md` — NEW (orchestrator AUTO #3).
+- `MEMORY.md` index — all entries above appended/updated.
 
 ## Cron status
 
