@@ -106,8 +106,30 @@ export class AgentRuntime {
     // Always debit the decomposer's tokens (even on refuse —
     // the input was processed). Budget-exhausted refusals charge
     // 0 per the AgentDecomposer contract.
+    let postDebitSession = sessionWithUser;
     if (decomposed.tokensConsumed > 0) {
-      await this.deps.sessions.debitTokens(session.id, decomposed.tokensConsumed);
+      postDebitSession = await this.deps.sessions.debitTokens(
+        session.id,
+        decomposed.tokensConsumed,
+      );
+    }
+
+    // Q.3 — atomic session close on budget exhaustion. Two paths trip:
+    //   1. The decomposer returned a budget-exhausted refusal
+    //      (decompose() pre-call check refused before any LLM call).
+    //   2. The debit took the remaining budget to exactly 0 (the LLM
+    //      call ran; actual usage zeroed the remaining budget).
+    // In either case the next turn would short-circuit on the
+    // `session.status !== 'active'` branch, but closing here means
+    // the customer's CURRENT turn returns a definitive signal — they
+    // don't have to attempt another turn before learning the session
+    // is dead.
+    const isBudgetExhaustedRefusal =
+      decomposed.kind === 'refuse' &&
+      decomposed.refuseReason === 'token budget exhausted; start a new session';
+    const debitZeroedBudget = postDebitSession.tokenBudgetRemaining === 0;
+    if (isBudgetExhaustedRefusal || debitZeroedBudget) {
+      await this.deps.sessions.closeWithReason(session.id, 'budget-exhausted');
     }
 
     if (decomposed.kind === 'refuse') {

@@ -177,7 +177,7 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(seenCalls[0]?.byok).toBeUndefined();
   });
 
-  it('token budget exhausted before turn: returns refuse with 0 tokens charged (interface contract from decomposer threads through)', async () => {
+  it('Q.3 token budget exhausted before turn: returns refuse + ATOMICALLY CLOSES the session with closedReason=budget-exhausted (so the next turn short-circuits on session-closed instead of letting the customer retry into another budget refusal)', async () => {
     const sessions = new InMemoryAgentSessionsRepo();
     const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 1 });
     const runtime = new AgentRuntime({
@@ -195,8 +195,70 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(result.decomposer.refuseReason).toMatch(/budget exhausted/);
     expect(result.decomposer.tokensConsumed).toBe(0);
 
-    // Budget unchanged (the 0-token refuse doesn't debit).
+    // Q.3 invariant: session is now CLOSED with budget-exhausted reason.
+    // Budget left unchanged (the 0-token refuse doesn't debit).
     const final = await sessions.get(seed.id);
     expect(final?.tokenBudgetRemaining).toBe(1);
+    expect(final?.status).toBe('closed');
+    expect(final?.closedReason).toBe('budget-exhausted');
+  });
+
+  it('Q.3 budget-exhausted session: subsequent runTurn returns kind: session-closed with reason budget-exhausted (the close from the prior refusal short-circuits without burning another decomposer call)', async () => {
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 1 });
+    const runtime = new AgentRuntime({
+      decomposer: new DeterministicAgentDecomposer(),
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    // First turn — budget refuse + close.
+    await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'open https://example.com',
+    });
+    // Second turn — session is closed; short-circuit fires.
+    const second = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'try again',
+    });
+    expect(second.kind).toBe('session-closed');
+    if (second.kind !== 'session-closed') throw new Error('type narrow');
+    expect(second.reason).toBe('budget-exhausted');
+  });
+
+  it("Q.3 debit-to-zero closes the session: a turn that successfully runs but exhausts the budget atomically closes so the customer sees the session-end signal on the NEXT request (rather than letting them attempt another turn that would refuse). Uses a custom decomposer that reports tokensConsumed=budget so the close fires deterministically without coupling to the deterministic decomposer's 600-token overhead estimate.", async () => {
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 500 });
+    // Custom decomposer: returns a valid plan with tokensConsumed
+    // matching the budget total, so the debit takes remaining to 0
+    // on the first successful turn.
+    const decomposer = {
+      decompose: (args: DecomposeArgs) =>
+        Promise.resolve({
+          kind: 'plan' as const,
+          intents: [
+            { kind: 'navigate' as const, url: 'https://example.com' },
+            { kind: 'capture' as const, capture: 'dom_snapshot' as const },
+          ],
+          tokensConsumed: args.budgetTokensRemaining,
+        }),
+    };
+    const runtime = new AgentRuntime({
+      decomposer,
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    const first = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'open https://example.com',
+    });
+    expect(first.kind).toBe('plan-executed');
+    // Session is now closed because the debit zeroed the budget.
+    const afterFirst = await sessions.get(seed.id);
+    expect(afterFirst?.tokenBudgetRemaining).toBe(0);
+    expect(afterFirst?.status).toBe('closed');
+    expect(afterFirst?.closedReason).toBe('budget-exhausted');
   });
 });
