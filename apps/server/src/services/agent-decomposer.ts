@@ -56,6 +56,32 @@ export interface CredentialBag {
 }
 
 /**
+ * v2-#4 Q.1.e — per-call usage telemetry. ClaudeAgentDecomposer fills
+ * this in; DeterministicAgentDecomposer leaves it `undefined`. The
+ * AgentRuntime records a usage row when this is present so we can
+ * cost-track every decompose() call even before the bundled-LLM tier
+ * launches (founder Q.1.e verdict: cost-tracked, unbilled at v1.0).
+ */
+export interface DecomposeUsage {
+  /** Discriminator used by the metering layer to render per-source
+   *  reports + drive the future billed/unbilled toggle. */
+  decomposerKind: 'claude' | 'deterministic';
+  /** Anthropic input tokens reported by the API `usage.input_tokens`
+   *  field. Undefined for deterministic. */
+  anthropicInputTokens?: number;
+  /** Anthropic output tokens reported by the API `usage.output_tokens`
+   *  field. Undefined for deterministic. */
+  anthropicOutputTokens?: number;
+  /** Cost in USD cents (integer; rounded up to the nearest cent so
+   *  short rows don't undercount). Computed from the per-model rate
+   *  table in ClaudeAgentDecomposer. Undefined for deterministic. */
+  costUsdCents?: number;
+  /** Model identifier used for the call (so future pricing-table
+   *  drift is recoverable from history). Undefined for deterministic. */
+  model?: string;
+}
+
+/**
  * The agent emits one of these per turn. The transport layer
  * (SSE / WebSocket) marshals the discriminated union into the
  * shape the UI expects.
@@ -69,6 +95,10 @@ export type DecomposeResult =
        *  invent new intent verbs. */
       intents: ReadonlyArray<AgentIntent>;
       tokensConsumed: number;
+      /** v2-#4 Q.1.e — per-call usage telemetry. Optional so the
+       *  deterministic decomposer + legacy callers don't have to
+       *  populate it. AgentRuntime records a usage row when present. */
+      usage?: DecomposeUsage;
     }
   | {
       kind: 'clarify';
@@ -76,6 +106,7 @@ export type DecomposeResult =
        *  ambiguous (e.g. "which dashboard do you mean?"). */
       clarifyingQuestion: string;
       tokensConsumed: number;
+      usage?: DecomposeUsage;
     }
   | {
       kind: 'refuse';
@@ -83,6 +114,7 @@ export type DecomposeResult =
        *  the launch-checklist requires ≥95% coverage on. */
       refuseReason: string;
       tokensConsumed: number;
+      usage?: DecomposeUsage;
     };
 
 /**

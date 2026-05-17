@@ -122,6 +122,11 @@ function synthesizePlan(task: string): AgentIntent[] {
   return intents;
 }
 
+// v2-#4 Q.1.e — uniform usage block so AgentRuntime records a row for
+// deterministic turns too. Zero anthropic tokens + zero cost; the
+// audit trail just shows "we ran a deterministic plan".
+const DETERMINISTIC_USAGE = { decomposerKind: 'deterministic' as const };
+
 export class DeterministicAgentDecomposer implements AgentDecomposer {
   decompose(args: DecomposeArgs): Promise<DecomposeResult> {
     const tokensConsumed = estimateTokens(args.task, args.history);
@@ -131,6 +136,7 @@ export class DeterministicAgentDecomposer implements AgentDecomposer {
         kind: 'refuse',
         refuseReason: 'token budget exhausted; start a new session',
         tokensConsumed: 0,
+        usage: DETERMINISTIC_USAGE,
       });
     }
 
@@ -140,6 +146,7 @@ export class DeterministicAgentDecomposer implements AgentDecomposer {
         kind: 'refuse',
         refuseReason: aupRefusal,
         tokensConsumed,
+        usage: DETERMINISTIC_USAGE,
       });
     }
 
@@ -149,6 +156,7 @@ export class DeterministicAgentDecomposer implements AgentDecomposer {
         kind: 'clarify',
         clarifyingQuestion: ambiguity,
         tokensConsumed,
+        usage: DETERMINISTIC_USAGE,
       });
     }
 
@@ -156,6 +164,7 @@ export class DeterministicAgentDecomposer implements AgentDecomposer {
       kind: 'plan',
       intents: synthesizePlan(args.task),
       tokensConsumed,
+      usage: DETERMINISTIC_USAGE,
     });
   }
 }

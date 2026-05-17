@@ -59,6 +59,7 @@ import { DrizzleBYOKAnthropicRepo } from '../db/byok-anthropic-repo.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
 import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
 import { DrizzleAgentSessionsRepo } from '../db/agent-sessions-repo.js';
+import { DrizzleAgentDecomposerUsageRecorder } from '../db/agent-decomposer-usage-recorder.js';
 import { AgentRuntime } from '../services/agent-runtime.js';
 import { StubAgentExecutor } from '../services/agent-executor.js';
 import { ClaudeAgentDecomposer } from '../services/agent-decomposer-claude.js';
@@ -517,11 +518,22 @@ export async function createProductionDeps(
   const agentDecomposer = selectAgentDecomposer(config, logger);
   const agentDecomposerKind: 'claude' | 'deterministic' =
     agentDecomposer instanceof ClaudeAgentDecomposer ? 'claude' : 'deterministic';
+  // v2-#4 Q.1.e — record one usage_records row per decompose() call.
+  // Wired unconditionally; even the deterministic decomposer fires
+  // it (with zero costs) so the audit trail is uniform.
+  // v2-#5 Q.1.f — same recorder also emits the operator-only
+  // `agent.decompose.{claude,deterministic}` audit event per turn.
+  const agentDecomposerUsageRecorder = new DrizzleAgentDecomposerUsageRecorder(
+    dbHandle,
+    logger,
+    accountAuditService,
+  );
   const agentRuntime = new AgentRuntime({
     decomposer: agentDecomposer,
     executor: agentExecutor,
     sessions: agentSessionsRepo,
     archetype: 'iphone16pro_ios18_7_safari26_4',
+    usageRecorder: agentDecomposerUsageRecorder,
   });
   // Q.1.c — per-session BYOK key cache. Pure in-memory; wired
   // unconditionally so the route can stash decrypted plaintexts

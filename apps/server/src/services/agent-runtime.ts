@@ -11,7 +11,7 @@
 // a real backend. Each can be swapped (Deterministic→Claude;
 // Stub→Wired; InMemory→Drizzle) without changing the runtime.
 
-import type { AgentDecomposer, DecomposeResult } from './agent-decomposer.js';
+import type { AgentDecomposer, DecomposeResult, DecomposeUsage } from './agent-decomposer.js';
 import type { AgentExecutor, ExecutorRunResult } from './agent-executor.js';
 import { runResultToTranscriptEntry } from './agent-executor.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from './agent-sessions.js';
@@ -59,11 +59,38 @@ export type RunTurnResult =
       session: AgentSessionRecord;
     };
 
+/**
+ * v2-#4 Q.1.e — per-turn usage recorder. AgentRuntime calls this
+ * after every decomposer.decompose() that returns a `usage` block.
+ * Bootstrap wires this to a usage_records writer when the Drizzle
+ * dependency direction is permitted. When unwired, AgentRuntime
+ * silently skips recording — the dashboard usage page only reflects
+ * what we successfully persisted, so a missing wire shows as missing
+ * cost data rather than a synthesized zero.
+ */
+export interface AgentDecomposerUsageRecorder {
+  record(args: {
+    accountId: string;
+    /** Driftstack session id (NOT agent-session id) if the agent-
+     *  session has one attached; null otherwise. */
+    driftstackSessionId: string | null;
+    agentSessionId: string;
+    decomposeResultKind: 'plan' | 'clarify' | 'refuse';
+    usage: DecomposeUsage;
+    tokensConsumed: number;
+    now: Date;
+  }): Promise<void>;
+}
+
 export interface AgentRuntimeDeps {
   decomposer: AgentDecomposer;
   executor: AgentExecutor;
   sessions: AgentSessionsRepo;
   archetype: string;
+  /** v2-#4 Q.1.e — optional usage recorder. When wired, AgentRuntime
+   *  persists a usage_records row per decompose() call that returns
+   *  a `usage` block. */
+  usageRecorder?: AgentDecomposerUsageRecorder;
 }
 
 export class AgentRuntime {
@@ -133,6 +160,28 @@ export class AgentRuntime {
         session.id,
         decomposed.tokensConsumed,
       );
+    }
+
+    // v2-#4 Q.1.e — cost-tracking. Persist a usage_records row per
+    // decompose() call that returns a `usage` block. Best-effort:
+    // record failures are swallowed so a meter-side outage never
+    // breaks the customer-facing chat turn. (Tracked metric: if
+    // recorder failures pile up, we'd see it in Sentry, not in a
+    // 500 to the customer.)
+    if (this.deps.usageRecorder !== undefined && decomposed.usage !== undefined) {
+      try {
+        await this.deps.usageRecorder.record({
+          accountId: session.accountId,
+          driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
+          agentSessionId: session.id,
+          decomposeResultKind: decomposed.kind,
+          usage: decomposed.usage,
+          tokensConsumed: decomposed.tokensConsumed,
+          now: args.now ?? new Date(),
+        });
+      } catch {
+        // Swallow; see comment above.
+      }
     }
 
     // Q.3 — atomic session close on budget exhaustion. Two paths trip:

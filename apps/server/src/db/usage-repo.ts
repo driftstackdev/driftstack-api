@@ -1,6 +1,6 @@
 // Drizzle-backed implementation of UsageRepo.
 
-import { and, eq, gte, lt, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, ne, sql } from 'drizzle-orm';
 import type {
   UsageDailyBucket,
   UsageRecordType,
@@ -9,6 +9,13 @@ import type {
 } from '../services/usage.js';
 import type { Database } from './client.js';
 import { usageRecords } from './schema.js';
+
+// v2-#4 Q.1.e — `agent_decomposer` rows are server-internal cost
+// telemetry per founder verdict "cost-tracked, unbilled at v1.0".
+// The customer-facing UsageRecordType union excludes this value;
+// filter at the repo so customer aggregations + tier-quota math
+// don't accidentally surface internal cost data on the dashboard.
+const INTERNAL_RECORD_TYPES = ['agent_decomposer'] as const;
 
 export class DrizzleUsageRepo implements UsageRepo {
   constructor(private readonly database: Database) {}
@@ -29,13 +36,18 @@ export class DrizzleUsageRepo implements UsageRepo {
           eq(usageRecords.accountId, accountId),
           gte(usageRecords.recordedAt, periodStart),
           lt(usageRecords.recordedAt, periodEnd),
+          ne(usageRecords.recordType, INTERNAL_RECORD_TYPES[0]),
         ),
       )
       .groupBy(usageRecords.recordType);
 
     const totals: Partial<Record<UsageRecordType, number>> = {};
     for (const row of rows) {
-      totals[row.recordType] = row.total;
+      // Defensive: the SQL ne() filter excludes internal types, but if
+      // a future row leaks through, drop it here so the customer-
+      // facing type stays narrowed.
+      if ((INTERNAL_RECORD_TYPES as readonly string[]).includes(row.recordType)) continue;
+      totals[row.recordType as UsageRecordType] = row.total;
     }
     return { totals };
   }
@@ -60,6 +72,7 @@ export class DrizzleUsageRepo implements UsageRepo {
           eq(usageRecords.accountId, accountId),
           gte(usageRecords.recordedAt, fromDate),
           lt(usageRecords.recordedAt, toDate),
+          ne(usageRecords.recordType, INTERNAL_RECORD_TYPES[0]),
         ),
       )
       .groupBy(
@@ -69,8 +82,9 @@ export class DrizzleUsageRepo implements UsageRepo {
 
     const byDate = new Map<string, Partial<Record<UsageRecordType, number>>>();
     for (const row of rows) {
+      if ((INTERNAL_RECORD_TYPES as readonly string[]).includes(row.recordType)) continue;
       const bucket = byDate.get(row.day) ?? {};
-      bucket[row.recordType] = row.total;
+      bucket[row.recordType as UsageRecordType] = row.total;
       byDate.set(row.day, bucket);
     }
     return Array.from(byDate.entries())

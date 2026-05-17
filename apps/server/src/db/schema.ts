@@ -106,6 +106,11 @@ export const usageRecordType = pgEnum('usage_record_type', [
   'wait',
   'state_capture',
   'screenshot_capture',
+  // v2-#4 Q.1.e — one row per ClaudeAgentDecomposer.decompose() or
+  // DeterministicAgentDecomposer.decompose() call. Detail (input/
+  // output tokens + cost cents + decomposer_kind) lives in the
+  // metadata JSONB column added in migration 0046.
+  'agent_decomposer',
 ]);
 
 export const webhookEventType = pgEnum('webhook_event_type', [
@@ -831,6 +836,11 @@ export const usageRecords = pgTable(
     recordType: usageRecordType('record_type').notNull(),
     // For `session_minute` we record one row per minute; for ops one per call.
     quantity: integer('quantity').notNull().default(1),
+    // v2-#4 Q.1.e — opt-in metadata payload. Currently used by
+    // `agent_decomposer` rows to carry input/output tokens + cost
+    // cents + decomposer_kind discriminator. See migration 0046 for
+    // the documented shape.
+    metadata: jsonb('metadata').$type<Record<string, unknown>>(),
     recordedAt: timestamp('recorded_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -1664,28 +1674,51 @@ export type NewStatusSubscriber = typeof statusSubscribers.$inferInsert;
 // a constraint-edit migration. Token-budget invariant (remaining ≤
 // total) enforced at the DB layer as belt-and-suspenders against
 // concurrent debits drift.
-export const agentSessions = pgTable('agent_sessions', {
-  id: text('id').primaryKey(),
-  accountId: uuid('account_id')
-    .notNull()
-    .references(() => accounts.id, { onDelete: 'cascade' }),
-  driftstackSessionId: text('driftstack_session_id'),
-  status: text('status').notNull(),
-  // jsonb transcript — `ReadonlyArray<TranscriptEntry>` at the service
-  // layer; Drizzle returns it as `unknown` so the repo casts on read.
-  transcript: jsonb('transcript')
-    .notNull()
-    .default(sql`'[]'::jsonb`),
-  tokenBudgetTotal: integer('token_budget_total').notNull(),
-  tokenBudgetRemaining: integer('token_budget_remaining').notNull(),
-  closedReason: text('closed_reason'),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .notNull()
-    .default(sql`now()`),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .notNull()
-    .default(sql`now()`),
-});
+export const agentSessions = pgTable(
+  'agent_sessions',
+  {
+    id: text('id').primaryKey(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    driftstackSessionId: text('driftstack_session_id'),
+    status: text('status').notNull(),
+    // jsonb transcript — `ReadonlyArray<TranscriptEntry>` at the
+    // service layer; Drizzle returns it as `unknown` so the repo
+    // casts on read.
+    transcript: jsonb('transcript')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    tokenBudgetTotal: integer('token_budget_total').notNull(),
+    tokenBudgetRemaining: integer('token_budget_remaining').notNull(),
+    closedReason: text('closed_reason'),
+    // v2-#9 — idempotency key for POST /v1/agent-sessions (Stripe-
+    // pattern; partial unique on (account_id, idempotency_key) when
+    // key is non-null).
+    idempotencyKey: text('idempotency_key'),
+    // v2-#9 — team-RBAC attribution. Nullable; populated when the
+    // route layer can resolve the calling user / api-key to an
+    // account row.
+    createdByUserId: uuid('created_by_user_id').references(() => accounts.id, {
+      onDelete: 'set null',
+    }),
+    // v2-#9 — distinct from updatedAt (which moves on every
+    // transcript append). Null for active sessions; set once at
+    // transition out of `active` status.
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    // v2-#9 list-by-status index. Matches the dashboard's "active
+    // agent-sessions" query plan.
+    index('agent_sessions_account_status_created_idx').on(t.accountId, t.status, t.createdAt),
+  ],
+);
 
 export type AgentSessionRow = typeof agentSessions.$inferSelect;
 export type NewAgentSessionRow = typeof agentSessions.$inferInsert;

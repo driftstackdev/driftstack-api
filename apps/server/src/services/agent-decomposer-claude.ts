@@ -29,6 +29,7 @@ import type {
   AgentIntent,
   DecomposeArgs,
   DecomposeResult,
+  DecomposeUsage,
 } from './agent-decomposer.js';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
@@ -37,6 +38,16 @@ const MODEL = 'claude-opus-4-7';
 const MAX_OUTPUT_TOKENS = 2048;
 const MAX_RETRIES_5XX = 1;
 const DEFAULT_RETRY_BACKOFF_MS = 1000;
+
+// v2-#4 Q.1.e — Anthropic public list pricing per million tokens for
+// claude-opus-4-7. Used to compute the per-call USD cents recorded in
+// usage_records.metadata.cost_usd_cents. Sourced from
+// https://www.anthropic.com/pricing — verify quarterly + on model
+// version bumps. If the rate is wrong, historical rows keep their
+// recorded cost (we don't recompute), so the audit trail stays
+// internally consistent even when the rate-table drifts.
+const CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK = 15;
+const CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK = 75;
 
 // AUP pre-filter — identical to the deterministic decomposer's corpus
 // so the same obvious-abuse short-circuit applies before any LLM call.
@@ -129,10 +140,14 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
     //    refusal). Charges tokens — the input was processed by us.
     const aupRefusal = checkAupRefusal(args.task);
     if (aupRefusal !== null) {
+      // No API call → no Anthropic tokens, no cost. Still record a
+      // usage row at the AgentRuntime level with decomposerKind=claude
+      // (zero tokens) so the audit trail covers the refused turn.
       return {
         kind: 'refuse',
         refuseReason: aupRefusal,
         tokensConsumed: estimateTokens(args.task, args.history),
+        usage: makeClaudeUsage(0, 0),
       };
     }
 
@@ -144,6 +159,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
         kind: 'refuse',
         refuseReason: 'token budget exhausted; start a new session',
         tokensConsumed: 0,
+        usage: makeClaudeUsage(0, 0),
       };
     }
 
@@ -277,25 +293,54 @@ function parseAnthropicResponse(json: AnthropicResponseJson): DecomposeResult {
   const obj = parsed as Record<string, unknown>;
   const kind = obj.kind;
 
-  const tokensConsumed = (json.usage?.input_tokens ?? 0) + (json.usage?.output_tokens ?? 0);
+  const inputTokens = json.usage?.input_tokens ?? 0;
+  const outputTokens = json.usage?.output_tokens ?? 0;
+  const tokensConsumed = inputTokens + outputTokens;
+  const usage = makeClaudeUsage(inputTokens, outputTokens);
 
   if (kind === 'plan') {
     const intents = parseIntents(obj.intents);
-    return { kind: 'plan', intents, tokensConsumed };
+    return { kind: 'plan', intents, tokensConsumed, usage };
   }
   if (kind === 'clarify') {
     if (typeof obj.clarifyingQuestion !== 'string') {
       throw new Error('Anthropic clarify response missing clarifyingQuestion');
     }
-    return { kind: 'clarify', clarifyingQuestion: obj.clarifyingQuestion, tokensConsumed };
+    return {
+      kind: 'clarify',
+      clarifyingQuestion: obj.clarifyingQuestion,
+      tokensConsumed,
+      usage,
+    };
   }
   if (kind === 'refuse') {
     if (typeof obj.refuseReason !== 'string') {
       throw new Error('Anthropic refuse response missing refuseReason');
     }
-    return { kind: 'refuse', refuseReason: obj.refuseReason, tokensConsumed };
+    return { kind: 'refuse', refuseReason: obj.refuseReason, tokensConsumed, usage };
   }
   throw new Error(`Anthropic response has unknown kind: ${String(kind)}`);
+}
+
+/**
+ * v2-#4 Q.1.e — assemble the per-call usage block from Anthropic's
+ * reported input/output tokens. Cost is rounded UP to the nearest
+ * cent so micro-rows don't undercount (treats partial cents as a
+ * conservative upper bound on what we'd bill if/when bundled-LLM
+ * billing turns on).
+ */
+function makeClaudeUsage(inputTokens: number, outputTokens: number): DecomposeUsage {
+  const inputCostUsd = (inputTokens / 1_000_000) * CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK;
+  const outputCostUsd = (outputTokens / 1_000_000) * CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK;
+  const totalUsd = inputCostUsd + outputCostUsd;
+  const costUsdCents = Math.ceil(totalUsd * 100);
+  return {
+    decomposerKind: 'claude',
+    anthropicInputTokens: inputTokens,
+    anthropicOutputTokens: outputTokens,
+    costUsdCents,
+    model: MODEL,
+  };
 }
 
 function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
@@ -381,4 +426,7 @@ export const __TEST_ONLY__ = {
   MODEL,
   ANTHROPIC_API_URL,
   ANTHROPIC_VERSION_HEADER,
+  CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK,
+  CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK,
+  makeClaudeUsage,
 };

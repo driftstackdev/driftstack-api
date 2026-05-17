@@ -257,6 +257,15 @@ export const AccountAuditActionSchema = z.enum([
   // / context-passing visibility.
   'admin.refund_recorded',
   'admin.support_note',
+  // v2-#5 Q.1.f — per-turn AI agent layer decompose() events.
+  // Operator-only surface: the customer sees the chat plan/refuse/
+  // clarify in their dashboard, but the audit trail captures WHICH
+  // decomposer (claude vs deterministic), token counts + cost cents
+  // (Claude), and the decomposer's result-kind discriminant. Founder
+  // verdict Q.1.f 2026-05-17 — audit log emission only; no separate
+  // operator UI surface at v1.0.
+  'agent.decompose.claude',
+  'agent.decompose.deterministic',
 ]);
 export type AccountAuditAction = z.infer<typeof AccountAuditActionSchema>;
 

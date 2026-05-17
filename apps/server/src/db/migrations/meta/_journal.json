@@ -323,6 +323,20 @@
       "when": 1778090436000,
       "tag": "0045_sessions_egress_capabilities",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1778090437000,
+      "tag": "0046_usage_records_agent_decomposer",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1778090438000,
+      "tag": "0047_agent_sessions_hardening",
+      "breakpoints": true
     }
   ]
 }
