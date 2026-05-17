@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigint,
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -227,6 +228,25 @@ export const accounts = pgTable(
     // sets via PATCH /v1/account/me; null = unset (no preference,
     // workload routes through default infra). Currently informational.
     region: accountRegion('region'),
+    // AI-CHAT BYOK Anthropic — per-customer encrypted API key
+    // (migration 0041; Tier-3 verdicts LOCKED 2026-05-17). AES-256-GCM
+    // via the shared MFA_ENCRYPTION_KEY env var. Encoding:
+    // `[12 bytes IV | 16 bytes auth tag | N bytes ciphertext]` in the
+    // single bytea so the GCM parameters travel with the ciphertext.
+    // NULL = no BYOK key set; runtime resolution falls back to the
+    // per-request `x-byok-anthropic-api-key` header → then to the
+    // deployment fallback `BYOK_ANTHROPIC_FALLBACK_KEY` env var.
+    // Account-owner-only (Q3 verdict); team members may USE the
+    // resolved key but cannot SET/CLEAR/TEST it.
+    byokAnthropicApiKeyCiphertext: customType<{ data: Buffer; driverData: Buffer }>({
+      dataType: () => 'bytea',
+    })('byok_anthropic_api_key_ciphertext'),
+    byokAnthropicApiKeySetAt: timestamp('byok_anthropic_api_key_set_at', {
+      withTimezone: true,
+    }),
+    byokAnthropicApiKeyLastUsedAt: timestamp('byok_anthropic_api_key_last_used_at', {
+      withTimezone: true,
+    }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

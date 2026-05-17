@@ -436,15 +436,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
           }
         : undefined,
     // AI-D BYOK Anthropic — read from env only (per memory rule
-    // "Credentials via env vars only"). Founder will share the
-    // fallback key when ready; until then `byokAnthropic` stays
-    // undefined and the AgentRuntime activation-gate keeps the
-    // /v1/agent-sessions/* routes on the 503-stub path.
+    // "Credentials via env vars only"). Founder shared the fallback
+    // key 2026-05-17 (orchestrator handoff post-AUTO #1). Canonical
+    // env var name is BYOK_ANTHROPIC_FALLBACK_KEY (per the handoff);
+    // DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY accepted as a deprecation-
+    // window alias for existing dev shells.
     byokAnthropic:
-      env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY || env.DRIFTSTACK_ANTHROPIC_MODEL
+      env.BYOK_ANTHROPIC_FALLBACK_KEY ||
+      env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY ||
+      env.DRIFTSTACK_ANTHROPIC_MODEL
         ? {
-            ...(env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY
-              ? { fallbackApiKey: env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY }
+            ...((env.BYOK_ANTHROPIC_FALLBACK_KEY ?? env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY)
+              ? {
+                  fallbackApiKey: (env.BYOK_ANTHROPIC_FALLBACK_KEY ??
+                    env.DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY) as string,
+                }
               : {}),
             ...(env.DRIFTSTACK_ANTHROPIC_MODEL ? { model: env.DRIFTSTACK_ANTHROPIC_MODEL } : {}),
           }
