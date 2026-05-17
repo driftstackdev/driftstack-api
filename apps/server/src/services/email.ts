@@ -146,6 +146,17 @@ export interface EmailService {
     ageDays: number;
     rotateBy: Date;
   }): Promise<void>;
+  /**
+   * v2-#11.5 — BYOK Anthropic API key rotation reminder. Fires when
+   * the customer's stored BYOK key was set more than the rotation
+   * threshold ago (60d nag, 90d target). No prefix shown — Anthropic
+   * keys are sensitive enough that we never echo any portion in mail.
+   */
+  sendByokAnthropicKeyRotationReminder(args: {
+    to: string;
+    ageDays: number;
+    rotateBy: Date;
+  }): Promise<void>;
   /** V-295c3-followup + V-545.B — fires when a public incident is posted,
    *  updated, or resolved. The 'updated' kind is wired-but-deferred:
    *  the template is shipped so subscribers receive it once the V-545.B
@@ -378,6 +389,18 @@ const TEMPLATES = {
     html: (v) =>
       `<p>Someone — probably you — just tried to sign in to your Driftstack account using <strong>${v.provider}</strong>.</p><p>If that was you, confirm the new sign-in method by clicking the link below. It expires at <strong>${v.expiresAt}</strong> (UTC) and works once.</p><p><a href="${v.confirmLink}">${v.confirmLink}</a></p><p>If that wasn't you, ignore this email — no change is made until the link is clicked. Your password (if any) still works.</p><p>— Driftstack</p>`,
   },
+  // v2-#11.5 — BYOK Anthropic key rotation nag. Subject explicit
+  // about provider name (Anthropic) so the customer immediately
+  // knows which credential they need to rotate. No partial-key
+  // echo in the body — Anthropic keys are sensitive enough that
+  // we never leak any portion of them in mail.
+  'byok-anthropic-key-rotation-reminder': {
+    subject: 'Driftstack — rotate your Anthropic API key',
+    text: (v) =>
+      `Your stored Anthropic API key on Driftstack is ${v.ageDays} days old. We recommend rotating every 90 days; we've reached the nag threshold.\n\nRotate by: ${v.rotateBy} (UTC)\n\nGenerate a fresh key in your Anthropic console (https://console.anthropic.com/) and update it on your Driftstack account at:\nhttps://app.driftstack.dev/account/byok-anthropic\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Your stored Anthropic API key on Driftstack is <strong>${v.ageDays} days old</strong>. We recommend rotating every 90 days; we've reached the nag threshold.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Rotate by:</strong></td><td>${v.rotateBy} (UTC)</td></tr></table><p>Generate a fresh key in your <a href="https://console.anthropic.com/">Anthropic console</a> and update it on your Driftstack account at <a href="https://app.driftstack.dev/account/byok-anthropic">app.driftstack.dev/account/byok-anthropic</a>.</p><p>— Driftstack</p>`,
+  },
   // v2-#10.5 — 90d rotation cadence nag. Endpoint URL + secret prefix
   // is enough for the customer to identify the endpoint without
   // re-exposing the full secret. Body explicitly notes that this is
@@ -504,6 +527,7 @@ export function createEmailService({
       sendTeamInvite: async () => {},
       sendOauthPendingLinkVerification: async () => {},
       sendWebhookSecretRotationReminder: async () => {},
+      sendByokAnthropicKeyRotationReminder: async () => {},
     };
   }
 
@@ -640,6 +664,11 @@ export function createEmailService({
       send('webhook-secret-rotation-reminder', to, {
         endpointUrl,
         secretPrefix,
+        ageDays: ageDays.toString(),
+        rotateBy: rotateBy.toISOString(),
+      }),
+    sendByokAnthropicKeyRotationReminder: ({ to, ageDays, rotateBy }) =>
+      send('byok-anthropic-key-rotation-reminder', to, {
         ageDays: ageDays.toString(),
         rotateBy: rotateBy.toISOString(),
       }),
