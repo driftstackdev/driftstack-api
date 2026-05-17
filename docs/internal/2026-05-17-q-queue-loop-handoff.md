@@ -406,3 +406,70 @@ Memory entries updated:
 
 - `project_multi_archetype_coordination_queued.md` — added
   "Agent 1 progress as of 2026-05-17 18:38 UTC" section.
+
+## 2026-05-17→18 v2 queue execution log
+
+Founder issued the v2 queue at 2026-05-17 ~22:00 UTC ("13 items;
+fire continuous; ≥6-8 tonight"). Agent 2 worked through to 2026-05-18
+~00:45 UTC. Cumulative output below.
+
+### Committed slices
+
+| Item    | Commit     | Scope                                                                         |
+| ------- | ---------- | ----------------------------------------------------------------------------- |
+| v2-#3   | `5918eb9a` | Migration 0045 sessions.egress_capabilities JSONB + GET /v1/sessions/:id      |
+| v2-#3.5 | `34aaee38` | EgressCapabilities + SocksProxyConfig dns_remote_resolve (EG-WK-1.9)          |
+| v2-#4   | `c48ff341` | Migration 0046 usage_records.metadata + agent_decomposer source + cost track  |
+| v2-#5   | `c48ff341` | Audit-log events agent.decompose.claude / .deterministic (Q.1.f)              |
+| v2-#9   | `c48ff341` | Migration 0047 agent_sessions hardening (idempotency_key + closed_at + index) |
+| v2-#6   | `04744796` | Design doc — bundled-LLM opt-in (5 founder verdicts pending)                  |
+| v2-#8   | `04744796` | Design doc — AI chat + manual side-by-side (5 founder verdicts pending)       |
+| v2-#10  | `498e3ce0` | Migration 0048 webhook_endpoints.secret_created_at + last_reminder_sent_at    |
+| v2-#11  | `aa1da111` | Migration 0049 accounts.byok_anthropic_api_key_last_reminder_sent_at          |
+| v2-#13  | `18e27036` | TIER_RATE_LIMIT_DEFAULTS adds agent_sessions:message bucket per tier          |
+| v2-#14  | `ebecb141` | Cross-SDK enum roster parity test (5 enums × 3 SDKs)                          |
+| v2-#12  | `54c46d6c` | SDK error catalog bidirectional parity (PROBLEM_TYPES ↔ TYPE_TO_CTOR)         |
+
+12 commits; ~6,000 LOC inserted; 4 new migrations (0045-0049); 2
+design docs; 5 new drift-guard tests.
+
+### Deferred / NOT-yet-actioned
+
+- v2-#15 Stripe test-mode customer portal redirect — already shipped
+  pre-v2 queue (POST /v1/billing/portal-session; tested in
+  `billing.test.ts:102`). No action needed.
+- v2-#16 Postmark email template audit — deferred pending inspection
+  of current template state. Not blocked; queue continues.
+- v2-#10.5 webhook secret rotation daily reminder job + UI banner.
+- v2-#11.5 BYOK Anthropic key rotation daily reminder job + UI banner.
+- v2-#3.5/sweep task #25 iphone16pro*\* → iphone17*\* archetype example
+  rename (founder paste 2026-05-17 ~23:10 CEST identified; cosmetic).
+
+### Founder verdicts pending in `/tmp/orchestrator-pending-tier3.md`
+
+- v2-#6 bundled-LLM opt-in — 5 verdicts (trial inclusion / per-tier
+  quotas / over-quota behavior / BYOK+bundled coexistence /
+  cost-pass-through).
+- v2-#8 AI chat + manual — 5 verdicts (SSE vs WebSocket /
+  gui_control auto-mint / pair_mode_state storage / per-session
+  lock location / cost surfacing).
+- v2-#10 webhook secret rotation — 2 verdicts (TTL configurable /
+  replay-window configurable).
+
+12 total verdicts pending. All Agent 2 slices ship with safe
+defaults so the queue does not stall.
+
+### Verification snapshot
+
+Each commit was verified against targeted drift-guard tests before
+landing; cumulative test count growth across the session:
+
+- v2-#3 + v2-#3.5: 1,311 server test files (14,644 + 24 new tests)
+- v2-#4 + v2-#5 + v2-#9: +13 v2-specific tests
+- v2-#10: +0 (existing 300 webhook tests cover surface)
+- v2-#11: +0 (existing 18 BYOK + schema tests cover)
+- v2-#13: +0 (existing 95 rate-limit tests; 23 v219 + roster updated)
+- v2-#14: +8 (new cross-SDK enum roster parity)
+- v2-#12: +6 (new bidirectional URI catalog parity)
+
+No regressions detected. Typecheck clean across all commits.
