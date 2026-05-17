@@ -1,5 +1,17 @@
 # deploy.yml-vs-server verdict — Option A vs Option B cost analysis
 
+**Outcome 2026-05-17 (orchestrator handoff post-AUTO #1):** Option B
+LOCKED. Rationale: matches prod systemd+node reality, deploy-bridge.sh
+proven across 10+ Wave 1062 prod deploys, 1h autopilot vs 3-4h
+operator-paired. Founder's personal-Mac Docker is dev-only (and was
+just stopped), unrelated to prod path. Future Docker migration stays
+an option per "What's next" below.
+
+Implementation landed this wave — `.github/workflows/deploy.yml`
+rewritten to call `scripts/deploy-bridge.sh staging` / `prod` directly
+from the GH Actions runner. Source maps still upload from a clean CI
+build (Sentry path unchanged).
+
 **Date:** 2026-05-16 (Wave 1062+ P-track design slice)
 **Status:** DESIGN — surfaces the trade-off for founder verdict. No
 implementation in this slice; design only so founder can pick and the

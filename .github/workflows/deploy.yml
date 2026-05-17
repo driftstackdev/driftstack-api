@@ -1,41 +1,51 @@
-# Driftstack API — deploy pipeline.
+# Driftstack API — deploy pipeline (Option B verdict 2026-05-17:
+# drop Docker, match prod systemd+node reality).
 #
-# Triggered on push to main. Build pipeline runs in CI (ci.yml) on
-# every PR + main; deploy.yml only runs on main merges and depends on
-# the same image build.
+# Triggered on push to main. The previous docker-compose approach
+# (image build → ghcr.io push → docker compose pull) did not match
+# what prod actually runs — production is bare-systemd + Node 22 at
+# /opt/driftstack/api (per docs/internal/2026-05-15-deploy-pipeline-
+# mismatch.md). Operators have been deploying via
+# scripts/deploy-bridge.sh manually since 2026-05-15 (10+ successful
+# Wave 1062 prod deploys).
+#
+# Option B keeps deploy-bridge.sh as the SOURCE OF TRUTH and has the
+# GH Actions runner call it. Single execution path for both manual
+# and CI-triggered deploys; no Docker drift between dev and CI.
 #
 # Two-environment flow:
 #   - Staging deploy auto-fires on main merge. No approval gate.
 #   - Production deploy is a manual job that requires the
 #     "production" GitHub environment's approver list to ack.
 #
-# Per Workstream A spec (V-051):
+# Per Workstream A spec (V-051 — REVISED 2026-05-17):
 #   - Hetzner Cloud VMs (CCX13 default — 4 vCPU, 16GB RAM, €25/mo).
-#   - systemd + docker-compose orchestration on the host.
-#   - Image pushed to ghcr.io/driftstackdev/driftstack-api.
-#   - Smoke test against /health post-deploy.
+#   - systemd at /opt/driftstack/api on the host.
+#   - npm ci on the runner; atomic-swap dist + node_modules into
+#     /opt/driftstack/api via SSH.
+#   - DB migrations applied BEFORE restart (deploy-bridge.sh runs
+#     node dist/db/migrate.js after the swap).
+#   - Smoke test against /health post-restart; auto-revert via
+#     scripts/revert-bridge.sh on post-deploy-verify failure.
 #
 # Required GitHub secrets (per environment):
-#   - HETZNER_HOST         — IP or hostname of the Hetzner VM.
-#   - HETZNER_USER         — SSH user (typically `driftstack`).
-#   - HETZNER_SSH_KEY      — private key, deploy-scoped.
-#   - DEPLOY_DOTENV_BASE64 — base64-encoded .env file dropped at
-#                              /opt/driftstack/.env on the VM. Contains
-#                              DATABASE_URL, REDIS_URL, R2_*, POSTMARK_*,
-#                              SENTRY_DSN, STRIPE_*, etc.
-#                              Updated via gh secret set when founder
-#                              rotates a credential.
+#   - HETZNER_DEPLOY_SSH_KEY — private key with deploy-scoped access
+#                              to root@<prod|staging>. Pubkey listed
+#                              in docs/founder-actions/v278-hetzner-
+#                              deploy-keys.md.
 #
-# Required repository-wide secrets (not per-environment):
-#   - SENTRY_AUTH_TOKEN    — Sentry auth token with project:write scope
-#                              (https://sentry.io → Settings → Auth Tokens).
-#                              Used by `@sentry/cli` to upload source
-#                              maps in the build-image job. If unset,
-#                              the upload step is skipped — runtime
-#                              still works, stack traces will be
-#                              minified until token is populated.
-#   - SENTRY_ORG           — Sentry organization slug.
-#   - SENTRY_PROJECT       — Sentry project slug for driftstack-api.
+# Required repository-wide secrets:
+#   - SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT (source-map upload
+#                              — Sentry runtime works without these;
+#                              stack traces will be minified).
+#
+# What was removed:
+#   - Docker buildx / build-push-action / ghcr.io push (no longer used
+#     by prod).
+#   - docker-compose pull / up -d (no docker-compose on the host).
+#   - DEPLOY_DOTENV_BASE64 secret (env is on the host at
+#     /opt/driftstack/api/.env; rotation is SSH-write, not GH Action
+#     payload — narrower secret-leak surface).
 
 name: Deploy
 
@@ -49,62 +59,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-image:
-    name: Build + push Docker image
+  source-map-upload:
+    name: Build + upload source maps to Sentry
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
-    outputs:
-      image-tag: ${{ steps.meta.outputs.image-tag }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Compute image metadata
-        id: meta
-        run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
-          IMAGE="ghcr.io/${{ github.repository_owner }}/driftstack-api:${SHORT_SHA}"
-          echo "image-tag=${IMAGE}" >> "${GITHUB_OUTPUT}"
-
-      - name: Build + push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./apps/server/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.meta.outputs.image-tag }}
-            ghcr.io/${{ github.repository_owner }}/driftstack-api:latest
-          build-args: |
-            SENTRY_RELEASE=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # Sentry source-map upload. Build the server outside Docker so
-      # the runner has local dist/*.js.map files to ship to Sentry.
-      # The build is deterministic; this dist/ matches what's already
-      # been baked into the image we just pushed. The whole step is a
-      # no-op if SENTRY_AUTH_TOKEN is unset (e.g. fresh repo without
-      # the secret populated yet) — runtime still works, stack traces
-      # will be minified until the secret lands.
       - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
+      - name: Build server (for source-map upload only — prod build
+          runs again on the Hetzner host via deploy-bridge.sh)
+        run: |
+          npm ci --no-audit --include=dev
+          npx tsc --build packages/api-types
+          npm run build --workspace=@driftstack/server
 
       - name: Upload source maps to Sentry
         env:
@@ -118,9 +93,6 @@ jobs:
             echo "Runtime still works; stack traces will be minified until the secret is populated."
             exit 0
           fi
-          npm install --no-audit --include=dev
-          npx tsc --build packages/api-types
-          npm run build --workspace=@driftstack/server
           npx --yes @sentry/cli@^2 releases new "${SENTRY_RELEASE}"
           npx --yes @sentry/cli@^2 sourcemaps upload \
             --release="${SENTRY_RELEASE}" \
@@ -130,63 +102,58 @@ jobs:
           npx --yes @sentry/cli@^2 releases set-commits "${SENTRY_RELEASE}" --auto || true
 
   deploy-staging:
-    name: Deploy to staging
-    needs: build-image
+    name: Deploy to staging (via deploy-bridge.sh)
+    needs: source-map-upload
     runs-on: ubuntu-latest
     environment:
       name: staging
-      url: https://api.staging.driftstack.dev
+      url: https://staging.driftstack.dev
     steps:
-      # V-278 — skip cleanly when Hetzner secrets aren't populated yet
-      # (fresh repo, pre-provisioning state). build-image still ran and
-      # pushed a usable image to ghcr.io; the deploy step can re-fire
-      # via workflow_dispatch once secrets are set.
-      - name: Check Hetzner secrets are set
+      - name: Check Hetzner deploy SSH key is set
         id: gate
         env:
-          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
-          HETZNER_USER: ${{ secrets.HETZNER_USER }}
-          HETZNER_SSH_KEY: ${{ secrets.HETZNER_SSH_KEY }}
-          DEPLOY_DOTENV_BASE64: ${{ secrets.DEPLOY_DOTENV_BASE64 }}
+          HETZNER_DEPLOY_SSH_KEY: ${{ secrets.HETZNER_DEPLOY_SSH_KEY }}
         run: |
-          if [ -z "$HETZNER_HOST" ] || [ -z "$HETZNER_USER" ] || [ -z "$HETZNER_SSH_KEY" ] || [ -z "$DEPLOY_DOTENV_BASE64" ]; then
-            echo "Hetzner secrets not all set — skipping deploy."
-            echo "Image tag pushed to ghcr.io: ${{ needs.build-image.outputs.image-tag }}"
-            echo "See docs/founder-actions/v278-hetzner-deploy-keys.md to populate secrets."
+          if [ -z "$HETZNER_DEPLOY_SSH_KEY" ]; then
+            echo "HETZNER_DEPLOY_SSH_KEY not set — skipping deploy."
+            echo "See docs/founder-actions/v278-hetzner-deploy-keys.md to populate the secret."
             echo "ready=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy via SSH
+      - name: Checkout (deploy-bridge.sh + post-deploy-verify.mjs live here)
         if: steps.gate.outputs.ready == 'true'
-        uses: appleboy/ssh-action@v1
+        uses: actions/checkout@v6
+
+      - name: Set up Node 22 (post-deploy-verify.mjs is a node script)
+        if: steps.gate.outputs.ready == 'true'
+        uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
-          script: |
-            set -euo pipefail
-            cd /opt/driftstack
-            echo "${{ secrets.DEPLOY_DOTENV_BASE64 }}" | base64 -d > .env
-            export IMAGE_TAG='${{ needs.build-image.outputs.image-tag }}'
-            docker compose pull
-            docker compose up -d --remove-orphans
-            # Wait for /health to come up before declaring success.
-            for i in 1 2 3 4 5 6 7 8 9 10; do
-              if curl -fsS http://127.0.0.1:7780/health > /dev/null; then
-                echo "staging healthy"
-                exit 0
-              fi
-              echo "attempt $i: not ready yet, sleeping"
-              sleep 3
-            done
-            echo "staging /health never returned 200"
-            exit 1
+          node-version: 22
+
+      - name: Configure SSH for Hetzner staging host
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          SSH_KEY: ${{ secrets.HETZNER_DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Prime known_hosts so the deploy-bridge ssh calls don't fail
+          # on the StrictHostKeyChecking prompt. We accept the staging
+          # host key on first contact; future rotations require the
+          # operator to update this fingerprint via gh workflow runs.
+          ssh-keyscan -t ed25519 116.203.22.197 >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Run scripts/deploy-bridge.sh staging
+        if: steps.gate.outputs.ready == 'true'
+        run: bash scripts/deploy-bridge.sh staging
 
   deploy-production:
-    name: Deploy to production (manual approval)
-    needs: [build-image, deploy-staging]
+    name: Deploy to production (manual approval; via deploy-bridge.sh)
+    needs: [source-map-upload, deploy-staging]
     runs-on: ubuntu-latest
     # The "production" environment is configured in repo settings to
     # require approval from the founder before this job runs.
@@ -194,42 +161,39 @@ jobs:
       name: production
       url: https://api.driftstack.dev
     steps:
-      - name: Check Hetzner secrets are set
+      - name: Check Hetzner deploy SSH key is set
         id: gate
         env:
-          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
-          HETZNER_USER: ${{ secrets.HETZNER_USER }}
-          HETZNER_SSH_KEY: ${{ secrets.HETZNER_SSH_KEY }}
-          DEPLOY_DOTENV_BASE64: ${{ secrets.DEPLOY_DOTENV_BASE64 }}
+          HETZNER_DEPLOY_SSH_KEY: ${{ secrets.HETZNER_DEPLOY_SSH_KEY }}
         run: |
-          if [ -z "$HETZNER_HOST" ] || [ -z "$HETZNER_USER" ] || [ -z "$HETZNER_SSH_KEY" ] || [ -z "$DEPLOY_DOTENV_BASE64" ]; then
-            echo "Hetzner secrets not all set — skipping deploy."
+          if [ -z "$HETZNER_DEPLOY_SSH_KEY" ]; then
+            echo "HETZNER_DEPLOY_SSH_KEY not set — skipping deploy."
             echo "ready=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy via SSH
+      - name: Checkout
         if: steps.gate.outputs.ready == 'true'
-        uses: appleboy/ssh-action@v1
+        uses: actions/checkout@v6
+
+      - name: Set up Node 22
+        if: steps.gate.outputs.ready == 'true'
+        uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.HETZNER_HOST }}
-          username: ${{ secrets.HETZNER_USER }}
-          key: ${{ secrets.HETZNER_SSH_KEY }}
-          script: |
-            set -euo pipefail
-            cd /opt/driftstack
-            echo "${{ secrets.DEPLOY_DOTENV_BASE64 }}" | base64 -d > .env
-            export IMAGE_TAG='${{ needs.build-image.outputs.image-tag }}'
-            docker compose pull
-            docker compose up -d --remove-orphans
-            for i in 1 2 3 4 5 6 7 8 9 10; do
-              if curl -fsS http://127.0.0.1:7780/health > /dev/null; then
-                echo "production healthy"
-                exit 0
-              fi
-              echo "attempt $i: not ready yet, sleeping"
-              sleep 3
-            done
-            echo "production /health never returned 200"
-            exit 1
+          node-version: 22
+
+      - name: Configure SSH for Hetzner prod host
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          SSH_KEY: ${{ secrets.HETZNER_DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 128.140.37.74 >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Run scripts/deploy-bridge.sh prod
+        if: steps.gate.outputs.ready == 'true'
+        run: bash scripts/deploy-bridge.sh prod
