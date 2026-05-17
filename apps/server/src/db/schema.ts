@@ -1678,3 +1678,45 @@ export const agentSessions = pgTable('agent_sessions', {
 
 export type AgentSessionRow = typeof agentSessions.$inferSelect;
 export type NewAgentSessionRow = typeof agentSessions.$inferInsert;
+
+// V-820 fleet_nodes — design APPROVED AS WRITTEN 2026-05-17
+// (orchestrator handoff post-AUTO #1; migration 0043).
+//
+// Backs FleetNodeAuthImpl's getPublicKey(nodeId) lookup in production.
+// public_key_base64url is the natural-unique 32-byte Ed25519 key
+// encoded base64url (44 chars including '=' pad). region +
+// hardware_class are free-form text (NOT enums per founder verdict —
+// operator-controlled set, CHECK enum feels too rigid). Soft delete
+// via revoked_at; revoked rows stay so audit trails survive.
+export const fleetNodes = pgTable(
+  'fleet_nodes',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    publicKeyBase64Url: text('public_key_base64url').notNull(),
+    displayName: text('display_name').notNull(),
+    region: text('region').notNull(),
+    hardwareClass: text('hardware_class').notNull(),
+    registeredAt: timestamp('registered_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    revocationReason: text('revocation_reason'),
+  },
+  (t) => [
+    uniqueIndex('fleet_nodes_public_key_unique').on(t.publicKeyBase64Url),
+    // Partial indexes mirror the migration's WHERE revoked_at IS NULL
+    // — Drizzle's `.where()` on `index()` produces the partial clause.
+    index('fleet_nodes_region_idx')
+      .on(t.region)
+      .where(sql`${t.revokedAt} IS NULL`),
+    index('fleet_nodes_last_seen_at_idx')
+      .on(t.lastSeenAt)
+      .where(sql`${t.revokedAt} IS NULL`),
+  ],
+);
+
+export type FleetNodeRow = typeof fleetNodes.$inferSelect;
+export type NewFleetNodeRow = typeof fleetNodes.$inferInsert;

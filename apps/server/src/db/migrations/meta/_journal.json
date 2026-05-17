@@ -302,6 +302,13 @@
       "when": 1778090433000,
       "tag": "0042_agent_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1778090434000,
+      "tag": "0043_fleet_nodes",
+      "breakpoints": true
     }
   ]
 }
