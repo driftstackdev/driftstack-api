@@ -56,6 +56,7 @@ import { MfaService } from '../services/mfa.js';
 import { DrizzleMfaRepo } from '../db/mfa-repo.js';
 import { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import { DrizzleBYOKAnthropicRepo } from '../db/byok-anthropic-repo.js';
+import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
 import { RedisMfaChallengeStore } from '../services/mfa-challenge-store.js';
 import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
@@ -472,6 +473,12 @@ export async function createProductionDeps(
       })
     : null;
 
+  // EG-API-1.6 — SocksProxyBackend is pure config-to-env-var with
+  // no external deps; instantiate eagerly so the route surface
+  // activates from process start. The backend itself accepts
+  // SOCKS5 + rejects OpenVPN/WireGuard with a typed error.
+  const sessionEgressService = new SocksProxyBackend();
+
   // V-079: user-facing auth flows.
   const authFlowsRepo = new DrizzleAuthFlowsRepo(dbHandle);
   // V-353d — Redis-backed challenge-token store for the MFA login
@@ -693,6 +700,16 @@ export async function createProductionDeps(
     // MFA_ENCRYPTION_KEY gate (one less env var to manage; Q1 verdict
     // 2026-05-17). When unset, app.ts registers 503 stubs.
     ...(byokAnthropicService !== null ? { byokAnthropicService } : {}),
+    // EG-API-1.6 — concrete SocksProxyBackend for the Phase 1 SOCKS5
+    // customer-egress path. Wired unconditionally: the backend is pure
+    // config-to-env-var translation with no external deps, so it
+    // activates as soon as the bootstrap mounts AppDeps. OpenVPN +
+    // WireGuard are Phase 2/3 (rejected at the backend with a typed
+    // error that the route layer maps to 503). When this wire lands,
+    // the W247.A drift-sweep gate flips hasEgressImpl=true and the
+    // marketing copy can update from "roadmap" to "live" per the
+    // Path-1 autoflip plan (orchestrator handoff 2026-05-17).
+    sessionEgressService,
     ...(config.stripe?.webhookSecret !== undefined
       ? {
           stripeWebhooksService,
