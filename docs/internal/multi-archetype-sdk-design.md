@@ -31,6 +31,31 @@ Family A is production-viable per Wave 29-356.1 — no
 experimental gate needed (per orchestrator paste). Both families
 ship at v1.0.
 
+### Contingent 4th archetype — `iphone17_ios18_7_safari26_5`
+
+Per orchestrator Wave 29-367 paste 2026-05-17 ~19:30Z, if Agent
+1's BS-pool diagnostic confirms Safari 26.5 shipped mid-May and
+the BS host pool rolled past 26.4 entirely, Safari 26.5 becomes
+a launch-blocking concern that supersedes the Family-B-only
+V-583K rebuild plan. In that scenario the launch family grows
+to 4 archetypes:
+
+- `iphone16pro_ios18_6_safari18_6` (Family A)
+- `iphone16pro_ios18_7_safari26_4` (Family B launch default)
+- `iphone17_ios18_7_safari26_4` (Family B iPhone 17)
+- `iphone17_ios18_7_safari26_5` (Family B iPhone 17, Safari 26.5)
+
+The SDK union + dashboard selector + cross-SDK enum parity test
+should be sized for 4 entries when the implementation fires, so
+adding the 4th literal is a one-line diff if Agent 1's diagnostic
+returns scenario 1. DON'T pre-emptively add the 4th literal —
+wait for Agent 1's diagnostic finding.
+
+The marketing M.6 Path A copy currently names "Safari 26.4 and
+Safari 26.5 as it rolls out" so the customer-facing copy is
+already forward-compatible with the 4-archetype family. No
+marketing follow-up if the 4th archetype lands.
+
 ## SDK shape across TS / Python / Go
 
 ### TypeScript
