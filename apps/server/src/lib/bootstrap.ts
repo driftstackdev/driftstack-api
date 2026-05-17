@@ -58,6 +58,12 @@ import { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import { DrizzleBYOKAnthropicRepo } from '../db/byok-anthropic-repo.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
 import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
+import { DrizzleAgentSessionsRepo } from '../db/agent-sessions-repo.js';
+import { AgentRuntime } from '../services/agent-runtime.js';
+import { StubAgentExecutor } from '../services/agent-executor.js';
+import { ClaudeAgentDecomposer } from '../services/agent-decomposer-claude.js';
+import { DeterministicAgentDecomposer } from '../services/agent-decomposer-deterministic.js';
+import type { AgentDecomposer } from '../services/agent-decomposer.js';
 import { RedisMfaChallengeStore } from '../services/mfa-challenge-store.js';
 import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
@@ -481,13 +487,39 @@ export async function createProductionDeps(
   const sessionEgressService = new SocksProxyBackend();
 
   // AI-B4 — recipes repo (write-only at v1.0). Backed by Postgres
-  // via migration 0044. The route surface's activation gate ALSO
-  // requires agentSessionsRepo to be wired (Q.1 territory); until
-  // that lands, the /v1/recipes route registers as a 503 stub even
-  // though recipesRepo is reachable here. When Q.1's agentSessionsRepo
-  // wire arrives, the recipes route auto-activates via the
-  // gate in app.ts.
+  // via migration 0044. Now activates because Q.1 wires
+  // agentSessionsRepo below.
   const recipesRepo = new DrizzleRecipesRepo(dbHandle);
+
+  // Q.1 AI-B1.b — agent-runtime composition. All 6 design questions
+  // verdicted by orchestrator 2026-05-17; this wire implements:
+  //
+  //   Q.1.a — Keying: option 4. Claude wires when EITHER
+  //           `BYOK_ANTHROPIC_FALLBACK_KEY` OR `byokAnthropicService`
+  //           can resolve a key. Open-answer: explicit operator
+  //           override env `DRIFTSTACK_AGENT_DECOMPOSER_FORCE=deterministic`
+  //           forces the deterministic path regardless of key state
+  //           (escape hatch for staging tests + prod incidents).
+  //
+  //   Q.1.b — Runtime fallthrough is wired in agent-runtime.ts; the
+  //           bootstrap just picks the decomposer impl.
+  //
+  //   Q.1.d — Deployment-fallback is HARD 502 in prod (force BYOK
+  //           per Tier-3 verdict 2026-05-16). Staging opt-in via
+  //           `DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK=true`.
+  //
+  // The DeterministicAgentDecomposer remains the safe-default when
+  // neither key path is available — agent-sessions routes still
+  // return planned/clarified output rather than 503ing the customer.
+  const agentSessionsRepo = new DrizzleAgentSessionsRepo(dbHandle);
+  const agentExecutor = new StubAgentExecutor();
+  const agentDecomposer = selectAgentDecomposer(config, logger);
+  const agentRuntime = new AgentRuntime({
+    decomposer: agentDecomposer,
+    executor: agentExecutor,
+    sessions: agentSessionsRepo,
+    archetype: 'iphone16pro_ios18_7_safari26_4',
+  });
 
   // V-079: user-facing auth flows.
   const authFlowsRepo = new DrizzleAuthFlowsRepo(dbHandle);
@@ -720,11 +752,16 @@ export async function createProductionDeps(
     // marketing copy can update from "roadmap" to "live" per the
     // Path-1 autoflip plan (orchestrator handoff 2026-05-17).
     sessionEgressService,
-    // AI-B4 — recipes repo. Wired unconditionally; the route surface's
-    // activation gate ALSO requires agentSessionsRepo (gated on Q.1).
-    // Until Q.1 wires agentSessionsRepo, /v1/recipes registers as
-    // a 503 stub even though recipesRepo is reachable here.
+    // AI-B4 — recipes repo. Wired unconditionally; now activates
+    // because Q.1 wires agentSessionsRepo below.
     recipesRepo,
+    // Q.1 — agent-runtime + agent-sessions repo wired unconditionally.
+    // Decomposer selection (Claude vs deterministic) is per
+    // `selectAgentDecomposer` below; runtime composition + sessions
+    // repo are always wired so the /v1/agent-sessions/* routes
+    // activate from process start.
+    agentRuntime,
+    agentSessionsRepo,
     ...(config.stripe?.webhookSecret !== undefined
       ? {
           stripeWebhooksService,
@@ -1041,4 +1078,54 @@ export async function createProductionDeps(
     handles: { db: dbHandle, redis, r2, email, sentry },
     teardown,
   };
+}
+
+/**
+ * Q.1 — agent-decomposer selection. Returns the impl bootstrap
+ * should wire into AppDeps per the Q.1.a + Q.1.a-open-answer
+ * verdicts (2026-05-17):
+ *
+ *   1. If `DRIFTSTACK_AGENT_DECOMPOSER_FORCE=deterministic` is set,
+ *      return DeterministicAgentDecomposer regardless of key state.
+ *      Operator escape hatch for staging tests + prod incidents.
+ *
+ *   2. Otherwise, if EITHER the deployment fallback key
+ *      (`config.byokAnthropic.fallbackApiKey`) OR per-customer BYOK
+ *      storage (`MFA_ENCRYPTION_KEY` set, byokAnthropicService
+ *      wired) is configured, return ClaudeAgentDecomposer. The
+ *      route layer's key-resolution chain decides per-turn which
+ *      path actually serves the request.
+ *
+ *   3. Otherwise return DeterministicAgentDecomposer as the safe
+ *      default — agent-sessions routes still return planned /
+ *      clarified output rather than 503ing the customer.
+ *
+ * Logs the choice at info level so the operator can verify which
+ * impl wired without grepping env vars.
+ */
+export function selectAgentDecomposer(config: Config, logger: Logger): AgentDecomposer {
+  if (config.agentDecomposer?.forceImpl === 'deterministic') {
+    logger.info(
+      { component: 'agent-decomposer' },
+      'agentDecomposer wired as DeterministicAgentDecomposer (forced via DRIFTSTACK_AGENT_DECOMPOSER_FORCE=deterministic)',
+    );
+    return new DeterministicAgentDecomposer();
+  }
+  const hasFallbackKey = config.byokAnthropic?.fallbackApiKey !== undefined;
+  const hasCustomerKeyStorage = config.mfaEncryptionKey !== undefined;
+  if (hasFallbackKey || hasCustomerKeyStorage) {
+    logger.info(
+      {
+        component: 'agent-decomposer',
+        keying: { hasFallbackKey, hasCustomerKeyStorage },
+      },
+      'agentDecomposer wired as ClaudeAgentDecomposer',
+    );
+    return new ClaudeAgentDecomposer();
+  }
+  logger.info(
+    { component: 'agent-decomposer' },
+    'agentDecomposer wired as DeterministicAgentDecomposer (no Anthropic key path configured)',
+  );
+  return new DeterministicAgentDecomposer();
 }

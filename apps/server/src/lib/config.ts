@@ -111,6 +111,30 @@ const ConfigSchema = z.object({
       model: z.string().min(1).optional(),
     })
     .optional(),
+  // Q.1 verdicts 2026-05-17 — agent-decomposer bootstrap selection
+  // controls. See docs/internal/ai-b1b-activation-design.md §"verdicts".
+  agentDecomposer: z
+    .object({
+      /**
+       * Operator escape hatch (Q.1.a open-answer verdict). When set to
+       * 'deterministic', bootstrap wires DeterministicAgentDecomposer
+       * regardless of BYOK key availability. Useful for staging-only
+       * deterministic-path testing AND for prod incidents where the
+       * operator needs to fall back to the heuristic decomposer without
+       * unwiring the Anthropic key path. Empty / unset = no override
+       * (auto-selection per Q.1.a verdict applies).
+       */
+      forceImpl: z.enum(['deterministic']).optional(),
+      /**
+       * Staging-only opt-in to using the deployment fallback key as
+       * the default for unauthenticated demo flows (Q.1.d open-answer
+       * verdict). PROD must keep this `false` so the BYOK-for-v1.0
+       * Tier-3 verdict (2026-05-16) holds — fallback key is for
+       * staging + integration tests ONLY.
+       */
+      useFallbackForUnconfiguredCustomers: z.boolean().default(false),
+    })
+    .optional(),
   // V-079: where the user-facing auth-flow links point. The plaintext
   // single-use token gets appended as `?token=<...>` to each. Defaults
   // are dev-friendly localhost URLs; production sets these to the real
@@ -453,6 +477,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
                 }
               : {}),
             ...(env.DRIFTSTACK_ANTHROPIC_MODEL ? { model: env.DRIFTSTACK_ANTHROPIC_MODEL } : {}),
+          }
+        : undefined,
+    // Q.1 verdicts 2026-05-17 — agent-decomposer bootstrap controls.
+    agentDecomposer:
+      env.DRIFTSTACK_AGENT_DECOMPOSER_FORCE || env.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK
+        ? {
+            ...(env.DRIFTSTACK_AGENT_DECOMPOSER_FORCE === 'deterministic'
+              ? { forceImpl: 'deterministic' as const }
+              : {}),
+            useFallbackForUnconfiguredCustomers:
+              env.DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK === 'true',
           }
         : undefined,
     authFlowUrls: deriveAuthFlowUrls(env),
