@@ -344,6 +344,13 @@
       "when": 1778090439000,
       "tag": "0048_webhook_secret_rotation_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1778090440000,
+      "tag": "0049_byok_anthropic_rotation_policy",
+      "breakpoints": true
     }
   ]
 }

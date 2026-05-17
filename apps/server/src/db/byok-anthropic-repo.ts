@@ -52,6 +52,9 @@ export class DrizzleBYOKAnthropicRepo implements BYOKAnthropicRepo {
       .set({
         byokAnthropicApiKeyCiphertext: args.ciphertext,
         byokAnthropicApiKeySetAt: args.setAt,
+        // v2-#11 — reset rotation reminder dedupe on every key set so
+        // the next 90d cycle can fire reminders again.
+        byokAnthropicApiKeyLastReminderSentAt: null,
         updatedAt: args.now,
       })
       .where(eq(accounts.id, args.accountId));
@@ -64,6 +67,7 @@ export class DrizzleBYOKAnthropicRepo implements BYOKAnthropicRepo {
         byokAnthropicApiKeyCiphertext: null,
         byokAnthropicApiKeySetAt: null,
         byokAnthropicApiKeyLastUsedAt: null,
+        byokAnthropicApiKeyLastReminderSentAt: null,
         updatedAt: args.now,
       })
       .where(eq(accounts.id, args.accountId));

@@ -252,6 +252,16 @@ export const accounts = pgTable(
     byokAnthropicApiKeyLastUsedAt: timestamp('byok_anthropic_api_key_last_used_at', {
       withTimezone: true,
     }),
+    // v2-#11 — rotation reminder dedupe. Same pattern as
+    // webhook_endpoints.last_reminder_sent_at (v2-#10). Daily job
+    // sets this to now() when the 90d-rotation reminder email
+    // fires. Reset to null on every key set/rotate (the
+    // BYOKAnthropicService.setKey path nulls it out so the next
+    // expiry cycle can fire reminders again).
+    byokAnthropicApiKeyLastReminderSentAt: timestamp(
+      'byok_anthropic_api_key_last_reminder_sent_at',
+      { withTimezone: true },
+    ),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
