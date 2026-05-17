@@ -408,6 +408,30 @@ describe('createEmailService — configured', () => {
     expect(c.TextBody).toContain('https://app.driftstack.dev/team/invite/tok_inv');
     expect(c.TextBody).toContain('2026-05-18');
   });
+
+  // v2-#16 — close coverage gap: every other template in
+  // EmailService had a unit test except this one. The oauth-pending
+  // path is exercised by integration tests (build-test-app.ts) but
+  // never had its template body asserted in isolation.
+  it('oauth-pending-verification template (V-667.C) — provider + confirm link + UTC expiry round-trip', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendOauthPendingLinkVerification({
+      to: 'user@example.com',
+      provider: 'Google',
+      confirmLink: 'https://app.driftstack.dev/oauth/confirm/tok_pending_abc',
+      expiresAt: new Date('2026-05-18T12:00:00Z'),
+    });
+    const c = client.calls[0] as Record<string, string>;
+    expect(c.Subject).toContain('confirm a new sign-in method');
+    expect(c.TextBody).toContain('Google');
+    expect(c.TextBody).toContain('https://app.driftstack.dev/oauth/confirm/tok_pending_abc');
+    expect(c.TextBody).toContain('2026-05-18');
+    // "wasn't me" affordance is the whole reason this template exists
+    // — the customer must be able to ignore a phishing-trigger attempt.
+    expect(c.TextBody).toMatch(/wasn't you/i);
+  });
 });
 
 // V-665 — failure categorisation. Distinguishes Postmark pending-approval
