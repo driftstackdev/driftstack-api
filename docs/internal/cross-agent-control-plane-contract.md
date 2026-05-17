@@ -83,7 +83,7 @@ slips behind those.
 | JWT verifier (Ed25519)        | Agent 2           | Shipped commit `95353f2a`. `FleetNodeAuthImpl` + `InMemoryFleetNodesRepo` + 8 unit tests covering 7 reject reasons.                                                                                                                                                                                                                      |
 | `fleet_nodes` SQL table       | Agent 2           | Pending Tier-2 founder review. Design doc: `docs/internal/fleet-nodes-sql-migration-design.md` (this wave).                                                                                                                                                                                                                              |
 | `DrizzleFleetNodesRepo`       | Agent 2           | Pending SQL migration.                                                                                                                                                                                                                                                                                                                   |
-| Nonce cache                   | Agent 2           | `InMemoryFleetNonceCache` foundation shipped this wave (6 unit tests; NUL-byte-delimited `(nodeId, nonce)` scope; TTL eviction on each access). Redis-backed prod impl + integration with `FleetNodeAuthImpl.verify` pending.                                                                                                            |
+| Nonce cache                   | Agent 2           | `InMemoryFleetNonceCache` foundation shipped `1b97a5e0`; replay-defence wiring into `FleetNodeAuthImpl.verify` shipped `f2a6c603` (6 + 4 unit tests; NUL-byte-delimited `(nodeId, nonce)` scope; TTL eviction on each access). Redis-backed prod impl pending.                                                                           |
 | `/v1/fleet/events` route stub | Agent 2           | Route stub SHIPPED `ae670c80` — path is addressable on the deployment (5th activation-gate-pattern feature); both AppDeps-wired + disabled postures currently 503 FeatureUnavailable. WebSocket handler + fastify-websocket plugin pending. Agent 1 can wire V-820.B.1.b client against this URL now and get a clean 503 in development. |
 | mTLS layer                    | Infra             | Cloudflare Authenticated Origin Pulls; Agent 2 receives client-cert hash via header.                                                                                                                                                                                                                                                     |
 | Fleet-side JWT signer         | Agent 1 / Harness | Signs JWT with provisioned Ed25519 private key; opens WebSocket; ACKs work events.                                                                                                                                                                                                                                                       |
@@ -129,8 +129,13 @@ file exports `registerXxxRoutes` (real handlers) AND
 
 Cross-source invariant pinned in
 `apps/server/tests/unit/activation-gate-pattern-cross-source-invariant.test.ts`
-(commit `e074fcf6`). Covers billing + session-proxy + saved-proxies +
-agent-sessions. Future gated features append to the FEATURES list.
+(commit `e074fcf6`; extended to 5 features at `ae670c80`; 6th
+per-feature assertion at `5b4336c5` requires non-empty detail string;
+31 test cases total). Covers billing + session-proxy + saved-proxies +
+agent-sessions + fleet-events. Runtime mirror in
+`scripts/post-deploy-verify.mjs` `featureGateStub()` (also asserts
+`detail` length ≥8). Future gated features append to the FEATURES
+list.
 
 ---
 
