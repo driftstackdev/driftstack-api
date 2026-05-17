@@ -281,9 +281,41 @@ Cross-session memory entries updated this session:
 - `project_stripe_live_post_bv_kvk.md` — NEW (orchestrator AUTO #3).
 - `MEMORY.md` index — all entries above appended/updated.
 
-## Cron status
+## Cron status (CANCELLED 2026-05-17 ~18:38 UTC)
 
-`055b9123` continues firing every 3 minutes (session-only,
-7-day auto-expire). The orchestrator-handoff prompt is the
-constant fire target; each fire re-enters this loop, picks
-the highest-priority unblocked item, and exits cleanly.
+`055b9123` was cancelled per founder direction after 8
+consecutive no-change fires. The queue exhaustion relative
+to gates made each fire a state-check that consumed a
+conversation turn without committing value. The cron was
+session-only so cancellation only affects the current
+session's autopilot loop; no durable state lost.
+
+To re-fire the autopilot when a gate clears (founder
+verdicts, Stripe Dashboard env vars, Agent 1 progress, prod
+deploy), invoke the /loop Skill with `3m` interval per
+locked memory `feedback_agent2_loop_skill_only_no_schedulewakeup`.
+
+## Orchestrator disengage + Agent 1 Wave 29-360 Item 1 (2026-05-17 18:38 UTC)
+
+A follow-up orchestrator paste arrived with three new state items:
+
+1. **ORCHESTRATOR DISENGAGE 18:38Z** — AUTO #3 explicitly
+   stopped per founder request. Per Fire #14 enhanced
+   visibility, no active orchestrator processes at 18:35 UTC.
+
+2. **Agent 1 Wave 29-360 Item 1 LANDED** — Navigator UA
+   env-route via `DRIFTSTACK_ARCHETYPE_UA_FULL`. First slice
+   of multi-archetype foundation work. Items 2-5 incoming
+   in parallel. SDK + dashboard archetype-selector slot still
+   gated on items 2-5 completing.
+
+3. **Q.5.f recap correction** — the paste mentioned "you were
+   on Q.5.f changelog updates earlier — finish + commit". Q.5.f
+   actually shipped at `f9e7dd19` + `ad440af8` fix-up before
+   the disengage; the paste was authored from an earlier
+   snapshot of the state.
+
+Memory entries updated:
+
+- `project_multi_archetype_coordination_queued.md` — added
+  "Agent 1 progress as of 2026-05-17 18:38 UTC" section.
