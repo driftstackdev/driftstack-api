@@ -1642,3 +1642,39 @@ export const statusSubscribers = pgTable(
 
 export type StatusSubscriber = typeof statusSubscribers.$inferSelect;
 export type NewStatusSubscriber = typeof statusSubscribers.$inferInsert;
+
+// AI-A.b — agent_sessions persistence (migration 0042; schema LOCKED
+// 2026-05-17 per orchestrator handoff post-AUTO #1).
+//
+// text PK matches the existing InMemoryAgentSessionsRepo's
+// `agt_<uuid>` minting pattern; jsonb transcript is the append-only
+// growth surface mirrored from `recipes.intent_log`. CHECK constraint
+// on `status` over a Postgres enum so future status additions ship as
+// a constraint-edit migration. Token-budget invariant (remaining ≤
+// total) enforced at the DB layer as belt-and-suspenders against
+// concurrent debits drift.
+export const agentSessions = pgTable('agent_sessions', {
+  id: text('id').primaryKey(),
+  accountId: uuid('account_id')
+    .notNull()
+    .references(() => accounts.id, { onDelete: 'cascade' }),
+  driftstackSessionId: text('driftstack_session_id'),
+  status: text('status').notNull(),
+  // jsonb transcript — `ReadonlyArray<TranscriptEntry>` at the service
+  // layer; Drizzle returns it as `unknown` so the repo casts on read.
+  transcript: jsonb('transcript')
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  tokenBudgetTotal: integer('token_budget_total').notNull(),
+  tokenBudgetRemaining: integer('token_budget_remaining').notNull(),
+  closedReason: text('closed_reason'),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+});
+
+export type AgentSessionRow = typeof agentSessions.$inferSelect;
+export type NewAgentSessionRow = typeof agentSessions.$inferInsert;

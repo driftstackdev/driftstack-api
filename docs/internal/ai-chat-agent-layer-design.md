@@ -10,8 +10,21 @@ LOCKED 2026-05-16.
 **Shipped this Wave (1119+):**
 
 - AI-A — `AgentSessionsRepo` interface + `InMemoryAgentSessionsRepo`
-  (commit `cc876a49`). 11 unit tests. SQL migration deferred to AI-A.b
-  (Tier-2 founder review).
+  (commit `cc876a49`). 11 unit tests.
+- AI-A.b — `agent_sessions` SQL migration (this wave). Schema LOCKED
+  2026-05-17 by orchestrator handoff post-AUTO #1. text PK
+  (`agt_<uuid>`), jsonb transcript with append-only growth, CHECK
+  over status enum, partial indexes on hot/sparse paths, CASCADE on
+  account delete, token-budget invariant
+  (`remaining ≤ total`) enforced at the DB layer. Migration
+  `0042_agent_sessions.sql` + Drizzle schema entry + journal index 42.
+- AI-A.c — `DrizzleAgentSessionsRepo` against the new table (this
+  wave). Same surface as the InMemory variant (create / get /
+  listByAccount / appendTranscript / debitTokens / closeWithReason);
+  read-modify-write UPDATE pattern with the CHECK constraint as the
+  DB-side guard against debit drift. Production wiring in
+  `bootstrap.ts` is the follow-up slice (paired with the agent-runtime
+  activation flip).
 - AI-B1 — `DeterministicAgentDecomposer` (commit `b4caffa4`) covering
   token-budget refuse / AUP refuse (5-pattern launch corpus) /
   ambiguity clarify / bounded plan. 13 unit tests. **AI-B1.b** (real
@@ -33,23 +46,17 @@ LOCKED 2026-05-16.
 
 **Pending (founder-review-blocked or focused-session):**
 
-- AI-A.b — SQL migration for `agent_sessions` table (Tier-2 founder
-  review for column shape).
-- AI-A.c — `DrizzleAgentSessionsRepo` backed by Postgres (depends on
-  AI-A.b).
 - AI-B1.b — Real Anthropic Claude Opus 4.7 wire against the documented
   prompt template (architecturally unblocked by BYOK lock 2026-05-16;
-  end-to-end HTTP-header → AgentRuntime → DecomposeArgs chain SHIPPED
-  via 1b97a5e0 + f2a6c603 + 9d7dded2; cross-SDK convenience layer
-  SHIPPED via a79796ae; cross-source header invariant SHIPPED via
-  9d7dded2 + 2048c45f. Real Claude API call inside the decomposer
-  is the only piece remaining — needs the Anthropic API key share +
-  a focused session for the Anthropic SDK integration + prompt
-  template work).
-- AI-B1.c — Per-customer BYOK Anthropic key storage column on
-  `accounts` table (Tier-2 founder review; design doc
-  `docs/internal/byok-anthropic-key-storage-design.md` shipped at
-  `a79796ae` with 5 open questions).
+  Anthropic SDK call inside the decomposer is the only piece remaining
+  — env var `BYOK_ANTHROPIC_FALLBACK_KEY` shared 2026-05-17 by
+  orchestrator handoff post-AUTO #1; ready for the focused session).
+- AI-B1.c — Per-customer BYOK Anthropic key storage — **shipped this
+  wave** (commits `e5523811` foundation + `994386cd` routes +
+  activation-gate). All 5 design-doc questions resolved by orchestrator
+  handoff 2026-05-17 (REUSE MFA_ENCRYPTION_KEY / NO audit fingerprint /
+  account_owner-only / NO quota visibility v1.0 / DEFER llm_billing_mode
+  to v1.1).
 - AI-B2.b — Real harness-wired intent executor (in-process
   SessionsService dispatch + capture aggregator).
 - A1-A4 (UI surface) — customer-dashboard chat composer + transcript
