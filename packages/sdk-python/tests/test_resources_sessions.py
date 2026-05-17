@@ -36,6 +36,7 @@ SESSION_FIXTURE: dict = {
     "purpose": "production_customer",
     "label": None,
     "metadata": None,
+    "egress_capabilities": None,
     "created_at": "2026-05-02T10:00:00Z",
     "updated_at": "2026-05-02T10:00:00Z",
     "last_state_at": None,

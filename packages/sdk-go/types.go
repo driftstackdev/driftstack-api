@@ -245,18 +245,29 @@ type TeamInviteResponse struct {
 // ──────────────────────────────────────────────────────────────────
 
 type Session struct {
-	ID          string         `json:"id"`
-	AccountID   string         `json:"account_id"`
-	APIKeyID    string         `json:"api_key_id"`
-	Status      SessionStatus  `json:"status"`
-	Archetype   string         `json:"archetype"`
-	Purpose     SessionPurpose `json:"purpose"`
-	Label       *string        `json:"label"`
-	Metadata    map[string]any `json:"metadata"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	LastStateAt *time.Time     `json:"last_state_at"`
-	DestroyedAt *time.Time     `json:"destroyed_at"`
+	ID                 string               `json:"id"`
+	AccountID          string               `json:"account_id"`
+	APIKeyID           string               `json:"api_key_id"`
+	Status             SessionStatus        `json:"status"`
+	Archetype          string               `json:"archetype"`
+	Purpose            SessionPurpose       `json:"purpose"`
+	Label              *string              `json:"label"`
+	Metadata           map[string]any       `json:"metadata"`
+	EgressCapabilities *EgressCapabilities  `json:"egress_capabilities"`
+	CreatedAt          time.Time            `json:"created_at"`
+	UpdatedAt          time.Time            `json:"updated_at"`
+	LastStateAt        *time.Time           `json:"last_state_at"`
+	DestroyedAt        *time.Time           `json:"destroyed_at"`
+}
+
+// EgressCapabilities is the harness-reported per-session SOCKS5
+// capability shape (cross-agent contract 7d5992d9, migration 0045).
+// Null until the harness emits `egress.capability_report`; non-SOCKS5
+// sessions stay null permanently.
+type EgressCapabilities struct {
+	UDPAssociate bool     `json:"udp_associate"`
+	QUICRoute    string   `json:"quic_route"` // "proxy" | "direct" | "disabled"
+	Warnings     []string `json:"warnings"`
 }
 
 // CreateSessionRequest. The `Archetype` and `Purpose` fields are

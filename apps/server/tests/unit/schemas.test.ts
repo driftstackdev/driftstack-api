@@ -237,6 +237,7 @@ describe('SessionSchema', () => {
       purpose: 'production_customer',
       label: null,
       metadata: null,
+      egress_capabilities: null,
       created_at: now,
       updated_at: now,
       last_state_at: null,

@@ -6,6 +6,7 @@ import {
   SessionEventIdSchema,
   SessionIdSchema,
 } from './common.js';
+import { EgressCapabilitiesSchema } from './egress.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Session resource
@@ -62,6 +63,14 @@ export const SessionSchema = z.object({
   purpose: SessionPurposeSchema,
   label: z.string().nullable(),
   metadata: z.record(z.unknown()).nullable(),
+  /**
+   * Harness-reported SOCKS5 egress capabilities (migration 0045 +
+   * cross-agent contract 7d5992d9). Null until the harness emits the
+   * `egress.capability_report` event after proxy wire-up; non-SOCKS5
+   * sessions stay null permanently. Shape pinned by
+   * `EgressCapabilitiesSchema` in `./egress.ts`.
+   */
+  egress_capabilities: EgressCapabilitiesSchema.nullable(),
   created_at: Iso8601Schema,
   updated_at: Iso8601Schema,
   last_state_at: Iso8601Schema.nullable(),

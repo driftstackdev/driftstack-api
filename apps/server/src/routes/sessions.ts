@@ -85,6 +85,10 @@ function publicSession(s: SessionRecord): Record<string, unknown> {
     purpose: s.purpose,
     label: s.label,
     metadata: s.metadata,
+    // Migration 0045 — harness-reported egress capabilities. null until
+    // SOCKS5 handshake completes or for non-SOCKS5 sessions. Cross-agent
+    // contract shape: { udp_associate, quic_route, warnings[] }.
+    egress_capabilities: s.egressCapabilities,
     created_at: s.createdAt.toISOString(),
     updated_at: s.updatedAt.toISOString(),
     last_state_at: s.lastStateAt ? s.lastStateAt.toISOString() : null,
@@ -308,6 +312,29 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         eff !== undefined ? { effectiveAccountId: eff } : {},
       );
       return { satisfied: result.satisfied, duration_ms: result.durationMs };
+    },
+  );
+
+  // ── GET /v1/sessions/:id ───────────────────────────────────────────────
+  // Detail endpoint — surfaces the session record + harness-reported
+  // egress_capabilities (migration 0045, cross-agent contract 7d5992d9).
+  // V-326e3 — describe is a READ; both 'member' and 'admin' roles allowed
+  // on team-scoped requests.
+  app.get<{ Params: { id: string } }>(
+    '/v1/sessions/:id',
+    {
+      preHandler: [app.requireAuth, app.rateLimit('global')],
+    },
+    async (request) => {
+      const ctx = requireCtx(request);
+      const id = uuidFromPrefixedId(request.params.id, 'ses');
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      const session = await service.describe(
+        ctx,
+        id,
+        effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {},
+      );
+      return publicSession(session);
     },
   );
 

@@ -1,0 +1,29 @@
+-- v2-#3: sessions.egress_capabilities JSONB column per cross-agent
+-- contract commit 7d5992d9 (driftstack repo) — Option B locked
+-- founder Tier-3 verdict 2026-05-17 ~20:00 UTC.
+--
+-- Populated by control plane on receipt of harness control-websocket
+-- `egress.capability_report` event when a session is started with
+-- `proxy.type = 'socks5'` AND `proxy.want_udp_associate = true`.
+-- Surfaces on GET /v1/sessions/:id as top-level `egress_capabilities`.
+--
+-- Shape (mirrors the harness event):
+--
+--   {
+--     "udp_associate": true | false,
+--     "quic_route": "proxy" | "direct" | "disabled",
+--     "warnings": ["udp_unsupported_by_proxy", "quic_disabled_fallback_http2"]
+--   }
+--
+-- Nullable because:
+--   - Pre-migration rows have no capability data (no fork-side report).
+--   - Sessions created without a SOCKS5 proxy don't trigger the
+--     capability report path; the column stays NULL.
+--   - The harness may report capabilities ASYNCHRONOUSLY after session
+--     create; reads before the report has arrived see NULL.
+--
+-- No index needed at v1.0 — egress_capabilities is read on per-session
+-- GET, not on list queries. Add a partial index later if dashboard
+-- list-views need to filter on udp_associate=false.
+
+ALTER TABLE "sessions" ADD COLUMN "egress_capabilities" jsonb DEFAULT NULL;

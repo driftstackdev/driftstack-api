@@ -15,10 +15,11 @@
 //
 //   account_id 2-branch (uuid-as-is OR uuidFromPrefixedId 'acc').
 //
-//   publicSession 12-field — id (ses_ prefix) + account_id (acc_
+//   publicSession 13-field — id (ses_ prefix) + account_id (acc_
 //     prefix) + api_key_id (key_ prefix) + status + archetype +
-//     purpose + label + metadata + created_at + updated_at +
-//     nullable last_state_at + nullable destroyed_at.
+//     purpose + label + metadata + egress_capabilities (migration
+//     0045 JSONB) + created_at + updated_at + nullable last_state_at
+//     + nullable destroyed_at.
 //
 // stays in lockstep across apps/server/src/routes/admin-sessions.ts.
 
@@ -60,7 +61,7 @@ describe('W1029 routes/admin-sessions cross-source invariant', () => {
     expect(p).toMatch(/'creating', 'ready', 'busy', 'destroyed', 'errored'/);
   });
 
-  it('CRITICAL publicSession 12-field — id (ses_ prefix) + account_id (acc_ prefix) + api_key_id (key_ prefix) + status + archetype + purpose + label + metadata + created_at + updated_at + nullable last_state_at + nullable destroyed_at.', () => {
+  it('CRITICAL publicSession 13-field — id (ses_ prefix) + account_id (acc_ prefix) + api_key_id (key_ prefix) + status + archetype + purpose + label + metadata + egress_capabilities + created_at + updated_at + nullable last_state_at + nullable destroyed_at.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-sessions.ts'));
     expect(p).toMatch(/id: `ses_\$\{s\.id\}`,/);
     expect(p).toMatch(/account_id: `acc_\$\{s\.accountId\}`,/);
@@ -70,6 +71,7 @@ describe('W1029 routes/admin-sessions cross-source invariant', () => {
     expect(p).toMatch(/purpose: s\.purpose,/);
     expect(p).toMatch(/label: s\.label,/);
     expect(p).toMatch(/metadata: s\.metadata,/);
+    expect(p).toMatch(/egress_capabilities: s\.egressCapabilities,/);
     expect(p).toMatch(/created_at: s\.createdAt\.toISOString\(\),/);
     expect(p).toMatch(/updated_at: s\.updatedAt\.toISOString\(\),/);
     expect(p).toMatch(/last_state_at: s\.lastStateAt \? s\.lastStateAt\.toISOString\(\) : null,/);

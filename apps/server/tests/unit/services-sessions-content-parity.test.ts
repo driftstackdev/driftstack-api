@@ -12,8 +12,9 @@
 //   • profileLimitFor: PROFILES_PER_TIER (V-136) — translates
 //     'custom' enterprise sentinel to null for legacy null-means-
 //     unlimited contract.
-//   • SessionRecord: 12 fields + 5-status union ('creating' |
-//     'ready' | 'busy' | 'destroyed' | 'errored').
+//   • SessionRecord: 13 fields + 5-status union ('creating' |
+//     'ready' | 'busy' | 'destroyed' | 'errored') + migration 0045
+//     egressCapabilities JSONB (cross-agent contract 7d5992d9).
 //   • SessionEventInput.type: 9-literal union covering full
 //     lifecycle (created → navigated/interacted/gui_input/waited/
 //     state_captured/screenshot_captured → destroyed/errored).
@@ -72,7 +73,7 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
   });
 
-  it("SessionRecord: 12 fields + 5-status union ('creating'|'ready'|'busy'|'destroyed'|'errored') + V-169 purpose", () => {
+  it("SessionRecord: 13 fields + 5-status union ('creating'|'ready'|'busy'|'destroyed'|'errored') + V-169 purpose + migration 0045 egressCapabilities", () => {
     expect(body).toMatch(/export interface SessionRecord \{/);
     expect(body).toMatch(/accountId: string;/);
     expect(body).toMatch(/apiKeyId: string;/);
@@ -82,6 +83,9 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(/\/\*\* V-169 — harness purpose\. \*\/\s*\n?\s*purpose: SessionPurpose;/);
     expect(body).toMatch(/label: string \| null;/);
     expect(body).toMatch(/metadata: Record<string, unknown> \| null;/);
+    expect(body).toMatch(
+      /egressCapabilities: \{\s*\n?\s*udp_associate: boolean;\s*\n?\s*quic_route: 'proxy' \| 'direct' \| 'disabled';\s*\n?\s*warnings: string\[\];\s*\n?\s*\} \| null;/,
+    );
     expect(body).toMatch(/lastStateAt: Date \| null;/);
     expect(body).toMatch(/destroyedAt: Date \| null;/);
   });

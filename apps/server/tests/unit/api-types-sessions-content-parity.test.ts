@@ -13,7 +13,9 @@
 //     cumulative_rig_validation | test_domain_probe + harness branching
 //     rationale (AFP Layer 1 / ATFP firing semantics).
 //   • DEFAULT_SESSION_PURPOSE = 'production_customer'.
-//   • SessionSchema: 12-field shape; purpose required (server defaults).
+//   • SessionSchema: 13-field shape (egress_capabilities added in
+//     migration 0045 + cross-agent contract 7d5992d9); purpose
+//     required (server defaults).
 //   • L-001 — InteractAction intent-only; coordinate primitives stay
 //     on gui_control plane, not customer-facing schema.
 //   • InteractAction 4-branch discriminated union: tap/type/scroll/press.
@@ -86,9 +88,9 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     );
   });
 
-  it('SessionSchema: 12-field shape (id + account_id + api_key_id + status + archetype + V-169 purpose + label nullable + metadata nullable + 4 timestamps incl. last_state_at/destroyed_at nullable)', () => {
+  it('SessionSchema: 13-field shape (id + account_id + api_key_id + status + archetype + V-169 purpose + label nullable + metadata nullable + egress_capabilities (migration 0045) nullable + 4 timestamps incl. last_state_at/destroyed_at nullable)', () => {
     expect(body).toMatch(
-      /export const SessionSchema = z\.object\(\{\s*\n?\s*id: SessionIdSchema,\s*\n?\s*account_id: AccountIdSchema,\s*\n?\s*api_key_id: ApiKeyIdSchema,\s*\n?\s*status: SessionStatusSchema,\s*\n?\s*archetype: ArchetypeSchema,\s*\n?\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*\n?\s*purpose: SessionPurposeSchema,\s*\n?\s*label: z\.string\(\)\.nullable\(\),\s*\n?\s*metadata: z\.record\(z\.unknown\(\)\)\.nullable\(\),\s*\n?\s*created_at: Iso8601Schema,\s*\n?\s*updated_at: Iso8601Schema,\s*\n?\s*last_state_at: Iso8601Schema\.nullable\(\),\s*\n?\s*destroyed_at: Iso8601Schema\.nullable\(\),\s*\n?\s*\}\);/,
+      /export const SessionSchema = z\.object\(\{\s*\n?\s*id: SessionIdSchema,\s*\n?\s*account_id: AccountIdSchema,\s*\n?\s*api_key_id: ApiKeyIdSchema,\s*\n?\s*status: SessionStatusSchema,\s*\n?\s*archetype: ArchetypeSchema,\s*\n?\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*\n?\s*purpose: SessionPurposeSchema,\s*\n?\s*label: z\.string\(\)\.nullable\(\),\s*\n?\s*metadata: z\.record\(z\.unknown\(\)\)\.nullable\(\),\s*\n?\s*[\s\S]*?egress_capabilities: EgressCapabilitiesSchema\.nullable\(\),\s*\n?\s*created_at: Iso8601Schema,\s*\n?\s*updated_at: Iso8601Schema,\s*\n?\s*last_state_at: Iso8601Schema\.nullable\(\),\s*\n?\s*destroyed_at: Iso8601Schema\.nullable\(\),\s*\n?\s*\}\);/,
     );
   });
 

@@ -123,15 +123,15 @@ describe('W895 Session lifecycle schemas cross-source invariant', () => {
     expect(p).toMatch(/export type NavigateRequestInput = z\.input<typeof NavigateRequestSchema>;/);
   });
 
-  // ─── 12-field cardinality ────────────────────────────────────
+  // ─── 13-field cardinality (migration 0045 added egress_capabilities)
 
-  it('CRITICAL Session = EXACTLY 12 fields. The 12-field shape is the full session-lifecycle audit-style read; drift to adding/removing without coordinated SDK + dashboard updates would break.', () => {
+  it('CRITICAL Session = EXACTLY 13 fields. Migration 0045 adds egress_capabilities (cross-agent contract 7d5992d9); the full shape is the session-lifecycle audit-style read; drift to adding/removing without coordinated SDK + dashboard updates would break.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
     const m = p.match(/SessionSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(m).not.toBeNull();
     const body = m![1] ?? '';
     const fieldCount = (body.match(/^\s*[a-z_]+:/gm) || []).length;
-    expect(fieldCount).toBe(12);
+    expect(fieldCount).toBe(13);
   });
 
   it('test file metadata — file exists at canonical path', () => {

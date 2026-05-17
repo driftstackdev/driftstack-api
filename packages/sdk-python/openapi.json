@@ -220,7 +220,20 @@
                 "admin",
                 "account_owner",
                 "driftstack_internal_admin",
-                "gui_control"
+                "gui_control",
+                "read:sessions",
+                "write:sessions",
+                "read:profiles",
+                "write:profiles",
+                "admin:profiles",
+                "read:webhooks",
+                "write:webhooks",
+                "admin:webhooks",
+                "read:api-keys",
+                "admin:api-keys",
+                "read:billing",
+                "admin:billing",
+                "read:audit"
               ]
             }
           },
@@ -292,6 +305,26 @@
             "type": ["object", "null"],
             "additionalProperties": {}
           },
+          "egress_capabilities": {
+            "type": ["object", "null"],
+            "properties": {
+              "udp_associate": {
+                "type": "boolean"
+              },
+              "quic_route": {
+                "type": "string",
+                "enum": ["proxy", "direct", "disabled"]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              }
+            },
+            "required": ["udp_associate", "quic_route"]
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -322,6 +355,7 @@
           "purpose",
           "label",
           "metadata",
+          "egress_capabilities",
           "created_at",
           "updated_at",
           "last_state_at",
@@ -546,6 +580,26 @@
             "type": ["object", "null"],
             "additionalProperties": {}
           },
+          "egress_capabilities": {
+            "type": ["object", "null"],
+            "properties": {
+              "udp_associate": {
+                "type": "boolean"
+              },
+              "quic_route": {
+                "type": "string",
+                "enum": ["proxy", "direct", "disabled"]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              }
+            },
+            "required": ["udp_associate", "quic_route"]
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -576,6 +630,7 @@
           "purpose",
           "label",
           "metadata",
+          "egress_capabilities",
           "created_at",
           "updated_at",
           "last_state_at",
@@ -870,7 +925,20 @@
                 "admin",
                 "account_owner",
                 "driftstack_internal_admin",
-                "gui_control"
+                "gui_control",
+                "read:sessions",
+                "write:sessions",
+                "read:profiles",
+                "write:profiles",
+                "admin:profiles",
+                "read:webhooks",
+                "write:webhooks",
+                "admin:webhooks",
+                "read:api-keys",
+                "admin:api-keys",
+                "read:billing",
+                "admin:billing",
+                "read:audit"
               ]
             },
             "minItems": 1
@@ -906,7 +974,20 @@
                 "admin",
                 "account_owner",
                 "driftstack_internal_admin",
-                "gui_control"
+                "gui_control",
+                "read:sessions",
+                "write:sessions",
+                "read:profiles",
+                "write:profiles",
+                "admin:profiles",
+                "read:webhooks",
+                "write:webhooks",
+                "admin:webhooks",
+                "read:api-keys",
+                "admin:api-keys",
+                "read:billing",
+                "admin:billing",
+                "read:audit"
               ]
             }
           },
@@ -1413,7 +1494,20 @@
                 "admin",
                 "account_owner",
                 "driftstack_internal_admin",
-                "gui_control"
+                "gui_control",
+                "read:sessions",
+                "write:sessions",
+                "read:profiles",
+                "write:profiles",
+                "admin:profiles",
+                "read:webhooks",
+                "write:webhooks",
+                "admin:webhooks",
+                "read:api-keys",
+                "admin:api-keys",
+                "read:billing",
+                "admin:billing",
+                "read:audit"
               ]
             }
           },
@@ -1683,6 +1777,26 @@
                       "type": ["object", "null"],
                       "additionalProperties": {}
                     },
+                    "egress_capabilities": {
+                      "type": ["object", "null"],
+                      "properties": {
+                        "udp_associate": {
+                          "type": "boolean"
+                        },
+                        "quic_route": {
+                          "type": "string",
+                          "enum": ["proxy", "direct", "disabled"]
+                        },
+                        "warnings": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "default": []
+                        }
+                      },
+                      "required": ["udp_associate", "quic_route"]
+                    },
                     "created_at": {
                       "type": "string",
                       "format": "date-time",
@@ -1713,6 +1827,7 @@
                     "purpose",
                     "label",
                     "metadata",
+                    "egress_capabilities",
                     "created_at",
                     "updated_at",
                     "last_state_at",
@@ -1843,6 +1958,26 @@
                             "type": ["object", "null"],
                             "additionalProperties": {}
                           },
+                          "egress_capabilities": {
+                            "type": ["object", "null"],
+                            "properties": {
+                              "udp_associate": {
+                                "type": "boolean"
+                              },
+                              "quic_route": {
+                                "type": "string",
+                                "enum": ["proxy", "direct", "disabled"]
+                              },
+                              "warnings": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "default": []
+                              }
+                            },
+                            "required": ["udp_associate", "quic_route"]
+                          },
                           "created_at": {
                             "type": "string",
                             "format": "date-time",
@@ -1873,6 +2008,7 @@
                           "purpose",
                           "label",
                           "metadata",
+                          "egress_capabilities",
                           "created_at",
                           "updated_at",
                           "last_state_at",
@@ -2456,6 +2592,237 @@
         }
       }
     },
+    "/v1/sessions/{id}": {
+      "get": {
+        "summary": "Get a session by id (includes harness-reported egress_capabilities)",
+        "tags": ["Sessions"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^ses_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "account_id": {
+                      "type": "string",
+                      "pattern": "^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "api_key_id": {
+                      "type": "string",
+                      "pattern": "^key_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["creating", "ready", "busy", "destroyed", "errored"]
+                    },
+                    "archetype": {
+                      "type": "string",
+                      "minLength": 3,
+                      "maxLength": 60,
+                      "pattern": "^[a-z0-9_]+$"
+                    },
+                    "purpose": {
+                      "type": "string",
+                      "enum": [
+                        "production_customer",
+                        "cumulative_rig_validation",
+                        "test_domain_probe"
+                      ]
+                    },
+                    "label": {
+                      "type": ["string", "null"]
+                    },
+                    "metadata": {
+                      "type": ["object", "null"],
+                      "additionalProperties": {}
+                    },
+                    "egress_capabilities": {
+                      "type": ["object", "null"],
+                      "properties": {
+                        "udp_associate": {
+                          "type": "boolean"
+                        },
+                        "quic_route": {
+                          "type": "string",
+                          "enum": ["proxy", "direct", "disabled"]
+                        },
+                        "warnings": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "default": []
+                        }
+                      },
+                      "required": ["udp_associate", "quic_route"]
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "last_state_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "destroyed_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "account_id",
+                    "api_key_id",
+                    "status",
+                    "archetype",
+                    "purpose",
+                    "label",
+                    "metadata",
+                    "egress_capabilities",
+                    "created_at",
+                    "updated_at",
+                    "last_state_at",
+                    "destroyed_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Destroy a session",
+        "tags": ["Sessions"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session destroyed."
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sessions/{id}/state": {
       "get": {
         "summary": "Snapshot current session state (URL, title, cookies, localStorage)",
@@ -2672,72 +3039,6 @@
         }
       }
     },
-    "/v1/sessions/{id}": {
-      "delete": {
-        "summary": "Destroy a session",
-        "tags": ["Sessions"],
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Session destroyed."
-          },
-          "400": {
-            "description": "Validation failed.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication failed.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller not permitted.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limit or concurrency limit hit.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/api-keys": {
       "post": {
         "summary": "Create an API key (returns plaintext once, never retrievable later)",
@@ -2768,7 +3069,20 @@
                         "admin",
                         "account_owner",
                         "driftstack_internal_admin",
-                        "gui_control"
+                        "gui_control",
+                        "read:sessions",
+                        "write:sessions",
+                        "read:profiles",
+                        "write:profiles",
+                        "admin:profiles",
+                        "read:webhooks",
+                        "write:webhooks",
+                        "admin:webhooks",
+                        "read:api-keys",
+                        "admin:api-keys",
+                        "read:billing",
+                        "admin:billing",
+                        "read:audit"
                       ]
                     },
                     "minItems": 1
@@ -2812,7 +3126,20 @@
                           "admin",
                           "account_owner",
                           "driftstack_internal_admin",
-                          "gui_control"
+                          "gui_control",
+                          "read:sessions",
+                          "write:sessions",
+                          "read:profiles",
+                          "write:profiles",
+                          "admin:profiles",
+                          "read:webhooks",
+                          "write:webhooks",
+                          "admin:webhooks",
+                          "read:api-keys",
+                          "admin:api-keys",
+                          "read:billing",
+                          "admin:billing",
+                          "read:audit"
                         ]
                       }
                     },
@@ -2939,7 +3266,20 @@
                                 "admin",
                                 "account_owner",
                                 "driftstack_internal_admin",
-                                "gui_control"
+                                "gui_control",
+                                "read:sessions",
+                                "write:sessions",
+                                "read:profiles",
+                                "write:profiles",
+                                "admin:profiles",
+                                "read:webhooks",
+                                "write:webhooks",
+                                "admin:webhooks",
+                                "read:api-keys",
+                                "admin:api-keys",
+                                "read:billing",
+                                "admin:billing",
+                                "read:audit"
                               ]
                             }
                           },
@@ -5114,6 +5454,16 @@
             "required": false,
             "name": "cursor",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": false,
+            "name": "endpoint_id",
+            "in": "query"
           }
         ],
         "responses": {
@@ -5645,6 +5995,16 @@
             "required": false,
             "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z",
             "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "required": false,
+            "name": "target_resource_id",
             "in": "query"
           },
           {
@@ -6740,6 +7100,106 @@
         }
       }
     },
+    "/v1/account/me/oauth-links": {
+      "get": {
+        "summary": "List OAuth-client identity links for the calling account (V-667.C)",
+        "tags": ["account"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Links for the calling account (empty when none linked).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "provider_email": {
+                            "type": ["string", "null"]
+                          },
+                          "linked_at": {
+                            "type": "string"
+                          },
+                          "last_login_at": {
+                            "type": ["string", "null"]
+                          },
+                          "last_revoked_at": {
+                            "type": ["string", "null"]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "provider",
+                          "provider_email",
+                          "linked_at",
+                          "last_login_at",
+                          "last_revoked_at"
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/account/rate-limits": {
       "get": {
         "summary": "Effective rate-limit config for the calling account",
@@ -7551,7 +8011,20 @@
                                 "admin",
                                 "account_owner",
                                 "driftstack_internal_admin",
-                                "gui_control"
+                                "gui_control",
+                                "read:sessions",
+                                "write:sessions",
+                                "read:profiles",
+                                "write:profiles",
+                                "admin:profiles",
+                                "read:webhooks",
+                                "write:webhooks",
+                                "admin:webhooks",
+                                "read:api-keys",
+                                "admin:api-keys",
+                                "read:billing",
+                                "admin:billing",
+                                "read:audit"
                               ]
                             }
                           },
@@ -7736,6 +8209,26 @@
                             "type": ["object", "null"],
                             "additionalProperties": {}
                           },
+                          "egress_capabilities": {
+                            "type": ["object", "null"],
+                            "properties": {
+                              "udp_associate": {
+                                "type": "boolean"
+                              },
+                              "quic_route": {
+                                "type": "string",
+                                "enum": ["proxy", "direct", "disabled"]
+                              },
+                              "warnings": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                },
+                                "default": []
+                              }
+                            },
+                            "required": ["udp_associate", "quic_route"]
+                          },
                           "created_at": {
                             "type": "string",
                             "format": "date-time",
@@ -7766,6 +8259,7 @@
                           "purpose",
                           "label",
                           "metadata",
+                          "egress_capabilities",
                           "created_at",
                           "updated_at",
                           "last_state_at",
@@ -10868,6 +11362,4038 @@
         }
       }
     },
+    "/v1/sessions/{id}/proxy": {
+      "post": {
+        "summary": "Set customer-configurable proxy for a session (planning 133 Phase 1+)",
+        "tags": ["egress"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "proxy": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["socks5"]
+                          },
+                          "socks5": {
+                            "type": "object",
+                            "properties": {
+                              "host": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 253
+                              },
+                              "port": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 65535
+                              },
+                              "username": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "password": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "udp_associate": {
+                                "type": "boolean",
+                                "default": true
+                              }
+                            },
+                            "required": ["host", "port"]
+                          }
+                        },
+                        "required": ["type", "socks5"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["openvpn"]
+                          },
+                          "openvpn": {
+                            "type": "object",
+                            "properties": {
+                              "config_blob": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 262144
+                              },
+                              "username": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "password": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              }
+                            },
+                            "required": ["config_blob"]
+                          }
+                        },
+                        "required": ["type", "openvpn"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["wireguard"]
+                          },
+                          "wireguard": {
+                            "type": "object",
+                            "properties": {
+                              "private_key": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9+/]{43}=$"
+                              },
+                              "peer_public_key": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9+/]{43}=$"
+                              },
+                              "endpoint": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9.\\-:_]+:[0-9]{1,5}$"
+                              },
+                              "allowed_ips": {
+                                "type": "string",
+                                "default": "0.0.0.0/0"
+                              },
+                              "dns": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["private_key", "peer_public_key", "endpoint"]
+                          }
+                        },
+                        "required": ["type", "wireguard"]
+                      }
+                    ]
+                  },
+                  "egress_safeguard": {
+                    "type": "object",
+                    "properties": {
+                      "block_direct_internet": {
+                        "type": "boolean",
+                        "default": true
+                      },
+                      "block_unproxied_dns": {
+                        "type": "boolean",
+                        "default": true
+                      },
+                      "block_webrtc_stun_leakage": {
+                        "type": "boolean",
+                        "default": true
+                      }
+                    },
+                    "default": {
+                      "block_direct_internet": true,
+                      "block_unproxied_dns": true,
+                      "block_webrtc_stun_leakage": true
+                    }
+                  }
+                },
+                "required": ["session_id", "proxy"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Proxy configured; safeguards applied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["socks5", "openvpn", "wireguard"]
+                    },
+                    "safeguards": {
+                      "type": "object",
+                      "properties": {
+                        "block_direct_internet": {
+                          "type": "boolean"
+                        },
+                        "block_unproxied_dns": {
+                          "type": "boolean"
+                        },
+                        "block_webrtc_stun_leakage": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "block_direct_internet",
+                        "block_unproxied_dns",
+                        "block_webrtc_stun_leakage"
+                      ]
+                    }
+                  },
+                  "required": ["type", "safeguards"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Egress backend not yet wired on this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Read a session's current proxy config (type + safeguards only — no secret material)",
+        "tags": ["egress"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proxy summary (NO raw secret material).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["socks5", "openvpn", "wireguard"]
+                    },
+                    "safeguards": {
+                      "type": "object",
+                      "properties": {
+                        "block_direct_internet": {
+                          "type": "boolean"
+                        },
+                        "block_unproxied_dns": {
+                          "type": "boolean"
+                        },
+                        "block_webrtc_stun_leakage": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "block_direct_internet",
+                        "block_unproxied_dns",
+                        "block_webrtc_stun_leakage"
+                      ]
+                    }
+                  },
+                  "required": ["type", "safeguards"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No proxy attached to this session yet.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Egress backend not yet wired on this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proxies": {
+      "post": {
+        "summary": "Save a reusable customer proxy config (SOCKS5/OpenVPN/WireGuard)",
+        "tags": ["egress"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "proxy": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["socks5"]
+                          },
+                          "socks5": {
+                            "type": "object",
+                            "properties": {
+                              "host": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 253
+                              },
+                              "port": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 65535
+                              },
+                              "username": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "password": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "udp_associate": {
+                                "type": "boolean",
+                                "default": true
+                              }
+                            },
+                            "required": ["host", "port"]
+                          }
+                        },
+                        "required": ["type", "socks5"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["openvpn"]
+                          },
+                          "openvpn": {
+                            "type": "object",
+                            "properties": {
+                              "config_blob": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 262144
+                              },
+                              "username": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "password": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              }
+                            },
+                            "required": ["config_blob"]
+                          }
+                        },
+                        "required": ["type", "openvpn"]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["wireguard"]
+                          },
+                          "wireguard": {
+                            "type": "object",
+                            "properties": {
+                              "private_key": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9+/]{43}=$"
+                              },
+                              "peer_public_key": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9+/]{43}=$"
+                              },
+                              "endpoint": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9.\\-:_]+:[0-9]{1,5}$"
+                              },
+                              "allowed_ips": {
+                                "type": "string",
+                                "default": "0.0.0.0/0"
+                              },
+                              "dns": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["private_key", "peer_public_key", "endpoint"]
+                          }
+                        },
+                        "required": ["type", "wireguard"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["label", "proxy"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Proxy config saved; raw secrets are NEVER echoed back.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "enum": ["socks5", "openvpn", "wireguard"]
+                    }
+                  },
+                  "required": ["id", "label", "type"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Egress backend not yet wired on this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List the calling account saved proxy configs (no secret material)",
+        "tags": ["egress"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of saved proxy summaries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": ["socks5", "openvpn", "wireguard"]
+                          }
+                        },
+                        "required": ["id", "label", "type"]
+                      }
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proxies/{id}": {
+      "delete": {
+        "summary": "Remove a saved proxy config",
+        "tags": ["egress"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Proxy not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Egress backend not yet wired on this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent-sessions": {
+      "post": {
+        "summary": "Create a new agent chat session",
+        "tags": ["agent-chat"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "driftstack_session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "token_budget": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Agent session created; transcript empty + full budget remaining.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI chat agent not enabled on this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent-sessions/{id}": {
+      "get": {
+        "summary": "Read agent session state (transcript_length + budget + status)",
+        "tags": ["agent-chat"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent session envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent session not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI chat agent not enabled on this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Close the agent session (idempotent)",
+        "tags": ["agent-chat"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Closed."
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent session not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI chat agent not enabled on this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent-sessions/{id}/message": {
+      "post": {
+        "summary": "Run one decompose→execute turn against the agent session",
+        "tags": ["agent-chat"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": false,
+            "name": "x-byok-anthropic-api-key",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "user_message": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8000
+                  }
+                },
+                "required": ["user_message"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Turn result — discriminated by `kind`: plan-executed (intents + results + ok) / clarify (clarifying_question) / refuse (refuse_reason). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["plan-executed"]
+                        },
+                        "session": {
+                          "type": "object",
+                          "properties": {}
+                        },
+                        "intents": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {}
+                          }
+                        },
+                        "results": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {}
+                          }
+                        },
+                        "ok": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["kind", "session", "intents", "results", "ok"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["clarify"]
+                        },
+                        "session": {
+                          "type": "object",
+                          "properties": {}
+                        },
+                        "clarifying_question": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["kind", "session", "clarifying_question"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["refuse"]
+                        },
+                        "session": {
+                          "type": "object",
+                          "properties": {}
+                        },
+                        "refuse_reason": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["kind", "session", "refuse_reason"]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Agent session is closed or paused; start a new session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI chat agent not enabled on this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recipes": {
+      "post": {
+        "summary": "Snapshot an agent session as a replayable recipe",
+        "tags": ["agent-chat"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "agent_session_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": ["agent_session_id", "label"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Recipe created. The `intent_count` field is the length of the assembled intent_log (flatMap of plan-executed transcript turns).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent session not found (also returned for cross-account access — existence is not leaked).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/fleet/events": {
+      "get": {
+        "summary": "Fleet-node WebSocket event stream (operator-only; mTLS + signed JWT auth per docs/network-architecture.md)",
+        "tags": ["fleet"],
+        "responses": {
+          "101": {
+            "description": "WebSocket protocol upgrade — handshake authenticated via mTLS + signed Ed25519 JWT in the `x-fleet-jwt` header. Currently NOT IMPLEMENTED; see 503 below."
+          },
+          "503": {
+            "description": "Fleet events stream not yet implemented. Both the AppDeps-wired path and the activation-gate-off path return 503 in this slice — the WebSocket handler + Cloudflare AOP + fleet_nodes SQL migration are pending (see docs/internal/fleet-nodes-sql-migration-design.md + docs/internal/cross-agent-control-plane-contract.md).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/crypto-checkout/quote": {
+      "post": {
+        "summary": "Preview a crypto-checkout price without minting an order",
+        "tags": ["billing", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "product": {
+                    "type": "string"
+                  },
+                  "price_currency": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 3,
+                    "pattern": "^[A-Z]{3}$"
+                  }
+                },
+                "required": ["product"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Fiat-cents price + crypto pay-range (stub until NowPayments lands).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "product": {
+                      "type": "string"
+                    },
+                    "price_cents": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    },
+                    "price_currency": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "enum": ["stub", "nowpayments"]
+                    },
+                    "pay_currency": {
+                      "type": ["string", "null"]
+                    },
+                    "pay_min_amount": {
+                      "type": ["number", "null"]
+                    },
+                    "pay_max_amount": {
+                      "type": ["number", "null"]
+                    }
+                  },
+                  "required": [
+                    "product",
+                    "price_cents",
+                    "price_currency",
+                    "provider",
+                    "pay_currency",
+                    "pay_min_amount",
+                    "pay_max_amount"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/crypto-checkout": {
+      "post": {
+        "summary": "Mint a new crypto-payment order",
+        "tags": ["billing", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 255,
+              "description": "Optional client-supplied idempotency key. Duplicate POSTs with the same key within 24h replay the original order. See /docs/idempotency-keys."
+            },
+            "required": false,
+            "description": "Optional client-supplied idempotency key. Duplicate POSTs with the same key within 24h replay the original order. See /docs/idempotency-keys.",
+            "name": "idempotency-key",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "product": {
+                    "type": "string",
+                    "description": "SKU; one of the tier ids or trial_pack."
+                  },
+                  "price_cents": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000
+                  },
+                  "price_currency": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 3,
+                    "pattern": "^[A-Z]{3}$"
+                  }
+                },
+                "required": ["product", "price_cents", "price_currency"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Order minted; response carries payment context for the customer. On a replayed key, the response also sets `Idempotent-Replayed: 1`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order_id": {
+                      "type": "string"
+                    },
+                    "product": {
+                      "type": "string"
+                    },
+                    "price_cents": {
+                      "type": "integer"
+                    },
+                    "price_currency": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "confirming", "paid", "failed", "partial", "cancelled"]
+                    },
+                    "provider": {
+                      "type": "string",
+                      "enum": ["stub", "nowpayments"]
+                    },
+                    "payment_address": {
+                      "type": ["string", "null"]
+                    },
+                    "pay_currency": {
+                      "type": ["string", "null"]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "order_id",
+                    "product",
+                    "price_cents",
+                    "price_currency",
+                    "status",
+                    "provider",
+                    "payment_address",
+                    "pay_currency",
+                    "created_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/crypto-orders": {
+      "get": {
+        "summary": "List the caller account's crypto orders (newest first)",
+        "tags": ["billing", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d+$",
+              "description": "Page size (1-100). Defaults to server-side 50."
+            },
+            "required": false,
+            "description": "Page size (1-100). Defaults to server-side 50.",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["pending", "confirming", "paid", "failed", "partial", "cancelled"],
+              "description": "If set, only orders matching this status are returned."
+            },
+            "required": false,
+            "description": "If set, only orders matching this status are returned.",
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Opaque cursor from a prior page. Iterate until null."
+            },
+            "required": false,
+            "description": "Opaque cursor from a prior page. Iterate until null.",
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Lower bound (inclusive). ISO 8601 timestamp."
+            },
+            "required": false,
+            "description": "Lower bound (inclusive). ISO 8601 timestamp.",
+            "name": "created_after",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Upper bound (exclusive). ISO 8601 timestamp."
+            },
+            "required": false,
+            "description": "Upper bound (exclusive). ISO 8601 timestamp.",
+            "name": "created_before",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order list scoped to the calling account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "orders": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "order_id": {
+                            "type": "string"
+                          },
+                          "product": {
+                            "type": "string"
+                          },
+                          "price_cents": {
+                            "type": "integer"
+                          },
+                          "price_currency": {
+                            "type": "string"
+                          },
+                          "payment_id": {
+                            "type": ["string", "null"]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "confirming",
+                              "paid",
+                              "failed",
+                              "partial",
+                              "cancelled"
+                            ]
+                          },
+                          "customer_note": {
+                            "type": ["string", "null"]
+                          },
+                          "events": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "confirming",
+                                    "paid",
+                                    "failed",
+                                    "partial",
+                                    "cancelled"
+                                  ]
+                                },
+                                "at": {
+                                  "type": "string",
+                                  "description": "ISO-8601 UTC timestamp of the transition."
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "enum": ["create", "ipn", "cancel", "expired"]
+                                }
+                              },
+                              "required": ["status", "at", "source"]
+                            }
+                          },
+                          "expires_at": {
+                            "type": ["string", "null"]
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "order_id",
+                          "product",
+                          "price_cents",
+                          "price_currency",
+                          "payment_id",
+                          "status",
+                          "customer_note",
+                          "events",
+                          "expires_at",
+                          "created_at",
+                          "updated_at"
+                        ]
+                      }
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["orders"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/crypto-orders/{order_id}": {
+      "get": {
+        "summary": "Read a single crypto order owned by the calling account",
+        "tags": ["billing", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Order id (ord_<hex>)."
+            },
+            "required": true,
+            "description": "Order id (ord_<hex>).",
+            "name": "order_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order_id": {
+                      "type": "string"
+                    },
+                    "product": {
+                      "type": "string"
+                    },
+                    "price_cents": {
+                      "type": "integer"
+                    },
+                    "price_currency": {
+                      "type": "string"
+                    },
+                    "payment_id": {
+                      "type": ["string", "null"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "confirming", "paid", "failed", "partial", "cancelled"]
+                    },
+                    "customer_note": {
+                      "type": ["string", "null"]
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "confirming",
+                              "paid",
+                              "failed",
+                              "partial",
+                              "cancelled"
+                            ]
+                          },
+                          "at": {
+                            "type": "string",
+                            "description": "ISO-8601 UTC timestamp of the transition."
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": ["create", "ipn", "cancel", "expired"]
+                          }
+                        },
+                        "required": ["status", "at", "source"]
+                      }
+                    },
+                    "expires_at": {
+                      "type": ["string", "null"]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "order_id",
+                    "product",
+                    "price_cents",
+                    "price_currency",
+                    "payment_id",
+                    "status",
+                    "customer_note",
+                    "events",
+                    "expires_at",
+                    "created_at",
+                    "updated_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such order owned by this account.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update the customer-facing free-text note on an order",
+        "tags": ["billing", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "order_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "customer_note": {
+                    "type": ["string", "null"],
+                    "maxLength": 500
+                  }
+                },
+                "required": ["customer_note"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated order envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order_id": {
+                      "type": "string"
+                    },
+                    "product": {
+                      "type": "string"
+                    },
+                    "price_cents": {
+                      "type": "integer"
+                    },
+                    "price_currency": {
+                      "type": "string"
+                    },
+                    "payment_id": {
+                      "type": ["string", "null"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "confirming", "paid", "failed", "partial", "cancelled"]
+                    },
+                    "customer_note": {
+                      "type": ["string", "null"]
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "confirming",
+                              "paid",
+                              "failed",
+                              "partial",
+                              "cancelled"
+                            ]
+                          },
+                          "at": {
+                            "type": "string",
+                            "description": "ISO-8601 UTC timestamp of the transition."
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": ["create", "ipn", "cancel", "expired"]
+                          }
+                        },
+                        "required": ["status", "at", "source"]
+                      }
+                    },
+                    "expires_at": {
+                      "type": ["string", "null"]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "order_id",
+                    "product",
+                    "price_cents",
+                    "price_currency",
+                    "payment_id",
+                    "status",
+                    "customer_note",
+                    "events",
+                    "expires_at",
+                    "created_at",
+                    "updated_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such order.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/crypto-orders/{order_id}/receipt": {
+      "get": {
+        "summary": "Read the JSON receipt for an order owned by the calling account",
+        "tags": ["billing", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "order_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Normalised receipt payload (status, paid_at, amounts).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order_id": {
+                      "type": "string"
+                    },
+                    "issued_at": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "confirming", "paid", "failed", "partial", "cancelled"]
+                    },
+                    "product": {
+                      "type": "string"
+                    },
+                    "price_cents": {
+                      "type": "integer"
+                    },
+                    "price_currency": {
+                      "type": "string"
+                    },
+                    "payment_id": {
+                      "type": ["string", "null"]
+                    },
+                    "paid_at": {
+                      "type": ["string", "null"]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "order_id",
+                    "issued_at",
+                    "status",
+                    "product",
+                    "price_cents",
+                    "price_currency",
+                    "payment_id",
+                    "paid_at",
+                    "created_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such order.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/crypto-orders/{order_id}/receipt.txt": {
+      "get": {
+        "summary": "Same receipt rendered as text/plain for curl/wget pipelines",
+        "tags": ["billing", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "order_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Text receipt; same fields as the JSON variant.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "description": "Plain-text receipt, one field per line."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such order.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/crypto-orders/{order_id}/receipt.pdf": {
+      "get": {
+        "summary": "PDF rendering of the receipt with Content-Disposition: attachment",
+        "tags": ["billing", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "order_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF bytes; the route also sets a meaningful filename.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "description": "Binary PDF body. base64 only on display."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such order.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/crypto-orders/{order_id}/cancel": {
+      "post": {
+        "summary": "Cancel a pending crypto order (self-service abandonment)",
+        "tags": ["billing", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "order_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order cancelled; envelope returned with status: cancelled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order_id": {
+                      "type": "string"
+                    },
+                    "product": {
+                      "type": "string"
+                    },
+                    "price_cents": {
+                      "type": "integer"
+                    },
+                    "price_currency": {
+                      "type": "string"
+                    },
+                    "payment_id": {
+                      "type": ["string", "null"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "confirming", "paid", "failed", "partial", "cancelled"]
+                    },
+                    "customer_note": {
+                      "type": ["string", "null"]
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "confirming",
+                              "paid",
+                              "failed",
+                              "partial",
+                              "cancelled"
+                            ]
+                          },
+                          "at": {
+                            "type": "string",
+                            "description": "ISO-8601 UTC timestamp of the transition."
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": ["create", "ipn", "cancel", "expired"]
+                          }
+                        },
+                        "required": ["status", "at", "source"]
+                      }
+                    },
+                    "expires_at": {
+                      "type": ["string", "null"]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "order_id",
+                    "product",
+                    "price_cents",
+                    "price_currency",
+                    "payment_id",
+                    "status",
+                    "customer_note",
+                    "events",
+                    "expires_at",
+                    "created_at",
+                    "updated_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such order.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Order has moved past pending and cannot be cancelled self-service.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/crypto-orders": {
+      "get": {
+        "summary": "List crypto orders across all accounts (admin)",
+        "tags": ["admin", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "account_id",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["pending", "confirming", "paid", "failed", "partial", "cancelled"]
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Exact-match reverse lookup."
+            },
+            "required": false,
+            "description": "Exact-match reverse lookup.",
+            "name": "payment_id",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Opaque cursor from a prior page."
+            },
+            "required": false,
+            "description": "Opaque cursor from a prior page.",
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Lower bound (inclusive). ISO 8601 timestamp."
+            },
+            "required": false,
+            "description": "Lower bound (inclusive). ISO 8601 timestamp.",
+            "name": "created_after",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Upper bound (exclusive). ISO 8601 timestamp."
+            },
+            "required": false,
+            "description": "Upper bound (exclusive). ISO 8601 timestamp.",
+            "name": "created_before",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated order list with next_cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "orders": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "order_id": {
+                            "type": "string"
+                          },
+                          "product": {
+                            "type": "string"
+                          },
+                          "price_cents": {
+                            "type": "integer"
+                          },
+                          "price_currency": {
+                            "type": "string"
+                          },
+                          "payment_id": {
+                            "type": ["string", "null"]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "confirming",
+                              "paid",
+                              "failed",
+                              "partial",
+                              "cancelled"
+                            ]
+                          },
+                          "customer_note": {
+                            "type": ["string", "null"]
+                          },
+                          "events": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "confirming",
+                                    "paid",
+                                    "failed",
+                                    "partial",
+                                    "cancelled"
+                                  ]
+                                },
+                                "at": {
+                                  "type": "string",
+                                  "description": "ISO-8601 UTC timestamp of the transition."
+                                },
+                                "source": {
+                                  "type": "string",
+                                  "enum": ["create", "ipn", "cancel", "expired"]
+                                }
+                              },
+                              "required": ["status", "at", "source"]
+                            }
+                          },
+                          "expires_at": {
+                            "type": ["string", "null"]
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "type": "string"
+                          },
+                          "account_id": {
+                            "type": ["string", "null"]
+                          },
+                          "internal_note": {
+                            "type": ["string", "null"]
+                          }
+                        },
+                        "required": [
+                          "order_id",
+                          "product",
+                          "price_cents",
+                          "price_currency",
+                          "payment_id",
+                          "status",
+                          "customer_note",
+                          "events",
+                          "expires_at",
+                          "created_at",
+                          "updated_at",
+                          "account_id",
+                          "internal_note"
+                        ]
+                      }
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["orders", "next_cursor"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/crypto-orders/{order_id}": {
+      "get": {
+        "summary": "Read a single crypto order (admin envelope includes internal_note)",
+        "tags": ["admin", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "order_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Admin order envelope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order_id": {
+                      "type": "string"
+                    },
+                    "product": {
+                      "type": "string"
+                    },
+                    "price_cents": {
+                      "type": "integer"
+                    },
+                    "price_currency": {
+                      "type": "string"
+                    },
+                    "payment_id": {
+                      "type": ["string", "null"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "confirming", "paid", "failed", "partial", "cancelled"]
+                    },
+                    "customer_note": {
+                      "type": ["string", "null"]
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "confirming",
+                              "paid",
+                              "failed",
+                              "partial",
+                              "cancelled"
+                            ]
+                          },
+                          "at": {
+                            "type": "string",
+                            "description": "ISO-8601 UTC timestamp of the transition."
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": ["create", "ipn", "cancel", "expired"]
+                          }
+                        },
+                        "required": ["status", "at", "source"]
+                      }
+                    },
+                    "expires_at": {
+                      "type": ["string", "null"]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "account_id": {
+                      "type": ["string", "null"]
+                    },
+                    "internal_note": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": [
+                    "order_id",
+                    "product",
+                    "price_cents",
+                    "price_currency",
+                    "payment_id",
+                    "status",
+                    "customer_note",
+                    "events",
+                    "expires_at",
+                    "created_at",
+                    "updated_at",
+                    "account_id",
+                    "internal_note"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such order.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/crypto-orders/{order_id}/events": {
+      "get": {
+        "summary": "Read an order's append-only state-transition timeline",
+        "tags": ["admin", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "order_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Order events oldest-first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "confirming",
+                              "paid",
+                              "failed",
+                              "partial",
+                              "cancelled"
+                            ]
+                          },
+                          "at": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": ["create", "ipn", "cancel", "expired", "swept"]
+                          }
+                        },
+                        "required": ["status", "at", "source"]
+                      }
+                    }
+                  },
+                  "required": ["events"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such order.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/crypto-orders/{order_id}/internal-note": {
+      "patch": {
+        "summary": "Set or clear the admin-only internal note on an order",
+        "tags": ["admin", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "order_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "internal_note": {
+                    "type": ["string", "null"],
+                    "maxLength": 2000
+                  }
+                },
+                "required": ["internal_note"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Order envelope with the updated internal_note.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order_id": {
+                      "type": "string"
+                    },
+                    "product": {
+                      "type": "string"
+                    },
+                    "price_cents": {
+                      "type": "integer"
+                    },
+                    "price_currency": {
+                      "type": "string"
+                    },
+                    "payment_id": {
+                      "type": ["string", "null"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "confirming", "paid", "failed", "partial", "cancelled"]
+                    },
+                    "customer_note": {
+                      "type": ["string", "null"]
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "confirming",
+                              "paid",
+                              "failed",
+                              "partial",
+                              "cancelled"
+                            ]
+                          },
+                          "at": {
+                            "type": "string",
+                            "description": "ISO-8601 UTC timestamp of the transition."
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": ["create", "ipn", "cancel", "expired"]
+                          }
+                        },
+                        "required": ["status", "at", "source"]
+                      }
+                    },
+                    "expires_at": {
+                      "type": ["string", "null"]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "account_id": {
+                      "type": ["string", "null"]
+                    },
+                    "internal_note": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": [
+                    "order_id",
+                    "product",
+                    "price_cents",
+                    "price_currency",
+                    "payment_id",
+                    "status",
+                    "customer_note",
+                    "events",
+                    "expires_at",
+                    "created_at",
+                    "updated_at",
+                    "account_id",
+                    "internal_note"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such order.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/crypto-orders/sweep-expired": {
+      "post": {
+        "summary": "Sweep stale pending orders to failed (idempotent)",
+        "tags": ["admin", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "older_than_hours": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8760
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Count of orders swept this tick + a capped flag.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "expired": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "capped": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["expired", "capped"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/crypto-orders/stats": {
+      "get": {
+        "summary": "At-a-glance KPI snapshot for the ops dashboard",
+        "tags": ["admin", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Counts per status + paid revenue + time-to-paid metrics.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "by_status": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "paid_revenue_cents": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "avg_time_to_paid_ms": {
+                      "type": ["integer", "null"]
+                    },
+                    "paid_sample": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "paid_revenue_by_product": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      }
+                    },
+                    "paid_count_by_product": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "scanned": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "total",
+                    "by_status",
+                    "paid_revenue_cents",
+                    "avg_time_to_paid_ms",
+                    "paid_sample",
+                    "paid_revenue_by_product",
+                    "paid_count_by_product",
+                    "truncated",
+                    "scanned"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/crypto-orders/daily": {
+      "get": {
+        "summary": "Per-(date, status) counts for the last N days (max 90)",
+        "tags": ["admin", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Defaults to 30; max 90."
+            },
+            "required": false,
+            "description": "Defaults to 30; max 90.",
+            "name": "days",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sparse rows; zero-fill is the caller responsibility.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "string",
+                            "description": "UTC YYYY-MM-DD."
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "confirming",
+                              "paid",
+                              "failed",
+                              "partial",
+                              "cancelled"
+                            ]
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": ["date", "status", "count"]
+                      }
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["rows", "truncated"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/crypto-orders/pending-age": {
+      "get": {
+        "summary": "Histogram of pending-order ages (1h / 1-6h / 6-24h / >24h)",
+        "tags": ["admin", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bucketed counts + total currently pending.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "buckets": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "total_pending": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": ["buckets", "total_pending"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/crypto-orders/idempotency-metrics": {
+      "get": {
+        "summary": "Idempotency-key counters (replays / first_writes / body mismatches)",
+        "tags": ["admin", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Process-lifetime counters; cheap to scrape.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "replays": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "first_writes": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "body_mismatches": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": ["replays", "first_writes", "body_mismatches"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/crypto-orders.csv": {
+      "get": {
+        "summary": "CSV export of crypto orders matching the supplied filters (max 1000 rows)",
+        "tags": ["admin", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "account_id",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["pending", "confirming", "paid", "failed", "partial", "cancelled"]
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "created_after",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "required": false,
+            "name": "created_before",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSV body. First row is the header.",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "description": "RFC 4180 CSV; UTF-8 no BOM."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/crypto-orders/{order_id}/apply-ipn": {
+      "post": {
+        "summary": "Manually apply a NowPayments IPN to an order (ops escape hatch)",
+        "tags": ["admin", "crypto"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "order_id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "provider_status": {
+                    "type": "string"
+                  },
+                  "payment_id": {
+                    "type": "string"
+                  }
+                },
+                "required": ["provider_status", "payment_id"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Order envelope with the transitioned status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "order_id": {
+                      "type": "string"
+                    },
+                    "product": {
+                      "type": "string"
+                    },
+                    "price_cents": {
+                      "type": "integer"
+                    },
+                    "price_currency": {
+                      "type": "string"
+                    },
+                    "payment_id": {
+                      "type": ["string", "null"]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "confirming", "paid", "failed", "partial", "cancelled"]
+                    },
+                    "customer_note": {
+                      "type": ["string", "null"]
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "pending",
+                              "confirming",
+                              "paid",
+                              "failed",
+                              "partial",
+                              "cancelled"
+                            ]
+                          },
+                          "at": {
+                            "type": "string",
+                            "description": "ISO-8601 UTC timestamp of the transition."
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": ["create", "ipn", "cancel", "expired"]
+                          }
+                        },
+                        "required": ["status", "at", "source"]
+                      }
+                    },
+                    "expires_at": {
+                      "type": ["string", "null"]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "account_id": {
+                      "type": ["string", "null"]
+                    },
+                    "internal_note": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": [
+                    "order_id",
+                    "product",
+                    "price_cents",
+                    "price_currency",
+                    "payment_id",
+                    "status",
+                    "customer_note",
+                    "events",
+                    "expires_at",
+                    "created_at",
+                    "updated_at",
+                    "account_id",
+                    "internal_note"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such order.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/auth/magic-link/request": {
       "post": {
         "summary": "Request a magic-link email; always 200 to avoid account enumeration",
@@ -11380,7 +15906,20 @@
                         "admin",
                         "account_owner",
                         "driftstack_internal_admin",
-                        "gui_control"
+                        "gui_control",
+                        "read:sessions",
+                        "write:sessions",
+                        "read:profiles",
+                        "write:profiles",
+                        "admin:profiles",
+                        "read:webhooks",
+                        "write:webhooks",
+                        "admin:webhooks",
+                        "read:api-keys",
+                        "admin:api-keys",
+                        "read:billing",
+                        "admin:billing",
+                        "read:audit"
                       ]
                     },
                     "minItems": 1
@@ -11872,7 +16411,37 @@
                     },
                     "recent_incidents": {
                       "type": "array",
-                      "items": {}
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "severity": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "started_at": {
+                            "type": "string"
+                          },
+                          "resolved_at": {
+                            "type": ["string", "null"]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "severity",
+                          "status",
+                          "started_at",
+                          "resolved_at"
+                        ]
+                      }
                     }
                   },
                   "required": ["overall_status", "components", "recent_incidents"]
@@ -11901,6 +16470,64 @@
                     }
                   },
                   "required": ["data"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/status/incidents/{id}": {
+      "get": {
+        "summary": "Public incident detail with update timeline (V-545.A)",
+        "tags": ["status"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Prefixed id: inc_<uuid>."
+            },
+            "required": true,
+            "description": "Prefixed id: inc_<uuid>.",
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Incident detail + update timeline (oldest first).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "incident": {},
+                    "updates": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": ["updates"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid id format. Expected inc_<uuid>.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Incident is private or does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }

@@ -151,6 +151,7 @@ function toSessionRecord(r: typeof sessions.$inferSelect): SessionRecord {
     purpose: r.purpose,
     label: r.label,
     metadata: r.metadata ?? null,
+    egressCapabilities: r.egressCapabilities ?? null,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     lastStateAt: r.lastStateAt,

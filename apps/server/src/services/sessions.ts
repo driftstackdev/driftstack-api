@@ -63,6 +63,17 @@ export interface SessionRecord {
   purpose: SessionPurpose;
   label: string | null;
   metadata: Record<string, unknown> | null;
+  /**
+   * Harness-reported egress capabilities for SOCKS5 sessions (migration
+   * 0045, cross-agent contract commit 7d5992d9). Null until the harness
+   * emits the `egress.capability_report` event after proxy wire-up;
+   * non-SOCKS5 sessions stay null permanently.
+   */
+  egressCapabilities: {
+    udp_associate: boolean;
+    quic_route: 'proxy' | 'direct' | 'disabled';
+    warnings: string[];
+  } | null;
   createdAt: Date;
   updatedAt: Date;
   lastStateAt: Date | null;
@@ -516,6 +527,26 @@ export class SessionsService {
   ): Promise<SessionListPage> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
     return this.deps.repo.listAllSessions(opts);
+  }
+
+  /**
+   * Returns the session record for GET /v1/sessions/:id. Read-type
+   * action — both 'member' and 'admin' roles are allowed (V-326e3
+   * read pattern, mirrors getState). 404s if the caller doesn't own
+   * the session or the session doesn't exist. Does NOT short-circuit
+   * on terminal status — destroyed/errored sessions remain visible so
+   * customers can inspect post-mortem (driver side-effects are skipped
+   * because no driver call is made; this is a pure DB read).
+   */
+  async describe(
+    ctx: AccountContext,
+    sessionId: string,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<SessionRecord> {
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const session = await this.deps.repo.findSession(sessionId, accountId);
+    if (!session) throw new NotFoundError(`Session "${sessionId}" not found.`);
+    return session;
   }
 
   /**

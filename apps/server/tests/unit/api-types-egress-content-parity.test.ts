@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  EgressCapabilitiesSchema,
   EgressSafeguardSchema,
   OpenVpnProxyConfigSchema,
   ProxyConfigSchema,
@@ -208,6 +209,36 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
         proxy: { type: 'socks5', socks5: { host: 'x', port: 1080 } },
       }).success,
     ).toBe(false);
+  });
+
+  it('EgressCapabilities: harness-reported per-session SOCKS5 capability shape (cross-agent contract 7d5992d9, migration 0045) — udp_associate boolean + quic_route 3-enum (proxy|direct|disabled) + warnings string-array default []', () => {
+    const parsed = EgressCapabilitiesSchema.parse({
+      udp_associate: true,
+      quic_route: 'proxy',
+    });
+    expect(parsed.udp_associate).toBe(true);
+    expect(parsed.quic_route).toBe('proxy');
+    expect(parsed.warnings).toEqual([]);
+    // quic_route enum.
+    expect(
+      EgressCapabilitiesSchema.safeParse({ udp_associate: false, quic_route: 'direct' }).success,
+    ).toBe(true);
+    expect(
+      EgressCapabilitiesSchema.safeParse({ udp_associate: false, quic_route: 'disabled' }).success,
+    ).toBe(true);
+    expect(
+      EgressCapabilitiesSchema.safeParse({ udp_associate: false, quic_route: 'bogus' }).success,
+    ).toBe(false);
+    // warnings as opaque string array — unknown codes pass through.
+    const withWarnings = EgressCapabilitiesSchema.parse({
+      udp_associate: false,
+      quic_route: 'disabled',
+      warnings: ['udp_unsupported_by_proxy', 'quic_disabled_fallback_http2', 'novel_code_xyz'],
+    });
+    expect(withWarnings.warnings).toHaveLength(3);
+    // udp_associate + quic_route required.
+    expect(EgressCapabilitiesSchema.safeParse({ quic_route: 'proxy' }).success).toBe(false);
+    expect(EgressCapabilitiesSchema.safeParse({ udp_associate: true }).success).toBe(false);
   });
 
   it("imports z from 'zod' only (no cross-package leakage)", () => {

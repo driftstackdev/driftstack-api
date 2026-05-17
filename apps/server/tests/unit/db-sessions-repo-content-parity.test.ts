@@ -19,8 +19,9 @@
 //   • recordEvent: 4-field append-only insert into sessionEvents.
 //   • listAllSessions: admin variant with status + accountId
 //     filters.
-//   • toSessionRecord: 13-field SessionRecord incl. metadata
-//     null-coalesce.
+//   • toSessionRecord: 14-field SessionRecord incl. metadata
+//     null-coalesce + egressCapabilities null-coalesce (migration
+//     0045, cross-agent contract 7d5992d9).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -103,9 +104,9 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     );
   });
 
-  it('toSessionRecord: 13-field SessionRecord (id + accountId + apiKeyId + driverSessionId + status + archetype + purpose + label + metadata null-coalesce + 4 timestamps incl. destroyedAt)', () => {
+  it('toSessionRecord: 14-field SessionRecord (id + accountId + apiKeyId + driverSessionId + status + archetype + purpose + label + metadata null-coalesce + egressCapabilities null-coalesce (migration 0045) + 4 timestamps incl. destroyedAt)', () => {
     expect(body).toMatch(
-      /function toSessionRecord\(r: typeof sessions\.\$inferSelect\): SessionRecord \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*apiKeyId: r\.apiKeyId,\s*\n?\s*driverSessionId: r\.driverSessionId,\s*\n?\s*status: r\.status,\s*\n?\s*archetype: r\.archetype,\s*\n?\s*purpose: r\.purpose,\s*\n?\s*label: r\.label,\s*\n?\s*metadata: r\.metadata \?\? null,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*lastStateAt: r\.lastStateAt,\s*\n?\s*destroyedAt: r\.destroyedAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toSessionRecord\(r: typeof sessions\.\$inferSelect\): SessionRecord \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*apiKeyId: r\.apiKeyId,\s*\n?\s*driverSessionId: r\.driverSessionId,\s*\n?\s*status: r\.status,\s*\n?\s*archetype: r\.archetype,\s*\n?\s*purpose: r\.purpose,\s*\n?\s*label: r\.label,\s*\n?\s*metadata: r\.metadata \?\? null,\s*\n?\s*egressCapabilities: r\.egressCapabilities \?\? null,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*lastStateAt: r\.lastStateAt,\s*\n?\s*destroyedAt: r\.destroyedAt,\s*\n?\s*\};\s*\n?\s*\}/,
     );
   });
 

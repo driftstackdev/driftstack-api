@@ -328,6 +328,22 @@ function buildRegistry(): OpenAPIRegistry {
 
   registerRoute(r, {
     method: 'get',
+    path: '/v1/sessions/{id}',
+    summary: 'Get a session by id (includes harness-reported egress_capabilities)',
+    tags: ['Sessions'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description: 'Session record.',
+        content: { 'application/json': { schema: SessionSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'get',
     path: '/v1/sessions/{id}/state',
     summary: 'Snapshot current session state (URL, title, cookies, localStorage)',
     tags: ['Sessions'],

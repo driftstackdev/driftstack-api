@@ -13,6 +13,7 @@ function fakeSession(id: string): Session {
     purpose: 'production_customer',
     label: null,
     metadata: null,
+    egress_capabilities: null,
     created_at: '2026-05-04T00:00:00Z',
     updated_at: '2026-05-04T00:00:00Z',
     last_state_at: null,

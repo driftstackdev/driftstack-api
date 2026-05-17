@@ -36,6 +36,7 @@ function publicSession(s: SessionRecord): Record<string, unknown> {
     purpose: s.purpose,
     label: s.label,
     metadata: s.metadata,
+    egress_capabilities: s.egressCapabilities,
     created_at: s.createdAt.toISOString(),
     updated_at: s.updatedAt.toISOString(),
     last_state_at: s.lastStateAt ? s.lastStateAt.toISOString() : null,

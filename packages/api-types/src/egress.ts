@@ -215,3 +215,44 @@ export const SavedProxyConfigSchema = z.object({
   proxy: ProxyConfigSchema,
 });
 export type SavedProxyConfig = z.infer<typeof SavedProxyConfigSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
+// Egress capabilities (cross-agent contract commit 7d5992d9)
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Capability report emitted by the harness control-websocket after a
+ * SOCKS5 proxy is wired up. The control plane persists the report on
+ * `sessions.egress_capabilities` (migration 0045) and surfaces it on
+ * GET /v1/sessions/{id}.
+ *
+ * Shape locked by the cross-agent contract — fields are NOT optional in
+ * the wire payload, only the column itself is nullable (pre-migration
+ * rows + non-SOCKS5 sessions + async-report-not-yet-arrived).
+ *
+ * - `udp_associate` — does the customer's SOCKS5 proxy support the
+ *   UDP ASSOCIATE command per RFC 1928 §6? Drives QUIC-over-proxy
+ *   feasibility.
+ * - `quic_route` — how QUIC traffic is being handled for this session:
+ *   `proxy` (UDP-tunneled through SOCKS5), `direct` (proxy refuses UDP,
+ *   QUIC bypasses safeguard — only reachable in opt-out configs;
+ *   default safeguard blocks this), or `disabled` (QUIC support turned
+ *   off, all traffic falls back to HTTP/2 over TCP).
+ * - `warnings` — string codes from a closed enum the harness may report
+ *   alongside the capability result. Known codes:
+ *     - `udp_unsupported_by_proxy` (SOCKS5 server returned a non-success
+ *       reply to UDP ASSOCIATE)
+ *     - `quic_disabled_fallback_http2` (QUIC was disabled at session
+ *       create time; emitted for parity with `udp_unsupported_by_proxy`
+ *       so dashboards can render a uniform "why no QUIC?" hint)
+ *
+ * Unknown warning codes are passed through verbatim — the SDK does not
+ * narrow to a Zod enum so the harness can ship new codes without an
+ * SDK release. Dashboard treats unknown codes as opaque strings.
+ */
+export const EgressCapabilitiesSchema = z.object({
+  udp_associate: z.boolean(),
+  quic_route: z.enum(['proxy', 'direct', 'disabled']),
+  warnings: z.array(z.string()).default([]),
+});
+export type EgressCapabilities = z.infer<typeof EgressCapabilitiesSchema>;

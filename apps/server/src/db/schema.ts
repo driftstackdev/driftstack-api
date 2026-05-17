@@ -766,6 +766,15 @@ export const sessions = pgTable(
     label: text('label'),
     // Free-form session metadata supplied by client; bounded at API layer.
     metadata: jsonb('metadata').$type<Record<string, unknown>>(),
+    // Migration 0045 — harness-reported egress capabilities for SOCKS5
+    // sessions per cross-agent contract commit 7d5992d9. Nullable;
+    // populated async after the proxy is wired. See
+    // packages/api-types/src/egress.ts EgressCapabilitiesSchema.
+    egressCapabilities: jsonb('egress_capabilities').$type<{
+      udp_associate: boolean;
+      quic_route: 'proxy' | 'direct' | 'disabled';
+      warnings: string[];
+    }>(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

@@ -91,9 +91,9 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     );
   });
 
-  it('publicSession mapper: 11 fields wire (id ses_ + account_id acc_ + api_key_id key_ + status + archetype + purpose + label + metadata + 4 timestamps incl. nullable last_state_at/destroyed_at)', () => {
+  it('publicSession mapper: 12 fields wire (id ses_ + account_id acc_ + api_key_id key_ + status + archetype + purpose + label + metadata + egress_capabilities (migration 0045) + 4 timestamps incl. nullable last_state_at/destroyed_at)', () => {
     expect(body).toMatch(
-      /function publicSession\(s: SessionRecord\): Record<string, unknown> \{\s*\n?\s*return \{\s*\n?\s*id: prefixId\('ses', s\.id\),\s*\n?\s*account_id: prefixId\('acc', s\.accountId\),\s*\n?\s*api_key_id: prefixId\('key', s\.apiKeyId\),\s*\n?\s*status: s\.status,\s*\n?\s*archetype: s\.archetype,\s*\n?\s*purpose: s\.purpose,\s*\n?\s*label: s\.label,\s*\n?\s*metadata: s\.metadata,\s*\n?\s*created_at: s\.createdAt\.toISOString\(\),\s*\n?\s*updated_at: s\.updatedAt\.toISOString\(\),\s*\n?\s*last_state_at: s\.lastStateAt \? s\.lastStateAt\.toISOString\(\) : null,\s*\n?\s*destroyed_at: s\.destroyedAt \? s\.destroyedAt\.toISOString\(\) : null,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function publicSession\(s: SessionRecord\): Record<string, unknown> \{\s*\n?\s*return \{\s*\n?\s*id: prefixId\('ses', s\.id\),\s*\n?\s*account_id: prefixId\('acc', s\.accountId\),\s*\n?\s*api_key_id: prefixId\('key', s\.apiKeyId\),\s*\n?\s*status: s\.status,\s*\n?\s*archetype: s\.archetype,\s*\n?\s*purpose: s\.purpose,\s*\n?\s*label: s\.label,\s*\n?\s*metadata: s\.metadata,\s*\n?\s*[\s\S]*?egress_capabilities: s\.egressCapabilities,\s*\n?\s*created_at: s\.createdAt\.toISOString\(\),\s*\n?\s*updated_at: s\.updatedAt\.toISOString\(\),\s*\n?\s*last_state_at: s\.lastStateAt \? s\.lastStateAt\.toISOString\(\) : null,\s*\n?\s*destroyed_at: s\.destroyedAt \? s\.destroyedAt\.toISOString\(\) : null,\s*\n?\s*\};\s*\n?\s*\}/,
     );
   });
 
