@@ -10,7 +10,8 @@
 //   • "Pay per concurrent session, not per call" metering
 //     framing pinned — load-bearing pricing differentiator.
 //   • EU-resident compliance section.
-//   • SOCKS5 / WireGuard / OpenVPN egress roadmap claim.
+//   • SOCKS5 / OpenVPN / WireGuard egress roadmap claim
+//     (priority order per founder verdict 2026-05-16).
 //   • Two-ladder pricing teaser: Manual $79/$249/$699 + API
 //     $149/$499/$1,499 with 1/3/8 + 2/8/24 concurrent caps.
 //   • Annual 20% off claim.
@@ -87,12 +88,14 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).not.toMatch(/Hetzner\s+Falkenstein, Neon EU, and Cloudflare R2/);
   });
 
-  it('egress card body no longer claims "on the roadmap" prose (F-5 Issue 5); the small "# Roadmap — customer-configurable egress" inline comment in the EU-residency code-preview is the canonical honest disclosure, gated by W499.D against the server source state', () => {
-    expect(body).toMatch(/Customer-configurable egress \(SOCKS5 \/ WireGuard \/ OpenVPN\)\s+— see/);
-    expect(body).toMatch(/SOCKS5 \/ WireGuard \/ OpenVPN \(not shipped\)/);
+  it('egress card body no longer claims "on the roadmap" prose (F-5 Issue 5); the small "# Roadmap — customer-configurable egress" inline comment in the EU-residency code-preview is the canonical honest disclosure, gated by W499.D against the server source state. Priority order SOCKS5 / OpenVPN / WireGuard per founder verdict 2026-05-16 (Phase 1 / Phase 2 / Phase 3 deferred); matches the server source string in session-proxy.ts.', () => {
+    expect(body).toMatch(/Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\)\s+— see/);
+    expect(body).toMatch(/SOCKS5 \/ OpenVPN \/ WireGuard \(not shipped\)/);
     expect(body).not.toMatch(
-      /Customer-configurable egress \(SOCKS5 \/ WireGuard \/ OpenVPN\)\s+is on the roadmap/,
+      /Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\)\s+is on the roadmap/,
     );
+    // The pre-reorder form must not return.
+    expect(body).not.toMatch(/SOCKS5 \/ WireGuard \/ OpenVPN \(not shipped\)/);
   });
 
   it('two-ladder pricing teaser pinned: Manual $79/$249/$699 + API $149/$499/$1,499', () => {

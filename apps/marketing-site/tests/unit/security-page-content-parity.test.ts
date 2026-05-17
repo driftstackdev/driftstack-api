@@ -49,9 +49,9 @@ describe('W365.A marketing-site /security page parity', () => {
     expect(body).toMatch(/06 · No-customer-data-access posture/);
   });
 
-  it('egress framed as ROADMAP — no server-side implementation today (honesty claim)', () => {
+  it('egress framed as ROADMAP — no server-side implementation today (honesty claim); priority order SOCKS5 / OpenVPN / WireGuard per founder verdict 2026-05-16', () => {
     expect(body).toMatch(
-      /Customer-configurable egress \(SOCKS5 \/ WireGuard \/\s+OpenVPN\) is on the roadmap — no server-side\s+implementation ships today/,
+      /Customer-configurable egress \(SOCKS5 \/ OpenVPN \/\s+WireGuard\) is on the roadmap — no server-side\s+implementation ships today/,
     );
   });
 

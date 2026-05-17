@@ -101,9 +101,9 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
     expect(pricingShapeMatches.length).toBeGreaterThanOrEqual(4);
   });
 
-  it("vs Bright Data BYO-proxy framing pinned: 'Bring your own proxy network or use SOCKS5 / WireGuard / OpenVPN to whatever IP pool you've already paid for. We don't sell proxies; we don't mark up egress.' — pinned so the 'BYO egress, no markup' positioning survives (drift to dropping would weaken the cost-comparison case against Bright Data who sells proxies)", () => {
+  it("vs Bright Data BYO-proxy framing pinned: 'Bring your own proxy network or use SOCKS5 / OpenVPN / WireGuard to whatever IP pool you've already paid for. We don't sell proxies; we don't mark up egress.' — pinned so the 'BYO egress, no markup' positioning survives (drift to dropping would weaken the cost-comparison case against Bright Data who sells proxies). Priority order SOCKS5 / OpenVPN / WireGuard matches the API server's user-facing 503 messages + the founder verdict 2026-05-16 (Phase 1 / Phase 2 / Phase 3 deferred).", () => {
     expect(body).toMatch(
-      /Bring your own\s*\n?\s*proxy network or use SOCKS5 \/ WireGuard \/ OpenVPN to whatever IP\s*\n?\s*pool you've already paid for\. We don't sell proxies; we don't\s*\n?\s*mark up egress\./,
+      /Bring your own\s*\n?\s*proxy network or use SOCKS5 \/ OpenVPN \/ WireGuard to whatever IP\s*\n?\s*pool you've already paid for\. We don't sell proxies; we don't\s*\n?\s*mark up egress\./,
     );
   });
 

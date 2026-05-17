@@ -110,7 +110,7 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
 
   it('"session traffic exits through your egress" + "Driftstack orchestrates; proxy carries the bytes" framing pinned', () => {
     expect(body).toMatch(
-      /Session traffic exits through your egress \(the SOCKS5 \/\s+WireGuard \/ OpenVPN proxies you configure\)\. Driftstack\s+orchestrates the session; the proxy carries the bytes\./,
+      /Session traffic exits through your egress \(the SOCKS5 \/\s+OpenVPN \/ WireGuard proxies you configure\)\. Driftstack\s+orchestrates the session; the proxy carries the bytes\./,
     );
   });
 

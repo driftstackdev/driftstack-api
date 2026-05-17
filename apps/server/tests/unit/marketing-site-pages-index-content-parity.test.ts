@@ -88,7 +88,7 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     );
     expect(body).toMatch(/We log session metadata only/);
     expect(body).toMatch(
-      /Customer-configurable egress \(SOCKS5 \/ WireGuard \/ OpenVPN\)\s*\n?\s*— see/,
+      /Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\)\s*\n?\s*— see/,
     );
     expect(body).not.toMatch(/Hetzner\s*\n?\s*Falkenstein, Neon EU, and Cloudflare R2/);
     expect(body).not.toMatch(/is on the roadmap/);

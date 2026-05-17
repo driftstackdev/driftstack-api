@@ -1,8 +1,9 @@
 // W332.B — drift guard for /security egress framing. The page
-// names customer-configurable egress (SOCKS5 / WireGuard / OpenVPN)
-// as ON ROADMAP, not live today. Catches drift if the framing
-// silently flips to "shipped" before it actually does, or if the
-// claim disappears entirely.
+// names customer-configurable egress (SOCKS5 / OpenVPN / WireGuard,
+// priority order per founder verdict 2026-05-16) as ON ROADMAP,
+// not live today. Catches drift if the framing silently flips to
+// "shipped" before it actually does, or if the claim disappears
+// entirely.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -24,10 +25,13 @@ describe('W332.B /security egress roadmap framing', () => {
     expect(body).toMatch(/Egress \(roadmap\)/);
   });
 
-  it('lists supported egress modalities (SOCKS5 / WireGuard / OpenVPN)', () => {
-    expect(body).toMatch(/SOCKS5/);
-    expect(body).toMatch(/WireGuard/);
-    expect(body).toMatch(/OpenVPN/);
+  it('lists supported egress modalities in priority order (SOCKS5 / OpenVPN / WireGuard)', () => {
+    // Order matches the 2026-05-16 founder verdict: SOCKS5 (Phase 1
+    // live target) → OpenVPN (Phase 2 priority) → WireGuard (Phase 3
+    // deferred). Pinning the order keeps marketing copy in sync with
+    // the API server's user-facing 503 messages (see
+    // apps/server/src/routes/session-proxy.ts which uses the same order).
+    expect(body).toMatch(/SOCKS5\s*\/\s*OpenVPN\s*\/\s*WireGuard/);
   });
 
   it('frames egress as "on the roadmap" (forward-looking, not live)', () => {

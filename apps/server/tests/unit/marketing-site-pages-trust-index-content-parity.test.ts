@@ -98,9 +98,9 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     );
   });
 
-  it("Destination-URL answer pinned: 'No. Session traffic exits through your egress (the SOCKS5 / WireGuard / OpenVPN proxies you configure). Driftstack orchestrates the session; the proxy carries the bytes.' — pinned so the no-we-don't-see-URLs + customer-egress posture survives (drift to softening 'No' would let buyers question what Driftstack actually sees; drift to dropping the SOCKS5/WG/OpenVPN list would lose the customer-controlled-egress specifics)", () => {
+  it("Destination-URL answer pinned: 'No. Session traffic exits through your egress (the SOCKS5 / OpenVPN / WireGuard proxies you configure). Driftstack orchestrates the session; the proxy carries the bytes.' — pinned so the no-we-don't-see-URLs + customer-egress posture survives (drift to softening 'No' would let buyers question what Driftstack actually sees; drift to dropping the SOCKS5/OpenVPN/WG list would lose the customer-controlled-egress specifics). Priority order SOCKS5 / OpenVPN / WireGuard per founder verdict 2026-05-16; matches the API server's user-facing 503 messages.", () => {
     expect(body).toMatch(
-      /No\. Session traffic exits through your egress \(the SOCKS5 \/\s*\n?\s*WireGuard \/ OpenVPN proxies you configure\)\. Driftstack\s*\n?\s*orchestrates the session; the proxy carries the bytes\./,
+      /No\. Session traffic exits through your egress \(the SOCKS5 \/\s*\n?\s*OpenVPN \/ WireGuard proxies you configure\)\. Driftstack\s*\n?\s*orchestrates the session; the proxy carries the bytes\./,
     );
   });
 
