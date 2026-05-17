@@ -58,10 +58,14 @@ describe('W627 R7-R17 marketing additions content parity', () => {
     // paths / EU-hosted) under "What sets us apart". Vendor names
     // (Hetzner FSN / Neon EU / R2 EU) moved to /trust/sub-processors
     // per Issue 6. "Pre-launch" framing dropped per Issue 5.
-    it('"What sets us apart" eyebrow + 4 fingerprint-leading differentiator labels pinned (Indistinguishable / Zero detection surface / Apple\'s WebKit not Chromium / API · SDK · GUI) — strip rewritten 2026-05-16 to lead with the canvas+WebGL-hash claim against competitors\' unique-per-session leakage', () => {
+    it('"What sets us apart" eyebrow + 4 fingerprint-leading differentiator labels pinned (M.3 Plan Item 5 dedupe: Population-matched / Zero detection surface / Apple\'s WebKit not Chromium / API · SDK · GUI). "Indistinguishable" moved off this card so it only appears once on the page (hero h1 brand line) — the canvas+WebGL-hash technical descriptor pairs more naturally with "Population-matched" anyway.', () => {
       expect(body).toMatch(/What sets us apart/);
       expect(body).not.toMatch(/Pre-launch trust signals/);
       expect(body).toMatch(
+        /<span class="text-base font-semibold text-ink-primary">Population-matched<\/span>/,
+      );
+      // The pre-dedupe label must NOT return at this slot.
+      expect(body).not.toMatch(
         /<span class="text-base font-semibold text-ink-primary">Indistinguishable<\/span>/,
       );
       expect(body).toMatch(

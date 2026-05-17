@@ -30,7 +30,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </p>
           <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
             <a href="/pricing#trial-pack" class="btn-primary w-full text-center sm:w-auto">Start for $2.99</a>
-            <a href="/comparison" class="btn-secondary w-full text-center sm:w-auto">Why not Browserless?</a>
+            <a href="/comparison" class="btn-secondary w-full text-center sm:w-auto">Compare the alternatives</a>
           </div>
           <p class="mt-4 text-xs text-ink-muted">
             16 hours of session time · 14-day window · one trial per account.
@@ -140,7 +140,7 @@ const result = await session.result();
       </p>
       <div class="mt-6 grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-4">
         <div class="flex flex-col items-center gap-1.5 text-center">
-          <span class="text-base font-semibold text-ink-primary">Indistinguishable</span>
+          <span class="text-base font-semibold text-ink-primary">Population-matched</span>
           <span class="text-xs text-ink-muted">Canvas + WebGL hashes match the real-iPhone population — not unique-per-session like every other API</span>
         </div>
         <div class="flex flex-col items-center gap-1.5 text-center">
@@ -174,9 +174,10 @@ const result = await session.result();
           <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">QA + testing</p>
           <h3 class="mt-3 text-lg font-semibold text-ink-primary">Mobile-Safari coverage</h3>
           <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
-            Run end-to-end tests against the exact engine your iOS users
-            run. Same rendering, same JavaScript timing, same quirks. No
-            "works on my Mac, fails on iPhone" surprises in production.
+            Run end-to-end tests against the exact engine your iOS
+            users run. Same rendering, same JavaScript timing, same
+            quirks — so the bug you reproduce in CI is the same bug
+            your users hit in production.
           </p>
         </div>
         <div class="card p-6">
@@ -271,7 +272,7 @@ const result = await session.result();
         style="letter-spacing: -0.04em;"
       >
         <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
-          Indistinguishable from a real iPhone.
+          One iPhone among millions.
         </span>
       </p>
       <p class="mt-8 max-w-prose text-lg text-ink-secondary leading-relaxed">
@@ -449,16 +450,13 @@ const result = await session.result();
             class="mt-6 max-w-2xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
             style="letter-spacing: -0.02em;"
           >
-            Customer data stays in the EU.
+            EU-only by default.
           </h2>
           <p class="mt-6 max-w-prose text-base text-ink-secondary leading-relaxed">
-            Database, object storage, and compute all run in the EU,
-            single-region. We log session metadata only — when a
-            session ran, how long, which device archetype. The pages
-            your session visits are never stored or read by the
-            control plane. Outbound traffic can route through proxy
-            regions you choose; per-vendor sub-processor breakdown
-            at
+            Your data stays in the EU. We don't log what your sessions
+            visit or do — only the operational metadata we need to bill
+            (session duration, archetype, cap usage). Full data
+            residency + sub-processor breakdown at
             <a href="/trust/sub-processors" class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
               >/trust/sub-processors</a
             >.

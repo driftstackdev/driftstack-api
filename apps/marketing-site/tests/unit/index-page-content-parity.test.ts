@@ -53,16 +53,23 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).toMatch(/16 hours of session time · 14-day window · one trial per account\./);
   });
 
-  it('Comparison CTA pinned (replaced the old GitHub-release secondary link)', () => {
+  it('Comparison CTA pinned (M.3 Plan Item 2 — "Compare the alternatives" generic framing replaced "Why not Browserless?" which read too defensive and gave free SEO to a specific competitor)', () => {
     expect(body).toMatch(/href="\/comparison"/);
-    expect(body).toMatch(/Why not Browserless\?/);
+    expect(body).toMatch(/Compare the alternatives/);
+    // The prior "Why not Browserless?" CTA must NOT return.
+    expect(body).not.toMatch(/Why not Browserless\?/);
   });
 
-  it('R12 "Indistinguishable from a real iPhone." framing (plain-English replacement for the prior "Bit-identical" jargon) + iPhone 16 Pro / iOS 18.7 / Safari 26.4 reference + launch-blocking-bug fidelity commitment', () => {
-    expect(body).toMatch(/Indistinguishable from a real iPhone\./);
+  it('M.3 (Plan Item 5) "One iPhone among millions." why-works hero (replaces the prior "Indistinguishable from a real iPhone." duplicate; the "Indistinguishable" word now appears once on the page in the hero h1 brand line) + iPhone 16 Pro / iOS 18.7 / Safari 26.4 reference + launch-blocking-bug fidelity commitment', () => {
+    expect(body).toMatch(/One iPhone among millions\./);
     expect(body).toMatch(/iPhone 16 Pro, iOS 18\.7, Safari 26\.4/);
     expect(body).toMatch(
       /If any\s+measurable signal differs from what that phone sends, we treat\s+it as a launch-blocking bug/,
+    );
+    // The pre-dedupe wording must NOT return at this slot — it was
+    // the load-bearing repetition Item 5 fixes.
+    expect(body).not.toMatch(
+      /<span class="bg-gradient-to-br[^>]+>\s*\n?\s*Indistinguishable from a real iPhone\./,
     );
   });
 
@@ -78,13 +85,17 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).toMatch(/Visit\s+200 pages on one session for the cost of visiting one\./);
   });
 
-  it('F-5 (Issue 5 + 6) EU-resident compliance section: "Customer data stays in the EU." headline + single-region framing (vendor names moved to /trust/sub-processors per Issue 6) + session-metadata-only commitment + sub-processors cross-link', () => {
-    expect(body).toMatch(/Customer data stays in the EU\./);
-    expect(body).toMatch(
+  it('M.3 (Plan Item 8) EU compliance simplification: "EU-only by default." headline (replaces "Customer data stays in the EU." for inviting/scan-friendly tone) + plain-English body ("Your data stays in the EU. We don\'t log what your sessions visit or do — only the operational metadata we need to bill") + sub-processors cross-link. Infra-tier detail (Database / object storage / compute / single-region) was moved off the homepage to /trust/security-overview and /trust/sub-processors where infra-tier readers go.', () => {
+    expect(body).toMatch(/EU-only by default\./);
+    expect(body).toMatch(/Your data stays in the EU\./);
+    expect(body).toMatch(/only the operational metadata we need to bill/);
+    expect(body).toMatch(/session duration, archetype, cap usage/);
+    expect(body).toMatch(/href="\/trust\/sub-processors"/);
+    // Prior framings must NOT return at this slot.
+    expect(body).not.toMatch(/Customer data stays in the EU\./);
+    expect(body).not.toMatch(
       /Database, object storage, and compute all run in the EU,\s+single-region\./,
     );
-    expect(body).toMatch(/We log session metadata only/);
-    expect(body).toMatch(/href="\/trust\/sub-processors"/);
     expect(body).not.toMatch(/Hetzner\s+Falkenstein, Neon EU, and Cloudflare R2/);
   });
 

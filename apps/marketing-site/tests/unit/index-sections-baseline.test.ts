@@ -1,12 +1,15 @@
-// W323.B (R12-refreshed) — drift guard for marketing /index section
+// W323.B (M.3-refreshed) — drift guard for marketing /index section
 // coverage. Anchors the narrative beats so a future copy refactor
-// doesn't silently drop a section. R12 simplified the headlines for
-// non-technical readers; updated phrase list:
-//   • "Indistinguishable from a real iPhone." fingerprint claim
-//     (replaces the prior "Bit-identical" jargon)
+// doesn't silently drop a section. M.3 (Plan Item 5 + Item 8)
+// dedupes "Indistinguishable" + simplifies EU compliance header:
+//   • "One iPhone among millions." fingerprint claim
+//     (M.3 dedupe; "Indistinguishable from a real iPhone" was the
+//     prior framing — the brand-line use survives in the hero h1)
 //   • "Apple's engine" stack positioning (replaces "Real WebKit")
 //   • "One metric. Concurrent sessions." pricing positioning
-//   • "Customer data stays in the EU." data plane section
+//   • "EU-only by default." data plane section header
+//     (M.3 simplify; "Customer data stays in the EU." was the prior
+//     framing — replaced for inviting / scan-friendly tone)
 //   • "Drive it by hand, or drive it from code." audience split
 //   • Two ladders + trial pack
 //   • Self-hosted as a parallel offering
@@ -21,10 +24,10 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/index.astro');
 
 const REQUIRED_PHRASES = [
-  'Indistinguishable from a real iPhone',
+  'One iPhone among millions',
   "Apple's engine",
   'One metric. Concurrent sessions',
-  'Customer data stays in the EU',
+  'EU-only by default',
   'Drive it by hand, or drive it from code',
   'Two ladders',
   'Run Driftstack on your own infrastructure',

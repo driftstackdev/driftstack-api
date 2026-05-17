@@ -46,12 +46,16 @@ describe('W246.D marketing-site /index doc parity', () => {
     }
   });
 
-  it('F-5 (Issue 6) EU-residency truthful: "Customer data stays in the EU." headline + single-region framing (vendor names moved to /trust/sub-processors — the prior "Hetzner Falkenstein, Neon EU, and Cloudflare R2" enumeration is no longer on the homepage splash)', () => {
-    expect(doc).toMatch(/Customer data stays in the EU/);
-    expect(doc).toMatch(
+  it('M.3 (Plan Item 8) EU compliance simplification: "EU-only by default." headline (replaces "Customer data stays in the EU." for inviting/scan-friendly tone) + plain-English body that drops the infra-tier "Database, object storage, and compute" enumeration in favour of "operational metadata we need to bill (session duration, archetype, cap usage)" framing. Infra-tier readers get the detail via the /trust/sub-processors cross-link.', () => {
+    expect(doc).toMatch(/EU-only by default/);
+    expect(doc).toMatch(/Your data stays in the EU/);
+    expect(doc).toMatch(/operational metadata we need to bill/);
+    expect(doc).not.toMatch(/Hetzner\s*\n?\s*Falkenstein, Neon EU, and Cloudflare R2/);
+    // Prior infra-tier wording must NOT return.
+    expect(doc).not.toMatch(/Customer data stays in the EU/);
+    expect(doc).not.toMatch(
       /Database, object storage, and compute all run in the EU,\s*\n?\s*single-region/,
     );
-    expect(doc).not.toMatch(/Hetzner\s*\n?\s*Falkenstein, Neon EU, and Cloudflare R2/);
   });
 
   it('does not claim "never sees destination URL" as a control-plane property', () => {

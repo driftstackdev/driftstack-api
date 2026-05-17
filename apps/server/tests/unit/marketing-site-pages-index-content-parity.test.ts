@@ -38,11 +38,16 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).not.toMatch(/Other API browsers patch JavaScript at runtime/);
   });
 
-  it('R12 "Indistinguishable from a real iPhone." giant-headline framing (plain-English replacement for the prior "Bit-identical" jargon) + iPhone 16 Pro / iOS 18.7 / Safari 26.4 reference + launch-blocking-bug fidelity commitment', () => {
-    expect(body).toMatch(/Indistinguishable from a real iPhone\./);
+  it('M.3 (Plan Item 5) "One iPhone among millions." giant-headline framing (replaces the prior "Indistinguishable from a real iPhone." — the "Indistinguishable" word now appears once on the page in the hero h1 brand line, dropping the 3x-repetition that read repetitive) + iPhone 16 Pro / iOS 18.7 / Safari 26.4 reference + launch-blocking-bug fidelity commitment', () => {
+    expect(body).toMatch(/One iPhone among millions\./);
     expect(body).toMatch(/iPhone 16 Pro, iOS 18\.7, Safari 26\.4/);
     expect(body).toMatch(
       /If any\s*\n?\s*measurable signal differs from what that phone sends, we treat\s*\n?\s*it as a launch-blocking bug/,
+    );
+    // Prior wording must NOT return at this slot — it was the
+    // load-bearing repetition Item 5 fixes.
+    expect(body).not.toMatch(
+      /<span class="bg-gradient-to-br[^>]+>\s*\n?\s*Indistinguishable from a real iPhone\./,
     );
   });
 
@@ -55,14 +60,16 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     );
   });
 
-  it("Hero CTAs + trial-pack subline (R5: 'Start for $2.99' + 'Why not Browserless?'). Tailwind classes match mobile-responsive full-width-on-mobile pattern (M.1: w-full sm:w-auto with centred text), so the buttons stack cleanly under 640px and the tap target spans the column.", () => {
+  it("Hero CTAs + trial-pack subline (R5: 'Start for $2.99' + M.3 Plan Item 2 'Compare the alternatives' generic CTA — replaces 'Why not Browserless?' which gave free SEO to a competitor and read defensive). Tailwind classes match mobile-responsive full-width-on-mobile pattern (M.1: w-full sm:w-auto with centred text), so the buttons stack cleanly under 640px and the tap target spans the column.", () => {
     expect(body).toMatch(
       /<a href="\/pricing#trial-pack" class="btn-primary w-full text-center sm:w-auto">Start for \$2\.99<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="\/comparison" class="btn-secondary w-full text-center sm:w-auto">Why not Browserless\?<\/a>/,
+      /<a href="\/comparison" class="btn-secondary w-full text-center sm:w-auto">Compare the alternatives<\/a>/,
     );
     expect(body).toMatch(/16 hours of session time · 14-day window · one trial per account\./);
+    // The defensive "Why not Browserless?" CTA must NOT return.
+    expect(body).not.toMatch(/Why not Browserless\?/);
   });
 
   it('Code example contract: archetype + wireguard proxy + navigate/waitForChallenge/interact/destroy', () => {
@@ -83,17 +90,21 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/Visit\s*\n?\s*200 pages on one session for the cost of visiting one\./);
   });
 
-  it('F-5 (Issue 5 + 6) EU compliance framing: "Customer data stays in the EU." headline + single-region framing (vendor names moved to /trust/sub-processors per Issue 6) + "We log session metadata only" commitment + customer-configurable egress card no longer claims "on the roadmap" (Issue 5; the security.astro card retains its honest "not shipped today" disclaimer where the W499.D parity test gates on actual server source).', () => {
-    expect(body).toMatch(/Customer data stays in the EU\./);
-    expect(body).toMatch(
-      /Database, object storage, and compute all run in the EU,\s*\n?\s*single-region\./,
-    );
-    expect(body).toMatch(/We log session metadata only/);
+  it('M.3 (Plan Item 8) EU compliance simplification: "EU-only by default." headline (replaces "Customer data stays in the EU." for inviting/scan-friendly tone) + plain-English body ("Your data stays in the EU. We don\'t log what your sessions visit or do — only the operational metadata we need to bill") + customer-configurable egress card still cross-links to /trust/security-overview per W247.A drift-sweep gate (egress disclaimer status quo respected; W247.A gate auto-flips when EG-API-1.6 customer-egress propagation slice lands at the API layer).', () => {
+    expect(body).toMatch(/EU-only by default\./);
+    expect(body).toMatch(/Your data stays in the EU\./);
+    expect(body).toMatch(/only the operational metadata we need to bill/);
+    expect(body).toMatch(/session duration, archetype, cap usage/);
     expect(body).toMatch(
       /Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\)\s*\n?\s*— see/,
     );
+    // Prior framings must NOT return at this slot.
+    expect(body).not.toMatch(/Customer data stays in the EU\./);
+    expect(body).not.toMatch(
+      /Database, object storage, and compute all run in the EU,\s*\n?\s*single-region\./,
+    );
+    expect(body).not.toMatch(/We log session metadata only/);
     expect(body).not.toMatch(/Hetzner\s*\n?\s*Falkenstein, Neon EU, and Cloudflare R2/);
-    expect(body).not.toMatch(/is on the roadmap/);
   });
 
   it('Manual ladder framing: $79/$249/$699 + 1/3/8 concurrent + unlimited hours within cap', () => {
