@@ -309,6 +309,13 @@
       "when": 1778090434000,
       "tag": "0043_fleet_nodes",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1778090435000,
+      "tag": "0044_recipes",
+      "breakpoints": true
     }
   ]
 }
