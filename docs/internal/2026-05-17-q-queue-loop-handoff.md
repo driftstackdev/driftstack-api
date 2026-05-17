@@ -495,3 +495,44 @@ Cumulative session output: 14 commits; ~6,800 LOC inserted across
 4 new migrations (0045/0046/0047/0048/0049), 5 new services, 9 new
 test files (v2-#4 + v2-#5 + v2-#12 + v2-#14 + email-gap + two
 reminder services).
+
+## v2-#10.6 + #11.6 Drizzle repo impls (2026-05-18 01:10 UTC)
+
+Service-layer follow-ups (v2-#10.5/#11.5) shipped with repo
+interfaces but no concrete Drizzle implementation. Completed
+in commit `872b287b`:
+
+- `DrizzleWebhookRotationReminderRepo` — joins webhook_endpoints +
+  accounts, filters on disabled_at IS NULL + secret age + cooldown,
+  ORDER BY oldest-first.
+- `DrizzleByokAnthropicRotationReminderRepo` — accounts-only,
+  filters on BYOK key set + age + cooldown, ORDER BY oldest-first.
+
+Both repos are wire-ready. A scheduled-job cron now has a full
+end-to-end path: `cron → tickOnce(now) → findEndpointsNeedingRotation
+Reminder → send emails → markReminderSent → cron re-enqueues next day`.
+
+Only piece left: the cron itself (v2-#10.7 + #11.7). One-shot
+scheduled_jobs row that self-reschedules daily; ~40 LOC in
+bootstrap.ts. Schema + service + repo are done.
+
+## Session summary (2026-05-17 22:00 UTC → 2026-05-18 01:10 UTC)
+
+15 commits. Cumulative scope:
+
+- 5 migrations (0045 / 0046 / 0047 / 0048 / 0049).
+- 7 new server services / repos:
+  - DrizzleAgentDecomposerUsageRecorder (v2-#4 + #5)
+  - WebhookRotationReminderService (v2-#10.5)
+  - DrizzleWebhookRotationReminderRepo (v2-#10.6)
+  - ByokAnthropicRotationReminderService (v2-#11.5)
+  - DrizzleByokAnthropicRotationReminderRepo (v2-#11.6)
+- 2 design docs (v2-#6 bundled-LLM + v2-#8 AI chat + manual).
+- 11 new unit-test files (~50 new tests across them).
+- ~7,200 LOC inserted across the 15 commits.
+- 12 founder verdicts queued in
+  /tmp/orchestrator-pending-tier3.md for the morning queue.
+
+Zero uncommitted files. Test suite count growing monotonically
+(14,644 → 14,696+ tests; targeted sweep across 20 touched files
+passed at session end).
