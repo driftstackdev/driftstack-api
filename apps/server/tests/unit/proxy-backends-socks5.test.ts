@@ -15,9 +15,16 @@
 //     ships them.
 //   - releaseFromSession is a no-op (returns resolved void).
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SocksProxyBackend } from '../../src/services/proxy-backends/socks5.js';
 import type { SessionEgressConfig } from '../../src/services/session-egress.js';
+
+// All tests inject a tcpProbe stub so we never open real sockets
+// during unit tests. Default stub resolves (probe success); the
+// reachability tests pass a rejecting stub.
+function probeOk(): Promise<void> {
+  return Promise.resolve();
+}
 
 const SAFEGUARD = {
   block_direct_internet: true,
@@ -53,7 +60,7 @@ function socks5Config(
 
 describe('EG-API-1.6 SocksProxyBackend', () => {
   it('applyToSession returns EgressHandle with the canonical env-var contract', async () => {
-    const backend = new SocksProxyBackend();
+    const backend = new SocksProxyBackend({ tcpProbe: probeOk });
     const handle = await backend.applyToSession({ config: socks5Config() });
     expect(handle.sessionId).toBe('ses_test_xxx');
     expect(handle.type).toBe('socks5');
@@ -65,19 +72,19 @@ describe('EG-API-1.6 SocksProxyBackend', () => {
   });
 
   it('UDP_ASSOCIATE defaults true (QUIC + HTTP/3 work end-to-end)', async () => {
-    const backend = new SocksProxyBackend();
+    const backend = new SocksProxyBackend({ tcpProbe: probeOk });
     const handle = await backend.applyToSession({ config: socks5Config({ udp_associate: true }) });
     expect(handle.cleanup.envOverrides?.DRIFTSTACK_SOCKS5_UDP_ASSOCIATE).toBe('1');
   });
 
   it('udp_associate=false drops the UDP path (TCP-only egress)', async () => {
-    const backend = new SocksProxyBackend();
+    const backend = new SocksProxyBackend({ tcpProbe: probeOk });
     const handle = await backend.applyToSession({ config: socks5Config({ udp_associate: false }) });
     expect(handle.cleanup.envOverrides?.DRIFTSTACK_SOCKS5_UDP_ASSOCIATE).toBe('0');
   });
 
   it('username + password are both propagated when present', async () => {
-    const backend = new SocksProxyBackend();
+    const backend = new SocksProxyBackend({ tcpProbe: probeOk });
     const handle = await backend.applyToSession({
       config: socks5Config({ username: 'alice', password: 'topsecret' }),
     });
@@ -86,35 +93,35 @@ describe('EG-API-1.6 SocksProxyBackend', () => {
   });
 
   it('username-without-password is rejected (both or neither)', async () => {
-    const backend = new SocksProxyBackend();
+    const backend = new SocksProxyBackend({ tcpProbe: probeOk });
     await expect(
       backend.applyToSession({ config: socks5Config({ username: 'alice' }) }),
     ).rejects.toThrow(/both username \+ password, or neither/);
   });
 
   it('password-without-username is rejected (both or neither)', async () => {
-    const backend = new SocksProxyBackend();
+    const backend = new SocksProxyBackend({ tcpProbe: probeOk });
     await expect(
       backend.applyToSession({ config: socks5Config({ password: 'topsecret' }) }),
     ).rejects.toThrow(/both username \+ password, or neither/);
   });
 
   it('empty-host is rejected before env vars are emitted', async () => {
-    const backend = new SocksProxyBackend();
+    const backend = new SocksProxyBackend({ tcpProbe: probeOk });
     await expect(backend.applyToSession({ config: socks5Config({ host: '   ' }) })).rejects.toThrow(
       /socks5\.host/,
     );
   });
 
   it('out-of-range port is rejected', async () => {
-    const backend = new SocksProxyBackend();
+    const backend = new SocksProxyBackend({ tcpProbe: probeOk });
     await expect(backend.applyToSession({ config: socks5Config({ port: 70000 }) })).rejects.toThrow(
       /port must be in \[1, 65535\]/,
     );
   });
 
   it('OpenVPN config is rejected with a typed planning-133-phase reference', async () => {
-    const backend = new SocksProxyBackend();
+    const backend = new SocksProxyBackend({ tcpProbe: probeOk });
     const config: SessionEgressConfig = {
       session_id: 'ses_test_xxx',
       proxy: {
@@ -129,7 +136,7 @@ describe('EG-API-1.6 SocksProxyBackend', () => {
   });
 
   it('WireGuard config is rejected with a typed planning-133-phase reference', async () => {
-    const backend = new SocksProxyBackend();
+    const backend = new SocksProxyBackend({ tcpProbe: probeOk });
     const config: SessionEgressConfig = {
       session_id: 'ses_test_xxx',
       proxy: {
@@ -147,8 +154,62 @@ describe('EG-API-1.6 SocksProxyBackend', () => {
   });
 
   it('releaseFromSession is a no-op (env vars are process-scoped to the WebKit child)', async () => {
-    const backend = new SocksProxyBackend();
+    const backend = new SocksProxyBackend({ tcpProbe: probeOk });
     const handle = await backend.applyToSession({ config: socks5Config() });
     await expect(backend.releaseFromSession(handle)).resolves.toBeUndefined();
+  });
+
+  describe('Q.0.b tunnel-reachability TCP probe', () => {
+    it('invokes the probe with host + port + injected timeout before returning the handle', async () => {
+      const probe = vi.fn().mockResolvedValue(undefined);
+      const backend = new SocksProxyBackend({ tcpProbe: probe, probeTimeoutMs: 1234 });
+      await backend.applyToSession({ config: socks5Config({ host: 'p.example', port: 1080 }) });
+      expect(probe).toHaveBeenCalledWith('p.example', 1080, 1234);
+    });
+
+    it('throws egress-tunnel-unreachable when the probe rejects (firewall / wrong host / wrong port)', async () => {
+      const probe = vi.fn().mockRejectedValue(new Error('egress-tunnel-unreachable: ECONNREFUSED'));
+      const backend = new SocksProxyBackend({ tcpProbe: probe });
+      await expect(backend.applyToSession({ config: socks5Config() })).rejects.toThrow(
+        /egress-tunnel-unreachable/,
+      );
+    });
+
+    it('does NOT call the probe when schema validation fails first (no point probing an invalid config)', async () => {
+      const probe = vi.fn().mockResolvedValue(undefined);
+      const backend = new SocksProxyBackend({ tcpProbe: probe });
+      await expect(
+        backend.applyToSession({ config: socks5Config({ host: '   ' }) }),
+      ).rejects.toThrow(/socks5\.host/);
+      expect(probe).not.toHaveBeenCalled();
+    });
+
+    it('does NOT call the probe for non-SOCKS5 proxy types (rejects at the type check)', async () => {
+      const probe = vi.fn().mockResolvedValue(undefined);
+      const backend = new SocksProxyBackend({ tcpProbe: probe });
+      const config: SessionEgressConfig = {
+        session_id: 'ses_test_xxx',
+        proxy: {
+          type: 'openvpn',
+          openvpn: { config_blob: 'client\nremote ovpn.example.com 1194\n' },
+        },
+        egress_safeguard: SAFEGUARD,
+      };
+      await expect(backend.applyToSession({ config })).rejects.toThrow(
+        /Phase 2\/3 per planning 133/,
+      );
+      expect(probe).not.toHaveBeenCalled();
+    });
+
+    it('default probe timeout is 3000ms when not injected', async () => {
+      let observedTimeout: number | undefined;
+      const probe = (_h: string, _p: number, t: number): Promise<void> => {
+        observedTimeout = t;
+        return Promise.resolve();
+      };
+      const backend = new SocksProxyBackend({ tcpProbe: probe });
+      await backend.applyToSession({ config: socks5Config() });
+      expect(observedTimeout).toBe(3000);
+    });
   });
 });

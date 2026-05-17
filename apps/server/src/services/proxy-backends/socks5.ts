@@ -7,6 +7,13 @@
 // What this slice does:
 //   - Validate the customer-supplied SOCKS5 config (host + port
 //     present, port in range, optional auth credentials).
+//   - TCP-probe the host:port with a short timeout before
+//     returning the EgressHandle (planning 133 §"Phase 1 §5 —
+//     fail-fast on session create"). Customers whose SOCKS5 host
+//     is unreachable get a 4xx with problem-type
+//     `https://errors.driftstack.dev/egress-tunnel-unreachable`
+//     instead of a delayed failure once the WebKit fork tries
+//     to connect.
 //   - Return an EgressHandle whose envOverrides the harness
 //     reads when spawning the WebKit fork — DRIFTSTACK_SOCKS5_*
 //     env vars per planning 133's per-WebContent SOCKS5 config
@@ -16,18 +23,58 @@
 //     the browser process exits.
 //
 // Out of scope for this slice (planned follow-ups):
-//   - Tunnel-reachability TCP probe before returning the handle
-//     (planning 133 §"Phase 1 §5 — fail-fast on session create").
-//     Until that lands, customers whose SOCKS5 host is unreachable
-//     get a delayed failure when the WebKit fork tries to connect.
 //   - OpenVPN + WireGuard backends — return 503 at this layer
 //     until the harness-side macOS-VM-namespace work lands
 //     (planning 133 §"Phase 2" + §"Phase 3").
+//   - SOCKS5 handshake probe (vs raw TCP connect) — actual SOCKS5
+//     greeting verification. The TCP probe today catches
+//     "wrong host / wrong port / firewall blocks" but doesn't
+//     verify the server is actually SOCKS5.
 
+import { connect, type Socket } from 'node:net';
 import type { EgressHandle, SessionEgressConfig, SessionEgressService } from '../session-egress.js';
 
+const DEFAULT_PROBE_TIMEOUT_MS = 3_000;
+
+export interface SocksProxyBackendDeps {
+  /**
+   * Injectable TCP probe — tests pass a deterministic stub so we
+   * don't actually open sockets during unit tests. Default uses
+   * node:net's connect() with a short timeout.
+   */
+  tcpProbe?: (host: string, port: number, timeoutMs: number) => Promise<void>;
+  /** Probe deadline in ms; default 3000. */
+  probeTimeoutMs?: number;
+}
+
+function defaultTcpProbe(host: string, port: number, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const socket: Socket = connect({ host, port }, () => {
+      clearTimeout(timer);
+      socket.end();
+      resolve();
+    });
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`egress-tunnel-unreachable: timed out connecting to ${host}:${port}`));
+    }, timeoutMs);
+    socket.on('error', (err) => {
+      clearTimeout(timer);
+      reject(new Error(`egress-tunnel-unreachable: ${err.message}`));
+    });
+  });
+}
+
 export class SocksProxyBackend implements SessionEgressService {
-  applyToSession({ config }: { config: SessionEgressConfig }): Promise<EgressHandle> {
+  private readonly tcpProbe: (host: string, port: number, timeoutMs: number) => Promise<void>;
+  private readonly probeTimeoutMs: number;
+
+  constructor(deps: SocksProxyBackendDeps = {}) {
+    this.tcpProbe = deps.tcpProbe ?? defaultTcpProbe;
+    this.probeTimeoutMs = deps.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
+  }
+
+  async applyToSession({ config }: { config: SessionEgressConfig }): Promise<EgressHandle> {
     const { session_id, proxy } = config;
     if (proxy.type !== 'socks5') {
       // OpenVPN + WireGuard backends are not yet wired at this
@@ -35,28 +82,35 @@ export class SocksProxyBackend implements SessionEgressService {
       // to 503 FeatureUnavailable — the customer sees a clean
       // "Phase X protocol not yet shipped" message instead of a
       // generic 500.
-      return Promise.reject(
-        new Error(
-          `SocksProxyBackend does not handle proxy.type='${proxy.type}'; ` +
-            `OpenVPN + WireGuard are Phase 2/3 per planning 133 and ship ` +
-            `with the harness-side macOS VM namespace work.`,
-        ),
+      throw new Error(
+        `SocksProxyBackend does not handle proxy.type='${proxy.type}'; ` +
+          `OpenVPN + WireGuard are Phase 2/3 per planning 133 and ship ` +
+          `with the harness-side macOS VM namespace work.`,
       );
     }
 
     const { host, port, username, password, udp_associate } = proxy.socks5;
     if (host.trim().length === 0) {
-      return Promise.reject(new Error('socks5.host must be non-empty'));
+      throw new Error('socks5.host must be non-empty');
     }
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      return Promise.reject(new Error(`socks5.port must be in [1, 65535]; got ${port}`));
+      throw new Error(`socks5.port must be in [1, 65535]; got ${port}`);
     }
     if (username !== undefined && password === undefined) {
-      return Promise.reject(new Error('socks5 requires both username + password, or neither'));
+      throw new Error('socks5 requires both username + password, or neither');
     }
     if (password !== undefined && username === undefined) {
-      return Promise.reject(new Error('socks5 requires both username + password, or neither'));
+      throw new Error('socks5 requires both username + password, or neither');
     }
+
+    // Q.0.b — TCP-probe the customer's SOCKS5 host:port before
+    // returning the handle. Catches "wrong host / wrong port /
+    // firewall blocks" at session-create time so the customer
+    // sees a 4xx egress-tunnel-unreachable immediately rather
+    // than a delayed failure once the WebKit fork tries to
+    // connect (which surfaces 30+ seconds later with a less
+    // helpful error).
+    await this.tcpProbe(host, port, this.probeTimeoutMs);
 
     // env-var contract per planning 133 §"Phase 1 §1.2 — per-
     // WebContent SOCKS5 config". The harness spawns the WebKit
@@ -78,11 +132,11 @@ export class SocksProxyBackend implements SessionEgressService {
       envOverrides.DRIFTSTACK_SOCKS5_PROXY_PASSWORD = password;
     }
 
-    return Promise.resolve({
+    return {
       sessionId: session_id,
       type: 'socks5',
       cleanup: { envOverrides },
-    });
+    };
   }
 
   releaseFromSession(_handle: EgressHandle): Promise<void> {
