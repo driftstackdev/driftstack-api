@@ -114,6 +114,38 @@ describe('activation-gate pattern cross-source invariant', () => {
         expect(tail).toMatch(/FeatureUnavailableError/);
       });
 
+      it(`disabled registrar passes a non-empty detail string to FeatureUnavailableError — the 503 body's \`detail\` field powers the dashboard's user-facing message; empty detail would surface as a blank toast`, () => {
+        const fnIdx = routeBody.indexOf(`export function ${f.disabledFn}`);
+        expect(fnIdx).toBeGreaterThan(-1);
+        const tail = routeBody.slice(fnIdx);
+        // Find the FeatureUnavailableError instantiation + capture its
+        // first arg. Two common shapes — a literal string or a variable
+        // initialized earlier in the function (e.g. `const detail =
+        // '...'; ... throw new FeatureUnavailableError(detail)`). Both
+        // shapes need the string to be non-empty.
+        const literalArg = tail.match(/new FeatureUnavailableError\(\s*'([^']{8,})'/);
+        const literalArgDouble = tail.match(/new FeatureUnavailableError\(\s*"([^"]{8,})"/);
+        const literalArgTemplate = tail.match(/new FeatureUnavailableError\(\s*`([^`]{8,})`/);
+        const variableArg = tail.match(/new FeatureUnavailableError\(\s*(\w+)\s*\)/);
+        const hasLiteralDetail = !!(literalArg || literalArgDouble || literalArgTemplate);
+        if (hasLiteralDetail) return; // literal string ≥8 chars present
+        // Variable arg path — track back to the const declaration and
+        // verify it points at a non-empty string. ≥8 chars to filter
+        // out placeholders.
+        expect(variableArg, 'no FeatureUnavailableError(...) call found').not.toBeNull();
+        const varName = variableArg![1];
+        const detailDecl = tail.match(
+          new RegExp(`const ${varName!}\\s*=\\s*['"\`]([^'"\`]{8,})['"\`]`),
+        );
+        // Concat shape: `const detail = 'foo' + 'bar';` — flatten and
+        // require the concatenated length to be ≥8 chars.
+        const detailConcat = tail.match(new RegExp(`const ${varName!}\\s*=([^;]{8,});`));
+        expect(
+          detailDecl || detailConcat,
+          `detail variable \`${varName}\` not declared with a non-empty string`,
+        ).toBeTruthy();
+      });
+
       it(`app.ts wires both registrars under an \`if (deps.${f.depsField}\` activation gate`, () => {
         // Allow either == or !== form so the test doesn't pin the
         // exact polarity (some gates negate, some don't).

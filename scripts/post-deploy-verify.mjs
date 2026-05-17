@@ -331,10 +331,17 @@ async function checkFleetEventsGateStub() {
       detail: `expected type=${FEATURE_UNAVAILABLE_TYPE}, got ${JSON.stringify(parsed?.type)}`,
     };
   }
+  if (typeof parsed?.detail !== 'string' || parsed.detail.length < 8) {
+    return {
+      ok: false,
+      name: 'V-820 fleet-events gate',
+      detail: `503 body has empty/short detail (got ${JSON.stringify(parsed?.detail)})`,
+    };
+  }
   return {
     ok: true,
     name: 'V-820 fleet-events gate',
-    detail: '503 + problem-type FeatureUnavailable as expected',
+    detail: '503 + problem-type FeatureUnavailable + populated detail as expected',
   };
 }
 
@@ -375,7 +382,22 @@ async function featureGateStub(method, path, name, body) {
       detail: `expected type=${FEATURE_UNAVAILABLE_TYPE}, got ${JSON.stringify(parsed?.type)}`,
     };
   }
-  return { ok: true, name, detail: `503 + problem-type FeatureUnavailable as expected` };
+  // Detail string powers the dashboard's user-facing message. An
+  // empty detail surfaces as a blank toast; treat as gate-drift.
+  // Matches the activation-gate-pattern-cross-source-invariant
+  // compile-time check.
+  if (typeof parsed?.detail !== 'string' || parsed.detail.length < 8) {
+    return {
+      ok: false,
+      name,
+      detail: `503 body has empty/short detail (got ${JSON.stringify(parsed?.detail)}); dashboard would render a blank toast`,
+    };
+  }
+  return {
+    ok: true,
+    name,
+    detail: `503 + problem-type FeatureUnavailable + populated detail as expected`,
+  };
 }
 
 async function checkUnknownPath404() {

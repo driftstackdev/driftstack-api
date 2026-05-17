@@ -38,8 +38,18 @@ LOCKED 2026-05-16.
 - AI-A.c — `DrizzleAgentSessionsRepo` backed by Postgres (depends on
   AI-A.b).
 - AI-B1.b — Real Anthropic Claude Opus 4.7 wire against the documented
-  prompt template (unblocked by BYOK lock 2026-05-16; substantial
-  focused session).
+  prompt template (architecturally unblocked by BYOK lock 2026-05-16;
+  end-to-end HTTP-header → AgentRuntime → DecomposeArgs chain SHIPPED
+  via 1b97a5e0 + f2a6c603 + 9d7dded2; cross-SDK convenience layer
+  SHIPPED via a79796ae; cross-source header invariant SHIPPED via
+  9d7dded2 + 2048c45f. Real Claude API call inside the decomposer
+  is the only piece remaining — needs the Anthropic API key share +
+  a focused session for the Anthropic SDK integration + prompt
+  template work).
+- AI-B1.c — Per-customer BYOK Anthropic key storage column on
+  `accounts` table (Tier-2 founder review; design doc
+  `docs/internal/byok-anthropic-key-storage-design.md` shipped at
+  `a79796ae` with 5 open questions).
 - AI-B2.b — Real harness-wired intent executor (in-process
   SessionsService dispatch + capture aggregator).
 - A1-A4 (UI surface) — customer-dashboard chat composer + transcript
