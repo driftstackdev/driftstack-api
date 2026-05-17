@@ -132,6 +132,20 @@ export interface EmailService {
     confirmLink: string;
     expiresAt: Date;
   }): Promise<void>;
+  /**
+   * v2-#10.5 — webhook signing-secret rotation reminder. Fires when
+   * an endpoint's active secret is older than the rotation threshold
+   * (60d nag, 90d target). Body includes the endpoint URL + secret
+   * prefix so the customer can identify which endpoint without
+   * leaking the full secret.
+   */
+  sendWebhookSecretRotationReminder(args: {
+    to: string;
+    endpointUrl: string;
+    secretPrefix: string;
+    ageDays: number;
+    rotateBy: Date;
+  }): Promise<void>;
   /** V-295c3-followup + V-545.B — fires when a public incident is posted,
    *  updated, or resolved. The 'updated' kind is wired-but-deferred:
    *  the template is shipped so subscribers receive it once the V-545.B
@@ -364,6 +378,18 @@ const TEMPLATES = {
     html: (v) =>
       `<p>Someone — probably you — just tried to sign in to your Driftstack account using <strong>${v.provider}</strong>.</p><p>If that was you, confirm the new sign-in method by clicking the link below. It expires at <strong>${v.expiresAt}</strong> (UTC) and works once.</p><p><a href="${v.confirmLink}">${v.confirmLink}</a></p><p>If that wasn't you, ignore this email — no change is made until the link is clicked. Your password (if any) still works.</p><p>— Driftstack</p>`,
   },
+  // v2-#10.5 — 90d rotation cadence nag. Endpoint URL + secret prefix
+  // is enough for the customer to identify the endpoint without
+  // re-exposing the full secret. Body explicitly notes that this is
+  // a nag, not auto-rotation — the V-359 dual-sign machinery gives
+  // the customer a zero-downtime path.
+  'webhook-secret-rotation-reminder': {
+    subject: 'Driftstack — rotate your webhook signing secret',
+    text: (v) =>
+      `Your Driftstack webhook signing secret is ${v.ageDays} days old. We recommend rotating every 90 days; we've reached the nag threshold.\n\nEndpoint: ${v.endpointUrl}\nSecret prefix: ${v.secretPrefix}\nRotate by: ${v.rotateBy} (UTC)\n\nRotation is zero-downtime: the previous secret stays valid for 24h after rotation so your verifier code can roll the new value at its own pace.\n\nRotate at: https://app.driftstack.dev/webhooks\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Your Driftstack webhook signing secret is <strong>${v.ageDays} days old</strong>. We recommend rotating every 90 days; we've reached the nag threshold.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Endpoint:</strong></td><td><code>${v.endpointUrl}</code></td></tr><tr><td><strong>Secret prefix:</strong></td><td><code>${v.secretPrefix}</code></td></tr><tr><td><strong>Rotate by:</strong></td><td>${v.rotateBy} (UTC)</td></tr></table><p>Rotation is zero-downtime: the previous secret stays valid for 24h after rotation so your verifier code can roll the new value at its own pace.</p><p><a href="https://app.driftstack.dev/webhooks">Rotate at app.driftstack.dev/webhooks</a></p><p>— Driftstack</p>`,
+  },
   // V-295c3-followup — DRAFT copy. Two templates so the subject can vary
   // (a "resolved" email shouldn't read like a fresh outage).
   'status-incident-created': {
@@ -477,6 +503,7 @@ export function createEmailService({
       sendStatusIncidentNotification: async () => {},
       sendTeamInvite: async () => {},
       sendOauthPendingLinkVerification: async () => {},
+      sendWebhookSecretRotationReminder: async () => {},
     };
   }
 
@@ -608,6 +635,13 @@ export function createEmailService({
         provider,
         confirmLink,
         expiresAt: expiresAt.toISOString(),
+      }),
+    sendWebhookSecretRotationReminder: ({ to, endpointUrl, secretPrefix, ageDays, rotateBy }) =>
+      send('webhook-secret-rotation-reminder', to, {
+        endpointUrl,
+        secretPrefix,
+        ageDays: ageDays.toString(),
+        rotateBy: rotateBy.toISOString(),
       }),
   };
 }
