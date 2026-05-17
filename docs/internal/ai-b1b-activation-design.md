@@ -187,13 +187,58 @@ Or a new dedicated `agent_session_costs` table that
 denormalizes (account_id, agent_session_id, anthropic_input_tokens,
 anthropic_output_tokens, anthropic_cost_usd_cents, at)?
 
+### Q.1.f — Audit logging: which decomposer ran which turn?
+
+Added per orchestrator follow-up paste 2026-05-17. When a given
+agent turn is served by `ClaudeAgentDecomposer` vs.
+`DeterministicAgentDecomposer` (Q.1.b option-2 fall-back path
+hit, or Q.1.a keying picked one over the other), does the
+transcript / audit log record WHICH path served the turn?
+
+Candidate behaviors:
+
+1. **No logging** — transcript treats both decomposer outputs
+   identically; downstream consumers can't tell which engine
+   ran. Simplest; opaque to the customer support flow.
+2. **Transcript field** — extend `TranscriptEntry` with an
+   optional `engine?: 'claude' | 'deterministic'` field. Visible
+   to the customer via GET /v1/agent-sessions/:id; tells them
+   why a heuristic-shaped clarify question appeared in a Claude-
+   wired deployment (the fallback hit). Has privacy
+   implications: the customer learns Driftstack's internal
+   wiring posture per-turn.
+3. **Account-audit-log entry** — emit `agent.decompose.{claude|
+deterministic}` events into the existing audit-log surface.
+   Not customer-visible by default (audit log is admin-only on
+   most account-tiers); operator can debug fallback rate per
+   account.
+4. **Both 2 + 3** — belt-and-suspenders; transcript for
+   customer-facing transparency, audit log for operator
+   debugging.
+
+**Orchestrator-recommended:** option 3 (audit log only) for
+v1.0 — minimum customer-facing surface while still capturing
+the data needed for fallback-rate monitoring. Option 2 + 4
+exposes "which engine ran" to customers, which makes engine-
+switching a customer-visible event the support team will need
+to explain. The audit log is internal observability.
+
+**Open**: when Q.1.d option 1 (burn fallback) is ever activated
+for a specific account, does the customer's API key receive a
+"using deployment fallback key" signal in the response header
+or response body? Or stays silent? Silent posture matches
+typical BYOK fallback conventions (the customer doesn't know /
+shouldn't care which key Driftstack used internally) but
+removes the customer's ability to detect runaway fallback
+consumption.
+
 ## Implementation gate
 
 Implementation does NOT fire until the orchestrator (or founder
-direct verdict, whichever the chain dictates) answers all five.
-Q.1.a + Q.1.b + Q.1.d are the load-bearing answers — Q.1.c +
-Q.1.e have safer defaults that can ship even without explicit
-verdicts.
+direct verdict, whichever the chain dictates) answers all six
+questions. Q.1.a + Q.1.b + Q.1.d are the load-bearing answers
+— Q.1.c + Q.1.e + Q.1.f have safer defaults that can ship even
+without explicit verdicts.
 
 The /loop 3m autopilot continues past this slice without
 blocking — Q.4 design doc fires next, then Q.5 recipe writer,
