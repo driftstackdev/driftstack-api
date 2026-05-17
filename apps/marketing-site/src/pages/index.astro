@@ -14,7 +14,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <div class="animate-fade-up">
           <p class="section-label">iPhone Safari · on demand</p>
           <h1
-            class="mt-5 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl lg:text-6xl"
+            class="mt-5 text-3xl font-semibold tracking-tight text-ink-primary sm:text-4xl md:text-5xl lg:text-6xl"
             style="letter-spacing: -0.02em;"
           >
             <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
@@ -22,29 +22,29 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             </span><br />
             Programmable from any language.
           </h1>
-          <p class="mt-6 max-w-prose text-lg text-ink-secondary leading-relaxed">
+          <p class="mt-6 max-w-prose text-base text-ink-secondary leading-relaxed sm:text-lg">
             Real WebKit — the engine every iPhone ships. Canvas + WebGL
             hashes match the millions of iPhones in the wild, not the
             unique-per-session leak every Chromium-stealth API surfaces.
             Drive sessions from TypeScript, Python, Go, or the GUI.
           </p>
-          <div class="mt-8 flex flex-wrap items-center gap-4">
-            <a href="/pricing#trial-pack" class="btn-primary">Start for $2.99</a>
-            <a href="/comparison" class="btn-secondary">Why not Browserless?</a>
+          <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+            <a href="/pricing#trial-pack" class="btn-primary w-full text-center sm:w-auto">Start for $2.99</a>
+            <a href="/comparison" class="btn-secondary w-full text-center sm:w-auto">Why not Browserless?</a>
           </div>
           <p class="mt-4 text-xs text-ink-muted">
             16 hours of session time · 14-day window · one trial per account.
           </p>
         </div>
 
-        <div class="code-preview">
+        <div class="code-preview relative">
           <div class="code-window-chrome">
             <span class="pip"></span>
             <span class="pip"></span>
             <span class="pip"></span>
-            <span class="ml-3 text-xs text-ink-muted">driftstack-typescript-sdk</span>
+            <span class="ml-3 truncate text-xs text-ink-muted">driftstack-typescript-sdk</span>
           </div>
-          <pre class="overflow-x-auto p-5 text-ink-primary"><code>{`import { Driftstack } from '@driftstack/sdk';
+          <pre class="max-h-[280px] overflow-x-auto p-5 text-[11px] leading-relaxed text-ink-primary sm:max-h-none sm:text-xs md:text-sm"><code>{`import { Driftstack } from '@driftstack/sdk';
 
 const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 
@@ -59,6 +59,9 @@ await session.interact({ tap: '#submit' });
 
 const state = await session.getState();
 await session.destroy();`}</code></pre>
+          <!-- Horizontal-scroll affordance: fade on the right edge so
+               readers know the code preview can be panned on mobile. -->
+          <div class="pointer-events-none absolute inset-y-12 right-0 w-8 bg-gradient-to-l from-surface-base/80 to-transparent sm:hidden"></div>
         </div>
       </div>
     </div>

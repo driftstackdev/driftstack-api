@@ -55,11 +55,13 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     );
   });
 
-  it("Hero CTAs + trial-pack subline (R5: 'Start for $2.99' + 'Why not Browserless?')", () => {
+  it("Hero CTAs + trial-pack subline (R5: 'Start for $2.99' + 'Why not Browserless?'). Tailwind classes match mobile-responsive full-width-on-mobile pattern (M.1: w-full sm:w-auto with centred text), so the buttons stack cleanly under 640px and the tap target spans the column.", () => {
     expect(body).toMatch(
-      /<a href="\/pricing#trial-pack" class="btn-primary">Start for \$2\.99<\/a>/,
+      /<a href="\/pricing#trial-pack" class="btn-primary w-full text-center sm:w-auto">Start for \$2\.99<\/a>/,
     );
-    expect(body).toMatch(/<a href="\/comparison" class="btn-secondary">Why not Browserless\?<\/a>/);
+    expect(body).toMatch(
+      /<a href="\/comparison" class="btn-secondary w-full text-center sm:w-auto">Why not Browserless\?<\/a>/,
+    );
     expect(body).toMatch(/16 hours of session time · 14-day window · one trial per account\./);
   });
 
