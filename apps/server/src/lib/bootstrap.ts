@@ -54,6 +54,8 @@ import { SessionsService } from '../services/sessions.js';
 import { ApiKeysService } from '../services/api-keys.js';
 import { MfaService } from '../services/mfa.js';
 import { DrizzleMfaRepo } from '../db/mfa-repo.js';
+import { BYOKAnthropicService } from '../services/byok-anthropic.js';
+import { DrizzleBYOKAnthropicRepo } from '../db/byok-anthropic-repo.js';
 import { RedisMfaChallengeStore } from '../services/mfa-challenge-store.js';
 import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
@@ -458,6 +460,16 @@ export async function createProductionDeps(
         'and set in deploy env to enable customer MFA enrollment.',
     );
   }
+  // AI-CHAT BYOK Anthropic — per-customer key storage. Activation-
+  // gated on MFA_ENCRYPTION_KEY (same env var; Q1 verdict 2026-05-17
+  // reuses the MFA key for operational simplicity). When absent, the
+  // /v1/account/me/byok-anthropic-key* routes register their 503
+  // disabled stubs via the activation-gate pattern.
+  const byokAnthropicService = config.mfaEncryptionKey
+    ? new BYOKAnthropicService(new DrizzleBYOKAnthropicRepo(dbHandle), {
+        encryptionKey: config.mfaEncryptionKey,
+      })
+    : null;
 
   // V-079: user-facing auth flows.
   const authFlowsRepo = new DrizzleAuthFlowsRepo(dbHandle);
@@ -665,6 +677,10 @@ export async function createProductionDeps(
     // (avoids registering enrollment routes that would write to a
     // table we can't decrypt back from).
     ...(mfaService !== null ? { mfaService } : {}),
+    // AI-CHAT BYOK Anthropic — per-customer key storage. Shares the
+    // MFA_ENCRYPTION_KEY gate (one less env var to manage; Q1 verdict
+    // 2026-05-17). When unset, app.ts registers 503 stubs.
+    ...(byokAnthropicService !== null ? { byokAnthropicService } : {}),
     ...(config.stripe?.webhookSecret !== undefined
       ? {
           stripeWebhooksService,

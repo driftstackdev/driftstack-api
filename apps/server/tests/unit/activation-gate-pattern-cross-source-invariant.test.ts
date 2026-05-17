@@ -1,6 +1,7 @@
-// Cross-source invariant — activation-gate pattern is now used 4 times
-// (billing / session-proxy / saved-proxies / agent-sessions) and the
-// pattern is structurally identical across all 4:
+// Cross-source invariant — activation-gate pattern is now used 6 times
+// (billing / session-proxy / saved-proxies / agent-sessions /
+// fleet-events / byok-anthropic) and the pattern is structurally
+// identical across all 6:
 //
 //   1. Each route file exports BOTH `registerXxxRoutes(app, deps)`
 //      AND `registerXxxDisabledRoutes(app)`.
@@ -80,6 +81,13 @@ const FEATURES: GatedFeature[] = [
     wiredFn: 'registerFleetEventsRoutes',
     disabledFn: 'registerFleetEventsDisabledRoutes',
     depsField: 'fleetNodeAuth',
+  },
+  {
+    name: 'byok-anthropic (AI-CHAT customer key storage)',
+    routesFile: 'apps/server/src/routes/account-byok-anthropic.ts',
+    wiredFn: 'registerAccountByokAnthropicRoutes',
+    disabledFn: 'registerAccountByokAnthropicDisabledRoutes',
+    depsField: 'byokAnthropicService',
   },
 ];
 

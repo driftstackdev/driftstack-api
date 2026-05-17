@@ -55,10 +55,15 @@ import type { ProfilesRepo } from '../services/profiles.js';
 import { registerAccountMeRoutes } from '../routes/account-me.js';
 import { registerAccountWebSessionsRoutes } from '../routes/account-web-sessions.js';
 import { registerAccountMfaRoutes } from '../routes/account-mfa.js';
+import {
+  registerAccountByokAnthropicDisabledRoutes,
+  registerAccountByokAnthropicRoutes,
+} from '../routes/account-byok-anthropic.js';
 import type { ApiKeysRepo } from '../services/api-keys.js';
 import type { Driver } from '../drivers/types.js';
 import type { R2 } from './r2.js';
 import type { MfaService } from '../services/mfa.js';
+import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -322,6 +327,15 @@ export interface AppDeps {
    * persistence is via DrizzleMfaRepo (or the in-memory fixture).
    */
   mfaService?: MfaService;
+  /**
+   * AI-CHAT BYOK Anthropic — per-customer key storage service.
+   * Activation-gate: present when MFA_ENCRYPTION_KEY env var is
+   * configured (the BYOK store reuses the MFA encryption key per
+   * Q1 verdict 2026-05-17). When absent, the 4
+   * `/v1/account/me/byok-anthropic-key*` routes return 503 +
+   * FeatureUnavailable via `registerAccountByokAnthropicDisabledRoutes`.
+   */
+  byokAnthropicService?: BYOKAnthropicService;
   /**
    * Readiness checks executed by `/ready`. Each runs with the
    * supplied (or default 1500ms) timeout; aggregate result drives
@@ -639,6 +653,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // bearer-auth-gated like everything else, no /v1/auth/* dependency.
   if (deps.mfaService !== undefined) {
     registerAccountMfaRoutes(app, { service: deps.mfaService });
+  }
+  // AI-CHAT BYOK Anthropic — 6th activation-gate feature (after
+  // billing / session-proxy / saved-proxies / agent-sessions /
+  // fleet-events). Active when MFA_ENCRYPTION_KEY env is set (the
+  // BYOK store reuses MFA's encryption key per Q1 verdict 2026-05-17).
+  // Otherwise the disabled stubs surface 503 + FeatureUnavailable so
+  // the dashboard sees a machine-readable "not yet enabled" signal.
+  if (deps.byokAnthropicService !== undefined) {
+    registerAccountByokAnthropicRoutes(app, { service: deps.byokAnthropicService });
+  } else {
+    registerAccountByokAnthropicDisabledRoutes(app);
   }
   if (deps.cliAuthorizeService !== undefined) {
     registerAuthCliRoutes(app, {
