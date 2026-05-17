@@ -1720,3 +1720,36 @@ export const fleetNodes = pgTable(
 
 export type FleetNodeRow = typeof fleetNodes.$inferSelect;
 export type NewFleetNodeRow = typeof fleetNodes.$inferInsert;
+
+// AI-B4 recipes (migration 0044). Mirrors agent_sessions PK pattern
+// (text 'rec_<uuid>'). intent_log + transcript_snapshot are jsonb
+// arrays; the service layer narrows them to ReadonlyArray<AgentIntent>
+// + ReadonlyArray<TranscriptEntry> respectively. agent_session_id is
+// nullable + ON DELETE SET NULL so the recipe survives agent-session
+// cleanup. CHECK constraints on label (1..120) + description (<=2000)
+// match the SQL migration; the InMemoryRecipesRepo's
+// validateLabelAndDescription enforces the same at the service layer.
+export const recipes = pgTable('recipes', {
+  id: text('id').primaryKey(),
+  accountId: uuid('account_id')
+    .notNull()
+    .references(() => accounts.id, { onDelete: 'cascade' }),
+  agentSessionId: text('agent_session_id').references(() => agentSessions.id, {
+    onDelete: 'set null',
+  }),
+  label: text('label').notNull(),
+  description: text('description'),
+  intentLog: jsonb('intent_log').notNull(),
+  transcriptSnapshot: jsonb('transcript_snapshot')
+    .notNull()
+    .default(sql`'[]'::jsonb`),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+});
+
+export type RecipeRow = typeof recipes.$inferSelect;
+export type NewRecipeRow = typeof recipes.$inferInsert;

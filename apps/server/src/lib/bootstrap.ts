@@ -57,6 +57,7 @@ import { DrizzleMfaRepo } from '../db/mfa-repo.js';
 import { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import { DrizzleBYOKAnthropicRepo } from '../db/byok-anthropic-repo.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
+import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
 import { RedisMfaChallengeStore } from '../services/mfa-challenge-store.js';
 import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
@@ -479,6 +480,15 @@ export async function createProductionDeps(
   // SOCKS5 + rejects OpenVPN/WireGuard with a typed error.
   const sessionEgressService = new SocksProxyBackend();
 
+  // AI-B4 — recipes repo (write-only at v1.0). Backed by Postgres
+  // via migration 0044. The route surface's activation gate ALSO
+  // requires agentSessionsRepo to be wired (Q.1 territory); until
+  // that lands, the /v1/recipes route registers as a 503 stub even
+  // though recipesRepo is reachable here. When Q.1's agentSessionsRepo
+  // wire arrives, the recipes route auto-activates via the
+  // gate in app.ts.
+  const recipesRepo = new DrizzleRecipesRepo(dbHandle);
+
   // V-079: user-facing auth flows.
   const authFlowsRepo = new DrizzleAuthFlowsRepo(dbHandle);
   // V-353d — Redis-backed challenge-token store for the MFA login
@@ -710,6 +720,11 @@ export async function createProductionDeps(
     // marketing copy can update from "roadmap" to "live" per the
     // Path-1 autoflip plan (orchestrator handoff 2026-05-17).
     sessionEgressService,
+    // AI-B4 — recipes repo. Wired unconditionally; the route surface's
+    // activation gate ALSO requires agentSessionsRepo (gated on Q.1).
+    // Until Q.1 wires agentSessionsRepo, /v1/recipes registers as
+    // a 503 stub even though recipesRepo is reachable here.
+    recipesRepo,
     ...(config.stripe?.webhookSecret !== undefined
       ? {
           stripeWebhooksService,

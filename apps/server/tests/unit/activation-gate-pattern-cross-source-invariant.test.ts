@@ -89,6 +89,13 @@ const FEATURES: GatedFeature[] = [
     disabledFn: 'registerAccountByokAnthropicDisabledRoutes',
     depsField: 'byokAnthropicService',
   },
+  {
+    name: 'recipes (AI-B4 write-only recipe library)',
+    routesFile: 'apps/server/src/routes/recipes.ts',
+    wiredFn: 'registerRecipesRoutes',
+    disabledFn: 'registerRecipesDisabledRoutes',
+    depsField: 'recipesRepo',
+  },
 ];
 
 const APP_TS = resolve(REPO_ROOT, 'apps/server/src/lib/app.ts');

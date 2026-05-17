@@ -48,6 +48,7 @@ import type { BillingService } from '../services/billing.js';
 import type { SessionEgressService } from '../services/session-egress.js';
 import type { AgentRuntime } from '../services/agent-runtime.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
+import type { RecipesRepo } from '../services/recipes.js';
 import type { FleetNodeAuth } from '../services/fleet-node-auth.js';
 import type { FleetNonceCache } from '../services/fleet-nonce-cache.js';
 import type { SessionRepo } from '../services/sessions.js';
@@ -117,6 +118,7 @@ import {
   registerAgentSessionsDisabledRoutes,
   registerAgentSessionsRoutes,
 } from '../routes/agent-sessions.js';
+import { registerRecipesDisabledRoutes, registerRecipesRoutes } from '../routes/recipes.js';
 import {
   registerFleetEventsDisabledRoutes,
   registerFleetEventsRoutes,
@@ -282,6 +284,15 @@ export interface AppDeps {
    * create/close paths. When agentRuntime is wired this MUST also be set.
    */
   agentSessionsRepo?: AgentSessionsRepo;
+  /**
+   * AI-B4 — write-only recipe library (orchestrator handoff #3 Q.5).
+   * POST /v1/recipes snapshots a finished agent_session's
+   * intent_log + transcript. When omitted, /v1/recipes registers
+   * as 503 FeatureUnavailable per the activation-gate pattern.
+   * Routes the gate ALSO requires `agentSessionsRepo` for the
+   * source-session cross-account auth check.
+   */
+  recipesRepo?: RecipesRepo;
   /**
    * V-820 — fleet-node JWT verifier (foundation slice 95353f2a +
    * nonce-cache integration f2a6c603). Optional. When wired,
@@ -791,6 +802,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
   } else {
     registerAgentSessionsDisabledRoutes(app);
+  }
+
+  // AI-B4 — /v1/recipes route surface. Activation gate requires BOTH
+  // recipesRepo (to insert the recipe) AND agentSessionsRepo (to
+  // load the source session for the cross-account auth check before
+  // snapshotting its transcript). Without either, registers 503 stubs.
+  if (deps.recipesRepo !== undefined && deps.agentSessionsRepo !== undefined) {
+    registerRecipesRoutes(app, {
+      recipes: deps.recipesRepo,
+      agentSessions: deps.agentSessionsRepo,
+    });
+  } else {
+    registerRecipesDisabledRoutes(app);
   }
 
   // V-820 — /v1/fleet/events route stub. Activation gate matches the
