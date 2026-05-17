@@ -28,8 +28,14 @@ describe('W317.B /roadmap page baseline', () => {
     expect(body).toMatch(/const LATER:\s*RoadmapItem\[\]/);
   });
 
-  it('Now bucket cites the locked archetype (iPhone 16 Pro / iOS 18.7 / Safari 26.4)', () => {
-    expect(body).toMatch(/iPhone 16 Pro[\s\S]{0,40}iOS 18\.7[\s\S]{0,40}Safari 26\.4/);
+  it('Now bucket cites the multi-archetype launch family (M.6 Path A: iPhone 15 Pro / 16 Pro / 17 lineup · iOS 18.7 · Safari 26.4-26.5 per founder verdict 2026-05-17)', () => {
+    // Two of the three families must be named in close proximity in
+    // the NOW bucket; the iOS + Safari span must mention 26.5.
+    expect(body).toMatch(/iPhone 15 Pro[\s\S]{0,200}iPhone 16 Pro/);
+    expect(body).toMatch(/iPhone 17/);
+    expect(body).toMatch(/iOS 18\.7/);
+    expect(body).toMatch(/Safari 26\.4/);
+    expect(body).toMatch(/Safari 26\.5/);
   });
 
   it('Now bucket cites the customer dashboard (app.driftstack.dev)', () => {

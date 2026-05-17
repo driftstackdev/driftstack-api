@@ -55,12 +55,16 @@ describe('W499.B apps/marketing-site/src/pages/roadmap.astro content parity', ()
     expect(body).toMatch(/Customer demand is the single best ordering signal we have\./);
   });
 
-  it("NOW section 5-item list: 'iPhone 16 Pro · iOS 18.7 · Safari 26.4 fingerprint parity' (foundation) + 'TypeScript · Python · Go SDKs' + 'Customer dashboard at app.driftstack.dev' + 'Webhook delivery infrastructure' + 'GUI client for human operators' — pinned so the live-today scope covers the 5 customer-visible platform pillars (drift to dropping any would create misalignment between the roadmap's claimed-shipped surface and the actual product)", () => {
-    expect(body).toMatch(/title: 'iPhone 16 Pro · iOS 18\.7 · Safari 26\.4 fingerprint parity',/);
+  it("NOW section 5-item list (M.6 Path A multi-archetype): 'iPhone family fingerprint parity (15 Pro · 16 Pro · 17 lineup)' (foundation — multi-archetype + Safari 26.5 launch scope per founder verdict 2026-05-17) + 'TypeScript · Python · Go SDKs' + 'Customer dashboard at app.driftstack.dev' + 'Webhook delivery infrastructure' + 'GUI client for human operators' — pinned so the live-today scope covers the 5 customer-visible platform pillars (drift to single-archetype framing would re-introduce the v1.0 scope-mismatch the founder rejected in §6 of the orchestrator handoff)", () => {
+    expect(body).toMatch(
+      /title: 'iPhone family fingerprint parity \(15 Pro · 16 Pro · 17 lineup\)',/,
+    );
     expect(body).toMatch(/title: 'TypeScript · Python · Go SDKs',/);
     expect(body).toMatch(/title: 'Customer dashboard at app\.driftstack\.dev',/);
     expect(body).toMatch(/title: 'Webhook delivery infrastructure',/);
     expect(body).toMatch(/title: 'GUI client for human operators',/);
+    // Pre-M.6 single-archetype framing must NOT return.
+    expect(body).not.toMatch(/iPhone 16 Pro · iOS 18\.7 · Safari 26\.4 fingerprint parity/);
   });
 
   it("NEXT section items: 'Public status page' + 'OAuth signup (Google · GitHub)' + 'API key rotation with grace window' + 'Account deletion (GDPR Article 17)' + 'Recipe library' + 'Live session WebRTC stream' + 'Workflow recording' — pinned so the active-engineering surface stays consistent (drift to dropping Account deletion would orphan the GDPR Article 17 compliance promise; drift to renaming OAuth would break the 'Continue with Google/GitHub' marketing-page framing)", () => {
@@ -73,13 +77,16 @@ describe('W499.B apps/marketing-site/src/pages/roadmap.astro content parity', ()
     expect(body).toMatch(/title: 'Workflow recording',/);
   });
 
-  it("LATER section items: 'Additional iOS archetypes' + 'Android Chrome archetypes' + 'Hardware-key MFA (WebAuthn)' + 'Public benchmark page' + 'Self-hosted parity polish' + 'AI agent layer' — pinned so the on-the-deck surface covers the canonical 6 directions (drift to dropping AI agent layer would lose the bundled-or-BYOK LLM commitment that's promised in the tier configuration; drift to dropping WebAuthn would orphan the hardware-key MFA path)", () => {
-    expect(body).toMatch(/title: 'Additional iOS archetypes',/);
+  it("LATER section items (M.6 Path A: older iOS archetypes split out from NOW since the launch families cover iPhone 15 Pro / 16 Pro / 17 lineup): 'Older iOS archetypes (iPhone 14 + earlier iOS)' + 'Android Chrome archetypes' + 'Hardware-key MFA (WebAuthn)' + 'Public benchmark page' + 'Self-hosted parity polish' + 'AI agent layer' — pinned so the on-the-deck surface covers the canonical 6 directions (drift to dropping AI agent layer would lose the bundled-or-BYOK LLM commitment that's promised in the tier configuration; drift to dropping WebAuthn would orphan the hardware-key MFA path)", () => {
+    expect(body).toMatch(/title: 'Older iOS archetypes \(iPhone 14 \+ earlier iOS\)',/);
     expect(body).toMatch(/title: 'Android Chrome archetypes',/);
     expect(body).toMatch(/title: 'Hardware-key MFA \(WebAuthn\)',/);
     expect(body).toMatch(/title: 'Public benchmark page',/);
     expect(body).toMatch(/title: 'Self-hosted parity polish',/);
     expect(body).toMatch(/title: 'AI agent layer',/);
+    // Pre-M.6 LATER title must NOT return — would re-imply the
+    // launch-only-iPhone-16-Pro scope.
+    expect(body).not.toMatch(/title: 'Additional iOS archetypes',/);
   });
 
   it("AI agent layer body framing: 'Optional bundled-or-BYOK LLM-driven session execution: describe a goal in natural language, the agent navigates the session against your target. The plumbing for both bundled and BYOK billing is already in tier configuration; the agent layer itself is the work.' — pinned so the dual bundled+BYOK billing model + the 'plumbing is done, agent is the work' framing survive (drift to dropping BYOK would lose the customer-bring-your-own-LLM commitment)", () => {

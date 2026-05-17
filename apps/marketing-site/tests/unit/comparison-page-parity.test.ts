@@ -20,10 +20,21 @@ function read(p: string): string {
 describe('W263.A /comparison ↔ live archetype + competitor framing parity', () => {
   const page = read(PAGE);
 
-  it('Driftstack device-target cell names iOS 18.7 + Safari 26.4', () => {
+  it('Driftstack device-target cell names the M.6 Path-A multi-archetype launch family: iPhone 15 Pro / 16 Pro / 17 family · iOS 18.7 · Safari 26.4-26.5 (founder verdict 2026-05-17 locks multi-archetype at v1.0)', () => {
+    // The LOCKED_ARCHETYPE_ID constant in the comparison page source
+    // still points at iphone16pro_ios18_7_safari26_4 as the
+    // canonical reference id; the marketing claim spans more
+    // archetypes than the id alone implies.
     expect(LOCKED_ARCHETYPE_ID).toBe('iphone16pro_ios18_7_safari26_4');
-    expect(page).toMatch(/iPhone 16 Pro · iOS 18\.7 · Safari 26\.4/);
+    expect(page).toMatch(
+      /driftstack: 'iPhone 15 Pro \/ 16 Pro \/ 17 family · iOS 18\.7 · Safari 26\.4-26\.5'/,
+    );
+    // Single-archetype framing must NOT return.
+    expect(page).not.toMatch(/driftstack: 'iPhone 16 Pro · iOS 18\.7 · Safari 26\.4'/);
+    // Common iOS-version typo guard (Safari 26.x is the Safari
+    // release, NOT the iOS version).
     expect(page).not.toMatch(/iOS 26\.4/);
+    expect(page).not.toMatch(/iOS 26\.5/);
   });
 
   it('competitor rows describe Chromium-based products', () => {

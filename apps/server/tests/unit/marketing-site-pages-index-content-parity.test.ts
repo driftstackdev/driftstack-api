@@ -38,17 +38,21 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).not.toMatch(/Other API browsers patch JavaScript at runtime/);
   });
 
-  it('M.3 (Plan Item 5) "One iPhone among millions." giant-headline framing (replaces the prior "Indistinguishable from a real iPhone." — the "Indistinguishable" word now appears once on the page in the hero h1 brand line, dropping the 3x-repetition that read repetitive) + iPhone 16 Pro / iOS 18.7 / Safari 26.4 reference + launch-blocking-bug fidelity commitment', () => {
+  it('M.3 + M.6 — "One iPhone among millions." giant-headline framing (M.3 Plan Item 5 dedupe: "Indistinguishable" now appears once on the page in the hero h1 brand line; M.6 Path A: multi-archetype family — iPhone 15 Pro / 16 Pro / 17 lineup, iOS 18.7 / Safari 26.4-26.5 per founder verdict 2026-05-17) + launch-blocking-bug fidelity commitment', () => {
     expect(body).toMatch(/One iPhone among millions\./);
-    expect(body).toMatch(/iPhone 16 Pro, iOS 18\.7, Safari 26\.4/);
-    expect(body).toMatch(
-      /If any\s*\n?\s*measurable signal differs from what that phone sends, we treat\s*\n?\s*it as a launch-blocking bug/,
-    );
-    // Prior wording must NOT return at this slot — it was the
-    // load-bearing repetition Item 5 fixes.
+    // M.6 Path A: multi-archetype family + Safari 26.5 span.
+    expect(body).toMatch(/iPhone\s*\n?\s*15 Pro/);
+    expect(body).toMatch(/iPhone 16 Pro/);
+    expect(body).toMatch(/iPhone 17 lineup/);
+    expect(body).toMatch(/iOS 18\.7\s*\n?\s*\/ Safari 26\.4/);
+    expect(body).toMatch(/Safari 26\.5/);
+    expect(body).toMatch(/launch-blocking bug/);
+    // Prior wording must NOT return — covers both M.3 (Indistinguishable
+    // duplicate) and M.6 (single-archetype reference) regressions.
     expect(body).not.toMatch(
       /<span class="bg-gradient-to-br[^>]+>\s*\n?\s*Indistinguishable from a real iPhone\./,
     );
+    expect(body).not.toMatch(/Reference device: iPhone 16 Pro, iOS 18\.7, Safari 26\.4\./);
   });
 
   it('R12 Stack framing: "Apple\'s engine. Not a Chromium copy." headline replaces the prior "Real WebKit. Real Core Text. Real iOS rendering." copy. Still preserves the Not-Chromium / Not-Playwright contrast + names WebKit / Core Text / iOS rendering pipeline downstream', () => {

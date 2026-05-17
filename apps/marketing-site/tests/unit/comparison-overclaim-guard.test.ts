@@ -26,10 +26,20 @@ describe('W312.B /comparison overclaim guard', () => {
     expect(body).toMatch(/source-level\s+fork/i);
   });
 
-  it('positions the runtime as iPhone 16 Pro / iOS 18.7 / Safari 26.4', () => {
-    expect(body).toMatch(/iPhone\s*16\s*Pro/);
+  it('positions the runtime against the multi-archetype iPhone launch family (M.6 Path A: 15 Pro / 16 Pro / 17 lineup · iOS 18.7 · Safari 26.4-26.5)', () => {
+    // Page must still name at least two of the launch iPhone families
+    // somewhere in body copy + the iOS + Safari spans the launch
+    // verdict locks (founder verdict 2026-05-17).
+    expect(body).toMatch(/iPhone\s*15\s*Pro/);
+    expect(body).toMatch(/16\s*Pro/);
+    // iPhone 17 family is named compactly in the table cell as
+    // "17 family" (the cell column header already says "device
+    // target", and the cell context names the other iPhones
+    // explicitly — so the compact form is unambiguous).
+    expect(body).toMatch(/17\s*(?:family|lineup)/);
     expect(body).toMatch(/iOS\s*18\.7/);
     expect(body).toMatch(/Safari\s*26\.4/);
+    expect(body).toMatch(/Safari\s*26\.5|26\.4-26\.5/);
   });
 
   it('does NOT claim Chromium support', () => {

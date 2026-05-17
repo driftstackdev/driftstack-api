@@ -60,17 +60,22 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).not.toMatch(/Why not Browserless\?/);
   });
 
-  it('M.3 (Plan Item 5) "One iPhone among millions." why-works hero (replaces the prior "Indistinguishable from a real iPhone." duplicate; the "Indistinguishable" word now appears once on the page in the hero h1 brand line) + iPhone 16 Pro / iOS 18.7 / Safari 26.4 reference + launch-blocking-bug fidelity commitment', () => {
+  it('M.3 + M.6 — "One iPhone among millions." why-works hero (M.3 Plan Item 5 dedupe; "Indistinguishable" now appears once on the page in the hero h1 brand line) + multi-archetype iPhone family + Safari 26.4-26.5 launch-window reference (M.6 Path A per founder verdict 2026-05-17) + launch-blocking-bug fidelity commitment', () => {
     expect(body).toMatch(/One iPhone among millions\./);
-    expect(body).toMatch(/iPhone 16 Pro, iOS 18\.7, Safari 26\.4/);
-    expect(body).toMatch(
-      /If any\s+measurable signal differs from what that phone sends, we treat\s+it as a launch-blocking bug/,
-    );
+    // M.6 Path A: multi-archetype launch family + Safari 26.5 span.
+    expect(body).toMatch(/iPhone\s+15 Pro/);
+    expect(body).toMatch(/iPhone 16 Pro/);
+    expect(body).toMatch(/iPhone 17 lineup/);
+    expect(body).toMatch(/iOS 18\.7\s*\n?\s*\/ Safari 26\.4/);
+    expect(body).toMatch(/Safari 26\.5/);
+    expect(body).toMatch(/launch-blocking bug/);
     // The pre-dedupe wording must NOT return at this slot — it was
     // the load-bearing repetition Item 5 fixes.
     expect(body).not.toMatch(
       /<span class="bg-gradient-to-br[^>]+>\s*\n?\s*Indistinguishable from a real iPhone\./,
     );
+    // Pre-M.6 single-archetype framing must NOT return.
+    expect(body).not.toMatch(/Reference device: iPhone 16 Pro, iOS 18\.7, Safari 26\.4\./);
   });
 
   it('SDK snippet pinned: archetype + proxy + sessions API shape (TypeScript)', () => {

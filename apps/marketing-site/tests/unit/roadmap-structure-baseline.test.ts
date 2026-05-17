@@ -25,8 +25,23 @@ describe('W297.A /roadmap structure baseline', () => {
     expect(body).toMatch(/const LATER:\s*RoadmapItem\[\]/);
   });
 
-  it('uses the iPhone 16 Pro · iOS 18.7 · Safari 26.4 canonical archetype label', () => {
-    expect(body).toMatch(/iPhone 16 Pro\s*[·.]\s*iOS 18\.7\s*[·.]\s*Safari 26\.4/);
+  it('uses the multi-archetype iPhone family canonical label (M.6 Path A: iPhone 15 Pro / 16 Pro / 17 lineup, iOS 18.7 / Safari 26.4-26.5)', () => {
+    // The page MUST name at least two of the launch iPhone families
+    // somewhere in the NOW bucket so the multi-archetype-at-launch
+    // commitment survives a copy rewrite. The OS span MUST mention
+    // both Safari 26.4 and 26.5 since the latter is the rolling-out
+    // version covered at v1.0 per the founder verdict 2026-05-17.
+    expect(body).toMatch(/iPhone 15 Pro/);
+    expect(body).toMatch(/iPhone 16 Pro/);
+    expect(body).toMatch(/iPhone 17/);
+    expect(body).toMatch(/Safari 26\.4/);
+    expect(body).toMatch(/Safari 26\.5/);
+    // Pre-M.6 single-archetype framing must NOT return on the NOW
+    // item title line (would re-introduce the single-archetype
+    // launch implication the orchestrator surfaced in §6 / Item 6).
+    expect(body).not.toMatch(
+      /title: 'iPhone 16 Pro · iOS 18\.7 · Safari 26\.4 fingerprint parity'/,
+    );
   });
 
   it('does not commit to specific calendar quarters in the bucket titles', () => {

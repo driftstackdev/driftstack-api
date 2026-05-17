@@ -123,7 +123,12 @@ describe('W366.A marketing-site /comparison page content parity', () => {
     // Chromium-with-iOS-skin. A future copy softening to "iOS-
     // optimized Chromium" would break the entire positioning.
     expect(body).toMatch(/driftstack: 'Apple WebKit \(C\+\+ source-level fork\)'/);
-    expect(body).toMatch(/driftstack: 'iPhone 16 Pro · iOS 18\.7 · Safari 26\.4'/);
+    // M.6 Path A: multi-archetype + Safari 26.5 launch scope per founder
+    // verdict 2026-05-17. Single-archetype framing must NOT return.
+    expect(body).toMatch(
+      /driftstack: 'iPhone 15 Pro \/ 16 Pro \/ 17 family · iOS 18\.7 · Safari 26\.4-26\.5'/,
+    );
+    expect(body).not.toMatch(/driftstack: 'iPhone 16 Pro · iOS 18\.7 · Safari 26\.4'/);
   });
 
   it('"don\'t sell proxies; we don\'t mark up egress" anti-Bright Data positioning pinned', () => {
