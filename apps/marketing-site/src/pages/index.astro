@@ -43,8 +43,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <span class="pip"></span>
             <span class="pip"></span>
             <span class="ml-3 truncate text-xs text-ink-muted">driftstack-typescript-sdk</span>
+            <button
+              type="button"
+              data-copy-target="hero-sdk-code"
+              class="ml-auto rounded border border-white/10 px-2 py-0.5 text-[10px] font-mono text-ink-muted transition hover:border-glow-red hover:text-glow-red"
+              aria-label="Copy code to clipboard"
+            >
+              <span data-copy-label>Copy</span>
+            </button>
           </div>
-          <pre class="max-h-[280px] overflow-x-auto p-5 text-[11px] leading-relaxed text-ink-primary sm:max-h-none sm:text-xs md:text-sm"><code>{`import { Driftstack } from '@driftstack/sdk';
+          <pre class="max-h-[280px] overflow-x-auto p-5 text-[11px] leading-relaxed text-ink-primary sm:max-h-none sm:text-xs md:text-sm"><code id="hero-sdk-code">{`import { Driftstack } from '@driftstack/sdk';
 
 const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 
@@ -97,9 +105,17 @@ await session.destroy();`}</code></pre>
           <span class="pip"></span>
           <span class="pip"></span>
           <span class="pip"></span>
-          <span class="ml-3 text-xs text-ink-muted">driftstack-typescript-sdk · agent layer</span>
+          <span class="ml-3 truncate text-xs text-ink-muted">driftstack-typescript-sdk · agent layer</span>
+          <button
+            type="button"
+            data-copy-target="agent-layer-code"
+            class="ml-auto rounded border border-white/10 px-2 py-0.5 text-[10px] font-mono text-ink-muted transition hover:border-glow-red hover:text-glow-red"
+            aria-label="Copy code to clipboard"
+          >
+            <span data-copy-label>Copy</span>
+          </button>
         </div>
-        <pre class="overflow-x-auto p-5 text-ink-primary"><code>{`import { Driftstack } from '@driftstack/sdk';
+        <pre class="overflow-x-auto p-5 text-ink-primary"><code id="agent-layer-code">{`import { Driftstack } from '@driftstack/sdk';
 
 const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 
@@ -720,4 +736,66 @@ const result = await session.result();
       </div>
     </div>
   </section>
+
+  <!-- M.4 Plan Item 9e — mobile-only sticky CTA. Pattern common on
+       landing pages; CRO literature shows 8-15% conversion lift on
+       mobile because the primary action stays tappable as the
+       visitor scrolls 700+ lines of homepage. Hidden at md+ to avoid
+       fighting the in-page hero CTA on desktop. The page body's
+       footer section above already has a bottom-padding equivalent
+       that prevents the sticky bar from overlapping the final
+       "Read the docs" CTA, but we add an explicit spacer below to
+       keep the bottom of the page from getting clipped on iOS
+       Safari's variable URL-bar viewport. -->
+  <div class="h-20 md:hidden" aria-hidden="true"></div>
+  <div
+    class="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-black/90 px-4 py-3 backdrop-blur-sm md:hidden"
+  >
+    <a href="/pricing#trial-pack" class="btn-primary w-full text-center">
+      Start for $2.99
+    </a>
+  </div>
+
+  <!-- M.4 Plan Item 9f — code-block copy button. Static prerender +
+       inline script (Astro is:inline) so no module hydration required;
+       wires every [data-copy-target] to navigator.clipboard. Resilient
+       to the navigator.clipboard absence (older WebViews / insecure
+       origins) — falls back to selecting the text so the user can
+       still ctrl-C / ⌘C. -->
+  <script is:inline>
+    (() => {
+      function wireCopyButton(btn) {
+        const targetId = btn.getAttribute('data-copy-target');
+        if (!targetId) return;
+        const target = document.getElementById(targetId);
+        const label = btn.querySelector('[data-copy-label]');
+        if (!target || !label) return;
+        btn.addEventListener('click', async () => {
+          const text = target.textContent ?? '';
+          const original = label.textContent;
+          try {
+            if (navigator.clipboard && window.isSecureContext) {
+              await navigator.clipboard.writeText(text);
+            } else {
+              const range = document.createRange();
+              range.selectNodeContents(target);
+              const selection = window.getSelection();
+              selection?.removeAllRanges();
+              selection?.addRange(range);
+            }
+            label.textContent = 'Copied';
+            setTimeout(() => {
+              label.textContent = original;
+            }, 1600);
+          } catch {
+            label.textContent = 'Copy failed';
+            setTimeout(() => {
+              label.textContent = original;
+            }, 1600);
+          }
+        });
+      }
+      document.querySelectorAll('[data-copy-target]').forEach(wireCopyButton);
+    })();
+  </script>
 </BaseLayout>
