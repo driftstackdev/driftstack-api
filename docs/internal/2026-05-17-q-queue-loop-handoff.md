@@ -473,3 +473,25 @@ landing; cumulative test count growth across the session:
 - v2-#12: +6 (new bidirectional URI catalog parity)
 
 No regressions detected. Typecheck clean across all commits.
+
+## Post-queue follow-ups (2026-05-18 01:00–01:10 UTC)
+
+After the 12-item queue completed, two follow-up impls shipped that
+layer concrete service-layer code onto the v2-#10/#11 schema
+scaffolding:
+
+| Item     | Commit     | Scope                                                           |
+| -------- | ---------- | --------------------------------------------------------------- |
+| v2-#10.5 | `2a091cf2` | WebhookRotationReminderService + email template + 6 unit tests  |
+| v2-#11.5 | `f6e95a24` | ByokAnthropicRotationReminderService + email template + 6 tests |
+
+Both services are dormant pending scheduled-job wiring (v2-#10.6 +
+v2-#11.6 follow-ups — one-shot job that self-reschedules daily).
+The schemas + service tickOnce(now) methods + email templates are
+fully implemented + tested; the cron decision is operator-level and
+can layer on top without further code changes.
+
+Cumulative session output: 14 commits; ~6,800 LOC inserted across
+4 new migrations (0045/0046/0047/0048/0049), 5 new services, 9 new
+test files (v2-#4 + v2-#5 + v2-#12 + v2-#14 + email-gap + two
+reminder services).
