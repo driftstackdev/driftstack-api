@@ -6,7 +6,7 @@
 // debit + transcript-append side effects verified.
 
 import { describe, expect, it } from 'vitest';
-import { AgentRuntime } from '../../src/services/agent-runtime.js';
+import { AgentRuntime, classifyDecomposerError } from '../../src/services/agent-runtime.js';
 import { DeterministicAgentDecomposer } from '../../src/services/agent-decomposer-deterministic.js';
 import { StubAgentExecutor } from '../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
@@ -286,5 +286,160 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(afterFirst?.tokenBudgetRemaining).toBe(0);
     expect(afterFirst?.status).toBe('closed');
     expect(afterFirst?.closedReason).toBe('budget-exhausted');
+  });
+
+  describe('Q.1.b hybrid error classification', () => {
+    it('transient error (Anthropic 5xx) → refuse with agent-unavailable reason, session stays active', async () => {
+      const throwingDecomposer = {
+        decompose: (_args: DecomposeArgs) =>
+          Promise.reject(new Error('Anthropic API 503: upstream error')),
+      };
+      const sessions = new InMemoryAgentSessionsRepo();
+      const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+      const runtime = new AgentRuntime({
+        decomposer: throwingDecomposer,
+        executor: new StubAgentExecutor(),
+        sessions,
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      const result = await runtime.runTurn({
+        agentSessionId: seed.id,
+        userMessage: 'open https://example.com',
+      });
+      expect(result.kind).toBe('refuse');
+      if (result.kind !== 'refuse') throw new Error('type narrow');
+      expect(result.decomposer.refuseReason).toMatch(/temporarily unavailable/);
+      expect(result.decomposer.tokensConsumed).toBe(0);
+      // Session stays active per Q.1.b open-answer verdict.
+      const final = await sessions.get(seed.id);
+      expect(final?.status).toBe('active');
+    });
+
+    it('transient error (network) → refuse, session stays active', async () => {
+      const throwingDecomposer = {
+        decompose: (_args: DecomposeArgs) => Promise.reject(new Error('ECONNRESET')),
+      };
+      const sessions = new InMemoryAgentSessionsRepo();
+      const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+      const runtime = new AgentRuntime({
+        decomposer: throwingDecomposer,
+        executor: new StubAgentExecutor(),
+        sessions,
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      const result = await runtime.runTurn({
+        agentSessionId: seed.id,
+        userMessage: 'open https://example.com',
+      });
+      expect(result.kind).toBe('refuse');
+      const final = await sessions.get(seed.id);
+      expect(final?.status).toBe('active');
+    });
+
+    it('fatal error (Anthropic 4xx) → re-throw, no transcript-side effects', async () => {
+      const throwingDecomposer = {
+        decompose: (_args: DecomposeArgs) =>
+          Promise.reject(new Error('Anthropic API 401: invalid api key')),
+      };
+      const sessions = new InMemoryAgentSessionsRepo();
+      const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+      const runtime = new AgentRuntime({
+        decomposer: throwingDecomposer,
+        executor: new StubAgentExecutor(),
+        sessions,
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      await expect(
+        runtime.runTurn({
+          agentSessionId: seed.id,
+          userMessage: 'open https://example.com',
+        }),
+      ).rejects.toThrow(/Anthropic API 401/);
+      const final = await sessions.get(seed.id);
+      expect(final?.status).toBe('active');
+      // Only the user turn made it into the transcript; no agent turn.
+      expect(final?.transcript).toHaveLength(1);
+      expect(final?.transcript[0]?.role).toBe('user');
+    });
+
+    it('fatal error (malformed response) → re-throw', async () => {
+      const throwingDecomposer = {
+        decompose: (_args: DecomposeArgs) =>
+          Promise.reject(new Error('Anthropic response missing text content')),
+      };
+      const sessions = new InMemoryAgentSessionsRepo();
+      const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+      const runtime = new AgentRuntime({
+        decomposer: throwingDecomposer,
+        executor: new StubAgentExecutor(),
+        sessions,
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      await expect(
+        runtime.runTurn({
+          agentSessionId: seed.id,
+          userMessage: 'open https://example.com',
+        }),
+      ).rejects.toThrow(/missing text content/);
+    });
+  });
+});
+
+describe('Q.1.b classifyDecomposerError', () => {
+  it('Anthropic 503 → transient', () => {
+    expect(classifyDecomposerError(new Error('Anthropic API 503: upstream'))).toBe('transient');
+  });
+
+  it('Anthropic 502 → transient', () => {
+    expect(classifyDecomposerError(new Error('Anthropic API 502: bad gateway'))).toBe('transient');
+  });
+
+  it('Anthropic 401 → fatal (credential)', () => {
+    expect(classifyDecomposerError(new Error('Anthropic API 401: invalid api key'))).toBe('fatal');
+  });
+
+  it('Anthropic 400 → fatal (validation)', () => {
+    expect(classifyDecomposerError(new Error('Anthropic API 400: malformed request'))).toBe(
+      'fatal',
+    );
+  });
+
+  it('malformed response (missing text content) → fatal', () => {
+    expect(classifyDecomposerError(new Error('Anthropic response missing text content'))).toBe(
+      'fatal',
+    );
+  });
+
+  it('malformed response (not valid JSON) → fatal', () => {
+    expect(classifyDecomposerError(new Error('Anthropic response was not valid JSON'))).toBe(
+      'fatal',
+    );
+  });
+
+  it('malformed response (unknown kind) → fatal', () => {
+    expect(classifyDecomposerError(new Error('Anthropic response has unknown kind: mystery'))).toBe(
+      'fatal',
+    );
+  });
+
+  it('missing api key → fatal (configuration error)', () => {
+    expect(
+      classifyDecomposerError(new Error('ClaudeAgentDecomposer: no Anthropic API key provided')),
+    ).toBe('fatal');
+  });
+
+  it('network error (ECONNRESET) → transient', () => {
+    expect(classifyDecomposerError(new Error('ECONNRESET'))).toBe('transient');
+  });
+
+  it('network error (fetch failed) → transient', () => {
+    expect(classifyDecomposerError(new Error('fetch failed'))).toBe('transient');
+  });
+
+  it('non-Error throw → fatal (defensive — surface to Sentry)', () => {
+    expect(classifyDecomposerError('some string')).toBe('fatal');
+    expect(classifyDecomposerError(null)).toBe('fatal');
+    expect(classifyDecomposerError(undefined)).toBe('fatal');
+    expect(classifyDecomposerError({ random: 'object' })).toBe('fatal');
   });
 });

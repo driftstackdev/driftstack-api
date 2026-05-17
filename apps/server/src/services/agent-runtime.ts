@@ -95,13 +95,34 @@ export class AgentRuntime {
     });
     const sessionWithUser = (await this.deps.sessions.get(session.id))!;
 
-    const decomposed = await this.deps.decomposer.decompose({
-      task: args.userMessage,
-      archetype: this.deps.archetype,
-      history: sessionWithUser.transcript,
-      budgetTokensRemaining: sessionWithUser.tokenBudgetRemaining,
-      ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
-    });
+    // Q.1.b — hybrid error classification per founder verdict
+    // 2026-05-17. Transient operational failures (5xx after the
+    // decomposer's internal retry, network errors) return a
+    // synthesized refuse so the customer's session stays active
+    // and they can retry the same turn after upstream recovery.
+    // Fatal failures (credential errors / malformed responses /
+    // missing-key configuration) re-throw — the route layer maps
+    // them to 502 + Sentry alert.
+    let decomposed: DecomposeResult;
+    try {
+      decomposed = await this.deps.decomposer.decompose({
+        task: args.userMessage,
+        archetype: this.deps.archetype,
+        history: sessionWithUser.transcript,
+        budgetTokensRemaining: sessionWithUser.tokenBudgetRemaining,
+        ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
+      });
+    } catch (err) {
+      if (classifyDecomposerError(err) === 'fatal') {
+        throw err;
+      }
+      // Transient — synthesize a refuse, session stays active.
+      decomposed = {
+        kind: 'refuse',
+        refuseReason: 'agent layer temporarily unavailable; please retry',
+        tokensConsumed: 0,
+      };
+    }
 
     // Always debit the decomposer's tokens (even on refuse —
     // the input was processed). Budget-exhausted refusals charge
@@ -180,4 +201,43 @@ export class AgentRuntime {
       session: updated,
     };
   }
+}
+
+/**
+ * Q.1.b — classify a thrown decomposer error as transient or fatal.
+ *
+ * Transient (return refuse, session stays active):
+ *   - Anthropic 5xx after the decomposer's internal retry (message
+ *     pattern `Anthropic API 5\d\d`)
+ *   - Network errors after retry (e.g. ECONNRESET, fetch failed)
+ *
+ * Fatal (re-throw → route 502):
+ *   - Anthropic 4xx (credential / quota / validation)
+ *   - Malformed response (missing text content / non-JSON body /
+ *     unknown discriminator kind / missing required fields)
+ *   - Missing API key configuration
+ *   - Any non-Error throw (defensive: treat as fatal so it surfaces
+ *     to Sentry rather than masquerading as a customer-facing refuse)
+ */
+export function classifyDecomposerError(err: unknown): 'transient' | 'fatal' {
+  if (!(err instanceof Error)) return 'fatal';
+  const msg = err.message;
+  // Anthropic 5xx after retry → transient
+  if (/Anthropic API 5\d\d/.test(msg)) return 'transient';
+  // Anthropic 4xx → fatal (credential / quota / validation)
+  if (/Anthropic API 4\d\d/.test(msg)) return 'fatal';
+  // Malformed Anthropic response → fatal
+  if (
+    /missing text content|not valid JSON|not a JSON object|unknown kind:|intents was not an array|missing clarifyingQuestion|missing refuseReason/i.test(
+      msg,
+    )
+  ) {
+    return 'fatal';
+  }
+  // Missing API key configuration → fatal (route should have caught
+  // this; if we got here, bootstrap wiring is wrong)
+  if (/no Anthropic API key/i.test(msg)) return 'fatal';
+  // Default: anything else (network errors, fetch rejections,
+  // timeouts) → transient
+  return 'transient';
 }
