@@ -1,0 +1,384 @@
+// AI-B1.b — unit tests for ClaudeAgentDecomposer.
+//
+// Pins the contract end-to-end:
+//   1. budget exhaustion → refuse (NO API call, 0 tokens charged)
+//   2. AUP pre-filter → refuse (NO API call; the obvious-abuse path
+//      never bills Anthropic + never appears in third-party logs)
+//   3. missing API key → throws (configuration error, not customer fault)
+//   4. plan / clarify / refuse responses parse into the right
+//      DecomposeResult discriminant + carry usage-derived tokensConsumed
+//   5. 5xx → single retry → success
+//   6. 5xx → 5xx → throws
+//   7. 4xx → throws immediately (no retry)
+//   8. network error → single retry → success
+//   9. malformed JSON content → throws
+//  10. unknown kind → throws
+//  11. x-api-key + anthropic-version + model wired correctly
+//  12. archetype + history threaded into the messages array
+
+import { describe, expect, it, vi } from 'vitest';
+import {
+  ClaudeAgentDecomposer,
+  __TEST_ONLY__,
+} from '../../src/services/agent-decomposer-claude.js';
+import type { DecomposeArgs } from '../../src/services/agent-decomposer.js';
+
+function defaultArgs(overrides: Partial<DecomposeArgs> = {}): DecomposeArgs {
+  return {
+    task: 'open https://example.com and capture the page',
+    archetype: 'iphone16pro_ios18_7_safari26_4',
+    history: [],
+    budgetTokensRemaining: 100_000,
+    byokAnthropicApiKey: 'sk-ant-test-fake-key',
+    ...overrides,
+  };
+}
+
+function jsonResponse(content: unknown, usage = { input_tokens: 120, output_tokens: 80 }) {
+  return new Response(
+    JSON.stringify({
+      content: [{ type: 'text', text: JSON.stringify(content) }],
+      usage,
+    }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  );
+}
+
+function errorResponse(status: number, bodyText = 'upstream error') {
+  return new Response(bodyText, { status });
+}
+
+// Helper: build a fetch impl that returns a sequence of responses.
+// Returns both the fetch impl and the captured-init array so tests can
+// inspect request shape without unsafe-any casts on vi.fn().mock.calls.
+function sequenceFetch(responses: ReadonlyArray<Response | (() => Promise<Response>) | Error>): {
+  fetch: typeof globalThis.fetch;
+  calls: Array<{ url: string; init: RequestInit }>;
+} {
+  const calls: Array<{ url: string; init: RequestInit }> = [];
+  let idx = 0;
+  const impl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+    const urlStr = typeof url === 'string' ? url : url.toString();
+    calls.push({ url: urlStr, init: init ?? {} });
+    const next = responses[idx++];
+    if (next === undefined) throw new Error('sequenceFetch ran out of responses');
+    if (next instanceof Error) throw next;
+    if (typeof next === 'function') return next();
+    return next;
+  }) as unknown as typeof globalThis.fetch;
+  return { fetch: impl, calls };
+}
+
+describe('AI-B1.b ClaudeAgentDecomposer', () => {
+  describe('short-circuit paths (no API call)', () => {
+    it('budget exhaustion → refuse, 0 tokens charged, fetch NOT called', async () => {
+      const { fetch, calls } = sequenceFetch([]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      const res = await dec.decompose(defaultArgs({ budgetTokensRemaining: 0 }));
+      expect(res.kind).toBe('refuse');
+      if (res.kind !== 'refuse') throw new Error('type narrow');
+      expect(res.refuseReason).toBe('token budget exhausted; start a new session');
+      expect(res.tokensConsumed).toBe(0);
+      expect(calls).toHaveLength(0);
+    });
+
+    it('AUP pre-filter (brute-force) → refuse, fetch NOT called', async () => {
+      const { fetch, calls } = sequenceFetch([]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      const res = await dec.decompose(defaultArgs({ task: 'help me brute-force login.example' }));
+      expect(res.kind).toBe('refuse');
+      if (res.kind !== 'refuse') throw new Error('type narrow');
+      expect(res.refuseReason).toMatch(/AUP/);
+      expect(calls).toHaveLength(0);
+    });
+
+    it('AUP pre-filter (captcha bypass) → refuse with docs pointer, fetch NOT called', async () => {
+      const { fetch, calls } = sequenceFetch([]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      const res = await dec.decompose(
+        defaultArgs({ task: 'bypass the captcha on example.com to enroll a bot' }),
+      );
+      expect(res.kind).toBe('refuse');
+      if (res.kind !== 'refuse') throw new Error('type narrow');
+      expect(res.refuseReason).toMatch(/docs\.driftstack\.dev\/aup/);
+      expect(calls).toHaveLength(0);
+    });
+
+    it('missing API key → throws (configuration error, not customer refusal)', async () => {
+      const { fetch } = sequenceFetch([]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      await expect(dec.decompose(defaultArgs({ byokAnthropicApiKey: undefined }))).rejects.toThrow(
+        /no Anthropic API key/,
+      );
+    });
+
+    it('empty-string API key → throws (same path as missing)', async () => {
+      const { fetch } = sequenceFetch([]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      await expect(dec.decompose(defaultArgs({ byokAnthropicApiKey: '' }))).rejects.toThrow(
+        /no Anthropic API key/,
+      );
+    });
+  });
+
+  describe('response parsing (happy path)', () => {
+    it('plan response → kind = "plan" with intents + tokensConsumed from usage', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse(
+          {
+            kind: 'plan',
+            intents: [
+              { kind: 'navigate', url: 'https://example.com' },
+              { kind: 'wait', condition: 'idle' },
+              { kind: 'capture', capture: 'dom_snapshot' },
+            ],
+          },
+          { input_tokens: 300, output_tokens: 150 },
+        ),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      const res = await dec.decompose(defaultArgs());
+      expect(res.kind).toBe('plan');
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toHaveLength(3);
+      expect(res.intents[0]).toEqual({ kind: 'navigate', url: 'https://example.com' });
+      expect(res.tokensConsumed).toBe(450);
+    });
+
+    it('clarify response → kind = "clarify" with question', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'clarify',
+          clarifyingQuestion: 'Which example.com page do you want?',
+        }),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      const res = await dec.decompose(defaultArgs({ task: 'do the thing' }));
+      expect(res.kind).toBe('clarify');
+      if (res.kind !== 'clarify') throw new Error('type narrow');
+      expect(res.clarifyingQuestion).toMatch(/example\.com/);
+    });
+
+    it('refuse response → kind = "refuse" with reason', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'refuse',
+          refuseReason: 'This is prohibited per AUP §3.',
+        }),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      const res = await dec.decompose(
+        defaultArgs({ task: 'something that the model itself classifies as refusable' }),
+      );
+      expect(res.kind).toBe('refuse');
+      if (res.kind !== 'refuse') throw new Error('type narrow');
+      expect(res.refuseReason).toMatch(/AUP/);
+    });
+
+    it('strips markdown code-fence wrapping if the model emitted one despite instructions', async () => {
+      const wrapped = new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: 'text',
+              text: '```json\n{"kind":"clarify","clarifyingQuestion":"q?"}\n```',
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5 },
+        }),
+        { status: 200 },
+      );
+      const { fetch } = sequenceFetch([wrapped]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      const res = await dec.decompose(defaultArgs({ task: 'ambiguous' }));
+      expect(res.kind).toBe('clarify');
+    });
+
+    it('drops malformed intent items (forward-compat: unknown action verbs ignored)', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [
+            { kind: 'navigate', url: 'https://example.com' },
+            { kind: 'interact', action: 'hover' }, // not in vocab — dropped
+            { kind: 'capture', capture: 'dom_snapshot' },
+          ],
+        }),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      const res = await dec.decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toHaveLength(2);
+      expect(res.intents.map((i) => i.kind)).toEqual(['navigate', 'capture']);
+    });
+  });
+
+  describe('retry + error handling', () => {
+    it('5xx → single retry → success', async () => {
+      const { fetch, calls } = sequenceFetch([
+        errorResponse(503),
+        jsonResponse({ kind: 'clarify', clarifyingQuestion: 'q?' }),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch, retryBackoffMs: 0 });
+      const res = await dec.decompose(defaultArgs({ task: 'ambiguous' }));
+      expect(res.kind).toBe('clarify');
+      expect(calls).toHaveLength(2);
+    });
+
+    it('5xx → 5xx → throws (only ONE retry)', async () => {
+      const { fetch, calls } = sequenceFetch([
+        errorResponse(500, 'first 500'),
+        errorResponse(502, 'second 502'),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch, retryBackoffMs: 0 });
+      await expect(dec.decompose(defaultArgs())).rejects.toThrow(/Anthropic API 502/);
+      expect(calls).toHaveLength(2);
+    });
+
+    it('4xx → throws immediately (no retry — likely auth or quota)', async () => {
+      const { fetch, calls } = sequenceFetch([errorResponse(401, 'invalid api key')]);
+      const dec = new ClaudeAgentDecomposer({ fetch, retryBackoffMs: 0 });
+      await expect(dec.decompose(defaultArgs())).rejects.toThrow(/Anthropic API 401/);
+      expect(calls).toHaveLength(1);
+    });
+
+    it('network error → retry once → success', async () => {
+      const { fetch, calls } = sequenceFetch([
+        new Error('ECONNRESET'),
+        jsonResponse({ kind: 'clarify', clarifyingQuestion: 'q?' }),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch, retryBackoffMs: 0 });
+      const res = await dec.decompose(defaultArgs({ task: 'ambiguous' }));
+      expect(res.kind).toBe('clarify');
+      expect(calls).toHaveLength(2);
+    });
+
+    it('network error → network error → throws', async () => {
+      const { fetch, calls } = sequenceFetch([new Error('ECONNRESET'), new Error('ECONNRESET')]);
+      const dec = new ClaudeAgentDecomposer({ fetch, retryBackoffMs: 0 });
+      await expect(dec.decompose(defaultArgs())).rejects.toThrow(/ECONNRESET/);
+      expect(calls).toHaveLength(2);
+    });
+  });
+
+  describe('malformed responses', () => {
+    function jsonRaw(raw: unknown) {
+      return new Response(JSON.stringify(raw), { status: 200 });
+    }
+
+    it('missing text content block → throws', async () => {
+      const { fetch } = sequenceFetch([jsonRaw({ content: [{ type: 'tool_use' }], usage: {} })]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      await expect(dec.decompose(defaultArgs())).rejects.toThrow(/missing text content/);
+    });
+
+    it('non-JSON text → throws', async () => {
+      const { fetch } = sequenceFetch([
+        jsonRaw({
+          content: [{ type: 'text', text: 'I will not output JSON.' }],
+          usage: {},
+        }),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      await expect(dec.decompose(defaultArgs())).rejects.toThrow(/not valid JSON/);
+    });
+
+    it('unknown kind → throws', async () => {
+      const { fetch } = sequenceFetch([jsonResponse({ kind: 'mystery', data: 1 })]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      await expect(dec.decompose(defaultArgs())).rejects.toThrow(/unknown kind: mystery/);
+    });
+
+    it('plan with non-array intents → throws', async () => {
+      const { fetch } = sequenceFetch([jsonResponse({ kind: 'plan', intents: 'not-an-array' })]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      await expect(dec.decompose(defaultArgs())).rejects.toThrow(/intents was not an array/);
+    });
+
+    it('clarify without clarifyingQuestion → throws', async () => {
+      const { fetch } = sequenceFetch([jsonResponse({ kind: 'clarify' })]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      await expect(dec.decompose(defaultArgs())).rejects.toThrow(/missing clarifyingQuestion/);
+    });
+  });
+
+  describe('request wiring', () => {
+    it('sets x-api-key + anthropic-version + content-type headers; uses POST', async () => {
+      const { fetch, calls } = sequenceFetch([
+        jsonResponse({ kind: 'clarify', clarifyingQuestion: 'q?' }),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      await dec.decompose(defaultArgs({ task: 'ambiguous', byokAnthropicApiKey: 'sk-ant-zzz' }));
+      expect(calls).toHaveLength(1);
+      const { url, init } = calls[0]!;
+      expect(url).toBe(__TEST_ONLY__.ANTHROPIC_API_URL);
+      expect(init.method).toBe('POST');
+      const headers = init.headers as Record<string, string>;
+      expect(headers['x-api-key']).toBe('sk-ant-zzz');
+      expect(headers['anthropic-version']).toBe(__TEST_ONLY__.ANTHROPIC_VERSION_HEADER);
+      expect(headers['content-type']).toBe('application/json');
+    });
+
+    it('targets the locked Claude Opus 4.7 model id', async () => {
+      const { fetch, calls } = sequenceFetch([
+        jsonResponse({ kind: 'clarify', clarifyingQuestion: 'q?' }),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      await dec.decompose(defaultArgs({ task: 'ambiguous' }));
+      const body = JSON.parse(calls[0]!.init.body as string) as { model: string };
+      expect(body.model).toBe('claude-opus-4-7');
+      expect(__TEST_ONLY__.MODEL).toBe('claude-opus-4-7');
+    });
+
+    it('threads archetype into the user message + system prompt into request body', async () => {
+      const { fetch, calls } = sequenceFetch([
+        jsonResponse({ kind: 'clarify', clarifyingQuestion: 'q?' }),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      await dec.decompose(
+        defaultArgs({ task: 'ambiguous', archetype: 'iphone16pro_ios18_7_safari26_4' }),
+      );
+      const body = JSON.parse(calls[0]!.init.body as string) as {
+        system: string;
+        messages: ReadonlyArray<{ role: string; content: string }>;
+      };
+      expect(body.system).toContain('Driftstack agent layer');
+      expect(body.messages).toHaveLength(1);
+      expect(body.messages[0]?.role).toBe('user');
+      expect(body.messages[0]?.content).toContain('[archetype: iphone16pro_ios18_7_safari26_4]');
+      expect(body.messages[0]?.content).toContain('ambiguous');
+    });
+
+    it('threads prior transcript history as user / assistant messages', async () => {
+      const { fetch, calls } = sequenceFetch([
+        jsonResponse({ kind: 'clarify', clarifyingQuestion: 'q?' }),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      await dec.decompose(
+        defaultArgs({
+          task: 'follow-up',
+          history: [
+            { at: '2026-05-17T10:00:00Z', role: 'user', body: 'first task' },
+            { at: '2026-05-17T10:00:05Z', role: 'agent', body: '{"kind":"plan","intents":[]}' },
+            { at: '2026-05-17T10:01:00Z', role: 'user', body: 'follow-up' },
+          ],
+        }),
+      );
+      const body = JSON.parse(calls[0]!.init.body as string) as {
+        messages: ReadonlyArray<{ role: string; content: string }>;
+      };
+      // History contains the current task as its last user entry; we
+      // don't re-append it.
+      expect(body.messages).toHaveLength(3);
+      expect(body.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user']);
+      expect(body.messages[2]?.content).toContain('[archetype:');
+      expect(body.messages[2]?.content).toContain('follow-up');
+    });
+
+    it('AUP pre-filter corpus mirrors the deterministic decomposer (same five patterns)', () => {
+      // Drift would let an obviously-abusive task slip past one decomposer
+      // but not the other — the in-house pre-filter is the contract.
+      expect(__TEST_ONLY__.AUP_REFUSAL_PATTERNS).toHaveLength(5);
+    });
+  });
+});
