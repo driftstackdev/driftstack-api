@@ -32,15 +32,15 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-const BUCKET_KEYS = ['global', 'sessions:create'] as const;
+const BUCKET_KEYS = ['global', 'sessions:create', 'agent_sessions:message'] as const;
 
 describe('W869 RateLimitBucket cross-source invariant', () => {
   // ─── api-types common.ts TIER_RATE_LIMIT_DEFAULTS shape ──────
 
-  it("CRITICAL packages/api-types/src/common.ts TIER_RATE_LIMIT_DEFAULTS has the EXACT Record<AccountTier, Record<'global' | 'sessions:create', BucketLimitConfig>> shape. The 2-bucket-key shape is the V-219 closed roster.", () => {
+  it("CRITICAL packages/api-types/src/common.ts TIER_RATE_LIMIT_DEFAULTS has the EXACT Record<AccountTier, Record<'global' | 'sessions:create' | 'agent_sessions:message', BucketLimitConfig>> shape. The 3-bucket-key shape (extended in v2-#13 for agent_sessions:message AI chat throttle) is the V-219 closed roster.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
     expect(p).toMatch(
-      /TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n?\s*AccountTier,\s*\n?\s*Record<'global' \| 'sessions:create', BucketLimitConfig>/,
+      /TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n?\s*AccountTier,\s*\n?\s*Record<'global' \| 'sessions:create' \| 'agent_sessions:message', BucketLimitConfig>/,
     );
   });
 
@@ -109,9 +109,9 @@ describe('W869 RateLimitBucket cross-source invariant', () => {
 
   // ─── 2-key cardinality + no forbidden buckets ────────────────
 
-  it('CRITICAL bucket_key roster = EXACTLY 2 values. The 2-key model intentionally avoids per-route buckets — the only carve-out is the most-expensive op (sessions:create). Drift to adding a 3rd bucket would force coordinated SDK + dashboard + admin updates.', () => {
-    expect(BUCKET_KEYS.length).toBe(2);
-    expect(BUCKET_KEYS).toEqual(['global', 'sessions:create']);
+  it('CRITICAL bucket_key roster = EXACTLY 3 values (v2-#13 extended for agent_sessions:message AI chat throttle). Drift to adding a 4th bucket would force coordinated SDK + dashboard + admin updates.', () => {
+    expect(BUCKET_KEYS.length).toBe(3);
+    expect(BUCKET_KEYS).toEqual(['global', 'sessions:create', 'agent_sessions:message']);
   });
 
   it("CRITICAL no source declares forbidden bucket-key names (per-route / api / write / read / admin / heavy / light). These are common patterns that V-219 intentionally avoids — the 2-key model maps to 'all calls vs the single most-expensive op'.", () => {
@@ -131,9 +131,12 @@ describe('W869 RateLimitBucket cross-source invariant', () => {
 
   // ─── 'sessions:create' colon-namespace pattern ────────────────
 
-  it("CRITICAL 'sessions:create' uses colon-namespace ('resource:verb') NOT slash or dot. The colon is what distinguishes per-route buckets from the global one. Drift to 'sessions/create' or 'sessions.create' would let the bucket-key parser mis-classify routes.", () => {
+  it("CRITICAL per-route buckets use colon-namespace ('resource:verb') NOT slash or dot. The colon is what distinguishes per-route buckets from the global one. Drift to 'sessions/create' or 'sessions.create' would let the bucket-key parser mis-classify routes.", () => {
     expect(BUCKET_KEYS).toContain('sessions:create');
-    expect(BUCKET_KEYS.filter((k) => k.includes(':')).length).toBe(1);
+    expect(BUCKET_KEYS).toContain('agent_sessions:message');
+    // v2-#13 — every non-global bucket follows the resource:verb
+    // colon convention; only 'global' is bare.
+    expect(BUCKET_KEYS.filter((k) => k.includes(':')).length).toBe(2);
     expect(BUCKET_KEYS.filter((k) => k.includes('/')).length).toBe(0);
     expect(BUCKET_KEYS.filter((k) => k.includes('.')).length).toBe(0);
   });

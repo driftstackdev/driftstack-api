@@ -61,10 +61,10 @@ describe('W731 V-219 TIER_RATE_LIMIT_DEFAULTS parity', () => {
     );
   });
 
-  it("CRITICAL TIER_RATE_LIMIT_DEFAULTS Record type-shape pinned — Record<AccountTier, Record<'global' | 'sessions:create', BucketLimitConfig>>. Drift to dropping the 2-bucket-key nested record would change the access pattern.", () => {
+  it("CRITICAL TIER_RATE_LIMIT_DEFAULTS Record type-shape pinned — Record<AccountTier, Record<'global' | 'sessions:create' | 'agent_sessions:message', BucketLimitConfig>>. The 3-bucket-key shape (v2-#13 extended for agent_sessions:message AI chat throttle).", () => {
     const c = read(COMMON);
     expect(c).toMatch(
-      /export const TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n\s*AccountTier,\s*\n\s*Record<'global' \| 'sessions:create', BucketLimitConfig>\s*\n>/,
+      /export const TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n\s*AccountTier,\s*\n\s*Record<'global' \| 'sessions:create' \| 'agent_sessions:message', BucketLimitConfig>\s*\n>/,
     );
   });
 

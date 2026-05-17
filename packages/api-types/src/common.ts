@@ -177,39 +177,51 @@ export interface BucketLimitConfig {
 
 export const TIER_RATE_LIMIT_DEFAULTS: Record<
   AccountTier,
-  Record<'global' | 'sessions:create', BucketLimitConfig>
+  Record<'global' | 'sessions:create' | 'agent_sessions:message', BucketLimitConfig>
 > = {
   trial_pack: {
     global: { capacity: 60, refill_per_second: 1 },
     'sessions:create': { capacity: 5, refill_per_second: 1 / 60 },
+    // v2-#13 — per-turn AI chat throttle. Chat is naturally bursty
+    // (customer types fast); throttle is set to "comfortable for
+    // human typing speed but rejects machine-loops". 20 turn burst
+    // + 1 / 5s refill is comfortable conversational.
+    'agent_sessions:message': { capacity: 20, refill_per_second: 1 / 5 },
   },
   solo_manual: {
     global: { capacity: 120, refill_per_second: 2 },
     'sessions:create': { capacity: 10, refill_per_second: 1 / 30 },
+    'agent_sessions:message': { capacity: 40, refill_per_second: 1 / 3 },
   },
   team_manual: {
     global: { capacity: 360, refill_per_second: 6 },
     'sessions:create': { capacity: 20, refill_per_second: 1 / 10 },
+    'agent_sessions:message': { capacity: 100, refill_per_second: 1 },
   },
   agency_manual: {
     global: { capacity: 1_800, refill_per_second: 30 },
     'sessions:create': { capacity: 60, refill_per_second: 1 },
+    'agent_sessions:message': { capacity: 300, refill_per_second: 3 },
   },
   api_starter: {
     global: { capacity: 240, refill_per_second: 4 },
     'sessions:create': { capacity: 15, refill_per_second: 1 / 20 },
+    'agent_sessions:message': { capacity: 60, refill_per_second: 1 / 2 },
   },
   api_builder: {
     global: { capacity: 1_800, refill_per_second: 30 },
     'sessions:create': { capacity: 60, refill_per_second: 1 },
+    'agent_sessions:message': { capacity: 300, refill_per_second: 3 },
   },
   api_scale: {
     global: { capacity: 6_000, refill_per_second: 100 },
     'sessions:create': { capacity: 120, refill_per_second: 2 },
+    'agent_sessions:message': { capacity: 1_000, refill_per_second: 10 },
   },
   enterprise: {
     global: { capacity: 60_000, refill_per_second: 1_000 },
     'sessions:create': { capacity: 600, refill_per_second: 10 },
+    'agent_sessions:message': { capacity: 10_000, refill_per_second: 100 },
   },
 };
 

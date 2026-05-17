@@ -159,7 +159,11 @@ export function registerAgentSessionsRoutes(
 
   app.post<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id/message',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // v2-#13 — dedicated bucket for AI chat turns (separate from
+    // 'global' so a customer hammering chat doesn't burn through
+    // their generic API quota). Bucket capacity scales per tier;
+    // see TIER_RATE_LIMIT_DEFAULTS in @driftstack/api-types.
+    { preHandler: [app.requireAuth, app.rateLimit('agent_sessions:message')] },
     async (req) => {
       const ctx = requireCtx(req);
       const parsed = RunTurnRequestSchema.safeParse(req.body);

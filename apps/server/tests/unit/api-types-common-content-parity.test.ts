@@ -165,16 +165,16 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
       /export interface BucketLimitConfig \{\s*\n?\s*capacity: number;\s*\n?\s*refill_per_second: number;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /export const TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n?\s*AccountTier,\s*\n?\s*Record<'global' \| 'sessions:create', BucketLimitConfig>\s*\n?\s*> = \{/,
+      /export const TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n?\s*AccountTier,\s*\n?\s*Record<'global' \| 'sessions:create' \| 'agent_sessions:message', BucketLimitConfig>\s*\n?\s*> = \{/,
     );
     expect(body).toMatch(
-      /trial_pack: \{\s*\n?\s*global: \{ capacity: 60, refill_per_second: 1 \},\s*\n?\s*'sessions:create': \{ capacity: 5, refill_per_second: 1 \/ 60 \},\s*\n?\s*\},/,
+      /trial_pack: \{\s*\n?\s*global: \{ capacity: 60, refill_per_second: 1 \},\s*\n?\s*'sessions:create': \{ capacity: 5, refill_per_second: 1 \/ 60 \},[\s\S]*?'agent_sessions:message': \{ capacity: 20, refill_per_second: 1 \/ 5 \},\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /api_scale: \{\s*\n?\s*global: \{ capacity: 6_000, refill_per_second: 100 \},\s*\n?\s*'sessions:create': \{ capacity: 120, refill_per_second: 2 \},\s*\n?\s*\},/,
+      /api_scale: \{\s*\n?\s*global: \{ capacity: 6_000, refill_per_second: 100 \},\s*\n?\s*'sessions:create': \{ capacity: 120, refill_per_second: 2 \},\s*\n?\s*'agent_sessions:message': \{ capacity: 1_000, refill_per_second: 10 \},\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /enterprise: \{\s*\n?\s*global: \{ capacity: 60_000, refill_per_second: 1_000 \},\s*\n?\s*'sessions:create': \{ capacity: 600, refill_per_second: 10 \},\s*\n?\s*\},/,
+      /enterprise: \{\s*\n?\s*global: \{ capacity: 60_000, refill_per_second: 1_000 \},\s*\n?\s*'sessions:create': \{ capacity: 600, refill_per_second: 10 \},\s*\n?\s*'agent_sessions:message': \{ capacity: 10_000, refill_per_second: 100 \},\s*\n?\s*\},/,
     );
   });
 
