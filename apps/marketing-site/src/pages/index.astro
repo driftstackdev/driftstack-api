@@ -75,14 +75,17 @@ await session.destroy();`}</code></pre>
     </div>
   </section>
 
-  <!-- F-4 (Issue 2) — "two ways to drive it" section. The hero
-       above shows the imperative SDK; this section pairs it with
-       the AI-agent shape per file 06 agent-layer spec. Stacked
-       vertically (no JS-driven tab switcher) so the page stays
-       static-prerender clean and Cloudflare Pages-cacheable. The
-       AI-agent code uses createWithAgent + an NL task so the
-       customer's mental shift from imperative → declarative is
-       obvious at a glance. -->
+  <!-- M.2 — "Two ways to drive it" section, refreshed per Plan Item 3.
+       The hero above shows the imperative SDK as a real code block;
+       this section now shows the AI-agent UX as a stylized visual
+       mockup (chat transcript + LiveKit preview pane) so customers
+       SEE the agent experience instead of reading another large
+       <pre><code> block. Static HTML/CSS — no live LiveKit embed
+       yet (a real auth-gated session embed lands as a follow-up
+       once the Q.0 EG-API-1.6 propagation + AI-B1.b activation
+       arrive). Mobile: md:grid-cols-[1fr_1fr] collapses to single
+       column, chat on top + preview below; preview min-height
+       stays 280px so the preview pane doesn't shrink to a sliver. -->
   <section class="relative border-t border-white/10">
     <div class="mx-auto max-w-6xl px-6 py-20">
       <p class="section-label">Two ways to drive it</p>
@@ -90,53 +93,91 @@ await session.destroy();`}</code></pre>
         class="mt-6 max-w-3xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
         style="letter-spacing: -0.02em;"
       >
-        Imperative SDK above. Sentence-driven agent below.
+        Code it precisely, or just describe what you want.
       </h2>
       <p class="mt-5 max-w-prose text-base text-ink-secondary leading-relaxed">
-        Need pixel-precise control? Drive intents directly (the hero
-        example). Need fast iteration on a new flow? Describe the
-        task in English; the agent layer decomposes it into the same
-        intents under the hood. Same session API, same archetype,
-        same fingerprint — just two ways in.
+        Engineers drive sessions directly with the SDK (see the hero
+        example). Everyone else can open the dashboard, type the task
+        in plain English, and watch the agent execute it live — with
+        the option to export the result as code anytime.
       </p>
 
-      <div class="mt-10 code-preview">
-        <div class="code-window-chrome">
-          <span class="pip"></span>
-          <span class="pip"></span>
-          <span class="pip"></span>
-          <span class="ml-3 truncate text-xs text-ink-muted">driftstack-typescript-sdk · agent layer</span>
-          <button
-            type="button"
-            data-copy-target="agent-layer-code"
-            class="ml-auto rounded border border-white/10 px-2 py-0.5 text-[10px] font-mono text-ink-muted transition hover:border-glow-red hover:text-glow-red"
-            aria-label="Copy code to clipboard"
-          >
-            <span data-copy-label>Copy</span>
-          </button>
+      <div class="mt-10 grid gap-6 md:grid-cols-2 md:items-stretch">
+        <!-- Chat-panel mockup. Renders as a faux conversation between
+             the customer and the AI agent. Pure CSS; no JS needed. -->
+        <div class="overflow-hidden rounded-lg border border-white/10 bg-surface-raised">
+          <div class="flex items-center gap-2 border-b border-white/10 bg-white/[0.02] px-5 py-3 text-xs text-ink-muted">
+            <span class="size-2 rounded-full bg-glow-red"></span>
+            <span class="font-mono">AI agent — session #a8c9e</span>
+          </div>
+          <div class="space-y-4 p-5 text-sm">
+            <div class="flex gap-3">
+              <span
+                class="flex size-7 shrink-0 items-center justify-center rounded-full bg-glow-red/20 text-xs"
+                >you</span
+              >
+              <p class="rounded-lg bg-white/[0.03] px-4 py-3 text-ink-primary">
+                Log in with the test account, open the revenue
+                dashboard, and screenshot the chart for the last 30 days.
+              </p>
+            </div>
+            <div class="flex gap-3">
+              <span
+                class="flex size-7 shrink-0 items-center justify-center rounded-full bg-ink-primary/10 text-xs"
+                >AI</span
+              >
+              <div class="space-y-2 text-ink-secondary">
+                <p class="rounded-lg bg-white/[0.02] px-4 py-3">
+                  Planning 4 intents:
+                  <span class="font-mono text-glow-red">navigate</span>,
+                  <span class="font-mono text-glow-red">fillForm</span>,
+                  <span class="font-mono text-glow-red">click</span>,
+                  <span class="font-mono text-glow-red">screenshot</span>.
+                </p>
+                <p class="rounded-lg bg-white/[0.02] px-4 py-3">
+                  <span class="font-mono text-ink-muted">[14:32:01]</span>
+                  Logged in. Navigating to /dashboard/revenue…
+                </p>
+                <p class="rounded-lg bg-white/[0.02] px-4 py-3">
+                  <span class="font-mono text-ink-muted">[14:32:04]</span>
+                  Screenshot captured ·
+                  <span class="text-glow-red underline underline-offset-4">view</span>
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center justify-between border-t border-white/10 bg-white/[0.02] px-5 py-3 text-xs">
+            <span class="text-ink-muted">3 intents · 4.2s · iPhone 16 Pro</span>
+            <span class="text-glow-red">Export as SDK code →</span>
+          </div>
         </div>
-        <pre class="overflow-x-auto p-5 text-ink-primary"><code id="agent-layer-code">{`import { Driftstack } from '@driftstack/sdk';
 
-const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
-
-// Describe the task in English. The agent layer decomposes it into
-// navigate / fillForm / click / screenshot intents and walks the
-// session through them — with a live preview you can watch.
-const session = await ds.sessions.createWithAgent({
-  archetype: 'iphone16pro_ios18_7_safari26_4',
-  proxy: { type: 'wireguard', config: '...' },
-  task: 'Log in with the supplied credentials, navigate to the analytics dashboard, and screenshot the revenue widget.',
-  credentials: { username: process.env.TARGET_USER, password: process.env.TARGET_PASS },
-});
-
-await session.run();              // agent decomposes + executes
-const result = await session.result();
-//   → { screenshots: [...], transcript: [...], intents: [...] }`}</code></pre>
+        <!-- Live-preview pane stub. Placeholder for a real
+             LiveKit-streamed iPhone-frame mockup; the static
+             monospace label avoids implying a live stream exists
+             at this URL today. -->
+        <div class="flex flex-col overflow-hidden rounded-lg border border-white/10 bg-surface-raised">
+          <div class="flex items-center gap-2 border-b border-white/10 bg-white/[0.02] px-5 py-3 text-xs text-ink-muted">
+            <span class="size-2 rounded-full bg-green-500"></span>
+            <span class="font-mono">Live preview — &lt;livekit-room&gt;</span>
+          </div>
+          <div class="relative flex min-h-[280px] flex-1 items-center justify-center bg-black/40">
+            <span class="font-mono text-xs text-ink-muted">
+              [ iPhone Safari · live preview ]
+            </span>
+          </div>
+          <div class="border-t border-white/10 bg-white/[0.02] px-5 py-3 text-xs text-ink-muted">
+            Watch in real time · 95ms median latency
+          </div>
+        </div>
       </div>
-      <p class="mt-4 text-xs text-ink-muted">
-        Click <strong>Get code</strong> in the agent UI to export the
-        decomposed intent log as a Direct API script — the agent
-        becomes a one-shot scaffold; recurring runs skip the agent.
+
+      <p class="mt-6 max-w-prose text-sm text-ink-muted">
+        The chat agent is the fast path for one-off tasks and
+        explorations. Click
+        <strong class="text-ink-primary">Export as SDK code</strong> to
+        lift the decomposed intent log into a reusable script — same
+        engine, same fingerprint, no agent overhead on repeat runs.
       </p>
     </div>
   </section>
