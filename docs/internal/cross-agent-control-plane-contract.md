@@ -131,11 +131,15 @@ Cross-source invariant pinned in
 `apps/server/tests/unit/activation-gate-pattern-cross-source-invariant.test.ts`
 (commit `e074fcf6`; extended to 5 features at `ae670c80`; 6th
 per-feature assertion at `5b4336c5` requires non-empty detail string;
-31 test cases total). Covers billing + session-proxy + saved-proxies +
-agent-sessions + fleet-events. Runtime mirror in
+grown to 6 features with BYOK Anthropic at `994336cd`; 7 features
+with recipes at `b165c8dd`; **43 test cases total** as of `b165c8dd`).
+Covers billing + session-proxy + saved-proxies + agent-sessions +
+fleet-events + byok-anthropic + recipes. Runtime mirror in
 `scripts/post-deploy-verify.mjs` `featureGateStub()` (also asserts
-`detail` length ≥8). Future gated features append to the FEATURES
-list.
+`detail` length ≥8; grown to 7 checks at `dd5f8b29` to match the
+compile-time invariant). Future gated features append to the
+FEATURES list in the compile-time test AND the checks array in
+post-deploy-verify.
 
 ---
 
