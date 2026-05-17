@@ -25,6 +25,10 @@ from driftstack.resources.agent_sessions import (
     AgentSessionsResource,
     AsyncAgentSessionsResource,
 )
+from driftstack.resources.recipes import (
+    AsyncRecipesResource,
+    RecipesResource,
+)
 from driftstack.resources.egress import AsyncEgressResource, EgressResource
 from driftstack.resources.crypto_orders import (
     AsyncCryptoOrdersResource,
@@ -117,6 +121,9 @@ class Driftstack:
         self.egress = EgressResource(self._http)
         # AI-D — agent chat sessions (planning 132 §"Phase 7").
         self.agent_sessions = AgentSessionsResource(self._http)
+        # AI-B4 — write-only recipe library (snapshot agent-session
+        # intent_log + transcript for later replay).
+        self.recipes = RecipesResource(self._http)
 
     def close(self) -> None:
         self._http.close()
@@ -180,6 +187,8 @@ class AsyncDriftstack:
         self.egress = AsyncEgressResource(self._http)
         # AI-D — agent chat sessions (planning 132 §"Phase 7").
         self.agent_sessions = AsyncAgentSessionsResource(self._http)
+        # AI-B4 — write-only recipe library.
+        self.recipes = AsyncRecipesResource(self._http)
 
     async def aclose(self) -> None:
         await self._http.aclose()

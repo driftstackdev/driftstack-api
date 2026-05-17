@@ -57,6 +57,9 @@ type Client struct {
 	Egress *EgressResource
 	// AI-D — agent chat sessions (planning 132 §"Phase 7").
 	AgentSessions *AgentSessionsResource
+	// AI-B4 — write-only recipe library (snapshot agent-session
+	// intent_log + transcript for later replay).
+	Recipes *RecipesResource
 }
 
 // Option is the functional-options shape for [New].
@@ -122,6 +125,7 @@ func New(apiKey string, opts ...Option) *Client {
 	c.Team = &TeamResource{client: c}
 	c.Egress = &EgressResource{client: c}
 	c.AgentSessions = &AgentSessionsResource{client: c}
+	c.Recipes = &RecipesResource{client: c}
 	return c
 }
 

@@ -20,9 +20,10 @@ const TS = resolve(REPO_ROOT, 'packages/sdk-typescript/src/client.ts');
 const PY = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/client.py');
 const GO = resolve(REPO_ROOT, 'packages/sdk-go/client.go');
 
-// 15 required resource accessors. Each must exist as a field/property
+// Required resource accessors. Each must exist as a field/property
 // on the top-level client in all 3 SDKs. Drift to dropping any would
-// orphan a documented surface area.
+// orphan a documented surface area. Adding a new resource = cross-SDK
+// lift (all 3 SDKs land in the same commit); count grows in lockstep.
 const REQUIRED_RESOURCES = [
   ['sessions', 'SessionsResource', 'Sessions'],
   ['apiKeys', 'ApiKeysResource', 'APIKeys'],
@@ -41,6 +42,7 @@ const REQUIRED_RESOURCES = [
   ['team', 'TeamResource', 'Team'],
   ['egress', 'EgressResource', 'Egress'],
   ['agentSessions', 'AgentSessionsResource', 'AgentSessions'],
+  ['recipes', 'RecipesResource', 'Recipes'],
 ] as const;
 
 describe('W819 cross-SDK client constructor parity', () => {
@@ -77,7 +79,7 @@ describe('W819 cross-SDK client constructor parity', () => {
 
   // ─── 15-required-resource-accessor set ────────────────────────
 
-  it('CRITICAL all 17 required resource accessors exist on each SDK client. Drift to dropping any would orphan a documented customer surface. Wave 1119: EGRESS (egress, all 3 SDKs at commit b4c27598) + AI-CHAT (agentSessions, all 3 SDKs at this slice).', () => {
+  it('CRITICAL all 18 required resource accessors exist on each SDK client. Drift to dropping any would orphan a documented customer surface. Wave 1119: EGRESS (egress, all 3 SDKs at commit b4c27598) + AI-CHAT (agentSessions, all 3 SDKs at the AI-D slice) + AI-B4 RECIPES (recipes, all 3 SDKs at this Q.5.d cross-SDK lift).', () => {
     const ts = read(TS);
     const py = read(PY);
     const go = read(GO);
@@ -94,7 +96,7 @@ describe('W819 cross-SDK client constructor parity', () => {
       // Python imports the AsyncXxxResource + XxxResource pair.
       // Skip apiKeys (Python uses snake_case: api_keys) — handled separately below.
     }
-    // Python's 17-resource sync + async dual import set.
+    // Python's 18-resource sync + async dual import set.
     expect(py).toMatch(
       /from driftstack\.resources\.sessions import AsyncSessionsResource, SessionsResource/,
     );

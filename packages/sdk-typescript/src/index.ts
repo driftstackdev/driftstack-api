@@ -37,6 +37,7 @@ export type {
   AgentIntentResult,
   AgentMessageResponse,
 } from './resources/agent-sessions.js';
+export type { Recipe, CreateRecipeRequest } from './resources/recipes.js';
 export type {
   LegalDocumentEntry,
   LegalRequiredEntry,

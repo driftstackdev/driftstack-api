@@ -173,14 +173,14 @@ describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
     expect(body).toMatch(/this\.team = new TeamResource\(this\.http\);/);
   });
 
-  it('17-resource count drift guard — count `readonly <name>:` fields + `new <Resource>(this.http)` instantiations. Both must equal 17 (the canonical resource inventory). Wave 1119: EG-API-1.2/1.3 added `egress` + AI-D added `agentSessions` (both TS-only for now; Python + Go mirrors are separate follow-up slices).', () => {
+  it('18-resource count drift guard — count `readonly <name>:` fields + `new <Resource>(this.http)` instantiations. Both must equal 18 (the canonical resource inventory). Wave 1119: EG-API-1.2/1.3 added `egress` + AI-D added `agentSessions` + AI-B4 Q.5.d added `recipes` (cross-SDK lift — TS + Python + Go all landed in the same commit).', () => {
     const readonlyFields = (body.match(/^ {2}readonly [a-zA-Z]+: [A-Za-z]+Resource;$/gm) ?? [])
       .length;
-    expect(readonlyFields, 'expected 17 readonly resource fields').toBe(17);
+    expect(readonlyFields, 'expected 18 readonly resource fields').toBe(18);
     const instantiations = (
       body.match(/this\.[a-zA-Z]+ = new [A-Za-z]+Resource\(this\.http\);/g) ?? []
     ).length;
-    expect(instantiations, 'expected 17 resource instantiations').toBe(17);
+    expect(instantiations, 'expected 18 resource instantiations').toBe(18);
   });
 
   it('Cross-SDK resource-name invariant — 15-resource roster matches the canonical inventory (account/api-keys/audit-log/auth/billing/crypto-orders/email-preferences/legal/mfa/profile-snapshots/profiles/sessions/team/usage/webhooks). Drift to dropping/renaming any would diverge from the cross-SDK wire-contract pinned in W649 cross-sdk-verb-parity.test.ts.', () => {

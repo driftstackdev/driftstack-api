@@ -20,6 +20,7 @@ import { MfaResource } from './resources/mfa.js';
 import { TeamResource } from './resources/team.js';
 import { EgressResource } from './resources/egress.js';
 import { AgentSessionsResource } from './resources/agent-sessions.js';
+import { RecipesResource } from './resources/recipes.js';
 import type { RetryConfig } from './retry.js';
 
 export interface DriftstackOptions {
@@ -64,6 +65,9 @@ export class Driftstack {
   readonly egress: EgressResource;
   /** AI-D — agent chat sessions (decompose → execute → transcript). */
   readonly agentSessions: AgentSessionsResource;
+  /** AI-B4 — write-only recipe library (snapshot agent-session
+   *  intent_log + transcript for later replay). */
+  readonly recipes: RecipesResource;
 
   private readonly http: HttpClient;
 
@@ -98,5 +102,6 @@ export class Driftstack {
     this.team = new TeamResource(this.http);
     this.egress = new EgressResource(this.http);
     this.agentSessions = new AgentSessionsResource(this.http);
+    this.recipes = new RecipesResource(this.http);
   }
 }
