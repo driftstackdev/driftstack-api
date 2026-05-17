@@ -8,6 +8,17 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.recipes.create(body)`** (AI-B4 / Q.5.d) — snapshot a
+  finished agent-session's intent_log + transcript into a replayable
+  recipe row. Body: `{ agent_session_id, label, description? }`
+  with `label` 1..120 chars and `description` ≤2000 chars after trim.
+  Server assembles `intent_log` by flatMapping the source
+  agent-session's transcript — each plan-executed turn's structured
+  intent array is concatenated in turn order. Returns the inserted
+  `Recipe` including `intent_count`. Read / list / execute / delete
+  are v1.1 D2/D3 surfaces. Re-exported types: `Recipe`,
+  `CreateRecipeRequest`. 503 until the deployment wires both
+  `recipesRepo` and `agentSessionsRepo`.
 - **`client.webhooks.sendTest(id)`** (V-463 / V-356) — send a
   synthetic `test.ping` delivery to a webhook endpoint, bypassing
   subscription. Lets customers verify their handler is reachable +

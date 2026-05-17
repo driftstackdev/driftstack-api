@@ -8,6 +8,16 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.recipes.create(agent_session_id=, label=, description=)`**
+  (AI-B4 / Q.5.d) + async mirror — snapshot a finished agent-session's
+  intent_log + transcript into a replayable recipe row. `label` is
+  1..120 chars and `description` is ≤2000 chars after trim. Server
+  assembles `intent_log` by flatMapping the source agent-session's
+  transcript — each plan-executed turn's structured intent array
+  contributes in turn order. Returns the inserted recipe dict
+  including `intent_count`. Read / list / execute / delete are v1.1
+  D2/D3 surfaces. 503 until the deployment wires both `recipesRepo`
+  and `agentSessionsRepo`.
 - **`client.crypto_orders.*`** + async mirror (V-666 Python parity) —
   customer-facing crypto-checkout surface: `quote(body)`,
   `create_checkout(body, *, idempotency_key=None)`, `list(*, limit,

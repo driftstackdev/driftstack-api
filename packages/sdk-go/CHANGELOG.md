@@ -8,6 +8,20 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.Recipes.Create(ctx, CreateRecipeRequest{...})`**
+  (AI-B4 / Q.5.d) — snapshot a finished agent-session's intent_log
+  - transcript into a replayable recipe row. `AgentSessionID` +
+    `Label` (1..120 chars after trim) are required; `Description`
+    (≤2000 chars) is optional and omitted from the wire when empty
+    (`json:"description,omitempty"`). Server assembles `intent_log`
+    by flatMapping the source agent-session's transcript — each
+    plan-executed turn's structured intent array contributes in turn
+    order. Returns `*Recipe` including `IntentCount`. `AgentSessionID`
+    on the response struct is `*string` so the server's ON DELETE
+    SET NULL (recipe outlived its source session) decodes as a nil
+    pointer cleanly. Read / list / execute / delete are v1.1 D2/D3
+    surfaces. 503 until the deployment wires both `recipesRepo` and
+    `agentSessionsRepo`.
 - **`client.CryptoOrders.*`** (V-666 Go parity) — customer-facing
   crypto-checkout surface: `Quote`, `CreateCheckout` (with
   `*CreateCheckoutOptions{IdempotencyKey}` for V-666.AO header
