@@ -90,6 +90,7 @@ import { UsageAggregatorFromUsageRepo } from '../services/cost-aggregator.js';
 import { DEFAULT_COST_RATES, DEFAULT_TIER_THRESHOLDS_DERIVED } from './cost-defaults.js';
 import { StripeBillingProvider } from '../services/stripe-billing-provider.js';
 import { StripeApiClient } from './stripe-api.js';
+import { validateStripeKeyForLaunch } from './stripe-key-safety.js';
 import { DrizzleBillingRepo } from '../db/billing-repo.js';
 import { buildLegalCatalog } from '../services/legal-catalog.js';
 import { RedisAuthCache } from '../services/auth-cache.js';
@@ -542,6 +543,17 @@ export async function createProductionDeps(
     profilesRepo,
     accountAuditService,
   );
+
+  // Q.2 — fail-fast safety: refuse to boot if STRIPE_SECRET_KEY is
+  // sk_live_ before the BV KvK launch cutover (2026-05-21). Catches
+  // an accidental live-key-before-entity-in-place misconfiguration
+  // BEFORE any routes register or any HTTP traffic starts.
+  const stripeKeySafety = validateStripeKeyForLaunch({
+    secretKey: config.stripe?.secretKey,
+  });
+  if (!stripeKeySafety.ok) {
+    throw new Error(stripeKeySafety.reason);
+  }
 
   // V-082 + V-088: Billing service. Activates only when all three of
   // STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS + STRIPE_TRIAL_PACK_PRICE_ID
