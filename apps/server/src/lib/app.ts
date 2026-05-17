@@ -49,6 +49,7 @@ import type { SessionEgressService } from '../services/session-egress.js';
 import type { AgentRuntime } from '../services/agent-runtime.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { RecipesRepo } from '../services/recipes.js';
+import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
 import type { FleetNodeAuth } from '../services/fleet-node-auth.js';
 import type { FleetNonceCache } from '../services/fleet-nonce-cache.js';
 import type { SessionRepo } from '../services/sessions.js';
@@ -284,6 +285,37 @@ export interface AppDeps {
    * create/close paths. When agentRuntime is wired this MUST also be set.
    */
   agentSessionsRepo?: AgentSessionsRepo;
+  /**
+   * Q.1.c — in-memory per-session plaintext BYOK key cache.
+   * Wired alongside `agentRuntime`. Route layer stashes decrypted
+   * customer stored-keys on session-create (when byokAnthropicService
+   * is wired) and reads from the cache on each message-turn for
+   * the resolve-without-decrypt fast path. Absence = no caching;
+   * route still works via header > deployment-fallback path.
+   */
+  byokKeyCache?: InMemoryByokKeyCache;
+  /**
+   * Q.1 — which decomposer impl bootstrap wired. The route layer
+   * uses this to decide whether to enforce the
+   * ByokAnthropicRequired 502 — Claude needs a key per request;
+   * deterministic ignores keys entirely so the gate is silent.
+   * Defaults to 'deterministic' (matches the safe-default branch
+   * of selectAgentDecomposer when neither key path is configured).
+   */
+  agentDecomposerKind?: 'claude' | 'deterministic';
+  /**
+   * Q.1.d — optional deployment-side Anthropic API key. Used ONLY
+   * when the message-turn's resolved key is undefined AND
+   * `agentDecomposerAllowFallback` is true. Default prod posture is
+   * undefined (force BYOK per Tier-3 verdict 2026-05-16).
+   */
+  agentDecomposerFallbackKey?: string;
+  /**
+   * Q.1.d — staging-only opt-in that lets the deployment fallback
+   * serve unconfigured customers. PROD must keep this `false`.
+   * Default is false (matches prod intent).
+   */
+  agentDecomposerAllowFallback?: boolean;
   /**
    * AI-B4 — write-only recipe library (orchestrator handoff #3 Q.5).
    * POST /v1/recipes snapshots a finished agent_session's
@@ -799,6 +831,23 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAgentSessionsRoutes(app, {
       runtime: deps.agentRuntime,
       sessions: deps.agentSessionsRepo,
+      ...(deps.byokAnthropicService !== undefined
+        ? { byokService: deps.byokAnthropicService }
+        : {}),
+      ...(deps.byokKeyCache !== undefined ? { byokKeyCache: deps.byokKeyCache } : {}),
+      // Q.1 — decomposer kind drives whether the ByokAnthropicRequired
+      // 502 fires. Default 'deterministic' matches the safe-default
+      // branch of bootstrap's selectAgentDecomposer when neither key
+      // path is wired.
+      agentDecomposerKind: deps.agentDecomposerKind ?? 'deterministic',
+      ...(deps.agentDecomposerFallbackKey !== undefined
+        ? { deploymentFallbackKey: deps.agentDecomposerFallbackKey }
+        : {}),
+      ...(deps.agentDecomposerAllowFallback !== undefined
+        ? {
+            allowFallbackForUnconfiguredCustomers: deps.agentDecomposerAllowFallback,
+          }
+        : {}),
     });
   } else {
     registerAgentSessionsDisabledRoutes(app);

@@ -64,6 +64,7 @@ import { StubAgentExecutor } from '../services/agent-executor.js';
 import { ClaudeAgentDecomposer } from '../services/agent-decomposer-claude.js';
 import { DeterministicAgentDecomposer } from '../services/agent-decomposer-deterministic.js';
 import type { AgentDecomposer } from '../services/agent-decomposer.js';
+import { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
 import { RedisMfaChallengeStore } from '../services/mfa-challenge-store.js';
 import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
@@ -514,12 +515,18 @@ export async function createProductionDeps(
   const agentSessionsRepo = new DrizzleAgentSessionsRepo(dbHandle);
   const agentExecutor = new StubAgentExecutor();
   const agentDecomposer = selectAgentDecomposer(config, logger);
+  const agentDecomposerKind: 'claude' | 'deterministic' =
+    agentDecomposer instanceof ClaudeAgentDecomposer ? 'claude' : 'deterministic';
   const agentRuntime = new AgentRuntime({
     decomposer: agentDecomposer,
     executor: agentExecutor,
     sessions: agentSessionsRepo,
     archetype: 'iphone16pro_ios18_7_safari26_4',
   });
+  // Q.1.c — per-session BYOK key cache. Pure in-memory; wired
+  // unconditionally so the route can stash decrypted plaintexts
+  // on session-create when byokAnthropicService is also wired.
+  const byokKeyCache = new InMemoryByokKeyCache();
 
   // V-079: user-facing auth flows.
   const authFlowsRepo = new DrizzleAuthFlowsRepo(dbHandle);
@@ -762,6 +769,16 @@ export async function createProductionDeps(
     // activate from process start.
     agentRuntime,
     agentSessionsRepo,
+    byokKeyCache,
+    agentDecomposerKind,
+    // Q.1.d — staging opts in to consuming the deployment fallback
+    // for unconfigured customers; prod (default false) hard-502s
+    // ByokAnthropicRequired per the BYOK-for-v1.0 Tier-3 verdict.
+    ...(config.byokAnthropic?.fallbackApiKey !== undefined
+      ? { agentDecomposerFallbackKey: config.byokAnthropic.fallbackApiKey }
+      : {}),
+    agentDecomposerAllowFallback:
+      config.agentDecomposer?.useFallbackForUnconfiguredCustomers ?? false,
     ...(config.stripe?.webhookSecret !== undefined
       ? {
           stripeWebhooksService,

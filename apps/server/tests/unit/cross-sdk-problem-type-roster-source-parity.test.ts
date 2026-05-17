@@ -4,7 +4,7 @@
 //
 // Complementary to W676 (the cross-SDK side of the roster): this
 // guard pins the api-types/src/problem.ts file as the AUTHORITATIVE
-// source of truth for the 24-entry PROBLEM_TYPES roster. Each URI
+// source of truth for the 25-entry PROBLEM_TYPES roster. Each URI
 // is a `https://errors.driftstack.dev/<slug>` URL that clients
 // type-narrow on. Drift to renaming a URI breaks every cross-
 // language consumer (and every external customer's error-handling
@@ -13,7 +13,7 @@
 // Invariants:
 //   - ProblemSchema RFC 7807 shape: type (URI) + title + status +
 //     optional detail + optional instance + .catchall(unknown)
-//   - PROBLEM_TYPES object with `as const` + 24 entries
+//   - PROBLEM_TYPES object with `as const` + 25 entries
 //   - All URIs use https://errors.driftstack.dev/ prefix
 //   - Slug-style URI path component (lowercase + hyphens)
 //   - ProblemType type-export is `as const`-derived union (not
@@ -75,10 +75,10 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
     );
   });
 
-  it('CRITICAL 24-entry PROBLEM_TYPES roster pinned with `as const`. Each entry is a https://errors.driftstack.dev/<slug> URL. Drift to dropping any entry or changing a URI breaks consumers.', () => {
+  it('CRITICAL 25-entry PROBLEM_TYPES roster pinned with `as const`. Each entry is a https://errors.driftstack.dev/<slug> URL. Drift to dropping any entry or changing a URI breaks consumers.', () => {
     const src = read(PROBLEM_SCHEMA);
 
-    // 24 problem types (the closed canonical roster, ordered as in W676).
+    // 25 problem types. Q.1.d added ByokAnthropicRequired (2026-05-17).
     const types: Record<string, string> = {
       BadRequest: 'bad-request',
       Unauthorized: 'unauthorized',
@@ -104,6 +104,7 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
       EmailNotVerified: 'email-not-verified',
       FeatureUnavailable: 'feature-unavailable',
       MfaStepUpRequired: 'mfa-step-up-required',
+      ByokAnthropicRequired: 'byok-anthropic-required',
     };
 
     for (const [key, slug] of Object.entries(types)) {
@@ -122,11 +123,11 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
     );
   });
 
-  it('CRITICAL all 24 problem-type URIs share the https://errors.driftstack.dev/ prefix. The shared origin is what lets clients pattern-match (e.g. `if (problem.type.startsWith("https://errors.driftstack.dev/"))`). Drift to a different host on any entry would silently break consumers.', () => {
+  it('CRITICAL all 25 problem-type URIs share the https://errors.driftstack.dev/ prefix. The shared origin is what lets clients pattern-match (e.g. `if (problem.type.startsWith("https://errors.driftstack.dev/"))`). Drift to a different host on any entry would silently break consumers.', () => {
     const src = read(PROBLEM_SCHEMA);
     // Count problem-type URIs.
     const errorUris = (src.match(/'https:\/\/errors\.driftstack\.dev\/[a-z-]+'/g) ?? []).length;
-    expect(errorUris, 'PROBLEM_TYPES entry count').toBe(24);
+    expect(errorUris, 'PROBLEM_TYPES entry count').toBe(25);
   });
 
   it('CRITICAL slug format pinned — all URI path slugs are lowercase + hyphens (no underscores, no camelCase). Drift to mixed casing would break URL-template clients that match on hyphen-only slugs.', () => {
@@ -168,7 +169,7 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
     expect(src).toMatch(/RFC 7807 problem details/);
   });
 
-  it('Cross-roster 5-invariant cluster — RFC-7807 shape + 24-entry PROBLEM_TYPES + `as const` + lowercase-hyphen slugs + "keep these URIs forever" framing. Drift on any would fragment the canonical problem-type roster.', () => {
+  it('Cross-roster 5-invariant cluster — RFC-7807 shape + 25-entry PROBLEM_TYPES + `as const` + lowercase-hyphen slugs + "keep these URIs forever" framing. Drift on any would fragment the canonical problem-type roster.', () => {
     const src = read(PROBLEM_SCHEMA);
 
     expect(src).toMatch(/RFC 7807 problem details/);
@@ -177,7 +178,7 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
 
     // 24 URIs.
     const errorUris = (src.match(/'https:\/\/errors\.driftstack\.dev\/[a-z-]+'/g) ?? []).length;
-    expect(errorUris).toBe(24);
+    expect(errorUris).toBe(25);
 
     // 7 V-anchor comments.
     for (const anchor of ['V-079', 'V-352b', 'V-353e']) {

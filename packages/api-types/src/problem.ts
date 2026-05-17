@@ -55,6 +55,14 @@ export const PROBLEM_TYPES = {
   // collects a fresh 6-digit code, posts to /v1/auth/mfa/step-up, then
   // retries the original request.
   MfaStepUpRequired: 'https://errors.driftstack.dev/mfa-step-up-required',
+  // Q.1.d (2026-05-17) — agent-sessions message turn cannot resolve
+  // an Anthropic API key. BYOK-for-v1.0 Tier-3 verdict means the
+  // customer MUST supply their own key (via stored
+  // /v1/account/me/byok-anthropic-key OR per-request
+  // `x-byok-anthropic-api-key` header). 502 status — the agent
+  // layer is operational but cannot serve this customer's turn
+  // without a key.
+  ByokAnthropicRequired: 'https://errors.driftstack.dev/byok-anthropic-required',
 } as const;
 
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES];

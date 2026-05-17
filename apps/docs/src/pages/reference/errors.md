@@ -54,6 +54,7 @@ returns true for that class.
 | `errors.driftstack.dev/driver-error`              | 502  | `DriverError`                 | `DriverError`                  | `DriverError`                  | no         |
 | `errors.driftstack.dev/driver-not-integrated`     | 503  | `DriverNotIntegratedError`    | `DriverError`                  | `DriverError`                  | no         |
 | `errors.driftstack.dev/feature-unavailable`       | 503  | `FeatureUnavailableError`     | `FeatureUnavailableError`      | `FeatureUnavailableError`      | no         |
+| `errors.driftstack.dev/byok-anthropic-required`   | 502  | `ByokAnthropicRequiredError`  | `ByokAnthropicRequiredError`   | `ByokAnthropicRequiredError`   | no         |
 | `errors.driftstack.dev/internal`                  | 5xx  | `InternalError`               | `InternalError`                | `InternalError`                | **yes**    |
 | (network failure / parse error)                   | 0    | `TransportError`              | `TransportError`               | `TransportError`               | **yes**    |
 

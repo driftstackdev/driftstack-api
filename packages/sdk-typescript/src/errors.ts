@@ -58,8 +58,10 @@ export type DriftstackErrorKind =
   | 'invalid_auth_token'
   | 'email_not_verified'
   // V-441 — closing problem-type parity with Go + Python.
+  // Q.1.d (2026-05-17) appended `byok_anthropic_required`.
   | 'feature_unavailable'
   | 'mfa_step_up_required'
+  | 'byok_anthropic_required'
   | 'transport';
 
 export class DriftstackError extends Error {
@@ -311,6 +313,16 @@ export class FeatureUnavailableError extends DriftstackError {
   }
 }
 
+/** Q.1.d (2026-05-17) — agent-sessions message turn cannot resolve
+ *  an Anthropic API key. BYOK-for-v1.0 means the customer must
+ *  supply their own key. HTTP 502. */
+export class ByokAnthropicRequiredError extends DriftstackError {
+  constructor(p: Problem) {
+    super(toOpts('byok_anthropic_required', p));
+    this.name = 'ByokAnthropicRequiredError';
+  }
+}
+
 /** Network / parse / non-Problem failure — server didn't return a structured error. */
 export class TransportError extends DriftstackError {
   constructor(message: string, status = 0, cause?: unknown) {
@@ -357,6 +369,7 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
   // V-441 — closing problem-type parity with Go + Python.
   'https://errors.driftstack.dev/feature-unavailable': (p) => new FeatureUnavailableError(p),
   'https://errors.driftstack.dev/mfa-step-up-required': (p) => new MfaStepUpRequiredError(p),
+  'https://errors.driftstack.dev/byok-anthropic-required': (p) => new ByokAnthropicRequiredError(p),
 };
 
 /**

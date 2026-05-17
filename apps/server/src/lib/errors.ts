@@ -266,6 +266,27 @@ export class FeatureUnavailableError extends ApiError {
   }
 }
 
+// Q.1.d (2026-05-17) — agent-sessions message turn cannot resolve
+// an Anthropic API key. Returned when the request supplies no
+// `x-byok-anthropic-api-key` header AND the account has no stored
+// BYOK key AND the deployment is configured to refuse fallback
+// (Q.1.d default for prod per Tier-3 verdict 2026-05-16).
+// 502 because the agent layer IS operational; it just cannot serve
+// THIS customer's turn without a key. The customer fixes this by
+// PUTting their key via /v1/account/me/byok-anthropic-key or by
+// sending the header per request.
+export class ByokAnthropicRequiredError extends ApiError {
+  constructor(detail: string) {
+    super({
+      type: PROBLEM_TYPES.ByokAnthropicRequired,
+      title: 'BYOK Anthropic key required',
+      status: 502,
+      detail,
+    });
+    this.name = 'ByokAnthropicRequiredError';
+  }
+}
+
 // V-353e — step-up MFA challenge required to run the requested op.
 // Status is 403 (the caller is authenticated; they just need to prove
 // MFA again within the 15-min freshness window). The
