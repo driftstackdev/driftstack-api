@@ -48,6 +48,17 @@ const checks = [
   checkEgressSavedProxiesGateStub,
   checkAgentSessionsGateStub,
   checkFleetEventsGateStub,
+  // Mirrors the activation-gate-pattern-cross-source-invariant
+  // test's FEATURES table (apps/server/tests/unit/activation-
+  // gate-pattern-cross-source-invariant.test.ts). Compile-time
+  // test pins source-level shape; these checks pin the deployed
+  // runtime shape. When a gate genuinely flips on (founder
+  // intentionally activates), the corresponding check fails —
+  // intentional signal to the operator that the activation
+  // commit must also remove this assertion.
+  checkBillingGateStub,
+  checkByokAnthropicGateStub,
+  checkRecipesGateStub,
 ].filter(Boolean);
 
 let allOk = true;
@@ -294,6 +305,48 @@ async function checkEgressSavedProxiesGateStub() {
 
 async function checkAgentSessionsGateStub() {
   return featureGateStub('POST', '/v1/agent-sessions', 'AI-CHAT agent-sessions gate', {});
+}
+
+async function checkBillingGateStub() {
+  // POST /v1/billing/checkout-session is one of the four billing
+  // routes the activation gate covers. The disabled stub returns
+  // 503 + FeatureUnavailable until the deploy has all three Stripe
+  // env vars (STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS +
+  // STRIPE_TRIAL_PACK_PRICE_ID) and bootstrap wires BillingService.
+  return featureGateStub(
+    'POST',
+    '/v1/billing/checkout-session',
+    'billing checkout-session gate',
+    {},
+  );
+}
+
+async function checkByokAnthropicGateStub() {
+  // PUT /v1/account/me/byok-anthropic-key is the canonical write
+  // endpoint for the BYOK customer-key storage feature. Gated on
+  // MFA_ENCRYPTION_KEY being set (per Q1 verdict 2026-05-17 the
+  // BYOK service reuses the MFA key for AES-256-GCM at-rest
+  // encryption). When unset, the route returns 503 + the typed
+  // "BYOK Anthropic key storage is not enabled" detail.
+  return featureGateStub(
+    'PUT',
+    '/v1/account/me/byok-anthropic-key',
+    'AI-CHAT byok-anthropic gate',
+    { api_key: 'sk-ant-noop-test' },
+  );
+}
+
+async function checkRecipesGateStub() {
+  // AI-B4 — POST /v1/recipes route. Gated on BOTH recipesRepo
+  // AND agentSessionsRepo being wired in AppDeps. The recipesRepo
+  // wires unconditionally at bootstrap (commit b165c8dd); the
+  // agentSessionsRepo wire is Q.1 territory and stays gated on
+  // the design-doc verdicts. Until both wire, /v1/recipes
+  // returns 503 with the recipe-library-not-enabled detail.
+  return featureGateStub('POST', '/v1/recipes', 'AI-B4 recipes gate', {
+    agent_session_id: 'agt_inmem_noop',
+    label: 'noop',
+  });
 }
 
 async function checkFleetEventsGateStub() {
