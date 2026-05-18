@@ -53,16 +53,33 @@ describe('W765 docs /api/billing content parity', () => {
     expect(p).toMatch(/audit-log \+ email notifications\./);
   });
 
-  it('CRITICAL GET /v1/billing response shape pinned — subscription + trial_pack. Matches W751 dashboard /billing live-fetch + W748 dashboard-home index trial-pack credit display.', () => {
+  it('CRITICAL GET /v1/billing response shape pinned — subscription + trial_pack. Matches publicSubscription() in apps/server/src/routes/billing.ts and SubscriptionSchema in packages/api-types/src/billing.ts. The previous pin asserted fictional fields (`id`, `billing_period`, `current_period_start`) that the route never returns + omitted real fields (`stripe_subscription_id`, `canceled_at`, `created_at`, `updated_at`). Refreshed against the source-of-truth.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/"subscription": \{/);
     expect(p).toMatch(/"tier": "api_builder"/);
     expect(p).toMatch(/"status": "active"/);
-    expect(p).toMatch(/"billing_period": "monthly"/);
-    expect(p).toMatch(/"current_period_start":/);
+    // Real fields per publicSubscription() at billing.ts:66.
+    expect(p).toMatch(/"stripe_subscription_id":/);
     expect(p).toMatch(/"current_period_end":/);
     expect(p).toMatch(/"cancel_at_period_end": false/);
+    expect(p).toMatch(/"canceled_at": null/);
+    expect(p).toMatch(/"created_at":/);
+    expect(p).toMatch(/"updated_at":/);
+    // Fictional fields must NOT appear in the GET /v1/billing response
+    // shape — drift-guard-reinforces-wrong failure mode (same pattern
+    // as marketing hero / archetype slug / dashboard /usage claim
+    // earlier this session). Scope the negatives to just the response
+    // block (billing_period IS legitimately a field on the SEPARATE
+    // CreateCheckoutSessionRequest, so a page-wide not-match would
+    // wrongly fire on that block).
+    const responseBlockStart = p.indexOf('"subscription": {');
+    const responseBlockEnd = p.indexOf('"trial_pack":', responseBlockStart);
+    const responseBlock = p.slice(responseBlockStart, responseBlockEnd);
+    expect(responseBlock).not.toMatch(/"id": "sub_<uuid>"/);
+    expect(responseBlock).not.toMatch(/"billing_period":/);
+    expect(responseBlock).not.toMatch(/"current_period_start":/);
+    // trial_pack block stays.
     expect(p).toMatch(/"trial_pack": \{/);
     expect(p).toMatch(/"active": false/);
     expect(p).toMatch(/"credit_cents_remaining": 0/);

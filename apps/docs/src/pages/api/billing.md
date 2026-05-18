@@ -26,13 +26,14 @@ Returns:
 ```json
 {
   "subscription": {
-    "id": "sub_<uuid>",
     "tier": "api_builder",
     "status": "active",
-    "billing_period": "monthly",
-    "current_period_start": "2026-05-01T00:00:00Z",
+    "stripe_subscription_id": "sub_<stripe-id>",
     "current_period_end": "2026-06-01T00:00:00Z",
-    "cancel_at_period_end": false
+    "cancel_at_period_end": false,
+    "canceled_at": null,
+    "created_at": "2026-05-01T00:00:00Z",
+    "updated_at": "2026-05-01T00:00:00Z"
   },
   "trial_pack": {
     "active": false,
@@ -44,6 +45,16 @@ Returns:
 ```
 
 `subscription` is `null` when the account has never subscribed.
+The id is `stripe_subscription_id` (the live Stripe-side id, prefix
+`sub_`); Driftstack does not mint its own subscription id alongside.
+
+`status` follows Stripe's subscription-status vocabulary
+(`active`, `trialing`, `past_due`, `canceled`, `incomplete`,
+`incomplete_expired`, `unpaid`, `paused`). `canceled_at` is the
+Stripe cancellation timestamp — non-null only when the
+subscription has been cancelled; `cancel_at_period_end=true` is
+distinct (cancellation is scheduled but not yet effective).
+
 `trial_pack.active` is `true` while the customer has unspent
 credit and the 14-day window hasn't elapsed.
 
