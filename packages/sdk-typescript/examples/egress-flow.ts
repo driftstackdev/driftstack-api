@@ -42,6 +42,9 @@ async function main(): Promise<void> {
       host: proxyHost!,
       port: proxyPort,
       udp_associate: true, // Required for WebRTC routing per planning 133.
+      // EG-WK-1.9 — leave DNS resolution local-side (default). Set true to
+      // route DNS through the proxy via SOCKS5 ATYP DOMAINNAME (0x03).
+      require_remote_dns: false,
     },
   };
 

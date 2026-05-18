@@ -167,4 +167,44 @@ export class AgentSessionsResource {
       path: `/v1/agent-sessions/${encodeURIComponent(id)}`,
     });
   }
+
+  /**
+   * Arc 2 sub-slice 8.9 (v2-#8) — request a human takeover on a
+   * pair-mode agent session. The state machine transitions
+   * `ai-driving → takeover-pending` (or `takeover-queued` if the
+   * runtime is mid-decompose). Returns the new `pair_mode_state`
+   * discriminant so the caller can branch on whether the takeover
+   * was queued behind an in-flight turn.
+   *
+   * Throws `PairModeStateInvalidTransitionError` (409) if the
+   * session is not in a state that permits takeover.
+   * Throws `ConflictError` (409) if the session is not mode='pair'.
+   */
+  takeover(
+    id: string,
+    clientId: string,
+  ): Promise<{ pair_mode_state: { kind: string; [k: string]: unknown } }> {
+    return this.http.request({
+      method: 'POST',
+      path: `/v1/agent-sessions/${encodeURIComponent(id)}/takeover`,
+      body: { client_id: clientId },
+    });
+  }
+
+  /**
+   * Arc 2 sub-slice 8.9 (v2-#8) — request a handback from human
+   * back to AI on a pair-mode agent session. The state machine
+   * transitions `human-driving → handback-pending` (or
+   * `handback-queued` if the runtime is mid-decompose).
+   *
+   * Throws `PairModeStateInvalidTransitionError` (409) if the
+   * session is not in `human-driving`.
+   */
+  handback(id: string): Promise<{ pair_mode_state: { kind: string; [k: string]: unknown } }> {
+    return this.http.request({
+      method: 'POST',
+      path: `/v1/agent-sessions/${encodeURIComponent(id)}/handback`,
+      body: {},
+    });
+  }
 }

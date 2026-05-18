@@ -326,7 +326,10 @@ describe('@driftstack/sdk against real server', () => {
     await expect(
       sdk.egress.attachToSession('ses_xxx', {
         session_id: 'ses_xxx',
-        proxy: { type: 'socks5', socks5: { host: 'p.example', port: 1080, udp_associate: true } },
+        proxy: {
+          type: 'socks5',
+          socks5: { host: 'p.example', port: 1080, udp_associate: true, require_remote_dns: false },
+        },
         egress_safeguard: {
           block_direct_internet: true,
           block_unproxied_dns: true,

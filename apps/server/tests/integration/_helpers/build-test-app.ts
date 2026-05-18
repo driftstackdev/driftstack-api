@@ -20,6 +20,7 @@ import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../../../src
 import { MockDriver } from '../../../src/drivers/mock.js';
 import { AgentRuntime } from '../../../src/services/agent-runtime.js';
 import { DeterministicAgentDecomposer } from '../../../src/services/agent-decomposer-deterministic.js';
+import type { DecomposeUsage } from '../../../src/services/agent-decomposer.js';
 import { StubAgentExecutor } from '../../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.js';
 import { BundledLlmService, InMemoryBundledLlmRepo } from '../../../src/services/bundled-llm.js';
@@ -195,6 +196,22 @@ function createRecordingEmailService(realService: EmailService): {
       record('oauth-pending-verification', args);
       await realService.sendOauthPendingLinkVerification(args);
     },
+    sendWebhookSecretRotationReminder: async (args) => {
+      record('webhook-secret-rotation-reminder', args);
+      await realService.sendWebhookSecretRotationReminder(args);
+    },
+    sendWebhookSecretForceRotated: async (args) => {
+      record('webhook-secret-force-rotated', args);
+      await realService.sendWebhookSecretForceRotated(args);
+    },
+    sendWebhookSecretGraceExpiring: async (args) => {
+      record('webhook-secret-grace-expiring', args);
+      await realService.sendWebhookSecretGraceExpiring(args);
+    },
+    sendByokAnthropicKeyRotationReminder: async (args) => {
+      record('byok-anthropic-key-rotation-reminder', args);
+      await realService.sendByokAnthropicKeyRotationReminder(args);
+    },
   };
   return { service, sends };
 }
@@ -355,9 +372,10 @@ export interface TestAppFixture {
     driftstackSessionId: string | null;
     agentSessionId: string;
     decomposeResultKind: 'plan' | 'clarify' | 'refuse';
-    usage: { decomposerKind: 'claude' | 'deterministic'; [key: string]: unknown };
+    usage: DecomposeUsage;
     tokensConsumed: number;
     now: Date;
+    keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none';
   }>;
   /**
    * Arc 1 sub-slice 6.5 (v2-#6) — exposed when `enableBundledLlm` is
@@ -671,9 +689,10 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     driftstackSessionId: string | null;
     agentSessionId: string;
     decomposeResultKind: 'plan' | 'clarify' | 'refuse';
-    usage: { decomposerKind: 'claude' | 'deterministic'; [key: string]: unknown };
+    usage: DecomposeUsage;
     tokensConsumed: number;
     now: Date;
+    keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none';
   }> = [];
 
   // V-295d — outbound incident broadcasts. Recording fetcher captures

@@ -165,4 +165,47 @@ describe('AgentSessionsResource', () => {
     await res.close('agt with space');
     expect(calls).toEqual([{ method: 'DELETE', path: '/v1/agent-sessions/agt%20with%20space' }]);
   });
+
+  // Arc 2 sub-slice 8.9 (v2-#8) — pair-mode takeover/handback SDK
+  // wrappers. The route landed at server-side in 8.9 but the SDK
+  // didn't have method wrappers — customers calling them had to
+  // construct the request via the raw http client. These pin the
+  // wire shape (method, path, body) so the customer-side SDK call
+  // matches the server-side handler 1:1.
+  it('takeover POSTs /v1/agent-sessions/{id}/takeover with { client_id }', async () => {
+    const reply = { pair_mode_state: { kind: 'takeover-pending' } };
+    const { http, calls } = makeFakeHttp(reply);
+    const res = new AgentSessionsResource(http);
+    const out = await res.takeover('agt_1', 'cli_a');
+    expect(calls).toEqual([
+      {
+        method: 'POST',
+        path: '/v1/agent-sessions/agt_1/takeover',
+        body: { client_id: 'cli_a' },
+      },
+    ]);
+    expect(out.pair_mode_state.kind).toBe('takeover-pending');
+  });
+
+  it('takeover URL-encodes the session id (so labels with slashes do not break route matching)', async () => {
+    const { http, calls } = makeFakeHttp({ pair_mode_state: { kind: 'takeover-pending' } });
+    const res = new AgentSessionsResource(http);
+    await res.takeover('agt/with/slash', 'cli_b');
+    expect(calls[0]?.path).toBe('/v1/agent-sessions/agt%2Fwith%2Fslash/takeover');
+  });
+
+  it('handback POSTs /v1/agent-sessions/{id}/handback with empty body', async () => {
+    const reply = { pair_mode_state: { kind: 'handback-pending' } };
+    const { http, calls } = makeFakeHttp(reply);
+    const res = new AgentSessionsResource(http);
+    const out = await res.handback('agt_1');
+    expect(calls).toEqual([
+      {
+        method: 'POST',
+        path: '/v1/agent-sessions/agt_1/handback',
+        body: {},
+      },
+    ]);
+    expect(out.pair_mode_state.kind).toBe('handback-pending');
+  });
 });

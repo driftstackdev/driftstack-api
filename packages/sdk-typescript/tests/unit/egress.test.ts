@@ -38,7 +38,12 @@ describe('EgressResource', () => {
       session_id: 'ses xyz',
       proxy: {
         type: 'socks5',
-        socks5: { host: 'proxy.example.com', port: 1080, udp_associate: true },
+        socks5: {
+          host: 'proxy.example.com',
+          port: 1080,
+          udp_associate: true,
+          require_remote_dns: false,
+        },
       },
       egress_safeguard: {
         block_direct_internet: true,
@@ -78,7 +83,10 @@ describe('EgressResource', () => {
   it('saveProxy POSTs /v1/proxies with SavedProxyConfig body', async () => {
     const body: SavedProxyConfig = {
       label: 'team SOCKS5',
-      proxy: { type: 'socks5', socks5: { host: 'x.example', port: 1080, udp_associate: true } },
+      proxy: {
+        type: 'socks5',
+        socks5: { host: 'x.example', port: 1080, udp_associate: true, require_remote_dns: false },
+      },
     };
     const reply = { id: 'proxy_1', label: 'team SOCKS5', type: 'socks5' as const };
     const { http, calls } = makeFakeHttp(reply);
