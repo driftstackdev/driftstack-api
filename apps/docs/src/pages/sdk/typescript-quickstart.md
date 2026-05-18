@@ -140,6 +140,15 @@ won't drop deliveries.
   idle timeouts, reconnect semantics.
 - [Profile management](/guides/profile-management/) — persistent
   identity slots that survive across sessions.
+- [Agent sessions](/api/agent-sessions/) — natural-language
+  decompose-and-execute on top of the regular driver surface;
+  AI / manual / pair modes and the live SSE transcript stream.
+- [Bundled LLM](/api/bundled-llm/) and
+  [BYOK Anthropic](/api/byok-anthropic/) — the two LLM rails
+  agent sessions can use; bring your own key OR consent to the
+  deployment-fallback budget.
+- [Idempotency keys](/reference/idempotency/) — `Idempotency-Key`
+  header on create-style POSTs makes retries safe.
 - [Webhook event catalog](/webhooks/events/) — every event the
   platform can push.
 - [Error catalogue](/sdk/error-handling/) — every problem-type
