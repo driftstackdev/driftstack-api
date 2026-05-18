@@ -37,6 +37,11 @@ function publicSession(s: SessionRecord): Record<string, unknown> {
     label: s.label,
     metadata: s.metadata,
     egress_capabilities: s.egressCapabilities,
+    // Arc 5 EGRESS eg.1.l — raw harness-emitted payload for admin
+    // forensics (migration 0054). Customer-facing surface added the
+    // field in eg.1.c; the admin route's separate publicSession()
+    // needs the same propagation.
+    egress_capability_report: s.egressCapabilityReport,
     created_at: s.createdAt.toISOString(),
     updated_at: s.updatedAt.toISOString(),
     last_state_at: s.lastStateAt ? s.lastStateAt.toISOString() : null,
