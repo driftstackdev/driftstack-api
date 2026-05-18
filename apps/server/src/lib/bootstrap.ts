@@ -228,6 +228,82 @@ export async function createProductionDeps(
   // Rate limit store.
   const rateLimitStore = new RedisRateLimitStore(redis);
 
+  // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics
+  // registry. Constructed eagerly so downstream services can
+  // accept a reference at construction time (audit service /
+  // AgentRuntime / etc.); the `/metrics` route registration is
+  // gated on metricsScrapeToken being present (much later, in the
+  // AppDeps assembly), so an unwired deployment never exposes the
+  // registry endpoint. Counter registration lives here so every
+  // service sees a fully-populated registry.
+  const metricsRegistry =
+    config.metricsScrapeToken !== undefined ? new MetricsRegistry() : undefined;
+  if (metricsRegistry !== undefined) {
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.pairModeTransitionTotal,
+      'Pair-mode state-machine transitions, labelled by from + to states.',
+      ['from', 'to'],
+    );
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.bundledLlmRequestTotal,
+      'Bundled-LLM decompose requests, labelled by outcome.',
+      ['outcome'],
+    );
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.bundledLlmErrorTotal,
+      'Bundled-LLM decompose errors, labelled by error kind.',
+      ['kind'],
+    );
+    // Arc 7 obs.3 — agent decompose result-kind counter.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.agentDecomposeTotal,
+      'Agent decompose() call counter, labelled by result kind (plan / clarify / refuse).',
+      ['result_kind'],
+    );
+    // Arc 7 obs.4 — BYOK Anthropic /test outcome counter.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.byokAnthropicTestTotal,
+      'BYOK Anthropic /test endpoint outcomes (ok / invalid / quota_exceeded / not_set / not_wired / unknown).',
+      ['outcome'],
+    );
+    // Arc 7 obs.5 — rate-limit consume counter.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.rateLimitTotal,
+      'Rate-limit consume counter, labelled by bucket + outcome (allowed | exceeded).',
+      ['bucket', 'outcome'],
+    );
+    // Arc 7 obs.6 — auth resolution outcome counter.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.authTotal,
+      'Auth resolution outcomes (ok / unauthorized / invalid / revoked / expired / forbidden / error).',
+      ['outcome'],
+    );
+    // Arc 7 obs.7 — OAuth /token exchange outcome counter.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.oauthTokenTotal,
+      'OAuth /token exchange outcomes (ok + OAuthError codes + error).',
+      ['outcome'],
+    );
+    // Arc 7 obs.8 — Stripe webhook receiver outcome counter.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.stripeWebhookTotal,
+      'Stripe webhook receiver outcomes (handled / duplicate / ignored / error / signature_invalid / signature_missing / empty_body / malformed_event).',
+      ['outcome'],
+    );
+    // Arc 7 obs.9 — NOWPayments IPN receiver outcome counter.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.nowpaymentsWebhookTotal,
+      'NOWPayments IPN receiver outcomes (ok / signature_missing / signature_invalid / empty_body / malformed_event).',
+      ['outcome'],
+    );
+    // Arc 7 obs.10 — account audit log emission counter.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.accountAuditEmitTotal,
+      'Customer-facing audit log emissions, labelled by action prefix + actor type.',
+      ['prefix', 'actor_type'],
+    );
+  }
+
   // Driver — mock or real WebKit per config. The Playwright dev
   // driver is dynamically imported, so this is async.
   const driver = await createDriver(config);
@@ -235,7 +311,7 @@ export async function createProductionDeps(
   // V-216 — customer-facing audit log; constructed early so all
   // emit-on-event services downstream (webhooks, sessions, api-keys,
   // profiles) can wire it.
-  const accountAuditService = new AccountAuditService(accountAuditRepo);
+  const accountAuditService = new AccountAuditService(accountAuditRepo, metricsRegistry);
 
   // V-204 — email notification preferences. Constructed early because
   // V-202c lifecycle service consumes it for opt-out checks.
@@ -589,75 +665,9 @@ export async function createProductionDeps(
   // audit emit. Routes call tracker.recordHeartbeat on takeover /
   // handback / message so customer activity counts as a heartbeat.
   const pairModeHeartbeatTracker = new InMemoryPairModeHeartbeatTracker();
-  // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics
-  // registry (constructed eagerly so AgentRuntime can take a
-  // reference; the `/metrics` route registration is gated on
-  // metricsScrapeToken being present, below, so an unwired
-  // deployment never exposes the registry).
-  const metricsRegistry =
-    config.metricsScrapeToken !== undefined
-      ? (() => {
-          const r = new MetricsRegistry();
-          r.registerCounter(
-            METRIC_NAMES.pairModeTransitionTotal,
-            'Pair-mode state-machine transitions, labelled by from + to states.',
-            ['from', 'to'],
-          );
-          r.registerCounter(
-            METRIC_NAMES.bundledLlmRequestTotal,
-            'Bundled-LLM decompose requests, labelled by outcome.',
-            ['outcome'],
-          );
-          r.registerCounter(
-            METRIC_NAMES.bundledLlmErrorTotal,
-            'Bundled-LLM decompose errors, labelled by error kind.',
-            ['kind'],
-          );
-          // Arc 7 obs.3 — agent decompose result-kind counter.
-          r.registerCounter(
-            METRIC_NAMES.agentDecomposeTotal,
-            'Agent decompose() call counter, labelled by result kind (plan / clarify / refuse).',
-            ['result_kind'],
-          );
-          // Arc 7 obs.4 — BYOK Anthropic /test outcome counter.
-          r.registerCounter(
-            METRIC_NAMES.byokAnthropicTestTotal,
-            'BYOK Anthropic /test endpoint outcomes (ok / invalid / quota_exceeded / not_set / not_wired / unknown).',
-            ['outcome'],
-          );
-          // Arc 7 obs.5 — rate-limit consume counter.
-          r.registerCounter(
-            METRIC_NAMES.rateLimitTotal,
-            'Rate-limit consume counter, labelled by bucket + outcome (allowed | exceeded).',
-            ['bucket', 'outcome'],
-          );
-          // Arc 7 obs.6 — auth resolution outcome counter.
-          r.registerCounter(
-            METRIC_NAMES.authTotal,
-            'Auth resolution outcomes (ok / unauthorized / invalid / revoked / expired / forbidden / error).',
-            ['outcome'],
-          );
-          // Arc 7 obs.7 — OAuth /token exchange outcome counter.
-          r.registerCounter(
-            METRIC_NAMES.oauthTokenTotal,
-            'OAuth /token exchange outcomes (ok + OAuthError codes + error).',
-            ['outcome'],
-          );
-          // Arc 7 obs.8 — Stripe webhook receiver outcome counter.
-          r.registerCounter(
-            METRIC_NAMES.stripeWebhookTotal,
-            'Stripe webhook receiver outcomes (handled / duplicate / ignored / error / signature_invalid / signature_missing / empty_body / malformed_event).',
-            ['outcome'],
-          );
-          // Arc 7 obs.9 — NOWPayments IPN receiver outcome counter.
-          r.registerCounter(
-            METRIC_NAMES.nowpaymentsWebhookTotal,
-            'NOWPayments IPN receiver outcomes (ok / signature_missing / signature_invalid / empty_body / malformed_event).',
-            ['outcome'],
-          );
-          return r;
-        })()
-      : undefined;
+  // Arc 4 Wave 2.B sub-slice 8.18 — metrics registry is now constructed
+  // earlier (before the audit service) so every downstream service can
+  // accept it at construction time. See the construction block above.
   const agentRuntime = new AgentRuntime({
     decomposer: agentDecomposer,
     executor: agentExecutor,

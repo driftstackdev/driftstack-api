@@ -201,4 +201,12 @@ export const METRIC_NAMES = {
   // (NOWPayments traffic volume) are different from Stripe — mixing
   // them under one label set would hide the per-provider signal.
   nowpaymentsWebhookTotal: 'driftstack_nowpayments_webhook_total',
+  // Arc 7 obs.10 — customer-audit-log emission counter. Labelled by
+  // the AccountAuditAction's top-level prefix (`api_key`, `session`,
+  // `agent_session`, `billing`, `team`, etc.) and the actor type
+  // (customer | system | staff). Cardinality stays bounded by the
+  // prefix count rather than the full action enum. Security signal:
+  // surges in `api_key` actor=customer can fingerprint compromised
+  // accounts; surges in `staff` actor signal admin activity.
+  accountAuditEmitTotal: 'driftstack_account_audit_emit_total',
 } as const;

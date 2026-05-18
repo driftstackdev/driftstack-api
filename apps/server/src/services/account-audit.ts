@@ -12,6 +12,7 @@
 import type { AccountAuditAction, AccountAuditActorType } from '@driftstack/api-types';
 import type { AccountContext } from './auth.js';
 import { requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
+import { METRIC_NAMES, type MetricsRegistry } from './metrics-registry.js';
 
 export interface AccountAuditEntryRow {
   id: string;
@@ -64,8 +65,21 @@ export interface AccountAuditRepo {
   list(accountId: string, opts: ListAccountAuditOpts): Promise<ListAccountAuditPage>;
 }
 
+/** Arc 7 obs.10 — bucket an AccountAuditAction (dot-separated namespace
+ *  like `api_key.created`, `agent_session.pair_mode.takeover`) into
+ *  its top-level prefix (`api_key`, `agent_session`, etc.). Keeps
+ *  the prefix label cardinality bounded by the namespace count, not
+ *  the full action enum. */
+export function auditActionPrefix(action: string): string {
+  const dot = action.indexOf('.');
+  return dot === -1 ? action : action.slice(0, dot);
+}
+
 export class AccountAuditService {
-  constructor(private readonly repo: AccountAuditRepo) {}
+  constructor(
+    private readonly repo: AccountAuditRepo,
+    private readonly metrics?: MetricsRegistry,
+  ) {}
 
   /**
    * Customer-facing read. Returns the calling account's own audit
@@ -95,6 +109,18 @@ export class AccountAuditService {
    * underlying customer action.
    */
   async record(input: RecordAccountAuditInput): Promise<AccountAuditEntryRow> {
-    return this.repo.insert(input);
+    const row = await this.repo.insert(input);
+    // Arc 7 obs.10 — bump the audit-emit counter labelled by the
+    // top-level action prefix + actor type. Best-effort; metrics
+    // failures never break the customer-visible operation.
+    try {
+      this.metrics?.inc(METRIC_NAMES.accountAuditEmitTotal, {
+        prefix: auditActionPrefix(input.action),
+        actor_type: input.actorType,
+      });
+    } catch {
+      // Swallow.
+    }
+    return row;
   }
 }
