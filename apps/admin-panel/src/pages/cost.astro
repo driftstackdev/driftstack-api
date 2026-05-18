@@ -204,18 +204,34 @@ const apiBaseUrl = resolveApiBaseUrl();
   function renderAccountSummary(body) {
     if (!accountResult) return;
     const cents = (n) => '$' + (Number(n ?? 0) / 100).toFixed(2);
+    // GET /v1/admin/cost/accounts/:id returns CostMonitoringAccountSummary
+    // (cost-monitoring.ts):
+    //   { account_id, billing_cycle, breakdown: CostBreakdown,
+    //     tier, thresholds: { softCents, hardCents } }
+    // where breakdown carries computeCents / storageCents / egressCents /
+    // emailCents / llmCents / totalCents / thresholdState.
+    // Previous reads used camelCase + a non-existent `estimated` /
+    // `softWarningCents` / `hardCapCents` / root-level `thresholdState`
+    // shape, silently rendering every value as "$0.00" or "—".
+    const breakdown = body.breakdown ?? body.estimated ?? {};
+    const thresholds = body.thresholds ?? {};
+    // Sub-processor row sums email (Postmark) + LLM (Anthropic) costs,
+    // matching what CostBreakdown carries. The old `subprocessorCents`
+    // field never existed on the wire.
+    const subprocessorCents =
+      Number(breakdown.emailCents ?? 0) + Number(breakdown.llmCents ?? 0);
     accountResult.classList.remove('hidden');
     accountResult.innerHTML =
       '<div class="space-y-2 text-sm">' +
-      `<p class="font-mono text-xs text-slate-500">account_id: ${escapeHtml(body.accountId ?? '—')} · cycle: ${escapeHtml(body.billingCycle ?? '—')} · tier: ${escapeHtml(body.tier ?? '—')}</p>` +
-      `<p class="text-base font-medium text-slate-900">Total: ${cents((body.estimated ?? {}).totalCents)}</p>` +
+      `<p class="font-mono text-xs text-slate-500">account_id: ${escapeHtml(body.account_id ?? body.accountId ?? '—')} · cycle: ${escapeHtml(body.billing_cycle ?? body.billingCycle ?? '—')} · tier: ${escapeHtml(body.tier ?? '—')}</p>` +
+      `<p class="text-base font-medium text-slate-900">Total: ${cents(breakdown.totalCents)}</p>` +
       '<dl class="grid grid-cols-2 gap-2 text-xs">' +
-      `<div><dt class="text-slate-500">Compute</dt><dd class="font-mono text-slate-900">${cents((body.estimated ?? {}).computeCents)}</dd></div>` +
-      `<div><dt class="text-slate-500">Storage</dt><dd class="font-mono text-slate-900">${cents((body.estimated ?? {}).storageCents)}</dd></div>` +
-      `<div><dt class="text-slate-500">Egress</dt><dd class="font-mono text-slate-900">${cents((body.estimated ?? {}).egressCents)}</dd></div>` +
-      `<div><dt class="text-slate-500">Sub-processor</dt><dd class="font-mono text-slate-900">${cents((body.estimated ?? {}).subprocessorCents)}</dd></div>` +
+      `<div><dt class="text-slate-500">Compute</dt><dd class="font-mono text-slate-900">${cents(breakdown.computeCents)}</dd></div>` +
+      `<div><dt class="text-slate-500">Storage</dt><dd class="font-mono text-slate-900">${cents(breakdown.storageCents)}</dd></div>` +
+      `<div><dt class="text-slate-500">Egress</dt><dd class="font-mono text-slate-900">${cents(breakdown.egressCents)}</dd></div>` +
+      `<div><dt class="text-slate-500">Sub-processor</dt><dd class="font-mono text-slate-900">${cents(subprocessorCents)}</dd></div>` +
       '</dl>' +
-      `<p class="text-xs text-slate-500">soft warn ${cents(body.softWarningCents)} · hard cap ${cents(body.hardCapCents)} · state ${escapeHtml(body.thresholdState ?? '—')}</p>` +
+      `<p class="text-xs text-slate-500">soft warn ${cents(thresholds.softCents)} · hard cap ${cents(thresholds.hardCents)} · state ${escapeHtml(breakdown.thresholdState ?? '—')}</p>` +
       '</div>';
   }
 
@@ -253,15 +269,29 @@ const apiBaseUrl = resolveApiBaseUrl();
       return;
     }
     const top = rows.slice(0, 10);
+    // Same field-rename invariant as renderAccountSummary above.
+    // Each row is a CostMonitoringAccountSummary; thresholds live
+    // under `thresholds.softCents` / `thresholds.hardCents` and the
+    // breakdown carries `thresholdState`.
     topResult.innerHTML =
       '<table class="w-full text-sm">' +
       '<thead><tr class="text-left text-xs uppercase tracking-widest text-slate-500"><th class="py-1">Account</th><th>Tier</th><th class="text-right">Total</th><th class="text-right">Soft warn</th><th class="text-right">Hard cap</th><th>State</th></tr></thead>' +
       '<tbody>' +
       top
-        .map(
-          (r) =>
-            `<tr class="border-t border-slate-100"><td class="py-2 font-mono text-xs">${escapeHtml(r.accountId ?? '—')}</td><td class="text-xs">${escapeHtml(r.tier ?? '—')}</td><td class="text-right font-mono text-xs">${cents((r.breakdown ?? r.estimated ?? {}).totalCents)}</td><td class="text-right font-mono text-xs">${cents(r.softWarningCents)}</td><td class="text-right font-mono text-xs">${cents(r.hardCapCents)}</td><td class="text-xs">${escapeHtml(r.thresholdState ?? '—')}</td></tr>`,
-        )
+        .map((r) => {
+          const breakdown = r.breakdown ?? r.estimated ?? {};
+          const thresholds = r.thresholds ?? {};
+          return (
+            `<tr class="border-t border-slate-100">` +
+            `<td class="py-2 font-mono text-xs">${escapeHtml(r.account_id ?? r.accountId ?? '—')}</td>` +
+            `<td class="text-xs">${escapeHtml(r.tier ?? '—')}</td>` +
+            `<td class="text-right font-mono text-xs">${cents(breakdown.totalCents)}</td>` +
+            `<td class="text-right font-mono text-xs">${cents(thresholds.softCents)}</td>` +
+            `<td class="text-right font-mono text-xs">${cents(thresholds.hardCents)}</td>` +
+            `<td class="text-xs">${escapeHtml(breakdown.thresholdState ?? '—')}</td>` +
+            `</tr>`
+          );
+        })
         .join('') +
       '</tbody></table>';
   }
