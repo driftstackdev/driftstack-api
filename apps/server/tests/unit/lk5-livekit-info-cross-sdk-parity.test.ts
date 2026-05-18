@@ -122,22 +122,37 @@ describe('LK.5 — LiveKitInfo cross-SDK parity', () => {
     );
   });
 
-  it('Python SDK declares AgentSessionsResource.livekit_token (sync + async)', () => {
+  it('Python SDK declares AgentSessionsResource.livekit_token (sync + async) returning LiveKitInfo TypedDict', () => {
     const pyResource = readFileSync(
       resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources/agent_sessions.py'),
       'utf8',
     );
-    // Sync helper.
+    // Hand-defined LiveKitInfo TypedDict (closes the cross-SDK type
+    // asymmetry against TS interface + Go struct). Companion to the
+    // .openapi('LiveKitInfo') registration in apps/server/src/lib/
+    // openapi.ts which lifts the schema into components.schemas so a
+    // future datamodel-codegen run can replace this hand-defined class
+    // with a generated pydantic model.
+    expect(pyResource).toMatch(/class LiveKitInfo\(TypedDict\):/);
+    for (const f of FIELD_NAMES) {
+      expect(pyResource, `Python LiveKitInfo TypedDict must declare ${f}`).toMatch(
+        new RegExp(`\\b${f}: str\\b`),
+      );
+    }
+    // Sync helper returns the typed shape.
+    expect(pyResource).toMatch(/def livekit_token\(self, agent_session_id: str\) -> LiveKitInfo:/);
+    // Async helper returns the typed shape.
     expect(pyResource).toMatch(
-      /def livekit_token\(self, agent_session_id: str\) -> dict\[str, Any\]:/,
-    );
-    // Async helper.
-    expect(pyResource).toMatch(
-      /async def livekit_token\(self, agent_session_id: str\) -> dict\[str, Any\]:/,
+      /async def livekit_token\(self, agent_session_id: str\) -> LiveKitInfo:/,
     );
     // The path that each helper hits.
     expect(pyResource).toMatch(
       /f"\/v1\/agent-sessions\/\{quote\(agent_session_id, safe=''\)\}\/livekit-token"/,
+    );
+    // Drift-guard: the legacy untyped `dict[str, Any]` return MUST NOT
+    // re-appear on either helper.
+    expect(pyResource).not.toMatch(
+      /def livekit_token\(self, agent_session_id: str\) -> dict\[str, Any\]:/,
     );
   });
 });
