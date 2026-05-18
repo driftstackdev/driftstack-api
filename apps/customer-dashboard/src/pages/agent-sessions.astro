@@ -192,6 +192,131 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         .catch(() => {
           /* swallow — network issues handled separately */
         });
+
+      // v2-#8 Wave 2.C sub-slice 8.25 — create-session form wiring.
+      // POSTs to /v1/agent-sessions with the selected mode; on
+      // success, populates the active-session block + reveals it.
+      const createForm = root.querySelector('[data-form="create-session"]');
+      const activeSection = root.querySelector('[data-section="active-session"]');
+      const activeIdEl = root.querySelector('[data-field="active-session-id"]');
+      const stateEl = root.querySelector('[data-field="pair-mode-state"]');
+      const takeoverBtn = root.querySelector('[data-action="takeover"]');
+      const handbackBtn = root.querySelector('[data-action="handback"]');
+
+      // v2-#8 Wave 2.C sub-slice 8.26 — render the takeover/handback
+      // buttons based on the current pair_mode_state.kind. Mirrors
+      // the design doc 8.23 §"TakeoverHandbackButtons.astro": the
+      // active action depends on the state-machine discriminator.
+      function renderTakeoverHandback(state, mode) {
+        if (mode !== 'pair' || !state || !takeoverBtn || !handbackBtn) {
+          if (takeoverBtn) takeoverBtn.classList.add('hidden');
+          if (handbackBtn) handbackBtn.classList.add('hidden');
+          return;
+        }
+        const kind = state.kind;
+        if (kind === 'ai-driving' || kind === 'takeover-queued') {
+          takeoverBtn.classList.remove('hidden');
+          handbackBtn.classList.add('hidden');
+        } else if (kind === 'human-driving' || kind === 'handback-queued') {
+          takeoverBtn.classList.add('hidden');
+          handbackBtn.classList.remove('hidden');
+        } else {
+          // takeover-pending / handback-pending — neither button
+          // active; the state badge above carries the spinner-state.
+          takeoverBtn.classList.add('hidden');
+          handbackBtn.classList.add('hidden');
+        }
+      }
+
+      let activeSessionId = null;
+      let activeMode = null;
+
+      if (createForm) {
+        createForm.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          const fd = new FormData(createForm);
+          const mode = fd.get('mode') ?? 'pair';
+          fetch(apiBaseUrl + '/v1/agent-sessions', {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              authorization: 'Bearer ' + token,
+            },
+            body: JSON.stringify({ mode }),
+          })
+            .then((r) => {
+              if (r.status === 503) {
+                if (featureBanner) featureBanner.classList.remove('hidden');
+                throw new Error('feature-unavailable');
+              }
+              if (!r.ok) throw new Error('http ' + r.status);
+              return r.json();
+            })
+            .then((session) => {
+              activeSessionId = session.id;
+              activeMode = session.mode;
+              if (activeIdEl) activeIdEl.textContent = session.id;
+              const initialState =
+                session.mode === 'pair' ? { kind: 'ai-driving' } : null;
+              if (stateEl) stateEl.textContent = initialState ? initialState.kind : '';
+              renderTakeoverHandback(initialState, session.mode);
+              if (activeSection) activeSection.classList.remove('hidden');
+            })
+            .catch(() => {
+              /* swallow — banner-render handled in the 503 branch above */
+            });
+        });
+      }
+
+      // v2-#8 Wave 2.C sub-slice 8.26 — takeover button click handler.
+      if (takeoverBtn) {
+        takeoverBtn.addEventListener('click', () => {
+          if (!activeSessionId) return;
+          const clientId = 'web-' + token.slice(0, 12);
+          fetch(apiBaseUrl + '/v1/agent-sessions/' + activeSessionId + '/takeover', {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              authorization: 'Bearer ' + token,
+            },
+            body: JSON.stringify({ client_id: clientId }),
+          })
+            .then((r) => r.json().then((body) => ({ status: r.status, body })))
+            .then(({ status, body }) => {
+              if (status === 200 && body.pair_mode_state) {
+                if (stateEl) stateEl.textContent = body.pair_mode_state.kind;
+                renderTakeoverHandback(body.pair_mode_state, activeMode);
+              }
+            })
+            .catch(() => {
+              /* swallow */
+            });
+        });
+      }
+
+      if (handbackBtn) {
+        handbackBtn.addEventListener('click', () => {
+          if (!activeSessionId) return;
+          fetch(apiBaseUrl + '/v1/agent-sessions/' + activeSessionId + '/handback', {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              authorization: 'Bearer ' + token,
+            },
+            body: JSON.stringify({}),
+          })
+            .then((r) => r.json().then((body) => ({ status: r.status, body })))
+            .then(({ status, body }) => {
+              if (status === 200 && body.pair_mode_state) {
+                if (stateEl) stateEl.textContent = body.pair_mode_state.kind;
+                renderTakeoverHandback(body.pair_mode_state, activeMode);
+              }
+            })
+            .catch(() => {
+              /* swallow */
+            });
+        });
+      }
     })();
   </script>
 </DashboardLayout>

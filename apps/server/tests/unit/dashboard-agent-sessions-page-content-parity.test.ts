@@ -72,4 +72,31 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
   it('page-root data-page="agent-sessions" attribute (consistent selector pattern)', () => {
     expect(body).toMatch(/data-page="agent-sessions"/);
   });
+
+  // v2-#8 Wave 2.C sub-slice 8.26 — TakeoverHandbackButtons JS wiring.
+  it('renderTakeoverHandback() branches on pair_mode_state.kind (all 4 active discriminators)', () => {
+    // ai-driving → show takeover button
+    // takeover-queued → show takeover button
+    // human-driving → show handback button
+    // handback-queued → show handback button
+    expect(body).toMatch(/kind === 'ai-driving' \|\| kind === 'takeover-queued'/);
+    expect(body).toMatch(/kind === 'human-driving' \|\| kind === 'handback-queued'/);
+  });
+
+  it('takeover button click POSTs to /v1/agent-sessions/{id}/takeover with { client_id }', () => {
+    expect(body).toMatch(/\/takeover'/);
+    expect(body).toMatch(/client_id: clientId/);
+  });
+
+  it('handback button click POSTs to /v1/agent-sessions/{id}/handback with empty body', () => {
+    expect(body).toMatch(/\/handback'/);
+    expect(body).toMatch(/JSON\.stringify\(\{\}\)/);
+  });
+
+  it('create-session form POSTs /v1/agent-sessions with { mode }; 503 reveals feature banner', () => {
+    expect(body).toMatch(/method: 'POST'/);
+    expect(body).toMatch(/JSON\.stringify\(\{ mode \}\)/);
+    expect(body).toMatch(/r\.status === 503/);
+    expect(body).toMatch(/featureBanner\.classList\.remove\('hidden'\)/);
+  });
 });
