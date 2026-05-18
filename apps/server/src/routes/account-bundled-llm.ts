@@ -3,6 +3,7 @@
 // Surface:
 //   GET   /v1/account/me/bundled-llm-settings   — read current state
 //   PATCH /v1/account/me/bundled-llm-settings   — flip consent +/or cap
+//   GET   /v1/account/me/bundled-llm-status     — spend + remaining (sub-slice 6.7)
 //
 // Same range invariants as the migration 0050 CHECK constraint:
 // monthly_cap_usd_cents ∈ [0, 1_000_000] (i.e. $0 to $10,000). The
@@ -54,6 +55,43 @@ export function registerAccountBundledLlmRoutes(
       return {
         consent: settings?.consent ?? false,
         monthly_cap_usd_cents: settings?.monthlyCapUsdCents ?? 2000,
+      };
+    },
+  );
+
+  // Arc 1 sub-slice 6.7 (v2-#6) — dashboard data endpoint. Returns
+  // consent / cap / month-to-date spend / remaining headroom. The
+  // refused_count_this_month field tracks BundledLlmBudgetExhausted
+  // throws; today the route layer doesn't write an audit row for
+  // these (audit wire is a follow-up slice), so the field reports 0
+  // as a stable schema placeholder. Customer + dashboard can branch
+  // on `remaining_cents <= 0` for the same "you've hit the cap" UX.
+  app.get(
+    '/v1/account/me/bundled-llm-status',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const now = new Date();
+      const settings = await service.findSettings(ctx.account.id);
+      const consent = settings?.consent ?? false;
+      const capCents = settings?.monthlyCapUsdCents ?? 2000;
+      const usedCents = await service.sumMonthlySpendCents({
+        accountId: ctx.account.id,
+        now,
+      });
+      const remaining = Math.max(0, capCents - usedCents);
+      return {
+        consent,
+        cap_cents: capCents,
+        used_this_month_cents: usedCents,
+        remaining_cents: remaining,
+        refused_count_this_month: 0,
+        // ISO-8601 calendar-month-start so the dashboard can render
+        // "resets on <date>" without re-deriving the boundary itself.
+        month_started_at: new Date(
+          Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0),
+        ).toISOString(),
       };
     },
   );

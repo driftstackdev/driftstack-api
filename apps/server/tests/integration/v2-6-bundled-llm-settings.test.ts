@@ -95,6 +95,51 @@ describe('Arc 1 v2-#6 sub-slice 6.6 GET + PATCH /v1/account/me/bundled-llm-setti
     expect(res.statusCode).toBe(400);
   });
 
+  // Arc 1 sub-slice 6.7 (v2-#6) — dashboard data endpoint.
+  it('v2-#6 sub-slice 6.7 GET /v1/account/me/bundled-llm-status returns consent + cap + used + remaining + refused_count', async () => {
+    fx = await buildTestApp({
+      enableBundledLlm: { consent: true, monthlyCapUsdCents: 5000 },
+    });
+    // Seed two prior bundled-LLM cost rows totalling 750 cents.
+    fx.bundledLlmRepo.addSpend(fx.accountId, new Date(), 500);
+    fx.bundledLlmRepo.addSpend(fx.accountId, new Date(), 250);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/bundled-llm-status',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{
+      consent: boolean;
+      cap_cents: number;
+      used_this_month_cents: number;
+      remaining_cents: number;
+      refused_count_this_month: number;
+      month_started_at: string;
+    }>();
+    expect(body.consent).toBe(true);
+    expect(body.cap_cents).toBe(5000);
+    expect(body.used_this_month_cents).toBe(750);
+    expect(body.remaining_cents).toBe(4250);
+    expect(body.refused_count_this_month).toBe(0);
+    expect(body.month_started_at).toMatch(/\d{4}-\d{2}-01T00:00:00\.000Z/);
+  });
+
+  it('v2-#6 sub-slice 6.7 GET status with spend >= cap → remaining_cents=0 (not negative)', async () => {
+    fx = await buildTestApp({
+      enableBundledLlm: { consent: true, monthlyCapUsdCents: 1000 },
+    });
+    fx.bundledLlmRepo.addSpend(fx.accountId, new Date(), 1500);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/bundled-llm-status',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const body = res.json<{ used_this_month_cents: number; remaining_cents: number }>();
+    expect(body.used_this_month_cents).toBe(1500);
+    expect(body.remaining_cents).toBe(0);
+  });
+
   it('PATCH partial update — only consent supplied leaves cap unchanged; only cap supplied leaves consent unchanged', async () => {
     fx = await buildTestApp({
       enableBundledLlm: { consent: true, monthlyCapUsdCents: 5000 },
