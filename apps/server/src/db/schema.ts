@@ -262,6 +262,23 @@ export const accounts = pgTable(
       'byok_anthropic_api_key_last_reminder_sent_at',
       { withTimezone: true },
     ),
+    // Arc 1 sub-slice 6.1 (v2-#6) — bundled-LLM opt-in flag +
+    // monthly soft-cap. Founder verdicts 2026-05-18:
+    //   Q4=A — BYOK always wins; bundled-LLM only resolves when no
+    //          BYOK is configured (or stored BYOK is past v2-#21
+    //          TTL) AND `bundledLlmConsent === true`.
+    //   Q3=C — $20 default monthly cap (2000 cents). Soft-cap
+    //          enforced server-side per calendar month against
+    //          usage_records rows with `source = 'agent_decomposer_bundled'`.
+    //          PATCH /v1/account/me/bundled-llm-settings (sub-slice
+    //          6.6) lets the customer raise / lower in the [$0,$10,000]
+    //          range.
+    //   Q5=A — actual upstream Anthropic cost hidden; per-turn cost
+    //          recorded at a posted flat rate (sub-slice 6.4).
+    bundledLlmConsent: boolean('bundled_llm_consent').notNull().default(false),
+    bundledLlmMonthlyCapUsdCents: integer('bundled_llm_monthly_cap_usd_cents')
+      .notNull()
+      .default(2000),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
