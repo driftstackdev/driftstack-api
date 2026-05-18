@@ -47,6 +47,12 @@ function rowToRecord(row: typeof agentSessions.$inferSelect): AgentSessionRecord
     idempotencyKey: row.idempotencyKey,
     createdByUserId: row.createdByUserId,
     closedAt: row.closedAt,
+    // Arc 2 sub-slice 8.2 (v2-#8) — pair-mode + GUI-key columns from
+    // migration 0052. Existing rows pick up mode='ai' from the CHECK
+    // default; null for pair_mode_state + gui_control_key_expires_at.
+    mode: (row.mode as 'manual' | 'ai' | 'pair') ?? 'ai',
+    pairModeState: row.pairModeState,
+    guiControlKeyExpiresAt: row.guiControlKeyExpiresAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -78,6 +84,9 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
         // pre-check is the primary dedupe surface.
         idempotencyKey: args.idempotencyKey ?? null,
         createdByUserId: args.createdByUserId ?? null,
+        // Arc 2 sub-slice 8.2 — mode forwarded from caller (or default
+        // via DB CHECK constraint when args.mode is omitted).
+        ...(args.mode !== undefined ? { mode: args.mode } : {}),
         createdAt: now,
         updatedAt: now,
       })
@@ -162,6 +171,20 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     const updated = await this.database.db
       .update(agentSessions)
       .set({ status: 'closed', closedReason: reason, closedAt, updatedAt: now })
+      .where(eq(agentSessions.id, id))
+      .returning();
+    const row = updated[0];
+    if (!row) {
+      throw new Error(`AgentSession ${id} not found`);
+    }
+    return rowToRecord(row);
+  }
+
+  async setPairModeState(id: string, state: unknown): Promise<AgentSessionRecord> {
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({ pairModeState: state, updatedAt: now })
       .where(eq(agentSessions.id, id))
       .returning();
     const row = updated[0];

@@ -174,6 +174,52 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     expect(await repo.findByIdempotencyKey('acc_A', 'other')).toBeNull();
   });
 
+  // Arc 2 sub-slice 8.2 (v2-#8) — mode + pair-mode-state plumbing.
+  it("v2-#8 sub-slice 8.2 create defaults mode='ai' + pairModeState=null + guiControlKeyExpiresAt=null", async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const rec = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    expect(rec.mode).toBe('ai');
+    expect(rec.pairModeState).toBeNull();
+    expect(rec.guiControlKeyExpiresAt).toBeNull();
+  });
+
+  it("v2-#8 sub-slice 8.2 create with mode='manual' or 'pair' round-trips on the record", async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const manual = await repo.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100,
+      mode: 'manual',
+    });
+    expect(manual.mode).toBe('manual');
+    const pair = await repo.create({
+      accountId: 'acc_2',
+      tokenBudgetTotal: 100,
+      mode: 'pair',
+    });
+    expect(pair.mode).toBe('pair');
+  });
+
+  it('v2-#8 sub-slice 8.2 setPairModeState round-trips arbitrary JSON; bumps updatedAt; rejects on unknown id', async () => {
+    let now = new Date('2026-05-18T00:00:00Z');
+    const repo = new InMemoryAgentSessionsRepo(() => now);
+    const rec = await repo.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100,
+      mode: 'pair',
+    });
+    expect(rec.pairModeState).toBeNull();
+    now = new Date('2026-05-18T00:05:00Z');
+    const updated = await repo.setPairModeState(rec.id, { kind: 'takeover-pending', by: 'cli_a' });
+    expect(updated.pairModeState).toEqual({ kind: 'takeover-pending', by: 'cli_a' });
+    expect(updated.updatedAt.toISOString()).toBe('2026-05-18T00:05:00.000Z');
+    // null clears.
+    const cleared = await repo.setPairModeState(rec.id, null);
+    expect(cleared.pairModeState).toBeNull();
+    await expect(repo.setPairModeState('agt_inmem_99999999', { x: 1 })).rejects.toThrow(
+      /AgentSession .* not found/,
+    );
+  });
+
   it('v2-#19 closeWithReason: sets closedAt to now on first close; re-closing leaves the original closedAt intact (first-close wins)', async () => {
     let now = new Date('2026-05-16T00:00:00Z');
     const repo = new InMemoryAgentSessionsRepo(() => now);

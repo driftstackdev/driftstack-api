@@ -25,6 +25,16 @@ import type { TranscriptEntry } from './agent-decomposer.js';
 
 export type AgentSessionStatus = 'active' | 'paused' | 'closed';
 
+/**
+ * Arc 2 sub-slice 8.2 (v2-#8) — operational mode for the agent
+ * session. 'ai' (the default) keeps the legacy decompose-driven
+ * behaviour. 'manual' makes AgentRuntime.runTurn pass-through —
+ * the human drives intents directly (sub-slice 8.6). 'pair' enables
+ * the takeover state-machine (sub-slice 8.7) so a human can interrupt
+ * an AI-driven run mid-flight.
+ */
+export type AgentSessionMode = 'manual' | 'ai' | 'pair';
+
 export interface AgentSessionRecord {
   /** `agt_<uuid>` id; minted by the repo on create. */
   id: string;
@@ -71,6 +81,26 @@ export interface AgentSessionRecord {
    * transcript append. NULL while the session is active.
    */
   closedAt: Date | null;
+  /**
+   * Arc 2 sub-slice 8.2 (v2-#8) — operational mode. 'ai' on every
+   * existing row (migration 0052 default). Customers / SDK pick
+   * 'manual' or 'pair' at create-time.
+   */
+  mode: AgentSessionMode;
+  /**
+   * Arc 2 sub-slice 8.2 (v2-#8) — pair-mode state machine discriminator
+   * payload (sub-slice 8.7 will define the exact shape). NULL when
+   * the session is not in pair mode, OR is in pair mode but no
+   * takeover has been requested yet.
+   */
+  pairModeState: unknown;
+  /**
+   * Arc 2 sub-slice 8.2 (v2-#8) — when the auto-minted 24h-TTL
+   * gui_control_key expires. NULL when no key has been minted (e.g.
+   * historical rows pre-migration 0052). Sub-slice 8.4 mints +
+   * populates.
+   */
+  guiControlKeyExpiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -91,6 +121,12 @@ export interface CreateAgentSessionArgs {
   /** v2-#19 — team-RBAC attribution. Set by the route layer once
    *  V-298 team-membership auth resolves a specific member id. */
   createdByUserId?: string;
+  /**
+   * Arc 2 sub-slice 8.2 (v2-#8) — operational mode at create-time.
+   * Defaults to 'ai' for backward compat. SDK consumers pick
+   * 'manual' or 'pair' to opt into the alternate flows.
+   */
+  mode?: AgentSessionMode;
 }
 
 export interface AgentSessionsRepo {
@@ -112,6 +148,13 @@ export interface AgentSessionsRepo {
     accountId: string,
     idempotencyKey: string,
   ): Promise<AgentSessionRecord | null>;
+
+  /**
+   * Arc 2 sub-slice 8.2 (v2-#8) — overwrite `pair_mode_state` JSONB
+   * on a session. Sub-slice 8.7 state machine drives these writes.
+   * Throws when the session is not found.
+   */
+  setPairModeState(id: string, state: unknown): Promise<AgentSessionRecord>;
 }
 
 /**
@@ -146,6 +189,10 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       idempotencyKey: args.idempotencyKey ?? null,
       createdByUserId: args.createdByUserId ?? null,
       closedAt: null,
+      // Arc 2 sub-slice 8.2 — default 'ai' mirrors migration 0052 default.
+      mode: args.mode ?? 'ai',
+      pairModeState: null,
+      guiControlKeyExpiresAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -195,6 +242,18 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     const updated: AgentSessionRecord = {
       ...rec,
       tokenBudgetRemaining: Math.max(0, rec.tokenBudgetRemaining - tokens),
+      updatedAt: this.clock(),
+    };
+    this.records.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
+  setPairModeState(id: string, state: unknown): Promise<AgentSessionRecord> {
+    const rec = this.records.get(id);
+    if (!rec) return Promise.reject(new Error(`AgentSession ${id} not found`));
+    const updated: AgentSessionRecord = {
+      ...rec,
+      pairModeState: state,
       updatedAt: this.clock(),
     };
     this.records.set(id, updated);
