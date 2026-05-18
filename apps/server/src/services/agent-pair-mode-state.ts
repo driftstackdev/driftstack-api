@@ -79,7 +79,20 @@ export type PairModeTransition =
    * decompose deferral. Route fires this when decompose_in_flight=true
    * AND the active state is human-driving.
    */
-  | { kind: 'handback-request-queued'; clientId: string; at: string };
+  | { kind: 'handback-request-queued'; clientId: string; at: string }
+  /**
+   * Arc 4 Wave 2.A sub-slice 8.13 (v2-#8) — auto-handback to ai-driving
+   * after 30s of no client heartbeat. The state-machine accepts this
+   * transition from any non-ai-driving state so the timer service can
+   * fire it without inspecting the current state first. Idempotent on
+   * ai-driving (silent no-op).
+   *
+   * The actual timer logic (track lastHeartbeatAt per session + fire
+   * the transition after the 30s gap) lives in the route layer + a
+   * sweep service (sub-slice 8.13b follow-up); this slice ships the
+   * pure-state transition that the timer fires.
+   */
+  | { kind: 'heartbeat-timeout'; at: string };
 
 export class PairModeStateInvalidTransitionError extends Error {
   constructor(
@@ -127,6 +140,10 @@ export function applyPairModeTransition(
       // contract simple (the route doesn't have to inspect state
       // before firing). Same idempotent posture as queue-decline below.
       if (transition.kind === 'decompose-settled') return state;
+      // Arc 4 Wave 2.A 8.13 — auto-handback on heartbeat timeout. Any
+      // non-ai-driving state goes back to ai-driving when the client
+      // hasn't heartbeated in 30s.
+      if (transition.kind === 'heartbeat-timeout') return { kind: 'ai-driving' };
       throw new PairModeStateInvalidTransitionError(state.kind, transition.kind);
 
     case 'takeover-queued':
@@ -142,6 +159,9 @@ export function applyPairModeTransition(
       if (transition.kind === 'takeover-decline') {
         return { kind: 'ai-driving' };
       }
+      // Arc 4 Wave 2.A 8.13 — heartbeat-timeout discards the queued
+      // takeover (human never fully took over; AI continues).
+      if (transition.kind === 'heartbeat-timeout') return { kind: 'ai-driving' };
       throw new PairModeStateInvalidTransitionError(state.kind, transition.kind);
 
     case 'takeover-pending':
@@ -158,6 +178,10 @@ export function applyPairModeTransition(
       // Arc 4 Wave 2.A 8.11 — silent no-op so the runtime can fire
       // unconditionally without inspecting state.
       if (transition.kind === 'decompose-settled') return state;
+      // Arc 4 Wave 2.A 8.13 — auto-handback on heartbeat timeout. Any
+      // non-ai-driving state goes back to ai-driving when the client
+      // hasn't heartbeated in 30s.
+      if (transition.kind === 'heartbeat-timeout') return { kind: 'ai-driving' };
       throw new PairModeStateInvalidTransitionError(state.kind, transition.kind);
 
     case 'human-driving':
@@ -173,6 +197,10 @@ export function applyPairModeTransition(
         };
       }
       if (transition.kind === 'decompose-settled') return state;
+      // Arc 4 Wave 2.A 8.13 — auto-handback on heartbeat timeout. Any
+      // non-ai-driving state goes back to ai-driving when the client
+      // hasn't heartbeated in 30s.
+      if (transition.kind === 'heartbeat-timeout') return { kind: 'ai-driving' };
       throw new PairModeStateInvalidTransitionError(state.kind, transition.kind);
 
     case 'handback-queued':
@@ -190,6 +218,10 @@ export function applyPairModeTransition(
           sinceAt: state.queuedAt,
         };
       }
+      // Arc 4 Wave 2.A 8.13 — heartbeat-timeout completes the
+      // requested handback even without a decompose-settle event
+      // (the client is gone anyway).
+      if (transition.kind === 'heartbeat-timeout') return { kind: 'ai-driving' };
       throw new PairModeStateInvalidTransitionError(state.kind, transition.kind);
 
     case 'handback-pending':
@@ -197,6 +229,8 @@ export function applyPairModeTransition(
         return { kind: 'ai-driving' };
       }
       if (transition.kind === 'decompose-settled') return state;
+      // Arc 4 Wave 2.A 8.13 — auto-handback on heartbeat timeout.
+      if (transition.kind === 'heartbeat-timeout') return { kind: 'ai-driving' };
       if (transition.kind === 'handback-cancel') {
         // Cancel a pending handback — go back to human-driving. The
         // clientId from the prior human-driving state isn't recoverable

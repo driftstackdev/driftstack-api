@@ -225,6 +225,51 @@ describe('Arc 2 v2-#8 sub-slice 8.7 pair-mode state machine', () => {
     ).toThrow(PairModeStateInvalidTransitionError);
   });
 
+  // Arc 4 Wave 2.A sub-slice 8.13 (v2-#8) — heartbeat-timeout
+  // auto-handback. Pure-state transition; the timer that fires it
+  // lives in the route/sweep layer.
+  it('v2-#8 sub-slice 8.13 heartbeat-timeout from human-driving / takeover-pending / handback-pending → ai-driving', () => {
+    expect(
+      applyPairModeTransition(
+        { kind: 'human-driving', clientId: 'cli_a', sinceAt: AT },
+        { kind: 'heartbeat-timeout', at: AT2 },
+      ),
+    ).toEqual({ kind: 'ai-driving' });
+    expect(
+      applyPairModeTransition(
+        { kind: 'takeover-pending', requestedByClientId: 'cli_a', requestedAt: AT },
+        { kind: 'heartbeat-timeout', at: AT2 },
+      ),
+    ).toEqual({ kind: 'ai-driving' });
+    expect(
+      applyPairModeTransition(
+        { kind: 'handback-pending', requestedAt: AT },
+        { kind: 'heartbeat-timeout', at: AT2 },
+      ),
+    ).toEqual({ kind: 'ai-driving' });
+  });
+
+  it('v2-#8 sub-slice 8.13 heartbeat-timeout from queued states discards the queue → ai-driving', () => {
+    expect(
+      applyPairModeTransition(
+        { kind: 'takeover-queued', requestedByClientId: 'cli_a', queuedAt: AT },
+        { kind: 'heartbeat-timeout', at: AT2 },
+      ),
+    ).toEqual({ kind: 'ai-driving' });
+    expect(
+      applyPairModeTransition(
+        { kind: 'handback-queued', queuedByClientId: 'cli_a', queuedAt: AT },
+        { kind: 'heartbeat-timeout', at: AT2 },
+      ),
+    ).toEqual({ kind: 'ai-driving' });
+  });
+
+  it('v2-#8 sub-slice 8.13 heartbeat-timeout from ai-driving is idempotent (self-loop)', () => {
+    expect(
+      applyPairModeTransition({ kind: 'ai-driving' }, { kind: 'heartbeat-timeout', at: AT }),
+    ).toEqual({ kind: 'ai-driving' });
+  });
+
   it('error carries diagnostic fields (from + transition)', () => {
     try {
       applyPairModeTransition({ kind: 'ai-driving' }, { kind: 'takeover-grant', at: AT });
