@@ -839,4 +839,12 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   app.get('/v1/agent-sessions/:id', stub);
   app.post('/v1/agent-sessions/:id/message', stub);
   app.delete('/v1/agent-sessions/:id', stub);
+  // Arc 2 sub-slice 8.9 (v2-#8) — pair-mode routes must also return
+  // 503 FeatureUnavailable when the activation gate is off. Without
+  // these the SDK + dashboard get a generic 404 + can't render the
+  // "feature not enabled" message; the customer sees a confusing
+  // "endpoint missing" error instead of the documented activation
+  // state.
+  app.post('/v1/agent-sessions/:id/takeover', stub);
+  app.post('/v1/agent-sessions/:id/handback', stub);
 }

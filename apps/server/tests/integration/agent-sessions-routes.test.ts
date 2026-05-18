@@ -61,6 +61,35 @@ describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)'
     });
     expect(res.statusCode).toBe(503);
   });
+
+  // Arc 4 Wave 2.B sub-slice 8.20.h (v2-#8) — without this regression
+  // pin, the disabled-routes stub was missing /takeover + /handback.
+  // The SDK + dashboard would see a generic 404 instead of the
+  // documented 503 FeatureUnavailable problem type — confusing
+  // customers who'd expect "feature not enabled" framing.
+  it('POST /v1/agent-sessions/:id/takeover → 503 FeatureUnavailable', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions/agt_xxx/takeover',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { client_id: 'cli_a' },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
+  });
+
+  it('POST /v1/agent-sessions/:id/handback → 503 FeatureUnavailable', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions/agt_xxx/handback',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
+  });
 });
 
 describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
