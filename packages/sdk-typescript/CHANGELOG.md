@@ -8,6 +8,17 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`client.agentSessions.takeover(id, clientId)`** + **`.handback(id)`**
+  (v2-#8 Arc 2 sub-slice 8.9) — pair-mode state-machine wrappers.
+  Takeover requests a human to take control of a `mode: 'pair'`
+  agent session (state machine transitions `ai-driving →
+takeover-pending`, or `takeover-queued` when the runtime is
+  mid-decompose); handback returns control to AI from
+  `human-driving`. Both return `{ pair_mode_state: { kind, ... } }`
+  so callers can branch on whether the request was queued without a
+  separate GET round-trip. 409 `PairModeStateInvalidTransitionError`
+  on invalid transitions (e.g. takeover from `takeover-pending`);
+  409 `ConflictError` when the session is not `mode: 'pair'`.
 - **`client.recipes.create(body)`** (AI-B4 / Q.5.d) — snapshot a
   finished agent-session's intent_log + transcript into a replayable
   recipe row. Body: `{ agent_session_id, label, description? }`
