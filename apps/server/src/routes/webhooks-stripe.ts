@@ -34,8 +34,14 @@ export interface RegisterStripeWebhookRoutesDeps {
 /** Map the StripeWebhooksService dispatch outcome to a bounded
  *  metric label. The service returns `'handled' | 'ignored' |
  *  'duplicate' | \`error:${string}\``; the dynamic error tail
- *  collapses to 'error' to keep cardinality fixed. */
-function classifyStripeDispatchOutcome(outcome: string): string {
+ *  collapses to 'error' to keep cardinality fixed.
+ *
+ *  Exported so the bounded-cardinality contract can be pinned by
+ *  pure-function unit tests — `driftstack_stripe_webhook_total{outcome}`
+ *  must only ever take one of the 4 values; drift to letting the
+ *  dynamic `error:<reason>` tail leak through would explode the
+ *  Prometheus cardinality. */
+export function classifyStripeDispatchOutcome(outcome: string): string {
   if (outcome === 'handled' || outcome === 'duplicate' || outcome === 'ignored') return outcome;
   return 'error';
 }
