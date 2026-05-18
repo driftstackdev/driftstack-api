@@ -828,6 +828,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         const row = await deps.sessionsService.findOwnedSessionLite(accountId, sessionId);
         return row !== null;
       },
+      ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
     });
   }
   // V-667.C — OAuth-client routes. Gated on all 4: service wired +

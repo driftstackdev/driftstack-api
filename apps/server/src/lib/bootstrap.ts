@@ -308,6 +308,12 @@ export async function createProductionDeps(
       'Admin audit log emissions, labelled by action prefix.',
       ['prefix'],
     );
+    // Arc 7 obs.12 — LiveKit token mint outcome counter.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.livekitTokenMintTotal,
+      'LiveKit token mint outcomes, labelled by role (publisher | subscriber | unknown) + outcome (ok / not_found / validation).',
+      ['role', 'outcome'],
+    );
   }
 
   // Driver — mock or real WebKit per config. The Playwright dev

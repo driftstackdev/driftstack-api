@@ -216,4 +216,11 @@ export const METRIC_NAMES = {
   // refund recording — so the dashboard can chart admin-action
   // distribution over time.
   adminAuditEmitTotal: 'driftstack_admin_audit_emit_total',
+  // Arc 7 obs.12 — LiveKit token mint counter. Labelled by role
+  // (publisher | subscriber) and outcome (ok / not_found / validation).
+  // Publisher tokens are issued for capture-side processes; subscriber
+  // tokens for the live-preview dashboard surface. A surge in
+  // not_found is either a 404 enumeration probe or a session-id
+  // mismatch bug; a surge in 'ok' tracks WebRTC adoption.
+  livekitTokenMintTotal: 'driftstack_livekit_token_mint_total',
 } as const;

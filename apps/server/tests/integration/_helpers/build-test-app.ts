@@ -627,6 +627,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'Admin audit log emissions, labelled by action prefix.',
     ['prefix'],
   );
+  // Arc 7 obs.12 — LiveKit token mint outcome counter.
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.livekitTokenMintTotal,
+    'LiveKit token mint outcomes, labelled by role (publisher | subscriber | unknown) + outcome (ok / not_found / validation).',
+    ['role', 'outcome'],
+  );
 
   // V-216 — customer-facing audit; constructed early so all
   // emit-on-event services (webhooks, sessions, api-keys, profiles)

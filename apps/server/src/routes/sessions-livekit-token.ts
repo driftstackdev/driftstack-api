@@ -25,6 +25,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { mintLivekitToken } from '../lib/livekit-token.js';
 import { NotFoundError, ValidationError } from '../lib/errors.js';
+import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 
 export interface RegisterLivekitTokenRouteDeps {
   /** `config.livekit.apiKey` */
@@ -49,6 +50,10 @@ export interface RegisterLivekitTokenRouteDeps {
    * floor: 60s; reasonable ceiling: 1h.
    */
   ttlSeconds?: number;
+  /** Arc 7 obs.12 — optional metrics registry. When wired, the route
+   *  increments `driftstack_livekit_token_mint_total{role,outcome}`
+   *  per request (outcome: ok / not_found / validation). */
+  metrics?: MetricsRegistry;
 }
 
 const BodySchema = z.object({
@@ -69,6 +74,15 @@ export function registerLivekitTokenRoute(
   app: FastifyInstance,
   deps: RegisterLivekitTokenRouteDeps,
 ): void {
+  const metrics = deps.metrics;
+  const bump = (role: string, outcome: string): void => {
+    try {
+      metrics?.inc(METRIC_NAMES.livekitTokenMintTotal, { role, outcome });
+    } catch {
+      // Swallow; metrics are best-effort.
+    }
+  };
+
   app.post<{ Params: { id: string }; Body: { role: 'publisher' | 'subscriber' } }>(
     '/v1/sessions/:id/livekit-token',
     {
@@ -79,10 +93,15 @@ export function registerLivekitTokenRoute(
       const sessionId = req.params.id;
       // Cheap shape-check rejects obvious junk before the db hit.
       if (!SESSION_ID_RE.test(sessionId)) {
+        // Role unknown at this point — body not yet parsed.
+        bump('unknown', 'not_found');
         throw new NotFoundError(`Session "${sessionId}" not found.`);
       }
       const parsed = BodySchema.safeParse(req.body);
-      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      if (!parsed.success) {
+        bump('unknown', 'validation');
+        throw new ValidationError(parsed.error.flatten());
+      }
 
       // Strip the `ses_` prefix before the ownership check — the
       // sessions repo's findSession() expects a bare uuid. The minted
@@ -91,7 +110,10 @@ export function registerLivekitTokenRoute(
       // of the API uses.
       const uuid = sessionId.slice('ses_'.length);
       const owned = await deps.isSessionOwned(ctx.account.id, uuid);
-      if (!owned) throw new NotFoundError(`Session "${sessionId}" not found.`);
+      if (!owned) {
+        bump(parsed.data.role, 'not_found');
+        throw new NotFoundError(`Session "${sessionId}" not found.`);
+      }
 
       const token = mintLivekitToken({
         apiKey: deps.apiKey,
@@ -106,6 +128,7 @@ export function registerLivekitTokenRoute(
         },
       });
 
+      bump(parsed.data.role, 'ok');
       return reply.code(200).send({
         token,
         ws_url: deps.wsUrl,
