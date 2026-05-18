@@ -34,6 +34,16 @@ export interface RunTurnArgs {
    * forwards as the `x-api-key` header on the Anthropic API call.
    */
   byokApiKey?: string;
+  /**
+   * Arc 1 sub-slice 6.4 (v2-#6) — which leg of the route's
+   * resolution chain produced `byokApiKey`. The usage recorder
+   * writes a distinct record_type for 'bundled' so the soft-cap
+   * sweep (sub-slice 6.5) can sum bundled-only spend without
+   * double-counting BYOK turns. Defaults to 'none' so existing
+   * callers (which don't pass keySource) keep recording under the
+   * generic 'agent_decomposer' record_type.
+   */
+  keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none';
 }
 
 export type RunTurnResult =
@@ -79,6 +89,14 @@ export interface AgentDecomposerUsageRecorder {
     usage: DecomposeUsage;
     tokensConsumed: number;
     now: Date;
+    /**
+     * Arc 1 sub-slice 6.4 (v2-#6) — drives the record_type column
+     * on the usage_records insert: 'bundled' → 'agent_decomposer_bundled',
+     * else → 'agent_decomposer'. Bundled rows post a flat $0.10/turn
+     * cost (Q5=A hide actual upstream); non-bundled rows keep the
+     * v2-#4 metadata.cost_usd_cents Anthropic-derived value.
+     */
+    keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none';
   }): Promise<void>;
 }
 
@@ -178,6 +196,9 @@ export class AgentRuntime {
           usage: decomposed.usage,
           tokensConsumed: decomposed.tokensConsumed,
           now: args.now ?? new Date(),
+          // Arc 1 sub-slice 6.4 (v2-#6) — forward the route-resolved
+          // key source so the recorder writes the right record_type.
+          ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
         });
       } catch {
         // Swallow; see comment above.

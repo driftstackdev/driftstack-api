@@ -285,6 +285,19 @@ export function registerAgentSessionsRoutes(
         cachedByokKey ??
         bundledLlmKey ??
         (allowFallbackForUnconfiguredCustomers === true ? deploymentFallbackKey : undefined);
+      // Arc 1 sub-slice 6.4 (v2-#6) — derive the resolution leg so
+      // AgentRuntime can write the right record_type. Order mirrors
+      // the chain above; 'none' for the prod-default 502 path.
+      const keySource: 'header' | 'cached' | 'bundled' | 'fallback' | 'none' =
+        headerByokKey !== undefined
+          ? 'header'
+          : cachedByokKey !== undefined
+            ? 'cached'
+            : bundledLlmKey !== undefined
+              ? 'bundled'
+              : resolvedByokKey !== undefined
+                ? 'fallback'
+                : 'none';
       // Q.1 — the ByokAnthropicRequired 502 only fires when the
       // deployment is wired for Claude. Deterministic ignores keys
       // entirely (the decomposer never reads byokAnthropicApiKey)
@@ -301,6 +314,7 @@ export function registerAgentSessionsRoutes(
         agentSessionId: req.params.id,
         userMessage: parsed.data.user_message,
         ...(resolvedByokKey !== undefined ? { byokApiKey: resolvedByokKey } : {}),
+        keySource,
       });
       if (result.kind === 'session-closed') {
         throw new ConflictError(

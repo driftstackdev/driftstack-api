@@ -111,6 +111,12 @@ export const usageRecordType = pgEnum('usage_record_type', [
   // output tokens + cost cents + decomposer_kind) lives in the
   // metadata JSONB column added in migration 0046.
   'agent_decomposer',
+  // Arc 1 sub-slice 6.4 (v2-#6) — distinct record type for bundled-LLM
+  // turns. Per Q5=A, posted cost is a flat $0.10/turn (10 cents) — the
+  // actual upstream Anthropic cost is hidden. Sub-slice 6.5 enforces
+  // the soft-cap by summing cost_usd_cents over rows of THIS type for
+  // the current calendar month against `accounts.bundled_llm_monthly_cap_usd_cents`.
+  'agent_decomposer_bundled',
 ]);
 
 export const webhookEventType = pgEnum('webhook_event_type', [

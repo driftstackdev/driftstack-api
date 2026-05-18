@@ -15,7 +15,11 @@ import { usageRecords } from './schema.js';
 // The customer-facing UsageRecordType union excludes this value;
 // filter at the repo so customer aggregations + tier-quota math
 // don't accidentally surface internal cost data on the dashboard.
-const INTERNAL_RECORD_TYPES = ['agent_decomposer'] as const;
+// Arc 1 sub-slice 6.4 (v2-#6) — `agent_decomposer_bundled` joins the
+// same filter set. The bundled-LLM status endpoint (sub-slice 6.7) is
+// the customer-visible surface for these rows; the generic /v1/usage
+// summary keeps the same shape it has today.
+const INTERNAL_RECORD_TYPES = ['agent_decomposer', 'agent_decomposer_bundled'] as const;
 
 export class DrizzleUsageRepo implements UsageRepo {
   constructor(private readonly database: Database) {}

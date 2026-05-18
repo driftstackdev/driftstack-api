@@ -37,6 +37,14 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
   ) {}
 
   async record(args: Parameters<AgentDecomposerUsageRecorder['record']>[0]): Promise<void> {
+    // Arc 1 sub-slice 6.4 (v2-#6) — bundled-LLM turns post a flat
+    // $0.10/turn (Q5=A hide actual upstream Anthropic cost) under a
+    // distinct record_type so the soft-cap sweep (sub-slice 6.5) can
+    // sum only bundled rows.
+    const isBundled = args.keySource === 'bundled';
+    const recordType = isBundled ? 'agent_decomposer_bundled' : 'agent_decomposer';
+    const POSTED_BUNDLED_COST_CENTS = 10;
+
     const metadata: Record<string, unknown> = {
       decomposer_kind: args.usage.decomposerKind,
       decompose_result_kind: args.decomposeResultKind,
@@ -49,9 +57,16 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
     if (args.usage.anthropicOutputTokens !== undefined) {
       metadata.anthropic_output_tokens = args.usage.anthropicOutputTokens;
     }
-    if (args.usage.costUsdCents !== undefined) {
+    if (isBundled) {
+      // Q5=A — surface the POSTED flat cost; the upstream Anthropic-
+      // derived cost in args.usage.costUsdCents is intentionally NOT
+      // written to metadata so a leaked DB snapshot can't reveal it.
+      metadata.cost_usd_cents = POSTED_BUNDLED_COST_CENTS;
+      metadata.cost_basis = 'bundled_flat_per_turn';
+    } else if (args.usage.costUsdCents !== undefined) {
       metadata.cost_usd_cents = args.usage.costUsdCents;
     }
+    if (args.keySource !== undefined) metadata.key_source = args.keySource;
     // agent-session id stashed in metadata so cost-by-agent-session
     // reports can group without an extra column; the usage_records
     // schema only carries the driftstack-session reference natively.
@@ -61,7 +76,7 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
       await this.database.db.insert(usageRecords).values({
         accountId: args.accountId,
         ...(args.driftstackSessionId !== null ? { sessionId: args.driftstackSessionId } : {}),
-        recordType: 'agent_decomposer',
+        recordType,
         quantity: 1,
         metadata,
         recordedAt: args.now,

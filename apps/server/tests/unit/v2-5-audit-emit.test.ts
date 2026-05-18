@@ -121,6 +121,66 @@ describe('v2-#5 Q.1.f DrizzleAgentDecomposerUsageRecorder audit emit', () => {
     expect(auditInput.action).toBe('agent.decompose.deterministic');
   });
 
+  // Arc 1 sub-slice 6.4 (v2-#6) — keySource='bundled' routes the
+  // insert to record_type='agent_decomposer_bundled' AND writes the
+  // posted $0.10 (10 cent) flat cost, hiding the actual upstream
+  // Anthropic costUsdCents per Q5=A.
+  it("v2-#6 sub-slice 6.4 keySource='bundled' → record_type='agent_decomposer_bundled' + posted 10 cents", async () => {
+    const { db, inserts } = makeFakeDb();
+    const rec = new DrizzleAgentDecomposerUsageRecorder(db, makeFakeLogger(), null);
+    await rec.record({
+      accountId: 'acc_bundled',
+      driftstackSessionId: null,
+      agentSessionId: 'aas_b1',
+      decomposeResultKind: 'plan',
+      usage: {
+        decomposerKind: 'claude',
+        anthropicInputTokens: 1000,
+        anthropicOutputTokens: 500,
+        // Actual upstream cost — must NOT appear in the metadata when
+        // keySource='bundled' (Q5=A hide).
+        costUsdCents: 45,
+        model: 'claude-opus-4-7',
+      },
+      tokensConsumed: 1500,
+      now: new Date('2026-05-18T10:00:00Z'),
+      keySource: 'bundled',
+    });
+    expect(inserts).toHaveLength(1);
+    const row = inserts[0]!;
+    expect(row.recordType).toBe('agent_decomposer_bundled');
+    expect((row.metadata as Record<string, unknown>).cost_usd_cents).toBe(10);
+    expect((row.metadata as Record<string, unknown>).cost_basis).toBe('bundled_flat_per_turn');
+    expect((row.metadata as Record<string, unknown>).key_source).toBe('bundled');
+  });
+
+  it("v2-#6 sub-slice 6.4 keySource='header' → record_type='agent_decomposer' + real upstream cost preserved", async () => {
+    const { db, inserts } = makeFakeDb();
+    const rec = new DrizzleAgentDecomposerUsageRecorder(db, makeFakeLogger(), null);
+    await rec.record({
+      accountId: 'acc_byok',
+      driftstackSessionId: null,
+      agentSessionId: 'aas_h1',
+      decomposeResultKind: 'plan',
+      usage: {
+        decomposerKind: 'claude',
+        anthropicInputTokens: 1000,
+        anthropicOutputTokens: 500,
+        costUsdCents: 45,
+        model: 'claude-opus-4-7',
+      },
+      tokensConsumed: 1500,
+      now: new Date('2026-05-18T10:00:00Z'),
+      keySource: 'header',
+    });
+    expect(inserts).toHaveLength(1);
+    const row = inserts[0]!;
+    expect(row.recordType).toBe('agent_decomposer');
+    expect((row.metadata as Record<string, unknown>).cost_usd_cents).toBe(45);
+    expect((row.metadata as Record<string, unknown>).cost_basis).toBeUndefined();
+    expect((row.metadata as Record<string, unknown>).key_source).toBe('header');
+  });
+
   it('audit emit failure → swallowed; usage insert still landed', async () => {
     const { db, inserts } = makeFakeDb();
     const recordFn = vi.fn(() => Promise.reject(new Error('audit table down')));
