@@ -238,6 +238,7 @@ describe('SessionSchema', () => {
       label: null,
       metadata: null,
       egress_capabilities: null,
+      egress_capability_report: null,
       created_at: now,
       updated_at: now,
       last_state_at: null,
