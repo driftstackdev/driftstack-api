@@ -100,14 +100,34 @@ language):
 
 - `rate(driftstack_auth_total{outcome="invalid"}[5m]) > 0.1`
   — sustained invalid-key rate suggests credential stuffing.
+- `rate(driftstack_auth_total{outcome="revoked"}[15m]) > 0`
+  — a revoked key is being retried; investigate the calling client
+  (it should rotate its credentials).
 - `rate(driftstack_stripe_webhook_total{outcome="signature_invalid"}[15m]) > 0`
   — any failed-signature webhook is a spoofing attempt; investigate.
+- `rate(driftstack_nowpayments_webhook_total{outcome="signature_invalid"}[15m]) > 0`
+  — same posture as Stripe; crypto-payment spoofing attempt.
 - `rate(driftstack_bundled_llm_error_total{kind="budget_exhausted"}[1h]) > 1`
   — multiple customers hitting the bundled-LLM cap signals demand
   outstripping the deployment-fallback budget.
 - `rate(driftstack_byok_anthropic_test_total{outcome="quota_exceeded"}[1h]) > 5`
   — multiple customers' Anthropic accounts are throttling; an
   upstream Anthropic-side incident.
+- `rate(driftstack_oauth_token_total{outcome="invalid_client"}[15m]) > 0.5`
+  — failed `client_id`+`client_secret` exchanges at scale signal a
+  brute-force probe.
+- `rate(driftstack_rate_limit_total{outcome="exceeded"}[5m]) > 1`
+  — sustained limit hits across the account base; either ramp the
+  defaults or audit which buckets saturate.
+- `rate(driftstack_email_send_total{outcome="pending-approval"}[1h]) > 0`
+  — Postmark approval is STILL blocking transactional sends; chase
+  with their compliance team.
+- `rate(driftstack_email_send_total{outcome="transport"}[15m]) > 0.1`
+  — sustained Postmark connectivity failures; check the status page
+  - the egress network from the API host.
+- `sum by (prefix) (rate(driftstack_admin_audit_emit_total[1h])) > 10`
+  — unusually high admin-action volume in any one prefix bucket;
+  audit whether the activity is expected.
 
 Set thresholds per your traffic baseline; the rates above are
 illustrative.
