@@ -34,6 +34,8 @@ function read(p: string): string {
 }
 
 // V-356 — the canonical 6-value roster + 5-value subscribable subset.
+// Arc 5 EGRESS eg.7 extends the closed roster with
+// `session.egress_capability_changed` (subscribable).
 const ALL_WEBHOOK_EVENTS = [
   'session.completed',
   'session.failed',
@@ -41,6 +43,7 @@ const ALL_WEBHOOK_EVENTS = [
   'quota.exceeded',
   'api_key.revoked',
   'test.ping',
+  'session.egress_capability_changed',
 ] as const;
 
 const SUBSCRIBABLE_EVENTS = [
@@ -49,12 +52,13 @@ const SUBSCRIBABLE_EVENTS = [
   'quota.warning_80pct',
   'quota.exceeded',
   'api_key.revoked',
+  'session.egress_capability_changed',
 ] as const;
 
 describe('W852 WebhookEventType cross-source invariant', () => {
   // ─── api-types canonical source ──────────────────────────────
 
-  it('CRITICAL packages/api-types/src/webhooks.ts WebhookEventTypeSchema = z.enum([...6 values...]). The 6-value closed-roster is the contract every consumer pivots on.', () => {
+  it('CRITICAL packages/api-types/src/webhooks.ts WebhookEventTypeSchema = z.enum([...7 values...]). The 7-value closed-roster is the contract every consumer pivots on (Arc 5 EGRESS eg.7 added session.egress_capability_changed).', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     expect(p).toMatch(/export const WebhookEventTypeSchema = z\.enum\(\[/);
     for (const ev of ALL_WEBHOOK_EVENTS) {
@@ -64,7 +68,7 @@ describe('W852 WebhookEventType cross-source invariant', () => {
     }
   });
 
-  it('CRITICAL packages/api-types/src/webhooks.ts SubscribableWebhookEventTypeSchema is the 5-value subset EXCLUDING test.ping. Per V-356, test.ping is server-only — dispatched ONLY via POST /v1/webhooks/:id/test endpoint, never via subscription.', () => {
+  it('CRITICAL packages/api-types/src/webhooks.ts SubscribableWebhookEventTypeSchema is the 6-value subset EXCLUDING test.ping. Per V-356, test.ping is server-only — dispatched ONLY via POST /v1/webhooks/:id/test endpoint, never via subscription. Arc 5 EGRESS eg.7 added session.egress_capability_changed as the 6th subscribable.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     const m = p.match(/SubscribableWebhookEventTypeSchema = z\.enum\(\[([\s\S]+?)\]\)/);
     expect(m, 'SubscribableWebhookEventTypeSchema declaration must match').not.toBeNull();
@@ -142,11 +146,11 @@ describe('W852 WebhookEventType cross-source invariant', () => {
     expect(p).toMatch(/V-356/);
   });
 
-  // ─── 6 + 5 cardinality ───────────────────────────────────────
+  // ─── 7 + 6 cardinality (was 6 + 5 pre-Arc-5-eg.7) ───────────
 
-  it('CRITICAL WebhookEventType = exactly 6 values + SubscribableWebhookEventType = exactly 5 (6 minus test.ping). The 6/5 cardinality is what dashboard form-grids + Go SDK doc comments depend on.', () => {
-    expect(ALL_WEBHOOK_EVENTS.length).toBe(6);
-    expect(SUBSCRIBABLE_EVENTS.length).toBe(5);
+  it('CRITICAL WebhookEventType = exactly 7 values + SubscribableWebhookEventType = exactly 6 (7 minus test.ping). Arc 5 EGRESS eg.7 added session.egress_capability_changed; previous 6/5 cardinality bumped to 7/6.', () => {
+    expect(ALL_WEBHOOK_EVENTS.length).toBe(7);
+    expect(SUBSCRIBABLE_EVENTS.length).toBe(6);
     expect(SUBSCRIBABLE_EVENTS.length).toBe(ALL_WEBHOOK_EVENTS.length - 1);
   });
 
