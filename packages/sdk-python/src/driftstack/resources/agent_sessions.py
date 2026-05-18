@@ -106,8 +106,13 @@ class AgentSessionsResource:
         callers don't have to construct it by hand. NEVER logged by
         the SDK; arrives over TLS to the control plane.
         """
+        # Skip the header when byok_api_key is None OR empty. Empty
+        # would send `x-byok-anthropic-api-key:` on the wire — the
+        # server normalises that to absent (slice 105 fix), but skipping
+        # client-side saves the round-trip header and matches the Go
+        # SDK's `opts.ByokAPIKey != ""` shape.
         extra_headers = (
-            {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key is not None else None
+            {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key else None
         )
         return self._http.request(
             "POST",
@@ -220,8 +225,13 @@ class AsyncAgentSessionsResource:
         *,
         byok_api_key: str | None = None,
     ) -> dict[str, Any]:
+        # Skip the header when byok_api_key is None OR empty. Empty
+        # would send `x-byok-anthropic-api-key:` on the wire — the
+        # server normalises that to absent (slice 105 fix), but skipping
+        # client-side saves the round-trip header and matches the Go
+        # SDK's `opts.ByokAPIKey != ""` shape.
         extra_headers = (
-            {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key is not None else None
+            {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key else None
         )
         return await self._http.request(
             "POST",

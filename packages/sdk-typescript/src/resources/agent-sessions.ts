@@ -178,7 +178,12 @@ export class AgentSessionsResource {
       method: 'POST',
       path: `/v1/agent-sessions/${encodeURIComponent(id)}/message`,
       body: { user_message: userMessage },
-      ...(opts?.byokApiKey !== undefined
+      // Skip the header when byokApiKey is undefined OR empty string.
+      // Empty would send `x-byok-anthropic-api-key:` on the wire — the
+      // server normalises that to absent (slice 105 fix), but skipping
+      // client-side saves the round-trip header and matches the Go SDK's
+      // `opts != nil && opts.ByokAPIKey != ""` shape.
+      ...(opts?.byokApiKey !== undefined && opts.byokApiKey.length > 0
         ? { headers: { 'x-byok-anthropic-api-key': opts.byokApiKey } }
         : {}),
     });
