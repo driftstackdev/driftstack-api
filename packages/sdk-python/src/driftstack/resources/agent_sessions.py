@@ -124,6 +124,35 @@ class AgentSessionsResource:
             json_body=coerce_body({}),
         )
 
+    def livekit_token(self, agent_session_id: str) -> dict[str, Any]:
+        """LK.3 — mint a fresh LiveKit JWT for the session's video room.
+
+        Use this when the auto-populated ``livekit`` field on
+        session-create is absent (pre-LK deployment) OR after the 24-hour
+        token TTL expires. Returns the same 5-field shape that
+        ``AgentSession.livekit`` carries:
+
+            {
+              "ws_url": "wss://mac-NNN.driftstack.dev:8443",
+              "room": "<agent_session_id>",
+              "token": "<HS256 JWT, 24h TTL>",
+              "participant_identity": "subscriber_<account_id>",
+              "expires_at": "<RFC 3339>"
+            }
+
+        Errors (raised as typed Driftstack errors):
+
+        - 403 — session is closed; cannot mint
+        - 404 — session unknown (or cross-account; existence not leaked)
+        - 503 — no Mac in the fleet has registered LiveKit yet, OR the
+          stored Mac secret can't be decrypted (operator action: re-run
+          POST /v1/mac-nodes/register)
+        """
+        return self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/livekit-token",
+        )
+
 
 class AsyncAgentSessionsResource:
     """Async AI-chat agent-sessions resource."""
@@ -189,4 +218,17 @@ class AsyncAgentSessionsResource:
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/handback",
             json_body=coerce_body({}),
+        )
+
+    async def livekit_token(self, agent_session_id: str) -> dict[str, Any]:
+        """Async mirror — same LK.3 semantics as sync.
+
+        Returns the 5-field LiveKitInfo dict (ws_url + room + token +
+        participant_identity + expires_at). See the sync
+        :meth:`AgentSessionsResource.livekit_token` for full error
+        semantics.
+        """
+        return await self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/livekit-token",
         )

@@ -184,6 +184,67 @@ def test_sync_handback_posts_empty_body() -> None:
         assert out["pair_mode_state"]["kind"] == "handback-pending"
 
 
+# LK.3 — Python SDK livekit_token() helper for re-minting after the
+# 24h TTL. Cross-SDK parity with TS / Go (same shape, same paths).
+def test_sync_livekit_token_posts_no_body() -> None:
+    reply = {
+        "ws_url": "wss://mac-011.driftstack.dev:8443",
+        "room": "agt_lk",
+        "token": "eyJhbGciOiJIUzI1NiJ9.fake",
+        "participant_identity": "subscriber_acc_1",
+        "expires_at": "2026-05-19T00:00:00Z",
+    }
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions/agt_lk/livekit-token").mock(
+            return_value=httpx.Response(200, json=reply),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.agent_sessions.livekit_token("agt_lk")
+        assert route.called
+        assert out["ws_url"] == "wss://mac-011.driftstack.dev:8443"
+        assert out["token"] == "eyJhbGciOiJIUzI1NiJ9.fake"
+        assert out["expires_at"] == "2026-05-19T00:00:00Z"
+
+
+def test_sync_livekit_token_url_encodes_session_id() -> None:
+    # The session id segment must round-trip through quote(safe=''),
+    # so a space in the id lands as %20 on the wire. Matches the
+    # test_sync_get_url_encoded pattern.
+    reply = {
+        "ws_url": "wss://mac-012.driftstack.dev:8443",
+        "room": "agt xyz",
+        "token": "eyJhbGciOiJIUzI1NiJ9.fake",
+        "participant_identity": "subscriber_acc_2",
+        "expires_at": "2026-05-19T00:00:00Z",
+    }
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions/agt%20xyz/livekit-token").mock(
+            return_value=httpx.Response(200, json=reply),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.agent_sessions.livekit_token("agt xyz")
+        assert route.called
+
+
+@pytest.mark.asyncio
+async def test_async_livekit_token_posts_no_body() -> None:
+    reply = {
+        "ws_url": "wss://mac-013.driftstack.dev:8443",
+        "room": "agt_lk_async",
+        "token": "eyJhbGciOiJIUzI1NiJ9.fake",
+        "participant_identity": "subscriber_acc_3",
+        "expires_at": "2026-05-19T00:00:00Z",
+    }
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions/agt_lk_async/livekit-token").mock(
+            return_value=httpx.Response(200, json=reply),
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = await client.agent_sessions.livekit_token("agt_lk_async")
+        assert route.called
+        assert out["ws_url"] == "wss://mac-013.driftstack.dev:8443"
+
+
 @pytest.mark.asyncio
 async def test_async_create_default_body() -> None:
     with respx.mock(base_url=BASE) as mock:
