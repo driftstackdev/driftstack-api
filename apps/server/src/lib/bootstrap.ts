@@ -63,6 +63,7 @@ import { DrizzleBYOKAnthropicRepo } from '../db/byok-anthropic-repo.js';
 import { BundledLlmService } from '../services/bundled-llm.js';
 import { DrizzleBundledLlmRepo } from '../db/bundled-llm-repo.js';
 import { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
+import { RedisPairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
 import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
 import { DrizzleAgentSessionsRepo } from '../db/agent-sessions-repo.js';
@@ -561,6 +562,16 @@ export async function createProductionDeps(
   // Arc 2 sub-slice 8.3 (v2-#8) — in-process transcript event bus.
   // Single-replica today; future redis-backed swap drops in here.
   const agentSessionEventBus = new AgentSessionEventBus();
+  // Arc 2 sub-slice 8.8 (v2-#8) — pair-mode takeover lock backed by
+  // the existing Redis client. SET NX EX semantics; per-session
+  // contention shards on the session id so per-account locking
+  // never blocks unrelated sessions. ioredis' .set overloads use
+  // positional flag arguments (`EX <ttl> NX`); narrow the seam here.
+  const pairModeLock = new RedisPairModeTakeoverLock({
+    set: (key, value, _nx, _ex, ttl) => redis.set(key, value, 'EX', ttl, 'NX'),
+    get: (key) => redis.get(key),
+    del: (key) => redis.del(key),
+  });
   const agentRuntime = new AgentRuntime({
     decomposer: agentDecomposer,
     executor: agentExecutor,
@@ -825,6 +836,7 @@ export async function createProductionDeps(
     // unconditionally; route registration is gated on agentRuntime
     // being wired (same activation pattern as the rest).
     agentSessionEventBus,
+    pairModeLock,
     // Arc 2 sub-slice 8.4 (v2-#8) — gui_control_key encryption.
     // Shares MFA_ENCRYPTION_KEY per Q2=C pattern; route gates on
     // this being present in AppDeps.

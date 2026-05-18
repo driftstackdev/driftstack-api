@@ -26,6 +26,13 @@ import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.
 import type { BundledLlmService } from '../services/bundled-llm.js';
 import type { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
 import {
+  applyPairModeTransition,
+  initialPairModeState,
+  PairModeStateInvalidTransitionError,
+  type PairModeState,
+} from '../services/agent-pair-mode-state.js';
+import type { PairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
+import {
   decryptGuiControlKey,
   encryptGuiControlKey,
   generateGuiControlKey,
@@ -158,6 +165,12 @@ export interface AgentSessionsRoutesDeps {
    * unit tests can pin a tighter window.
    */
   guiControlKeyTtlMs?: number;
+  /**
+   * Arc 2 sub-slice 8.8 (v2-#8) — Redis SET-NX-EX takeover lock.
+   * Required for the POST /:id/takeover + /:id/handback routes;
+   * omitting it skips route registration entirely.
+   */
+  pairModeLock?: PairModeTakeoverLock;
 }
 
 export function registerAgentSessionsRoutes(
@@ -177,6 +190,7 @@ export function registerAgentSessionsRoutes(
     transcriptHeartbeatMs = 30_000,
     guiControlKeyEncryptionKey,
     guiControlKeyTtlMs = 24 * 60 * 60 * 1000,
+    pairModeLock,
   } = deps;
 
   app.post(
@@ -381,6 +395,107 @@ export function registerAgentSessionsRoutes(
           expires_at: rec.guiControlKeyExpiresAt!.toISOString(),
           minted: false as const,
         };
+      },
+    );
+  }
+
+  // Arc 2 sub-slice 8.9 (v2-#8) — pair-mode takeover + handback.
+  // Both routes require the pair-mode lock AND mode='pair' on the
+  // session; otherwise they 409. Takeover composes the lock (sub-
+  // slice 8.8) + the state machine (sub-slice 8.7). The lock guards
+  // the takeover-request transition specifically; subsequent
+  // transitions are serialised by the per-row UPDATE in
+  // setPairModeState.
+  if (pairModeLock !== undefined) {
+    const TakeoverBodySchema = z.object({ client_id: z.string().min(1) });
+    app.post<{ Params: { id: string } }>(
+      '/v1/agent-sessions/:id/takeover',
+      { preHandler: [app.requireAuth, app.rateLimit('global')] },
+      async (req, reply) => {
+        const ctx = requireCtx(req);
+        const parsed = TakeoverBodySchema.safeParse(req.body);
+        if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+        const rec = await sessions.get(req.params.id);
+        if (rec === null || rec.accountId !== ctx.account.id) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+        if (rec.mode !== 'pair') {
+          throw new ConflictError(
+            `AgentSession is in mode='${rec.mode}'; takeover requires mode='pair'.`,
+          );
+        }
+        const lockResult = await pairModeLock.tryAcquire({
+          sessionId: req.params.id,
+          clientId: parsed.data.client_id,
+        });
+        if (!lockResult.acquired) {
+          return reply.code(409).send({
+            type: 'https://errors.driftstack.dev/conflict',
+            title: 'Pair-mode takeover already in flight',
+            status: 409,
+            detail: `Another client (${lockResult.winnerClientId}) is currently taking over this agent session.`,
+            winner_client_id: lockResult.winnerClientId,
+          });
+        }
+        try {
+          const currentState =
+            (rec.pairModeState as PairModeState | null) ?? initialPairModeState();
+          const nextState = applyPairModeTransition(currentState, {
+            kind: 'takeover-request',
+            clientId: parsed.data.client_id,
+            at: new Date().toISOString(),
+          });
+          await sessions.setPairModeState(req.params.id, nextState);
+          return reply.code(200).send({ pair_mode_state: nextState });
+        } catch (err) {
+          if (err instanceof PairModeStateInvalidTransitionError) {
+            throw new ConflictError(err.message, {
+              from: err.from,
+              transition: err.transition,
+            });
+          }
+          throw err;
+        } finally {
+          await pairModeLock.release({
+            sessionId: req.params.id,
+            clientId: parsed.data.client_id,
+          });
+        }
+      },
+    );
+
+    app.post<{ Params: { id: string } }>(
+      '/v1/agent-sessions/:id/handback',
+      { preHandler: [app.requireAuth, app.rateLimit('global')] },
+      async (req, reply) => {
+        const ctx = requireCtx(req);
+        const rec = await sessions.get(req.params.id);
+        if (rec === null || rec.accountId !== ctx.account.id) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+        if (rec.mode !== 'pair') {
+          throw new ConflictError(
+            `AgentSession is in mode='${rec.mode}'; handback requires mode='pair'.`,
+          );
+        }
+        try {
+          const currentState =
+            (rec.pairModeState as PairModeState | null) ?? initialPairModeState();
+          const nextState = applyPairModeTransition(currentState, {
+            kind: 'handback-request',
+            at: new Date().toISOString(),
+          });
+          await sessions.setPairModeState(req.params.id, nextState);
+          return reply.code(200).send({ pair_mode_state: nextState });
+        } catch (err) {
+          if (err instanceof PairModeStateInvalidTransitionError) {
+            throw new ConflictError(err.message, {
+              from: err.from,
+              transition: err.transition,
+            });
+          }
+          throw err;
+        }
       },
     );
   }

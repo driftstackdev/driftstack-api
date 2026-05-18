@@ -24,6 +24,7 @@ import { StubAgentExecutor } from '../../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.js';
 import { BundledLlmService, InMemoryBundledLlmRepo } from '../../../src/services/bundled-llm.js';
 import { AgentSessionEventBus } from '../../../src/services/agent-session-event-bus.js';
+import { InMemoryPairModeTakeoverLock } from '../../../src/services/agent-pair-mode-lock.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
@@ -635,6 +636,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // so AgentRuntime can publish; route registration is gated below
   // on enableAgentRuntime being on.
   const agentSessionEventBus = new AgentSessionEventBus();
+  // Arc 2 sub-slice 8.8 (v2-#8) — in-memory takeover lock for tests.
+  const pairModeLock = new InMemoryPairModeTakeoverLock();
 
   // v2-#18 — capturing usage recorder for the AgentRuntime end-to-end
   // smoke. Always declared (even when captureAgentDecomposerUsage is
@@ -1101,6 +1104,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // mint. 32 raw bytes base64-encoded. Tests assert the route works
     // round-trip; production uses the real MFA_ENCRYPTION_KEY env.
     guiControlKeyEncryptionKey: Buffer.alloc(32, 7).toString('base64'),
+    // Arc 2 sub-slice 8.8 (v2-#8) — in-memory takeover lock; always
+    // wired so the takeover/handback routes register for tests.
+    pairModeLock,
     // Stub deployment fallback key — only used when a test seeds
     // opts.enableBundledLlm with consent=true so the bundled-LLM leg
     // can actually resolve. Otherwise harmless; default-fallback

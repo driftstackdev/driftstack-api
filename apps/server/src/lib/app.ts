@@ -69,6 +69,7 @@ import type { MfaService } from '../services/mfa.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { BundledLlmService } from '../services/bundled-llm.js';
 import type { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
+import type { PairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -341,6 +342,11 @@ export interface AppDeps {
    * Omit to skip the route registration.
    */
   guiControlKeyEncryptionKey?: string;
+  /**
+   * Arc 2 sub-slice 8.8 (v2-#8) — pair-mode takeover lock. Wired
+   * conditionally so prod can flip the feature with one env-var.
+   */
+  pairModeLock?: PairModeTakeoverLock;
   /**
    * AI-B4 — write-only recipe library (orchestrator handoff #3 Q.5).
    * POST /v1/recipes snapshots a finished agent_session's
@@ -899,6 +905,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.guiControlKeyEncryptionKey !== undefined
         ? { guiControlKeyEncryptionKey: deps.guiControlKeyEncryptionKey }
         : {}),
+      // Arc 2 sub-slice 8.8/8.9 (v2-#8) — pair-mode takeover/handback
+      // routes register only when the lock is wired (prod gates on env).
+      ...(deps.pairModeLock !== undefined ? { pairModeLock: deps.pairModeLock } : {}),
     });
   } else {
     registerAgentSessionsDisabledRoutes(app);
