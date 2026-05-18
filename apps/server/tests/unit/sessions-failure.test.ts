@@ -73,6 +73,7 @@ class StubRepo implements SessionRepo {
       label: input.label,
       metadata: input.metadata,
       egressCapabilities: null,
+      egressCapabilityReport: null,
       createdAt: now,
       updatedAt: now,
       lastStateAt: null,
