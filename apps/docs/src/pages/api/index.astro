@@ -73,6 +73,10 @@ import DocLayout from '../../layouts/DocLayout.astro';
  (shipped; auth path integration is.
     </li>
     <li>
+      <a href="/api/status/">Status page API</a> — public snapshot, incident feed (REST + SSE),
+      30-day SLA report, and double-opt-in email subscription. Unauthenticated; CDN-coalesced.
+    </li>
+    <li>
       <a href="/api/oauth/">OAuth 2.0 (third-party clients)</a> — Authorization-code + PKCE
       flow so third-party apps can act on a customer's behalf without holding the
       customer's API key. Register, authorize, exchange, introspect, revoke.
