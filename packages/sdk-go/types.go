@@ -245,19 +245,26 @@ type TeamInviteResponse struct {
 // ──────────────────────────────────────────────────────────────────
 
 type Session struct {
-	ID                 string               `json:"id"`
-	AccountID          string               `json:"account_id"`
-	APIKeyID           string               `json:"api_key_id"`
-	Status             SessionStatus        `json:"status"`
-	Archetype          string               `json:"archetype"`
-	Purpose            SessionPurpose       `json:"purpose"`
-	Label              *string              `json:"label"`
-	Metadata           map[string]any       `json:"metadata"`
-	EgressCapabilities *EgressCapabilities  `json:"egress_capabilities"`
-	CreatedAt          time.Time            `json:"created_at"`
-	UpdatedAt          time.Time            `json:"updated_at"`
-	LastStateAt        *time.Time           `json:"last_state_at"`
-	DestroyedAt        *time.Time           `json:"destroyed_at"`
+	ID                 string              `json:"id"`
+	AccountID          string              `json:"account_id"`
+	APIKeyID           string              `json:"api_key_id"`
+	Status             SessionStatus       `json:"status"`
+	Archetype          string              `json:"archetype"`
+	Purpose            SessionPurpose      `json:"purpose"`
+	Label              *string             `json:"label"`
+	Metadata           map[string]any      `json:"metadata"`
+	EgressCapabilities *EgressCapabilities `json:"egress_capabilities"`
+	// Arc 5 EGRESS eg.1.g — RAW harness-emitted event payload
+	// (migration 0054). Stored alongside the derived
+	// EgressCapabilities view for forensics + schema-evolution
+	// safety. Opaque map; consumers should prefer
+	// EgressCapabilities for typed access. Null until the
+	// harness emits.
+	EgressCapabilityReport map[string]any `json:"egress_capability_report"`
+	CreatedAt              time.Time      `json:"created_at"`
+	UpdatedAt              time.Time      `json:"updated_at"`
+	LastStateAt            *time.Time     `json:"last_state_at"`
+	DestroyedAt            *time.Time     `json:"destroyed_at"`
 }
 
 // EgressCapabilities is the harness-reported per-session SOCKS5
