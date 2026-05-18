@@ -42,7 +42,7 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     expect(l).toMatch(/withSidebar = true,/);
   });
 
-  it('CRITICAL 11-item navItems roster pinned. Drift to dropping/renaming would change the dashboard primary navigation across every page. The 11 items match the dashboard surface: Overview/Profiles/Snapshots/Sessions/API keys/Usage/Billing/Webhooks/Audit log/Team/Settings.', () => {
+  it('CRITICAL 12-item navItems roster pinned. Drift to dropping/renaming would change the dashboard primary navigation across every page. The 12 items match the dashboard surface: Overview/Profiles/Snapshots/Sessions/Agent sessions/API keys/Usage/Billing/Webhooks/Audit log/Team/Settings. Arc 4 Wave 2.C sub-slice 8.24.b added Agent sessions between Sessions and API keys.', () => {
     const l = read(LAYOUT);
 
     const expected: Array<[string, string]> = [
@@ -50,6 +50,7 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
       ['/profiles', 'Profiles'],
       ['/snapshots', 'Snapshots'],
       ['/sessions', 'Sessions'],
+      ['/agent-sessions', 'Agent sessions'],
       ['/api-keys', 'API keys'],
       ['/usage', 'Usage'],
       ['/billing', 'Billing'],
