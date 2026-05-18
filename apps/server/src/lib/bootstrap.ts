@@ -302,6 +302,12 @@ export async function createProductionDeps(
       'Customer-facing audit log emissions, labelled by action prefix + actor type.',
       ['prefix', 'actor_type'],
     );
+    // Arc 7 obs.11 — admin audit log emission counter.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.adminAuditEmitTotal,
+      'Admin audit log emissions, labelled by action prefix.',
+      ['prefix'],
+    );
   }
 
   // Driver — mock or real WebKit per config. The Playwright dev
@@ -375,7 +381,7 @@ export async function createProductionDeps(
   const usageService = new UsageService(usageRepo);
 
   // Admin services.
-  const adminAuditService = new AdminAuditService(adminAuditRepo);
+  const adminAuditService = new AdminAuditService(adminAuditRepo, metricsRegistry);
   const accountsAdminService = new AccountsAdminService(accountsAdminRepo, authCache);
   const rateLimitOverridesService = new RateLimitOverridesService(
     rateLimitOverridesRepo,

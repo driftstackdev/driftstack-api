@@ -10,6 +10,9 @@
 // it forces deliberate vocabulary choices and gives action-filtered
 // queries a free index hit.
 
+import { METRIC_NAMES, type MetricsRegistry } from './metrics-registry.js';
+import { auditActionPrefix } from './account-audit.js';
+
 export type AdminAuditAction =
   | 'account.tier_changed'
   | 'account.suspended'
@@ -82,15 +85,31 @@ export interface AdminAuditLogRepo {
 }
 
 export class AdminAuditService {
-  constructor(private readonly repo: AdminAuditLogRepo) {}
+  constructor(
+    private readonly repo: AdminAuditLogRepo,
+    private readonly metrics?: MetricsRegistry,
+  ) {}
 
   /**
    * Record one admin action. Must be called by the route handler before
    * returning the response. A throw here propagates up — failure to
    * audit fails the request (D-025).
    */
-  record(input: NewAdminAuditLogInput): Promise<AdminAuditLogRow> {
-    return this.repo.insert(input);
+  async record(input: NewAdminAuditLogInput): Promise<AdminAuditLogRow> {
+    const row = await this.repo.insert(input);
+    // Arc 7 obs.11 — admin-audit emission counter, labelled by the
+    // top-level admin-action prefix (account / webhook_delivery /
+    // rate_limit_override / session / api_key / audit_note / refund /
+    // incident / status_subscriber). Bounded cardinality. Best-effort;
+    // a metric failure must not break the admin-action persistence.
+    try {
+      this.metrics?.inc(METRIC_NAMES.adminAuditEmitTotal, {
+        prefix: auditActionPrefix(input.action),
+      });
+    } catch {
+      // Swallow.
+    }
+    return row;
   }
 
   list(filters: ListAuditFilters): Promise<ListAuditPage> {

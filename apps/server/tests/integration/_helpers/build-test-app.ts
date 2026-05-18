@@ -621,6 +621,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'Customer-facing audit log emissions, labelled by action prefix + actor type.',
     ['prefix', 'actor_type'],
   );
+  // Arc 7 obs.11 — admin audit log emission counter.
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.adminAuditEmitTotal,
+    'Admin audit log emissions, labelled by action prefix.',
+    ['prefix'],
+  );
 
   // V-216 — customer-facing audit; constructed early so all
   // emit-on-event services (webhooks, sessions, api-keys, profiles)
@@ -679,7 +685,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const webhooksAdminService = new WebhooksAdminService(webhooksRepo);
 
   const adminAuditRepo = new InMemoryAdminAuditLogRepo();
-  const adminAuditService = new AdminAuditService(adminAuditRepo);
+  const adminAuditService = new AdminAuditService(adminAuditRepo, metricsRegistry);
 
   const accountsAdminRepo = new InMemoryAccountsAdminRepo(authRepo);
   const accountsAdminService = new AccountsAdminService(accountsAdminRepo, authCache);

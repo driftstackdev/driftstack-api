@@ -209,4 +209,11 @@ export const METRIC_NAMES = {
   // surges in `api_key` actor=customer can fingerprint compromised
   // accounts; surges in `staff` actor signal admin activity.
   accountAuditEmitTotal: 'driftstack_account_audit_emit_total',
+  // Arc 7 obs.11 — admin-audit-log emission counter. Labelled by the
+  // AdminAuditAction's top-level prefix only (actor is always
+  // 'staff' for the admin surface). Surfaces operator activity by
+  // category — incident management vs account suspension vs
+  // refund recording — so the dashboard can chart admin-action
+  // distribution over time.
+  adminAuditEmitTotal: 'driftstack_admin_audit_emit_total',
 } as const;
