@@ -84,20 +84,25 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <li class="flex gap-4">
           <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
           <div>
-            <p class="font-medium text-ink-primary">BYOK Anthropic keys + gui_control_keys: AES-256-GCM at rest</p>
+            <p class="font-medium text-ink-primary">BYOK Anthropic keys + gui_control_keys + Mac LiveKit secrets: AES-256-GCM at rest</p>
             <p class="mt-1 text-sm text-ink-secondary">
-              Customer-supplied Anthropic API keys (when used as the BYOK
-              LLM rail for agent sessions) and per-session
-              gui_control_keys (HMAC keys for the gui_control plane)
+              Three classes of plaintext-equivalent secret material
               live in AES-256-GCM ciphertext under the same
-              host-resident encryption key as MFA TOTP secrets.
-              Decrypted in-memory only at execution time; never logged;
-              never echoed in responses. Pino-redact + Sentry-scrub
-              guard against accidental leak across both log + error
-              paths.
+              host-resident encryption key as MFA TOTP secrets:
+              (1) customer-supplied Anthropic API keys when used as
+              the BYOK LLM rail for agent sessions; (2) per-session
+              gui_control_keys (HMAC keys for the gui_control plane);
+              and (3) per-Mac LiveKit API secrets registered via
+              POST /v1/mac-nodes/register (LK.2 — used by the
+              control plane to mint the per-session JWTs that the
+              gui-client uses to subscribe to live video). All three
+              are decrypted in-memory only at execution time, never
+              logged, never echoed in responses. Pino-redact + Sentry-
+              scrub guard against accidental leak across both log
+              + error paths.
             </p>
             <p class="mt-1 text-xs font-mono text-ink-muted">
-              apps/server/src/services/byok-anthropic.ts · apps/server/src/lib/byok-anthropic-encryption.ts
+              apps/server/src/services/byok-anthropic.ts · apps/server/src/lib/byok-anthropic-encryption.ts · apps/server/src/lib/livekit-secret-encryption.ts
             </p>
           </div>
         </li>
