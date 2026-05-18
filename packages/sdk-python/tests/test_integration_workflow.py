@@ -39,6 +39,7 @@ def _session_fixture(session_id: str = "ses_00000000-0000-4000-8000-000000000001
         "label": "ci",
         "metadata": None,
         "egress_capabilities": None,
+        "egress_capability_report": None,
         "created_at": "2026-05-02T10:00:00Z",
         "updated_at": "2026-05-02T10:00:00Z",
         "last_state_at": None,
