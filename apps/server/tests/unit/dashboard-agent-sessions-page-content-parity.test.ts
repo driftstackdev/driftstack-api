@@ -147,10 +147,21 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
   });
 
   // v2-#8 Wave 2.C sub-slice 8.28 — BundledLlmStatusPanel reader.
-  it('renders bundled-llm-status fields (consent / cap / used) from GET /v1/account/me/bundled-llm-status', () => {
-    expect(body).toMatch(/monthly_cap_usd_cents/);
+  // CRITICAL: GET /v1/account/me/bundled-llm-status returns `cap_cents`,
+  // NOT `monthly_cap_usd_cents`. The settings endpoint uses
+  // `monthly_cap_usd_cents`; the status endpoint uses `cap_cents`. The
+  // previous skip pinned the WRONG field name and the dashboard JS
+  // also read the wrong field, so the cap rendered as "$0.00" for
+  // every customer. Fixed in the same slice that refreshed this
+  // assertion.
+  it('renders bundled-llm-status fields (consent / cap / used) from GET /v1/account/me/bundled-llm-status using cap_cents (not monthly_cap_usd_cents — that field name belongs to the SETTINGS endpoint)', () => {
+    expect(body).toMatch(/cap_cents/);
     expect(body).toMatch(/used_this_month_cents/);
     expect(body).toMatch(/'opted in' : 'not enabled'/);
+    // Drift-guard: the JS must NOT read `status.monthly_cap_usd_cents`
+    // from the bundled-llm-status response — that field doesn't exist
+    // there and would silently render "$0.00".
+    expect(body).not.toMatch(/status\.monthly_cap_usd_cents/);
   });
 
   // v2-#8 Wave 2.C sub-slice 8.28.b — MessageComposer.

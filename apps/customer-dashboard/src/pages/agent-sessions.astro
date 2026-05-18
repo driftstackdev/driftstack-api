@@ -591,7 +591,11 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           if (!status) return;
           if (consentEl) consentEl.textContent = status.consent ? 'opted in' : 'not enabled';
           if (capEl) {
-            const cents = status.monthly_cap_usd_cents ?? 0;
+            // GET /v1/account/me/bundled-llm-status returns `cap_cents`,
+            // NOT `monthly_cap_usd_cents` (that field name is on the
+            // settings endpoint). Reading the wrong field made the cap
+            // render as "$0.00" for every customer on this panel.
+            const cents = status.cap_cents ?? 0;
             capEl.textContent = '$' + (cents / 100).toFixed(2);
           }
           if (usedEl) {
