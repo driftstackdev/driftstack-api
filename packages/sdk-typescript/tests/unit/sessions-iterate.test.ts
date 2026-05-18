@@ -14,6 +14,7 @@ function fakeSession(id: string): Session {
     label: null,
     metadata: null,
     egress_capabilities: null,
+    egress_capability_report: null,
     created_at: '2026-05-04T00:00:00Z',
     updated_at: '2026-05-04T00:00:00Z',
     last_state_at: null,
