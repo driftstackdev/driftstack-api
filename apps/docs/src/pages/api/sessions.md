@@ -141,16 +141,28 @@ the session itself stays `ready` for a retry.
 
 `POST /v1/sessions/:id/interact`
 
+The body wraps the typed action under `action` plus an optional
+top-level `timeout_ms`:
+
 ```json
 {
-  "type": "tap",
-  "selector": "button#submit"
+  "action": {
+    "kind": "tap",
+    "selector": "button#submit"
+  },
+  "timeout_ms": 5000
 }
 ```
 
-Supported types: `tap`, `type`, `scroll`, `press`. Each carries
-type-specific fields (`text` for `type`; `direction` + `pixels`
-for `scroll`; `key` for `press`).
+Supported discriminator values on `action.kind`:
+
+- `tap` — `selector` (required).
+- `type` — `selector` + `text` (max 10,000 chars) + optional
+  `delay_ms` (0-500ms between keystrokes; mock driver honours
+  bounds, real driver clamps).
+- `scroll` — optional `selector` + `delta_x` (default 0) + `delta_y`
+  (default 0). Both integers; positive scrolls down/right.
+- `press` — `key` (1-20 chars; e.g. `Enter`, `Tab`, `a`).
 
 ## Wait
 

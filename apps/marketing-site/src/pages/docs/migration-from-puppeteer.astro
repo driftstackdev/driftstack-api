@@ -194,8 +194,12 @@ const session = await client.sessions.create({
   label: 'qa-login',
 });
 await client.sessions.navigate(session.id, { url: 'https://app.example.com/login' });
-await client.sessions.interact(session.id, { action: 'type', selector: '#email', value: 'user@x.com' });
-await client.sessions.interact(session.id, { action: 'click', selector: 'button[type=submit]' });
+await client.sessions.interact(session.id, {
+  action: { kind: 'type', selector: '#email', text: 'user@x.com' },
+});
+await client.sessions.interact(session.id, {
+  action: { kind: 'tap', selector: 'button[type=submit]' },
+});
 await client.sessions.wait(session.id, { kind: 'selector', selector: '#dashboard', timeout_ms: 10000 });
 const state = await client.sessions.getState(session.id);
 await client.sessions.destroy(session.id);`}</code></pre>

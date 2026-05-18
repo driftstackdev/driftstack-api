@@ -128,13 +128,13 @@ console.log(title);`}</code></pre>
 const s = await client.sessions.create({ archetype: 'iphone16pro_ios18_7_safari26_4' });
 await client.sessions.navigate(s.id, { url: 'https://example.com/login' });
 await client.sessions.interact(s.id, {
-  action: 'type', selector: '#email', value: 'bot@you.dev',
+  action: { kind: 'type', selector: '#email', text: 'bot@you.dev' },
 });
 // …
 await client.sessions.destroy(s.id);
 
 // Capture the post-login state into the profile for replay later.
-await client.profiles.captureSnapshot(profile.id, {
+await client.profileSnapshots.capture(profile.id, {
   label: 'logged-in-baseline',
 });`}</code></pre>
 

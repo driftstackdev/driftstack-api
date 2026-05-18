@@ -118,10 +118,20 @@ describe('W761 docs /api/sessions content parity', () => {
     );
   });
 
-  it('CRITICAL 4-interact-type enum pinned — tap/type/scroll/press. Drift to dropping a type would silently break SDK interact() consumers.', () => {
+  it('CRITICAL 4-interact-kind enum pinned — tap/type/scroll/press, with the correct discriminator name (kind) and request-body wrapper (action). The previous pin used "Supported types" + a flat top-level shape, but the schema in packages/api-types/src/sessions.ts:140 is a discriminatedUnion on `kind` wrapped inside `action`. The route accepts { action: { kind, ... }, timeout_ms? } per InteractRequestSchema at sessions.ts:166. Drift would force customers to copy the wrong shape and 4xx at the schema layer.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Supported types: `tap`, `type`, `scroll`, `press`/);
+    expect(p).toMatch(/Supported discriminator values on `action\.kind`/);
+    // All 4 kinds named.
+    expect(p).toMatch(/- `tap`/);
+    expect(p).toMatch(/- `type`/);
+    expect(p).toMatch(/- `scroll`/);
+    expect(p).toMatch(/- `press`/);
+    // The action wrapper is the load-bearing shape detail.
+    expect(p).toMatch(/"action":\s*\{/);
+    expect(p).toMatch(/"kind":\s*"tap"/);
+    // The previous (wrong) flat shape must NOT return.
+    expect(p).not.toMatch(/^Supported types: `tap`/m);
   });
 
   it("CRITICAL 3-wait-kind enum pinned — selector/navigation/duration. The 'duration form counts toward your minute-meter' clause is the load-bearing billing-meter framing.", () => {
