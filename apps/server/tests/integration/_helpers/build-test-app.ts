@@ -711,6 +711,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'Rate-limit consume counter, labelled by bucket + outcome (allowed | exceeded).',
     ['bucket', 'outcome'],
   );
+  // Arc 7 obs.6 — auth resolution outcome counter.
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.authTotal,
+    'Auth resolution outcomes (ok / unauthorized / invalid / revoked / expired / forbidden / error).',
+    ['outcome'],
+  );
 
   // v2-#18 — capturing usage recorder for the AgentRuntime end-to-end
   // smoke. Always declared (even when captureAgentDecomposerUsage is

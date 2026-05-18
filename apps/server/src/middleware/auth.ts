@@ -9,7 +9,15 @@ import { authenticate, extractBearerToken, requireScope } from '../services/auth
 import type { AuthCache } from '../services/auth-cache.js';
 import type { AuthCoalescer } from '../services/auth-coalescer.js';
 import type { MfaService } from '../services/mfa.js';
-import { MfaStepUpRequiredError } from '../lib/errors.js';
+import {
+  ExpiredKeyError,
+  ForbiddenError,
+  InvalidKeyError,
+  MfaStepUpRequiredError,
+  RevokedKeyError,
+  UnauthorizedError,
+} from '../lib/errors.js';
+import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 import type { ApiKeyScope } from '@driftstack/api-types';
 
 declare module 'fastify' {
@@ -44,6 +52,21 @@ export interface AuthPluginOptions {
    *  state. When omitted the gate becomes a no-op (MFA off in this
    *  deploy / test fixture without it). */
   mfaService?: MfaService | null;
+  /** Arc 7 obs.6 — optional metrics registry. When wired, the plugin
+   *  increments `driftstack_auth_total{outcome}` per requireAuth call.
+   *  Outcome is one of: ok | unauthorized | invalid | revoked |
+   *  expired | forbidden | error. Bounded label cardinality. */
+  metrics?: MetricsRegistry;
+}
+
+/** Map a thrown auth error to a bounded outcome label. */
+function classifyAuthError(err: unknown): string {
+  if (err instanceof UnauthorizedError) return 'unauthorized';
+  if (err instanceof InvalidKeyError) return 'invalid';
+  if (err instanceof RevokedKeyError) return 'revoked';
+  if (err instanceof ExpiredKeyError) return 'expired';
+  if (err instanceof ForbiddenError) return 'forbidden';
+  return 'error';
 }
 
 /** V-353e — default step-up freshness window per V-353a Q4 verdict. */
@@ -57,15 +80,29 @@ function authPlugin(
   app.decorateRequest('account', null);
 
   const requireAuth = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-    const token = extractBearerToken(request.headers.authorization);
-    const ctx = await authenticate(
-      opts.authRepo,
-      token,
-      opts.authCache,
-      new Date(),
-      opts.authCoalescer,
-    );
-    request.account = ctx;
+    try {
+      const token = extractBearerToken(request.headers.authorization);
+      const ctx = await authenticate(
+        opts.authRepo,
+        token,
+        opts.authCache,
+        new Date(),
+        opts.authCoalescer,
+      );
+      request.account = ctx;
+      try {
+        opts.metrics?.inc(METRIC_NAMES.authTotal, { outcome: 'ok' });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
+    } catch (err) {
+      try {
+        opts.metrics?.inc(METRIC_NAMES.authTotal, { outcome: classifyAuthError(err) });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
+      throw err;
+    }
   };
 
   app.decorate('requireAuth', requireAuth);

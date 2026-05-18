@@ -174,4 +174,10 @@ export const METRIC_NAMES = {
   // capacity-planning signal (which buckets saturate first under load)
   // and a security signal (which clients are hitting limits hard).
   rateLimitTotal: 'driftstack_rate_limit_total',
+  // Arc 7 obs.6 — auth-resolution outcome counter. Labelled by outcome
+  // (ok / unauthorized / invalid / revoked / expired / forbidden /
+  // error). A jump in 'invalid' or 'revoked' is a brute-force /
+  // credential-stuffing signal; a jump in 'ok' tracks legitimate
+  // traffic growth.
+  authTotal: 'driftstack_auth_total',
 } as const;

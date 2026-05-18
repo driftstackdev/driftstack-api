@@ -631,6 +631,12 @@ export async function createProductionDeps(
             'Rate-limit consume counter, labelled by bucket + outcome (allowed | exceeded).',
             ['bucket', 'outcome'],
           );
+          // Arc 7 obs.6 — auth resolution outcome counter.
+          r.registerCounter(
+            METRIC_NAMES.authTotal,
+            'Auth resolution outcomes (ok / unauthorized / invalid / revoked / expired / forbidden / error).',
+            ['outcome'],
+          );
           return r;
         })()
       : undefined;
