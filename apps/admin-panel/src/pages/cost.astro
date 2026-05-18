@@ -188,8 +188,12 @@ const apiBaseUrl = resolveApiBaseUrl();
   function renderTierThresholds(tiers) {
     if (!tierThresholds) return;
     const rows = Object.entries(tiers ?? {}).map(
+      // GET /v1/admin/cost/config returns `{ softCents, hardCents }`
+      // per AlertThresholds in lib/cost-estimator.ts. Reading
+      // `softWarningCents` / `hardCapCents` (a previous field-name
+      // guess) silently rendered every tier as "$0.00".
       ([tier, t]) =>
-        `<div class="flex justify-between gap-4"><dt class="text-slate-600">${escapeHtml(tier)}</dt><dd class="font-mono text-xs text-slate-900">soft $${escapeHtml(String((t.softWarningCents ?? 0) / 100))} · hard $${escapeHtml(String((t.hardCapCents ?? 0) / 100))}</dd></div>`,
+        `<div class="flex justify-between gap-4"><dt class="text-slate-600">${escapeHtml(tier)}</dt><dd class="font-mono text-xs text-slate-900">soft $${escapeHtml(String((t.softCents ?? 0) / 100))} · hard $${escapeHtml(String((t.hardCents ?? 0) / 100))}</dd></div>`,
     );
     tierThresholds.innerHTML =
       rows.length > 0
