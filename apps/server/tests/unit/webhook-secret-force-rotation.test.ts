@@ -9,7 +9,9 @@ function makeFakeEmail(): { svc: EmailService; sends: Array<Record<string, unkno
   const sends: Array<Record<string, unknown>> = [];
   const svc = {
     isConfigured: true,
-    sendWebhookSecretRotationReminder: (args: Record<string, unknown>) => {
+    // Arc 3 sub-slice 28.4 — distinct send method for the force-
+    // rotation template.
+    sendWebhookSecretForceRotated: (args: Record<string, unknown>) => {
       sends.push(args);
       return Promise.resolve();
     },
@@ -124,7 +126,7 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
     }
     const failingEmail = {
       isConfigured: true,
-      sendWebhookSecretRotationReminder: () => Promise.reject(new Error('postmark down')),
+      sendWebhookSecretForceRotated: () => Promise.reject(new Error('postmark down')),
     } as unknown as EmailService;
     const svc = new WebhookSecretForceRotationService(repo, failingEmail, makeFakeLogger(), {
       dashboardUrl: 'https://app.driftstack.test',

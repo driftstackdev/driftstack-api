@@ -155,6 +155,21 @@ export interface EmailService {
     dashboardUrl: string;
   }): Promise<void>;
   /**
+   * Arc 3 sub-slice 28.4 (v2-#28) — server-initiated force-rotation
+   * notification. Fires after the daily sweep (sub-slice 28.2) auto-
+   * rotates a secret past the 91-day cap. Distinct from the 60-day
+   * reminder: this one carries the new secret prefix + 7-day grace
+   * deadline so the customer knows their old secret stops verifying
+   * after that point.
+   */
+  sendWebhookSecretForceRotated(args: {
+    to: string;
+    endpointUrl: string;
+    newSecretPrefix: string;
+    graceWindowEndsAt: Date;
+    dashboardUrl: string;
+  }): Promise<void>;
+  /**
    * v2-#11.5 — BYOK Anthropic API key rotation reminder. Fires when
    * the customer's stored BYOK key was set more than the rotation
    * threshold ago (60d nag, 90d target). No prefix shown — Anthropic
@@ -423,6 +438,17 @@ const TEMPLATES = {
     html: (v) =>
       `<p>Your Driftstack webhook signing secret is <strong>${v.ageDays} days old</strong>. We recommend rotating every 90 days; we've reached the nag threshold.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Endpoint:</strong></td><td><code>${v.endpointUrl}</code></td></tr><tr><td><strong>Secret prefix:</strong></td><td><code>${v.secretPrefix}</code></td></tr><tr><td><strong>Rotate by:</strong></td><td>${v.rotateBy} (UTC)</td></tr></table><p>Rotation is zero-downtime: the previous secret stays valid for 24h after rotation so your verifier code can roll the new value at its own pace.</p><p><a href="${v.dashboardUrl}/webhooks">Rotate at ${v.dashboardUrl}/webhooks</a></p><p>— Driftstack</p>`,
   },
+  // Arc 3 sub-slice 28.4 (v2-#28) — server-initiated force-rotation
+  // notification. Fires once per cycle when the 91-day cap is crossed
+  // (Q1=B). Body carries the new secret prefix + 7-day grace deadline
+  // (Q2=B) so the customer knows when the old secret stops verifying.
+  'webhook-secret-force-rotated': {
+    subject: 'Driftstack — your webhook secret was auto-rotated for security',
+    text: (v) =>
+      `Your Driftstack webhook signing secret was past our 91-day security cap, so we auto-rotated it for you.\n\nEndpoint: ${v.endpointUrl}\nNew secret prefix: ${v.newSecretPrefix}\nGrace window ends: ${v.graceWindowEndsAt} (UTC)\n\nThe previous secret stays valid until the grace window ends so your verifier code has time to pick up the new value. After that point only the new secret will verify HMAC signatures.\n\nFetch the new secret + manage your endpoints at:\n${v.dashboardUrl}/webhooks\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Your Driftstack webhook signing secret was past our 91-day security cap, so we auto-rotated it for you.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Endpoint:</strong></td><td><code>${v.endpointUrl}</code></td></tr><tr><td><strong>New secret prefix:</strong></td><td><code>${v.newSecretPrefix}</code></td></tr><tr><td><strong>Grace window ends:</strong></td><td>${v.graceWindowEndsAt} (UTC)</td></tr></table><p>The previous secret stays valid until the grace window ends so your verifier code has time to pick up the new value. After that point only the new secret will verify HMAC signatures.</p><p>Fetch the new secret + manage your endpoints at <a href="${v.dashboardUrl}/webhooks">${v.dashboardUrl}/webhooks</a>.</p><p>— Driftstack</p>`,
+  },
   // V-295c3-followup — DRAFT copy. Two templates so the subject can vary
   // (a "resolved" email shouldn't read like a fresh outage).
   'status-incident-created': {
@@ -537,6 +563,7 @@ export function createEmailService({
       sendTeamInvite: async () => {},
       sendOauthPendingLinkVerification: async () => {},
       sendWebhookSecretRotationReminder: async () => {},
+      sendWebhookSecretForceRotated: async () => {},
       sendByokAnthropicKeyRotationReminder: async () => {},
     };
   }
@@ -683,6 +710,19 @@ export function createEmailService({
         secretPrefix,
         ageDays: ageDays.toString(),
         rotateBy: rotateBy.toISOString(),
+        dashboardUrl,
+      }),
+    sendWebhookSecretForceRotated: ({
+      to,
+      endpointUrl,
+      newSecretPrefix,
+      graceWindowEndsAt,
+      dashboardUrl,
+    }) =>
+      send('webhook-secret-force-rotated', to, {
+        endpointUrl,
+        newSecretPrefix,
+        graceWindowEndsAt: graceWindowEndsAt.toISOString(),
         dashboardUrl,
       }),
     sendByokAnthropicKeyRotationReminder: ({ to, ageDays, rotateBy, dashboardUrl }) =>

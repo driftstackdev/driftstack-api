@@ -75,18 +75,15 @@ export class WebhookSecretForceRotationService {
       rotated += 1;
       if (ep.accountEmail !== null) {
         try {
-          // For the v1.0 surface we reuse the existing rotation-reminder
-          // template — the customer learns the new secret prefix + grace
-          // deadline via the same email shape they get for the 60-day
-          // nag. Sub-slice 28.4 lands the dedicated force-rotation
-          // template variant.
-          const ageDays = Math.floor((now.getTime() - ep.secretCreatedAt.getTime()) / MS_PER_DAY);
-          await this.email.sendWebhookSecretRotationReminder({
+          // Arc 3 sub-slice 28.4 (v2-#28) — dedicated template
+          // distinguishes the force-rotation event from the 60-day
+          // reminder. Customer sees "we auto-rotated for security"
+          // framing instead of "rotate at your convenience".
+          await this.email.sendWebhookSecretForceRotated({
             to: ep.accountEmail,
             endpointUrl: ep.url,
-            secretPrefix: newPrefix,
-            ageDays,
-            rotateBy: graceWindowEndsAt,
+            newSecretPrefix: newPrefix,
+            graceWindowEndsAt,
             dashboardUrl: this.dashboardUrl,
           });
         } catch (err) {
