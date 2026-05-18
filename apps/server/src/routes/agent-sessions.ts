@@ -26,6 +26,7 @@ import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.
 import type { BundledLlmService } from '../services/bundled-llm.js';
 import {
   BundledLlmBudgetExhaustedError,
+  BundledLlmConsentRequiredError,
   ByokAnthropicRequiredError,
   ConflictError,
   FeatureUnavailableError,
@@ -270,6 +271,7 @@ export function registerAgentSessionsRoutes(
           : undefined;
       const cachedByokKey = byokKeyCache?.get(req.params.id);
       let bundledLlmKey: string | undefined;
+      let bundledLlmConsentMissing = false;
       if (
         headerByokKey === undefined &&
         cachedByokKey === undefined &&
@@ -277,6 +279,13 @@ export function registerAgentSessionsRoutes(
         deploymentFallbackKey !== undefined
       ) {
         const settings = await bundledLlmService.findSettings(ctx.account.id);
+        if (settings !== null && !settings.consent) {
+          // Arc 1 sub-slice 6.8 (v2-#6) — flag for the post-resolution
+          // gate. Deployment HAS bundled-LLM, customer just hasn't
+          // ticked consent yet. The route surfaces a typed 402 below
+          // so the dashboard can render a precise CTA.
+          bundledLlmConsentMissing = true;
+        }
         if (settings !== null && settings.consent) {
           // Arc 1 sub-slice 6.5 (v2-#6) — soft-cap pre-turn check.
           // Sum bundled-LLM spend in the current calendar month and
@@ -322,6 +331,14 @@ export function registerAgentSessionsRoutes(
       // so gating would surface a false alarm to customers whose
       // turn would have succeeded with a deterministic plan output.
       if (resolvedByokKey === undefined && agentDecomposerKind === 'claude') {
+        // Arc 1 sub-slice 6.8 (v2-#6) — surface the typed consent-
+        // required error when bundled-LLM is wired but the customer
+        // hasn't opted in. Without this branch the customer would get
+        // the generic ByokAnthropicRequired 502, which doesn't hint at
+        // the simpler dashboard fix (flip consent).
+        if (bundledLlmConsentMissing) {
+          throw new BundledLlmConsentRequiredError();
+        }
         throw new ByokAnthropicRequiredError(
           'No Anthropic API key configured for this account. ' +
             'PUT /v1/account/me/byok-anthropic-key to set a stored key, ' +

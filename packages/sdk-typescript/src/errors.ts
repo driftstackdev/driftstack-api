@@ -316,6 +316,32 @@ export class FeatureUnavailableError extends DriftstackError {
 /** Q.1.d (2026-05-17) — agent-sessions message turn cannot resolve
  *  an Anthropic API key. BYOK-for-v1.0 means the customer must
  *  supply their own key. HTTP 502. */
+// Arc 1 sub-slice 6.8 (v2-#6) — 402 Payment Required when the
+// customer's bundled-LLM monthly spend has reached their per-account
+// cap. Recovery paths: PATCH /v1/account/me/bundled-llm-settings to
+// raise the cap, supply a BYOK key (header or stored), or wait for
+// the next calendar month.
+export class BundledLlmBudgetExhaustedError extends DriftstackError {
+  readonly spentCents: number;
+  readonly capCents: number;
+  constructor(p: Problem) {
+    super(toOpts('bad_request', p));
+    this.name = 'BundledLlmBudgetExhaustedError';
+    this.spentCents = Number((p as { spent_cents?: number }).spent_cents ?? 0);
+    this.capCents = Number((p as { cap_cents?: number }).cap_cents ?? 0);
+  }
+}
+
+// Arc 1 sub-slice 6.8 (v2-#6) — 402 Payment Required when the
+// deployment offers bundled-LLM but the customer hasn't ticked
+// consent yet. Dashboard surfaces a one-click enable CTA.
+export class BundledLlmConsentRequiredError extends DriftstackError {
+  constructor(p: Problem) {
+    super(toOpts('bad_request', p));
+    this.name = 'BundledLlmConsentRequiredError';
+  }
+}
+
 export class ByokAnthropicRequiredError extends DriftstackError {
   constructor(p: Problem) {
     super(toOpts('byok_anthropic_required', p));
@@ -370,6 +396,11 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
   'https://errors.driftstack.dev/feature-unavailable': (p) => new FeatureUnavailableError(p),
   'https://errors.driftstack.dev/mfa-step-up-required': (p) => new MfaStepUpRequiredError(p),
   'https://errors.driftstack.dev/byok-anthropic-required': (p) => new ByokAnthropicRequiredError(p),
+  // Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM 402s.
+  'https://errors.driftstack.dev/bundled-llm-budget-exhausted': (p) =>
+    new BundledLlmBudgetExhaustedError(p),
+  'https://errors.driftstack.dev/bundled-llm-consent-required': (p) =>
+    new BundledLlmConsentRequiredError(p),
 };
 
 /**

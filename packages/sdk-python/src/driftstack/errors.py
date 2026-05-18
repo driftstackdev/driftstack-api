@@ -251,6 +251,21 @@ class InternalError(DriftstackError):
     check Driftstack status / contact support if this persists."""
 
 
+class BundledLlmBudgetExhaustedError(DriftstackError):
+    """Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM monthly cap reached
+    (HTTP 402). Customer recovery paths in the problem-detail string:
+    raise cap via PATCH /v1/account/me/bundled-llm-settings, supply a
+    BYOK key (header or stored), or wait for next calendar month.
+    Extensions carry ``spent_cents`` + ``cap_cents`` for dashboard
+    rendering."""
+
+
+class BundledLlmConsentRequiredError(DriftstackError):
+    """Arc 1 sub-slice 6.8 (v2-#6) — deployment offers bundled-LLM but
+    the customer hasn't opted in (HTTP 402). Recovery: PATCH /v1/account/
+    me/bundled-llm-settings with {"consent": true} OR PUT a BYOK key."""
+
+
 class ByokAnthropicRequiredError(DriftstackError):
     """v2-#24 — Q.1.d (2026-05-17) — agent-sessions message turn cannot
     resolve an Anthropic API key. BYOK-for-v1.0 Tier-3 verdict means
@@ -295,6 +310,9 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/internal": InternalError,
     # v2-#24: Q.1.d BYOK Anthropic key path — closes TS/Python parity.
     "https://errors.driftstack.dev/byok-anthropic-required": ByokAnthropicRequiredError,
+    # Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM 402 paths.
+    "https://errors.driftstack.dev/bundled-llm-budget-exhausted": BundledLlmBudgetExhaustedError,
+    "https://errors.driftstack.dev/bundled-llm-consent-required": BundledLlmConsentRequiredError,
 }
 
 

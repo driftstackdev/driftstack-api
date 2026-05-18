@@ -18,6 +18,8 @@ from driftstack._version import __version__
 from driftstack.client import AsyncDriftstack, Driftstack
 from driftstack.errors import (
     AuthError,
+    BundledLlmBudgetExhaustedError,
+    BundledLlmConsentRequiredError,
     ByokAnthropicRequiredError,
     ConcurrencyLimitError,
     ConflictError,
@@ -77,6 +79,8 @@ __all__ = [
     "InternalError",
     "MfaStepUpRequiredError",
     "ByokAnthropicRequiredError",
+    "BundledLlmBudgetExhaustedError",
+    "BundledLlmConsentRequiredError",
     "is_retryable",
     "verify_webhook_signature",
 ]

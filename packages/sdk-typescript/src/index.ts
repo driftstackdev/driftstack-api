@@ -52,6 +52,8 @@ export {
   isRetryable,
   AuthError,
   BadRequestError,
+  BundledLlmBudgetExhaustedError,
+  BundledLlmConsentRequiredError,
   ByokAnthropicRequiredError,
   ConcurrencyLimitError,
   ConflictError,

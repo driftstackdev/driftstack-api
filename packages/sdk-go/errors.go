@@ -74,6 +74,9 @@ var (
 	// the TS/Python parity gap so Go customers can errors.Is(err,
 	// driftstack.ErrByokAnthropicRequired) before falling back.
 	ErrByokAnthropicRequired = errors.New("byok anthropic key required")
+	// Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM 402 paths.
+	ErrBundledLlmBudgetExhausted = errors.New("bundled-llm monthly cap reached")
+	ErrBundledLlmConsentRequired = errors.New("bundled-llm consent required")
 )
 
 // AuthError covers any of the auth-related problem types. Use the
@@ -275,6 +278,26 @@ type ByokAnthropicRequiredError struct{ apiError }
 
 func (e *ByokAnthropicRequiredError) Is(target error) bool {
 	return target == ErrByokAnthropicRequired
+}
+
+// Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM monthly cap reached.
+// Extensions carry spent_cents + cap_cents for dashboard rendering.
+type BundledLlmBudgetExhaustedError struct {
+	apiError
+	SpentCents int
+	CapCents   int
+}
+
+func (e *BundledLlmBudgetExhaustedError) Is(target error) bool {
+	return target == ErrBundledLlmBudgetExhausted
+}
+
+// Arc 1 sub-slice 6.8 (v2-#6) — deployment offers bundled-LLM but the
+// customer's account hasn't opted in yet.
+type BundledLlmConsentRequiredError struct{ apiError }
+
+func (e *BundledLlmConsentRequiredError) Is(target error) bool {
+	return target == ErrBundledLlmConsentRequired
 }
 
 // V-491 — public retry predicate. Mirrors the V-489 TS / V-490

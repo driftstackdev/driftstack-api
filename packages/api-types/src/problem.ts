@@ -70,6 +70,13 @@ export const PROBLEM_TYPES = {
   // via PATCH /v1/account/me/bundled-llm-settings or supply a BYOK
   // key (BYOK always wins per Q4=A). Resets at calendar month start.
   BundledLlmBudgetExhausted: 'https://errors.driftstack.dev/bundled-llm-budget-exhausted',
+  // Arc 1 sub-slice 6.8 (v2-#6) — distinct from BYOK-required because
+  // the deployment IS wired for bundled-LLM, the customer just hasn't
+  // ticked the consent flag yet. 402 Payment Required so SDKs can
+  // branch on status + URI; the dashboard surfaces a one-click
+  // "enable bundled-LLM" call-to-action that hits
+  // PATCH /v1/account/me/bundled-llm-settings.
+  BundledLlmConsentRequired: 'https://errors.driftstack.dev/bundled-llm-consent-required',
 } as const;
 
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES];

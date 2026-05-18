@@ -287,6 +287,26 @@ export class ByokAnthropicRequiredError extends ApiError {
   }
 }
 
+// Arc 1 sub-slice 6.8 (v2-#6). Fires when the deployment IS wired for
+// bundled-LLM (service + fallback key both present) AND no BYOK key
+// resolved AND the customer's consent flag is false. Distinct from
+// the generic ByokAnthropicRequired (502) so the dashboard can show
+// a one-click "enable bundled-LLM" CTA. Status 402 Payment Required.
+export class BundledLlmConsentRequiredError extends ApiError {
+  constructor() {
+    super({
+      type: PROBLEM_TYPES.BundledLlmConsentRequired,
+      title: 'Bundled-LLM consent required',
+      status: 402,
+      detail:
+        'This deployment offers bundled-LLM but your account has not opted in. ' +
+        'PATCH /v1/account/me/bundled-llm-settings with { "consent": true } to enable, ' +
+        'or PUT /v1/account/me/byok-anthropic-key to bring your own Anthropic key (BYOK always wins).',
+    });
+    this.name = 'BundledLlmConsentRequiredError';
+  }
+}
+
 // Arc 1 sub-slice 6.5 (v2-#6 bundled-LLM, founder verdict Q3=C
 // $20 default cap). Fires when the customer's bundled-LLM monthly
 // spend has reached `accounts.bundled_llm_monthly_cap_usd_cents`.

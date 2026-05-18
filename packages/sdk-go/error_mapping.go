@@ -41,6 +41,9 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	// parity gap so Go customers can errors.As(err, &ByokAnthropicRequiredError)
 	// before falling back to a deployment-managed key path.
 	"https://errors.driftstack.dev/byok-anthropic-required": buildByokAnthropicRequired,
+	// Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM 402 paths.
+	"https://errors.driftstack.dev/bundled-llm-budget-exhausted": buildBundledLlmBudgetExhausted,
+	"https://errors.driftstack.dev/bundled-llm-consent-required": buildBundledLlmConsentRequired,
 }
 
 // errorFromResponse parses an HTTP response body as RFC 7807
@@ -259,6 +262,22 @@ func buildByokAnthropicRequired(base apiError, _ map[string]any, _ string) error
 	return &ByokAnthropicRequiredError{apiError: base}
 }
 
+func buildBundledLlmBudgetExhausted(base apiError, problem map[string]any, _ string) error {
+	spent := 0
+	cap_ := 0
+	if v, ok := problem["spent_cents"].(float64); ok {
+		spent = int(v)
+	}
+	if v, ok := problem["cap_cents"].(float64); ok {
+		cap_ = int(v)
+	}
+	return &BundledLlmBudgetExhaustedError{apiError: base, SpentCents: spent, CapCents: cap_}
+}
+
+func buildBundledLlmConsentRequired(base apiError, _ map[string]any, _ string) error {
+	return &BundledLlmConsentRequiredError{apiError: base}
+}
+
 // Compile-time sanity that the error types implement error.
 var (
 	_ error = (*apiError)(nil)
@@ -271,6 +290,8 @@ var (
 	_ error = (*MfaStepUpRequiredError)(nil)
 	_ error = (*InternalError)(nil)
 	_ error = (*ByokAnthropicRequiredError)(nil)
+	_ error = (*BundledLlmBudgetExhaustedError)(nil)
+	_ error = (*BundledLlmConsentRequiredError)(nil)
 	_ error = (*RateLimitError)(nil)
 	_ error = (*ConcurrencyLimitError)(nil)
 	_ error = (*QuotaExceededError)(nil)
