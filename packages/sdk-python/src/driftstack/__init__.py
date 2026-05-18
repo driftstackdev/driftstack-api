@@ -49,6 +49,7 @@ from driftstack.errors import (
     ValidationError,
     is_retryable,
 )
+from driftstack.resources.agent_sessions import LiveKitInfo
 from driftstack.webhook_signature import verify_webhook_signature
 
 __all__ = [
@@ -85,6 +86,7 @@ __all__ = [
     "BundledLlmConsentRequiredError",
     "PairModeConflictError",
     "PairModeStateInvalidTransitionError",
+    "LiveKitInfo",
     "is_retryable",
     "verify_webhook_signature",
 ]

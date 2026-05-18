@@ -62,6 +62,18 @@ describe('LK.5 — LiveKitInfo cross-SDK parity', () => {
     expect(tsIndex).toMatch(/LiveKitInfo,?\s*\n/);
   });
 
+  it('Python SDK package __init__ re-exports LiveKitInfo (matches TS index parity)', () => {
+    const pyInit = readFileSync(
+      resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/__init__.py'),
+      'utf8',
+    );
+    // Import line from the resource module.
+    expect(pyInit).toMatch(/from driftstack\.resources\.agent_sessions import LiveKitInfo/);
+    // __all__ list — pin the literal entry so `from driftstack import
+    // LiveKitInfo` keeps working even if the import line moves.
+    expect(pyInit).toMatch(/"LiveKitInfo",/);
+  });
+
   it('Go SDK declares LiveKitInfo struct with all 5 JSON tags', () => {
     const goResource = readFileSync(
       resolve(REPO_ROOT, 'packages/sdk-go/agent_sessions.go'),
