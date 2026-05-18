@@ -41,7 +41,7 @@ function read(p: string): string {
 describe('W520.B apps/marketing-site/src/pages/docs/billing-crypto-integration-guide.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-720 framing pinned: 'billing-crypto integration guide. End-to-end walkthrough of integrating with the crypto-payments surface: mint a checkout, listen for the webhook, render a receipt. Cross-links the individual reference pages (overview / webhooks / idempotency / receipts / cancellation).' — pinned so the V-720 anchor + 5-cross-link-categories commitment survives", () => {
+  it("V-720 framing pinned: 'billing-crypto integration guide. End-to-end walkthrough of integrating with the crypto-payments surface: mint a checkout, listen for the webhook, render a receipt. Cross-links the individual reference pages (overview / webhooks / idempotency / receipts / cancellation).' — pinned so the V-720 anchor + 5-cross-link-categories commitment survives", () => {
     expect(body).toMatch(
       /\/\/ V-720 — billing-crypto integration guide\. End-to-end walkthrough\s*\n?\s*\/\/ of integrating with the crypto-payments surface: mint a checkout,\s*\n?\s*\/\/ listen for the webhook, render a receipt\./,
     );
@@ -120,9 +120,9 @@ describe('W520.B apps/marketing-site/src/pages/docs/billing-crypto-integration-g
     );
   });
 
-  it.skip("Backfill + reconciliation V-666.BU + V-666.BX framing pinned: 'For nightly jobs or post-incident catchups, walk every matching order using the cursor (V-666.BU) + date-range (V-666.BX) filters. The SDK's listAll() manages the cursor for you' + raw-fetch fallback while loop using next_cursor + 'Crypto payments are non-refundable; the reconciliation loop is naturally idempotent because the local DB key is (order_id, status).' — pinned so the V-666.BU + V-666.BX anchors + listAll-SDK + raw-fetch-loop + (order_id,status)-idempotent-DB-key commitment survives", () => {
+  it("Backfill + reconciliation framing pinned: 'For nightly jobs or post-incident catchups, walk every matching order using the cursor + date-range filters. The SDK's listAll() manages the cursor for you' + raw-fetch fallback while loop using next_cursor + 'Crypto payments are non-refundable; the reconciliation loop is naturally idempotent because the local DB key is (order_id, status).' The previous skip pinned inline `(V-666.BU)` + `(V-666.BX)` anchors that were removed from the customer-facing copy as a UX cleanup (internal V-anchors should not bleed into marketing pages); the structural framing + the listAll-SDK + raw-fetch-loop + (order_id, status)-idempotent-DB-key commitment all survive without them.", () => {
     expect(body).toMatch(
-      /walk every\s*\n?\s*matching order using the cursor \(V-666\.BU\) \+ date-range\s*\n?\s*\(V-666\.BX\) filters\. The SDK's <code>listAll\(\)<\/code> manages\s*\n?\s*the cursor for you/,
+      /walk every\s*\n?\s*matching order using the cursor \+ date-range\s*\n?\s*filters\. The SDK's <code>listAll\(\)<\/code> manages\s*\n?\s*the cursor for you/,
     );
     expect(body).toMatch(/for await \(const o of client\.cryptoOrders\.listAll\(\{/);
     expect(body).toMatch(/status: 'paid',/);
@@ -133,6 +133,9 @@ describe('W520.B apps/marketing-site/src/pages/docs/billing-crypto-integration-g
     expect(body).toMatch(
       /Crypto payments are non-refundable; the reconciliation loop\s*\n?\s*is naturally idempotent because the local DB key is\s*\n?\s*<code>\(order_id, status\)<\/code>\./,
     );
+    // Internal V-anchors must NOT bleed into customer-facing copy.
+    expect(body).not.toMatch(/cursor \(V-666\.BU\)/);
+    expect(body).not.toMatch(/date-range \(V-666\.BX\)/);
   });
 
   it("Edge-cases 4-bullet framing pinned: wrong-amount → partial (no entitlement, manual reconcile) + after-window-expires → failed-with-IPN-recorded + refund-wanted → non-refundable + cancel-stops-future + browser-retries-without-Idempotency-Key → duplicate ('that's why Driftstack's own GUI client always sends the header') — pinned so the 4-edge-case + Driftstack-GUI-always-sends-Idempotency-Key commitment survives", () => {
