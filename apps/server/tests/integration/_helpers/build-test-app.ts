@@ -27,6 +27,7 @@ import { BundledLlmService, InMemoryBundledLlmRepo } from '../../../src/services
 import { AgentSessionEventBus } from '../../../src/services/agent-session-event-bus.js';
 import { InMemoryPairModeTakeoverLock } from '../../../src/services/agent-pair-mode-lock.js';
 import { InMemoryPairModeHeartbeatTracker } from '../../../src/services/agent-pair-mode-heartbeat.js';
+import { InMemoryRecipesRepo } from '../../../src/services/recipes.js';
 import { MetricsRegistry, METRIC_NAMES } from '../../../src/services/metrics-registry.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
@@ -667,6 +668,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const pairModeLock = new InMemoryPairModeTakeoverLock();
   // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — heartbeat tracker for tests.
   const pairModeHeartbeatTracker = new InMemoryPairModeHeartbeatTracker();
+  // AI-B4 — in-memory recipes repo for tests; production path uses
+  // DrizzleRecipesRepo. Always wired so the /v1/recipes route
+  // registers (activation gate requires both recipesRepo +
+  // agentSessionsRepo to be present).
+  const recipesRepo = new InMemoryRecipesRepo();
   // Arc 4 Wave 2.B sub-slice 8.18/8.19 (v2-#8) — Prometheus metrics
   // registry. Pre-registers the pair-mode + bundled-LLM counters so
   // call sites can inc() blindly without first checking registration.
@@ -1163,6 +1169,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // become time-flaky); integration tests for the sweep live in
     // unit tests against PairModeHeartbeatSweep directly.
     pairModeHeartbeatTracker,
+    // AI-B4 (v2-#8) — recipes repo. Wired unconditionally so the
+    // /v1/recipes route activates against the in-memory repo for
+    // tests; prod gates on Drizzle wiring per the activation
+    // pattern. Recipes track agent-session snapshots so customers
+    // can replay the same flow without re-paying decompose cost.
+    recipesRepo,
     // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics
     // registry + scrape token. Always wired in tests so the /metrics
     // route registers + pair-mode + bundled-llm counters can be
