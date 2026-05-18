@@ -167,7 +167,7 @@ class AgentSessionsResource:
               "ws_url": "wss://mac-NNN.driftstack.dev:8443",
               "room": "<agent_session_id>",
               "token": "<HS256 JWT, 24h TTL>",
-              "participant_identity": "subscriber_<account_id>",
+              "participant_identity": "customer-<account-uuid>",
               "expires_at": "<RFC 3339>"
             }
 

@@ -134,6 +134,25 @@ describe('LK.5 — LiveKitInfo cross-SDK parity', () => {
     );
   });
 
+  // LK.3 — participant_identity wire-format drift-guard. The route at
+  // apps/server/src/routes/agent-sessions-livekit-token.ts emits
+  // `customer-${ctx.account.id}` (also pinned in lk3-agent-sessions-
+  // livekit-token.test.ts assertions). Customer-facing docs at
+  // apps/docs/src/pages/api/agent-sessions.md show
+  // `"customer-<account-uuid>"`. The Python SDK docstring previously
+  // documented `"subscriber_<account_id>"` — wrong by both prefix
+  // (subscriber_ vs customer-) and separator (_ vs -). This guard
+  // pins the corrected sample so the drift can't slip back during a
+  // regen or hand-edit.
+  it('Python SDK livekit_token docstring example uses the correct customer-<account-uuid> shape (not subscriber_<account_id>)', () => {
+    const pyResource = readFileSync(
+      resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources/agent_sessions.py'),
+      'utf8',
+    );
+    expect(pyResource).toMatch(/"participant_identity": "customer-<account-uuid>",/);
+    expect(pyResource).not.toMatch(/"participant_identity": "subscriber_/);
+  });
+
   it('Python SDK declares AgentSessionsResource.livekit_token (sync + async) returning LiveKitInfo TypedDict', () => {
     const pyResource = readFileSync(
       resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources/agent_sessions.py'),
