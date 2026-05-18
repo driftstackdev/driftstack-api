@@ -109,10 +109,13 @@ expected steady-state RPS. Admins evaluate, set the override via
 
 ## Customer-dashboard surface
 
-The `/usage` page on the customer dashboard renders the same data
-visually — bucket name + capacity + refill rate per row, with a
-badge when an override is active. No additional surface today;
-the dashboard reads this endpoint directly.
+Read this endpoint directly via the SDK or `curl` — the customer
+dashboard does not yet render the rate-limit bucket config
+visually. The `/usage` page on the dashboard shows time-series
+usage counts (session minutes, navigates, captures, etc.) but not
+the per-bucket capacity / refill / source rows from this endpoint.
+A dedicated rate-limits surface is queued for a future dashboard
+slice.
 
 ## Response headers
 

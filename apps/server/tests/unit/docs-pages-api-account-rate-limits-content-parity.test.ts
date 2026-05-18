@@ -119,11 +119,17 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     );
   });
 
-  it("CRITICAL /usage dashboard cross-reference pinned. The 'The /usage page on the customer dashboard renders the same data visually — bucket name + capacity + refill rate per row, with a badge when an override is active' wording matches W754 dashboard /usage rate-limit-meter framing.", () => {
+  it("CRITICAL Customer-dashboard-surface framing pinned — TRUTHFUL version. The previous pin asserted '/usage renders the same data visually' which was source-of-truth-divergent (no such section exists in apps/customer-dashboard/src/pages/usage.astro). Now pins the honest 'read via SDK/curl; /usage shows time-series usage counts only; dedicated surface queued' framing.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The `\/usage` page on the customer dashboard renders the same data\s*\n?visually — bucket name \+ capacity \+ refill rate per row, with a\s*\n?badge when an override is active\./,
+      /Read this endpoint directly via the SDK or `curl` — the customer\s*\n?dashboard does not yet render the rate-limit bucket config\s*\n?visually\./,
+    );
+    expect(p).toMatch(
+      /The `\/usage` page on the dashboard shows time-series\s*\n?usage counts \(session minutes, navigates, captures, etc\.\) but not\s*\n?the per-bucket capacity \/ refill \/ source rows from this endpoint\./,
+    );
+    expect(p).toMatch(
+      /A dedicated rate-limits surface is queued for a future dashboard\s*\n?slice\./,
     );
   });
 
