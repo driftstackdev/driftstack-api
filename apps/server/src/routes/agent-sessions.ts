@@ -36,6 +36,7 @@ import type { SentryClient } from '../lib/sentry.js';
 import type { AccountAuditService } from '../services/account-audit.js';
 import type { MetricsRegistry } from '../services/metrics-registry.js';
 import { METRIC_NAMES } from '../services/metrics-registry.js';
+import type { PairModeHeartbeatTracker } from '../services/agent-pair-mode-heartbeat.js';
 import {
   decryptGuiControlKey,
   encryptGuiControlKey,
@@ -201,6 +202,15 @@ export interface AgentSessionsRoutesDeps {
    * transition).
    */
   metrics?: MetricsRegistry;
+  /**
+   * Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
+   * tracker. When wired, takeover + handback handlers call
+   * `recordHeartbeat({sessionId, at})` so the sweep service (running
+   * every 5s) doesn't auto-handback active sessions back to
+   * ai-driving. Omit to skip the recording (sweep then treats every
+   * pair-mode session as never-heartbeated → no transitions fire).
+   */
+  pairModeHeartbeatTracker?: PairModeHeartbeatTracker;
 }
 
 export function registerAgentSessionsRoutes(
@@ -224,6 +234,7 @@ export function registerAgentSessionsRoutes(
     sentry,
     accountAudit,
     metrics,
+    pairModeHeartbeatTracker,
   } = deps;
 
   app.post(
@@ -518,6 +529,14 @@ export function registerAgentSessionsRoutes(
           } catch {
             /* swallow */
           }
+          // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — record a fresh
+          // heartbeat so the 5s sweep doesn't immediately auto-
+          // handback a takeover the customer just acquired. The
+          // tracker is in-memory; recordHeartbeat doesn't throw.
+          pairModeHeartbeatTracker?.recordHeartbeat({
+            sessionId: req.params.id,
+            at: new Date(),
+          });
           return reply.code(200).send({ pair_mode_state: nextState });
         } catch (err) {
           if (err instanceof PairModeStateInvalidTransitionError) {
@@ -590,6 +609,15 @@ export function registerAgentSessionsRoutes(
           } catch {
             /* swallow */
           }
+          // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — record a fresh
+          // heartbeat. Handback transitions still represent active
+          // customer attention (they're explicitly returning control,
+          // not abandoning the session), so the sweep should not
+          // immediately fire timeout on a session that was just
+          // handed back. The state-machine post-handback (ai-driving)
+          // is a no-op for the sweep anyway, but we forget the entry
+          // here to keep the in-memory map bounded.
+          pairModeHeartbeatTracker?.forget(req.params.id);
           return reply.code(200).send({ pair_mode_state: nextState });
         } catch (err) {
           if (err instanceof PairModeStateInvalidTransitionError) {

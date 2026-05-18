@@ -38,6 +38,7 @@ import type { ScheduledJobsService } from '../services/scheduled-jobs.js';
 import { registerAccountAuditRoutes } from '../routes/account-audit.js';
 import type { MetricsRegistry } from '../services/metrics-registry.js';
 import { registerMetricsRoutes } from '../routes/metrics.js';
+import type { PairModeHeartbeatTracker } from '../services/agent-pair-mode-heartbeat.js';
 import type { ValidationHarnessService } from '../services/validation-harness.js';
 import { registerAdminValidationHarnessRoutes } from '../routes/admin-validation-harness.js';
 import { registerAccountRateLimitsRoutes } from '../routes/account-rate-limits.js';
@@ -211,6 +212,13 @@ export interface AppDeps {
    * is exposed publicly + the token gates access).
    */
   metricsScrapeToken?: string;
+  /**
+   * Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
+   * tracker. Routes record customer activity here so the
+   * PairModeHeartbeatSweep (also driven by bootstrap) can fire the
+   * heartbeat-timeout transition on stale sessions.
+   */
+  pairModeHeartbeatTracker?: PairModeHeartbeatTracker;
   /** V-218: continuous validation harness. */
   validationHarnessService: ValidationHarnessService;
   /**
@@ -943,6 +951,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
       // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics.
       ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
+      // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
+      // tracker. Routes call recordHeartbeat on takeover / forget on
+      // handback so the sweep doesn't auto-handback an active session.
+      ...(deps.pairModeHeartbeatTracker !== undefined
+        ? { pairModeHeartbeatTracker: deps.pairModeHeartbeatTracker }
+        : {}),
     });
   } else {
     registerAgentSessionsDisabledRoutes(app);

@@ -65,6 +65,8 @@ import { BundledLlmService } from '../services/bundled-llm.js';
 import { DrizzleBundledLlmRepo } from '../db/bundled-llm-repo.js';
 import { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
 import { RedisPairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
+import { InMemoryPairModeHeartbeatTracker } from '../services/agent-pair-mode-heartbeat.js';
+import { PairModeHeartbeatSweep } from '../services/agent-pair-mode-heartbeat-sweep.js';
 import { MetricsRegistry, METRIC_NAMES } from '../services/metrics-registry.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
 import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
@@ -580,6 +582,13 @@ export async function createProductionDeps(
     eval: (script, numKeys, ...args) =>
       redis.eval(script, numKeys, ...args) as Promise<string | number | null>,
   });
+  // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — heartbeat tracker +
+  // sweep wire. In-memory tracker (single-replica today); the sweep
+  // walks stale sessions every 5s + fires the heartbeat-timeout
+  // state-machine transition + agent_session.pair_mode.timeout
+  // audit emit. Routes call tracker.recordHeartbeat on takeover /
+  // handback / message so customer activity counts as a heartbeat.
+  const pairModeHeartbeatTracker = new InMemoryPairModeHeartbeatTracker();
   const agentRuntime = new AgentRuntime({
     decomposer: agentDecomposer,
     executor: agentExecutor,
@@ -845,6 +854,7 @@ export async function createProductionDeps(
     // being wired (same activation pattern as the rest).
     agentSessionEventBus,
     pairModeLock,
+    pairModeHeartbeatTracker,
     // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics
     // registry. Activated when METRICS_SCRAPE_TOKEN is wired; routes
     // emit counters into it + /metrics returns the rendered text.
@@ -1218,6 +1228,36 @@ export async function createProductionDeps(
       }, ROTATION_REMINDER_INTERVAL_MS);
   byokAnthropicRotationReminderTimer?.unref();
 
+  // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
+  // sweep. Tick every 5 seconds: walks tracker.findStaleSessions()
+  // + fires heartbeat-timeout transition + agent_session.pair_mode.timeout
+  // audit emit on each. The 5s cadence is much tighter than the
+  // 60s scheduled-jobs poller because the user-visible behavior
+  // (auto-handback to AI after 30s of no client heartbeat) is
+  // interactive and needs sub-minute responsiveness.
+  const PAIR_MODE_HEARTBEAT_SWEEP_INTERVAL_MS = 5_000;
+  const pairModeHeartbeatSweep = new PairModeHeartbeatSweep({
+    tracker: pairModeHeartbeatTracker,
+    sessions: agentSessionsRepo,
+    accountAudit: accountAuditService,
+  });
+  const pairModeHeartbeatSweepTimer = setInterval(() => {
+    void (async () => {
+      try {
+        await pairModeHeartbeatSweep.tickOnce(new Date());
+      } catch (err) {
+        logger.warn(
+          {
+            component: 'pair-mode-heartbeat-sweep',
+            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+          },
+          'pair-mode-heartbeat-sweep tickOnce threw unexpectedly (interval continues)',
+        );
+      }
+    })();
+  }, PAIR_MODE_HEARTBEAT_SWEEP_INTERVAL_MS);
+  pairModeHeartbeatSweepTimer.unref();
+
   // Arc 3 sub-slice 28.2 (v2-#28) — daily 91-day force-rotation sweep.
   const webhookSecretForceRotationTimer = rotationRemindersDisabled
     ? null
@@ -1294,6 +1334,7 @@ export async function createProductionDeps(
     if (byokAnthropicRotationReminderTimer) clearInterval(byokAnthropicRotationReminderTimer);
     if (webhookSecretForceRotationTimer) clearInterval(webhookSecretForceRotationTimer);
     if (webhookSecretPrevCleanupTimer) clearInterval(webhookSecretPrevCleanupTimer);
+    clearInterval(pairModeHeartbeatSweepTimer);
     try {
       await sentry.flush(2000);
       await sentry.close(2000);

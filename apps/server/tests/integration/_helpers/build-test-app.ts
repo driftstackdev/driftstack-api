@@ -26,6 +26,7 @@ import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.
 import { BundledLlmService, InMemoryBundledLlmRepo } from '../../../src/services/bundled-llm.js';
 import { AgentSessionEventBus } from '../../../src/services/agent-session-event-bus.js';
 import { InMemoryPairModeTakeoverLock } from '../../../src/services/agent-pair-mode-lock.js';
+import { InMemoryPairModeHeartbeatTracker } from '../../../src/services/agent-pair-mode-heartbeat.js';
 import { MetricsRegistry, METRIC_NAMES } from '../../../src/services/metrics-registry.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
@@ -353,6 +354,10 @@ export interface TestAppFixture {
   /** Arc 4 Wave 2.B 8.18/8.19 — exposed so tests can scrape /metrics
    *  + read counter values directly via registry.getValue(). */
   metricsRegistry: MetricsRegistry;
+  /** Arc 4 Wave 2.B sub-slice 8.13d — exposed so tests can assert
+   *  the takeover route called recordHeartbeat and the handback
+   *  route called forget. */
+  pairModeHeartbeatTracker: InMemoryPairModeHeartbeatTracker;
   /** V-295a — exposed so tests can assert incident state. */
   incidentsRepo: InMemoryIncidentsRepo;
   /** V-295c3 — exposed so tests can assert subscriber state. */
@@ -660,6 +665,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const agentSessionEventBus = new AgentSessionEventBus();
   // Arc 2 sub-slice 8.8 (v2-#8) — in-memory takeover lock for tests.
   const pairModeLock = new InMemoryPairModeTakeoverLock();
+  // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — heartbeat tracker for tests.
+  const pairModeHeartbeatTracker = new InMemoryPairModeHeartbeatTracker();
   // Arc 4 Wave 2.B sub-slice 8.18/8.19 (v2-#8) — Prometheus metrics
   // registry. Pre-registers the pair-mode + bundled-LLM counters so
   // call sites can inc() blindly without first checking registration.
@@ -1150,6 +1157,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // Arc 2 sub-slice 8.8 (v2-#8) — in-memory takeover lock; always
     // wired so the takeover/handback routes register for tests.
     pairModeLock,
+    // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — heartbeat tracker so
+    // takeover/handback handlers can record activity. The sweep
+    // service itself isn't wired in the test fixture (tests would
+    // become time-flaky); integration tests for the sweep live in
+    // unit tests against PairModeHeartbeatSweep directly.
+    pairModeHeartbeatTracker,
     // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics
     // registry + scrape token. Always wired in tests so the /metrics
     // route registers + pair-mode + bundled-llm counters can be
@@ -1192,6 +1205,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     adminAuditRepo,
     accountAuditRepo,
     metricsRegistry,
+    pairModeHeartbeatTracker,
     incidentsRepo,
     statusSubscribersRepo,
     statusSubscribersService,
