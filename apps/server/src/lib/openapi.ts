@@ -2298,6 +2298,84 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // ── Arc 2 sub-slice 8.9 (v2-#8) — pair-mode takeover + handback ──
+  //
+  // For mode='pair' agent sessions only — these endpoints return 409 on
+  // non-pair sessions. State machine carries through 'takeover-queued' /
+  // 'handback-queued' intermediate states when the runtime is mid-
+  // decompose (Wave 2.A 8.11 / 8.12); the wire response reflects the
+  // post-transition state so callers branch on `pair_mode_state.kind`.
+  const pairModeStateResponseSchema = z.object({
+    pair_mode_state: z
+      .object({
+        kind: z.enum([
+          'ai-driving',
+          'takeover-pending',
+          'takeover-queued',
+          'human-driving',
+          'handback-pending',
+          'handback-queued',
+        ]),
+      })
+      .passthrough(),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/agent-sessions/{id}/takeover',
+    summary: 'Request a human takeover on a pair-mode agent session',
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      body: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: z.object({ client_id: z.string().min(1).max(120) }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Transition succeeded; returns the post-transition pair-mode state.',
+        content: { 'application/json': { schema: pairModeStateResponseSchema } },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      409: {
+        description:
+          'Session not mode=pair, or pair-mode state machine refused the transition (typed problem URI pair-mode-invalid-transition with from + transition extensions).',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/agent-sessions/{id}/handback',
+    summary: 'Hand control back from human to AI on a pair-mode agent session',
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      body: {
+        required: false,
+        content: { 'application/json': { schema: z.object({}) } },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Transition succeeded; returns the post-transition pair-mode state.',
+        content: { 'application/json': { schema: pairModeStateResponseSchema } },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      409: {
+        description:
+          'Session not mode=pair, or pair-mode state machine refused the transition (typed problem URI pair-mode-invalid-transition with from + transition extensions).',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
   // ── AI-B4 recipe library (write-only at v1.0) ──
   //
   // POST /v1/recipes snapshots a finished agent_session's intent_log

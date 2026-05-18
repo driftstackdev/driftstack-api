@@ -10488,6 +10488,14 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 120
+                  },
+                  "bundled_llm_consent": {
+                    "type": "boolean"
+                  },
+                  "bundled_llm_monthly_cap_usd_cents": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000
                   }
                 },
                 "required": ["email", "password"]
@@ -12531,6 +12539,241 @@
           },
           "503": {
             "description": "AI chat agent not enabled on this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent-sessions/{id}/takeover": {
+      "post": {
+        "summary": "Request a human takeover on a pair-mode agent session",
+        "tags": ["agent-chat"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "client_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  }
+                },
+                "required": ["client_id"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transition succeeded; returns the post-transition pair-mode state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pair_mode_state": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "ai-driving",
+                            "takeover-pending",
+                            "takeover-queued",
+                            "human-driving",
+                            "handback-pending",
+                            "handback-queued"
+                          ]
+                        }
+                      },
+                      "required": ["kind"]
+                    }
+                  },
+                  "required": ["pair_mode_state"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent session not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Session not mode=pair, or pair-mode state machine refused the transition (typed problem URI pair-mode-invalid-transition with from + transition extensions).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent-sessions/{id}/handback": {
+      "post": {
+        "summary": "Hand control back from human to AI on a pair-mode agent session",
+        "tags": ["agent-chat"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transition succeeded; returns the post-transition pair-mode state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pair_mode_state": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "ai-driving",
+                            "takeover-pending",
+                            "takeover-queued",
+                            "human-driving",
+                            "handback-pending",
+                            "handback-queued"
+                          ]
+                        }
+                      },
+                      "required": ["kind"]
+                    }
+                  },
+                  "required": ["pair_mode_state"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent session not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Session not mode=pair, or pair-mode state machine refused the transition (typed problem URI pair-mode-invalid-transition with from + transition extensions).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
             "content": {
               "application/problem+json": {
                 "schema": {
