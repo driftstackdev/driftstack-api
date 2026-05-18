@@ -13,7 +13,7 @@ import type {
   WebhooksRepo,
 } from '../services/webhooks.js';
 import type { Database } from './client.js';
-import { webhookDeliveries, webhookEndpoints } from './schema.js';
+import { accounts, webhookDeliveries, webhookEndpoints } from './schema.js';
 
 export class DrizzleWebhooksRepo implements WebhooksRepo {
   constructor(private readonly database: Database) {}
@@ -155,6 +155,11 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
         // reminders without being blocked by a stale send.
         secretCreatedAt: input.now,
         lastReminderSentAt: null,
+        // Arc 3 sub-slice 28.1 (v2-#28) — reset force-rotation
+        // bookkeeping so the 91-day clock restarts cleanly when the
+        // customer rotates manually.
+        forceRotatedAt: null,
+        graceWindowEndsAt: null,
         updatedAt: input.now,
       })
       .where(
@@ -164,6 +169,103 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
           isNull(webhookEndpoints.disabledAt),
         ),
       )
+      .returning();
+    return row ? toEndpointRow(row) : null;
+  }
+
+  async findEndpointsNeedingForceRotation(args: {
+    now: Date;
+    thresholdDays: number;
+    limit: number;
+  }): Promise<ReadonlyArray<WebhookEndpointRow & { accountEmail: string | null }>> {
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    const cutoff = new Date(args.now.getTime() - args.thresholdDays * MS_PER_DAY);
+    const rows = await this.database.db
+      .select({
+        id: webhookEndpoints.id,
+        accountId: webhookEndpoints.accountId,
+        url: webhookEndpoints.url,
+        secret: webhookEndpoints.secret,
+        secretPrefix: webhookEndpoints.secretPrefix,
+        secretPrev: webhookEndpoints.secretPrev,
+        secretPrevExpiresAt: webhookEndpoints.secretPrevExpiresAt,
+        secretCreatedAt: webhookEndpoints.secretCreatedAt,
+        lastReminderSentAt: webhookEndpoints.lastReminderSentAt,
+        graceWindowEndsAt: webhookEndpoints.graceWindowEndsAt,
+        forceRotatedAt: webhookEndpoints.forceRotatedAt,
+        events: webhookEndpoints.events,
+        description: webhookEndpoints.description,
+        active: webhookEndpoints.active,
+        consecutiveFailures: webhookEndpoints.consecutiveFailures,
+        lastSuccessAt: webhookEndpoints.lastSuccessAt,
+        lastFailureAt: webhookEndpoints.lastFailureAt,
+        disabledAt: webhookEndpoints.disabledAt,
+        createdAt: webhookEndpoints.createdAt,
+        updatedAt: webhookEndpoints.updatedAt,
+        accountEmail: accounts.email,
+      })
+      .from(webhookEndpoints)
+      .innerJoin(accounts, eq(accounts.id, webhookEndpoints.accountId))
+      .where(
+        and(
+          isNull(webhookEndpoints.disabledAt),
+          isNull(webhookEndpoints.forceRotatedAt),
+          lt(webhookEndpoints.secretCreatedAt, cutoff),
+        ),
+      )
+      .orderBy(webhookEndpoints.secretCreatedAt)
+      .limit(args.limit);
+    return rows.map((r) => ({
+      id: r.id,
+      accountId: r.accountId,
+      url: r.url,
+      secret: r.secret,
+      secretPrefix: r.secretPrefix,
+      secretPrev: r.secretPrev,
+      secretPrevExpiresAt: r.secretPrevExpiresAt,
+      secretCreatedAt: r.secretCreatedAt,
+      lastReminderSentAt: r.lastReminderSentAt,
+      graceWindowEndsAt: r.graceWindowEndsAt,
+      forceRotatedAt: r.forceRotatedAt,
+      events: r.events,
+      description: r.description,
+      active: r.active,
+      consecutiveFailures: r.consecutiveFailures,
+      lastSuccessAt: r.lastSuccessAt,
+      lastFailureAt: r.lastFailureAt,
+      disabledAt: r.disabledAt,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      accountEmail: r.accountEmail,
+    }));
+  }
+
+  async forceRotateSecret(input: {
+    id: string;
+    newSecret: string;
+    newPrefix: string;
+    graceWindowEndsAt: Date;
+    now: Date;
+  }): Promise<WebhookEndpointRow | null> {
+    // Mirrors rotateSecret (V-359 dual-sign path) PLUS writes the
+    // sub-slice 28.1 columns. forceRotatedAt stamps the rotation
+    // event so the daily sweep doesn't loop; graceWindowEndsAt is
+    // the 7-day deadline (Q2=B) the validator (sub-slice 28.3) reads
+    // to accept the prev secret for inbound HMAC verification.
+    const [row] = await this.database.db
+      .update(webhookEndpoints)
+      .set({
+        secret: input.newSecret,
+        secretPrefix: input.newPrefix,
+        secretPrev: sql`${webhookEndpoints.secret}`,
+        secretPrevExpiresAt: input.graceWindowEndsAt,
+        graceWindowEndsAt: input.graceWindowEndsAt,
+        forceRotatedAt: input.now,
+        secretCreatedAt: input.now,
+        lastReminderSentAt: null,
+        updatedAt: input.now,
+      })
+      .where(and(eq(webhookEndpoints.id, input.id), isNull(webhookEndpoints.disabledAt)))
       .returning();
     return row ? toEndpointRow(row) : null;
   }
@@ -436,6 +538,9 @@ function toEndpointRow(r: typeof webhookEndpoints.$inferSelect): WebhookEndpoint
     secretPrevExpiresAt: r.secretPrevExpiresAt,
     secretCreatedAt: r.secretCreatedAt,
     lastReminderSentAt: r.lastReminderSentAt,
+    // Arc 3 sub-slice 28.1 (v2-#28) — force-rotation columns.
+    graceWindowEndsAt: r.graceWindowEndsAt,
+    forceRotatedAt: r.forceRotatedAt,
     events: r.events,
     description: r.description,
     active: r.active,

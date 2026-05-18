@@ -29,6 +29,11 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       secretPrevExpiresAt: null,
       secretCreatedAt: now,
       lastReminderSentAt: null,
+      // Arc 3 sub-slice 28.1 (v2-#28) — server-initiated force-rotation
+      // columns. Always null on fresh insert; sub-slice 28.2's daily
+      // sweep populates them.
+      graceWindowEndsAt: null,
+      forceRotatedAt: null,
       events: input.events,
       description: input.description,
       active: true,
@@ -108,6 +113,49 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       secretPrefix: input.newPrefix,
       secretPrev: r.secret,
       secretPrevExpiresAt: input.graceExpiresAt,
+      secretCreatedAt: input.now,
+      lastReminderSentAt: null,
+      updatedAt: input.now,
+    };
+    this.endpoints.set(input.id, updated);
+    return Promise.resolve(updated);
+  }
+
+  findEndpointsNeedingForceRotation(args: {
+    now: Date;
+    thresholdDays: number;
+    limit: number;
+  }): Promise<ReadonlyArray<WebhookEndpointRow & { accountEmail: string | null }>> {
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    const cutoff = new Date(args.now.getTime() - args.thresholdDays * MS_PER_DAY);
+    const out: Array<WebhookEndpointRow & { accountEmail: string | null }> = [];
+    for (const r of this.endpoints.values()) {
+      if (r.disabledAt !== null) continue;
+      if (r.forceRotatedAt !== null) continue;
+      if (r.secretCreatedAt >= cutoff) continue;
+      out.push({ ...r, accountEmail: null });
+      if (out.length >= args.limit) break;
+    }
+    return Promise.resolve(out);
+  }
+
+  forceRotateSecret(input: {
+    id: string;
+    newSecret: string;
+    newPrefix: string;
+    graceWindowEndsAt: Date;
+    now: Date;
+  }): Promise<WebhookEndpointRow | null> {
+    const r = this.endpoints.get(input.id);
+    if (!r || r.disabledAt !== null) return Promise.resolve(null);
+    const updated: WebhookEndpointRow = {
+      ...r,
+      secret: input.newSecret,
+      secretPrefix: input.newPrefix,
+      secretPrev: r.secret,
+      secretPrevExpiresAt: input.graceWindowEndsAt,
+      graceWindowEndsAt: input.graceWindowEndsAt,
+      forceRotatedAt: input.now,
       secretCreatedAt: input.now,
       lastReminderSentAt: null,
       updatedAt: input.now,

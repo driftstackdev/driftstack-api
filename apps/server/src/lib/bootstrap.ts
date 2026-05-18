@@ -32,6 +32,7 @@ import { DrizzleWebhookRotationReminderRepo } from '../db/webhook-rotation-remin
 import { DrizzleByokAnthropicRotationReminderRepo } from '../db/byok-anthropic-rotation-reminder-repo.js';
 import { WebhookRotationReminderService } from '../services/webhook-rotation-reminder.js';
 import { ByokAnthropicRotationReminderService } from '../services/byok-anthropic-rotation-reminder.js';
+import { WebhookSecretForceRotationService } from '../services/webhook-secret-force-rotation.js';
 import { DrizzleAdminAuditLogRepo } from '../db/admin-audit-repo.js';
 import { DrizzleAccountsAdminRepo } from '../db/admin-accounts-repo.js';
 import { DrizzleEmailPreferencesRepo } from '../db/email-preferences-repo.js';
@@ -1131,6 +1132,16 @@ export async function createProductionDeps(
     logger,
     { dashboardUrl: config.dashboardOrigin },
   );
+  // Arc 3 sub-slice 28.2 (v2-#28) — 91-day server-initiated force-
+  // rotation sweep. Shares the DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS
+  // opt-out env var (Q4=A — no per-endpoint opt-out, but ops can
+  // silence the entire mutation surface for a customer-quiet deploy).
+  const webhookSecretForceRotationService = new WebhookSecretForceRotationService(
+    webhooksRepo,
+    email,
+    logger,
+    { dashboardUrl: config.dashboardOrigin },
+  );
   const webhookRotationReminderTimer = rotationRemindersDisabled
     ? null
     : setInterval(() => {
@@ -1169,6 +1180,27 @@ export async function createProductionDeps(
         })();
       }, ROTATION_REMINDER_INTERVAL_MS);
   byokAnthropicRotationReminderTimer?.unref();
+
+  // Arc 3 sub-slice 28.2 (v2-#28) — daily 91-day force-rotation sweep.
+  const webhookSecretForceRotationTimer = rotationRemindersDisabled
+    ? null
+    : setInterval(() => {
+        void (async () => {
+          try {
+            await webhookSecretForceRotationService.tickOnce(new Date());
+          } catch (err) {
+            logger.warn(
+              {
+                component: 'webhook-force-rotation-poller',
+                err:
+                  err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+              },
+              'webhook-force-rotation tickOnce threw unexpectedly (interval continues)',
+            );
+          }
+        })();
+      }, ROTATION_REMINDER_INTERVAL_MS);
+  webhookSecretForceRotationTimer?.unref();
 
   // v2-#29 — daily stale-secret_prev cleanup. v2-#20's worker fix
   // already stops emitting the prev signature past the grace window;
@@ -1223,6 +1255,7 @@ export async function createProductionDeps(
     clearInterval(statusPurgeTimer);
     if (webhookRotationReminderTimer) clearInterval(webhookRotationReminderTimer);
     if (byokAnthropicRotationReminderTimer) clearInterval(byokAnthropicRotationReminderTimer);
+    if (webhookSecretForceRotationTimer) clearInterval(webhookSecretForceRotationTimer);
     if (webhookSecretPrevCleanupTimer) clearInterval(webhookSecretPrevCleanupTimer);
     try {
       await sentry.flush(2000);

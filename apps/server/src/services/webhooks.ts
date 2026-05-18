@@ -48,6 +48,14 @@ export interface WebhookEndpointRow {
   secretCreatedAt: Date;
   /** v2-#10 — dedupe for the daily reminder job. Null = never sent. */
   lastReminderSentAt: Date | null;
+  /** Arc 3 sub-slice 28.1 (v2-#28) — 7-day server-initiated grace
+   *  deadline. Distinct from secretPrevExpiresAt (V-359 24h customer-
+   *  initiated). Null when no server-side force-rotation in flight. */
+  graceWindowEndsAt: Date | null;
+  /** Arc 3 sub-slice 28.1 (v2-#28) — stamped when the 91-day auto-
+   *  rotation fired. Used by the sweep to skip already-rotated rows.
+   *  Reset to null on the next customer-initiated rotation. */
+  forceRotatedAt: Date | null;
   events: WebhookEventType[];
   description: string | null;
   active: boolean;
@@ -161,6 +169,35 @@ export interface WebhooksRepo {
    * the count of rows cleared for telemetry.
    */
   clearStaleSecretPrev(args: { now: Date }): Promise<{ cleared: number }>;
+
+  /**
+   * Arc 3 sub-slice 28.2 (v2-#28) — find endpoints whose active secret
+   * has crossed the 91-day age threshold AND haven't been force-rotated
+   * already this cycle. The caller (WebhookSecretForceRotationService)
+   * iterates the result + calls forceRotate per row. limit bounds the
+   * per-tick burst for telemetry / blast-radius.
+   */
+  findEndpointsNeedingForceRotation(args: {
+    now: Date;
+    thresholdDays: number;
+    limit: number;
+  }): Promise<ReadonlyArray<WebhookEndpointRow & { accountEmail: string | null }>>;
+
+  /**
+   * Arc 3 sub-slice 28.2 (v2-#28) — server-initiated force rotation.
+   * Identical to rotateSecret except: writes secret_prev /
+   * secret_prev_expires_at AS WELL AS the new grace_window_ends_at +
+   * force_rotated_at fields. Returns the row + the fresh plaintext
+   * secret. The reminder email (sub-slice 28.4) is the only mechanism
+   * the customer learns the new value.
+   */
+  forceRotateSecret(args: {
+    id: string;
+    newSecret: string;
+    newPrefix: string;
+    graceWindowEndsAt: Date;
+    now: Date;
+  }): Promise<WebhookEndpointRow | null>;
 
   /**
    * V-185 — aggregate per-endpoint delivery counts (delivered, failed,
