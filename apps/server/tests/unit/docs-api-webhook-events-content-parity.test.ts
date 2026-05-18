@@ -60,6 +60,11 @@ describe('W570.C /docs/api/webhook-events.md content parity', () => {
     expect(body).toMatch(
       /\| `quota\.exceeded`\s+\| \[DECLARED\] \| Account hits 100% of tier quota\s+\|/,
     );
+    // Arc 5 EGRESS eg.7 — new DECLARED entry between the
+    // quota.exceeded row and the [PLANNED] block.
+    expect(body).toMatch(
+      /\| `session\.egress_capability_changed` \| \[DECLARED\] \| Harness emitted an egress\.capability_report for a SOCKS5 session \|/,
+    );
     expect(body).toMatch(
       /\| `session\.created`\s+\| \[PLANNED\]\s+\| Session transitions `creating` → `ready`\s+\|/,
     );

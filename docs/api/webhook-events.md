@@ -12,24 +12,25 @@ site (when it lands as a Tier 3 visual surface).
 
 ## Quick index
 
-| Event                      | Status     | When                                                  |
-| -------------------------- | ---------- | ----------------------------------------------------- |
-| `session.completed`        | [LIVE]     | Session is destroyed cleanly                          |
-| `session.failed`           | [LIVE]     | Session terminates in `errored` state                 |
-| `api_key.revoked`          | [LIVE]     | API key revoked (customer or admin)                   |
-| `quota.warning_80pct`      | [DECLARED] | Account hits 80% of tier quota                        |
-| `quota.exceeded`           | [DECLARED] | Account hits 100% of tier quota                       |
-| `session.created`          | [PLANNED]  | Session transitions `creating` → `ready`              |
-| `session.destroyed`        | [PLANNED]  | Distinct from `session.completed` (no semantic shift) |
-| `profile.created`          | [PLANNED]  | New profile created                                   |
-| `profile.deleted`          | [PLANNED]  | Profile deleted                                       |
-| `api_key.minted`           | [PLANNED]  | New API key issued                                    |
-| `subscription.changed`     | [PLANNED]  | Tier changed via Stripe                               |
-| `subscription.cancelled`   | [PLANNED]  | Subscription cancelled                                |
-| `trial_pack.purchased`     | [PLANNED]  | $2.99 trial pack purchased                            |
-| `trial_pack.expired`       | [PLANNED]  | Trial pack expired (14-day window closed)             |
-| `webhook_endpoint.created` | [PLANNED]  | New webhook endpoint registered                       |
-| `webhook_endpoint.deleted` | [PLANNED]  | Webhook endpoint deleted                              |
+| Event                               | Status     | When                                                             |
+| ----------------------------------- | ---------- | ---------------------------------------------------------------- |
+| `session.completed`                 | [LIVE]     | Session is destroyed cleanly                                     |
+| `session.failed`                    | [LIVE]     | Session terminates in `errored` state                            |
+| `api_key.revoked`                   | [LIVE]     | API key revoked (customer or admin)                              |
+| `quota.warning_80pct`               | [DECLARED] | Account hits 80% of tier quota                                   |
+| `quota.exceeded`                    | [DECLARED] | Account hits 100% of tier quota                                  |
+| `session.egress_capability_changed` | [DECLARED] | Harness emitted an egress.capability_report for a SOCKS5 session |
+| `session.created`                   | [PLANNED]  | Session transitions `creating` → `ready`                         |
+| `session.destroyed`                 | [PLANNED]  | Distinct from `session.completed` (no semantic shift)            |
+| `profile.created`                   | [PLANNED]  | New profile created                                              |
+| `profile.deleted`                   | [PLANNED]  | Profile deleted                                                  |
+| `api_key.minted`                    | [PLANNED]  | New API key issued                                               |
+| `subscription.changed`              | [PLANNED]  | Tier changed via Stripe                                          |
+| `subscription.cancelled`            | [PLANNED]  | Subscription cancelled                                           |
+| `trial_pack.purchased`              | [PLANNED]  | $2.99 trial pack purchased                                       |
+| `trial_pack.expired`                | [PLANNED]  | Trial pack expired (14-day window closed)                        |
+| `webhook_endpoint.created`          | [PLANNED]  | New webhook endpoint registered                                  |
+| `webhook_endpoint.deleted`          | [PLANNED]  | Webhook endpoint deleted                                         |
 
 ## Common envelope
 
@@ -159,6 +160,36 @@ Planned shape:
   "percentage": 100,
   "period_start": "2026-05-01T00:00:00.000Z",
   "period_end": "2026-06-01T00:00:00.000Z"
+}
+```
+
+### `session.egress_capability_changed` [DECLARED]
+
+Fires when the WebKit-fork harness emits an
+`egress.capability_report` event for a SOCKS5 session and the
+control plane ingests it. Carries the same shape as the
+`egress_capabilities` field on `GET /v1/sessions/{id}` —
+subscribers can branch on `udp_associate`, `dns_remote_resolve`,
+`quic_route`, or `warnings` without a follow-up GET.
+
+Subscribable — add it to your webhook endpoint's `events` array
+to wire proxy-health visibility into your own observability
+surface.
+
+`[DECLARED]` because the schema + pgEnum + emitter plumbing is in
+place (migrations 0054 + 0055; api-types enum extended) but the
+harness side (Agent 1 scope per planning 133) has not yet shipped
+the event source. Once the harness emits, this moves to `[LIVE]`.
+
+```json
+{
+  "session_id": "ses_<uuid>",
+  "egress_capabilities": {
+    "udp_associate": true,
+    "quic_route": "proxy",
+    "dns_remote_resolve": false,
+    "warnings": []
+  }
 }
 ```
 
