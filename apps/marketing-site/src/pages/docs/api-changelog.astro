@@ -22,6 +22,41 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>2026-05</h2>
     <ul>
       <li>
+        <strong>API — Live video for agent sessions (LiveKit WebRTC).</strong>
+        New <code>POST /v1/agent-sessions/&#123;id&#125;/livekit-token</code>
+        endpoint mints a per-Mac LiveKit JWT for WebRTC subscribers
+        (the customer dashboard, the desktop GUI client, or any other
+        LiveKit-aware tool). <code>POST /v1/agent-sessions</code>
+        now also auto-populates a <code>livekit</code> field on the 201
+        response when the deployment is LiveKit-ready, so clients can
+        skip the round-trip and connect to the room immediately on
+        create. Token TTL is 24h; the room name is always the
+        agent_session id. Backward-compatible — the field is optional;
+        older SDKs ignore it. Full reference at
+        <a href="https://docs.driftstack.dev/api/agent-sessions/">/api/agent-sessions</a>
+        and integration guide at
+        <a href="https://docs.driftstack.dev/guides/live-video/">/guides/live-video</a>.
+      </li>
+      <li>
+        <strong>API — Mac-node LiveKit credential registration.</strong>
+        New <code>POST /v1/mac-nodes/register</code> admin endpoint
+        accepts per-Mac LiveKit API credentials on harness boot. The
+        API secret is encrypted at rest under the existing
+        <code>MFA_ENCRYPTION_KEY</code> (same envelope as BYOK Anthropic
+        + gui_control_key + MFA TOTP); plaintext is decrypted in-memory
+        only at JWT-mint time.
+      </li>
+      <li>
+        <strong>SDKs — <code>LiveKitInfo</code> type across TS / Python / Go.</strong>
+        New typed shape carries <code>ws_url</code> + <code>room</code> +
+        <code>token</code> + <code>participant_identity</code> +
+        <code>expires_at</code>. Used on the new
+        <code>/livekit-token</code> response AND the optional
+        <code>livekit</code> field on session-create — one type, two
+        consumption surfaces. <code>AgentSession.livekit</code> field is
+        optional so older SDKs parse the response unchanged.
+      </li>
+      <li>
         <strong>Auth — derivation paths match dashboard routes.</strong>
 : the DASHBOARD_ORIGIN-derived defaults now land on
         the customer-dashboard's real file-based routes
