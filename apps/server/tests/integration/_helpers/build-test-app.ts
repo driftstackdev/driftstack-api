@@ -633,6 +633,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'LiveKit token mint outcomes, labelled by role (publisher | subscriber | unknown) + outcome (ok / not_found / validation).',
     ['role', 'outcome'],
   );
+  // Arc 7 obs.13 — outbound email send outcome counter.
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.emailSendTotal,
+    'Outbound email sends, labelled by template + outcome (ok + classifyEmailError categories).',
+    ['template', 'outcome'],
+  );
 
   // V-216 — customer-facing audit; constructed early so all
   // emit-on-event services (webhooks, sessions, api-keys, profiles)

@@ -223,4 +223,11 @@ export const METRIC_NAMES = {
   // not_found is either a 404 enumeration probe or a session-id
   // mismatch bug; a surge in 'ok' tracks WebRTC adoption.
   livekitTokenMintTotal: 'driftstack_livekit_token_mint_total',
+  // Arc 7 obs.13 — outbound email send counter. Labelled by template
+  // (signup-verification / password-reset / billing-receipt / etc.)
+  // and outcome (ok / postmark_pending_approval / recipient_inactive
+  // / transport_error / config_error — the classifyEmailError code
+  // set). A spike in 'postmark_pending_approval' = the approval is
+  // still blocking transactional traffic; ops priority bump.
+  emailSendTotal: 'driftstack_email_send_total',
 } as const;

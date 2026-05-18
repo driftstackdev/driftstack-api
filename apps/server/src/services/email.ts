@@ -29,6 +29,7 @@
 import { ServerClient as PostmarkClient } from 'postmark';
 import type { Logger } from '../lib/logger.js';
 import type { PostmarkConfig } from '../lib/config.js';
+import { METRIC_NAMES, type MetricsRegistry } from './metrics-registry.js';
 
 export interface EmailService {
   /**
@@ -549,6 +550,11 @@ export interface CreateEmailServiceArgs {
   client?: PostmarkSendApi;
   /** Postmark message stream. Default `outbound`. */
   messageStream?: string;
+  /** Arc 7 obs.13 — optional metrics registry. When wired, each
+   *  send() call emits `driftstack_email_send_total{template,outcome}`
+   *  where outcome is one of: ok / postmark_pending_approval /
+   *  recipient_inactive / transport_error / config_error. */
+  metrics?: MetricsRegistry;
 }
 
 export function createEmailService({
@@ -556,6 +562,7 @@ export function createEmailService({
   logger,
   client,
   messageStream = 'outbound',
+  metrics,
 }: CreateEmailServiceArgs): EmailService {
   if (config === null) {
     logger.warn(
@@ -604,6 +611,11 @@ export function createEmailService({
         MessageStream: messageStream,
       });
       logger.info({ component: 'email', template: name, to }, 'email sent');
+      try {
+        metrics?.inc(METRIC_NAMES.emailSendTotal, { template: name, outcome: 'ok' });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
     } catch (err) {
       // V-665 — categorise the failure so dashboards / alerts can
       // distinguish "Postmark account still pending approval" (the
@@ -622,6 +634,11 @@ export function createEmailService({
         },
         'email send failed (fire-and-forget)',
       );
+      try {
+        metrics?.inc(METRIC_NAMES.emailSendTotal, { template: name, outcome: category });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
       // Deliberately swallow — email is never on a request critical path.
     }
   }

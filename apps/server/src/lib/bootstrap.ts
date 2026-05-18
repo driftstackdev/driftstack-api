@@ -202,8 +202,9 @@ export async function createProductionDeps(
     logger.info({ component: 'r2', bucket: r2.bucket }, 'R2 client initialized');
   }
 
-  // Postmark email — optional. No-op if not configured.
-  const email = createEmailService({ config: config.postmark, logger });
+  // Postmark email — optional. No-op if not configured. Constructed
+  // lazily AFTER the metrics registry below so the metrics dep can
+  // be threaded in at construction time.
 
   // Repos — Drizzle-backed.
   const authRepo = new DrizzleAccountAuthRepo(dbHandle);
@@ -314,7 +315,22 @@ export async function createProductionDeps(
       'LiveKit token mint outcomes, labelled by role (publisher | subscriber | unknown) + outcome (ok / not_found / validation).',
       ['role', 'outcome'],
     );
+    // Arc 7 obs.13 — outbound email send outcome counter.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.emailSendTotal,
+      'Outbound email sends, labelled by template + outcome (ok + classifyEmailError categories).',
+      ['template', 'outcome'],
+    );
   }
+
+  // Arc 7 obs.13 — construct the email service after the metrics
+  // registry so send() emits the email_send_total counter when
+  // wired. No-op service when Postmark is unconfigured.
+  const email: EmailService = createEmailService({
+    config: config.postmark,
+    logger,
+    ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),
+  });
 
   // Driver — mock or real WebKit per config. The Playwright dev
   // driver is dynamically imported, so this is async.

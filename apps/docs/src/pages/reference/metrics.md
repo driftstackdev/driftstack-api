@@ -87,6 +87,12 @@ The current counter catalogue (all `driftstack_*` namespaced):
 | ------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------- |
 | `driftstack_livekit_token_mint_total` | `role`, `outcome` | LiveKit token mint requests (role: publisher/subscriber/unknown × outcome: ok/not_found/validation) |
 
+### Transactional email
+
+| Metric                        | Labels                | What it tracks                                                                                                                                                                   |
+| ----------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `driftstack_email_send_total` | `template`, `outcome` | Outbound transactional-email sends per template × outcome (ok / pending-approval / inactive-recipient / account-inactive / invalid-request / rate-limited / transport / unknown) |
+
 ## Suggested alerts
 
 Reasonable starting alerts (translate to your alert-manager rules
