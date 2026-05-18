@@ -153,6 +153,16 @@ export interface WebhooksRepo {
   }): Promise<WebhookEndpointRow | null>;
 
   /**
+   * v2-#29 — null out `secret_prev` + `secret_prev_expires_at` on every
+   * row whose grace window has elapsed. v2-#20's worker fix already
+   * stops emitting the prev signature past expiry, so this is purely a
+   * data-hygiene sweep: a leaked DB snapshot would otherwise still
+   * carry the old plaintext secret past its useful lifetime. Returns
+   * the count of rows cleared for telemetry.
+   */
+  clearStaleSecretPrev(args: { now: Date }): Promise<{ cleared: number }>;
+
+  /**
    * V-185 — aggregate per-endpoint delivery counts (delivered, failed,
    * dlq) for an account. One GROUP BY query in Drizzle; iterates the
    * in-memory map in tests. Returns a Map keyed by endpoint id (uuid,

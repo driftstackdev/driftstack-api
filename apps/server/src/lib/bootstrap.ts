@@ -1109,6 +1109,39 @@ export async function createProductionDeps(
         })();
       }, ROTATION_REMINDER_INTERVAL_MS);
   byokAnthropicRotationReminderTimer?.unref();
+
+  // v2-#29 — daily stale-secret_prev cleanup. v2-#20's worker fix
+  // already stops emitting the prev signature past the grace window;
+  // this sweep is a data-hygiene follow-up that nulls the row columns
+  // so a leaked DB snapshot can no longer surface the old plaintext.
+  // Shares the same daily cadence + opt-out as the rotation reminders;
+  // a deploy that wants no automatic mutations sets
+  // DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1.
+  const webhookSecretPrevCleanupTimer = rotationRemindersDisabled
+    ? null
+    : setInterval(() => {
+        void (async () => {
+          try {
+            const result = await webhooksRepo.clearStaleSecretPrev({ now: new Date() });
+            if (result.cleared > 0) {
+              logger.info(
+                { component: 'webhook-secret-prev-cleanup', cleared: result.cleared },
+                'webhook secret_prev cleanup nulled stale rows',
+              );
+            }
+          } catch (err) {
+            logger.warn(
+              {
+                component: 'webhook-secret-prev-cleanup',
+                err:
+                  err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+              },
+              'webhook secret_prev cleanup threw unexpectedly (interval continues)',
+            );
+          }
+        })();
+      }, ROTATION_REMINDER_INTERVAL_MS);
+  webhookSecretPrevCleanupTimer?.unref();
   if (rotationRemindersDisabled) {
     logger.warn(
       { component: 'rotation-reminders' },
@@ -1130,6 +1163,7 @@ export async function createProductionDeps(
     clearInterval(statusPurgeTimer);
     if (webhookRotationReminderTimer) clearInterval(webhookRotationReminderTimer);
     if (byokAnthropicRotationReminderTimer) clearInterval(byokAnthropicRotationReminderTimer);
+    if (webhookSecretPrevCleanupTimer) clearInterval(webhookSecretPrevCleanupTimer);
     try {
       await sentry.flush(2000);
       await sentry.close(2000);

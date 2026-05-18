@@ -1,6 +1,6 @@
 // Drizzle-backed implementation of WebhooksRepo.
 
-import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import type {
   EndpointDeliveryCounts,
   ListDeliveriesPage,
@@ -166,6 +166,27 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
       )
       .returning();
     return row ? toEndpointRow(row) : null;
+  }
+
+  async clearStaleSecretPrev(args: { now: Date }): Promise<{ cleared: number }> {
+    // v2-#29 — single UPDATE that nulls out secret_prev +
+    // secret_prev_expires_at for every row whose grace window has
+    // elapsed. The match clause keys on `secret_prev_expires_at <
+    // now` AND `secret_prev IS NOT NULL` so rows that never rotated
+    // (both fields null) aren't touched. Returns the cleared-row
+    // count for telemetry.
+    const rows = await this.database.db
+      .update(webhookEndpoints)
+      .set({ secretPrev: null, secretPrevExpiresAt: null })
+      .where(
+        and(
+          isNotNull(webhookEndpoints.secretPrev),
+          isNotNull(webhookEndpoints.secretPrevExpiresAt),
+          lt(webhookEndpoints.secretPrevExpiresAt, args.now),
+        ),
+      )
+      .returning({ id: webhookEndpoints.id });
+    return { cleared: rows.length };
   }
 
   async enqueueDelivery(input: NewWebhookDeliveryInput): Promise<void> {

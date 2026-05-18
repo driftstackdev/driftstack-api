@@ -116,6 +116,25 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     return Promise.resolve(updated);
   }
 
+  clearStaleSecretPrev(args: { now: Date }): Promise<{ cleared: number }> {
+    let cleared = 0;
+    for (const [id, r] of this.endpoints) {
+      if (
+        r.secretPrev !== null &&
+        r.secretPrevExpiresAt !== null &&
+        r.secretPrevExpiresAt.getTime() < args.now.getTime()
+      ) {
+        this.endpoints.set(id, {
+          ...r,
+          secretPrev: null,
+          secretPrevExpiresAt: null,
+        });
+        cleared += 1;
+      }
+    }
+    return Promise.resolve({ cleared });
+  }
+
   updateEndpoint(input: {
     id: string;
     accountId: string;
