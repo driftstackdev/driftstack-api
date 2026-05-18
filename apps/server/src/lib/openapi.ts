@@ -2270,6 +2270,30 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
+  // v2-#26 — dashboard-friendly 302 redirect to the Stripe Customer
+  // Portal. The POST /v1/billing/portal-session endpoint above
+  // returns the URL as JSON; this GET variant is for direct browser
+  // navigation (e.g. a dashboard "Manage subscription" link).
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/me/billing-portal',
+    summary: 'Redirect to a one-time Stripe Customer Portal URL (302)',
+    tags: ['billing'],
+    security: auth,
+    responses: {
+      302: {
+        description: 'Redirects to the Stripe Customer Portal URL via the Location header.',
+        headers: {
+          Location: {
+            description: 'Stripe Customer Portal URL.',
+            schema: { type: 'string', format: 'uri' },
+          },
+        },
+      },
+      ...errors4xx,
+      503: { description: 'Billing not enabled on this deployment.', content: problemContent },
+    },
+  });
   registerRoute(r, {
     method: 'get',
     path: '/v1/billing',
