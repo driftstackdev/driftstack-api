@@ -650,6 +650,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'Outbound webhook delivery terminal state transitions, labelled by terminal_state (delivered | dlq).',
     ['terminal_state'],
   );
+  // Arc 7 obs.15 — foundational HTTP request counter.
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.httpRequestTotal,
+    'HTTP requests, labelled by method × route template × status_class (1xx/2xx/3xx/4xx/5xx).',
+    ['method', 'route', 'status_class'],
+  );
 
   // V-216 — customer-facing audit; constructed early so all
   // emit-on-event services (webhooks, sessions, api-keys, profiles)

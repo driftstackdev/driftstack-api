@@ -36,7 +36,7 @@ import type { AccountAuditService } from '../services/account-audit.js';
 import type { AccountLifecycleService } from '../services/account-lifecycle.js';
 import type { ScheduledJobsService } from '../services/scheduled-jobs.js';
 import { registerAccountAuditRoutes } from '../routes/account-audit.js';
-import type { MetricsRegistry } from '../services/metrics-registry.js';
+import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 import { registerMetricsRoutes } from '../routes/metrics.js';
 import type { PairModeHeartbeatTracker } from '../services/agent-pair-mode-heartbeat.js';
 import type { ValidationHarnessService } from '../services/validation-harness.js';
@@ -652,6 +652,47 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
     done();
   });
+
+  // Arc 7 obs.15 — foundational HTTP request counter. Per-request
+  // tick keyed by method × route-template × status_class. The route
+  // template (e.g. `/v1/sessions/:id`) is what Fastify exposes as
+  // routerPath / routeOptions.url; falling back to '__unrouted__'
+  // when neither is available avoids leaking the raw URL (which
+  // would carry account / session ids and blow up cardinality).
+  if (deps.metricsRegistry !== undefined) {
+    const registry = deps.metricsRegistry;
+    app.addHook('onResponse', (req, reply, done) => {
+      const method = req.method.toUpperCase();
+      // Fastify v4 exposes the matched route template under
+      // routeOptions.url; older code paths used routerPath. Prefer
+      // routeOptions.url; fall back to routerPath; finally fall back
+      // to the synthetic 'unrouted' bucket so 404s don't leak the
+      // requested URL.
+      const ro = (req as { routeOptions?: { url?: string } }).routeOptions;
+      const route = ro?.url ?? (req as { routerPath?: string }).routerPath ?? '__unrouted__';
+      const status = reply.statusCode;
+      const statusClass =
+        status >= 500
+          ? '5xx'
+          : status >= 400
+            ? '4xx'
+            : status >= 300
+              ? '3xx'
+              : status >= 200
+                ? '2xx'
+                : '1xx';
+      try {
+        registry.inc(METRIC_NAMES.httpRequestTotal, {
+          method,
+          route,
+          status_class: statusClass,
+        });
+      } catch {
+        // Swallow; metrics are best-effort. Never break a response.
+      }
+      done();
+    });
+  }
 
   registerSessionRoutes(app, {
     service: deps.sessionsService,

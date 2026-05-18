@@ -241,4 +241,14 @@ export const METRIC_NAMES = {
   //     whose endpoints have been unreachable for the full retry curve.
   webhookDeliveryAttemptTotal: 'driftstack_webhook_delivery_attempt_total',
   webhookDeliveryTerminalTotal: 'driftstack_webhook_delivery_terminal_total',
+  // Arc 7 obs.15 — foundational HTTP request counter. Labelled by
+  // method × route template × status class. Cardinality is bounded
+  // by:
+  //   - method: 5 (GET/POST/PUT/DELETE/PATCH)
+  //   - route: Fastify's parameterized route template (e.g.
+  //     `/v1/sessions/:id`), bounded by the count of registered routes
+  //   - status_class: 5 (1xx/2xx/3xx/4xx/5xx)
+  // The route label uses the TEMPLATE, never the URL, so account ids
+  // / session ids / etc. don't leak.
+  httpRequestTotal: 'driftstack_http_request_total',
 } as const;

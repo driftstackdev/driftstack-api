@@ -49,6 +49,12 @@ enums; the scrape size stays well under the Prometheus default
 
 The current counter catalogue (all `driftstack_*` namespaced):
 
+### Foundational
+
+| Metric                          | Labels                            | What it tracks                                                                                                                                                                                   |
+| ------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `driftstack_http_request_total` | `method`, `route`, `status_class` | Every HTTP request. `route` is the Fastify route TEMPLATE (e.g. `/v1/sessions/:id`), never the raw URL — keeps cardinality bounded by the registered-route count. `status_class` is `1xx`–`5xx`. |
+
 ### Auth + rate limiting
 
 | Metric                         | Labels              | What it tracks                                                                                        |
