@@ -450,6 +450,24 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
           s.profile_id !== null && s.profile_id !== undefined
             ? ' · profile <code class="font-mono">' + escapeHtml(s.profile_id.slice(0, 16)) + '…</code>'
             : '';
+        // Arc 5 EGRESS eg.5 — proxy-warning indicator. When the
+        // harness reports warnings on this session's egress
+        // capabilities (e.g. udp_unsupported_by_proxy,
+        // dns_remote_resolve_unsupported_by_proxy), surface a small
+        // badge on the row so the customer sees the issue without
+        // opening a detail panel.
+        const warnings =
+          s.egress_capabilities && Array.isArray(s.egress_capabilities.warnings)
+            ? s.egress_capabilities.warnings
+            : [];
+        const warningBadge =
+          warnings.length > 0
+            ? '<span class="inline-flex rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400" title="' +
+              escapeHtml(warnings.join(', ')) +
+              '">⚠ proxy ' +
+              warnings.length +
+              '</span>'
+            : '';
         return (
           '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
@@ -462,6 +480,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
           '">' +
           escapeHtml(s.status) +
           '</span>' +
+          warningBadge +
           '</div>' +
           '<p class="mt-1 text-xs text-ink-muted">Archetype <code class="font-mono">' +
           escapeHtml(s.archetype) +
