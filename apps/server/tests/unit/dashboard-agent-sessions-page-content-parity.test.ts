@@ -132,4 +132,39 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
     expect(body).toMatch(/status === 402/);
     expect(body).toMatch(/ring-2.*ring-amber-500\/50/);
   });
+
+  // v2-#8 Wave 2.C sub-slice 8.26.b — toast surface for typed 409 errors.
+  it('showToast() helper + ensureToastContainer() create a bottom-right toast stack', () => {
+    expect(body).toMatch(/function showToast\(/);
+    expect(body).toMatch(/function ensureToastContainer\(/);
+    expect(body).toMatch(/data-toast-container/);
+    expect(body).toMatch(/fixed bottom-4 right-4/);
+    expect(body).toMatch(/setTimeout\(\(\) => \{[\s\S]+?toast\.remove\(\)/);
+  });
+
+  it('describePairModeError() composes a customer-visible message from the from + transition extension fields', () => {
+    expect(body).toMatch(/function describePairModeError\(body\)/);
+    expect(body).toMatch(/body\.from === 'string'/);
+    expect(body).toMatch(/body\.transition === 'string'/);
+    expect(body).toMatch(/Cannot/);
+  });
+
+  it('takeover + handback 409 with pair-mode-invalid-transition type → showToast warn (typed error surface)', () => {
+    // The same regex hits BOTH takeover + handback handlers since
+    // they share the same pattern.
+    const occurrences = (
+      body.match(/body\.type\.indexOf\('pair-mode-invalid-transition'\) !== -1/g) ?? []
+    ).length;
+    expect(occurrences).toBeGreaterThanOrEqual(2);
+  });
+
+  it('takeover + handback non-200 non-409 errors → showToast error with HTTP status surfaced', () => {
+    expect(body).toMatch(/'Takeover failed \(HTTP '/);
+    expect(body).toMatch(/'Handback failed \(HTTP '/);
+  });
+
+  it('takeover + handback network errors (fetch rejection) → showToast error with network framing', () => {
+    expect(body).toMatch(/'Takeover failed — network error\.'/);
+    expect(body).toMatch(/'Handback failed — network error\.'/);
+  });
 });

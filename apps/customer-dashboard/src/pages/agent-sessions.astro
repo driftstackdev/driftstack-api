@@ -273,7 +273,59 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
         });
       }
 
-      // v2-#8 Wave 2.C sub-slice 8.26 — takeover button click handler.
+      // v2-#8 Wave 2.C sub-slice 8.26.b — toast surface for typed
+      // 409 PairModeStateInvalidTransitionError. The route returns
+      // RFC 7807 problem+json with `from` + `transition` extension
+      // fields naming the conflict precisely; we surface those to
+      // the customer instead of silently swallowing.
+      function showToast(kind, message) {
+        const container = ensureToastContainer();
+        const toast = document.createElement('div');
+        const bg =
+          kind === 'error'
+            ? 'bg-red-500/10 border-red-500/30 text-red-200'
+            : kind === 'warn'
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+              : 'bg-white/5 border-white/10 text-ink-secondary';
+        toast.className =
+          'pointer-events-auto rounded-md border px-4 py-2 text-sm shadow-lg ' + bg;
+        toast.setAttribute('data-toast', kind);
+        toast.textContent = message;
+        container.appendChild(toast);
+        // Auto-dismiss after 6s.
+        setTimeout(() => {
+          toast.remove();
+        }, 6000);
+      }
+      function ensureToastContainer() {
+        let c = root.querySelector('[data-toast-container]');
+        if (c) return c;
+        c = document.createElement('div');
+        c.setAttribute('data-toast-container', '');
+        c.className =
+          'pointer-events-none fixed bottom-4 right-4 z-50 flex max-w-md flex-col gap-2';
+        root.appendChild(c);
+        return c;
+      }
+
+      function describePairModeError(body) {
+        // RFC 7807 problem-json shape: { type, title, status, detail,
+        // from?, transition? }. The typed error class extracts the
+        // last two fields on the SDK side; here we render a customer-
+        // visible message.
+        const from = body && typeof body.from === 'string' ? body.from : 'unknown state';
+        const transition =
+          body && typeof body.transition === 'string' ? body.transition : 'unknown transition';
+        return (
+          'Cannot ' +
+          transition.replace(/-request$/, '') +
+          ' from ' +
+          from +
+          " — refresh to see the session's current state."
+        );
+      }
+
+      // v2-#8 Wave 2.C sub-slice 8.26 + 8.26.b — takeover button click.
       if (takeoverBtn) {
         takeoverBtn.addEventListener('click', () => {
           if (!activeSessionId) return;
@@ -291,10 +343,19 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
               if (status === 200 && body.pair_mode_state) {
                 if (stateEl) stateEl.textContent = body.pair_mode_state.kind;
                 renderTakeoverHandback(body.pair_mode_state, activeMode);
+              } else if (
+                status === 409 &&
+                body &&
+                typeof body.type === 'string' &&
+                body.type.indexOf('pair-mode-invalid-transition') !== -1
+              ) {
+                showToast('warn', describePairModeError(body));
+              } else if (status >= 400) {
+                showToast('error', 'Takeover failed (HTTP ' + status + ').');
               }
             })
             .catch(() => {
-              /* swallow */
+              showToast('error', 'Takeover failed — network error.');
             });
         });
       }
@@ -315,10 +376,19 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
               if (status === 200 && body.pair_mode_state) {
                 if (stateEl) stateEl.textContent = body.pair_mode_state.kind;
                 renderTakeoverHandback(body.pair_mode_state, activeMode);
+              } else if (
+                status === 409 &&
+                body &&
+                typeof body.type === 'string' &&
+                body.type.indexOf('pair-mode-invalid-transition') !== -1
+              ) {
+                showToast('warn', describePairModeError(body));
+              } else if (status >= 400) {
+                showToast('error', 'Handback failed (HTTP ' + status + ').');
               }
             })
             .catch(() => {
-              /* swallow */
+              showToast('error', 'Handback failed — network error.');
             });
         });
       }
