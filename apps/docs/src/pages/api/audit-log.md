@@ -84,7 +84,7 @@ customer-facing responses for privacy (per the): the dashboard
 rendering doesn't display them, and the admin tooling reads them
 out of a separate internal store.
 
-**Caveat (V-413):** the auth-flow audit events
+**Caveat:** the auth-flow audit events
 (`account.email_verified`, `account.login`, `account.logout`,
 `account.password_changed`) currently store `issued_from_ip` +
 `user_agent` inside `payload` — contrary to the intent at

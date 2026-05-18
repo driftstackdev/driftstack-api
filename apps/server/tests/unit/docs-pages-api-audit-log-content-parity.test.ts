@@ -86,14 +86,17 @@ describe('W768 docs /api/audit-log content parity', () => {
     );
   });
 
-  it('CRITICAL V-413 caveat pinned — auth-flow events store issued_from_ip+user_agent in payload as a deliberate exception. The "Caveat (V-413)" + the TD-audit-payload-scrub queued framing explains the known asymmetry.', () => {
+  it('CRITICAL caveat pinned — auth-flow events store issued_from_ip+user_agent in payload as a deliberate exception. The "Caveat:" + TD-audit-payload-scrub queued framing explains the known asymmetry. The previous skip pinned `Caveat (V-413)` with the inline V-anchor; the V-413 internal anchor was removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the substantive caveat framing survives without it.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/\*\*Caveat \(V-413\):\*\* the auth-flow audit events/);
+    expect(p).toMatch(/\*\*Caveat:\*\* the auth-flow audit events/);
     expect(p).toMatch(
       /`account\.email_verified`, `account\.login`, `account\.logout`,\s*\n?`account\.password_changed`\) currently store `issued_from_ip` \+\s*\n?`user_agent` inside `payload`/,
     );
     expect(p).toMatch(/TD-audit-payload-scrub/);
+    // Drift-guard: the internal V-413 anchor MUST NOT bleed back
+    // into the customer-rendered Caveat line.
+    expect(p).not.toMatch(/\*\*Caveat \(V-413\):\*\*/);
   });
 
   it('CRITICAL 27-action catalog pinned. The 27-row table matches W755 /audit-log dashboard + V-216 server-side enum + V-398 expansions.', () => {

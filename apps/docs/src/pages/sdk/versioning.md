@@ -7,7 +7,7 @@ description: Driftstack SDK versioning + deprecation policy. Independent of HTTP
 # SDK versioning + deprecation policy
 
 **Status:** Active
-**Effective date:** 2026-05-05 (V-177)
+**Effective date:** 2026-05-05
 **Applies to:** `@driftstack/sdk` (TypeScript), `driftstack` (Python),
 `github.com/driftstackdev/driftstack-api/packages/sdk-go` (Go).
 
