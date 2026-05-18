@@ -310,7 +310,13 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
                 if (featureBanner) featureBanner.classList.remove('hidden');
                 throw new Error('feature-unavailable');
               }
-              if (!r.ok) throw new Error('http ' + r.status);
+              if (!r.ok) {
+                // Non-503 4xx / 5xx — surface a typed toast so the
+                // customer sees an HTTP code (the form silently
+                // failing was hostile).
+                const httpStatus = r.status;
+                throw new Error('http ' + httpStatus);
+              }
               return r.json();
             })
             .then((session) => {
@@ -333,8 +339,17 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
                 new CustomEvent('agent-session-created', { detail: { id: session.id } }),
               );
             })
-            .catch(() => {
-              /* swallow — banner-render handled in the 503 branch above */
+            .catch((err) => {
+              const msg = err && err.message ? String(err.message) : '';
+              // feature-unavailable: the banner reveal above is the
+              // canonical UX; no toast needed (the banner is more
+              // informative than a transient toast).
+              if (msg === 'feature-unavailable') return;
+              if (msg.startsWith('http ')) {
+                showToast('error', 'Session create failed (HTTP ' + msg.slice(5) + ').');
+              } else {
+                showToast('error', 'Session create failed — network error.');
+              }
             });
         });
       }

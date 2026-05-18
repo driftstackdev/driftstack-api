@@ -118,6 +118,16 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
     expect(body).toMatch(/featureBanner\.classList\.remove\('hidden'\)/);
   });
 
+  it('create-session form non-503 errors fire typed toasts (HTTP for 4xx/5xx; network for fetch rejection) — was silently swallowed pre-fix', () => {
+    // The catch branch distinguishes feature-unavailable (banner-
+    // only), HTTP errors (toast with status), and network errors
+    // (network-error toast). 503-feature-unavailable stays as banner
+    // because the banner is more informative than a transient toast.
+    expect(body).toMatch(/'Session create failed \(HTTP ' \+ msg\.slice\(5\) \+ '\)\.'/);
+    expect(body).toMatch(/'Session create failed — network error\.'/);
+    expect(body).toMatch(/msg === 'feature-unavailable'/);
+  });
+
   // v2-#8 Wave 2.C sub-slice 8.27 — TranscriptStream SSE consumer.
   it('startTranscriptStream() opens EventSource on /v1/agent-sessions/:id/transcript with ds_token fallback', () => {
     expect(body).toMatch(/new EventSource\(url\)/);
