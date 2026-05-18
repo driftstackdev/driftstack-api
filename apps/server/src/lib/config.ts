@@ -420,7 +420,16 @@ function readSentryConfig(env: NodeJS.ProcessEnv): SentryConfig | null {
   if (!dsn || !environment) {
     return null;
   }
-  const release = env.SENTRY_RELEASE;
+  // Arc 7 obs.1 — Sentry release auto-tagging. Prefer the explicit
+  // SENTRY_RELEASE env when set; otherwise fall back to GIT_SHA so
+  // every deploy gets a release tag without manual env config. The
+  // deploy bridge already writes GIT_SHA to /etc/driftstack/api.env
+  // for the /version endpoint; this slice re-uses the same source
+  // of truth so the Sentry release matches the git_sha surfaced on
+  // GET /version. No fallback to 'unknown' here — better to emit
+  // events with `release: undefined` than to ship a misleading
+  // sentinel that pretends to identify a build.
+  const release = env.SENTRY_RELEASE ?? env.GIT_SHA;
   const tracesSampleRate = env.SENTRY_TRACES_SAMPLE_RATE;
   return {
     dsn,

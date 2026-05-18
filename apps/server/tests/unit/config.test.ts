@@ -195,4 +195,37 @@ describe('loadConfig', () => {
       }),
     ).toThrow();
   });
+
+  it('Arc 7 obs.1 — Sentry release auto-tags from GIT_SHA when SENTRY_RELEASE is unset', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      SENTRY_DSN: 'https://abc@de.ingest.de.sentry.io/123',
+      SENTRY_ENVIRONMENT: 'production',
+      GIT_SHA: '1234567abcdef',
+    });
+    expect(cfg.sentry?.release).toBe('1234567abcdef');
+  });
+
+  it('Arc 7 obs.1 — explicit SENTRY_RELEASE overrides GIT_SHA (operator override wins)', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      SENTRY_DSN: 'https://abc@de.ingest.de.sentry.io/123',
+      SENTRY_ENVIRONMENT: 'production',
+      SENTRY_RELEASE: 'v1.2.3-rc.4',
+      GIT_SHA: '1234567abcdef',
+    });
+    expect(cfg.sentry?.release).toBe('v1.2.3-rc.4');
+  });
+
+  it('Arc 7 obs.1 — neither SENTRY_RELEASE nor GIT_SHA set → release stays undefined (no misleading sentinel)', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      SENTRY_DSN: 'https://abc@de.ingest.de.sentry.io/123',
+      SENTRY_ENVIRONMENT: 'production',
+    });
+    expect(cfg.sentry?.release).toBeUndefined();
+  });
 });
