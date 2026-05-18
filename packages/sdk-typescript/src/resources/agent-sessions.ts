@@ -88,6 +88,18 @@ export type AgentMessageResponse =
       kind: 'refuse';
       session: AgentSession;
       refuse_reason: string;
+    }
+  | {
+      /**
+       * Arc 2 sub-slice 8.6 (v2-#8) — manual-mode pass-through. The
+       * runtime did NOT call the decomposer; the customer's
+       * user_message was recorded as a role='operator' transcript
+       * entry. No intents, no executor results. Customer's gui-client
+       * drives the real actions via the gui_control plane (sub-slice
+       * 8.4 mints the per-session key).
+       */
+      kind: 'logged-manual';
+      session: AgentSession;
     };
 
 export class AgentSessionsResource {
