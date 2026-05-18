@@ -573,6 +573,12 @@ export async function createProductionDeps(
     set: (key, value, _nx, _ex, ttl) => redis.set(key, value, 'EX', ttl, 'NX'),
     get: (key) => redis.get(key),
     del: (key) => redis.del(key),
+    // Arc 4 Wave 2.B sub-slice 8.20.j (v2-#8) — atomic CAS-DEL on
+    // release via Lua script. ioredis.eval signature is (script,
+    // numKeys, ...args); the adapter shape matches our
+    // RedisLikeClient.eval contract.
+    eval: (script, numKeys, ...args) =>
+      redis.eval(script, numKeys, ...args) as Promise<string | number | null>,
   });
   const agentRuntime = new AgentRuntime({
     decomposer: agentDecomposer,

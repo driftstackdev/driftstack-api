@@ -104,6 +104,24 @@ describe('Arc 2 v2-#8 sub-slice 8.8 RedisPairModeTakeoverLock', () => {
         await Promise.resolve();
         return store.delete(key) ? 1 : 0;
       },
+      async eval(script, _numKeys, ...args) {
+        await Promise.resolve();
+        // Tiny interpreter just for the release CAS-DEL script. The
+        // real Redis Lua evaluator is opaque; we only need to model
+        // the one script the service actually issues.
+        const RELEASE_SCRIPT =
+          'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end';
+        if (script === RELEASE_SCRIPT) {
+          const key = args[0]!;
+          const value = args[1]!;
+          if (store.get(key) === value) {
+            store.delete(key);
+            return 1;
+          }
+          return 0;
+        }
+        throw new Error(`unsupported test script: ${script}`);
+      },
     };
     return { redis, store };
   }
@@ -118,7 +136,7 @@ describe('Arc 2 v2-#8 sub-slice 8.8 RedisPairModeTakeoverLock', () => {
     expect(b).toEqual({ acquired: false, winnerClientId: 'cli_a' });
   });
 
-  it('release deletes the key only when the calling clientId matches the stored value (best-effort CAS)', async () => {
+  it('release deletes the key only when the calling clientId matches the stored value (atomic CAS-DEL via Lua)', async () => {
     const { redis, store } = makeFakeRedis();
     const lock = new RedisPairModeTakeoverLock(redis);
     await lock.tryAcquire({ sessionId: 'agt_x', clientId: 'cli_a' });
@@ -128,5 +146,31 @@ describe('Arc 2 v2-#8 sub-slice 8.8 RedisPairModeTakeoverLock', () => {
     // Holder release — key gone.
     await lock.release({ sessionId: 'agt_x', clientId: 'cli_a' });
     expect(store.has('pair_lock:agt_x')).toBe(false);
+  });
+
+  // Arc 4 Wave 2.B sub-slice 8.20.j (v2-#8) — atomic-release race
+  // regression pin. The original GET-then-DEL release had a window
+  // where another client could acquire the lock between the GET and
+  // the DEL — the original holder's stale DEL would then erase the
+  // new holder's lock, leaving the session unlocked + the new holder
+  // surprised that their lock evaporated. The Lua CAS-DEL collapses
+  // GET+DEL into one Redis op so the race window closes.
+  it('v2-#8 sub-slice 8.20.j atomic release — interleaved acquire-while-releasing does NOT erase the new holder', async () => {
+    const { redis, store } = makeFakeRedis();
+    const lock = new RedisPairModeTakeoverLock(redis);
+    await lock.tryAcquire({ sessionId: 'agt_race', clientId: 'cli_a' });
+    // Simulate the race: between the original GET and DEL we'd have
+    // had a window. Since release is now atomic, we can hammer it
+    // from a stale holder and the live holder's lock survives.
+    await lock.release({ sessionId: 'agt_race', clientId: 'cli_a' });
+    // cli_a is now released; cli_b acquires.
+    const b = await lock.tryAcquire({ sessionId: 'agt_race', clientId: 'cli_b' });
+    expect(b).toEqual({ acquired: true, winnerClientId: 'cli_b' });
+    // cli_a tries to release again (e.g. its handler's finally{}
+    // block fires after re-entry). Without the atomic CAS this would
+    // delete cli_b's lock too. With Lua CAS-DEL the equality fails
+    // and cli_b's lock survives.
+    await lock.release({ sessionId: 'agt_race', clientId: 'cli_a' });
+    expect(store.get('pair_lock:agt_race')).toBe('cli_b');
   });
 });

@@ -87,6 +87,12 @@ export interface RedisLikeClient {
   get(key: string): Promise<string | null>;
   /** Subset of ioredis.del. */
   del(key: string): Promise<number>;
+  /** Atomic Lua eval for the CAS-DEL on release. Returns 1 when the
+   *  delete fired, 0 when the GET-equality check failed (lock no
+   *  longer held by the caller). The release path needs this to
+   *  avoid a GET-then-DEL race window where another client could
+   *  acquire the key between the two operations. */
+  eval(script: string, numKeys: number, ...args: string[]): Promise<number | string | null>;
 }
 
 export class RedisPairModeTakeoverLock implements PairModeTakeoverLock {
@@ -109,12 +115,15 @@ export class RedisPairModeTakeoverLock implements PairModeTakeoverLock {
 
   async release(args: { sessionId: string; clientId: string }): Promise<void> {
     const key = `pair_lock:${args.sessionId}`;
-    const current = await this.redis.get(key);
-    if (current === args.clientId) {
-      // Best-effort cas-check; a true CAS-DEL needs a Lua script
-      // (DEL_IF_VALUE) — leaving that as a follow-up since the TTL
-      // bounds the worst-case stale-holder window to ttlSeconds.
-      await this.redis.del(key);
-    }
+    // Atomic CAS-DEL via Lua: GET-then-equality-then-DEL collapses
+    // into one Redis op so a second client can't acquire the lock in
+    // the race window. The canonical Redlock release recipe — used by
+    // the official redis-lock libraries across every language.
+    // Script returns 1 on successful delete, 0 if the key value
+    // didn't match (caller's lock already expired or got stolen).
+    await this.redis.eval(RELEASE_SCRIPT, 1, key, args.clientId);
   }
 }
+
+const RELEASE_SCRIPT =
+  'if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end';
