@@ -670,6 +670,12 @@ export function registerAgentSessionsRoutes(
           // ticked consent yet. The route surfaces a typed 402 below
           // so the dashboard can render a precise CTA.
           bundledLlmConsentMissing = true;
+          // Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — error counter.
+          try {
+            metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, { kind: 'consent_missing' });
+          } catch {
+            /* swallow */
+          }
         }
         if (settings !== null && settings.consent) {
           // Arc 1 sub-slice 6.5 (v2-#6) — soft-cap pre-turn check.
@@ -684,12 +690,28 @@ export function registerAgentSessionsRoutes(
             now,
           });
           if (spent >= settings.monthlyCapUsdCents) {
+            // Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — error counter.
+            try {
+              metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, { kind: 'budget_exhausted' });
+            } catch {
+              /* swallow */
+            }
             throw new BundledLlmBudgetExhaustedError({
               spentCents: spent,
               capCents: settings.monthlyCapUsdCents,
             });
           }
           bundledLlmKey = deploymentFallbackKey;
+          // Arc 4 Wave 2.B sub-slice 8.19 (v2-#8) — request counter
+          // fires when the bundled-LLM leg actually resolves a key
+          // (consent + under cap). Distinct from the error counters
+          // above so a single dashboard panel can ratio
+          // ok / consent_missing / budget_exhausted.
+          try {
+            metrics?.inc(METRIC_NAMES.bundledLlmRequestTotal, { outcome: 'ok' });
+          } catch {
+            /* swallow */
+          }
         }
       }
       const resolvedByokKey =
