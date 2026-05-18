@@ -637,6 +637,12 @@ export async function createProductionDeps(
             'Auth resolution outcomes (ok / unauthorized / invalid / revoked / expired / forbidden / error).',
             ['outcome'],
           );
+          // Arc 7 obs.7 — OAuth /token exchange outcome counter.
+          r.registerCounter(
+            METRIC_NAMES.oauthTokenTotal,
+            'OAuth /token exchange outcomes (ok + OAuthError codes + error).',
+            ['outcome'],
+          );
           return r;
         })()
       : undefined;

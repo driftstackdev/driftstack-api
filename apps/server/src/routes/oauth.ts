@@ -22,6 +22,7 @@ import { z } from 'zod';
 import { ApiKeyScopeSchema } from '@driftstack/api-types';
 import { OAuthError, type OAuthService } from '../services/oauth.js';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
+import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 
 const RegisterClientBody = z.object({
   label: z.string().min(1).max(120),
@@ -66,9 +67,23 @@ const RevokeBody = z.object({
 
 export interface RegisterOAuthRoutesDeps {
   service: OAuthService;
+  /** Arc 7 obs.7 — optional metrics registry. When wired, the
+   *  /v1/oauth/token endpoint increments
+   *  `driftstack_oauth_token_total{outcome}` per exchange. Outcome
+   *  values: ok / invalid_grant / invalid_client / invalid_request /
+   *  invalid_scope / access_denied / unauthorized_client / error. */
+  metrics?: MetricsRegistry;
+}
+
+/** Map an OAuthError code (or unknown throw) to a bounded outcome
+ *  label for the obs.7 counter. */
+function classifyOAuthTokenError(err: unknown): string {
+  if (err instanceof OAuthError) return err.code;
+  return 'error';
 }
 
 export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRoutesDeps): void {
+  const metrics = deps.metrics;
   // ─── Admin surface ─────────────────────────────────────────────
   app.post(
     '/v1/admin/oauth/clients',
@@ -200,8 +215,18 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
         client_secret: body.client_secret,
         redirect_uri: body.redirect_uri,
       });
+      try {
+        metrics?.inc(METRIC_NAMES.oauthTokenTotal, { outcome: 'ok' });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
       return reply.send(result);
     } catch (err) {
+      try {
+        metrics?.inc(METRIC_NAMES.oauthTokenTotal, { outcome: classifyOAuthTokenError(err) });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
       throw oauthErrorToHttp(err);
     }
   });

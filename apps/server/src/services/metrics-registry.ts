@@ -180,4 +180,11 @@ export const METRIC_NAMES = {
   // credential-stuffing signal; a jump in 'ok' tracks legitimate
   // traffic growth.
   authTotal: 'driftstack_auth_total',
+  // Arc 7 obs.7 — OAuth /token exchange outcome counter. Labels are
+  // the OAuthError code set (ok / invalid_grant / invalid_client /
+  // invalid_request / invalid_scope / access_denied /
+  // unauthorized_client / error). Spike in 'invalid_grant' tracks
+  // PKCE mismatches + expired-code retries; spike in 'invalid_client'
+  // tracks attempted brute-force against the client_secret hash.
+  oauthTokenTotal: 'driftstack_oauth_token_total',
 } as const;

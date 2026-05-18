@@ -862,6 +862,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   if (deps.oauthStore !== undefined) {
     registerOAuthRoutes(app, {
       service: new OAuthService(deps.oauthStore),
+      ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
     });
   }
   if (deps.costMonitoringService !== undefined) {

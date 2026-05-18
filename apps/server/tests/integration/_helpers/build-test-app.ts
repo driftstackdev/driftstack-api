@@ -717,6 +717,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'Auth resolution outcomes (ok / unauthorized / invalid / revoked / expired / forbidden / error).',
     ['outcome'],
   );
+  // Arc 7 obs.7 — OAuth /token exchange outcome counter.
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.oauthTokenTotal,
+    'OAuth /token exchange outcomes (ok + OAuthError codes + error).',
+    ['outcome'],
+  );
 
   // v2-#18 — capturing usage recorder for the AgentRuntime end-to-end
   // smoke. Always declared (even when captureAgentDecomposerUsage is
