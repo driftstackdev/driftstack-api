@@ -57,6 +57,14 @@ const SENTRY_SENSITIVE_KEYS = new Set<string>([
   'mfasecret',
   'client_secret',
   'clientsecret',
+  // Arc 7 obs.2.b — v2-#8 BYOK + gui_control_key Sentry mirror of
+  // the lib/logger.ts redact-paths extension. Match keys are
+  // lowercase + hyphen/underscore variants (the
+  // SENTRY_SENSITIVE_KEYS Set is compared via key.toLowerCase()).
+  'x-byok-anthropic-api-key',
+  'byokanthropicapikey',
+  'gui_control_key',
+  'guicontrolkey',
 ]);
 
 function isSensitiveKey(key: string): boolean {

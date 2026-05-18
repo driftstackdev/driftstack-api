@@ -74,6 +74,23 @@ describe('V-494 — Sentry scrub: top-level keys', () => {
     expect(e.AUTHORIZATION).toBe('[redacted]');
     expect(e.RecoveryCodes).toBe('[redacted]');
   });
+
+  // Arc 7 obs.2.b — v2-#8 BYOK + gui_control_key Sentry mirror.
+  it('redacts x-byok-anthropic-api-key header (request.headers shape) — v2-#8 BYOK Sentry mirror', () => {
+    const e: Record<string, string> = { 'x-byok-anthropic-api-key': 'sk-ant-api03-...' };
+    scrubInPlace(e);
+    expect(e['x-byok-anthropic-api-key']).toBe('[redacted]');
+  });
+
+  it('redacts gui_control_key (snake_case) + guiControlKey (camelCase) — v2-#8 sub-slice 8.4 plaintext', () => {
+    const e: Record<string, string> = {
+      gui_control_key: 'gck_live_...',
+      guiControlKey: 'gck_live_...',
+    };
+    scrubInPlace(e);
+    expect(e.gui_control_key).toBe('[redacted]');
+    expect(e.guiControlKey).toBe('[redacted]');
+  });
 });
 
 describe('V-494 — Sentry scrub: nested structures', () => {
