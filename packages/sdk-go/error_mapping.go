@@ -37,6 +37,10 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	"https://errors.driftstack.dev/feature-unavailable":  buildFeatureUnavailable,
 	"https://errors.driftstack.dev/mfa-step-up-required": buildMfaStepUpRequired,
 	"https://errors.driftstack.dev/internal":             buildInternal,
+	// v2-#24 — Q.1.d BYOK Anthropic key path; closes the TS/Python
+	// parity gap so Go customers can errors.As(err, &ByokAnthropicRequiredError)
+	// before falling back to a deployment-managed key path.
+	"https://errors.driftstack.dev/byok-anthropic-required": buildByokAnthropicRequired,
 }
 
 // errorFromResponse parses an HTTP response body as RFC 7807
@@ -251,6 +255,10 @@ func buildInternal(base apiError, _ map[string]any, _ string) error {
 	return &InternalError{apiError: base}
 }
 
+func buildByokAnthropicRequired(base apiError, _ map[string]any, _ string) error {
+	return &ByokAnthropicRequiredError{apiError: base}
+}
+
 // Compile-time sanity that the error types implement error.
 var (
 	_ error = (*apiError)(nil)
@@ -262,6 +270,7 @@ var (
 	_ error = (*FeatureUnavailableError)(nil)
 	_ error = (*MfaStepUpRequiredError)(nil)
 	_ error = (*InternalError)(nil)
+	_ error = (*ByokAnthropicRequiredError)(nil)
 	_ error = (*RateLimitError)(nil)
 	_ error = (*ConcurrencyLimitError)(nil)
 	_ error = (*QuotaExceededError)(nil)

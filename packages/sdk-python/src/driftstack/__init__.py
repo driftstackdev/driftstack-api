@@ -18,6 +18,7 @@ from driftstack._version import __version__
 from driftstack.client import AsyncDriftstack, Driftstack
 from driftstack.errors import (
     AuthError,
+    ByokAnthropicRequiredError,
     ConcurrencyLimitError,
     ConflictError,
     DriftstackError,
@@ -75,6 +76,7 @@ __all__ = [
     "FeatureUnavailableError",
     "InternalError",
     "MfaStepUpRequiredError",
+    "ByokAnthropicRequiredError",
     "is_retryable",
     "verify_webhook_signature",
 ]

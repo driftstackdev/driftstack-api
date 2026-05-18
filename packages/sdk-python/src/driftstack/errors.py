@@ -251,6 +251,15 @@ class InternalError(DriftstackError):
     check Driftstack status / contact support if this persists."""
 
 
+class ByokAnthropicRequiredError(DriftstackError):
+    """v2-#24 — Q.1.d (2026-05-17) — agent-sessions message turn cannot
+    resolve an Anthropic API key. BYOK-for-v1.0 Tier-3 verdict means
+    the customer MUST supply their own key (via stored
+    /v1/account/me/byok-anthropic-key OR per-request
+    ``x-byok-anthropic-api-key`` header). HTTP 502 — the agent layer is
+    operational but cannot serve this customer's turn without a key."""
+
+
 # ── Mapping problem-type URI → subclass ──────────────────────────────────
 
 # Keep the mapping in one place for ease of audit + extension. The HTTP
@@ -284,6 +293,8 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/feature-unavailable": FeatureUnavailableError,
     "https://errors.driftstack.dev/mfa-step-up-required": MfaStepUpRequiredError,
     "https://errors.driftstack.dev/internal": InternalError,
+    # v2-#24: Q.1.d BYOK Anthropic key path — closes TS/Python parity.
+    "https://errors.driftstack.dev/byok-anthropic-required": ByokAnthropicRequiredError,
 }
 
 

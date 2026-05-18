@@ -70,6 +70,10 @@ var (
 	ErrFeatureUnavailable = errors.New("feature unavailable")
 	ErrMfaStepUpRequired  = errors.New("mfa step-up required")
 	ErrInternal           = errors.New("internal error")
+	// v2-#24 — BYOK Anthropic key required (Q.1.d 2026-05-17). Closes
+	// the TS/Python parity gap so Go customers can errors.Is(err,
+	// driftstack.ErrByokAnthropicRequired) before falling back.
+	ErrByokAnthropicRequired = errors.New("byok anthropic key required")
 )
 
 // AuthError covers any of the auth-related problem types. Use the
@@ -259,6 +263,19 @@ func (e *MfaStepUpRequiredError) Is(target error) bool { return target == ErrMfa
 type InternalError struct{ apiError }
 
 func (e *InternalError) Is(target error) bool { return target == ErrInternal }
+
+// v2-#24 — ByokAnthropicRequiredError — Q.1.d (2026-05-17) — the
+// agent-sessions message turn cannot resolve an Anthropic API key for
+// this customer. BYOK-for-v1.0 Tier-3 verdict: customers MUST supply
+// their own key via stored /v1/account/me/byok-anthropic-key OR the
+// per-request x-byok-anthropic-api-key header. HTTP 502 — the agent
+// layer is operational but cannot serve this customer's turn without
+// a key.
+type ByokAnthropicRequiredError struct{ apiError }
+
+func (e *ByokAnthropicRequiredError) Is(target error) bool {
+	return target == ErrByokAnthropicRequired
+}
 
 // V-491 — public retry predicate. Mirrors the V-489 TS / V-490
 // Python implementations. Returns true when err is a Driftstack
