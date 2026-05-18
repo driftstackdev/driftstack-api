@@ -187,4 +187,11 @@ export const METRIC_NAMES = {
   // PKCE mismatches + expired-code retries; spike in 'invalid_client'
   // tracks attempted brute-force against the client_secret hash.
   oauthTokenTotal: 'driftstack_oauth_token_total',
+  // Arc 7 obs.8 — Stripe webhook outcome counter. Bounded outcome
+  // labels: handled / duplicate / ignored / error (route-side dispatch
+  // outcomes) + signature_invalid / signature_missing / empty_body /
+  // malformed_event (pre-dispatch reject paths). Spike in 'error'
+  // signals a Stripe contract change or a downstream bug; spike in
+  // 'signature_invalid' signals webhook-spoofing attempts.
+  stripeWebhookTotal: 'driftstack_stripe_webhook_total',
 } as const;

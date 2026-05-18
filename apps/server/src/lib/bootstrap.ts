@@ -643,6 +643,12 @@ export async function createProductionDeps(
             'OAuth /token exchange outcomes (ok + OAuthError codes + error).',
             ['outcome'],
           );
+          // Arc 7 obs.8 — Stripe webhook receiver outcome counter.
+          r.registerCounter(
+            METRIC_NAMES.stripeWebhookTotal,
+            'Stripe webhook receiver outcomes (handled / duplicate / ignored / error / signature_invalid / signature_missing / empty_body / malformed_event).',
+            ['outcome'],
+          );
           return r;
         })()
       : undefined;

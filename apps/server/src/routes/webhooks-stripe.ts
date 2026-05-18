@@ -18,12 +18,26 @@ import { type StripeEvent, type StripeWebhooksService } from '../services/stripe
 import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 import type { Logger } from '../lib/logger.js';
 import { registerWebhookRawBodyParser } from './_webhook-raw-body.js';
+import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 
 export interface RegisterStripeWebhookRoutesDeps {
   service: StripeWebhooksService;
   /** Webhook signing secret as configured in Stripe (`whsec_...`). */
   signingSecret: string;
   logger: Logger;
+  /** Arc 7 obs.8 — optional metrics registry. When wired, the
+   *  /v1/webhooks/stripe route increments
+   *  `driftstack_stripe_webhook_total{outcome}` per request. */
+  metrics?: MetricsRegistry;
+}
+
+/** Map the StripeWebhooksService dispatch outcome to a bounded
+ *  metric label. The service returns `'handled' | 'ignored' |
+ *  'duplicate' | \`error:${string}\``; the dynamic error tail
+ *  collapses to 'error' to keep cardinality fixed. */
+function classifyStripeDispatchOutcome(outcome: string): string {
+  if (outcome === 'handled' || outcome === 'duplicate' || outcome === 'ignored') return outcome;
+  return 'error';
 }
 
 export function registerStripeWebhookRoutes(
@@ -31,15 +45,25 @@ export function registerStripeWebhookRoutes(
   deps: RegisterStripeWebhookRoutesDeps,
 ): void {
   registerWebhookRawBodyParser(app);
+  const metrics = deps.metrics;
+  const bumpOutcome = (outcome: string): void => {
+    try {
+      metrics?.inc(METRIC_NAMES.stripeWebhookTotal, { outcome });
+    } catch {
+      // Swallow; metrics are best-effort.
+    }
+  };
 
   app.post('/v1/webhooks/stripe', async (req: FastifyRequest, reply) => {
     const sigHeader = req.headers['stripe-signature'];
     if (typeof sigHeader !== 'string' || sigHeader.length === 0) {
+      bumpOutcome('signature_missing');
       throw new UnauthorizedError('Stripe-Signature header missing.');
     }
 
     const rawBody = req.rawBody;
     if (typeof rawBody !== 'string' || rawBody.length === 0) {
+      bumpOutcome('empty_body');
       throw new BadRequestError('Empty request body.');
     }
 
@@ -49,6 +73,7 @@ export function registerStripeWebhookRoutes(
       secret: deps.signingSecret,
     });
     if (!verified.ok) {
+      bumpOutcome('signature_invalid');
       deps.logger.warn(
         { component: 'stripe-webhooks', reason: verified.reason },
         'Stripe webhook signature verification failed',
@@ -65,10 +90,12 @@ export function registerStripeWebhookRoutes(
       typeof event.data !== 'object' ||
       event.data === null
     ) {
+      bumpOutcome('malformed_event');
       throw new BadRequestError('Stripe event is missing required fields.');
     }
 
     const outcome = await deps.service.handle(event, rawBody);
+    bumpOutcome(classifyStripeDispatchOutcome(outcome));
 
     // Always reply 200 to a verified, parseable event — even on
     // duplicate or ignored. Stripe interprets non-2xx as a delivery

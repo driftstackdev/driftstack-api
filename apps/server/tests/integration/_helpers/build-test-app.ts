@@ -723,6 +723,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'OAuth /token exchange outcomes (ok + OAuthError codes + error).',
     ['outcome'],
   );
+  // Arc 7 obs.8 — Stripe webhook receiver outcome counter.
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.stripeWebhookTotal,
+    'Stripe webhook receiver outcomes (handled / duplicate / ignored / error / signature_invalid / signature_missing / empty_body / malformed_event).',
+    ['outcome'],
+  );
 
   // v2-#18 — capturing usage recorder for the AgentRuntime end-to-end
   // smoke. Always declared (even when captureAgentDecomposerUsage is

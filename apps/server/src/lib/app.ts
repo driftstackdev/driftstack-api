@@ -802,6 +802,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       service: deps.stripeWebhooksService,
       signingSecret: deps.stripeWebhookSigningSecret,
       logger: deps.logger,
+      ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
     });
   }
   if (deps.nowpaymentsIpnSecret !== undefined && deps.nowpaymentsIpnSecret.length > 0) {
