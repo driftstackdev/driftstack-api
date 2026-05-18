@@ -147,6 +147,62 @@ customer is on the bundled-LLM rail.
 
 Sets `status='closed'` with `closed_at` stamped. Idempotent.
 
+## Live transcript stream (SSE)
+
+`GET /v1/agent-sessions/{id}/transcript`
+
+Server-Sent Events stream that publishes every transcript append
+in real time. Customers building their own UIs (dashboard,
+desktop apps) can subscribe instead of polling.
+
+Auth: bearer token via `Authorization: Bearer <token>` header
+OR `?ds_token=<token>` query-string fallback (`EventSource` API
+in browsers doesn't support custom headers; the query-string
+fallback exists for that use case).
+
+Event types emitted:
+
+- `transcript.entry` — fires for each transcript append. The
+  `id:` SSE field is the entry's monotonic index; the `data:`
+  field is JSON with `{ index, entry }` where `entry` has the
+  same shape as the elements of `Session.transcript` (role +
+  body + at + optional `intents` for plan-executed agent turns).
+
+Resume semantics (RFC 6202 + EventSource spec):
+
+- The client's last received id is sent back as
+  `Last-Event-ID: <n>` header on reconnect. The server replays
+  every transcript entry with index > n, then live-streams new
+  appends.
+- The replay is exclusive (strictly greater than the supplied
+  index) so a resumed subscriber doesn't see duplicate events.
+
+Heartbeat: server sends a `: stream open` comment on connect.
+Browsers' EventSource auto-reconnect on disconnect uses
+`Last-Event-ID` for resume, so a transient network blip doesn't
+lose any transcript content as long as the customer's auth
+token is still valid.
+
+Example (TypeScript browser):
+
+```ts
+const url = new URL(`/v1/agent-sessions/${id}/transcript`, 'https://api.driftstack.dev');
+url.searchParams.set('ds_token', token);
+const stream = new EventSource(url.toString());
+stream.addEventListener('transcript.entry', (ev) => {
+  const { index, entry } = JSON.parse(ev.data);
+  console.log(`[${index}] ${entry.role}: ${entry.body}`);
+});
+stream.addEventListener('error', () => {
+  // Browser auto-reconnects with Last-Event-ID.
+});
+```
+
+Closing the EventSource on `beforeunload` is the customer's
+responsibility — the server doesn't enforce a max-subscribers
+limit per session, but each subscriber consumes a long-lived
+TCP connection.
+
 ## Pair-mode takeover + handback
 
 For `mode: 'pair'` sessions only — these endpoints return 409 on

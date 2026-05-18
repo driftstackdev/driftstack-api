@@ -125,4 +125,17 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
     // production behavior.
     expect(body).toMatch(new RegExp(`${ttlSeconds}s`));
   });
+
+  // Arc 6 docs.agent-sessions.b — SSE transcript stream documented.
+  it('documents the SSE transcript stream endpoint with auth fallback', () => {
+    expect(body).toMatch(/GET \/v1\/agent-sessions\/\{id\}\/transcript/);
+    expect(body).toMatch(/Server-Sent Events/);
+    expect(body).toMatch(/ds_token/);
+  });
+
+  it('documents the transcript.entry event shape + Last-Event-ID resume semantics', () => {
+    expect(body).toMatch(/transcript\.entry/);
+    expect(body).toMatch(/Last-Event-ID/);
+    expect(body).toMatch(/replay is exclusive/);
+  });
 });
