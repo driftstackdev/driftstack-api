@@ -1,0 +1,28 @@
+-- Arc 5 EGRESS eg.1 — sessions.egress_capability_report column.
+--
+-- Extends migration 0045 (which added sessions.egress_capabilities,
+-- the DERIVED per-session view: udp_associate / quic_route /
+-- dns_remote_resolve / warnings). This migration adds the RAW
+-- harness-emitted event payload alongside the derived view so:
+--
+--   1. Forensics — if a customer reports unexpected egress behaviour,
+--      we have the unaltered wire payload from the harness, not just
+--      the SDK-shaped projection.
+--   2. Schema evolution — if the harness adds a new capability field
+--      that the SDK schema hasn't been extended for yet, the raw
+--      payload preserves it for the next SDK release without a
+--      backfill.
+--   3. Cross-agent contract diagnostics — when Agent 1's harness
+--      side ships a contract change, the raw payload makes the
+--      mismatch trivially auditable.
+--
+-- Same nullability semantics as egress_capabilities:
+--   - Pre-migration rows are NULL.
+--   - Sessions without a SOCKS5 proxy never trigger the report path.
+--   - Async report ingestion — rows are NULL until the harness emits.
+--
+-- No index — capability_report is read on per-session GET, never on
+-- list queries. Add a partial GIN index later if dashboard list-views
+-- need to filter on raw fields.
+
+ALTER TABLE "sessions" ADD COLUMN "egress_capability_report" jsonb DEFAULT NULL;

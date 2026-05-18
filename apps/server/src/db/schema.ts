@@ -815,6 +815,12 @@ export const sessions = pgTable(
       dns_remote_resolve: boolean;
       warnings: string[];
     }>(),
+    // Arc 5 EGRESS eg.1 — RAW harness-emitted event payload, kept
+    // alongside the derived `egressCapabilities` view. Forensics +
+    // schema-evolution safety net: if the harness ships a new field
+    // before the SDK schema is extended, the unaltered payload
+    // preserves it without a backfill. See migration 0054.
+    egressCapabilityReport: jsonb('egress_capability_report').$type<Record<string, unknown>>(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
