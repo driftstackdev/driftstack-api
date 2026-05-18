@@ -57,12 +57,15 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     );
   });
 
-  it('12-group surface map taxonomy: Sessions + Agent sessions + Profiles + API keys + Webhooks + Account + Team + Billing — crypto orders + Status + Auth flows + Billing — pinned so the 12-group enumeration of canonical route prefixes stays complete (drift to dropping any group would orphan SDK readers from that route surface; drift to merging Billing + crypto-orders would lose the separate billing-paths distinction)', () => {
+  it('13-group surface map taxonomy: Sessions + Agent sessions + Recipes + Profiles + API keys + Webhooks + Account + Team + Billing — crypto orders + Status + Auth flows + Billing — pinned so the 13-group enumeration of canonical route prefixes stays complete (drift to dropping any group would orphan SDK readers from that route surface; drift to merging Billing + crypto-orders would lose the separate billing-paths distinction)', () => {
     expect(body).toMatch(
       /uppercase tracking-widest text-glow-red">\s*\n?\s*Sessions\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
       /uppercase tracking-widest text-glow-red">\s*\n?\s*Agent sessions\s*\n?\s*<\/h3>/,
+    );
+    expect(body).toMatch(
+      /uppercase tracking-widest text-glow-red">\s*\n?\s*Recipes\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
       /uppercase tracking-widest text-glow-red">\s*\n?\s*Profiles\s*\n?\s*<\/h3>/,
@@ -110,6 +113,12 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     expect(body).toMatch(/<li>POST \/v1\/agent-sessions\/:id\/takeover<\/li>/);
     expect(body).toMatch(/<li>POST \/v1\/agent-sessions\/:id\/handback<\/li>/);
     expect(body).toMatch(/<li>DELETE \/v1\/agent-sessions\/:id<\/li>/);
+  });
+
+  // AI-B4 sub-slice 8.20.m.2 — recipes is a 1-endpoint surface
+  // (POST only at v1.0; read/list/execute/delete are v1.1).
+  it("Recipes route enumeration 1-endpoint: POST /v1/recipes — pinned so the recipes surface stays visible on the marketing page (drift to dropping would hide AI-B4 from prospects; drift to listing more endpoints would surface v1.1 scope that hasn't shipped)", () => {
+    expect(body).toMatch(/<li>POST \/v1\/recipes<\/li>/);
   });
 
   it("Webhooks route enumeration 9-endpoint: POST + GET + GET /:id + PATCH + DELETE + POST /:id/rotate-secret + POST /:id/test + GET /:id/deliveries + POST /v1/webhook-deliveries/:id/replay — pinned so the webhook lifecycle endpoint enumeration matches the customer-dashboard webhooks page's wired actions (drift would create marketing↔dashboard contract mismatch)", () => {
