@@ -17,6 +17,20 @@ type AgentSessionsResource struct {
 	client *Client
 }
 
+// LK.5 — LiveKitInfo is the per-Mac LiveKit join info returned on
+// session-create (when a Mac is available) and by the dedicated
+// POST /v1/agent-sessions/:id/livekit-token endpoint. Use with
+// the official livekit-server-sdk-go consumer side.
+//
+// Token TTL is 24h. Room name is always the agent_session id.
+type LiveKitInfo struct {
+	WSURL               string `json:"ws_url"`
+	Room                string `json:"room"`
+	Token               string `json:"token"`
+	ParticipantIdentity string `json:"participant_identity"`
+	ExpiresAt           string `json:"expires_at"`
+}
+
 // AgentSession is the read envelope returned by Create / Get / and as
 // the .Session field of every Message response.
 type AgentSession struct {
@@ -38,6 +52,11 @@ type AgentSession struct {
 	Mode                  string  `json:"mode"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
+	// LK.4 — auto-populated on POST /v1/agent-sessions when a Mac
+	// has LiveKit credentials registered. nil on older deployments
+	// or pre-Mac-registration. Fall back to LK.3 endpoint for an
+	// explicit mint.
+	LiveKit               *LiveKitInfo `json:"livekit,omitempty"`
 }
 
 // CreateAgentSessionRequest is the optional body for Create.

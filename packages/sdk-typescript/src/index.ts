@@ -36,6 +36,7 @@ export type {
   AgentIntent,
   AgentIntentResult,
   AgentMessageResponse,
+  LiveKitInfo,
 } from './resources/agent-sessions.js';
 export type { Recipe, CreateRecipeRequest } from './resources/recipes.js';
 export type {

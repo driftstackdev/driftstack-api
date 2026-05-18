@@ -14,6 +14,21 @@
 
 import type { HttpClient } from '../http.js';
 
+/**
+ * LK.5 — LiveKit join info, optionally returned on session-create
+ * + always returned by POST /v1/agent-sessions/:id/livekit-token.
+ * Use these fields with `livekit-client`'s `Room.connect(ws_url,
+ * token)`. Token TTL is 24h; re-mint via the dedicated /livekit-
+ * token endpoint after expiry.
+ */
+export interface LiveKitInfo {
+  ws_url: string;
+  room: string;
+  token: string;
+  participant_identity: string;
+  expires_at: string;
+}
+
 export interface AgentSession {
   id: string;
   account_id: string;
@@ -42,6 +57,15 @@ export interface AgentSession {
   mode: 'manual' | 'ai' | 'pair';
   created_at: string;
   updated_at: string;
+  /**
+   * LK.4 — auto-populated on POST /v1/agent-sessions response when a
+   * Mac with LiveKit credentials is available + the deployment has
+   * LiveKit wiring on (encryption key + fleet repo). Absent on older
+   * deployments + on the GET shape. Clients that need a token on
+   * pre-LK deployments fall back to POST
+   * /v1/agent-sessions/:id/livekit-token (LK.3).
+   */
+  livekit?: LiveKitInfo;
 }
 
 export interface CreateAgentSessionRequest {
