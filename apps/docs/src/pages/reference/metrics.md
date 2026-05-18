@@ -96,9 +96,9 @@ The current counter catalogue (all `driftstack_*` namespaced):
 
 ### Live-preview (LiveKit)
 
-| Metric                                | Labels            | What it tracks                                                                                      |
-| ------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------- |
-| `driftstack_livekit_token_mint_total` | `role`, `outcome` | LiveKit token mint requests (role: publisher/subscriber/unknown × outcome: ok/not_found/validation) |
+| Metric                                | Labels            | What it tracks                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `driftstack_livekit_token_mint_total` | `role`, `outcome` | LiveKit token mint requests. Two emission sites share the counter: `/v1/sessions/:id/livekit-token` (V-531.B, legacy session-livekit; role = publisher) and `/v1/agent-sessions/:id/livekit-token` (LK.3; role = subscriber). Outcomes: ok / not_found / validation / forbidden / no_mac / secret_unreadable. role=unknown on early-reject paths. |
 
 ### Transactional email
 

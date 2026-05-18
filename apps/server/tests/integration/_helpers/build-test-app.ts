@@ -630,7 +630,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // Arc 7 obs.12 — LiveKit token mint outcome counter.
   metricsRegistry.registerCounter(
     METRIC_NAMES.livekitTokenMintTotal,
-    'LiveKit token mint outcomes, labelled by role (publisher | subscriber | unknown) + outcome (ok / not_found / validation).',
+    'LiveKit token mint outcomes, labelled by role (publisher | subscriber | unknown) + outcome (ok / not_found / validation / forbidden / no_mac / secret_unreadable). Emitted by both /v1/sessions/:id/livekit-token (V-531.B) and /v1/agent-sessions/:id/livekit-token (LK.3); the role label discriminates publisher (legacy session-livekit surface) from subscriber (LK.3 + LK.6 gui-client).',
     ['role', 'outcome'],
   );
   // Arc 7 obs.13 — outbound email send outcome counter.
