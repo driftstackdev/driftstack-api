@@ -55,6 +55,24 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
     expect(body).toMatch(/AI agent layer requires an LLM key path/);
   });
 
+  it('activation-gate banner carries actionable self-serve links to BYOK + bundled-LLM docs', () => {
+    // Without these links the banner is a dead-end for self-serve
+    // customers who don't have a Driftstack admin to ping. Pin both
+    // hrefs + the data-link attributes so future copy edits can't
+    // silently drop the affordance.
+    expect(body).toMatch(/data-link="byok-anthropic"/);
+    expect(body).toMatch(/data-link="bundled-llm"/);
+    expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic\/"/);
+    expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev\/api\/bundled-llm\/"/);
+    // External link hygiene — target=_blank + rel noopener for both.
+    const byokSlice = body.slice(
+      body.indexOf('data-link="byok-anthropic"') - 200,
+      body.indexOf('data-link="byok-anthropic"') + 200,
+    );
+    expect(byokSlice).toMatch(/target="_blank"/);
+    expect(byokSlice).toMatch(/rel="noopener noreferrer"/);
+  });
+
   it('unauthenticated banner pre-rendered + hidden by default (revealed when token absent)', () => {
     expect(body).toMatch(/data-banner-unauthenticated/);
     expect(body).toMatch(/Sign in to start an agent session/);

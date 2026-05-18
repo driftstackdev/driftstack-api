@@ -34,7 +34,23 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
     >
       <strong>Feature not enabled in this deployment.</strong>
       The AI agent layer requires an LLM key path (BYOK or bundled) to be configured.
-      Contact your Driftstack admin to enable it.
+      Two self-serve options:
+      <a
+        href="https://docs.driftstack.dev/api/byok-anthropic/"
+        class="underline hover:text-amber-100"
+        target="_blank"
+        rel="noopener noreferrer"
+        data-link="byok-anthropic">bring your own Anthropic key</a
+      > (encrypted at rest)
+      or
+      <a
+        href="https://docs.driftstack.dev/api/bundled-llm/"
+        class="underline hover:text-amber-100"
+        target="_blank"
+        rel="noopener noreferrer"
+        data-link="bundled-llm">opt into the deployment's bundled-LLM budget</a
+      > (Anthropic, pre-paid by Driftstack).
+      Either path activates this surface.
     </div>
 
     <div
