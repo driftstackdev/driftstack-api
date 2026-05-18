@@ -186,12 +186,15 @@ describe('W768 docs /api/audit-log content parity', () => {
     expect(p).toMatch(/\/\/ api_key\.minted/);
   });
 
-  it('CRITICAL webhook_endpoint.secret_rotated payload shape pinned — new_prefix + old_prefix + grace_expires_at. Matches V-359 server-side payload contract.', () => {
+  it('CRITICAL webhook_endpoint.secret_rotated payload shape pinned — new_secret_prefix + old_secret_prefix + grace_expires_at. The previous pin asserted bare `new_prefix` / `old_prefix` but the real emit-site at apps/server/src/services/webhooks.ts:516-518 uses the `_secret_` infix. Matches V-359 server-side payload contract.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/"new_prefix": "whsec_<first-12>",/);
-    expect(p).toMatch(/"old_prefix": "whsec_<first-12>",/);
+    expect(p).toMatch(/"new_secret_prefix": "whsec_<first-12>",/);
+    expect(p).toMatch(/"old_secret_prefix": "whsec_<first-12>",/);
     expect(p).toMatch(/"grace_expires_at": "2026-05-10T00:00:00\.000Z"/);
+    // The fictional shorter names must NOT return.
+    expect(p).not.toMatch(/"new_prefix":/);
+    expect(p).not.toMatch(/"old_prefix":/);
   });
 
   it('CRITICAL "Consumers should default-handle unknown payload shapes gracefully; new fields are additive" framing pinned. Drift to claiming breaking changes would mismatch versioning policy.', () => {

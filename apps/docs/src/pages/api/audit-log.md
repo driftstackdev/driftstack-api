@@ -182,13 +182,13 @@ the following shapes:
 
 // webhook_endpoint.secret_rotated (V-359)
 {
-  "new_prefix": "whsec_<first-12>",
-  "old_prefix": "whsec_<first-12>",
+  "new_secret_prefix": "whsec_<first-12>",
+  "old_secret_prefix": "whsec_<first-12>",
   "grace_expires_at": "2026-05-10T00:00:00.000Z"
 }
 
 // team.member_invited
-{ "email": "<invited-address>", "role": "admin" | "member" }
+{ "invitee_email": "<invited-address>", "role": "admin" | "member" }
 
 // subscription.tier_changed
 { "from": "<tier-slug>", "to": "<tier-slug>" }
