@@ -110,6 +110,46 @@ describe('Arc 3 v2-#28 sub-slice 28.2 WebhookSecretForceRotationService', () => 
     expect(second.rotated).toBe(0);
   });
 
+  // Arc 3 sub-slice 28.7 (v2-#28) — drift guard: customer-initiated
+  // rotateSecret MUST clear force_rotated_at + grace_window_ends_at
+  // so the 91-day clock restarts cleanly. Otherwise a customer who
+  // manually rotates after a force-rotation event would carry stale
+  // force-rotation bookkeeping forward + the next 91-day sweep would
+  // skip them.
+  it('v2-#28 sub-slice 28.7 customer-initiated rotateSecret resets force_rotated_at + grace_window_ends_at', async () => {
+    const repo = new InMemoryWebhooksRepo();
+    const ep = await repo.insertEndpoint({
+      accountId: 'acc_1',
+      url: 'https://customer.test/hook',
+      secret: 'whsec_aged',
+      secretPrefix: 'whsec_aged',
+      events: ['session.completed'],
+      description: null,
+    });
+    const agedRow = await repo.findEndpoint(ep.id, 'acc_1');
+    if (agedRow) (agedRow as { secretCreatedAt: Date }).secretCreatedAt = NINETY_TWO_DAYS_AGO;
+    const { svc: emailSvc } = makeFakeEmail();
+    const svc = new WebhookSecretForceRotationService(repo, emailSvc, makeFakeLogger(), {
+      dashboardUrl: 'https://app.driftstack.test',
+    });
+    await svc.tickOnce(NOW);
+    const postForce = await repo.findEndpoint(ep.id, 'acc_1');
+    expect(postForce?.forceRotatedAt).not.toBeNull();
+    expect(postForce?.graceWindowEndsAt).not.toBeNull();
+
+    await repo.rotateSecret({
+      id: ep.id,
+      accountId: 'acc_1',
+      newSecret: 'whsec_customer_rotated_value_padded_____',
+      newPrefix: 'whsec_cust',
+      graceExpiresAt: new Date(NOW.getTime() + 24 * 60 * 60 * 1000),
+      now: new Date(NOW.getTime() + 60_000),
+    });
+    const postManual = await repo.findEndpoint(ep.id, 'acc_1');
+    expect(postManual?.forceRotatedAt).toBeNull();
+    expect(postManual?.graceWindowEndsAt).toBeNull();
+  });
+
   it('email send failure is swallowed — rotation still persists', async () => {
     const repo = new InMemoryWebhooksRepo();
     const aged = await repo.insertEndpoint({

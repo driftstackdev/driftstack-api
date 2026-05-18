@@ -115,6 +115,11 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       secretPrevExpiresAt: input.graceExpiresAt,
       secretCreatedAt: input.now,
       lastReminderSentAt: null,
+      // Arc 3 sub-slice 28.7 (v2-#28) — reset force-rotation
+      // bookkeeping so the 91-day clock restarts cleanly when the
+      // customer rotates manually.
+      forceRotatedAt: null,
+      graceWindowEndsAt: null,
       updatedAt: input.now,
     };
     this.endpoints.set(input.id, updated);
