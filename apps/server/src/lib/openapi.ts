@@ -1541,23 +1541,27 @@ function buildRegistry(): OpenAPIRegistry {
     cursor: z.string().optional(),
     action: z.string().optional(),
   });
-  const AccountAuditEntryOpenApi = z.object({
-    id: z.string().uuid(),
-    account_id: z.string(),
-    actor_type: z.enum(['customer', 'system', 'staff']),
-    actor_account_id: z.string().nullable(),
-    actor_key_id: z.string().nullable(),
-    action: z.string(),
-    target_resource_id: z.string().nullable(),
-    payload: z.record(z.unknown()).nullable(),
-    ip_address: z.string().nullable(),
-    user_agent: z.string().nullable(),
-    timestamp: z.string(),
-  });
-  const ListAccountAuditResponseOpenApi = z.object({
-    data: z.array(AccountAuditEntryOpenApi),
-    next_cursor: z.string().nullable(),
-  });
+  const AccountAuditEntryOpenApi = z
+    .object({
+      id: z.string().uuid(),
+      account_id: z.string(),
+      actor_type: z.enum(['customer', 'system', 'staff']),
+      actor_account_id: z.string().nullable(),
+      actor_key_id: z.string().nullable(),
+      action: z.string(),
+      target_resource_id: z.string().nullable(),
+      payload: z.record(z.unknown()).nullable(),
+      ip_address: z.string().nullable(),
+      user_agent: z.string().nullable(),
+      timestamp: z.string(),
+    })
+    .openapi('AccountAuditEntry');
+  const ListAccountAuditResponseOpenApi = z
+    .object({
+      data: z.array(AccountAuditEntryOpenApi),
+      next_cursor: z.string().nullable(),
+    })
+    .openapi('ListAccountAuditResponse');
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/audit-log',
@@ -1582,13 +1586,15 @@ function buildRegistry(): OpenAPIRegistry {
   const ExportAccountAuditQueryOpenApi = z.object({
     format: z.enum(['csv', 'json']).optional(),
   });
-  const ExportAccountAuditResponseOpenApi = z.object({
-    generated_at: z.string(),
-    account_id: z.string(),
-    row_count: z.number().int().nonnegative(),
-    truncated: z.boolean(),
-    data: z.array(AccountAuditEntryOpenApi),
-  });
+  const ExportAccountAuditResponseOpenApi = z
+    .object({
+      generated_at: z.string(),
+      account_id: z.string(),
+      row_count: z.number().int().nonnegative(),
+      truncated: z.boolean(),
+      data: z.array(AccountAuditEntryOpenApi),
+    })
+    .openapi('ExportAccountAuditResponse');
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/audit-log/export',

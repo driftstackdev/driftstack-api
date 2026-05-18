@@ -271,6 +271,13 @@ describe('OpenAPI spec generation', () => {
     // so the Python regen produces a typed `GetBillingStateResponse`
     // class instead of an anonymous synthesised type.
     expect(names).toContain('GetBillingStateResponse');
+    // V-462 / V-297 audit-log — AccountAuditEntry is the row shape
+    // emitted on /v1/account/audit-log (list) + /v1/account/audit-log/
+    // export. Pinning ensures the Python regen produces a typed
+    // pydantic class instead of synthesised inline types per-route.
+    expect(names).toContain('AccountAuditEntry');
+    expect(names).toContain('ListAccountAuditResponse');
+    expect(names).toContain('ExportAccountAuditResponse');
   });
 
   // LK.3 — pin LiveKitInfo as a NAMED schema in components.schemas
