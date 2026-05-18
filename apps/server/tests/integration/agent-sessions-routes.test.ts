@@ -242,4 +242,105 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     });
     expect(res.statusCode).toBe(404);
   });
+
+  it('v2-#19 idempotency: POST /v1/agent-sessions with `Idempotency-Key` header replays the same 201 on retry (Stripe-pattern). Second call MUST NOT mint a new row — same id returned, transcript_length unchanged.', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+
+    const first = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': 'idem-test-v2-19',
+      },
+      payload: { token_budget: 25_000 },
+    });
+    expect(first.statusCode).toBe(201);
+    const firstBody = first.json<{ id: string; token_budget_total: number; closed_at: null }>();
+    expect(firstBody.id).toMatch(/^agt_inmem_/);
+    expect(firstBody.closed_at).toBeNull();
+
+    const second = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'idempotency-key': 'idem-test-v2-19',
+      },
+      // Even with a different body, the replay returns the original
+      // record — that's the Stripe contract.
+      payload: { token_budget: 999_999 },
+    });
+    expect(second.statusCode).toBe(201);
+    const secondBody = second.json<{ id: string; token_budget_total: number }>();
+    expect(secondBody.id).toBe(firstBody.id);
+    expect(secondBody.token_budget_total).toBe(firstBody.token_budget_total);
+  });
+
+  it('v2-#19 idempotency: POST without the header still mints a fresh row each call (header is opt-in, NOT default-on)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const a = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const b = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(a.statusCode).toBe(201);
+    expect(b.statusCode).toBe(201);
+    expect(a.json<{ id: string }>().id).not.toBe(b.json<{ id: string }>().id);
+  });
+
+  it('v2-#19 idempotency: empty-string `Idempotency-Key` is treated as absent (stray proxy header MUST NOT collapse every session onto a phantom row)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const a = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': '' },
+      payload: {},
+    });
+    const b = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': '' },
+      payload: {},
+    });
+    expect(a.statusCode).toBe(201);
+    expect(b.statusCode).toBe(201);
+    expect(a.json<{ id: string }>().id).not.toBe(b.json<{ id: string }>().id);
+  });
+
+  it('v2-#19 closed_at: NULL while active; ISO timestamp set on DELETE → close', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const id = create.json<{ id: string; closed_at: string | null }>().id;
+    expect(create.json<{ closed_at: string | null }>().closed_at).toBeNull();
+
+    const close = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(close.statusCode).toBe(204);
+
+    const read = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(read.statusCode).toBe(200);
+    const body = read.json<{ closed_at: string | null; status: string }>();
+    expect(body.status).toBe('closed');
+    expect(body.closed_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+  });
 });

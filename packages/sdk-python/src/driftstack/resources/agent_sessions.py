@@ -25,14 +25,31 @@ class AgentSessionsResource:
     def __init__(self, http: HttpClient) -> None:
         self._http = http
 
-    def create(self, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def create(
+        self,
+        body: dict[str, Any] | None = None,
+        *,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
         """Create a new agent chat session.
 
         Body shape (all fields optional): ``{"driftstack_session_id"?: ...,
         "token_budget"?: int}``.
+
+        ``idempotency_key`` (optional, v2-#19) is forwarded as the
+        ``Idempotency-Key`` request header — Stripe-pattern dedupe. The
+        server enforces ``(account_id, idempotency_key)`` uniqueness via
+        a partial unique index; retries with the same key replay the
+        original 201 response instead of minting a duplicate row.
         """
+        extra_headers = (
+            {"Idempotency-Key": idempotency_key} if idempotency_key is not None else None
+        )
         return self._http.request(
-            "POST", "/v1/agent-sessions", json_body=coerce_body(body or {})
+            "POST",
+            "/v1/agent-sessions",
+            json_body=coerce_body(body or {}),
+            extra_headers=extra_headers,
         )
 
     def get(self, agent_session_id: str) -> dict[str, Any]:
@@ -81,9 +98,21 @@ class AsyncAgentSessionsResource:
     def __init__(self, http: AsyncHttpClient) -> None:
         self._http = http
 
-    async def create(self, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def create(
+        self,
+        body: dict[str, Any] | None = None,
+        *,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        """Async mirror — same v2-#19 idempotency_key semantics as sync."""
+        extra_headers = (
+            {"Idempotency-Key": idempotency_key} if idempotency_key is not None else None
+        )
         return await self._http.request(
-            "POST", "/v1/agent-sessions", json_body=coerce_body(body or {})
+            "POST",
+            "/v1/agent-sessions",
+            json_body=coerce_body(body or {}),
+            extra_headers=extra_headers,
         )
 
     async def get(self, agent_session_id: str) -> dict[str, Any]:

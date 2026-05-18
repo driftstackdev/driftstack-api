@@ -56,6 +56,9 @@ interface PublicAgentSession {
   token_budget_total: number;
   token_budget_remaining: number;
   transcript_length: number;
+  // v2-#19 — wall-clock close timestamp; distinct from updated_at
+  // which moves on every transcript append. NULL while active.
+  closed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -70,6 +73,7 @@ function publicAgentSession(rec: AgentSessionRecord): PublicAgentSession {
     token_budget_total: rec.tokenBudgetTotal,
     token_budget_remaining: rec.tokenBudgetRemaining,
     transcript_length: rec.transcript.length,
+    closed_at: rec.closedAt !== null ? rec.closedAt.toISOString() : null,
     created_at: rec.createdAt.toISOString(),
     updated_at: rec.updatedAt.toISOString(),
   };
@@ -124,12 +128,39 @@ export function registerAgentSessionsRoutes(
       const ctx = requireCtx(req);
       const parsed = CreateAgentSessionRequestSchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // v2-#19 — Stripe-pattern idempotency. Header name is lowercase
+      // per Fastify's normalised headers map; the dashboard / SDK send
+      // it as `Idempotency-Key` and the wire-level toLowerCase happens
+      // before this handler sees it. Empty string treated as "absent"
+      // so a stray `Idempotency-Key:` from an over-eager proxy doesn't
+      // collapse all sessions to a single phantom-keyed row.
+      const rawHeader = req.headers['idempotency-key'];
+      const idempotencyKey =
+        typeof rawHeader === 'string' && rawHeader.length > 0 ? rawHeader : null;
+      if (idempotencyKey !== null) {
+        const existing = await sessions.findByIdempotencyKey(ctx.account.id, idempotencyKey);
+        if (existing !== null) {
+          // Replay the prior 201 response. We re-attach the cached
+          // BYOK key plaintext too: if the original session-create
+          // hydrated the cache, the cache lives in memory and may
+          // have evicted (single-replica today; survives a request
+          // but not a redeploy). A second hydration here is cheap
+          // (one AES-GCM unwrap) and keeps the replay behaviour
+          // observably-identical to the first call.
+          if (byokService !== undefined && byokKeyCache !== undefined) {
+            const stored = await byokService.getPlaintext({ accountId: ctx.account.id });
+            if (stored !== null) byokKeyCache.set(existing.id, stored);
+          }
+          return reply.code(201).send(publicAgentSession(existing));
+        }
+      }
       const created = await sessions.create({
         accountId: ctx.account.id,
         tokenBudgetTotal: parsed.data.token_budget ?? DEFAULT_TOKEN_BUDGET,
         ...(parsed.data.driftstack_session_id !== undefined
           ? { driftstackSessionId: parsed.data.driftstack_session_id }
           : {}),
+        ...(idempotencyKey !== null ? { idempotencyKey } : {}),
       });
       // Q.1.c — decrypt the customer's stored BYOK key ONCE at
       // session-create and stash plaintext in the per-session cache.

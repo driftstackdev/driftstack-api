@@ -21,7 +21,7 @@
 // requests would have done — acceptable for v1.0.
 
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { agentSessions } from './schema.js';
 import type { TranscriptEntry } from '../services/agent-decomposer.js';
@@ -42,6 +42,11 @@ function rowToRecord(row: typeof agentSessions.$inferSelect): AgentSessionRecord
     tokenBudgetTotal: row.tokenBudgetTotal,
     tokenBudgetRemaining: row.tokenBudgetRemaining,
     closedReason: row.closedReason,
+    // v2-#9 + v2-#19 hardening columns — present on every row even
+    // when migration 0047 left them NULL on legacy rows.
+    idempotencyKey: row.idempotencyKey,
+    createdByUserId: row.createdByUserId,
+    closedAt: row.closedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -66,6 +71,13 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
         transcript: [],
         tokenBudgetTotal: args.tokenBudgetTotal,
         tokenBudgetRemaining: args.tokenBudgetTotal,
+        // v2-#19 hardening columns — partial unique index on
+        // (account_id, idempotency_key) enforces "first-write wins" if
+        // the route layer races two POSTs with the same key. Postgres
+        // raises a UniqueViolation; the route layer's findByIdempotencyKey
+        // pre-check is the primary dedupe surface.
+        idempotencyKey: args.idempotencyKey ?? null,
+        createdByUserId: args.createdByUserId ?? null,
         createdAt: now,
         updatedAt: now,
       })
@@ -141,9 +153,15 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
 
   async closeWithReason(id: string, reason: string): Promise<AgentSessionRecord> {
     const now = this.clock();
+    // v2-#19 — closedAt is set ONLY on the first close transition. We
+    // do a read-before-write so re-closing an already-closed row leaves
+    // the original closedAt intact (Stripe-style timestamp; the first
+    // close wins). The row-level UPDATE is still atomic per id.
+    const existing = await this.get(id);
+    const closedAt = existing?.closedAt ?? now;
     const updated = await this.database.db
       .update(agentSessions)
-      .set({ status: 'closed', closedReason: reason, updatedAt: now })
+      .set({ status: 'closed', closedReason: reason, closedAt, updatedAt: now })
       .where(eq(agentSessions.id, id))
       .returning();
     const row = updated[0];
@@ -151,5 +169,25 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       throw new Error(`AgentSession ${id} not found`);
     }
     return rowToRecord(row);
+  }
+
+  async findByIdempotencyKey(
+    accountId: string,
+    idempotencyKey: string,
+  ): Promise<AgentSessionRecord | null> {
+    // v2-#19 — partial unique index `agent_sessions_idempotency_key_unique`
+    // on (account_id, idempotency_key) means at most one row matches.
+    const rows = await this.database.db
+      .select()
+      .from(agentSessions)
+      .where(
+        and(
+          eq(agentSessions.accountId, accountId),
+          eq(agentSessions.idempotencyKey, idempotencyKey),
+        ),
+      )
+      .limit(1);
+    const row = rows[0];
+    return row ? rowToRecord(row) : null;
   }
 }

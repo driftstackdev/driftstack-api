@@ -39,7 +39,7 @@ func main() {
 
 	session, err := client.AgentSessions.Create(ctx, &driftstack.CreateAgentSessionRequest{
 		TokenBudget: 25_000,
-	})
+	}, nil)
 	if err != nil {
 		if errors.Is(err, driftstack.ErrFeatureUnavailable) {
 			fmt.Fprintf(os.Stderr, "Agent chat not yet enabled on this deployment: %v\nPre-launch posture; comes online when the LLM key path wires up.\n", err)

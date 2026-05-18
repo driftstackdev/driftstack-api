@@ -21,6 +21,7 @@ SESSION_ENVELOPE = {
     "token_budget_total": 100_000,
     "token_budget_remaining": 100_000,
     "transcript_length": 0,
+    "closed_at": None,
     "created_at": "2026-05-16T00:00:00Z",
     "updated_at": "2026-05-16T00:00:00Z",
 }
@@ -116,6 +117,34 @@ def test_sync_message_no_byok_omits_header() -> None:
         assert route.called
         sent_headers = route.calls.last.request.headers
         assert "x-byok-anthropic-api-key" not in sent_headers
+
+
+def test_sync_create_idempotency_key_sets_header() -> None:
+    """v2-#19 — passing ``idempotency_key`` forwards the
+    ``Idempotency-Key`` request header so server-side dedupe collapses
+    retries onto a single row."""
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions").mock(
+            return_value=httpx.Response(201, json=SESSION_ENVELOPE),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.agent_sessions.create(idempotency_key="idem-py-test")
+        assert route.called
+        sent_headers = route.calls.last.request.headers
+        assert sent_headers["Idempotency-Key"] == "idem-py-test"
+
+
+def test_sync_create_no_idempotency_key_omits_header() -> None:
+    """Omitting ``idempotency_key`` sends NO Idempotency-Key header
+    (header is opt-in; parity with the TS + Go SDKs)."""
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions").mock(
+            return_value=httpx.Response(201, json=SESSION_ENVELOPE),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.agent_sessions.create()
+        sent_headers = route.calls.last.request.headers
+        assert "Idempotency-Key" not in sent_headers
 
 
 def test_sync_close_delete() -> None:

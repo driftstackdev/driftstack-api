@@ -49,6 +49,28 @@ export interface AgentSessionRecord {
   /** Reason set by `closeWithReason` (refused / budget-exhausted /
    *  customer-closed / fatal-error). NULL on active sessions. */
   closedReason: string | null;
+  /**
+   * v2-#9 + v2-#19 — Stripe-pattern idempotency key.
+   * NULL when the caller didn't pass an `Idempotency-Key` header on
+   * POST /v1/agent-sessions. Repo enforces (account_id, idempotency_key)
+   * uniqueness via the partial unique index from migration 0047. Lookup
+   * via `findByIdempotencyKey` is what the route layer uses to replay a
+   * prior 201 response on retry instead of minting a duplicate row.
+   */
+  idempotencyKey: string | null;
+  /**
+   * v2-#9 + v2-#19 — team-RBAC attribution. NULL when the auth context
+   * is account-scoped (no specific team member id resolvable). Populated
+   * by the route layer once V-298 team-membership auth lands; today it
+   * stays NULL for password / OAuth account-scoped sessions.
+   */
+  createdByUserId: string | null;
+  /**
+   * v2-#9 + v2-#19 — wall-clock timestamp the session transitioned out
+   * of `active` status. Distinct from `updatedAt`, which moves on every
+   * transcript append. NULL while the session is active.
+   */
+  closedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -59,6 +81,16 @@ export interface CreateAgentSessionArgs {
   /** Optional pre-attached driftstack session id (when the customer
    *  starts the agent-chat from inside an already-running session). */
   driftstackSessionId?: string;
+  /**
+   * v2-#19 — Stripe-pattern idempotency key. When supplied, the partial
+   * unique index on (account_id, idempotency_key) ensures retries
+   * collapse onto a single row. The route layer is what reads the
+   * `Idempotency-Key` HTTP header + threads it here.
+   */
+  idempotencyKey?: string;
+  /** v2-#19 — team-RBAC attribution. Set by the route layer once
+   *  V-298 team-membership auth resolves a specific member id. */
+  createdByUserId?: string;
 }
 
 export interface AgentSessionsRepo {
@@ -68,6 +100,18 @@ export interface AgentSessionsRepo {
   appendTranscript(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord>;
   debitTokens(id: string, tokens: number): Promise<AgentSessionRecord>;
   closeWithReason(id: string, reason: string): Promise<AgentSessionRecord>;
+  /**
+   * v2-#19 — Stripe-pattern idempotency lookup. Scoped per-account so
+   * customer A's "key=foo" cannot collide with customer B's "key=foo"
+   * (mirrors the partial unique index from migration 0047). Returns
+   * the existing record when the (accountId, key) tuple matches; NULL
+   * otherwise. The route layer uses the NULL/non-NULL outcome to decide
+   * "replay prior 201" vs "mint new row".
+   */
+  findByIdempotencyKey(
+    accountId: string,
+    idempotencyKey: string,
+  ): Promise<AgentSessionRecord | null>;
 }
 
 /**
@@ -99,11 +143,26 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       tokenBudgetTotal: args.tokenBudgetTotal,
       tokenBudgetRemaining: args.tokenBudgetTotal,
       closedReason: null,
+      idempotencyKey: args.idempotencyKey ?? null,
+      createdByUserId: args.createdByUserId ?? null,
+      closedAt: null,
       createdAt: now,
       updatedAt: now,
     };
     this.records.set(id, rec);
     return Promise.resolve(rec);
+  }
+
+  findByIdempotencyKey(
+    accountId: string,
+    idempotencyKey: string,
+  ): Promise<AgentSessionRecord | null> {
+    for (const rec of this.records.values()) {
+      if (rec.accountId === accountId && rec.idempotencyKey === idempotencyKey) {
+        return Promise.resolve(rec);
+      }
+    }
+    return Promise.resolve(null);
   }
 
   get(id: string): Promise<AgentSessionRecord | null> {
@@ -145,11 +204,17 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
   closeWithReason(id: string, reason: string): Promise<AgentSessionRecord> {
     const rec = this.records.get(id);
     if (!rec) return Promise.reject(new Error(`AgentSession ${id} not found`));
+    const now = this.clock();
     const updated: AgentSessionRecord = {
       ...rec,
       status: 'closed',
       closedReason: reason,
-      updatedAt: this.clock(),
+      // v2-#19 — wall-clock close timestamp; distinct from updatedAt
+      // which moves on every transcript append. Set once at the
+      // transition; not advanced if the row is later re-closed (the
+      // first close wins, by Stripe-style timestamp semantics).
+      closedAt: rec.closedAt ?? now,
+      updatedAt: now,
     };
     this.records.set(id, updated);
     return Promise.resolve(updated);

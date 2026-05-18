@@ -16,6 +16,7 @@ var agentSessionEnvelope = map[string]any{
 	"token_budget_total":     100_000,
 	"token_budget_remaining": 100_000,
 	"transcript_length":      0,
+	"closed_at":              nil,
 	"created_at":             "2026-05-16T00:00:00Z",
 	"updated_at":             "2026-05-16T00:00:00Z",
 }
@@ -29,7 +30,7 @@ func TestAgentSessions_Create(t *testing.T) {
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(agentSessionEnvelope)
 	})
-	got, err := client.AgentSessions.Create(context.Background(), &CreateAgentSessionRequest{TokenBudget: 25_000})
+	got, err := client.AgentSessions.Create(context.Background(), &CreateAgentSessionRequest{TokenBudget: 25_000}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +45,44 @@ func TestAgentSessions_Create_NilBody(t *testing.T) {
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(agentSessionEnvelope)
 	})
-	if _, err := client.AgentSessions.Create(context.Background(), nil); err != nil {
+	if _, err := client.AgentSessions.Create(context.Background(), nil, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentSessions_Create_IdempotencyKey(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// v2-#19 — SDK MUST forward IdempotencyKey via the
+		// Idempotency-Key header so the server-side partial unique
+		// index on (account_id, idempotency_key) collapses retries.
+		if got := r.Header.Get("Idempotency-Key"); got != "idem-go-test" {
+			t.Errorf("Idempotency-Key header=%q want %q", got, "idem-go-test")
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(agentSessionEnvelope)
+	})
+	if _, err := client.AgentSessions.Create(
+		context.Background(),
+		nil,
+		&CreateOptions{IdempotencyKey: "idem-go-test"},
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentSessions_Create_NoIdempotencyKey_OmitsHeader(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// Without opts, no Idempotency-Key header is sent — header is
+		// opt-in, parity with the TS SDK.
+		if got := r.Header.Get("Idempotency-Key"); got != "" {
+			t.Errorf("expected no Idempotency-Key header; got %q", got)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(agentSessionEnvelope)
+	})
+	if _, err := client.AgentSessions.Create(context.Background(), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 }

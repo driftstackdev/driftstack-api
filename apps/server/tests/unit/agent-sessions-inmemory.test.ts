@@ -131,4 +131,64 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     const repo = new InMemoryAgentSessionsRepo();
     await expect(repo.closeWithReason('agt_inmem_99999999', 'x')).rejects.toThrow();
   });
+
+  // v2-#19 — Stripe-pattern idempotency-key + closedAt hardening.
+  it('v2-#19 create: idempotencyKey + createdByUserId default to NULL on the record when caller omits them; closedAt is NULL while active', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const rec = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    expect(rec.idempotencyKey).toBeNull();
+    expect(rec.createdByUserId).toBeNull();
+    expect(rec.closedAt).toBeNull();
+  });
+
+  it('v2-#19 create: idempotencyKey + createdByUserId persist when supplied; round-trip via findByIdempotencyKey and listByAccount', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const rec = await repo.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100,
+      idempotencyKey: 'idem-abc',
+      createdByUserId: 'usr_team_member_1',
+    });
+    expect(rec.idempotencyKey).toBe('idem-abc');
+    expect(rec.createdByUserId).toBe('usr_team_member_1');
+    const looked = await repo.findByIdempotencyKey('acc_1', 'idem-abc');
+    expect(looked?.id).toBe(rec.id);
+  });
+
+  it('v2-#19 findByIdempotencyKey: scoped per-account — customer A "key=foo" does NOT collide with customer B "key=foo"', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const a = await repo.create({
+      accountId: 'acc_A',
+      tokenBudgetTotal: 1,
+      idempotencyKey: 'shared',
+    });
+    const b = await repo.create({
+      accountId: 'acc_B',
+      tokenBudgetTotal: 1,
+      idempotencyKey: 'shared',
+    });
+    expect(a.id).not.toBe(b.id);
+    expect((await repo.findByIdempotencyKey('acc_A', 'shared'))?.id).toBe(a.id);
+    expect((await repo.findByIdempotencyKey('acc_B', 'shared'))?.id).toBe(b.id);
+    expect(await repo.findByIdempotencyKey('acc_C', 'shared')).toBeNull();
+    expect(await repo.findByIdempotencyKey('acc_A', 'other')).toBeNull();
+  });
+
+  it('v2-#19 closeWithReason: sets closedAt to now on first close; re-closing leaves the original closedAt intact (first-close wins)', async () => {
+    let now = new Date('2026-05-16T00:00:00Z');
+    const repo = new InMemoryAgentSessionsRepo(() => now);
+    const r0 = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    expect(r0.closedAt).toBeNull();
+
+    now = new Date('2026-05-16T00:10:00Z');
+    const first = await repo.closeWithReason(r0.id, 'customer-closed');
+    expect(first.closedAt?.toISOString()).toBe('2026-05-16T00:10:00.000Z');
+
+    now = new Date('2026-05-16T00:20:00Z');
+    const reClosed = await repo.closeWithReason(r0.id, 'budget-exhausted');
+    // Reason updates to the latest close call but closedAt is sticky.
+    expect(reClosed.closedReason).toBe('budget-exhausted');
+    expect(reClosed.closedAt?.toISOString()).toBe('2026-05-16T00:10:00.000Z');
+    expect(reClosed.updatedAt.toISOString()).toBe('2026-05-16T00:20:00.000Z');
+  });
 });

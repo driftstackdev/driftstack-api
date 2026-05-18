@@ -23,6 +23,12 @@ export interface AgentSession {
   token_budget_total: number;
   token_budget_remaining: number;
   transcript_length: number;
+  /**
+   * v2-#19 — wall-clock ISO-8601 timestamp the session transitioned out
+   * of `active` status. Distinct from `updated_at`, which moves on every
+   * transcript append. `null` while the session is active.
+   */
+  closed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -69,11 +75,22 @@ export type AgentMessageResponse =
 export class AgentSessionsResource {
   constructor(private readonly http: HttpClient) {}
 
-  create(body: CreateAgentSessionRequest = {}): Promise<AgentSession> {
+  create(
+    body: CreateAgentSessionRequest = {},
+    opts?: { idempotencyKey?: string },
+  ): Promise<AgentSession> {
+    // v2-#19 — Stripe-pattern idempotency. Forward as the
+    // `Idempotency-Key` request header so retries collapse onto the
+    // server's first 201 response. The server-side partial unique
+    // index on (account_id, idempotency_key) is what guarantees the
+    // dedupe end-to-end; SDK just plumbs the header.
     return this.http.request<AgentSession>({
       method: 'POST',
       path: '/v1/agent-sessions',
       body,
+      ...(opts?.idempotencyKey !== undefined
+        ? { headers: { 'Idempotency-Key': opts.idempotencyKey } }
+        : {}),
     });
   }
 

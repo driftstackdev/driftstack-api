@@ -64,6 +64,25 @@ describe('AgentSessionsResource', () => {
     expect(calls[0]).toEqual({ method: 'POST', path: '/v1/agent-sessions', body: {} });
   });
 
+  it('v2-#19 create with { idempotencyKey } forwards the `Idempotency-Key` header so server-side dedupe collapses retries onto one row', async () => {
+    const { http, calls } = makeFakeHttp({});
+    const res = new AgentSessionsResource(http);
+    await res.create({}, { idempotencyKey: 'idem-abc-123' });
+    expect(calls[0]).toEqual({
+      method: 'POST',
+      path: '/v1/agent-sessions',
+      body: {},
+      headers: { 'Idempotency-Key': 'idem-abc-123' },
+    });
+  });
+
+  it('v2-#19 create without idempotencyKey does NOT send the header (header is opt-in)', async () => {
+    const { http, calls } = makeFakeHttp({});
+    const res = new AgentSessionsResource(http);
+    await res.create({ token_budget: 1000 });
+    expect(calls[0]?.headers).toBeUndefined();
+  });
+
   it('get GETs /v1/agent-sessions/{id} (URL-encoded)', async () => {
     const { http, calls } = makeFakeHttp({});
     const res = new AgentSessionsResource(http);

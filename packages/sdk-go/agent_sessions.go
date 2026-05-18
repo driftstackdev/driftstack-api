@@ -28,6 +28,9 @@ type AgentSession struct {
 	TokenBudgetTotal      int     `json:"token_budget_total"`
 	TokenBudgetRemaining  int     `json:"token_budget_remaining"`
 	TranscriptLength      int     `json:"transcript_length"`
+	// v2-#19 wall-clock ISO-8601 close timestamp; nil while active.
+	// Distinct from UpdatedAt which moves on every transcript append.
+	ClosedAt              *string `json:"closed_at"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
 }
@@ -52,18 +55,35 @@ type AgentMessageResponse struct {
 	RefuseReason        string            `json:"refuse_reason,omitempty"`
 }
 
+// CreateOptions carries optional per-call overrides for Create.
+//
+// IdempotencyKey is the v2-#19 Stripe-pattern idempotency token.
+// Forwarded as the Idempotency-Key request header so retries collapse
+// onto the same server-side row. Server enforces (account_id,
+// idempotency_key) uniqueness via a partial unique index; SDK just
+// plumbs the header.
+type CreateOptions struct {
+	IdempotencyKey string
+}
+
 // Create mints a new agent chat session.
-func (r *AgentSessionsResource) Create(ctx context.Context, body *CreateAgentSessionRequest) (*AgentSession, error) {
+//
+// Pass `nil` for opts to skip the Idempotency-Key header.
+func (r *AgentSessionsResource) Create(ctx context.Context, body *CreateAgentSessionRequest, opts *CreateOptions) (*AgentSession, error) {
 	var out AgentSession
 	if body == nil {
 		body = &CreateAgentSessionRequest{}
 	}
-	if err := r.client.do(ctx, requestOptions{
+	req := requestOptions{
 		method: "POST",
 		path:   "/v1/agent-sessions",
 		body:   body,
 		out:    &out,
-	}); err != nil {
+	}
+	if opts != nil && opts.IdempotencyKey != "" {
+		req.headers = map[string]string{"Idempotency-Key": opts.IdempotencyKey}
+	}
+	if err := r.client.do(ctx, req); err != nil {
 		return nil, err
 	}
 	return &out, nil
