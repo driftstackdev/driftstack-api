@@ -1176,6 +1176,155 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // Arc 7 docs.openapi — BYOK Anthropic + Bundled LLM endpoints.
+  // The full reference for both surfaces lives at
+  // docs.driftstack.dev/api/byok-anthropic + /api/bundled-llm. These
+  // OpenAPI route registrations expose the surface to SDK
+  // generators + the Scalar UI rendered at /docs/.
+  const ByokAnthropicMetadataOpenApi = z.object({
+    has_key: z.boolean(),
+    set_at: z.string().nullable(),
+    last_used_at: z.string().nullable(),
+  });
+  const PutByokAnthropicRequestOpenApi = z.object({
+    api_key: z.string().min(1).describe('Plaintext Anthropic API key. Never echoed back.'),
+  });
+  const PutByokAnthropicResponseOpenApi = z.object({
+    set_at: z.string(),
+  });
+  const TestByokAnthropicResponseOpenApi = z.union([
+    z.object({ ok: z.literal(true) }),
+    z.object({ ok: z.literal(false), reason: z.string() }),
+  ]);
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/me/byok-anthropic-key',
+    summary: 'BYOK Anthropic key metadata (no plaintext)',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Metadata — has_key + set_at + last_used_at. Plaintext is never exposed.',
+        content: { 'application/json': { schema: ByokAnthropicMetadataOpenApi } },
+      },
+      ...errors4xx,
+      503: {
+        description: 'BYOK Anthropic key storage not yet enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'put',
+    path: '/v1/account/me/byok-anthropic-key',
+    summary: 'Set or rotate the BYOK Anthropic key',
+    tags: ['account'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: PutByokAnthropicRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'Key stored. Returns set_at timestamp.',
+        content: { 'application/json': { schema: PutByokAnthropicResponseOpenApi } },
+      },
+      ...errors4xx,
+      503: { description: 'BYOK storage not enabled.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/account/me/byok-anthropic-key',
+    summary: 'Clear the stored BYOK Anthropic key',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      204: { description: 'Key cleared.' },
+      ...errors4xx,
+      503: { description: 'BYOK storage not enabled.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/account/me/byok-anthropic-key/test',
+    summary: 'Test the stored BYOK Anthropic key against the Anthropic API',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Connection test result. ok=true on success; ok=false with reason on failure.',
+        content: { 'application/json': { schema: TestByokAnthropicResponseOpenApi } },
+      },
+      ...errors4xx,
+      503: { description: 'BYOK storage not enabled.', content: problemContent },
+    },
+  });
+
+  // Bundled LLM (v2-#6).
+  const BundledLlmSettingsOpenApi = z.object({
+    consent: z.boolean(),
+    monthly_cap_usd_cents: z.number().int().min(0).max(1_000_000),
+  });
+  const PatchBundledLlmRequestOpenApi = z
+    .object({
+      consent: z.boolean().optional(),
+      monthly_cap_usd_cents: z.number().int().min(0).max(1_000_000).optional(),
+    })
+    .describe('At least one of consent / monthly_cap_usd_cents must be present.');
+  const BundledLlmStatusOpenApi = z.object({
+    consent: z.boolean(),
+    cap_cents: z.number().int().min(0),
+    used_this_month_cents: z.number().int().min(0),
+    remaining_cents: z.number().int().min(0),
+    refused_count_this_month: z.number().int().min(0),
+    month_started_at: z.string(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/me/bundled-llm-settings',
+    summary: 'Bundled-LLM consent + monthly cap (v2-#6)',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Current bundled-LLM settings. Defaults to consent=false, cap=$20.',
+        content: { 'application/json': { schema: BundledLlmSettingsOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'patch',
+    path: '/v1/account/me/bundled-llm-settings',
+    summary: 'Update bundled-LLM consent and/or monthly cap',
+    tags: ['account'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: PatchBundledLlmRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'Updated settings.',
+        content: { 'application/json': { schema: BundledLlmSettingsOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/me/bundled-llm-status',
+    summary: 'Bundled-LLM month-to-date spend + remaining headroom',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Used / remaining / cap in cents, plus calendar-month-start.',
+        content: { 'application/json': { schema: BundledLlmStatusOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+
   const RateLimitBucketOpenApi = z.object({
     bucket_key: z.enum(['global', 'sessions:create']),
     capacity: z.number().int().positive(),
