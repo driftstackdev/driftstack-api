@@ -288,6 +288,62 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(afterFirst?.closedReason).toBe('budget-exhausted');
   });
 
+  // Arc 2 sub-slice 8.6 (v2-#8) — manual mode pass-through.
+  // The integration test (agent-sessions-routes.test.ts) covers the
+  // wire surface; these unit tests pin the runtime semantics so a
+  // refactor of decompose/executor wiring can't accidentally start
+  // running the decomposer on a mode='manual' session.
+  describe('mode=manual pass-through (sub-slice 8.6)', () => {
+    it('manual session: runTurn does NOT call decompose, returns kind: logged-manual, transcript carries actor=operator entry', async () => {
+      const sessions = new InMemoryAgentSessionsRepo();
+      const seed = await sessions.create({
+        accountId: 'acc_1',
+        mode: 'manual',
+        tokenBudgetTotal: 100_000,
+      });
+      // Decomposer that explodes if called — proves runTurn never
+      // touches it on mode='manual'.
+      const explodingDecomposer = {
+        decompose: () => Promise.reject(new Error('decompose must not be called on manual mode')),
+      };
+      const runtime = new AgentRuntime({
+        decomposer: explodingDecomposer,
+        executor: new StubAgentExecutor(),
+        sessions,
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      const result = await runtime.runTurn({
+        agentSessionId: seed.id,
+        userMessage: 'I am driving directly via gui_control',
+      });
+      expect(result.kind).toBe('logged-manual');
+      const final = await sessions.get(seed.id);
+      expect(final?.transcript).toHaveLength(1);
+      expect(final?.transcript[0]?.role).toBe('operator');
+      expect(final?.transcript[0]?.body).toBe('I am driving directly via gui_control');
+      // No debit on manual turns — they consume zero tokens.
+      expect(final?.tokenBudgetRemaining).toBe(100_000);
+    });
+
+    it('manual session does NOT carry intents on the operator turn (intents are only set on plan-executed agent turns)', async () => {
+      const sessions = new InMemoryAgentSessionsRepo();
+      const seed = await sessions.create({
+        accountId: 'acc_1',
+        mode: 'manual',
+        tokenBudgetTotal: 100_000,
+      });
+      const runtime = new AgentRuntime({
+        decomposer: new DeterministicAgentDecomposer(),
+        executor: new StubAgentExecutor(),
+        sessions,
+        archetype: 'iphone16pro_ios18_7_safari26_4',
+      });
+      await runtime.runTurn({ agentSessionId: seed.id, userMessage: 'click submit' });
+      const final = await sessions.get(seed.id);
+      expect(final?.transcript[0]?.intents).toBeUndefined();
+    });
+  });
+
   describe('Q.1.b hybrid error classification', () => {
     it('transient error (Anthropic 5xx) → refuse with agent-unavailable reason, session stays active', async () => {
       const throwingDecomposer = {
