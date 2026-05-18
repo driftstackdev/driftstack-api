@@ -51,12 +51,14 @@ describe('W769 docs /api/usage content parity', () => {
     );
   });
 
-  it("CRITICAL session_minutes meter framing pinned — 'wall-clock minutes a session was active, summed across the calendar month. Drives the BYOK or bundled-session-minutes meter on Stripe.' The wording matches ADR-004 + V-186 concurrent-only-meter framing.", () => {
+  it("CRITICAL session_minute meter framing pinned — 'wall-clock minutes a session was active, summed across the calendar month'. The previous pin asserted `session_minutes` (plural, fictional) but the UsageRecordType enum is singular per packages/api-types/src/usage.ts:4-11. Refreshed against source-of-truth + simplified wording (no BYOK/bundled hedge — the meter sums session minutes regardless of the LLM rail).", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`totals\.session_minutes` — wall-clock minutes a session was\s*\n?\s+active, summed across the calendar month\. Drives the BYOK or\s*\n?\s+bundled-session-minutes meter on Stripe\./,
+      /`totals\.session_minute` — wall-clock minutes a session was\s*\n?\s+active, summed across the calendar month\./,
     );
+    // The fictional plural must NOT return.
+    expect(p).not.toMatch(/`totals\.session_minutes`/);
   });
 
   it("CRITICAL navigates/interacts/waits free-across-tiers framing pinned. The 'Free across all tiers; surfaced for observability' wording matches W754 dashboard /usage ADR-004 'count everything, charge for nothing-but-concurrent' framing.", () => {
@@ -73,12 +75,14 @@ describe('W769 docs /api/usage content parity', () => {
     );
   });
 
-  it('CRITICAL enterprise profiles_limit-may-be-null framing pinned. Drift would let SDK consumers crash on a null cap.', () => {
+  it('CRITICAL enterprise null-quota framing pinned. The previous pin asserted `quotas.profiles_limit` which is fictional — UsageRecordType has no "profiles_limit" member; the actual quotas map uses the singular UsageRecordType keys (session_minute, navigate, etc.). For enterprise the singular `session_minute` cap may be null. Drift would let SDK consumers crash on a null cap.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /For the enterprise tier, `quotas\.profiles_limit` may be `null`\s*\n?\(meaning "no fixed cap; see your contract"\)\./,
+      /For the enterprise tier, `quotas\.session_minute` may be `null`\s*\n?\(meaning "no fixed cap; see your contract"\)\./,
     );
+    // Fictional key must NOT return.
+    expect(p).not.toMatch(/`quotas\.profiles_limit`/);
   });
 
   it("CRITICAL daily series right-aligned-on-yesterday framing pinned. The 'right-aligned on \"yesterday\" (the most-recent fully-closed UTC day); today\\'s partial bucket is intentionally not surfaced — the dashboard\\'s sparkline renders cleaner without a half-empty trailing bucket' wording is the load-bearing bucket-alignment contract.", () => {
@@ -190,22 +194,35 @@ describe('W769 docs /api/usage content parity', () => {
     expect(p).toMatch(/client\.Usage\.Series\(ctx, 30\)/);
   });
 
-  it("CRITICAL response shape — totals + quotas blocks. The 'totals' block has 6 fields (session_minutes/navigates/interacts/waits/state_captures/screenshot_captures); 'quotas' has 3 fields (session_minutes_limit/concurrent_sessions_limit/profiles_limit).", () => {
+  it("CRITICAL response shape — totals + quotas blocks. Matches UsageRecordType enum at packages/api-types/src/usage.ts:4-11 (singular keys, NOT plurals; quotas keys are the SAME enum keys with optional null values, NOT fictional `_limit`-suffixed keys). Drift previously pinned plural keys + 3 fictional `_limit` quota keys that don't exist in the response.", () => {
     const p = read(PAGE);
 
+    // The 6-key UsageRecordType enum (singular). totals + quotas share
+    // the same key space; both maps always carry all six keys.
     for (const field of [
+      'session_minute',
+      'navigate',
+      'interact',
+      'wait',
+      'state_capture',
+      'screenshot_capture',
+    ]) {
+      expect(p, `key ${field}`).toMatch(new RegExp(`"${field}":`));
+    }
+    // The fictional plurals + `_limit` keys must NOT return.
+    for (const fictional of [
       'session_minutes',
       'navigates',
       'interacts',
       'waits',
       'state_captures',
       'screenshot_captures',
+      'session_minutes_limit',
+      'concurrent_sessions_limit',
+      'profiles_limit',
     ]) {
-      expect(p, `totals.${field}`).toMatch(new RegExp(`"${field}":`));
+      expect(p, `fictional key ${fictional}`).not.toMatch(new RegExp(`"${fictional}":`));
     }
-    expect(p).toMatch(/"session_minutes_limit":/);
-    expect(p).toMatch(/"concurrent_sessions_limit":/);
-    expect(p).toMatch(/"profiles_limit":/);
   });
 
   it('CRITICAL series buckets singular-key shape pinned — session_minute/navigate/interact/wait/state_capture/screenshot_capture. Drift to plural would let SDK consumers parse a different schema.', () => {

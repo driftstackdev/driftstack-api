@@ -28,17 +28,20 @@ Response (200):
   "period_end": "2026-06-01T00:00:00.000Z",
   "tier": "api_builder",
   "totals": {
-    "session_minutes": 1234,
-    "navigates": 56789,
-    "interacts": 12345,
-    "waits": 6789,
-    "state_captures": 234,
-    "screenshot_captures": 78
+    "session_minute": 1234,
+    "navigate": 56789,
+    "interact": 12345,
+    "wait": 6789,
+    "state_capture": 234,
+    "screenshot_capture": 78
   },
   "quotas": {
-    "session_minutes_limit": 50000,
-    "concurrent_sessions_limit": 5,
-    "profiles_limit": 25
+    "session_minute": 50000,
+    "navigate": null,
+    "interact": null,
+    "wait": null,
+    "state_capture": null,
+    "screenshot_capture": null
   }
 }
 ```
@@ -50,28 +53,36 @@ Response (200):
   next month).
 - `tier` — the account's billing tier. The tier determines the
   quota caps below.
-- `totals.session_minutes` — wall-clock minutes a session was
-  active, summed across the calendar month. Drives the BYOK or
-  bundled-session-minutes meter on Stripe.
-- `totals.navigates` / `interacts` / `waits` — count of each
-  driver action invoked. Free across all tiers; surfaced for
+- `totals.*` and `quotas.*` use the same key set — the
+  `UsageRecordType` enum (singular): `session_minute`, `navigate`,
+  `interact`, `wait`, `state_capture`, `screenshot_capture`. Both
+  maps always carry all six keys.
+- `totals.session_minute` — wall-clock minutes a session was
+  active, summed across the calendar month. Drives the
+  session-minutes meter on Stripe.
+- `totals.navigate` / `interact` / `wait` — count of each driver
+  action invoked. Free across all tiers; surfaced for
   observability.
-- `totals.state_captures` / `screenshot_captures` — count of state
+- `totals.state_capture` / `screenshot_capture` — count of state
   reads + screenshot endpoint hits. Same: count-only, no per-tier
   cap.
-- `quotas.session_minutes_limit` — calendar-month soft cap from the
-  tier table. Crossing the cap triggers a 402-style billing-overage
+- `quotas.session_minute` — calendar-month soft cap from the tier
+  table. Crossing the cap triggers a 402-style billing-overage
   signal at the BillingService layer (this endpoint reports raw
   counters; the cap is informational here).
-- `quotas.concurrent_sessions_limit` — the live cap enforced at
-  POST /v1/sessions create-time. Tier table value (locked in
-  pricing planning file 127).
-- `quotas.profiles_limit` — the cap on the count of saved
-  profiles. Tier table value.
+- `quotas.<other>` is `null` for record types that are unmetered
+  on the calling tier (free / count-only). A non-null value here
+  means a hard cap exists; cross-check against `totals.<same-key>`
+  to see how much headroom remains.
 
-For the enterprise tier, `quotas.profiles_limit` may be `null`
+For the enterprise tier, `quotas.session_minute` may be `null`
 (meaning "no fixed cap; see your contract"). All other tiers
 return a numeric value.
+
+This endpoint does not surface the concurrent-sessions cap or the
+profile-count cap — those are tier-table values enforced at create
+time. See [/reference/rate-limits](/reference/rate-limits) for the
+full per-tier configuration.
 
 ## Daily series
 
