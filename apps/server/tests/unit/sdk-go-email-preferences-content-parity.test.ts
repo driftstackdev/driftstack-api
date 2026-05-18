@@ -37,12 +37,26 @@ describe('W592.C packages/sdk-go/email_preferences.go content parity', () => {
     expect(body).toMatch(/path:\s+"\/v1\/account\/email-preferences",/);
     expect(body).toMatch(/method: "PUT",/);
     expect(body).toMatch(/\/\/ OptOut is a convenience wrapper for Set with opted_in=false\./);
+    // Set + OptOut + OptIn return only `error` (no *EmailPreference)
+    // because the server replies 204 No Content. The previous pin
+    // asserted `(*EmailPreference, error)` which was source-of-truth-
+    // divergent — customer Go code unmarshalling `pref.EventType` from
+    // a nil-EmailPreference would panic. Call List() if the
+    // post-update state is needed.
     expect(body).toMatch(
-      /func \(r \*EmailPreferencesResource\) OptOut\(ctx context\.Context, eventType string\) \(\*EmailPreference, error\) \{\s*\n\s*return r\.Set\(ctx, &SetEmailPreferenceRequest\{EventType: eventType, OptedIn: false\}\)\s*\n\}/,
+      /func \(r \*EmailPreferencesResource\) OptOut\(ctx context\.Context, eventType string\) error \{\s*\n\s*return r\.Set\(ctx, &SetEmailPreferenceRequest\{EventType: eventType, OptedIn: false\}\)\s*\n\}/,
     );
     expect(body).toMatch(/\/\/ OptIn is a convenience wrapper for Set with opted_in=true\./);
     expect(body).toMatch(
-      /func \(r \*EmailPreferencesResource\) OptIn\(ctx context\.Context, eventType string\) \(\*EmailPreference, error\) \{\s*\n\s*return r\.Set\(ctx, &SetEmailPreferenceRequest\{EventType: eventType, OptedIn: true\}\)\s*\n\}/,
+      /func \(r \*EmailPreferencesResource\) OptIn\(ctx context\.Context, eventType string\) error \{\s*\n\s*return r\.Set\(ctx, &SetEmailPreferenceRequest\{EventType: eventType, OptedIn: true\}\)\s*\n\}/,
+    );
+    // The previous (wrong) (*EmailPreference, error) signature must
+    // NOT return on either method.
+    expect(body).not.toMatch(
+      /func \(r \*EmailPreferencesResource\) OptOut\([^)]+\) \(\*EmailPreference, error\)/,
+    );
+    expect(body).not.toMatch(
+      /func \(r \*EmailPreferencesResource\) OptIn\([^)]+\) \(\*EmailPreference, error\)/,
     );
   });
 

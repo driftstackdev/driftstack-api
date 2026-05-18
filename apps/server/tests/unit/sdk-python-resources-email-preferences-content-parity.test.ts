@@ -79,25 +79,27 @@ describe('W580.C packages/sdk-python/src/driftstack/resources/email_preferences.
     );
   });
 
-  it('Sync set — PUT /v1/account/email-preferences. CRITICAL: PUT (not PATCH) because the write replaces the entire row for one event_type, not partial-update across multiple fields. Body shape pinned: {"event_type": "...", "opted_in": True|False} — exactly 2 fields. Drift to allowing a `description` or `note` field would silently widen the row and break the simple opt-in toggle UX.', () => {
-    expect(body).toMatch(/def set\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/);
+  it('Sync set — PUT /v1/account/email-preferences. CRITICAL: PUT (not PATCH) because the write replaces the entire row for one event_type, not partial-update across multiple fields. Body shape pinned: {"event_type": "...", "opted_in": True|False} — exactly 2 fields. The return-type is None — the server replies 204 No Content; the previous pin asserted `-> dict[str, Any]` which was source-of-truth-divergent (customer code would assign None to a typed-dict var). Customers needing the post-update state call list().', () => {
+    expect(body).toMatch(/def set\(self, body: dict\[str, Any\]\) -> None:/);
     expect(body).toMatch(
-      /"""Set opt-in\/opt-out for a single event type\.\s*\n\s*\n\s*``body``: ``\{"event_type": "\.\.\.", "opted_in": True\|False\}``\s*\n\s*"""/,
+      /Set opt-in\/opt-out for a single event type\.\s*\n\s*\n\s*``body``: ``\{"event_type": "\.\.\.", "opted_in": True\|False\}``\s*\n\s*\n\s*Returns ``None`` — the server replies ``204 No Content``/,
     );
     expect(body).toMatch(
-      /return self\._http\.request\(\s*\n\s*"PUT", "\/v1\/account\/email-preferences", json_body=coerce_body\(body\)\s*\n\s*\)/,
+      /self\._http\.request\(\s*\n\s*"PUT", "\/v1\/account\/email-preferences", json_body=coerce_body\(body\)\s*\n\s*\)/,
+    );
+    // The previous (wrong) -> dict[str, Any] return must NOT return.
+    expect(body).not.toMatch(/def set\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/);
+  });
+
+  it('Sync opt_out — convenience wrapper that delegates to self.set({"event_type": event_type, "opted_in": False}). Returns None matching set(). The function-rename invariant matters: opt_out MUST keep opted_in=False semantics stable.', () => {
+    expect(body).toMatch(
+      /def opt_out\(self, event_type: str\) -> None:\s*\n\s*"""Convenience: opt out of a single event type\."""\s*\n\s*self\.set\(\{"event_type": event_type, "opted_in": False\}\)/,
     );
   });
 
-  it('Sync opt_out — convenience wrapper that delegates to self.set({"event_type": event_type, "opted_in": False}). CRITICAL: the delegated dict has opted_in=False — drift to True would silently invert the wrapper\'s semantic (opt_out would actually opt in). The function-rename invariant matters: a future "unsubscribe" alias should also delegate to set with opted_in=False, but the .opt_out name MUST keep that semantic stable.', () => {
+  it('Sync opt_in — convenience wrapper that delegates to self.set({"event_type": event_type, "opted_in": True}). Mirror of opt_out with opted_in=True. Returns None matching set(). "Opt back in" framing acknowledges this is the un-undo of a prior opt_out.', () => {
     expect(body).toMatch(
-      /def opt_out\(self, event_type: str\) -> dict\[str, Any\]:\s*\n\s*"""Convenience: opt out of a single event type\."""\s*\n\s*return self\.set\(\{"event_type": event_type, "opted_in": False\}\)/,
-    );
-  });
-
-  it('Sync opt_in — convenience wrapper that delegates to self.set({"event_type": event_type, "opted_in": True}). Mirror of opt_out with opted_in=True. Drift to False would invert the semantic. "Opt back in" framing in docstring acknowledges this is the un-undo of a prior opt_out — load-bearing for the dashboard UX where a customer toggles "re-enable notifications".', () => {
-    expect(body).toMatch(
-      /def opt_in\(self, event_type: str\) -> dict\[str, Any\]:\s*\n\s*"""Convenience: opt back in to a single event type\."""\s*\n\s*return self\.set\(\{"event_type": event_type, "opted_in": True\}\)/,
+      /def opt_in\(self, event_type: str\) -> None:\s*\n\s*"""Convenience: opt back in to a single event type\."""\s*\n\s*self\.set\(\{"event_type": event_type, "opted_in": True\}\)/,
     );
   });
 
@@ -109,21 +111,21 @@ describe('W580.C packages/sdk-python/src/driftstack/resources/email_preferences.
     );
   });
 
-  it('Async list + set — awaited GET/PUT twins with same wire paths + same coerce_body wrapping on set. Drift to a different qs computation or body wrapping in the async path would silently fragment the SDK surface.', () => {
+  it('Async list + set — awaited GET/PUT twins with same wire paths + same coerce_body wrapping on set. Async set returns None matching the sync side (the wire replies 204 No Content).', () => {
     expect(body).toMatch(
       /async def list\(self\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\("GET", "\/v1\/account\/email-preferences"\)/,
     );
     expect(body).toMatch(
-      /async def set\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\(\s*\n\s*"PUT", "\/v1\/account\/email-preferences", json_body=coerce_body\(body\)\s*\n\s*\)/,
+      /async def set\(self, body: dict\[str, Any\]\) -> None:[\s\S]+?await self\._http\.request\(\s*\n\s*"PUT", "\/v1\/account\/email-preferences", json_body=coerce_body\(body\)\s*\n\s*\)/,
     );
   });
 
-  it("Async opt_out + opt_in — convenience wrappers `await self.set({event_type, opted_in})`. Same delegated-False / delegated-True semantic as sync; await keyword the only difference. Drift to a different opted_in value in the async path would invert the wrapper's semantic.", () => {
+  it('Async opt_out + opt_in — convenience wrappers `await self.set({event_type, opted_in})`. Returns None matching sync. Same delegated-False / delegated-True semantic.', () => {
     expect(body).toMatch(
-      /async def opt_out\(self, event_type: str\) -> dict\[str, Any\]:\s*\n\s*return await self\.set\(\{"event_type": event_type, "opted_in": False\}\)/,
+      /async def opt_out\(self, event_type: str\) -> None:\s*\n\s*await self\.set\(\{"event_type": event_type, "opted_in": False\}\)/,
     );
     expect(body).toMatch(
-      /async def opt_in\(self, event_type: str\) -> dict\[str, Any\]:\s*\n\s*return await self\.set\(\{"event_type": event_type, "opted_in": True\}\)/,
+      /async def opt_in\(self, event_type: str\) -> None:\s*\n\s*await self\.set\(\{"event_type": event_type, "opted_in": True\}\)/,
     );
   });
 

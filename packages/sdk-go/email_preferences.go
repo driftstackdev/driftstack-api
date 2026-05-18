@@ -42,29 +42,26 @@ func (r *EmailPreferencesResource) List(ctx context.Context) (*ListEmailPreferen
 	return &out, nil
 }
 
-// Set updates opt-in/opt-out for a single event type.
+// Set updates opt-in/opt-out for a single event type. The server
+// replies 204 No Content (empty body), so this returns only an
+// error. Call List afterwards if the post-update state is needed.
 func (r *EmailPreferencesResource) Set(
 	ctx context.Context,
 	body *SetEmailPreferenceRequest,
-) (*EmailPreference, error) {
-	var out EmailPreference
-	if err := r.client.do(ctx, requestOptions{
+) error {
+	return r.client.do(ctx, requestOptions{
 		method: "PUT",
 		path:   "/v1/account/email-preferences",
 		body:   body,
-		out:    &out,
-	}); err != nil {
-		return nil, err
-	}
-	return &out, nil
+	})
 }
 
 // OptOut is a convenience wrapper for Set with opted_in=false.
-func (r *EmailPreferencesResource) OptOut(ctx context.Context, eventType string) (*EmailPreference, error) {
+func (r *EmailPreferencesResource) OptOut(ctx context.Context, eventType string) error {
 	return r.Set(ctx, &SetEmailPreferenceRequest{EventType: eventType, OptedIn: false})
 }
 
 // OptIn is a convenience wrapper for Set with opted_in=true.
-func (r *EmailPreferencesResource) OptIn(ctx context.Context, eventType string) (*EmailPreference, error) {
+func (r *EmailPreferencesResource) OptIn(ctx context.Context, eventType string) error {
 	return r.Set(ctx, &SetEmailPreferenceRequest{EventType: eventType, OptedIn: true})
 }

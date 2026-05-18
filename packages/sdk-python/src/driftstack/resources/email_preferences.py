@@ -24,22 +24,26 @@ class EmailPreferencesResource:
         """Read all opt-out toggles. Defaults opted-in for unset rows."""
         return self._http.request("GET", "/v1/account/email-preferences")
 
-    def set(self, body: dict[str, Any]) -> dict[str, Any]:
+    def set(self, body: dict[str, Any]) -> None:
         """Set opt-in/opt-out for a single event type.
 
         ``body``: ``{"event_type": "...", "opted_in": True|False}``
+
+        Returns ``None`` — the server replies ``204 No Content``
+        with an empty body. Call :meth:`list` afterwards if you
+        need the post-update state.
         """
-        return self._http.request(
+        self._http.request(
             "PUT", "/v1/account/email-preferences", json_body=coerce_body(body)
         )
 
-    def opt_out(self, event_type: str) -> dict[str, Any]:
+    def opt_out(self, event_type: str) -> None:
         """Convenience: opt out of a single event type."""
-        return self.set({"event_type": event_type, "opted_in": False})
+        self.set({"event_type": event_type, "opted_in": False})
 
-    def opt_in(self, event_type: str) -> dict[str, Any]:
+    def opt_in(self, event_type: str) -> None:
         """Convenience: opt back in to a single event type."""
-        return self.set({"event_type": event_type, "opted_in": True})
+        self.set({"event_type": event_type, "opted_in": True})
 
 
 class AsyncEmailPreferencesResource:
@@ -51,13 +55,17 @@ class AsyncEmailPreferencesResource:
     async def list(self) -> dict[str, Any]:
         return await self._http.request("GET", "/v1/account/email-preferences")
 
-    async def set(self, body: dict[str, Any]) -> dict[str, Any]:
-        return await self._http.request(
+    async def set(self, body: dict[str, Any]) -> None:
+        """Async mirror of :meth:`EmailPreferencesResource.set`.
+
+        Returns ``None`` — the server replies ``204 No Content``.
+        """
+        await self._http.request(
             "PUT", "/v1/account/email-preferences", json_body=coerce_body(body)
         )
 
-    async def opt_out(self, event_type: str) -> dict[str, Any]:
-        return await self.set({"event_type": event_type, "opted_in": False})
+    async def opt_out(self, event_type: str) -> None:
+        await self.set({"event_type": event_type, "opted_in": False})
 
-    async def opt_in(self, event_type: str) -> dict[str, Any]:
-        return await self.set({"event_type": event_type, "opted_in": True})
+    async def opt_in(self, event_type: str) -> None:
+        await self.set({"event_type": event_type, "opted_in": True})
