@@ -336,6 +336,12 @@ export interface AppDeps {
    */
   agentSessionEventBus?: AgentSessionEventBus;
   /**
+   * Arc 2 sub-slice 8.4 (v2-#8) — base64-encoded AES-256 key for the
+   * gui_control_key auto-mint. Shares MFA_ENCRYPTION_KEY by convention.
+   * Omit to skip the route registration.
+   */
+  guiControlKeyEncryptionKey?: string;
+  /**
    * AI-B4 — write-only recipe library (orchestrator handoff #3 Q.5).
    * POST /v1/recipes snapshots a finished agent_session's
    * intent_log + transcript. When omitted, /v1/recipes registers
@@ -886,6 +892,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // an event stream.
       ...(deps.agentSessionEventBus !== undefined
         ? { transcriptEventBus: deps.agentSessionEventBus }
+        : {}),
+      // Arc 2 sub-slice 8.4 (v2-#8) — gui_control_key auto-mint. The
+      // route registers only when an encryption key is wired (shared
+      // MFA_ENCRYPTION_KEY per the BYOK / MFA pattern).
+      ...(deps.guiControlKeyEncryptionKey !== undefined
+        ? { guiControlKeyEncryptionKey: deps.guiControlKeyEncryptionKey }
         : {}),
     });
   } else {

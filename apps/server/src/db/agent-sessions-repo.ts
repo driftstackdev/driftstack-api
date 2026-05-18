@@ -53,6 +53,7 @@ function rowToRecord(row: typeof agentSessions.$inferSelect): AgentSessionRecord
     mode: (row.mode as 'manual' | 'ai' | 'pair') ?? 'ai',
     pairModeState: row.pairModeState,
     guiControlKeyExpiresAt: row.guiControlKeyExpiresAt,
+    guiControlKeyCiphertext: row.guiControlKeyCiphertext,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -176,6 +177,28 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     const row = updated[0];
     if (!row) {
       throw new Error(`AgentSession ${id} not found`);
+    }
+    return rowToRecord(row);
+  }
+
+  async setGuiControlKey(args: {
+    id: string;
+    ciphertext: Buffer | null;
+    expiresAt: Date | null;
+  }): Promise<AgentSessionRecord> {
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({
+        guiControlKeyCiphertext: args.ciphertext,
+        guiControlKeyExpiresAt: args.expiresAt,
+        updatedAt: now,
+      })
+      .where(eq(agentSessions.id, args.id))
+      .returning();
+    const row = updated[0];
+    if (!row) {
+      throw new Error(`AgentSession ${args.id} not found`);
     }
     return rowToRecord(row);
   }

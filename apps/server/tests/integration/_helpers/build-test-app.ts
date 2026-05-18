@@ -1097,6 +1097,10 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // leg on deploymentFallbackKey being set; sub-slice 6.6 GET +
     // PATCH need the service regardless.
     bundledLlmService,
+    // Arc 2 sub-slice 8.4 (v2-#8) — stub MFA-key for the gui_control_key
+    // mint. 32 raw bytes base64-encoded. Tests assert the route works
+    // round-trip; production uses the real MFA_ENCRYPTION_KEY env.
+    guiControlKeyEncryptionKey: Buffer.alloc(32, 7).toString('base64'),
     // Stub deployment fallback key — only used when a test seeds
     // opts.enableBundledLlm with consent=true so the bundled-LLM leg
     // can actually resolve. Otherwise harmless; default-fallback

@@ -825,6 +825,12 @@ export async function createProductionDeps(
     // unconditionally; route registration is gated on agentRuntime
     // being wired (same activation pattern as the rest).
     agentSessionEventBus,
+    // Arc 2 sub-slice 8.4 (v2-#8) — gui_control_key encryption.
+    // Shares MFA_ENCRYPTION_KEY per Q2=C pattern; route gates on
+    // this being present in AppDeps.
+    ...(config.mfaEncryptionKey !== undefined
+      ? { guiControlKeyEncryptionKey: config.mfaEncryptionKey }
+      : {}),
     // Q.1.d — staging opts in to consuming the deployment fallback
     // for unconfigured customers; prod (default false) hard-502s
     // ByokAnthropicRequired per the BYOK-for-v1.0 Tier-3 verdict.

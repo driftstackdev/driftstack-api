@@ -26,6 +26,11 @@ import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.
 import type { BundledLlmService } from '../services/bundled-llm.js';
 import type { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
 import {
+  decryptGuiControlKey,
+  encryptGuiControlKey,
+  generateGuiControlKey,
+} from '../lib/gui-control-key-encryption.js';
+import {
   BundledLlmBudgetExhaustedError,
   BundledLlmConsentRequiredError,
   ByokAnthropicRequiredError,
@@ -134,6 +139,20 @@ export interface AgentSessionsRoutesDeps {
   transcriptEventBus?: AgentSessionEventBus;
   /** Heartbeat interval for the SSE stream (ms). Defaults to 30s. */
   transcriptHeartbeatMs?: number;
+  /**
+   * Arc 2 sub-slice 8.4 (v2-#8) — base64-encoded AES-256 encryption
+   * key for the gui_control_key plaintext. Shares MFA_ENCRYPTION_KEY
+   * by convention (sub-slice 8.4 mints + persists; route surface
+   * decrypts at fetch). Omit to skip the gui_control_key route
+   * registration.
+   */
+  guiControlKeyEncryptionKey?: string;
+  /**
+   * Arc 2 sub-slice 8.4 (v2-#8) — TTL of the auto-minted
+   * gui_control_key. Q2=C verdict locked 24h. Test-injectable so
+   * unit tests can pin a tighter window.
+   */
+  guiControlKeyTtlMs?: number;
 }
 
 export function registerAgentSessionsRoutes(
@@ -151,6 +170,8 @@ export function registerAgentSessionsRoutes(
     bundledLlmService,
     transcriptEventBus,
     transcriptHeartbeatMs = 30_000,
+    guiControlKeyEncryptionKey,
+    guiControlKeyTtlMs = 24 * 60 * 60 * 1000,
   } = deps;
 
   app.post(
@@ -300,6 +321,58 @@ export function registerAgentSessionsRoutes(
         req.raw.on('close', cleanup);
         req.raw.on('error', cleanup);
         reply.hijack();
+      },
+    );
+  }
+
+  // Arc 2 sub-slice 8.4 (v2-#8) — gui_control_key auto-mint endpoint.
+  // First call: mint plaintext, AES-GCM encrypt, persist ciphertext +
+  // 24h-TTL expiry. Subsequent calls within the TTL: decrypt + echo
+  // the same plaintext back so the gui-client can reconnect without
+  // a full session-reissue. Past TTL: mint fresh (the old plaintext
+  // is unrecoverable — purposeful, since the customer should treat
+  // it as a single-session token).
+  if (guiControlKeyEncryptionKey !== undefined) {
+    app.get<{ Params: { id: string } }>(
+      '/v1/agent-sessions/:id/gui-control-key',
+      { preHandler: [app.requireAuth, app.rateLimit('global')] },
+      async (req) => {
+        const ctx = requireCtx(req);
+        const rec = await sessions.get(req.params.id);
+        if (rec === null || rec.accountId !== ctx.account.id) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+        const now = new Date();
+        // Mint when no key exists OR the existing one has expired.
+        const expired =
+          rec.guiControlKeyExpiresAt === null ||
+          rec.guiControlKeyExpiresAt.getTime() <= now.getTime();
+        if (expired || rec.guiControlKeyCiphertext === null) {
+          const plaintext = generateGuiControlKey();
+          const ciphertext = encryptGuiControlKey(plaintext, guiControlKeyEncryptionKey);
+          const expiresAt = new Date(now.getTime() + guiControlKeyTtlMs);
+          await sessions.setGuiControlKey({
+            id: req.params.id,
+            ciphertext,
+            expiresAt,
+          });
+          return {
+            gui_control_key: plaintext,
+            expires_at: expiresAt.toISOString(),
+            minted: true as const,
+          };
+        }
+        // Live key: decrypt + echo. The dashboard treats every call
+        // as idempotent within the TTL.
+        const plaintext = decryptGuiControlKey(
+          rec.guiControlKeyCiphertext,
+          guiControlKeyEncryptionKey,
+        );
+        return {
+          gui_control_key: plaintext as string,
+          expires_at: rec.guiControlKeyExpiresAt!.toISOString(),
+          minted: false as const,
+        };
       },
     );
   }

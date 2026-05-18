@@ -101,6 +101,13 @@ export interface AgentSessionRecord {
    * populates.
    */
   guiControlKeyExpiresAt: Date | null;
+  /**
+   * Arc 2 sub-slice 8.4 (v2-#8) — AES-256-GCM ciphertext blob for
+   * the gui_control_key plaintext. NULL when no key has been minted.
+   * Decrypted at the route layer via `decryptGuiControlKey` with the
+   * MFA_ENCRYPTION_KEY env value.
+   */
+  guiControlKeyCiphertext: Buffer | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -155,6 +162,18 @@ export interface AgentSessionsRepo {
    * Throws when the session is not found.
    */
   setPairModeState(id: string, state: unknown): Promise<AgentSessionRecord>;
+
+  /**
+   * Arc 2 sub-slice 8.4 (v2-#8) — write the encrypted
+   * gui_control_key blob + its 24h-TTL expiry timestamp. Called by
+   * the route layer at first-fetch (auto-mint) or rotation. Pass
+   * null for both args to clear.
+   */
+  setGuiControlKey(args: {
+    id: string;
+    ciphertext: Buffer | null;
+    expiresAt: Date | null;
+  }): Promise<AgentSessionRecord>;
 }
 
 /**
@@ -193,6 +212,7 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       mode: args.mode ?? 'ai',
       pairModeState: null,
       guiControlKeyExpiresAt: null,
+      guiControlKeyCiphertext: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -245,6 +265,23 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       updatedAt: this.clock(),
     };
     this.records.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
+  setGuiControlKey(args: {
+    id: string;
+    ciphertext: Buffer | null;
+    expiresAt: Date | null;
+  }): Promise<AgentSessionRecord> {
+    const rec = this.records.get(args.id);
+    if (!rec) return Promise.reject(new Error(`AgentSession ${args.id} not found`));
+    const updated: AgentSessionRecord = {
+      ...rec,
+      guiControlKeyCiphertext: args.ciphertext,
+      guiControlKeyExpiresAt: args.expiresAt,
+      updatedAt: this.clock(),
+    };
+    this.records.set(args.id, updated);
     return Promise.resolve(updated);
   }
 
