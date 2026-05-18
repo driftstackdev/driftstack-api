@@ -70,4 +70,55 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.k cross-SDK PairModeStateInvalidTransiti
     // failed transition" contract.
     expect(body).toMatch(/readonly from: string;[\s\S]*readonly transition: string;/);
   });
+
+  // Arc 4 Wave 2.B sub-slice 8.20.k.3 — extend the parity guard to
+  // cover the OTHER two typed-extension errors in the v2-#8 +
+  // bundled-LLM surface so all three SDKs stay in lockstep.
+  describe('PairModeConflictError.winnerClientId / WinnerClientID / winner_client_id', () => {
+    it('TypeScript exposes readonly winnerClientId', () => {
+      const body = readFileSync(TS_ERRORS, 'utf8');
+      expect(body).toMatch(/class PairModeConflictError extends DriftstackError \{/);
+      expect(body).toMatch(/readonly winnerClientId: string;/);
+      expect(body).toMatch(/this\.winnerClientId = .*\.winner_client_id/);
+    });
+
+    it('Python exposes self.winner_client_id assignment in __init__', () => {
+      const body = readFileSync(PY_ERRORS, 'utf8');
+      expect(body).toMatch(/class PairModeConflictError\(DriftstackError\):/);
+      expect(body).toMatch(/self\.winner_client_id: str = str\(p\.get\("winner_client_id", ""\)\)/);
+    });
+
+    it('Go exposes WinnerClientID struct field', () => {
+      const body = readFileSync(GO_ERRORS, 'utf8');
+      const m = body.match(/type PairModeConflictError struct \{[\s\S]+?\}/);
+      expect(m).not.toBeNull();
+      expect(m![0]).toMatch(/\n\s*WinnerClientID\s+string/);
+    });
+  });
+
+  describe('BundledLlmBudgetExhaustedError.spentCents/SpentCents/spent_cents + capCents/CapCents/cap_cents', () => {
+    it('TypeScript exposes readonly spentCents + capCents', () => {
+      const body = readFileSync(TS_ERRORS, 'utf8');
+      expect(body).toMatch(/class BundledLlmBudgetExhaustedError extends DriftstackError \{/);
+      expect(body).toMatch(/readonly spentCents: number;/);
+      expect(body).toMatch(/readonly capCents: number;/);
+      expect(body).toMatch(/this\.spentCents = .*\.spent_cents/);
+      expect(body).toMatch(/this\.capCents = .*\.cap_cents/);
+    });
+
+    it('Python exposes self.spent_cents + self.cap_cents in __init__', () => {
+      const body = readFileSync(PY_ERRORS, 'utf8');
+      expect(body).toMatch(/class BundledLlmBudgetExhaustedError\(DriftstackError\):/);
+      expect(body).toMatch(/self\.spent_cents: int = _coerce_int\(p\.get\("spent_cents"\)\)/);
+      expect(body).toMatch(/self\.cap_cents: int = _coerce_int\(p\.get\("cap_cents"\)\)/);
+    });
+
+    it('Go exposes SpentCents + CapCents struct fields', () => {
+      const body = readFileSync(GO_ERRORS, 'utf8');
+      const m = body.match(/type BundledLlmBudgetExhaustedError struct \{[\s\S]+?\}/);
+      expect(m).not.toBeNull();
+      expect(m![0]).toMatch(/\n\s*SpentCents\s+int/);
+      expect(m![0]).toMatch(/\n\s*CapCents\s+int/);
+    });
+  });
 });

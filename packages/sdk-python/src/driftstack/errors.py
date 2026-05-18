@@ -21,6 +21,18 @@ from __future__ import annotations
 from typing import Any
 
 
+def _coerce_int(value: Any) -> int:
+    """Best-effort int coercion for typed error-class extensions.
+    Returns 0 when the value is missing or non-numeric so a malformed
+    problem-json response can't break error-class construction."""
+    if value is None:
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 class DriftstackError(Exception):
     """Base for every error raised by the Driftstack SDK.
 
@@ -256,8 +268,24 @@ class BundledLlmBudgetExhaustedError(DriftstackError):
     (HTTP 402). Customer recovery paths in the problem-detail string:
     raise cap via PATCH /v1/account/me/bundled-llm-settings, supply a
     BYOK key (header or stored), or wait for next calendar month.
-    Extensions carry ``spent_cents`` + ``cap_cents`` for dashboard
-    rendering."""
+
+    Cross-SDK parity: TS exposes ``err.spentCents`` + ``err.capCents``;
+    Go exposes ``err.SpentCents`` + ``err.CapCents``; Python exposes
+    snake_case ``err.spent_cents`` + ``err.cap_cents``.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = 402,
+        problem_type: str | None = None,
+        problem: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, status=status, problem_type=problem_type, problem=problem)
+        p = problem or {}
+        self.spent_cents: int = _coerce_int(p.get("spent_cents"))
+        self.cap_cents: int = _coerce_int(p.get("cap_cents"))
 
 
 class BundledLlmConsentRequiredError(DriftstackError):
@@ -268,8 +296,25 @@ class BundledLlmConsentRequiredError(DriftstackError):
 
 class PairModeConflictError(DriftstackError):
     """Arc 2 sub-slice 8.10 (v2-#8) — pair-mode takeover lost the
-    SET-NX-EX lock race. HTTP 409. The `winner_client_id` extension
-    on the wire identifies who currently holds the takeover."""
+    SET-NX-EX lock race. HTTP 409.
+
+    Cross-SDK parity: TS exposes ``err.winnerClientId``; Go exposes
+    ``err.WinnerClientID``; Python exposes snake_case
+    ``err.winner_client_id`` — identifies who currently holds the
+    takeover so the dashboard can render "user X is taking over".
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = 409,
+        problem_type: str | None = None,
+        problem: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, status=status, problem_type=problem_type, problem=problem)
+        p = problem or {}
+        self.winner_client_id: str = str(p.get("winner_client_id", ""))
 
 
 class PairModeStateInvalidTransitionError(DriftstackError):

@@ -7,6 +7,7 @@ import pytest
 from driftstack.errors import (
     PROBLEM_TYPE_TO_ERROR,
     AuthError,
+    BundledLlmBudgetExhaustedError,
     ConcurrencyLimitError,
     ConflictError,
     DriftstackError,
@@ -19,6 +20,7 @@ from driftstack.errors import (
     InvalidCredentialsError,
     InvalidKeyError,
     NotFoundError,
+    PairModeConflictError,
     PairModeStateInvalidTransitionError,
     QuotaExceededError,
     RateLimitError,
@@ -152,6 +154,49 @@ def test_pair_mode_state_invalid_transition_extracts_from_and_transition() -> No
     assert err.from_ == "takeover-pending"
     assert err.transition == "takeover-request"
     assert err.status == 409
+
+
+def test_pair_mode_conflict_extracts_winner_client_id() -> None:
+    """Arc 4 Wave 2.B sub-slice 8.20.k.3 (v2-#8) — TS exposes
+    ``err.winnerClientId``; Go exposes ``err.WinnerClientID``; Python
+    parity-fix exposes snake_case ``err.winner_client_id``."""
+    body = (
+        '{"type":"https://errors.driftstack.dev/pair-mode-conflict",'
+        '"title":"Lock contended","status":409,'
+        '"detail":"Another client has the takeover.",'
+        '"winner_client_id":"cli_a"}'
+    )
+    err = _error_from_response_data(status=409, text=body, retry_after_header=None)
+    assert isinstance(err, PairModeConflictError)
+    assert err.winner_client_id == "cli_a"
+
+
+def test_bundled_llm_budget_exhausted_extracts_spent_and_cap() -> None:
+    """Arc 4 Wave 2.B sub-slice 8.20.k.3 (v2-#8) — TS exposes
+    ``err.spentCents`` + ``err.capCents``; Go exposes ``err.SpentCents``
+    + ``err.CapCents``; Python parity-fix exposes snake_case
+    ``err.spent_cents`` + ``err.cap_cents``."""
+    body = (
+        '{"type":"https://errors.driftstack.dev/bundled-llm-budget-exhausted",'
+        '"title":"Cap reached","status":402,'
+        '"detail":"Bundled-LLM monthly cap reached.",'
+        '"spent_cents":2050,"cap_cents":2000}'
+    )
+    err = _error_from_response_data(status=402, text=body, retry_after_header=None)
+    assert isinstance(err, BundledLlmBudgetExhaustedError)
+    assert err.spent_cents == 2050
+    assert err.cap_cents == 2000
+
+
+def test_bundled_llm_budget_exhausted_missing_fields_default_to_zero() -> None:
+    body = (
+        '{"type":"https://errors.driftstack.dev/bundled-llm-budget-exhausted",'
+        '"title":"Cap reached","status":402,"detail":"…"}'
+    )
+    err = _error_from_response_data(status=402, text=body, retry_after_header=None)
+    assert isinstance(err, BundledLlmBudgetExhaustedError)
+    assert err.spent_cents == 0
+    assert err.cap_cents == 0
 
 
 def test_pair_mode_state_invalid_transition_missing_fields_default_to_empty_string() -> None:
