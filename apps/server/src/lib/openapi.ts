@@ -1325,6 +1325,118 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // Arc 7 docs.openapi — OAuth 2.0 public dance (V-667). The 4
+  // standard-spec endpoints third-party clients use to obtain access
+  // tokens on a customer's behalf. Full prose at
+  // docs.driftstack.dev/api/oauth. Admin endpoints (/v1/admin/oauth/*)
+  // are NOT registered — they're internal-only.
+  const OAuthAuthorizeQueryOpenApi = z.object({
+    client_id: z.string().min(1),
+    redirect_uri: z.string().url(),
+    state: z.string().min(8).max(256),
+    code_challenge: z.string().min(43).max(128),
+    code_challenge_method: z.literal('S256'),
+    scope: z.string().optional(),
+  });
+  const OAuthAuthorizeResponseOpenApi = z.object({ authorization_id: z.string() });
+  const OAuthTokenRequestOpenApi = z.object({
+    grant_type: z.literal('authorization_code'),
+    code: z.string().min(1),
+    code_verifier: z.string().min(43).max(128),
+    client_id: z.string().min(1),
+    client_secret: z.string().min(1),
+    redirect_uri: z.string().url(),
+  });
+  const OAuthTokenResponseOpenApi = z.object({
+    access_token: z.string(),
+    token_type: z.literal('Bearer'),
+    expires_in: z.number().int().positive(),
+    scope: z.array(z.string()),
+  });
+  const OAuthIntrospectRequestOpenApi = z.object({ token: z.string().min(1) });
+  const OAuthIntrospectResponseOpenApi = z.union([
+    z.object({ active: z.literal(false) }),
+    z.object({
+      active: z.literal(true),
+      client_id: z.string(),
+      account_id: z.string().nullable(),
+      scope: z.array(z.string()),
+      exp: z.number().int().positive(),
+    }),
+  ]);
+  const OAuthRevokeRequestOpenApi = z.object({
+    token: z.string().min(1),
+    token_type_hint: z.enum(['access_token', 'refresh_token']).optional(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/oauth/authorize',
+    summary: 'OAuth 2.0 authorize — stage a PKCE authorization (RFC 6749 + RFC 7636)',
+    tags: ['oauth'],
+    request: {
+      query: OAuthAuthorizeQueryOpenApi,
+    },
+    responses: {
+      200: {
+        description: 'Authorization staged. authorization_id is consumed by /authorize/complete.',
+        content: { 'application/json': { schema: OAuthAuthorizeResponseOpenApi } },
+      },
+      400: { description: 'Invalid request / scope / client.', content: problemContent },
+      401: { description: 'Unknown / revoked client.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/oauth/token',
+    summary: 'OAuth 2.0 token — exchange authorization code for an access token',
+    tags: ['oauth'],
+    request: {
+      body: { content: { 'application/json': { schema: OAuthTokenRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'Access token (1-hour TTL; no refresh tokens issued).',
+        content: { 'application/json': { schema: OAuthTokenResponseOpenApi } },
+      },
+      400: {
+        description: 'invalid_grant / invalid_request / invalid_scope / access_denied.',
+        content: problemContent,
+      },
+      401: { description: 'invalid_client / unauthorized_client.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/oauth/introspect',
+    summary: 'OAuth 2.0 introspect — RFC 7662 token introspection',
+    tags: ['oauth'],
+    request: {
+      body: { content: { 'application/json': { schema: OAuthIntrospectRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'active=true with token metadata, OR active=false when not recognized.',
+        content: { 'application/json': { schema: OAuthIntrospectResponseOpenApi } },
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/oauth/revoke',
+    summary: 'OAuth 2.0 revoke — RFC 7009 token revocation',
+    tags: ['oauth'],
+    request: {
+      body: { content: { 'application/json': { schema: OAuthRevokeRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description:
+          'Always 200, regardless of whether the token existed. Spec requirement: prevents probe-style enumeration.',
+        content: { 'application/json': { schema: z.object({}) } },
+      },
+    },
+  });
+
   const RateLimitBucketOpenApi = z.object({
     bucket_key: z.enum(['global', 'sessions:create']),
     capacity: z.number().int().positive(),

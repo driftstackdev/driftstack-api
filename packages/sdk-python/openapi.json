@@ -7850,6 +7850,319 @@
         }
       }
     },
+    "/v1/oauth/authorize": {
+      "get": {
+        "summary": "OAuth 2.0 authorize — stage a PKCE authorization (RFC 6749 + RFC 7636)",
+        "tags": ["oauth"],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true,
+            "name": "client_id",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uri"
+            },
+            "required": true,
+            "name": "redirect_uri",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 256
+            },
+            "required": true,
+            "name": "state",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 43,
+              "maxLength": 128
+            },
+            "required": true,
+            "name": "code_challenge",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["S256"]
+            },
+            "required": true,
+            "name": "code_challenge_method",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "scope",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorization staged. authorization_id is consumed by /authorize/complete.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authorization_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["authorization_id"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request / scope / client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown / revoked client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/oauth/token": {
+      "post": {
+        "summary": "OAuth 2.0 token — exchange authorization code for an access token",
+        "tags": ["oauth"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "grant_type": {
+                    "type": "string",
+                    "enum": ["authorization_code"]
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "code_verifier": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 128
+                  },
+                  "client_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "client_secret": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "redirect_uri": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "grant_type",
+                  "code",
+                  "code_verifier",
+                  "client_id",
+                  "client_secret",
+                  "redirect_uri"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access token (1-hour TTL; no refresh tokens issued).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": {
+                      "type": "string"
+                    },
+                    "token_type": {
+                      "type": "string",
+                      "enum": ["Bearer"]
+                    },
+                    "expires_in": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    },
+                    "scope": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": ["access_token", "token_type", "expires_in", "scope"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_grant / invalid_request / invalid_scope / access_denied.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "invalid_client / unauthorized_client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/oauth/introspect": {
+      "post": {
+        "summary": "OAuth 2.0 introspect — RFC 7662 token introspection",
+        "tags": ["oauth"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": ["token"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "active=true with token metadata, OR active=false when not recognized.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "active": {
+                          "type": "boolean",
+                          "enum": [false]
+                        }
+                      },
+                      "required": ["active"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "active": {
+                          "type": "boolean",
+                          "enum": [true]
+                        },
+                        "client_id": {
+                          "type": "string"
+                        },
+                        "account_id": {
+                          "type": ["string", "null"]
+                        },
+                        "scope": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "exp": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": ["active", "client_id", "account_id", "scope", "exp"]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/oauth/revoke": {
+      "post": {
+        "summary": "OAuth 2.0 revoke — RFC 7009 token revocation",
+        "tags": ["oauth"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "token_type_hint": {
+                    "type": "string",
+                    "enum": ["access_token", "refresh_token"]
+                  }
+                },
+                "required": ["token"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Always 200, regardless of whether the token existed. Spec requirement: prevents probe-style enumeration.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/account/rate-limits": {
       "get": {
         "summary": "Effective rate-limit config for the calling account",
