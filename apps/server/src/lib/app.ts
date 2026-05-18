@@ -54,6 +54,8 @@ import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { RecipesRepo } from '../services/recipes.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
 import type { FleetNodeAuth } from '../services/fleet-node-auth.js';
+import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
+import { registerMacNodesRoutes } from '../routes/mac-nodes-register.js';
 import type { FleetNonceCache } from '../services/fleet-nonce-cache.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
@@ -396,6 +398,15 @@ export interface AppDeps {
    * omitted, JWT verification still works but loses replay defence.
    */
   fleetNonceCache?: FleetNonceCache;
+  /**
+   * LK.2 — POST /v1/mac-nodes/register depends on a Drizzle-backed
+   * fleet_nodes repo (so the LiveKit credentials can persist) plus
+   * the encryption key for the AES-256-GCM envelope. Registers only
+   * when both are wired. Encryption key is MFA_ENCRYPTION_KEY (the
+   * shared host-resident key).
+   */
+  drizzleFleetNodesRepo?: DrizzleFleetNodesRepo;
+  livekitSecretEncryptionKey?: string;
   /**
    * V-100: admin force-action route deps. Routes register only when
    * all four are provided (sessionRepo / apiKeysRepo / driver / audit
@@ -1040,6 +1051,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
   } else {
     registerFleetEventsDisabledRoutes(app);
+  }
+  // LK.2 — Mac-side LiveKit credentials registration. Gated on both
+  // the Drizzle repo (in-memory test fixtures skip it; prod wires
+  // it via bootstrap.ts) AND the encryption key being present.
+  if (deps.drizzleFleetNodesRepo !== undefined && deps.livekitSecretEncryptionKey !== undefined) {
+    registerMacNodesRoutes(app, {
+      repo: deps.drizzleFleetNodesRepo,
+      encryptionKey: deps.livekitSecretEncryptionKey,
+    });
   }
   if (
     deps.sessionRepo !== undefined &&

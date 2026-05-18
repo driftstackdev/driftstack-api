@@ -24,6 +24,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { createDb, type Database } from '../db/client.js';
 import { DrizzleAccountAuthRepo } from '../db/auth-repo.js';
+import { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { DrizzleSessionRepo } from '../db/sessions-repo.js';
 import { DrizzleApiKeysRepo } from '../db/api-keys-repo.js';
 import { DrizzleUsageRepo } from '../db/usage-repo.js';
@@ -948,6 +949,15 @@ export async function createProductionDeps(
     // MFA_ENCRYPTION_KEY gate (one less env var to manage; Q1 verdict
     // 2026-05-17). When unset, app.ts registers 503 stubs.
     ...(byokAnthropicService !== null ? { byokAnthropicService } : {}),
+    // LK.2 — POST /v1/mac-nodes/register depends on the Drizzle-backed
+    // fleet_nodes repo (writes the per-Mac LiveKit credentials) +
+    // MFA_ENCRYPTION_KEY for the AES-256-GCM envelope. Both wired
+    // unconditionally when the env vars permit; app.ts gates the
+    // route registration on both being non-undefined here.
+    drizzleFleetNodesRepo: new DrizzleFleetNodesRepo(dbHandle),
+    ...(config.mfaEncryptionKey !== undefined
+      ? { livekitSecretEncryptionKey: config.mfaEncryptionKey }
+      : {}),
     // Arc 1 sub-slice 6.3 (v2-#6) — bundled-LLM consent gate. Wired
     // unconditionally; the route's resolution chain skips this leg
     // unless deploymentFallbackKey is also configured.

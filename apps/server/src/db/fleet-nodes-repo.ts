@@ -26,6 +26,14 @@ export interface FleetNodeDetail {
   lastSeenAt: Date | null;
   revokedAt: Date | null;
   revocationReason: string | null;
+  /** LK.1 — per-Mac LiveKit credentials. All four fields are set
+   *  together (CHECK constraint) or all four are NULL (pre-LK.2). */
+  livekit: {
+    apiKey: string;
+    apiSecretCiphertextBase64: string;
+    wsUrl: string;
+    registeredAt: Date;
+  } | null;
 }
 
 export interface RegisterFleetNodeArgs {
@@ -33,6 +41,17 @@ export interface RegisterFleetNodeArgs {
   displayName: string;
   region: string;
   hardwareClass: string;
+  registeredAt?: Date;
+}
+
+/** LK.2 — credentials the Mac harness POSTs to the control plane on
+ *  boot. apiSecretCiphertextBase64 is the base64-encoded
+ *  [IV | tag | ciphertext] blob produced by encryptLivekitSecret(). */
+export interface SetFleetNodeLivekitArgs {
+  nodeId: string;
+  apiKey: string;
+  apiSecretCiphertextBase64: string;
+  wsUrl: string;
   registeredAt?: Date;
 }
 
@@ -93,6 +112,24 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
       .where(eq(fleetNodes.id, nodeId));
   }
 
+  /** LK.2 — set / rotate per-Mac LiveKit credentials on an existing
+   *  fleet_node row. Returns the updated detail, or null when the
+   *  nodeId doesn't match a row (caller maps to 404). */
+  async setLivekitCredentials(args: SetFleetNodeLivekitArgs): Promise<FleetNodeDetail | null> {
+    const updated = await this.database.db
+      .update(fleetNodes)
+      .set({
+        livekitApiKey: args.apiKey,
+        livekitApiSecretCiphertext: args.apiSecretCiphertextBase64,
+        livekitWsUrl: args.wsUrl,
+        livekitRegisteredAt: args.registeredAt ?? new Date(),
+      })
+      .where(eq(fleetNodes.id, args.nodeId))
+      .returning();
+    const row = updated[0];
+    return row ? rowToDetail(row) : null;
+  }
+
   async getDetail(nodeId: string): Promise<FleetNodeDetail | null> {
     const rows = await this.database.db
       .select()
@@ -139,5 +176,17 @@ function rowToDetail(row: typeof fleetNodes.$inferSelect): FleetNodeDetail {
     lastSeenAt: row.lastSeenAt,
     revokedAt: row.revokedAt,
     revocationReason: row.revocationReason,
+    livekit:
+      row.livekitApiKey !== null &&
+      row.livekitApiSecretCiphertext !== null &&
+      row.livekitWsUrl !== null &&
+      row.livekitRegisteredAt !== null
+        ? {
+            apiKey: row.livekitApiKey,
+            apiSecretCiphertextBase64: row.livekitApiSecretCiphertext,
+            wsUrl: row.livekitWsUrl,
+            registeredAt: row.livekitRegisteredAt,
+          }
+        : null,
   };
 }
