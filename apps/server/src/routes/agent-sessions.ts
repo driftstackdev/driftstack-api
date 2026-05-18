@@ -522,6 +522,16 @@ export function registerAgentSessionsRoutes(
           `Agent session is ${result.session.status} (${result.reason}). Start a new agent session.`,
         );
       }
+      // Arc 2 sub-slice 8.6 (v2-#8) — manual-mode pass-through. No
+      // decompose/executor ran; transcript carries one extra operator
+      // entry. SDK consumers branch on kind:'logged-manual' to render
+      // the human-driven log line distinctly from AI turns.
+      if (result.kind === 'logged-manual') {
+        return {
+          kind: result.kind,
+          session: publicAgentSession(result.session),
+        };
+      }
       if (result.kind === 'plan-executed') {
         // Narrow the decomposer to the plan variant — TS can't infer
         // it across the runTurn discriminant without a manual branch.

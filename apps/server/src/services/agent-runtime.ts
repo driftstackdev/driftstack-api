@@ -68,6 +68,15 @@ export type RunTurnResult =
       kind: 'session-closed';
       reason: string;
       session: AgentSessionRecord;
+    }
+  | {
+      // Arc 2 sub-slice 8.6 (v2-#8) — manual mode pass-through.
+      // The user_message was recorded as an actor='operator' transcript
+      // entry; no decompose / executor ran. Customer's gui-client is
+      // responsible for driving real intents via the V-174 gui_control
+      // routes (sub-slice 8.4 mints the gui_control_key for that).
+      kind: 'logged-manual';
+      session: AgentSessionRecord;
     };
 
 /**
@@ -138,6 +147,26 @@ export class AgentRuntime {
         reason: session.closedReason ?? `session ${session.status}`,
         session,
       };
+    }
+
+    // Arc 2 sub-slice 8.6 (v2-#8) — manual mode pass-through. Record
+    // the customer's user_message as actor='operator' on the transcript
+    // (no decompose / executor / token debit; the gui-client drives
+    // intents directly via the gui_control plane). Returns a distinct
+    // result kind so the route maps to a 200 'logged' response.
+    if (session.mode === 'manual') {
+      const operatorEntry = {
+        at,
+        role: 'operator' as const,
+        body: args.userMessage,
+      };
+      const updated = await this.deps.sessions.appendTranscript(session.id, operatorEntry);
+      this.deps.eventBus?.publish({
+        agentSessionId: session.id,
+        index: updated.transcript.length - 1,
+        entry: operatorEntry,
+      });
+      return { kind: 'logged-manual', session: updated };
     }
 
     // Append the user turn FIRST so the decomposer sees its own

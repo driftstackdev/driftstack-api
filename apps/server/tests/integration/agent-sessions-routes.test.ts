@@ -341,6 +341,36 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(readBody.created_by_user_id).toBeNull();
   });
 
+  it("v2-#8 sub-slice 8.6 manual-mode pass-through — POST /:id/message in mode='manual' records actor='operator' transcript entry; returns kind:'logged-manual'; no token debit", async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'manual', token_budget: 10_000 },
+    });
+    const id = create.json<{ id: string }>().id;
+    const msg = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { user_message: 'tap login button' },
+    });
+    expect(msg.statusCode).toBe(200);
+    const body = msg.json<{ kind: string; session: { token_budget_remaining: number } }>();
+    expect(body.kind).toBe('logged-manual');
+    // No token debit on manual turns.
+    expect(body.session.token_budget_remaining).toBe(10_000);
+
+    // The transcript now has exactly one entry (the operator log).
+    const read = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(read.json<{ transcript_length: number }>().transcript_length).toBe(1);
+  });
+
   it("v2-#8 sub-slice 8.5 SDK mode parameter — POST body { mode: 'manual' } persists; GET echoes it back", async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({

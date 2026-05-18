@@ -26,8 +26,13 @@
 export interface TranscriptEntry {
   /** ISO timestamp the entry was created. */
   at: string;
-  /** Whose turn this is. */
-  role: 'user' | 'agent';
+  /**
+   * Whose turn this is. 'operator' (Arc 2 sub-slice 8.6) is the
+   * manual-mode actor — the human driving intents directly without a
+   * decomposer call. Recipes assembly + dashboard UI both branch on
+   * this so manual-driven turns render distinctly.
+   */
+  role: 'user' | 'agent' | 'operator';
   /** Free-text content for user turns; serialized DecomposeResult
    *  for agent turns. */
   body: string;
