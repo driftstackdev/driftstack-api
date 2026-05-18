@@ -339,6 +339,12 @@ export async function createProductionDeps(
       'HTTP requests, labelled by method × route template × status_class (1xx/2xx/3xx/4xx/5xx).',
       ['method', 'route', 'status_class'],
     );
+    // Arc 7 obs.16 — LK.2 Mac LiveKit credential registration outcomes.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.macNodeLivekitRegisterTotal,
+      'POST /v1/mac-nodes/register outcomes (ok | validation | encryption_error | not_found | unknown).',
+      ['outcome'],
+    );
   }
 
   // Arc 7 obs.13 — construct the email service after the metrics

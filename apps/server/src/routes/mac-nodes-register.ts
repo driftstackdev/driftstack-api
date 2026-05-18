@@ -23,6 +23,7 @@ import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { encryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
 import { BadRequestError, NotFoundError, ValidationError } from '../lib/errors.js';
 import type { AdminAuditService } from '../services/admin-audit.js';
+import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 
 const RegisterBodySchema = z.object({
   mac_node_id: z.string().uuid('mac_node_id must be a UUID matching an existing fleet_nodes row.'),
@@ -48,6 +49,11 @@ export interface RegisterMacNodesRoutesDeps {
    *  ws_url, which are non-sensitive. Failures are swallowed so a
    *  metric/db hiccup doesn't break credential persistence. */
   adminAudit?: AdminAuditService;
+  /** Arc 7 obs.16 — when wired, the route increments
+   *  `driftstack_mac_node_livekit_register_total{outcome}` per call.
+   *  Outcome labels: ok / validation / encryption_error / not_found /
+   *  unknown. Failures to .inc() are swallowed (best-effort). */
+  metrics?: MetricsRegistry;
 }
 
 export function registerMacNodesRoutes(
@@ -56,6 +62,16 @@ export function registerMacNodesRoutes(
 ): void {
   const { repo, encryptionKey } = deps;
   const now = deps.now ?? (() => new Date());
+
+  /** Arc 7 obs.16 — bounded-cardinality outcome bump. Swallow metric
+   *  failures so a counter hiccup can't 5xx the route. */
+  function bumpOutcome(outcome: string): void {
+    try {
+      deps.metrics?.inc(METRIC_NAMES.macNodeLivekitRegisterTotal, { outcome });
+    } catch {
+      // Swallow.
+    }
+  }
 
   app.post(
     '/v1/mac-nodes/register',
@@ -68,7 +84,10 @@ export function registerMacNodesRoutes(
     },
     async (req, reply) => {
       const parsed = RegisterBodySchema.safeParse(req.body);
-      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      if (!parsed.success) {
+        bumpOutcome('validation');
+        throw new ValidationError(parsed.error.flatten());
+      }
       const body = parsed.data;
 
       // Encrypt the plaintext secret immediately. The plaintext does
@@ -78,6 +97,7 @@ export function registerMacNodesRoutes(
       try {
         ciphertextBase64 = encryptLivekitSecret(body.livekit.api_secret, encryptionKey);
       } catch (err) {
+        bumpOutcome('encryption_error');
         throw new BadRequestError(
           `Failed to encrypt LiveKit API secret: ${err instanceof Error ? err.message : 'unknown'}`,
         );
@@ -92,11 +112,13 @@ export function registerMacNodesRoutes(
       });
 
       if (updated === null) {
+        bumpOutcome('not_found');
         throw new NotFoundError(
           `Mac node ${body.mac_node_id} not found in fleet_nodes. ` +
             'The node must already be registered via the V-820 fleet-node provisioning path.',
         );
       }
+      bumpOutcome('ok');
 
       // LK.2 audit emission — operators provisioning Macs is exactly
       // the kind of event the admin audit log exists to capture.

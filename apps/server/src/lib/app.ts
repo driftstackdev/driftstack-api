@@ -1070,6 +1070,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       repo: deps.drizzleFleetNodesRepo,
       encryptionKey: deps.livekitSecretEncryptionKey,
       adminAudit: deps.adminAuditService,
+      ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
     });
   }
   // LK.3 — per-Mac LiveKit JWT mint endpoint. Same gate as LK.2 plus

@@ -251,4 +251,18 @@ export const METRIC_NAMES = {
   // The route label uses the TEMPLATE, never the URL, so account ids
   // / session ids / etc. don't leak.
   httpRequestTotal: 'driftstack_http_request_total',
+  // Arc 7 obs.16 — LK.2 Mac LiveKit credential registration counter.
+  // Labelled by outcome (ok / validation / encryption_error / not_found
+  // / unknown). Surfaces operator-side credential-provisioning health:
+  //   - `ok` is the happy path (Mac harness POSTed; row persisted).
+  //   - `validation` = Zod parse failed (bad UUID, bad URL).
+  //   - `encryption_error` = AES-256-GCM seal failed (key length wrong;
+  //     ops alert).
+  //   - `not_found` = mac_node_id has no fleet_nodes row (V-820
+  //     provisioning hasn't run for this Mac yet).
+  //   - `unknown` = anything else (best-effort bucket).
+  // Bounded cardinality. Companion to admin_audit_emit_total which
+  // tracks the successful audit-row writes; this counter sees the
+  // pre-audit reject paths too.
+  macNodeLivekitRegisterTotal: 'driftstack_mac_node_livekit_register_total',
 } as const;
