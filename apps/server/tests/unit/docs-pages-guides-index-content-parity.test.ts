@@ -32,12 +32,21 @@ describe('W780 docs /guides index content parity', () => {
     );
   });
 
-  it('CRITICAL 3-concept-guide TOC pinned — profile-management + session-lifecycle + team-rbac. Drift would lose the canonical workflow guides set.', () => {
+  it('CRITICAL 4-concept-guide TOC pinned — profile-management + session-lifecycle + team-rbac + live-video. Drift would lose a canonical workflow guide from the surface.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/<a href="\/guides\/profile-management\/">Profile management<\/a>/);
     expect(p).toMatch(/<a href="\/guides\/session-lifecycle\/">Session lifecycle<\/a>/);
     expect(p).toMatch(/<a href="\/guides\/team-rbac\/">Team RBAC — invite, accept, act-as<\/a>/);
+    expect(p).toMatch(/<a href="\/guides\/live-video\/">Live video for agent sessions<\/a>/);
+  });
+
+  it('CRITICAL live-video framing pinned. The "subscribe to a running agent session\'s video stream over LiveKit WebRTC; covers token mint, connect, render, input forwarding, and reconnect" wording threads the LK arc cross-references.', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(
+      /subscribe to a\s*\n\s+running agent session's video stream over LiveKit WebRTC; covers token mint,\s*\n\s+connect, render, input forwarding, and reconnect\./,
+    );
   });
 
   it("CRITICAL team-rbac framing pinned. The 'end-to-end tutorial for setting up a multi-user team; invite + accept + X-Driftstack-Account header + audit-log review' wording threads the W757 + W766 + W768 cross-references.", () => {
