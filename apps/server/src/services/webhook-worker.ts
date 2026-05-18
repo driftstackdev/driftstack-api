@@ -125,7 +125,24 @@ export class WebhookDeliveryWorker {
     }
 
     const body = JSON.stringify(delivery.payload);
-    const sigHeader = signWebhookPayload({ body, secret: endpoint.secret });
+    // v2-#20 — Honour the rotation grace window. When the customer
+    // rotates via POST /v1/webhooks/:id/rotate-secret, the old secret
+    // is parked at `secretPrev` with `secretPrevExpiresAt` = now +
+    // graceMs. Outbound deliveries during the window MUST dual-sign so
+    // the customer's verifier (still configured with the old secret)
+    // accepts the payload while they roll the new secret across their
+    // infra. Past expiry, we stop emitting the prev signature so a
+    // stale leaked secret can no longer authenticate replays.
+    const nowMs = this.now().getTime();
+    const dualSign =
+      endpoint.secretPrev !== null &&
+      endpoint.secretPrevExpiresAt !== null &&
+      endpoint.secretPrevExpiresAt.getTime() > nowMs;
+    const sigHeader = signWebhookPayload({
+      body,
+      secret: endpoint.secret,
+      ...(dualSign && endpoint.secretPrev !== null ? { secretPrev: endpoint.secretPrev } : {}),
+    });
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);

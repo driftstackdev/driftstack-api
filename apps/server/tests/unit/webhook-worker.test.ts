@@ -196,4 +196,90 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     expect(headers?.['x-driftstack-event-id']).toBe('11111111-2222-3333-4444-555555555555');
     expect(headers?.['x-driftstack-event-type']).toBe('session.completed');
   });
+
+  // v2-#20 — dual-sign during rotation grace window. Pre-v2-#20 the
+  // worker emitted only the current secret signature even when an
+  // endpoint had a live rotation (secretPrev + secretPrevExpiresAt in
+  // the future). Customers verifying with the prior secret got 401-
+  // shaped errors during the grace period, defeating the whole point
+  // of dual-signing. The fix in webhook-worker.ts now reads
+  // endpoint.secretPrev + secretPrevExpiresAt and passes secretPrev to
+  // signWebhookPayload only while the grace window is active.
+  it('v2-#20 dual-signs deliveries during the rotation grace window (two v1=… entries when secretPrev is set and secretPrevExpiresAt > now)', async () => {
+    const { repo, endpoint } = await setupRepoWithEndpoint();
+    await repo.rotateSecret({
+      id: endpoint.id,
+      accountId: endpoint.accountId,
+      newSecret: 'whsec_new_new_new_new_new_new_new_new__',
+      newPrefix: 'whsec_new_n',
+      graceExpiresAt: new Date(NOW.getTime() + 24 * 60 * 60 * 1000),
+      now: NOW,
+    });
+    // Re-enqueue a delivery on the rotated endpoint.
+    await repo.enqueueDelivery({
+      webhookId: endpoint.id,
+      eventId: '22222222-3333-4444-5555-666666666666',
+      eventType: 'session.completed',
+      payload: { id: '22222222-3333-4444-5555-666666666666', type: 'session.completed', data: {} },
+      nextAttemptAt: NOW,
+    });
+
+    let captured: RequestInit | undefined;
+    const fetchImpl = vi.fn(async (_url, init) => {
+      captured = init;
+      await Promise.resolve();
+      return new Response('ok', { status: 200 });
+    }) as unknown as typeof fetch;
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fetchImpl,
+      now: constNow,
+    });
+    await worker.tickOnce();
+    const headers = captured?.headers as Record<string, string> | undefined;
+    // Two v1=<hex> entries — one for the current secret, one for the
+    // prev secret carried during the dual-sign window.
+    expect(headers?.['x-driftstack-signature']).toMatch(/^t=\d+,v1=[0-9a-f]{64},v1=[0-9a-f]{64}$/);
+  });
+
+  it('v2-#20 stops dual-signing past secretPrevExpiresAt — even with a stale secretPrev still in the row, the prev signature drops once the grace window closes', async () => {
+    const { repo, endpoint } = await setupRepoWithEndpoint();
+    // Rotate with a grace that ALREADY EXPIRED relative to constNow.
+    // The row still carries secretPrev (no separate cleanup task yet);
+    // the worker must enforce the cutoff at signing time, not assume
+    // the row is null'd out.
+    await repo.rotateSecret({
+      id: endpoint.id,
+      accountId: endpoint.accountId,
+      newSecret: 'whsec_new2_new2_new2_new2_new2_new2_n_',
+      newPrefix: 'whsec_new2_',
+      graceExpiresAt: new Date(NOW.getTime() - 60 * 1000),
+      now: NOW,
+    });
+    await repo.enqueueDelivery({
+      webhookId: endpoint.id,
+      eventId: '33333333-4444-5555-6666-777777777777',
+      eventType: 'session.completed',
+      payload: { id: '33333333-4444-5555-6666-777777777777', type: 'session.completed', data: {} },
+      nextAttemptAt: NOW,
+    });
+
+    let captured: RequestInit | undefined;
+    const fetchImpl = vi.fn(async (_url, init) => {
+      captured = init;
+      await Promise.resolve();
+      return new Response('ok', { status: 200 });
+    }) as unknown as typeof fetch;
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fetchImpl,
+      now: constNow,
+    });
+    await worker.tickOnce();
+    const headers = captured?.headers as Record<string, string> | undefined;
+    // Single v1=… entry — past the grace window, prev signature drops.
+    expect(headers?.['x-driftstack-signature']).toMatch(/^t=\d+,v1=[0-9a-f]{64}$/);
+  });
 });
