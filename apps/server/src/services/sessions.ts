@@ -182,11 +182,13 @@ export interface SessionRepo {
 export interface SessionsServiceDeps {
   repo: SessionRepo;
   driver: Driver;
-  /** Optional: when wired, emits session.completed / session.failed events. */
+  /** Optional: when wired, emits session.completed / session.failed /
+   *  session.egress_capability_changed events. Arc 5 EGRESS eg.7
+   *  extends the closed eventType union with the third value. */
   webhooks?: {
     enqueueEvent: (
       accountId: string,
-      eventType: 'session.completed' | 'session.failed',
+      eventType: 'session.completed' | 'session.failed' | 'session.egress_capability_changed',
       data: Record<string, unknown>,
     ) => Promise<number>;
   } | null;
@@ -709,5 +711,50 @@ export class SessionsService {
 
       throw err;
     }
+  }
+
+  /**
+   * Arc 5 EGRESS eg.7.e — ingest a harness-emitted egress.capability_report.
+   * Persists both the derived view + raw payload (repo handles the
+   * atomic write) AND fires the session.egress_capability_changed
+   * webhook so subscribers see the new capability state without
+   * polling.
+   *
+   * Idempotent at the repo layer (repeat reports overwrite); the
+   * webhook event fires on every successful persist. Returns null
+   * when the session doesn't exist (harness race).
+   *
+   * Called from the eg.2 WebSocket control-plane handler when it
+   * lands; today exposed for direct service-layer testing + admin
+   * tooling. Best-effort webhook emit: a failure logs but doesn't
+   * roll back the persist (matches the session.completed pattern).
+   */
+  async ingestEgressCapabilityReport(args: {
+    sessionId: string;
+    derived: {
+      udp_associate: boolean;
+      quic_route: 'proxy' | 'direct' | 'disabled';
+      dns_remote_resolve: boolean;
+      warnings: string[];
+    };
+    raw: Record<string, unknown>;
+  }): Promise<SessionRecord | null> {
+    const updated = await this.deps.repo.setEgressCapabilityReport(args);
+    if (updated === null) return null;
+    if (this.deps.webhooks) {
+      try {
+        await this.deps.webhooks.enqueueEvent(
+          updated.accountId,
+          'session.egress_capability_changed',
+          {
+            session_id: `ses_${updated.id}`,
+            egress_capabilities: args.derived,
+          },
+        );
+      } catch {
+        /* webhook enqueue is best-effort — persist already succeeded */
+      }
+    }
+    return updated;
   }
 }
