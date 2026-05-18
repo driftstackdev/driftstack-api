@@ -34,6 +34,8 @@ type AgentSession struct {
 	// v2-#35 team-RBAC attribution; nil when account-scoped auth
 	// can't resolve a specific user id.
 	CreatedByUserID       *string `json:"created_by_user_id"`
+	// Arc 2 sub-slice 8.5 (v2-#8) — operational mode.
+	Mode                  string  `json:"mode"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
 }
@@ -42,6 +44,10 @@ type AgentSession struct {
 type CreateAgentSessionRequest struct {
 	DriftstackSessionID string `json:"driftstack_session_id,omitempty"`
 	TokenBudget         int    `json:"token_budget,omitempty"`
+	// Arc 2 sub-slice 8.5 (v2-#8) — operational mode. Empty string
+	// omits the field on the wire so the server applies its default
+	// ('ai').
+	Mode string `json:"mode,omitempty"`
 }
 
 // AgentMessageResponse is the discriminated turn-result. Branch on

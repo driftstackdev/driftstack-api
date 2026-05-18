@@ -341,6 +341,47 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(readBody.created_by_user_id).toBeNull();
   });
 
+  it("v2-#8 sub-slice 8.5 SDK mode parameter — POST body { mode: 'manual' } persists; GET echoes it back", async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'manual' },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json<{ mode: string }>().mode).toBe('manual');
+    const id = create.json<{ id: string }>().id;
+    const read = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(read.json<{ mode: string }>().mode).toBe('manual');
+  });
+
+  it("v2-#8 sub-slice 8.5 default mode='ai' when omitted (backward-compat)", async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(create.json<{ mode: string }>().mode).toBe('ai');
+  });
+
+  it('v2-#8 sub-slice 8.5 invalid mode rejected with 400 (enum guard)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'autopilot' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('v2-#19 closed_at: NULL while active; ISO timestamp set on DELETE → close', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({

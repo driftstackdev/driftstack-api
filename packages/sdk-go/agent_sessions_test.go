@@ -18,6 +18,7 @@ var agentSessionEnvelope = map[string]any{
 	"transcript_length":      0,
 	"closed_at":              nil,
 	"created_by_user_id":     nil,
+	"mode":                   "ai",
 	"created_at":             "2026-05-16T00:00:00Z",
 	"updated_at":             "2026-05-16T00:00:00Z",
 }

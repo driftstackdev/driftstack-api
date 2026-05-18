@@ -45,6 +45,8 @@ const DEFAULT_TOKEN_BUDGET = 100_000;
 const CreateAgentSessionRequestSchema = z.object({
   driftstack_session_id: z.string().min(1).optional(),
   token_budget: z.number().int().positive().optional(),
+  // Arc 2 sub-slice 8.5 (v2-#8) — operational mode at create-time.
+  mode: z.enum(['manual', 'ai', 'pair']).optional(),
 });
 
 const RunTurnRequestSchema = z.object({
@@ -75,6 +77,8 @@ interface PublicAgentSession {
   // so the dashboard's "started by alice@" UI can wire against a
   // stable field.
   created_by_user_id: string | null;
+  // Arc 2 sub-slice 8.5 (v2-#8) — operational mode.
+  mode: 'manual' | 'ai' | 'pair';
   created_at: string;
   updated_at: string;
 }
@@ -91,6 +95,7 @@ function publicAgentSession(rec: AgentSessionRecord): PublicAgentSession {
     transcript_length: rec.transcript.length,
     closed_at: rec.closedAt !== null ? rec.closedAt.toISOString() : null,
     created_by_user_id: rec.createdByUserId,
+    mode: rec.mode,
     created_at: rec.createdAt.toISOString(),
     updated_at: rec.updatedAt.toISOString(),
   };
@@ -220,6 +225,9 @@ export function registerAgentSessionsRoutes(
           ? { driftstackSessionId: parsed.data.driftstack_session_id }
           : {}),
         ...(idempotencyKey !== null ? { idempotencyKey } : {}),
+        // Arc 2 sub-slice 8.5 (v2-#8) — forward mode when supplied;
+        // otherwise repo applies the default ('ai').
+        ...(parsed.data.mode !== undefined ? { mode: parsed.data.mode } : {}),
       });
       // Q.1.c — decrypt the customer's stored BYOK key ONCE at
       // session-create and stash plaintext in the per-session cache.

@@ -35,6 +35,11 @@ export interface AgentSession {
    * once V-298 team-membership auth threads a resolved user id through.
    */
   created_by_user_id: string | null;
+  /**
+   * Arc 2 sub-slice 8.5 (v2-#8) — operational mode chosen at create-
+   * time. Server-side default is 'ai' for backward compat.
+   */
+  mode: 'manual' | 'ai' | 'pair';
   created_at: string;
   updated_at: string;
 }
@@ -42,6 +47,13 @@ export interface AgentSession {
 export interface CreateAgentSessionRequest {
   driftstack_session_id?: string;
   token_budget?: number;
+  /**
+   * Arc 2 sub-slice 8.5 (v2-#8 AI chat + manual). Defaults to 'ai'
+   * (legacy decompose-driven runtime). 'manual' makes runTurn a
+   * pass-through so the customer drives intents directly. 'pair'
+   * enables the takeover state-machine (sub-slice 8.7).
+   */
+  mode?: 'manual' | 'ai' | 'pair';
 }
 
 export type AgentIntent =
