@@ -28,6 +28,10 @@ import { DrizzleSessionRepo } from '../db/sessions-repo.js';
 import { DrizzleApiKeysRepo } from '../db/api-keys-repo.js';
 import { DrizzleUsageRepo } from '../db/usage-repo.js';
 import { DrizzleWebhooksRepo } from '../db/webhooks-repo.js';
+import { DrizzleWebhookRotationReminderRepo } from '../db/webhook-rotation-reminder-repo.js';
+import { DrizzleByokAnthropicRotationReminderRepo } from '../db/byok-anthropic-rotation-reminder-repo.js';
+import { WebhookRotationReminderService } from '../services/webhook-rotation-reminder.js';
+import { ByokAnthropicRotationReminderService } from '../services/byok-anthropic-rotation-reminder.js';
 import { DrizzleAdminAuditLogRepo } from '../db/admin-audit-repo.js';
 import { DrizzleAccountsAdminRepo } from '../db/admin-accounts-repo.js';
 import { DrizzleEmailPreferencesRepo } from '../db/email-preferences-repo.js';
@@ -1044,6 +1048,74 @@ export async function createProductionDeps(
   }, STATUS_PURGE_INTERVAL_MS);
   statusPurgeTimer.unref();
 
+  // v2-#17 — daily rotation-reminder sweeps for webhook signing secrets
+  // (v2-#10/#10.5/#10.6) and BYOK Anthropic API keys (v2-#11/#11.5/#11.6).
+  // Both reminder services are pure-sweep nags (no auto-rotation); the
+  // services skip rows that don't need a reminder yet, so the per-tick
+  // burst is bounded by perTickLimit (default 50). Default-on for
+  // production; the operator can flip
+  // DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 to suppress when a
+  // customer-quiet account wants to silence the nag (e.g. canary
+  // deployments). Daily cadence (24h) matches the V-295c3-tombstone
+  // status-purge poller — no need for finer granularity since the
+  // services' cooldown windows are days, not minutes.
+  const ROTATION_REMINDER_INTERVAL_MS = 24 * 60 * 60 * 1000;
+  const rotationRemindersDisabled = process.env.DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS === '1';
+  const webhookRotationReminderService = new WebhookRotationReminderService(
+    new DrizzleWebhookRotationReminderRepo(dbHandle),
+    email,
+    logger,
+  );
+  const byokAnthropicRotationReminderService = new ByokAnthropicRotationReminderService(
+    new DrizzleByokAnthropicRotationReminderRepo(dbHandle),
+    email,
+    logger,
+  );
+  const webhookRotationReminderTimer = rotationRemindersDisabled
+    ? null
+    : setInterval(() => {
+        void (async () => {
+          try {
+            await webhookRotationReminderService.tickOnce(new Date());
+          } catch (err) {
+            logger.warn(
+              {
+                component: 'webhook-rotation-reminder-poller',
+                err:
+                  err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+              },
+              'webhook-rotation-reminder tickOnce threw unexpectedly (interval continues)',
+            );
+          }
+        })();
+      }, ROTATION_REMINDER_INTERVAL_MS);
+  webhookRotationReminderTimer?.unref();
+  const byokAnthropicRotationReminderTimer = rotationRemindersDisabled
+    ? null
+    : setInterval(() => {
+        void (async () => {
+          try {
+            await byokAnthropicRotationReminderService.tickOnce(new Date());
+          } catch (err) {
+            logger.warn(
+              {
+                component: 'byok-anthropic-rotation-reminder-poller',
+                err:
+                  err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+              },
+              'byok-anthropic-rotation-reminder tickOnce threw unexpectedly (interval continues)',
+            );
+          }
+        })();
+      }, ROTATION_REMINDER_INTERVAL_MS);
+  byokAnthropicRotationReminderTimer?.unref();
+  if (rotationRemindersDisabled) {
+    logger.warn(
+      { component: 'rotation-reminders' },
+      'DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 — webhook + BYOK Anthropic key rotation reminder sweeps disabled at boot',
+    );
+  }
+
   let torn = false;
   async function teardown(): Promise<void> {
     if (torn) return;
@@ -1056,6 +1128,8 @@ export async function createProductionDeps(
     if (healthProbeTimer) clearInterval(healthProbeTimer);
     if (statusSnapshotTimer) clearInterval(statusSnapshotTimer);
     clearInterval(statusPurgeTimer);
+    if (webhookRotationReminderTimer) clearInterval(webhookRotationReminderTimer);
+    if (byokAnthropicRotationReminderTimer) clearInterval(byokAnthropicRotationReminderTimer);
     try {
       await sentry.flush(2000);
       await sentry.close(2000);
