@@ -127,6 +127,23 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     );
   });
 
+  it('CRITICAL x-ratelimit-* response headers documented. Drift would orphan SDK consumers from the per-response capacity/remaining/reset surface emitted by middleware/rate-limit.ts. Pins all 4 headers + the emitted-on-every-status invariant.', () => {
+    const p = read(PAGE);
+
+    // Header names matching middleware/rate-limit.ts lines 62-65.
+    expect(p).toMatch(/`x-ratelimit-bucket`/);
+    expect(p).toMatch(/`x-ratelimit-limit`/);
+    expect(p).toMatch(/`x-ratelimit-remaining`/);
+    expect(p).toMatch(/`x-ratelimit-reset`/);
+    // Invariant: headers are emitted regardless of status code so
+    // retry logic can read them after a 4xx/429.
+    expect(p).toMatch(/headers\s*\n?are emitted regardless of HTTP status/);
+    // The combine-with-Retry-After-on-429 pattern.
+    expect(p).toMatch(
+      /combine\s*\n?`x-ratelimit-remaining=0` \+ `Retry-After` to drive a back-off/,
+    );
+  });
+
   it('CRITICAL 429 response shape pinned with bucket-field. The \'"bucket": "global"\' field on the response body is what tells SDK consumers WHICH cap was hit. Matches W776 + W786 reference/errors rate-limited contract.', () => {
     const p = read(PAGE);
 

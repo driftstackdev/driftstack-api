@@ -114,6 +114,30 @@ visually — bucket name + capacity + refill rate per row, with a
 badge when an override is active. No additional surface today;
 the dashboard reads this endpoint directly.
 
+## Response headers
+
+Every authenticated `/v1/*` response (whether the call landed at
+200, 4xx, or hit the cap with 429) carries four `x-ratelimit-*`
+headers reflecting the bucket your call consumed from. The headers
+are emitted regardless of HTTP status so retry logic can read them
+even after a hard error.
+
+| Header                  | Meaning                                                                     |
+| ----------------------- | --------------------------------------------------------------------------- |
+| `x-ratelimit-bucket`    | Which bucket the call drained (`global` or `sessions:create`).              |
+| `x-ratelimit-limit`     | Bucket capacity — same as `capacity` from this endpoint.                    |
+| `x-ratelimit-remaining` | Tokens left in the bucket _after_ this call (integer, floor of fractional). |
+| `x-ratelimit-reset`     | Unix-seconds timestamp when the bucket refills to full capacity.            |
+
+A `POST /v1/sessions` consumes from both `global` and
+`sessions:create`. The headers reflect the more-constrained bucket —
+typically `sessions:create`, since its capacity is much lower than
+the global bucket.
+
+These headers are also surfaced on `429` responses; combine
+`x-ratelimit-remaining=0` + `Retry-After` to drive a back-off
+without an extra round-trip.
+
 ## What happens when you hit a cap
 
 The API returns HTTP 429 with an RFC 9457 problem-details body:
