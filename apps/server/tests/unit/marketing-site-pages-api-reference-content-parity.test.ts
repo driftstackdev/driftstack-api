@@ -57,9 +57,12 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     );
   });
 
-  it('11-group surface map taxonomy: Sessions + Profiles + API keys + Webhooks + Account + Team + Billing — crypto orders + Status + Auth flows + Billing — pinned so the 11-group enumeration of canonical route prefixes stays complete (drift to dropping any group would orphan SDK readers from that route surface; drift to merging Billing + crypto-orders would lose the separate billing-paths distinction)', () => {
+  it('12-group surface map taxonomy: Sessions + Agent sessions + Profiles + API keys + Webhooks + Account + Team + Billing — crypto orders + Status + Auth flows + Billing — pinned so the 12-group enumeration of canonical route prefixes stays complete (drift to dropping any group would orphan SDK readers from that route surface; drift to merging Billing + crypto-orders would lose the separate billing-paths distinction)', () => {
     expect(body).toMatch(
       /uppercase tracking-widest text-glow-red">\s*\n?\s*Sessions\s*\n?\s*<\/h3>/,
+    );
+    expect(body).toMatch(
+      /uppercase tracking-widest text-glow-red">\s*\n?\s*Agent sessions\s*\n?\s*<\/h3>/,
     );
     expect(body).toMatch(
       /uppercase tracking-widest text-glow-red">\s*\n?\s*Profiles\s*\n?\s*<\/h3>/,
@@ -95,6 +98,18 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     expect(body).toMatch(/<li>GET \/v1\/sessions\/:id\/state<\/li>/);
     expect(body).toMatch(/<li>POST \/v1\/sessions\/:id\/capture<\/li>/);
     expect(body).toMatch(/<li>DELETE \/v1\/sessions\/:id<\/li>/);
+  });
+
+  // Arc 4 Wave 2.B sub-slice 8.20.f (v2-#8) — marketing api-reference
+  // surfaces agent-sessions as a distinct route group; pins the 6
+  // endpoints of the v2-#8 surface so any rename / drop breaks CI.
+  it('Agent sessions route enumeration 6-endpoint: POST + GET /:id + POST /:id/message + POST /:id/takeover + POST /:id/handback + DELETE /:id — pinned so the agent-sessions surface stays visible alongside regular sessions on the marketing page (drift to dropping would hide v2-#8 from prospects)', () => {
+    expect(body).toMatch(/<li>POST \/v1\/agent-sessions<\/li>/);
+    expect(body).toMatch(/<li>GET \/v1\/agent-sessions\/:id<\/li>/);
+    expect(body).toMatch(/<li>POST \/v1\/agent-sessions\/:id\/message<\/li>/);
+    expect(body).toMatch(/<li>POST \/v1\/agent-sessions\/:id\/takeover<\/li>/);
+    expect(body).toMatch(/<li>POST \/v1\/agent-sessions\/:id\/handback<\/li>/);
+    expect(body).toMatch(/<li>DELETE \/v1\/agent-sessions\/:id<\/li>/);
   });
 
   it("Webhooks route enumeration 9-endpoint: POST + GET + GET /:id + PATCH + DELETE + POST /:id/rotate-secret + POST /:id/test + GET /:id/deliveries + POST /v1/webhook-deliveries/:id/replay — pinned so the webhook lifecycle endpoint enumeration matches the customer-dashboard webhooks page's wired actions (drift would create marketing↔dashboard contract mismatch)", () => {

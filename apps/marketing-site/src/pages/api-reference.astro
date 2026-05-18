@@ -69,6 +69,20 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
 
         <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
           <h3 class="font-mono text-sm uppercase tracking-widest text-glow-red">
+            Agent sessions
+          </h3>
+          <ul class="mt-3 space-y-2 font-mono text-xs text-ink-secondary">
+            <li>POST /v1/agent-sessions</li>
+            <li>GET /v1/agent-sessions/:id</li>
+            <li>POST /v1/agent-sessions/:id/message</li>
+            <li>POST /v1/agent-sessions/:id/takeover</li>
+            <li>POST /v1/agent-sessions/:id/handback</li>
+            <li>DELETE /v1/agent-sessions/:id</li>
+          </ul>
+        </div>
+
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
+          <h3 class="font-mono text-sm uppercase tracking-widest text-glow-red">
             Profiles
           </h3>
           <ul class="mt-3 space-y-2 font-mono text-xs text-ink-secondary">
