@@ -87,8 +87,13 @@ describe('W521.B apps/marketing-site/src/pages/docs/migration-from-browserless.a
     );
     expect(body).toMatch(/\/\/ Driftstack equivalent \(TypeScript SDK\)/);
     expect(body).toMatch(/import \{ Driftstack \} from '@driftstack\/sdk';/);
+    // Per migration 0012_archetype_default_rename, the slug 'default'
+    // was renamed to 'iphone16pro_ios18_7_safari26_4'
+    // (= LOCKED_ARCHETYPE_ID). The migration page now reflects the
+    // current canonical archetype id so customers copy-pasting the
+    // example don't end up with the legacy slug stored on the row.
     expect(body).toMatch(
-      /const session = await client\.sessions\.create\(\{ archetype: 'default' \}\);/,
+      /const session = await client\.sessions\.create\(\{ archetype: 'iphone16pro_ios18_7_safari26_4' \}\);/,
     );
     expect(body).toMatch(
       /await client\.sessions\.navigate\(session\.id, \{ url: 'https:\/\/example\.com' \}\);/,

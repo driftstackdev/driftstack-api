@@ -190,7 +190,7 @@ DELETE /v1/sessions/ses_…`}</code></pre>
 const client = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY! });
 
 const session = await client.sessions.create({
-  archetype: 'default',
+  archetype: 'iphone16pro_ios18_7_safari26_4',
   label: 'qa-login',
 });
 await client.sessions.navigate(session.id, { url: 'https://app.example.com/login' });

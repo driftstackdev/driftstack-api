@@ -92,7 +92,7 @@ import { Driftstack } from '@driftstack/sdk';
 
 const client = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY! });
 
-const session = await client.sessions.create({ archetype: 'default' });
+const session = await client.sessions.create({ archetype: 'iphone16pro_ios18_7_safari26_4' });
 await client.sessions.navigate(session.id, { url: 'https://example.com' });
 const state = await client.sessions.getState(session.id);
 // state.url is the resolved URL, state.title is the page title.
@@ -121,11 +121,11 @@ console.log(title);`}</code></pre>
 
     <pre><code>{`const profile = await client.profiles.create({
   name: 'evergreen-scraper',
-  archetype: 'default',
+  archetype: 'iphone16pro_ios18_7_safari26_4',
 });
 
 // Drive a login flow.
-const s = await client.sessions.create({ archetype: 'default' });
+const s = await client.sessions.create({ archetype: 'iphone16pro_ios18_7_safari26_4' });
 await client.sessions.navigate(s.id, { url: 'https://example.com/login' });
 await client.sessions.interact(s.id, {
   action: 'type', selector: '#email', value: 'bot@you.dev',
