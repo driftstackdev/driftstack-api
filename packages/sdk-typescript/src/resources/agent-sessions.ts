@@ -231,4 +231,25 @@ export class AgentSessionsResource {
       body: {},
     });
   }
+
+  /**
+   * LK.3 — mint a fresh LiveKit JWT for the agent session's video
+   * room. Use this when the auto-populated `livekit` field on
+   * session-create is absent (pre-LK deployment, OR the token TTL
+   * has expired — tokens are 24h). The same `LiveKitInfo` shape
+   * is returned either way; one type, two paths.
+   *
+   * Errors (raised as DriftstackError with HTTP-mapped kind):
+   *   - 403 — session is closed; can't mint
+   *   - 404 — session unknown (or cross-account; existence not leaked)
+   *   - 503 — no Mac registered LiveKit yet, OR the stored Mac
+   *           secret can't be decrypted (operator action — re-run
+   *           POST /v1/mac-nodes/register)
+   */
+  livekitToken(id: string): Promise<LiveKitInfo> {
+    return this.http.request<LiveKitInfo>({
+      method: 'POST',
+      path: `/v1/agent-sessions/${encodeURIComponent(id)}/livekit-token`,
+    });
+  }
 }

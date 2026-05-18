@@ -208,4 +208,43 @@ describe('AgentSessionsResource', () => {
     ]);
     expect(out.pair_mode_state.kind).toBe('handback-pending');
   });
+
+  // LK.3 — re-mint a LiveKit JWT for the agent session room. The
+  // server-side route is admin-scope-free (any owner of the session
+  // can mint a token) so the SDK helper has no special-case auth.
+  it('livekitToken POSTs /v1/agent-sessions/{id}/livekit-token with no body', async () => {
+    const reply = {
+      ws_url: 'wss://mac-007.driftstack.dev:8443',
+      room: 'agt_lk',
+      token: 'eyJhbGciOiJIUzI1NiJ9.fake',
+      participant_identity: 'subscriber_acc_1',
+      expires_at: '2026-05-19T00:00:00Z',
+    };
+    const { http, calls } = makeFakeHttp(reply);
+    const res = new AgentSessionsResource(http);
+    const out = await res.livekitToken('agt_lk');
+    expect(calls).toEqual([
+      {
+        method: 'POST',
+        path: '/v1/agent-sessions/agt_lk/livekit-token',
+      },
+    ]);
+    expect(out.ws_url).toBe('wss://mac-007.driftstack.dev:8443');
+    expect(out.token).toBe('eyJhbGciOiJIUzI1NiJ9.fake');
+    expect(out.expires_at).toBe('2026-05-19T00:00:00Z');
+  });
+
+  it('livekitToken URL-encodes the session id (so ids with slashes do not break route matching)', async () => {
+    const reply = {
+      ws_url: 'wss://mac-008.driftstack.dev:8443',
+      room: 'agt_with/slash',
+      token: 'eyJhbGciOiJIUzI1NiJ9.fake',
+      participant_identity: 'subscriber_acc_2',
+      expires_at: '2026-05-19T00:00:00Z',
+    };
+    const { http, calls } = makeFakeHttp(reply);
+    const res = new AgentSessionsResource(http);
+    await res.livekitToken('agt_with/slash');
+    expect(calls[0]!.path).toBe('/v1/agent-sessions/agt_with%2Fslash/livekit-token');
+  });
 });
