@@ -2736,19 +2736,23 @@ function buildRegistry(): OpenAPIRegistry {
       expires_at: z.string(),
     })
     .openapi('LiveKitInfo');
-  const RegisterMacNodeBodyOpenApi = z.object({
-    mac_node_id: z.string().uuid(),
-    livekit: z.object({
-      api_key: z.string().min(1).max(256),
-      api_secret: z.string().min(1).max(1024),
-      ws_url: z.string().url(),
-    }),
-  });
-  const RegisterMacNodeResponseOpenApi = z.object({
-    mac_node_id: z.string(),
-    livekit_registered_at: z.string(),
-    ws_url: z.string(),
-  });
+  const RegisterMacNodeBodyOpenApi = z
+    .object({
+      mac_node_id: z.string().uuid(),
+      livekit: z.object({
+        api_key: z.string().min(1).max(256),
+        api_secret: z.string().min(1).max(1024),
+        ws_url: z.string().url(),
+      }),
+    })
+    .openapi('RegisterMacNodeRequest');
+  const RegisterMacNodeResponseOpenApi = z
+    .object({
+      mac_node_id: z.string(),
+      livekit_registered_at: z.string(),
+      ws_url: z.string(),
+    })
+    .openapi('RegisterMacNodeResponse');
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions/{id}/livekit-token',

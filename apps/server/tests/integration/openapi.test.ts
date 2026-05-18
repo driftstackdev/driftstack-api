@@ -293,6 +293,36 @@ describe('OpenAPI spec generation', () => {
       ['expires_at', 'participant_identity', 'room', 'token', 'ws_url'].sort(),
     );
   });
+
+  // LK.2 — same named-schema pattern for the mac-nodes/register
+  // request + response bodies. Without explicit .openapi() names,
+  // datamodel-codegen produces synthesised types per-method (e.g.
+  // `RegisterMacNodeRequestRequest`) which makes the operator-facing
+  // Python regen harder to consume. Pin both as `RegisterMacNodeRequest`
+  // and `RegisterMacNodeResponse`.
+  it('LK.2 — RegisterMacNodeRequest + RegisterMacNodeResponse are named component schemas', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const schemas = spec.components?.schemas as Record<string, unknown> | undefined;
+    expect(schemas).toBeDefined();
+    const names = Object.keys(schemas ?? {});
+    expect(names).toContain('RegisterMacNodeRequest');
+    expect(names).toContain('RegisterMacNodeResponse');
+
+    const req = schemas?.RegisterMacNodeRequest as
+      | { type?: string; properties?: Record<string, unknown>; required?: string[] }
+      | undefined;
+    expect(req?.type).toBe('object');
+    expect(Object.keys(req?.properties ?? {}).sort()).toEqual(['livekit', 'mac_node_id'].sort());
+
+    const res = schemas?.RegisterMacNodeResponse as
+      | { type?: string; properties?: Record<string, unknown>; required?: string[] }
+      | undefined;
+    expect(res?.type).toBe('object');
+    expect(Object.keys(res?.properties ?? {}).sort()).toEqual(
+      ['livekit_registered_at', 'mac_node_id', 'ws_url'].sort(),
+    );
+  });
 });
 
 describe('OpenAPI HTTP routes', () => {
