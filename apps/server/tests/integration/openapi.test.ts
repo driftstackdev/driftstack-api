@@ -267,6 +267,10 @@ describe('OpenAPI spec generation', () => {
     expect(names).toContain('Account');
     expect(names).toContain('Problem');
     expect(names).toContain('UsagePeriodSummary');
+    // V-082 billing — GET /v1/billing response. Pinned in components
+    // so the Python regen produces a typed `GetBillingStateResponse`
+    // class instead of an anonymous synthesised type.
+    expect(names).toContain('GetBillingStateResponse');
   });
 
   // LK.3 — pin LiveKitInfo as a NAMED schema in components.schemas
