@@ -12,6 +12,13 @@ export const WebhookEventTypeSchema = z.enum([
   'quota.warning_80pct',
   'quota.exceeded',
   'api_key.revoked',
+  // Arc 5 EGRESS eg.7 (v2-#3) — fires when the harness emits an
+  // `egress.capability_report` event for a SOCKS5 session and the
+  // control plane ingests it (eg.2 wires the listener; this event
+  // fans out to customer webhook endpoints). Payload mirrors
+  // EgressCapabilitiesSchema so subscribers can branch on
+  // udp_associate / dns_remote_resolve / warnings without a GET.
+  'session.egress_capability_changed',
   // V-356 — synthetic test event, sent only via POST
   // /v1/webhooks/:id/test. Customers cannot subscribe to it
   // (UpdateSubscriptionsSchema rejects it) — the endpoint dispatches
@@ -33,6 +40,9 @@ export const SubscribableWebhookEventTypeSchema = z.enum([
   'quota.warning_80pct',
   'quota.exceeded',
   'api_key.revoked',
+  // Arc 5 EGRESS eg.7 — subscribable so customers can hook
+  // proxy-health visibility into their own observability surface.
+  'session.egress_capability_changed',
 ]);
 export type SubscribableWebhookEventType = z.infer<typeof SubscribableWebhookEventTypeSchema>;
 

@@ -27,7 +27,11 @@ export type WebhookEventType =
   // V-356 — synthetic event sent only via POST /v1/webhooks/:id/test.
   // Customers cannot subscribe to it (Zod schemas reject it) — the
   // test endpoint dispatches regardless of subscription.
-  | 'test.ping';
+  | 'test.ping'
+  // Arc 5 EGRESS eg.7 — fires when the harness emits an
+  // egress.capability_report event for a SOCKS5 session and the
+  // control plane ingests it. Migration 0055 ALTERs the pgEnum.
+  | 'session.egress_capability_changed';
 
 export type WebhookDeliveryStatus = 'pending' | 'in_flight' | 'delivered' | 'failed' | 'dlq';
 

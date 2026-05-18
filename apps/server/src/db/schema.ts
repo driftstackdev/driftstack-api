@@ -131,6 +131,11 @@ export const webhookEventType = pgEnum('webhook_event_type', [
   // it for real events. Migration 0032 adds the value to the
   // existing postgres enum.
   'test.ping',
+  // Arc 5 EGRESS eg.7 — fires when the harness emits an
+  // egress.capability_report event for a SOCKS5 session and the
+  // control plane ingests it. Migration 0055 ALTERs the existing
+  // pgEnum to add this value.
+  'session.egress_capability_changed',
 ]);
 
 export const webhookDeliveryStatus = pgEnum('webhook_delivery_status', [
