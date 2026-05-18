@@ -1081,11 +1081,15 @@ export async function createProductionDeps(
     new DrizzleWebhookRotationReminderRepo(dbHandle),
     email,
     logger,
+    // v2-#36 — thread DASHBOARD_ORIGIN-driven config so rotation
+    // reminder emails link to the right host on each env.
+    { dashboardUrl: config.dashboardOrigin },
   );
   const byokAnthropicRotationReminderService = new ByokAnthropicRotationReminderService(
     new DrizzleByokAnthropicRotationReminderRepo(dbHandle),
     email,
     logger,
+    { dashboardUrl: config.dashboardOrigin },
   );
   const webhookRotationReminderTimer = rotationRemindersDisabled
     ? null

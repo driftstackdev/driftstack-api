@@ -145,6 +145,14 @@ export interface EmailService {
     secretPrefix: string;
     ageDays: number;
     rotateBy: Date;
+    /**
+     * v2-#36 — customer-facing dashboard origin (DASHBOARD_ORIGIN env).
+     * Threaded from bootstrap so the rotation link in the email points
+     * at the right host across dev / staging / prod. Pre-v2-#36 the
+     * template hardcoded https://app.driftstack.dev — staging emails
+     * mis-directed customers to prod.
+     */
+    dashboardUrl: string;
   }): Promise<void>;
   /**
    * v2-#11.5 — BYOK Anthropic API key rotation reminder. Fires when
@@ -156,6 +164,8 @@ export interface EmailService {
     to: string;
     ageDays: number;
     rotateBy: Date;
+    /** v2-#36 — same dashboard-origin threading as the webhook reminder. */
+    dashboardUrl: string;
   }): Promise<void>;
   /** V-295c3-followup + V-545.B — fires when a public incident is posted,
    *  updated, or resolved. The 'updated' kind is wired-but-deferred:
@@ -397,9 +407,9 @@ const TEMPLATES = {
   'byok-anthropic-key-rotation-reminder': {
     subject: 'Driftstack — rotate your Anthropic API key',
     text: (v) =>
-      `Your stored Anthropic API key on Driftstack is ${v.ageDays} days old. We recommend rotating every 90 days; we've reached the nag threshold.\n\nRotate by: ${v.rotateBy} (UTC)\n\nGenerate a fresh key in your Anthropic console (https://console.anthropic.com/) and update it on your Driftstack account at:\nhttps://app.driftstack.dev/account/byok-anthropic\n\n— Driftstack`,
+      `Your stored Anthropic API key on Driftstack is ${v.ageDays} days old. We recommend rotating every 90 days; we've reached the nag threshold.\n\nRotate by: ${v.rotateBy} (UTC)\n\nGenerate a fresh key in your Anthropic console (https://console.anthropic.com/) and update it on your Driftstack account at:\n${v.dashboardUrl}/account/byok-anthropic\n\n— Driftstack`,
     html: (v) =>
-      `<p>Your stored Anthropic API key on Driftstack is <strong>${v.ageDays} days old</strong>. We recommend rotating every 90 days; we've reached the nag threshold.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Rotate by:</strong></td><td>${v.rotateBy} (UTC)</td></tr></table><p>Generate a fresh key in your <a href="https://console.anthropic.com/">Anthropic console</a> and update it on your Driftstack account at <a href="https://app.driftstack.dev/account/byok-anthropic">app.driftstack.dev/account/byok-anthropic</a>.</p><p>— Driftstack</p>`,
+      `<p>Your stored Anthropic API key on Driftstack is <strong>${v.ageDays} days old</strong>. We recommend rotating every 90 days; we've reached the nag threshold.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Rotate by:</strong></td><td>${v.rotateBy} (UTC)</td></tr></table><p>Generate a fresh key in your <a href="https://console.anthropic.com/">Anthropic console</a> and update it on your Driftstack account at <a href="${v.dashboardUrl}/account/byok-anthropic">${v.dashboardUrl}/account/byok-anthropic</a>.</p><p>— Driftstack</p>`,
   },
   // v2-#10.5 — 90d rotation cadence nag. Endpoint URL + secret prefix
   // is enough for the customer to identify the endpoint without
@@ -409,9 +419,9 @@ const TEMPLATES = {
   'webhook-secret-rotation-reminder': {
     subject: 'Driftstack — rotate your webhook signing secret',
     text: (v) =>
-      `Your Driftstack webhook signing secret is ${v.ageDays} days old. We recommend rotating every 90 days; we've reached the nag threshold.\n\nEndpoint: ${v.endpointUrl}\nSecret prefix: ${v.secretPrefix}\nRotate by: ${v.rotateBy} (UTC)\n\nRotation is zero-downtime: the previous secret stays valid for 24h after rotation so your verifier code can roll the new value at its own pace.\n\nRotate at: https://app.driftstack.dev/webhooks\n\n— Driftstack`,
+      `Your Driftstack webhook signing secret is ${v.ageDays} days old. We recommend rotating every 90 days; we've reached the nag threshold.\n\nEndpoint: ${v.endpointUrl}\nSecret prefix: ${v.secretPrefix}\nRotate by: ${v.rotateBy} (UTC)\n\nRotation is zero-downtime: the previous secret stays valid for 24h after rotation so your verifier code can roll the new value at its own pace.\n\nRotate at: ${v.dashboardUrl}/webhooks\n\n— Driftstack`,
     html: (v) =>
-      `<p>Your Driftstack webhook signing secret is <strong>${v.ageDays} days old</strong>. We recommend rotating every 90 days; we've reached the nag threshold.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Endpoint:</strong></td><td><code>${v.endpointUrl}</code></td></tr><tr><td><strong>Secret prefix:</strong></td><td><code>${v.secretPrefix}</code></td></tr><tr><td><strong>Rotate by:</strong></td><td>${v.rotateBy} (UTC)</td></tr></table><p>Rotation is zero-downtime: the previous secret stays valid for 24h after rotation so your verifier code can roll the new value at its own pace.</p><p><a href="https://app.driftstack.dev/webhooks">Rotate at app.driftstack.dev/webhooks</a></p><p>— Driftstack</p>`,
+      `<p>Your Driftstack webhook signing secret is <strong>${v.ageDays} days old</strong>. We recommend rotating every 90 days; we've reached the nag threshold.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Endpoint:</strong></td><td><code>${v.endpointUrl}</code></td></tr><tr><td><strong>Secret prefix:</strong></td><td><code>${v.secretPrefix}</code></td></tr><tr><td><strong>Rotate by:</strong></td><td>${v.rotateBy} (UTC)</td></tr></table><p>Rotation is zero-downtime: the previous secret stays valid for 24h after rotation so your verifier code can roll the new value at its own pace.</p><p><a href="${v.dashboardUrl}/webhooks">Rotate at ${v.dashboardUrl}/webhooks</a></p><p>— Driftstack</p>`,
   },
   // V-295c3-followup — DRAFT copy. Two templates so the subject can vary
   // (a "resolved" email shouldn't read like a fresh outage).
@@ -660,17 +670,26 @@ export function createEmailService({
         confirmLink,
         expiresAt: expiresAt.toISOString(),
       }),
-    sendWebhookSecretRotationReminder: ({ to, endpointUrl, secretPrefix, ageDays, rotateBy }) =>
+    sendWebhookSecretRotationReminder: ({
+      to,
+      endpointUrl,
+      secretPrefix,
+      ageDays,
+      rotateBy,
+      dashboardUrl,
+    }) =>
       send('webhook-secret-rotation-reminder', to, {
         endpointUrl,
         secretPrefix,
         ageDays: ageDays.toString(),
         rotateBy: rotateBy.toISOString(),
+        dashboardUrl,
       }),
-    sendByokAnthropicKeyRotationReminder: ({ to, ageDays, rotateBy }) =>
+    sendByokAnthropicKeyRotationReminder: ({ to, ageDays, rotateBy, dashboardUrl }) =>
       send('byok-anthropic-key-rotation-reminder', to, {
         ageDays: ageDays.toString(),
         rotateBy: rotateBy.toISOString(),
+        dashboardUrl,
       }),
   };
 }

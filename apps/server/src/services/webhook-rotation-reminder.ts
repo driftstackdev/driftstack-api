@@ -53,18 +53,27 @@ export interface WebhookRotationReminderRepo {
 export interface WebhookRotationReminderServiceConfig {
   /** Maximum emails per tick. Bounds the per-tick burst. */
   perTickLimit?: number;
+  /**
+   * v2-#36 — customer-facing dashboard origin (DASHBOARD_ORIGIN env)
+   * passed through to the email template so the rotation link points
+   * at the right host across dev / staging / prod. Required so a
+   * staging deploy doesn't mail customers a prod-dashboard link.
+   */
+  dashboardUrl: string;
 }
 
 export class WebhookRotationReminderService {
   private readonly perTickLimit: number;
+  private readonly dashboardUrl: string;
 
   constructor(
     private readonly repo: WebhookRotationReminderRepo,
     private readonly email: EmailService,
     private readonly logger: Logger,
-    config: WebhookRotationReminderServiceConfig = {},
+    config: WebhookRotationReminderServiceConfig,
   ) {
     this.perTickLimit = config.perTickLimit ?? 50;
+    this.dashboardUrl = config.dashboardUrl;
   }
 
   /**
@@ -94,6 +103,7 @@ export class WebhookRotationReminderService {
             secretPrefix: ep.secretPrefix,
             ageDays,
             rotateBy,
+            dashboardUrl: this.dashboardUrl,
           });
         } catch (err) {
           this.logger.warn(

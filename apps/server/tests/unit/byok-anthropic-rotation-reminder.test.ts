@@ -77,7 +77,9 @@ describe('v2-#11.5 ByokAnthropicRotationReminderService.tickOnce', () => {
   it('empty match → no email + no mark + reminded=0', async () => {
     const { svc: emailSvc, calls } = makeFakeEmail();
     const { repo, marked } = makeFakeRepo([]);
-    const svc = new ByokAnthropicRotationReminderService(repo, emailSvc, makeFakeLogger());
+    const svc = new ByokAnthropicRotationReminderService(repo, emailSvc, makeFakeLogger(), {
+      dashboardUrl: 'https://app.driftstack.test',
+    });
     const result = await svc.tickOnce(NOW);
     expect(result.reminded).toBe(0);
     expect(calls).toHaveLength(0);
@@ -87,7 +89,9 @@ describe('v2-#11.5 ByokAnthropicRotationReminderService.tickOnce', () => {
   it('match → fires reminder + marks sent + reminded=1', async () => {
     const { svc: emailSvc, calls } = makeFakeEmail();
     const { repo, marked } = makeFakeRepo([makeRow()]);
-    const svc = new ByokAnthropicRotationReminderService(repo, emailSvc, makeFakeLogger());
+    const svc = new ByokAnthropicRotationReminderService(repo, emailSvc, makeFakeLogger(), {
+      dashboardUrl: 'https://app.driftstack.test',
+    });
     const result = await svc.tickOnce(NOW);
     expect(result.reminded).toBe(1);
     expect(calls).toHaveLength(1);
@@ -104,7 +108,9 @@ describe('v2-#11.5 ByokAnthropicRotationReminderService.tickOnce', () => {
       sendByokAnthropicKeyRotationReminder: () => Promise.reject(new Error('postmark down')),
     } as unknown as EmailService;
     const { repo, marked } = makeFakeRepo([makeRow()]);
-    const svc = new ByokAnthropicRotationReminderService(repo, failingEmail, makeFakeLogger());
+    const svc = new ByokAnthropicRotationReminderService(repo, failingEmail, makeFakeLogger(), {
+      dashboardUrl: 'https://app.driftstack.test',
+    });
     const result = await svc.tickOnce(NOW);
     expect(result.reminded).toBe(1);
     expect(marked).toEqual(['acc_1']);
@@ -116,7 +122,9 @@ describe('v2-#11.5 ByokAnthropicRotationReminderService.tickOnce', () => {
       findAccountsNeedingRotationReminder: () => Promise.resolve([makeRow()]),
       markReminderSent: () => Promise.reject(new Error('db down')),
     };
-    const svc = new ByokAnthropicRotationReminderService(repo, emailSvc, makeFakeLogger());
+    const svc = new ByokAnthropicRotationReminderService(repo, emailSvc, makeFakeLogger(), {
+      dashboardUrl: 'https://app.driftstack.test',
+    });
     const result = await svc.tickOnce(NOW);
     expect(calls).toHaveLength(1);
     expect(result.reminded).toBe(0);
@@ -125,7 +133,9 @@ describe('v2-#11.5 ByokAnthropicRotationReminderService.tickOnce', () => {
   it('accountEmail null → email skipped + mark still fires', async () => {
     const { svc: emailSvc, calls } = makeFakeEmail();
     const { repo, marked } = makeFakeRepo([makeRow({ accountEmail: null })]);
-    const svc = new ByokAnthropicRotationReminderService(repo, emailSvc, makeFakeLogger());
+    const svc = new ByokAnthropicRotationReminderService(repo, emailSvc, makeFakeLogger(), {
+      dashboardUrl: 'https://app.driftstack.test',
+    });
     const result = await svc.tickOnce(NOW);
     expect(calls).toHaveLength(0);
     expect(marked).toEqual(['acc_1']);
@@ -138,6 +148,7 @@ describe('v2-#11.5 ByokAnthropicRotationReminderService.tickOnce', () => {
     const { repo, marked } = makeFakeRepo(rows);
     const svc = new ByokAnthropicRotationReminderService(repo, emailSvc, makeFakeLogger(), {
       perTickLimit: 2,
+      dashboardUrl: 'https://app.driftstack.test',
     });
     const result = await svc.tickOnce(NOW);
     expect(calls).toHaveLength(2);

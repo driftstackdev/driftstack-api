@@ -44,18 +44,23 @@ export interface ByokAnthropicRotationReminderRepo {
 
 export interface ByokAnthropicRotationReminderServiceConfig {
   perTickLimit?: number;
+  /** v2-#36 — customer-facing dashboard origin threaded into the
+   *  email template so the rotation link points at the right host. */
+  dashboardUrl: string;
 }
 
 export class ByokAnthropicRotationReminderService {
   private readonly perTickLimit: number;
+  private readonly dashboardUrl: string;
 
   constructor(
     private readonly repo: ByokAnthropicRotationReminderRepo,
     private readonly email: EmailService,
     private readonly logger: Logger,
-    config: ByokAnthropicRotationReminderServiceConfig = {},
+    config: ByokAnthropicRotationReminderServiceConfig,
   ) {
     this.perTickLimit = config.perTickLimit ?? 50;
+    this.dashboardUrl = config.dashboardUrl;
   }
 
   async tickOnce(now: Date): Promise<{ reminded: number }> {
@@ -81,6 +86,7 @@ export class ByokAnthropicRotationReminderService {
             to: row.accountEmail,
             ageDays,
             rotateBy,
+            dashboardUrl: this.dashboardUrl,
           });
         } catch (err) {
           this.logger.warn(
