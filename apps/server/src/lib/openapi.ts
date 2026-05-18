@@ -1110,11 +1110,13 @@ function buildRegistry(): OpenAPIRegistry {
   });
 
   // V-387 — avatar upload + clear.
-  const UploadAvatarResponseOpenApi = z.object({
-    avatar_url: z.string().nullable(),
-    content_type: z.enum(['image/png', 'image/jpeg', 'image/webp']),
-    bytes: z.number().int().nonnegative(),
-  });
+  const UploadAvatarResponseOpenApi = z
+    .object({
+      avatar_url: z.string().nullable(),
+      content_type: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+      bytes: z.number().int().nonnegative(),
+    })
+    .openapi('UploadAvatarResponse');
   registerRoute(r, {
     method: 'post',
     path: '/v1/account/me/avatar',
@@ -1187,17 +1189,27 @@ function buildRegistry(): OpenAPIRegistry {
   // docs.driftstack.dev/api/byok-anthropic + /api/bundled-llm. These
   // OpenAPI route registrations expose the surface to SDK
   // generators + the Scalar UI rendered at /docs/.
-  const ByokAnthropicMetadataOpenApi = z.object({
-    has_key: z.boolean(),
-    set_at: z.string().nullable(),
-    last_used_at: z.string().nullable(),
-  });
-  const PutByokAnthropicRequestOpenApi = z.object({
-    api_key: z.string().min(1).describe('Plaintext Anthropic API key. Never echoed back.'),
-  });
-  const PutByokAnthropicResponseOpenApi = z.object({
-    set_at: z.string(),
-  });
+  const ByokAnthropicMetadataOpenApi = z
+    .object({
+      has_key: z.boolean(),
+      set_at: z.string().nullable(),
+      last_used_at: z.string().nullable(),
+    })
+    .openapi('ByokAnthropicMetadata');
+  const PutByokAnthropicRequestOpenApi = z
+    .object({
+      api_key: z.string().min(1).describe('Plaintext Anthropic API key. Never echoed back.'),
+    })
+    .openapi('PutByokAnthropicRequest');
+  const PutByokAnthropicResponseOpenApi = z
+    .object({
+      set_at: z.string(),
+    })
+    .openapi('PutByokAnthropicResponse');
+  // Union types don't accept .openapi() in zod-to-openapi for some
+  // versions; leave TestByokAnthropicResponseOpenApi inline. The
+  // success/failure shapes are simple enough that the synthesised
+  // type is fine.
   const TestByokAnthropicResponseOpenApi = z.union([
     z.object({ ok: z.literal(true) }),
     z.object({ ok: z.literal(false), reason: z.string() }),

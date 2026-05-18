@@ -278,6 +278,12 @@ describe('OpenAPI spec generation', () => {
     expect(names).toContain('AccountAuditEntry');
     expect(names).toContain('ListAccountAuditResponse');
     expect(names).toContain('ExportAccountAuditResponse');
+    // V-352b avatar upload — UploadAvatarResponse.
+    expect(names).toContain('UploadAvatarResponse');
+    // BYOK Anthropic customer-key surface — 3 named schemas.
+    expect(names).toContain('ByokAnthropicMetadata');
+    expect(names).toContain('PutByokAnthropicRequest');
+    expect(names).toContain('PutByokAnthropicResponse');
   });
 
   // LK.3 — pin LiveKitInfo as a NAMED schema in components.schemas
