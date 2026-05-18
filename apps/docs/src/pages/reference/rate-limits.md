@@ -101,8 +101,11 @@ active, `override_expires_at` carries the auto-revert timestamp.
 Full read-endpoint docs at
 [/api/account-rate-limits](/api/account-rate-limits/).
 
-The customer dashboard at `/usage` surfaces the same data
-visually.
+The customer dashboard does not yet render this data visually —
+`/usage` on the dashboard shows time-series usage counts (session
+minutes, navigates, captures) but not the per-bucket rate-limit
+rows. Read this endpoint directly via the SDK or `curl`; a
+dedicated dashboard surface is queued for a future slice.
 
 ## Response headers
 
