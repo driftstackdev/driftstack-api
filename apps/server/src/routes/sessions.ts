@@ -89,6 +89,10 @@ function publicSession(s: SessionRecord): Record<string, unknown> {
     // SOCKS5 handshake completes or for non-SOCKS5 sessions. Cross-agent
     // contract shape: { udp_associate, quic_route, warnings[] }.
     egress_capabilities: s.egressCapabilities,
+    // Arc 5 EGRESS eg.1 — migration 0054 raw harness-emitted payload.
+    // Null until the harness emits; opaque JSON record. Consumers
+    // should prefer `egress_capabilities` for typed access.
+    egress_capability_report: s.egressCapabilityReport,
     created_at: s.createdAt.toISOString(),
     updated_at: s.updatedAt.toISOString(),
     last_state_at: s.lastStateAt ? s.lastStateAt.toISOString() : null,

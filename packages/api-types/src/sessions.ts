@@ -71,6 +71,14 @@ export const SessionSchema = z.object({
    * `EgressCapabilitiesSchema` in `./egress.ts`.
    */
   egress_capabilities: EgressCapabilitiesSchema.nullable(),
+  /**
+   * Arc 5 EGRESS eg.1 — RAW harness-emitted event payload (migration
+   * 0054). Stored alongside `egress_capabilities` (the derived view)
+   * for forensics + schema-evolution safety. Opaque JSON; consumers
+   * should prefer `egress_capabilities` for typed access. Null until
+   * the harness emits.
+   */
+  egress_capability_report: z.record(z.unknown()).nullable(),
   created_at: Iso8601Schema,
   updated_at: Iso8601Schema,
   last_state_at: Iso8601Schema.nullable(),
