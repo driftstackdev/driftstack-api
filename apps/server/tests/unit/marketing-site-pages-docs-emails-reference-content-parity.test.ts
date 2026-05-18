@@ -112,6 +112,11 @@ describe('W519.C apps/marketing-site/src/pages/docs/emails-reference.astro conte
     expect(body).toMatch(/<strong>quota-warning<\/strong>/);
     expect(body).toMatch(/<td>Approaching the tier's concurrency \/ minute cap\.<\/td>/);
     expect(body).toMatch(/<td>No — guards against accidental overage\.<\/td>/);
+    // V-anchor-leak invariant: internal version anchors must NOT
+    // bleed into customer-rendered marketing copy. The
+    // status-incident-updated row previously carried "(V-545.B)"
+    // inline — scrubbed in the same slice that added this guard.
+    expect(body).not.toMatch(/\(V-545\.B\)/);
   });
 
   it('Team + support 2-template framing pinned: team-invite (admin invites a new member to the team, NOT opt-outable, invitee needs link to accept) + support-ack (Acknowledgement of a support ticket, NOT opt-outable) — pinned so the 2-team+support template + both-not-opt-outable commitment survives', () => {
