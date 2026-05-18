@@ -44,4 +44,20 @@ describe('Arc 5 EGRESS eg.5 dashboard sessions proxy-warning badge', () => {
       /escapeHtml\(s\.status\) \+[\s\S]+?'<\/span>' \+[\s\S]+?warningBadge \+[\s\S]+?'<\/div>'/,
     );
   });
+
+  // Arc 5 EGRESS eg.5.b — same badge in recentLi() so closed
+  // sessions also surface the warning. Pins that both render
+  // functions carry the defensive read + badge construction.
+  it('recentLi() also renders the warning badge with identical pattern (eg.5.b)', () => {
+    const occurrences = (
+      body.match(/s\.egress_capabilities && Array\.isArray\(s\.egress_capabilities\.warnings\)/g) ??
+      []
+    ).length;
+    expect(occurrences).toBeGreaterThanOrEqual(2);
+  });
+
+  it('recentLi() uses the same amber + ⚠ glyph badge construction (eg.5.b)', () => {
+    const occurrences = (body.match(/⚠ proxy '/g) ?? []).length;
+    expect(occurrences).toBeGreaterThanOrEqual(2);
+  });
 });
