@@ -12,11 +12,42 @@ Discriminated message response: branch on ``["kind"]`` —
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypedDict
 from urllib.parse import quote
 
 from driftstack.http import AsyncHttpClient, HttpClient
 from driftstack.resources._common import coerce_body
+
+
+class LiveKitInfo(TypedDict):
+    """LK.3/LK.5 — 5-field LiveKit join info.
+
+    Returned by :meth:`AgentSessionsResource.livekit_token` and also
+    auto-populated on the ``livekit`` field of an agent-session create
+    response when a Mac is available at create time. The 5 fields match
+    the named ``LiveKitInfo`` component schema in openapi.json.
+
+    Hand-defined here (not generated) because the same 5-field shape is
+    used as a typed return across all three SDKs (TS ``LiveKitInfo``
+    interface + Go ``LiveKitInfo`` struct + this Python TypedDict) and
+    the codegen step can lag behind. The OpenAPI schema is the contract
+    source; this class is the Python projection of that contract.
+    """
+
+    ws_url: str
+    """WebSocket URL the client connects to (per-Mac unique hostname)."""
+
+    room: str
+    """LiveKit room name — always the agent_session id."""
+
+    token: str
+    """Short-lived HS256 JWT signed with the per-Mac api_secret."""
+
+    participant_identity: str
+    """Identity claim baked into the JWT — ``customer-<account-uuid>``."""
+
+    expires_at: str
+    """ISO-8601 timestamp at which the token expires."""
 
 
 class AgentSessionsResource:
@@ -124,7 +155,7 @@ class AgentSessionsResource:
             json_body=coerce_body({}),
         )
 
-    def livekit_token(self, agent_session_id: str) -> dict[str, Any]:
+    def livekit_token(self, agent_session_id: str) -> LiveKitInfo:
         """LK.3 — mint a fresh LiveKit JWT for the session's video room.
 
         Use this when the auto-populated ``livekit`` field on
@@ -220,11 +251,11 @@ class AsyncAgentSessionsResource:
             json_body=coerce_body({}),
         )
 
-    async def livekit_token(self, agent_session_id: str) -> dict[str, Any]:
+    async def livekit_token(self, agent_session_id: str) -> LiveKitInfo:
         """Async mirror — same LK.3 semantics as sync.
 
-        Returns the 5-field LiveKitInfo dict (ws_url + room + token +
-        participant_identity + expires_at). See the sync
+        Returns the 5-field :class:`LiveKitInfo` dict (ws_url + room +
+        token + participant_identity + expires_at). See the sync
         :meth:`AgentSessionsResource.livekit_token` for full error
         semantics.
         """
