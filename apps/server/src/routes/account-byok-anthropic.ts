@@ -191,7 +191,7 @@ export function registerAccountByokAnthropicDisabledRoutes(app: FastifyInstance)
     'BYOK Anthropic key management is not yet enabled on this deployment. ' +
     'Once the operator configures the deployment, customers can store their ' +
     'own Anthropic key via PUT /v1/account/me/byok-anthropic-key. See ' +
-    'https://docs.driftstack.dev/api/byok-anthropic for the full flow.';
+    'https://docs.driftstack.dev/api/byok-anthropic/ for the full flow.';
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };

@@ -108,7 +108,7 @@ export function registerRecipesDisabledRoutes(app: FastifyInstance): void {
     'Recipes are not yet enabled on this deployment. Once the operator ' +
     'configures the recipe library + agent layer, customers can snapshot ' +
     'a finished agent-session via POST /v1/recipes. See ' +
-    'https://docs.driftstack.dev/api/recipes for the full flow.';
+    'https://docs.driftstack.dev/api/recipes/ for the full flow.';
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };

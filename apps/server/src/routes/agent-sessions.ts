@@ -956,9 +956,9 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   const detail =
     'AI chat agent is not yet enabled on this deployment. Two self-serve ' +
     'options activate this surface: bring your own Anthropic key ' +
-    '(https://docs.driftstack.dev/api/byok-anthropic), or opt into the ' +
+    '(https://docs.driftstack.dev/api/byok-anthropic/), or opt into the ' +
     "deployment's bundled-LLM budget " +
-    '(https://docs.driftstack.dev/api/bundled-llm).';
+    '(https://docs.driftstack.dev/api/bundled-llm/).';
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };

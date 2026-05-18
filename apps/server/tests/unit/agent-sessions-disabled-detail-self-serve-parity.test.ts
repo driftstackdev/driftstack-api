@@ -43,8 +43,8 @@ describe('agent-sessions disabled-stub 503 detail — customer-facing self-serve
   it('carries customer-facing docs URLs (docs.driftstack.dev/api/byok-anthropic + bundled-llm)', () => {
     // Without these URLs the SDK customer has nowhere to go — the
     // 503 problem-detail is their only signal.
-    expect(body).toMatch(/https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic/);
-    expect(body).toMatch(/https:\/\/docs\.driftstack\.dev\/api\/bundled-llm/);
+    expect(body).toMatch(/https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic\//);
+    expect(body).toMatch(/https:\/\/docs\.driftstack\.dev\/api\/bundled-llm\//);
   });
 
   it('does NOT reference internal "AI-CHAT design doc" in the customer-facing 503 detail', () => {
@@ -77,7 +77,7 @@ describe('byok-anthropic disabled-stub 503 detail — customer-facing, no intern
   );
 
   it('carries the customer-facing docs URL (docs.driftstack.dev/api/byok-anthropic)', () => {
-    expect(body).toMatch(/https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic/);
+    expect(body).toMatch(/https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic\//);
   });
 
   it('does NOT reference internal "docs/internal/byok-anthropic-key-storage-design" doc', () => {
@@ -93,8 +93,8 @@ describe('byok-anthropic disabled-stub 503 detail — customer-facing, no intern
 describe('recipes disabled-stub 503 detail — customer-facing, no internal-handoff-doc reference', () => {
   const body = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/recipes.ts'), 'utf8');
 
-  it('carries the customer-facing docs URL (docs.driftstack.dev/api/recipes)', () => {
-    expect(body).toMatch(/https:\/\/docs\.driftstack\.dev\/api\/recipes/);
+  it('carries the customer-facing docs URL (docs.driftstack.dev/api/recipes/)', () => {
+    expect(body).toMatch(/https:\/\/docs\.driftstack\.dev\/api\/recipes\//);
   });
 
   it('does NOT reference internal "2026-05-17-q-queue-loop-handoff" doc in the customer-facing 503 detail', () => {
