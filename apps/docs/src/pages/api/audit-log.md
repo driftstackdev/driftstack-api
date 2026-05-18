@@ -30,9 +30,9 @@ Response (200):
   "data": [
     {
       "id": "<uuid>",
-      "account_id": "<account-uuid>",
+      "account_id": "acc_<uuid>",
       "actor_type": "customer",
-      "actor_account_id": "<account-uuid>",
+      "actor_account_id": "acc_<uuid>",
       "actor_key_id": "key_<uuid>",
       "action": "api_key.minted",
       "target_resource_id": "key_<new-key-uuid>",
@@ -45,6 +45,12 @@ Response (200):
   "next_cursor": "<opaque-cursor>"
 }
 ```
+
+Both `account_id` and `actor_account_id` carry the public `acc_`
+prefix on the wire (matches the format `GET /v1/account/me`
+returns). The bare row `id` is a UUID (no prefix). `actor_key_id`
+uses `key_` for API-key calls and `wsk_` for web-session calls;
+the prefix is the actor-class discriminator.
 
 `next_cursor` is `null` when there are no more pages.
 
