@@ -51,8 +51,12 @@ export interface UseInputCaptureOpts {
 
 /** Map a browser pointer event to the video's intrinsic logical
  *  coordinate space. Returns null when the element isn't sized
- *  yet (race on first mount). */
-function pointerToViewport(
+ *  yet (race on first mount).
+ *
+ *  Exported (alongside `modifiersFromEvent` and `mouseButton`) so
+ *  pure-function unit tests can pin the coordinate math without
+ *  spinning up jsdom + a fake LiveKit Room. */
+export function pointerToViewport(
   event: PointerEvent | MouseEvent | WheelEvent,
   video: HTMLVideoElement,
 ): { x: number; y: number } | null {
@@ -68,7 +72,7 @@ function pointerToViewport(
 /** Capture the modifier-set from a KeyboardEvent. Returns
  *  undefined when no modifier is held (matches the InputEvent
  *  optional `modifiers` field). */
-function modifiersFromEvent(event: KeyboardEvent): readonly string[] | undefined {
+export function modifiersFromEvent(event: KeyboardEvent): readonly string[] | undefined {
   const mods: string[] = [];
   if (event.shiftKey) mods.push('Shift');
   if (event.ctrlKey) mods.push('Control');
@@ -80,7 +84,7 @@ function modifiersFromEvent(event: KeyboardEvent): readonly string[] | undefined
 /** Translate a mouse `button` field (0=left/1=middle/2=right) to
  *  the bounded InputEvent type. Returns null for unsupported
  *  buttons (e.g. back/forward — not yet in the Mac-side decoder). */
-function mouseButton(raw: number): 0 | 1 | 2 | null {
+export function mouseButton(raw: number): 0 | 1 | 2 | null {
   if (raw === 0 || raw === 1 || raw === 2) return raw;
   return null;
 }
