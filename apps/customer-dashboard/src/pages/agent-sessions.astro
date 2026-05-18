@@ -164,6 +164,48 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             </div>
           </dl>
         </div>
+
+        <!--
+          LK arc — Live video info card. Surfaces whether the
+          current session has a LiveKit join URL available + a
+          one-click link to the integration guide. Empty (hidden)
+          by default; the dashboard JS reveals it after session
+          create when the response carries the `livekit` field.
+        -->
+        <div
+          class="hidden rounded-lg border border-white/10 bg-surface-raised p-5"
+          data-section="livekit-info"
+        >
+          <h2 class="text-sm font-semibold uppercase tracking-widest text-ink-muted">
+            Live video
+          </h2>
+          <p class="mt-3 text-xs text-ink-secondary">
+            This session publishes its browser video stream to a per-Mac
+            LiveKit room. Subscribe from the desktop GUI client or via
+            <a
+              href="https://docs.driftstack.dev/guides/live-video/"
+              class="underline hover:text-glow-red"
+              target="_blank"
+              rel="noopener noreferrer">livekit-client</a
+            >.
+          </p>
+          <dl class="mt-3 space-y-1.5 text-xs">
+            <div class="flex flex-col">
+              <dt class="text-ink-muted">Room</dt>
+              <dd
+                data-field="livekit-room"
+                class="overflow-x-auto whitespace-nowrap font-mono text-ink-secondary"
+              ></dd>
+            </div>
+            <div class="flex flex-col">
+              <dt class="text-ink-muted">WebSocket URL</dt>
+              <dd
+                data-field="livekit-ws-url"
+                class="overflow-x-auto whitespace-nowrap font-mono text-ink-secondary"
+              ></dd>
+            </div>
+          </dl>
+        </div>
       </aside>
     </div>
   </div>
@@ -264,6 +306,11 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
               if (stateEl) stateEl.textContent = initialState ? initialState.kind : '';
               renderTakeoverHandback(initialState, session.mode);
               if (activeSection) activeSection.classList.remove('hidden');
+              // LK arc — surface the optional `livekit` field when
+              // the deployment is LK-ready. Card stays hidden when
+              // session.livekit is absent (pre-LK deployment OR no
+              // Mac registered yet).
+              renderLivekitInfo(session.livekit);
               // Wave 2.C sub-slice 8.27 — start the SSE transcript
               // stream now that we have a valid session id.
               createForm.dispatchEvent(
@@ -274,6 +321,28 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
               /* swallow — banner-render handled in the 503 branch above */
             });
         });
+      }
+
+      // LK arc — render the optional `livekit` field from the
+      // session-create response. The card lives in the right rail;
+      // visibility flips based on whether the server included the
+      // field. Two displayed values: room name + ws_url (the join
+      // info needed to subscribe via livekit-client). Token is
+      // intentionally NOT surfaced here — the dashboard is a
+      // presentational consumer; the desktop GUI client does the
+      // actual subscribe.
+      function renderLivekitInfo(livekit) {
+        const card = root.querySelector('[data-section="livekit-info"]');
+        if (!card) return;
+        if (livekit && typeof livekit.room === 'string' && typeof livekit.ws_url === 'string') {
+          const roomEl = card.querySelector('[data-field="livekit-room"]');
+          const wsEl = card.querySelector('[data-field="livekit-ws-url"]');
+          if (roomEl) roomEl.textContent = livekit.room;
+          if (wsEl) wsEl.textContent = livekit.ws_url;
+          card.classList.remove('hidden');
+        } else {
+          card.classList.add('hidden');
+        }
       }
 
       // v2-#8 Wave 2.C sub-slice 8.26.b — toast surface for typed

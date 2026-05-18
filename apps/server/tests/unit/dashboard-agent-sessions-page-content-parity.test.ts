@@ -182,4 +182,38 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
   it('message-composer input has an aria-label (no visible <label>, placeholder is not a label)', () => {
     expect(body).toMatch(/name="user_message"[\s\S]{0,200}aria-label="Message to the AI agent"/);
   });
+
+  // LK arc — the dashboard surfaces the optional `livekit` field
+  // from the session-create response as a right-rail info card.
+  it('renders a Live video right-rail card hidden by default', () => {
+    expect(body).toMatch(/data-section="livekit-info"/);
+    expect(body).toMatch(/<h2[^>]*>\s*Live video\s*<\/h2>/);
+    expect(body).toMatch(/class="hidden[^"]*"[\s\S]{0,500}data-section="livekit-info"/);
+  });
+
+  it('Live video card carries room + ws_url field placeholders', () => {
+    expect(body).toMatch(/data-field="livekit-room"/);
+    expect(body).toMatch(/data-field="livekit-ws-url"/);
+  });
+
+  it('Live video card cross-links to the docs.driftstack.dev guide', () => {
+    expect(body).toMatch(/docs\.driftstack\.dev\/guides\/live-video/);
+  });
+
+  it('renderLivekitInfo() flips card visibility based on session.livekit presence', () => {
+    expect(body).toMatch(/function renderLivekitInfo\(livekit\)/);
+    expect(body).toMatch(/card\.classList\.remove\('hidden'\)/);
+    expect(body).toMatch(/card\.classList\.add\('hidden'\)/);
+  });
+
+  it('renderLivekitInfo() never echoes the token (presentational consumer only)', () => {
+    // The dashboard is presentational; the actual subscribe happens
+    // in the gui-client. Token MUST NOT be rendered into the DOM
+    // (would risk leaking via dev-tools / accidental clipboard).
+    expect(body).toMatch(/Token is[\s\S]{0,50}intentionally NOT surfaced/);
+  });
+
+  it('session-create handler calls renderLivekitInfo with session.livekit', () => {
+    expect(body).toMatch(/renderLivekitInfo\(session\.livekit\)/);
+  });
 });
