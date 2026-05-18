@@ -60,6 +60,8 @@ import { MfaService } from '../services/mfa.js';
 import { DrizzleMfaRepo } from '../db/mfa-repo.js';
 import { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import { DrizzleBYOKAnthropicRepo } from '../db/byok-anthropic-repo.js';
+import { BundledLlmService } from '../services/bundled-llm.js';
+import { DrizzleBundledLlmRepo } from '../db/bundled-llm-repo.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
 import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
 import { DrizzleAgentSessionsRepo } from '../db/agent-sessions-repo.js';
@@ -502,6 +504,13 @@ export async function createProductionDeps(
       })
     : null;
 
+  // Arc 1 sub-slice 6.3 (v2-#6) — bundled-LLM settings service.
+  // Wired unconditionally (the route layer separately gates on
+  // deploymentFallbackKey being set, so a deploy without the key
+  // never resolves the bundled-LLM leg even if a customer has
+  // consent=true).
+  const bundledLlmService = new BundledLlmService(new DrizzleBundledLlmRepo(dbHandle));
+
   // EG-API-1.6 — SocksProxyBackend is pure config-to-env-var with
   // no external deps; instantiate eagerly so the route surface
   // activates from process start. The backend itself accepts
@@ -781,6 +790,10 @@ export async function createProductionDeps(
     // MFA_ENCRYPTION_KEY gate (one less env var to manage; Q1 verdict
     // 2026-05-17). When unset, app.ts registers 503 stubs.
     ...(byokAnthropicService !== null ? { byokAnthropicService } : {}),
+    // Arc 1 sub-slice 6.3 (v2-#6) — bundled-LLM consent gate. Wired
+    // unconditionally; the route's resolution chain skips this leg
+    // unless deploymentFallbackKey is also configured.
+    bundledLlmService,
     // EG-API-1.6 — concrete SocksProxyBackend for the Phase 1 SOCKS5
     // customer-egress path. Wired unconditionally: the backend is pure
     // config-to-env-var translation with no external deps, so it

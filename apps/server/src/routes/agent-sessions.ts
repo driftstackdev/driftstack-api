@@ -23,6 +23,7 @@ import type { AgentRuntime } from '../services/agent-runtime.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
+import type { BundledLlmService } from '../services/bundled-llm.js';
 import {
   ByokAnthropicRequiredError,
   ConflictError,
@@ -113,6 +114,14 @@ export interface AgentSessionsRoutesDeps {
    *  unconfigured customers get 502 ByokAnthropicRequired instead
    *  of silently consuming the deployment fallback. */
   allowFallbackForUnconfiguredCustomers?: boolean;
+  /**
+   * Arc 1 sub-slice 6.3 (v2-#6) — bundled-LLM settings lookup.
+   * When wired AND the customer has `bundled_llm_consent === true`,
+   * the resolution chain falls through to the deployment fallback
+   * key (Q4=A: BYOK still wins; bundled-LLM is the no-BYOK fallback).
+   * Omit to keep the v2-#21 / Q.1.d posture unchanged.
+   */
+  bundledLlmService?: BundledLlmService;
 }
 
 export function registerAgentSessionsRoutes(
@@ -127,6 +136,7 @@ export function registerAgentSessionsRoutes(
     agentDecomposerKind = 'deterministic',
     deploymentFallbackKey,
     allowFallbackForUnconfiguredCustomers,
+    bundledLlmService,
   } = deps;
 
   app.post(
@@ -242,6 +252,13 @@ export function registerAgentSessionsRoutes(
       //      consumed on staging where the flag is opted in for demo
       //      flows without BYOK setup.
       //
+      // Arc 1 sub-slice 6.3 (v2-#6) extends the resolution chain with
+      // a bundled-LLM leg AFTER cached BYOK but BEFORE the staging-only
+      // fallback gate. Per founder verdict Q4=A, BYOK ALWAYS wins —
+      // bundled-LLM only resolves when both header AND cached are absent
+      // AND the customer ticked `bundled_llm_consent`. Soft-cap
+      // enforcement against the monthly cap lands as sub-slice 6.5.
+      //
       // If nothing resolves AND fallback is gated, throw
       // ByokAnthropicRequiredError so the customer sees the
       // problem-type that points them at PUT /byok-anthropic-key.
@@ -251,9 +268,22 @@ export function registerAgentSessionsRoutes(
           ? req.headers['x-byok-anthropic-api-key']
           : undefined;
       const cachedByokKey = byokKeyCache?.get(req.params.id);
+      let bundledLlmKey: string | undefined;
+      if (
+        headerByokKey === undefined &&
+        cachedByokKey === undefined &&
+        bundledLlmService !== undefined &&
+        deploymentFallbackKey !== undefined
+      ) {
+        const settings = await bundledLlmService.findSettings(ctx.account.id);
+        if (settings !== null && settings.consent) {
+          bundledLlmKey = deploymentFallbackKey;
+        }
+      }
       const resolvedByokKey =
         headerByokKey ??
         cachedByokKey ??
+        bundledLlmKey ??
         (allowFallbackForUnconfiguredCustomers === true ? deploymentFallbackKey : undefined);
       // Q.1 — the ByokAnthropicRequired 502 only fires when the
       // deployment is wired for Claude. Deterministic ignores keys

@@ -66,6 +66,7 @@ import type { Driver } from '../drivers/types.js';
 import type { R2 } from './r2.js';
 import type { MfaService } from '../services/mfa.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
+import type { BundledLlmService } from '../services/bundled-llm.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -316,6 +317,16 @@ export interface AppDeps {
    * Default is false (matches prod intent).
    */
   agentDecomposerAllowFallback?: boolean;
+  /**
+   * Arc 1 sub-slice 6.3 (v2-#6) — bundled-LLM settings reader.
+   * When wired (bootstrap-side requires the deploymentFallbackKey
+   * to be set; otherwise the bundled-LLM leg has nothing to consume),
+   * customers with `bundled_llm_consent === true` get the fallback
+   * key when BYOK absent/expired. Q4=A LOCKED 2026-05-18: BYOK still
+   * wins. Soft-cap enforcement against the monthly cap lands as
+   * sub-slice 6.5.
+   */
+  bundledLlmService?: BundledLlmService;
   /**
    * AI-B4 — write-only recipe library (orchestrator handoff #3 Q.5).
    * POST /v1/recipes snapshots a finished agent_session's
@@ -847,6 +858,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         ? {
             allowFallbackForUnconfiguredCustomers: deps.agentDecomposerAllowFallback,
           }
+        : {}),
+      // Arc 1 sub-slice 6.3 (v2-#6) — bundled-LLM consent gate. When
+      // wired AND customer has consent=true AND BYOK path didn't
+      // resolve, route falls through to the deployment fallback key.
+      ...(deps.bundledLlmService !== undefined
+        ? { bundledLlmService: deps.bundledLlmService }
         : {}),
     });
   } else {
