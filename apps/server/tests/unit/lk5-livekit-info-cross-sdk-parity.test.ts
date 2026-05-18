@@ -144,13 +144,23 @@ describe('LK.5 — LiveKitInfo cross-SDK parity', () => {
   // (subscriber_ vs customer-) and separator (_ vs -). This guard
   // pins the corrected sample so the drift can't slip back during a
   // regen or hand-edit.
-  it('Python SDK livekit_token docstring example uses the correct customer-<account-uuid> shape (not subscriber_<account_id>)', () => {
+  it('Python SDK livekit_token docstring example uses the canonical 5-field shape (api-types + customer docs parity)', () => {
     const pyResource = readFileSync(
       resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources/agent_sessions.py'),
       'utf8',
     );
+    // The 5 sample values must match the canonical form used in
+    // packages/api-types/src/livekit.ts (header comment lines 11-15)
+    // + apps/docs/src/pages/api/agent-sessions.md (lines 46-50 + 191-194).
+    expect(pyResource).toMatch(/"ws_url": "wss:\/\/mac-NNN\.driftstack\.dev:8443",/);
+    expect(pyResource).toMatch(/"room": "agt_<uuid>",/);
+    expect(pyResource).toMatch(/"token": "<HS256 JWT>",/);
     expect(pyResource).toMatch(/"participant_identity": "customer-<account-uuid>",/);
+    expect(pyResource).toMatch(/"expires_at": "<RFC 3339>"/);
+    // Drift-guards on the legacy fictional forms.
     expect(pyResource).not.toMatch(/"participant_identity": "subscriber_/);
+    expect(pyResource).not.toMatch(/"room": "<agent_session_id>"/);
+    expect(pyResource).not.toMatch(/"token": "<HS256 JWT, 24h TTL>"/);
   });
 
   it('Python SDK declares AgentSessionsResource.livekit_token (sync + async) returning LiveKitInfo TypedDict', () => {
