@@ -180,6 +180,17 @@ const ConfigSchema = z.object({
    */
   mfaEncryptionKey: z.string().optional(),
   /**
+   * Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus /metrics
+   * scrape bearer token. Required for the /metrics endpoint to
+   * activate; without it the route returns 503 + the registry is
+   * dropped from AppDeps (counters silently no-op).
+   *
+   * Convention: generate with
+   *   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+   * and rotate alongside other internal credentials.
+   */
+  metricsScrapeToken: z.string().min(16).optional(),
+  /**
    * V-487 — NowPayments crypto-rail scaffold. Conditional, opt-in
    * sub-processor (Estonia EEA-internal per the V-308a legal
    * scaffolding). When `apiKey` + `ipnSecret` are unset, the
@@ -493,6 +504,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     authFlowUrls: deriveAuthFlowUrls(env),
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,
+    metricsScrapeToken: env.METRICS_SCRAPE_TOKEN,
     // V-487 — NowPayments scaffold. All fields optional; presence of
     // BOTH apiKey + ipnSecret is what the route registration checks.
     nowpayments:

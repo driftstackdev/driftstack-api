@@ -65,6 +65,7 @@ import { BundledLlmService } from '../services/bundled-llm.js';
 import { DrizzleBundledLlmRepo } from '../db/bundled-llm-repo.js';
 import { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
 import { RedisPairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
+import { MetricsRegistry, METRIC_NAMES } from '../services/metrics-registry.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
 import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
 import { DrizzleAgentSessionsRepo } from '../db/agent-sessions-repo.js';
@@ -838,6 +839,36 @@ export async function createProductionDeps(
     // being wired (same activation pattern as the rest).
     agentSessionEventBus,
     pairModeLock,
+    // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics
+    // registry. Activated when METRICS_SCRAPE_TOKEN is wired; routes
+    // emit counters into it + /metrics returns the rendered text.
+    // Without the token, the registry is omitted and counter call
+    // sites silently no-op (the optional chain `metrics?.inc(...)`
+    // matters here).
+    ...(config.metricsScrapeToken !== undefined
+      ? {
+          metricsRegistry: (() => {
+            const r = new MetricsRegistry();
+            r.registerCounter(
+              METRIC_NAMES.pairModeTransitionTotal,
+              'Pair-mode state-machine transitions, labelled by from + to states.',
+              ['from', 'to'],
+            );
+            r.registerCounter(
+              METRIC_NAMES.bundledLlmRequestTotal,
+              'Bundled-LLM decompose requests, labelled by outcome.',
+              ['outcome'],
+            );
+            r.registerCounter(
+              METRIC_NAMES.bundledLlmErrorTotal,
+              'Bundled-LLM decompose errors, labelled by error kind.',
+              ['kind'],
+            );
+            return r;
+          })(),
+          metricsScrapeToken: config.metricsScrapeToken,
+        }
+      : {}),
     // Arc 2 sub-slice 8.4 (v2-#8) — gui_control_key encryption.
     // Shares MFA_ENCRYPTION_KEY per Q2=C pattern; route gates on
     // this being present in AppDeps.
