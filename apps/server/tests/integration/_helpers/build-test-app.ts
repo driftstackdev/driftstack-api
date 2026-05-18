@@ -23,6 +23,7 @@ import { DeterministicAgentDecomposer } from '../../../src/services/agent-decomp
 import { StubAgentExecutor } from '../../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.js';
 import { BundledLlmService, InMemoryBundledLlmRepo } from '../../../src/services/bundled-llm.js';
+import { AgentSessionEventBus } from '../../../src/services/agent-session-event-bus.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
@@ -630,6 +631,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   }
   const bundledLlmService = new BundledLlmService(bundledLlmRepo);
 
+  // Arc 2 sub-slice 8.3 (v2-#8) — transcript event bus. Always wired
+  // so AgentRuntime can publish; route registration is gated below
+  // on enableAgentRuntime being on.
+  const agentSessionEventBus = new AgentSessionEventBus();
+
   // v2-#18 — capturing usage recorder for the AgentRuntime end-to-end
   // smoke. Always declared (even when captureAgentDecomposerUsage is
   // off) so the fixture shape is stable.
@@ -1070,6 +1076,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
             executor: new StubAgentExecutor(),
             sessions: agentSessionsRepo,
             archetype: 'iphone16pro_ios18_7_safari26_4',
+            eventBus: agentSessionEventBus,
             ...(opts.captureAgentDecomposerUsage === true
               ? {
                   usageRecorder: {
@@ -1081,7 +1088,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
                 }
               : {}),
           });
-          return { agentRuntime, agentSessionsRepo };
+          return { agentRuntime, agentSessionsRepo, agentSessionEventBus };
         })()
       : {}),
     // Arc 1 sub-slice 6.5 (v2-#6) — bundled-LLM service is always

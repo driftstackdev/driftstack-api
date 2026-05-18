@@ -62,6 +62,7 @@ import { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import { DrizzleBYOKAnthropicRepo } from '../db/byok-anthropic-repo.js';
 import { BundledLlmService } from '../services/bundled-llm.js';
 import { DrizzleBundledLlmRepo } from '../db/bundled-llm-repo.js';
+import { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
 import { SocksProxyBackend } from '../services/proxy-backends/socks5.js';
 import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
 import { DrizzleAgentSessionsRepo } from '../db/agent-sessions-repo.js';
@@ -557,12 +558,16 @@ export async function createProductionDeps(
     logger,
     accountAuditService,
   );
+  // Arc 2 sub-slice 8.3 (v2-#8) — in-process transcript event bus.
+  // Single-replica today; future redis-backed swap drops in here.
+  const agentSessionEventBus = new AgentSessionEventBus();
   const agentRuntime = new AgentRuntime({
     decomposer: agentDecomposer,
     executor: agentExecutor,
     sessions: agentSessionsRepo,
     archetype: 'iphone16pro_ios18_7_safari26_4',
     usageRecorder: agentDecomposerUsageRecorder,
+    eventBus: agentSessionEventBus,
   });
   // Q.1.c — per-session BYOK key cache. Pure in-memory; wired
   // unconditionally so the route can stash decrypted plaintexts
@@ -816,6 +821,10 @@ export async function createProductionDeps(
     agentSessionsRepo,
     byokKeyCache,
     agentDecomposerKind,
+    // Arc 2 sub-slice 8.3 (v2-#8) — SSE transcript bus wired
+    // unconditionally; route registration is gated on agentRuntime
+    // being wired (same activation pattern as the rest).
+    agentSessionEventBus,
     // Q.1.d — staging opts in to consuming the deployment fallback
     // for unconfigured customers; prod (default false) hard-502s
     // ByokAnthropicRequired per the BYOK-for-v1.0 Tier-3 verdict.

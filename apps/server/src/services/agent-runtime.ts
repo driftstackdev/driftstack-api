@@ -15,6 +15,7 @@ import type { AgentDecomposer, DecomposeResult, DecomposeUsage } from './agent-d
 import type { AgentExecutor, ExecutorRunResult } from './agent-executor.js';
 import { runResultToTranscriptEntry } from './agent-executor.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from './agent-sessions.js';
+import type { AgentSessionEventBus } from './agent-session-event-bus.js';
 
 export interface RunTurnArgs {
   agentSessionId: string;
@@ -109,6 +110,14 @@ export interface AgentRuntimeDeps {
    *  persists a usage_records row per decompose() call that returns
    *  a `usage` block. */
   usageRecorder?: AgentDecomposerUsageRecorder;
+  /**
+   * Arc 2 sub-slice 8.3 (v2-#8) — optional transcript event bus.
+   * When wired, AgentRuntime publishes every transcript-append to
+   * the bus so the SSE endpoint can stream live turns to dashboard
+   * subscribers. Omitting the bus is a silent no-op (the runtime
+   * still writes to the repo).
+   */
+  eventBus?: AgentSessionEventBus;
 }
 
 export class AgentRuntime {
@@ -133,12 +142,21 @@ export class AgentRuntime {
 
     // Append the user turn FIRST so the decomposer sees its own
     // prior plans + the new user task in the history.
-    await this.deps.sessions.appendTranscript(session.id, {
+    const userEntry = {
       at,
-      role: 'user',
+      role: 'user' as const,
       body: args.userMessage,
-    });
+    };
+    await this.deps.sessions.appendTranscript(session.id, userEntry);
     const sessionWithUser = (await this.deps.sessions.get(session.id))!;
+    // Arc 2 sub-slice 8.3 (v2-#8) — publish the user-turn entry to
+    // the SSE event bus. Index = length-1 of the post-append
+    // transcript so subscribers can resume via Last-Event-ID.
+    this.deps.eventBus?.publish({
+      agentSessionId: session.id,
+      index: sessionWithUser.transcript.length - 1,
+      entry: userEntry,
+    });
 
     // Q.1.b — hybrid error classification per founder verdict
     // 2026-05-17. Transient operational failures (5xx after the
@@ -224,19 +242,31 @@ export class AgentRuntime {
     }
 
     if (decomposed.kind === 'refuse') {
-      const updated = await this.deps.sessions.appendTranscript(session.id, {
+      const refuseEntry = {
         at,
-        role: 'agent',
+        role: 'agent' as const,
         body: `refused: ${decomposed.refuseReason}`,
+      };
+      const updated = await this.deps.sessions.appendTranscript(session.id, refuseEntry);
+      this.deps.eventBus?.publish({
+        agentSessionId: session.id,
+        index: updated.transcript.length - 1,
+        entry: refuseEntry,
       });
       return { kind: 'refuse', decomposer: decomposed, session: updated };
     }
 
     if (decomposed.kind === 'clarify') {
-      const updated = await this.deps.sessions.appendTranscript(session.id, {
+      const clarifyEntry = {
         at,
-        role: 'agent',
+        role: 'agent' as const,
         body: `clarify: ${decomposed.clarifyingQuestion}`,
+      };
+      const updated = await this.deps.sessions.appendTranscript(session.id, clarifyEntry);
+      this.deps.eventBus?.publish({
+        agentSessionId: session.id,
+        index: updated.transcript.length - 1,
+        entry: clarifyEntry,
       });
       return { kind: 'clarify', decomposer: decomposed, session: updated };
     }
@@ -259,9 +289,15 @@ export class AgentRuntime {
     // compatible: existing consumers reading `body` keep working;
     // recipe consumers iterate `intents` instead.
     const transcriptEntry = runResultToTranscriptEntry(executorResult, at);
-    const updated = await this.deps.sessions.appendTranscript(session.id, {
+    const planEntry = {
       ...transcriptEntry,
       intents: decomposed.intents,
+    };
+    const updated = await this.deps.sessions.appendTranscript(session.id, planEntry);
+    this.deps.eventBus?.publish({
+      agentSessionId: session.id,
+      index: updated.transcript.length - 1,
+      entry: planEntry,
     });
 
     return {

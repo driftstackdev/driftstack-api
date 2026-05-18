@@ -68,6 +68,7 @@ import type { R2 } from './r2.js';
 import type { MfaService } from '../services/mfa.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { BundledLlmService } from '../services/bundled-llm.js';
+import type { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
 import requestIdPlugin from '../middleware/request-id.js';
@@ -328,6 +329,12 @@ export interface AppDeps {
    * sub-slice 6.5.
    */
   bundledLlmService?: BundledLlmService;
+  /**
+   * Arc 2 sub-slice 8.3 (v2-#8) — pub/sub bus for the SSE transcript
+   * stream. AgentRuntime publishes every transcript append; the SSE
+   * route subscribes per-sessionId and forwards to the client.
+   */
+  agentSessionEventBus?: AgentSessionEventBus;
   /**
    * AI-B4 — write-only recipe library (orchestrator handoff #3 Q.5).
    * POST /v1/recipes snapshots a finished agent_session's
@@ -873,6 +880,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // resolve, route falls through to the deployment fallback key.
       ...(deps.bundledLlmService !== undefined
         ? { bundledLlmService: deps.bundledLlmService }
+        : {}),
+      // Arc 2 sub-slice 8.3 (v2-#8) — SSE transcript bus. When
+      // wired, GET /v1/agent-sessions/:id/transcript registers as
+      // an event stream.
+      ...(deps.agentSessionEventBus !== undefined
+        ? { transcriptEventBus: deps.agentSessionEventBus }
         : {}),
     });
   } else {

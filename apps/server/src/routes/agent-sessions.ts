@@ -24,6 +24,7 @@ import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-se
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
 import type { BundledLlmService } from '../services/bundled-llm.js';
+import type { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
 import {
   BundledLlmBudgetExhaustedError,
   BundledLlmConsentRequiredError,
@@ -124,6 +125,15 @@ export interface AgentSessionsRoutesDeps {
    * Omit to keep the v2-#21 / Q.1.d posture unchanged.
    */
   bundledLlmService?: BundledLlmService;
+  /**
+   * Arc 2 sub-slice 8.3 (v2-#8) — SSE transcript bus. When wired,
+   * GET /v1/agent-sessions/:id/transcript registers as an SSE stream;
+   * AgentRuntime publishes every transcript-append. Omit to skip
+   * registration (route just won't exist).
+   */
+  transcriptEventBus?: AgentSessionEventBus;
+  /** Heartbeat interval for the SSE stream (ms). Defaults to 30s. */
+  transcriptHeartbeatMs?: number;
 }
 
 export function registerAgentSessionsRoutes(
@@ -139,6 +149,8 @@ export function registerAgentSessionsRoutes(
     deploymentFallbackKey,
     allowFallbackForUnconfiguredCustomers,
     bundledLlmService,
+    transcriptEventBus,
+    transcriptHeartbeatMs = 30_000,
   } = deps;
 
   app.post(
@@ -218,6 +230,79 @@ export function registerAgentSessionsRoutes(
       return publicAgentSession(rec);
     },
   );
+
+  // Arc 2 sub-slice 8.3 (v2-#8) — SSE transcript stream. Registers
+  // only when the event bus is wired (the live-stream functionality
+  // is opt-in deploy-side). Last-Event-ID resumes from a prior
+  // disconnect: client sends the last `index` it saw; server replays
+  // every entry with index > last-id, then live-streams new appends.
+  if (transcriptEventBus !== undefined) {
+    app.get<{ Params: { id: string } }>(
+      '/v1/agent-sessions/:id/transcript',
+      { preHandler: [app.requireAuth, app.rateLimit('global')] },
+      async (req, reply) => {
+        const ctx = requireCtx(req);
+        const session = await sessions.get(req.params.id);
+        if (session === null || session.accountId !== ctx.account.id) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+        const lastEventIdHeader = req.headers['last-event-id'];
+        const lastEventId =
+          typeof lastEventIdHeader === 'string' && lastEventIdHeader.length > 0
+            ? Number.parseInt(lastEventIdHeader, 10)
+            : -1;
+        const resumeFrom = Number.isFinite(lastEventId) ? lastEventId : -1;
+
+        reply.raw.writeHead(200, {
+          'content-type': 'text/event-stream; charset=utf-8',
+          'cache-control': 'no-cache, no-transform',
+          connection: 'keep-alive',
+          'x-accel-buffering': 'no',
+        });
+        reply.raw.write(': stream open\n\n');
+
+        // Replay every transcript entry past the resume point. The
+        // client's Last-Event-ID is exclusive (replay strictly after).
+        for (let i = resumeFrom + 1; i < session.transcript.length; i += 1) {
+          const entry = session.transcript[i];
+          if (entry === undefined) continue;
+          reply.raw.write(`id: ${i.toString()}\n`);
+          reply.raw.write('event: transcript.entry\n');
+          reply.raw.write(`data: ${JSON.stringify({ index: i, entry })}\n\n`);
+        }
+
+        const liveSent = new Set<number>();
+        const unsubscribe = transcriptEventBus.subscribe(req.params.id, (event) => {
+          if (event.index <= resumeFrom) return;
+          if (liveSent.has(event.index)) return;
+          // Skip indices the replay loop already wrote (avoid dupes
+          // on the connect-then-publish race; both write the same
+          // {index, entry} payload so a downstream dedupe IS safe,
+          // but we elide here to keep the stream tight).
+          if (event.index < session.transcript.length) return;
+          liveSent.add(event.index);
+          reply.raw.write(`id: ${event.index.toString()}\n`);
+          reply.raw.write('event: transcript.entry\n');
+          reply.raw.write(
+            `data: ${JSON.stringify({ index: event.index, entry: event.entry })}\n\n`,
+          );
+        });
+        const heartbeat = setInterval(() => {
+          reply.raw.write(`: heartbeat ${new Date().toISOString()}\n\n`);
+        }, transcriptHeartbeatMs);
+        heartbeat.unref();
+
+        const cleanup = (): void => {
+          clearInterval(heartbeat);
+          unsubscribe();
+          reply.raw.end();
+        };
+        req.raw.on('close', cleanup);
+        req.raw.on('error', cleanup);
+        reply.hijack();
+      },
+    );
+  }
 
   app.post<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id/message',
