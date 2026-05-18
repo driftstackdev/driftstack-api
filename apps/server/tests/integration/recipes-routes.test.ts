@@ -157,3 +157,30 @@ describe('AI-B4 POST /v1/recipes — wired', () => {
     expect(res.statusCode).toBe(401);
   });
 });
+
+// Arc 4 Wave 2.B sub-slice 8.20.l (v2-#8) — activation gate posture
+// pin for recipes. The route requires BOTH recipesRepo +
+// agentSessionsRepo wired in AppDeps; the test fixture wires
+// recipesRepo unconditionally but agentSessionsRepo only when
+// enableAgentRuntime: true. Without enableAgentRuntime the route
+// MUST surface the 503 stub so the SDK + dashboard get a machine-
+// readable "not yet enabled" signal vs a generic 404.
+describe('AI-B4 POST /v1/recipes — disabled stub (no agentSessionsRepo)', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('POST → 503 FeatureUnavailable when enableAgentRuntime is off', async () => {
+    fx = await buildTestApp(); // no enableAgentRuntime
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/recipes',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { agent_session_id: 'agt_anything', label: 'x' },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json<{ type: string }>().type).toMatch(/feature-unavailable/);
+  });
+});
