@@ -768,9 +768,20 @@ export function registerAgentSessionsRoutes(
       // ByokAnthropicRequiredError so the customer sees the
       // problem-type that points them at PUT /byok-anthropic-key.
       // NEVER logged; the key plaintext is held in-memory only.
+      // Normalise empty-string to undefined. A request with the
+      // header present but empty (e.g. `x-byok-anthropic-api-key:`)
+      // would otherwise:
+      //   1. Skip the bundled-LLM fallback (`headerByokKey === ""` is
+      //      not `=== undefined`, so the fallback branch is skipped).
+      //   2. Pass `""` downstream to Anthropic, which 401s with a
+      //      cryptic "invalid API key" error far from the cause.
+      //   3. Mark the cost-tracking row as keySource='header' even
+      //      though no real header value was provided.
+      // Treating empty as absent is the only safe interpretation.
+      const rawHeaderByokKey = req.headers['x-byok-anthropic-api-key'];
       const headerByokKey =
-        typeof req.headers['x-byok-anthropic-api-key'] === 'string'
-          ? req.headers['x-byok-anthropic-api-key']
+        typeof rawHeaderByokKey === 'string' && rawHeaderByokKey.length > 0
+          ? rawHeaderByokKey
           : undefined;
       const cachedByokKey = byokKeyCache?.get(req.params.id);
       let bundledLlmKey: string | undefined;

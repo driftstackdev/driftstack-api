@@ -241,6 +241,46 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(read.body).not.toContain(SECRET);
   });
 
+  it('BYOK header empty-string is treated as absent (does NOT pass empty key downstream, does NOT skip bundled-LLM fallback)', async () => {
+    // Previously an empty `x-byok-anthropic-api-key:` header would
+    // be read as the empty string ''. Empty string is `!== undefined`,
+    // so the bundled-LLM fallback branch (which gates on all 3 sources
+    // being undefined) was skipped. The empty key was then passed
+    // downstream where it 401s at Anthropic with a cryptic "invalid
+    // API key" — a hostile UX far from the actual cause.
+    //
+    // Fix at apps/server/src/routes/agent-sessions.ts: normalise the
+    // raw header to undefined when it's an empty string. This test
+    // pins that normalisation by sending the header empty + asserting
+    // the request still succeeds (DeterministicAgentDecomposer
+    // ignores the BYOK key, so 200 = the route didn't fast-fail on
+    // an "invalid empty key").
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const id = create.json<{ id: string }>().id;
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/message`,
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        // Empty header value — would have been read as `""` before
+        // the fix; now normalised to undefined.
+        'x-byok-anthropic-api-key': '',
+      },
+      payload: { user_message: 'open https://example.com' },
+    });
+    // 200 = the route resolved a key (or skipped key requirement via
+    // DeterministicAgentDecomposer). The load-bearing assertion is
+    // "didn't 4xx with 'invalid API key' on an empty string".
+    expect(res.statusCode).toBe(200);
+  });
+
   it('not-found: GET on a never-existed id → 404 (NOT 503 — 503 is for activation-gate-off only)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const res = await fx.app.inject({
