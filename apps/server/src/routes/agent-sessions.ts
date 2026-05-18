@@ -37,6 +37,9 @@ import type { AccountAuditService } from '../services/account-audit.js';
 import type { MetricsRegistry } from '../services/metrics-registry.js';
 import { METRIC_NAMES } from '../services/metrics-registry.js';
 import type { PairModeHeartbeatTracker } from '../services/agent-pair-mode-heartbeat.js';
+import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
+import { mintLivekitToken } from '../lib/livekit-token.js';
+import { decryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
 import {
   decryptGuiControlKey,
   encryptGuiControlKey,
@@ -95,10 +98,28 @@ interface PublicAgentSession {
   mode: 'manual' | 'ai' | 'pair';
   created_at: string;
   updated_at: string;
+  // LK.4 — auto-populated on session-create when a Mac with LiveKit
+  // credentials is available. Optional so older SDKs ignore it and
+  // pre-LK-Mac deployments skip the field entirely.
+  livekit?: PublicLivekitInfo;
 }
 
-function publicAgentSession(rec: AgentSessionRecord): PublicAgentSession {
-  return {
+/** LK.4 — LiveKit join info auto-populated on session-create + the
+ *  /livekit-token endpoint's response shape. Wire-identical so SDK
+ *  consumers can reuse the same type for both surfaces. */
+export interface PublicLivekitInfo {
+  ws_url: string;
+  room: string;
+  token: string;
+  participant_identity: string;
+  expires_at: string;
+}
+
+function publicAgentSession(
+  rec: AgentSessionRecord,
+  livekit?: PublicLivekitInfo,
+): PublicAgentSession {
+  const base: PublicAgentSession = {
     id: rec.id,
     account_id: rec.accountId,
     driftstack_session_id: rec.driftstackSessionId,
@@ -113,6 +134,7 @@ function publicAgentSession(rec: AgentSessionRecord): PublicAgentSession {
     created_at: rec.createdAt.toISOString(),
     updated_at: rec.updatedAt.toISOString(),
   };
+  return livekit !== undefined ? { ...base, livekit } : base;
 }
 
 export interface AgentSessionsRoutesDeps {
@@ -211,6 +233,18 @@ export interface AgentSessionsRoutesDeps {
    * pair-mode session as never-heartbeated → no transitions fire).
    */
   pairModeHeartbeatTracker?: PairModeHeartbeatTracker;
+  /**
+   * LK.4 — when wired together, the session-create handler auto-
+   * mints a LiveKit token + populates the `livekit` field on the 201
+   * response (and on the idempotency-replay path). When omitted,
+   * the field is absent — clients fall back to calling
+   * POST /v1/agent-sessions/:id/livekit-token (LK.3) explicitly.
+   *
+   * Both must be wired together: the repo holds the per-Mac api_key
+   * + encrypted secret, and the encryption key decrypts the secret.
+   */
+  fleetNodesRepo?: DrizzleFleetNodesRepo;
+  livekitSecretEncryptionKey?: string;
 }
 
 export function registerAgentSessionsRoutes(
@@ -235,7 +269,61 @@ export function registerAgentSessionsRoutes(
     accountAudit,
     metrics,
     pairModeHeartbeatTracker,
+    fleetNodesRepo,
+    livekitSecretEncryptionKey,
   } = deps;
+
+  /** LK.4 — auto-mint a LiveKit token for the just-created (or
+   *  replayed) agent session. Returns undefined when:
+   *   - the fleet repo or encryption key isn't wired
+   *   - no Mac has registered LiveKit credentials yet
+   *   - the Mac's secret can't be decrypted (key-rotation drift)
+   *  In every "undefined" case the session-create response simply
+   *  omits the `livekit` field — clients fall back to calling
+   *  LK.3 (POST /v1/agent-sessions/:id/livekit-token) explicitly.
+   *  Best-effort: never fails the session-create call. */
+  async function maybeMintLivekit(
+    sessionId: string,
+    accountId: string,
+  ): Promise<PublicLivekitInfo | undefined> {
+    if (fleetNodesRepo === undefined || livekitSecretEncryptionKey === undefined) {
+      return undefined;
+    }
+    try {
+      const mac = await fleetNodesRepo.findAnyWithLivekit();
+      if (mac === null || mac.livekit === null) return undefined;
+      const apiSecret = decryptLivekitSecret(
+        mac.livekit.apiSecretCiphertextBase64,
+        livekitSecretEncryptionKey,
+      );
+      const ttlSeconds = 24 * 60 * 60;
+      const nowMs = Date.now();
+      const token = mintLivekitToken({
+        apiKey: mac.livekit.apiKey,
+        apiSecret,
+        identity: `customer-${accountId}`,
+        ttlSeconds,
+        nowMs,
+        video: {
+          room: sessionId,
+          roomJoin: true,
+          canPublish: false,
+          canSubscribe: true,
+        },
+      });
+      return {
+        ws_url: mac.livekit.wsUrl,
+        room: sessionId,
+        token,
+        participant_identity: `customer-${accountId}`,
+        expires_at: new Date(nowMs + ttlSeconds * 1000).toISOString(),
+      };
+    } catch {
+      // Best-effort: any failure (decrypt error, repo error) drops
+      // to undefined so the session-create response still ships.
+      return undefined;
+    }
+  }
 
   app.post(
     '/v1/agent-sessions',
@@ -273,7 +361,8 @@ export function registerAgentSessionsRoutes(
             });
             if (stored !== null) byokKeyCache.set(existing.id, stored);
           }
-          return reply.code(201).send(publicAgentSession(existing));
+          const livekit = await maybeMintLivekit(existing.id, ctx.account.id);
+          return reply.code(201).send(publicAgentSession(existing, livekit));
         }
       }
       const created = await sessions.create({
@@ -301,7 +390,8 @@ export function registerAgentSessionsRoutes(
           byokKeyCache.set(created.id, stored);
         }
       }
-      return reply.code(201).send(publicAgentSession(created));
+      const livekit = await maybeMintLivekit(created.id, ctx.account.id);
+      return reply.code(201).send(publicAgentSession(created, livekit));
     },
   );
 

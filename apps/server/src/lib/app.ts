@@ -1021,6 +1021,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.pairModeHeartbeatTracker !== undefined
         ? { pairModeHeartbeatTracker: deps.pairModeHeartbeatTracker }
         : {}),
+      // LK.4 — auto-mint LiveKit token on session-create. Both deps
+      // must be present; absent either, the response just omits the
+      // `livekit` field and clients fall back to LK.3 explicitly.
+      ...(deps.drizzleFleetNodesRepo !== undefined
+        ? { fleetNodesRepo: deps.drizzleFleetNodesRepo }
+        : {}),
+      ...(deps.livekitSecretEncryptionKey !== undefined
+        ? { livekitSecretEncryptionKey: deps.livekitSecretEncryptionKey }
+        : {}),
     });
   } else {
     registerAgentSessionsDisabledRoutes(app);
