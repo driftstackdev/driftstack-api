@@ -155,7 +155,9 @@ you roll the new secret across your verifier infra.
   identity slots that survive across sessions.
 - [Agent sessions](/api/agent-sessions/) — natural-language
   decompose-and-execute on top of the regular driver surface;
-  AI / manual / pair modes and the live SSE transcript stream.
+  AI / manual / pair modes, live SSE transcript stream, and the
+  LiveKit-based live video subscription (auto-populated `livekit`
+  field on session-create or via the explicit token-mint endpoint).
 - [Bundled LLM](/api/bundled-llm/) and
   [BYOK Anthropic](/api/byok-anthropic/) — the two LLM rails
   agent sessions can use.
