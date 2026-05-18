@@ -315,6 +315,32 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(a.json<{ id: string }>().id).not.toBe(b.json<{ id: string }>().id);
   });
 
+  it('v2-#35 created_by_user_id surfaces on the read shape — NULL today (account-scoped auth) but the field is always present so dashboard UI can wire against a stable schema', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(create.statusCode).toBe(201);
+    const createBody = create.json<{ created_by_user_id: string | null }>();
+    expect(createBody).toHaveProperty('created_by_user_id');
+    // Account-scoped auth — no V-298 team-membership context yet, so
+    // the field stays null. Schema-stable presence is the point.
+    expect(createBody.created_by_user_id).toBeNull();
+
+    const id = create.json<{ id: string }>().id;
+    const read = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const readBody = read.json<{ created_by_user_id: string | null }>();
+    expect(readBody).toHaveProperty('created_by_user_id');
+    expect(readBody.created_by_user_id).toBeNull();
+  });
+
   it('v2-#19 closed_at: NULL while active; ISO timestamp set on DELETE → close', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({

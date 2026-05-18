@@ -31,6 +31,9 @@ type AgentSession struct {
 	// v2-#19 wall-clock ISO-8601 close timestamp; nil while active.
 	// Distinct from UpdatedAt which moves on every transcript append.
 	ClosedAt              *string `json:"closed_at"`
+	// v2-#35 team-RBAC attribution; nil when account-scoped auth
+	// can't resolve a specific user id.
+	CreatedByUserID       *string `json:"created_by_user_id"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
 }

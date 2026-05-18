@@ -22,6 +22,7 @@ SESSION_ENVELOPE = {
     "token_budget_remaining": 100_000,
     "transcript_length": 0,
     "closed_at": None,
+    "created_by_user_id": None,
     "created_at": "2026-05-16T00:00:00Z",
     "updated_at": "2026-05-16T00:00:00Z",
 }

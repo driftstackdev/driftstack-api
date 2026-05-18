@@ -29,6 +29,12 @@ export interface AgentSession {
    * transcript append. `null` while the session is active.
    */
   closed_at: string | null;
+  /**
+   * v2-#35 — team-RBAC attribution. `null` when the auth context is
+   * account-scoped (no specific team-member id resolvable). Populated
+   * once V-298 team-membership auth threads a resolved user id through.
+   */
+  created_by_user_id: string | null;
   created_at: string;
   updated_at: string;
 }

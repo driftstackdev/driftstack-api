@@ -59,6 +59,13 @@ interface PublicAgentSession {
   // v2-#19 — wall-clock close timestamp; distinct from updated_at
   // which moves on every transcript append. NULL while active.
   closed_at: string | null;
+  // v2-#35 — team-RBAC attribution. NULL when the auth context is
+  // account-scoped (no specific team-member id resolvable). Today
+  // always NULL for password / OAuth account-scoped sessions until
+  // V-298 team-membership auth lands; surfaced on the read shape now
+  // so the dashboard's "started by alice@" UI can wire against a
+  // stable field.
+  created_by_user_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -74,6 +81,7 @@ function publicAgentSession(rec: AgentSessionRecord): PublicAgentSession {
     token_budget_remaining: rec.tokenBudgetRemaining,
     transcript_length: rec.transcript.length,
     closed_at: rec.closedAt !== null ? rec.closedAt.toISOString() : null,
+    created_by_user_id: rec.createdByUserId,
     created_at: rec.createdAt.toISOString(),
     updated_at: rec.updatedAt.toISOString(),
   };
