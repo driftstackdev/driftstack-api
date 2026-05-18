@@ -10,23 +10,33 @@ A **session** is one running iPhone Safari instance on the modified WebKit fork.
 
 ## States
 
+The wire-level `session.status` enum has five values: `creating` / `ready` / `busy` / `destroyed` / `errored`.
+
 ```
               create
                 │
                 ▼
-            ┌───────┐    navigate / interact / wait      ┌────────┐
-            │ ready │───────────────────────────────────▶│ active │
-            └───────┘                                    └────────┘
-                                                              │
-                                                              │ destroy
-                                                              │ or idle ≥ idle_timeout
-                                                              ▼
-                                                        ┌──────────┐
-                                                        │ destroyed│
-                                                        └──────────┘
+            ┌──────────┐  (transient — server resolves        ┌───────┐
+            │ creating │───────────────────────────────────▶  │ ready │
+            └──────────┘   driver allocation + handshake)     └───────┘
+                                                                  │  ▲
+                                              navigate / interact │  │ ack / settle
+                                              / wait / capture    │  │
+                                                                  ▼  │
+                                                              ┌──────┐
+                                                              │ busy │
+                                                              └──────┘
+                                                                  │
+                                                                  │ destroy
+                                                                  │ OR idle ≥ idle_timeout
+                                                                  ▼
+                                                            ┌───────────┐
+                                                            │ destroyed │
+                                                            └───────────┘
+                                                            (or `errored` on driver failure)
 ```
 
-In practice you don't observe `ready` separately — the SDK's `sessions.create()` returns once the session is `active` and ready for the first method call.
+In practice you don't observe `creating` separately — the SDK's `sessions.create()` blocks until the server-side transition reaches `ready` (the driver is allocated and the harness is responding). Every method call flips the session into `busy` for the duration and back to `ready` on ack. `errored` is a terminal failure state mirroring `destroyed` but caused by a driver-side fault (not by an explicit destroy or idle timeout).
 
 ## Concurrency
 

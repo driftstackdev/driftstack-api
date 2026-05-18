@@ -47,24 +47,28 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     );
   });
 
-  it("CRITICAL ASCII state-diagram pinned — create→ready→active→destroyed transitions. The 4-state machine + 'destroy or idle ≥ idle_timeout' boundary annotation is the canonical V-105 visualization.", () => {
+  it('CRITICAL ASCII state-diagram pinned — creating→ready→busy→destroyed transitions matching the SessionStatus enum at packages/api-types/src/sessions.ts:15. The previous pin asserted a fictional `active` state — there is no `active` status in the wire-level SessionStatus enum (the values are creating/ready/busy/destroyed/errored). Customer code checking `session.status === "active"` would never match.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/create/);
-    expect(p).toMatch(/┌───────┐\s+navigate \/ interact \/ wait\s+┌────────┐/);
+    expect(p).toMatch(/│ creating │/);
     expect(p).toMatch(/│ ready │/);
-    expect(p).toMatch(/│ active │/);
-    expect(p).toMatch(/│ destroy/);
-    expect(p).toMatch(/│ or idle ≥ idle_timeout/);
-    expect(p).toMatch(/│ destroyed│/);
+    expect(p).toMatch(/│ busy │/);
+    expect(p).toMatch(/│ destroyed │/);
+    expect(p).toMatch(/│ OR idle ≥ idle_timeout/);
+    expect(p).toMatch(/`errored` on driver failure/);
+    // The fictional `active` state must NOT return in the diagram.
+    expect(p).not.toMatch(/│ active │/);
   });
 
-  it("CRITICAL ready-is-not-observed framing pinned. The 'In practice you don\\'t observe ready separately — the SDK\\'s sessions.create() returns once the session is active and ready for the first method call' wording explains the SDK-side state abstraction.", () => {
+  it("CRITICAL creating-is-not-observed framing pinned (replaces the fictional 'session is active' framing — the SessionStatus enum has no `active` value). The 'In practice you don\\'t observe creating separately — the SDK\\'s sessions.create() blocks until the server-side transition reaches ready' wording explains the SDK-side state abstraction.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /In practice you don't observe `ready` separately — the SDK's `sessions\.create\(\)` returns once the session is `active` and ready for the first method call\./,
+      /In practice you don't observe `creating` separately — the SDK's `sessions\.create\(\)` blocks until the server-side transition reaches `ready`/,
     );
+    // The previous fictional framing must NOT return.
+    expect(p).not.toMatch(/once the session is `active` and ready/);
   });
 
   it("CRITICAL Retry-After + idle-boundary-worst-case framing pinned. The '429 Too Many Requests on sessions.create(), with a Retry-After header indicating when capacity will free up (worst case = soonest tracked session\\'s idle-timeout boundary)' wording matches W761 retry-after framing.", () => {
