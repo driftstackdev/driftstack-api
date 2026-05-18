@@ -145,6 +145,25 @@ describe('W968 V-494 logger redaction cross-source invariant', () => {
     expect(p).toMatch(/censor: '\[redacted\]',/);
   });
 
+  // ─── Arc 7 obs.2 — v2-#8 BYOK + gui_control_key redact paths ─
+
+  it('CRITICAL Arc 7 obs.2 — BYOK per-request header redacted at req.headers["x-byok-anthropic-api-key"]. Drift to dropping would leak customer Anthropic keys in any future request-trace log.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/logger.ts'));
+    expect(p).toMatch(/'req\.headers\["x-byok-anthropic-api-key"\]',/);
+  });
+
+  it("CRITICAL Arc 7 obs.2 — BYOK PUT body field redacted at body.api_key. Drift to dropping would leak the customer's key in any request-body log line.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/logger.ts'));
+    expect(p).toMatch(/'body\.api_key',/);
+  });
+
+  it('CRITICAL Arc 7 obs.2 — v2-#8 sub-slice 8.4 gui_control_key plaintext redacted in snake_case + camelCase + body.* variants.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/logger.ts'));
+    expect(p).toMatch(/'gui_control_key',/);
+    expect(p).toMatch(/'guiControlKey',/);
+    expect(p).toMatch(/'body\.gui_control_key',/);
+  });
+
   // ─── pino config: base + timestamp + formatter ───────────────
 
   it("CRITICAL pino base config — { service: 'driftstack-api' } + timestamp pino.stdTimeFunctions.isoTime + formatters.level returns { level: label }. The service-base + ISO-timestamp + label-level shape is the structured-log canonical format.", () => {

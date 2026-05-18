@@ -27,6 +27,13 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
         'req.headers.cookie',
         'res.headers["set-cookie"]',
         'req.headers["stripe-signature"]',
+        // Arc 7 obs.2 — v2-#8 BYOK per-request header. Customers'
+        // Anthropic keys arrive in this header on agent-session
+        // message turns; MUST scrub even though the route never
+        // logs req.headers explicitly (defense-in-depth: a future
+        // refactor that adds a request-trace log would otherwise
+        // leak the key).
+        'req.headers["x-byok-anthropic-api-key"]',
         // Direct fields seen on objects logged inline
         'apiKey',
         'plaintext',
@@ -43,6 +50,19 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
         'body.recovery_codes',
         'body.signing_secret',
         'body.secret',
+        // Arc 7 obs.2 — v2-#8 BYOK PUT body field. The PUT
+        // /v1/account/me/byok-anthropic-key route accepts the key
+        // as { api_key: 'sk-ant-...' }. Same defense-in-depth as
+        // the header above.
+        'body.api_key',
+        // Arc 7 obs.2 — v2-#8 sub-slice 8.4 gui_control_key.
+        // Auto-minted per pair-mode session; surfaces in the
+        // response payload as the plaintext (shown once). If a
+        // future route adds the field on a request body too,
+        // these glob the camelCase + snake_case variants.
+        'gui_control_key',
+        'guiControlKey',
+        'body.gui_control_key',
         // Response-body fields surfaced on enrolment / mint paths
         'recovery_codes',
         'recoveryCodes',
