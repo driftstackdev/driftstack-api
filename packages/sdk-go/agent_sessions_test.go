@@ -252,3 +252,60 @@ func TestAgentSessions_Handback(t *testing.T) {
 		t.Errorf("unexpected pair_mode_state.kind: %v", out.PairModeState["kind"])
 	}
 }
+
+// LK.3 — POST /v1/agent-sessions/:id/livekit-token. Returns the
+// same LiveKitInfo shape that AgentSession.LiveKit carries.
+func TestAgentSessions_LivekitToken(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/agent-sessions/agt_1/livekit-token" || r.Method != "POST" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"ws_url": "wss://mac-009.driftstack.dev:8443",
+			"room": "agt_1",
+			"token": "eyJhbGciOiJIUzI1NiJ9.fake",
+			"participant_identity": "subscriber_acc_1",
+			"expires_at": "2026-05-19T00:00:00Z"
+		}`))
+	})
+	out, err := client.AgentSessions.LivekitToken(context.Background(), "agt_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.WSURL != "wss://mac-009.driftstack.dev:8443" {
+		t.Errorf("unexpected ws_url: %q", out.WSURL)
+	}
+	if out.Token != "eyJhbGciOiJIUzI1NiJ9.fake" {
+		t.Errorf("unexpected token: %q", out.Token)
+	}
+	if out.ExpiresAt != "2026-05-19T00:00:00Z" {
+		t.Errorf("unexpected expires_at: %q", out.ExpiresAt)
+	}
+}
+
+// LK.3 — URL-encodes the session id so ids with spaces don't
+// break route matching server-side. Matches the
+// TestAgentSessions_Get_URLEscapes pattern (url.PathEscape on
+// the id segment, then assert r.URL.EscapedPath()).
+func TestAgentSessions_LivekitToken_URLEscapes(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.EscapedPath() != "/v1/agent-sessions/agt%20xyz/livekit-token" {
+			t.Errorf("escaped path=%q", r.URL.EscapedPath())
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"ws_url": "wss://mac-010.driftstack.dev:8443",
+			"room": "agt xyz",
+			"token": "eyJhbGciOiJIUzI1NiJ9.fake",
+			"participant_identity": "subscriber_acc_2",
+			"expires_at": "2026-05-19T00:00:00Z"
+		}`))
+	})
+	_, err := client.AgentSessions.LivekitToken(context.Background(), "agt xyz")
+	if err != nil {
+		t.Fatal(err)
+	}
+}

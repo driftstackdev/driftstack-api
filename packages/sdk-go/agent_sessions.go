@@ -221,3 +221,28 @@ func (r *AgentSessionsResource) Handback(ctx context.Context, agentSessionID str
 	}
 	return &out, nil
 }
+
+// LivekitToken mints a fresh LiveKit JWT for the agent session's
+// video room. Use this when the auto-populated LiveKit field on
+// session-create is absent (pre-LK deployment) OR when the 24h
+// token TTL has expired. Returns the same 5-field LiveKitInfo
+// shape that AgentSession.LiveKit carries; one type, two paths.
+//
+// Errors (mapped to typed Driftstack errors):
+//   - 403 — session is closed; cannot mint
+//   - 404 — session unknown (or cross-account; existence not leaked)
+//   - 503 — no Mac registered LiveKit yet, OR the stored Mac secret
+//     can't be decrypted (operator action: re-run
+//     POST /v1/mac-nodes/register)
+func (r *AgentSessionsResource) LivekitToken(ctx context.Context, agentSessionID string) (*LiveKitInfo, error) {
+	var out LiveKitInfo
+	req := requestOptions{
+		method: "POST",
+		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/livekit-token",
+		out:    &out,
+	}
+	if err := r.client.do(ctx, req); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
