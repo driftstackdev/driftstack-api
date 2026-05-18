@@ -93,4 +93,51 @@ describe('LK.5 — LiveKitInfo cross-SDK parity', () => {
       expect(f, `field ${f} must be lowercase_snake_case`).toMatch(/^[a-z][a-z0-9_]*$/);
     }
   });
+
+  // LK.3 helper-method parity — each SDK ships a typed
+  // re-mint helper for POST /v1/agent-sessions/:id/livekit-token.
+  // Without these, customers fall back to raw HTTP calls when the
+  // 24h token expires.
+  it('TS SDK declares AgentSessionsResource.livekitToken returning LiveKitInfo', () => {
+    const tsResource = readFileSync(
+      resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/agent-sessions.ts'),
+      'utf8',
+    );
+    expect(tsResource).toMatch(/livekitToken\(id: string\): Promise<LiveKitInfo>/);
+    expect(tsResource).toMatch(
+      /\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/livekit-token/,
+    );
+  });
+
+  it('Go SDK declares (*AgentSessionsResource).LivekitToken returning *LiveKitInfo', () => {
+    const goResource = readFileSync(
+      resolve(REPO_ROOT, 'packages/sdk-go/agent_sessions.go'),
+      'utf8',
+    );
+    expect(goResource).toMatch(
+      /func \(r \*AgentSessionsResource\) LivekitToken\(ctx context\.Context, agentSessionID string\) \(\*LiveKitInfo, error\)/,
+    );
+    expect(goResource).toMatch(
+      /"\/v1\/agent-sessions\/" \+ url\.PathEscape\(agentSessionID\) \+ "\/livekit-token"/,
+    );
+  });
+
+  it('Python SDK declares AgentSessionsResource.livekit_token (sync + async)', () => {
+    const pyResource = readFileSync(
+      resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources/agent_sessions.py'),
+      'utf8',
+    );
+    // Sync helper.
+    expect(pyResource).toMatch(
+      /def livekit_token\(self, agent_session_id: str\) -> dict\[str, Any\]:/,
+    );
+    // Async helper.
+    expect(pyResource).toMatch(
+      /async def livekit_token\(self, agent_session_id: str\) -> dict\[str, Any\]:/,
+    );
+    // The path that each helper hits.
+    expect(pyResource).toMatch(
+      /f"\/v1\/agent-sessions\/\{quote\(agent_session_id, safe=''\)\}\/livekit-token"/,
+    );
+  });
 });
