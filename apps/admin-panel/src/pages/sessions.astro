@@ -237,7 +237,25 @@ const apiBaseUrl = resolveApiBaseUrl();
           (STATUS_BADGE[s.status] || '') +
           '">' +
           escapeHtml(s.status) +
-          '</span></td>' +
+          '</span>' +
+          // Arc 5 EGRESS eg.5.c — admin-panel proxy-warning badge.
+          // Same logic as customer-dashboard eg.5/5.b; admins
+          // inspecting sessions for support tickets need the same
+          // capability-warning indicator.
+          (() => {
+            const w =
+              s.egress_capabilities && Array.isArray(s.egress_capabilities.warnings)
+                ? s.egress_capabilities.warnings
+                : [];
+            return w.length > 0
+              ? ' <span class="ml-1 inline-flex rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700" title="' +
+                  escapeHtml(w.join(', ')) +
+                  '">⚠ proxy ' +
+                  w.length +
+                  '</span>'
+              : '';
+          })() +
+          '</td>' +
           '<td class="px-4 py-3 text-slate-600">' +
           escapeHtml(fmtIso(s.created_at)) +
           '</td>' +
