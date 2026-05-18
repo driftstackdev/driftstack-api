@@ -74,6 +74,15 @@ describe('W463.A apps/docs/src/data/nav.ts content parity', () => {
     );
   });
 
+  // Arc 4 Wave 2.B sub-slice 8.20.n / AI-B4 — extension entries for
+  // the v2-#8 agent-sessions surface + AI-B4 recipes surface. Pinned
+  // separately from the original 9-entry block so the heritage test
+  // stays untouched + the new entries get explicit drift coverage.
+  it('API reference section additions: /api/agent-sessions/ + /api/recipes/ after Sessions', () => {
+    expect(body).toMatch(/\{ href: '\/api\/agent-sessions\/', label: 'Agent sessions' \}/);
+    expect(body).toMatch(/\{ href: '\/api\/recipes\/', label: 'Recipes' \}/);
+  });
+
   it('Webhooks section: 3 entries (endpoints + events + replay) at section bottom', () => {
     expect(body).toMatch(
       /\{\s*\n?\s*label: 'Webhooks',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/webhooks\/endpoints\/', label: 'Endpoints \(CRUD \+ rotate \+ test\)' \},\s*\n?\s*\{ href: '\/webhooks\/events\/', label: 'Event catalog' \},\s*\n?\s*\{ href: '\/webhooks\/replay\/', label: 'Replay deliveries' \},/,

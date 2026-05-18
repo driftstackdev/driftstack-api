@@ -57,6 +57,8 @@ export const DOC_NAV: DocNavSection[] = [
       { href: '/api/audit-log/', label: 'Audit log' },
       { href: '/api/profiles/', label: 'Profiles' },
       { href: '/api/sessions/', label: 'Sessions' },
+      { href: '/api/agent-sessions/', label: 'Agent sessions' },
+      { href: '/api/recipes/', label: 'Recipes' },
     ],
   },
   {
