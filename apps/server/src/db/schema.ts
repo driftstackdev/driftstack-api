@@ -942,6 +942,18 @@ export const webhookEndpoints = pgTable(
     // = never sent. Job sets to now() when it fires the email; queries
     // skip rows whose reminder was sent in the last 7d.
     lastReminderSentAt: timestamp('last_reminder_sent_at', { withTimezone: true }),
+    // Arc 3 sub-slice 28.1 (v2-#28) — server-initiated 91-day auto-
+    // rotation grace window (Q2=B 7 days). Distinct from
+    // secretPrevExpiresAt which is the customer-initiated 24h
+    // dual-sign window. Both columns can be set simultaneously in
+    // theory; the v2-#20 worker reads secretPrevExpiresAt for the
+    // legacy path and sub-slice 28.3 reads this column for the
+    // force-rotation path.
+    graceWindowEndsAt: timestamp('grace_window_ends_at', { withTimezone: true }),
+    // Arc 3 sub-slice 28.1 (v2-#28) — stamped when the 91-day auto-
+    // rotation fired. Reset to NULL on the next customer-initiated
+    // rotation so the 91-day clock restarts cleanly.
+    forceRotatedAt: timestamp('force_rotated_at', { withTimezone: true }),
     events: webhookEventType('events').array().notNull(),
     description: text('description'),
     active: boolean('active').notNull().default(true),
