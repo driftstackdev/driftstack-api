@@ -1,5 +1,5 @@
 // W250.C — stability guard for SubscribableWebhookEventTypeSchema.
-// A downstream change that removed any of the five shipped events
+// A downstream change that removed any of the six shipped events
 // would silently break:
 //   - SDK webhook verifiers (TS/Python/Go)
 //   - /docs/webhooks event-type table
@@ -8,6 +8,10 @@
 //
 // This guard fails fast if any current event leaves the enum and
 // forces the change to land alongside SDK + doc updates.
+//
+// Six shipped: the original 5 (session.completed, session.failed,
+// quota.warning_80pct, quota.exceeded, api_key.revoked) plus the
+// Arc 5 EGRESS eg.7 addition session.egress_capability_changed.
 
 import { describe, expect, it } from 'vitest';
 import { SubscribableWebhookEventTypeSchema } from '@driftstack/api-types';
@@ -24,6 +28,9 @@ describe('W250.C SubscribableWebhookEventTypeSchema stability', () => {
       'quota.warning_80pct',
       'quota.exceeded',
       'api_key.revoked',
+      // Arc 5 EGRESS eg.7 — subscribable so customers can hook
+      // proxy-health visibility into their own observability.
+      'session.egress_capability_changed',
     ]) {
       expect(live.has(evt), `missing event ${evt}`).toBe(true);
     }
@@ -47,8 +54,9 @@ describe('W250.C SubscribableWebhookEventTypeSchema stability', () => {
   });
 
   it('exposes exactly the documented number of live events', () => {
-    // Five shipped today. Increment if/when the schema grows; this
-    // is intentionally tight so a silent enum addition fails CI.
-    expect(live.size).toBe(5);
+    // Six shipped today (5 original + Arc 5 EGRESS eg.7). Increment
+    // if/when the schema grows; this is intentionally tight so a
+    // silent enum addition fails CI.
+    expect(live.size).toBe(6);
   });
 });
