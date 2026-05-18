@@ -40,7 +40,7 @@ describe('W760 docs /api index page content parity', () => {
     expect(p).toMatch(/cycles per the policy below\./);
   });
 
-  it('CRITICAL 14-section sub-TOC pinned. Drift to dropping any link would hide that API surface. Order: auth/account/api-keys/sessions/agent-sessions/recipes/profiles/usage/audit-log/mfa/billing/team/versioning + 2 webhook subsections.', () => {
+  it('CRITICAL 20-section sub-TOC pinned. Drift to dropping any link would hide that API surface. Order: auth/account/api-keys/sessions/agent-sessions/recipes/bundled-llm/byok-anthropic/profiles/usage/audit-log/mfa/billing/team/status/oauth/versioning + 3 webhook subsections (endpoints/events/replay).', () => {
     const p = read(PAGE);
 
     for (const href of [
@@ -50,13 +50,22 @@ describe('W760 docs /api index page content parity', () => {
       '/api/sessions/',
       '/api/agent-sessions/',
       '/api/recipes/',
+      // v2-#6/#8 — bundled-LLM + BYOK Anthropic API surfaces.
+      '/api/bundled-llm/',
+      '/api/byok-anthropic/',
       '/api/profiles/',
       '/api/usage/',
       '/api/audit-log/',
       '/api/mfa/',
       '/api/billing/',
       '/api/team/',
+      // V-295a status API + V-667 OAuth 2.0 third-party client surface.
+      '/api/status/',
+      '/api/oauth/',
       '/api/versioning/',
+      // 3 webhook subsections: endpoints (CRUD), events (catalog),
+      // replay (per-delivery replay endpoint).
+      '/webhooks/endpoints/',
       '/webhooks/events/',
       '/webhooks/replay/',
     ]) {
