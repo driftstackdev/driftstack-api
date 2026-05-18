@@ -118,6 +118,8 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           <ul
             data-list="transcript"
             class="mt-4 max-h-96 space-y-2 overflow-y-auto rounded border border-white/10 bg-surface-base p-3"
+            aria-live="polite"
+            aria-label="Agent session transcript"
           >
             <li class="text-xs italic text-ink-muted">Transcript will appear here…</li>
           </ul>
@@ -128,6 +130,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
               type="text"
               name="user_message"
               placeholder="Tell the AI what to do…"
+              aria-label="Message to the AI agent"
               class="flex-1 rounded-md border border-white/10 bg-surface-base px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
             />
             <button

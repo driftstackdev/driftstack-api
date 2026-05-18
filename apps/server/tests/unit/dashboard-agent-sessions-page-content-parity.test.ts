@@ -167,4 +167,19 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
     expect(body).toMatch(/'Takeover failed — network error\.'/);
     expect(body).toMatch(/'Handback failed — network error\.'/);
   });
+
+  // A11y pins — see commit 48ae3eb8 / docs(reference) trail. The
+  // transcript list is a streaming live region; the message input
+  // has no visible label, so an aria-label substitutes. Both must
+  // stay in place — removing them would silently regress screen
+  // reader UX without breaking visual layout.
+  it('transcript list has aria-live="polite" + aria-label (streaming live region)', () => {
+    expect(body).toMatch(
+      /data-list="transcript"[\s\S]{0,200}aria-live="polite"[\s\S]{0,200}aria-label="Agent session transcript"/,
+    );
+  });
+
+  it('message-composer input has an aria-label (no visible <label>, placeholder is not a label)', () => {
+    expect(body).toMatch(/name="user_message"[\s\S]{0,200}aria-label="Message to the AI agent"/);
+  });
 });
