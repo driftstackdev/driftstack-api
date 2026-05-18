@@ -138,6 +138,9 @@ prompt the customer first.
 - [Idempotency keys](/reference/idempotency) — when retrying a POST
   that creates a resource, send an `Idempotency-Key` header so the
   retry replays the original response instead of minting a duplicate.
+- [Pagination](/reference/pagination) — cursor-based pagination
+  contract shared across every list endpoint; request shape,
+  opaque-cursor semantics, and TS/Python/Go drive-to-completion loops.
 - [Prometheus metrics](/reference/metrics) — operators integrating
   Driftstack into their own observability stack: counter catalogue,
   bearer-token gate, suggested alert thresholds.

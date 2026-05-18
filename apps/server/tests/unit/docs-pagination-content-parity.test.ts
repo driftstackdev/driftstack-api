@@ -1,0 +1,83 @@
+// Arc 6 docs.pagination — `apps/docs/src/pages/reference/pagination.md`
+// content parity. Pins the canonical cursor contract so a future
+// refactor that introduces a different pagination shape on any
+// endpoint breaks CI loudly.
+
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/pagination.md');
+
+describe('Arc 6 docs.pagination — pagination reference parity', () => {
+  it('page exists at the expected path', () => {
+    expect(existsSync(PAGE)).toBe(true);
+  });
+
+  const body = readFileSync(PAGE, 'utf8');
+
+  it('frontmatter declares layout + title + description', () => {
+    expect(body).toMatch(/layout: \.\.\/\.\.\/layouts\/DocLayout\.astro/);
+    expect(body).toMatch(/title: Pagination/);
+    expect(body).toMatch(/description: .*cursor-based pagination/i);
+  });
+
+  it('documents the request-shape query parameters (limit + cursor)', () => {
+    expect(body).toMatch(/`limit`/);
+    expect(body).toMatch(/`cursor`/);
+  });
+
+  it('documents the response-shape `data` + `next_cursor` (with null on last page)', () => {
+    expect(body).toMatch(/"data":/);
+    expect(body).toMatch(/"next_cursor":/);
+    expect(body).toMatch(/`null` when the page is the last/);
+  });
+
+  it('declares cursor opacity (do not parse)', () => {
+    expect(body).toMatch(/do not (try to )?parse/i);
+    expect(body).toMatch(/opaque/);
+  });
+
+  it('canonical drive-to-completion loop in all 3 SDKs (TS / Python / Go)', () => {
+    expect(body).toMatch(/### TypeScript/);
+    expect(body).toMatch(/### Python/);
+    expect(body).toMatch(/### Go/);
+    // Each must check next_cursor for null and break.
+    expect(body).toMatch(/if \(!page\.next_cursor\) break;/);
+    expect(body).toMatch(/if not page\.next_cursor:/);
+    expect(body).toMatch(/page\.NextCursor == ""/);
+  });
+
+  it('rejects offset/page-number pagination explicitly (stability rationale)', () => {
+    expect(body).toMatch(/Offset \/ page-number pagination is not supported/i);
+    expect(body).toMatch(/stable under concurrent inserts/i);
+  });
+
+  it('documents stability semantics under inserts + deletes', () => {
+    expect(body).toMatch(/Stability under writes/);
+    expect(body).toMatch(/Stability under deletes/);
+  });
+
+  it('documents the anti-patterns customers commonly fall into', () => {
+    expect(body).toMatch(/Anti-patterns/);
+    expect(body).toMatch(/Don't decode the cursor/);
+    expect(body).toMatch(/Don't loop without an exit condition/);
+  });
+
+  it('linked from reference/errors.md cross-references section', () => {
+    const errors = readFileSync(
+      resolve(REPO_ROOT, 'apps/docs/src/pages/reference/errors.md'),
+      'utf8',
+    );
+    expect(errors).toMatch(/\/reference\/pagination/);
+  });
+
+  it('linked from docs landing (index.astro)', () => {
+    const idx = readFileSync(resolve(REPO_ROOT, 'apps/docs/src/pages/index.astro'), 'utf8');
+    expect(idx).toMatch(/\/reference\/pagination\//);
+    expect(idx).toMatch(/label: 'Pagination'/);
+  });
+});
