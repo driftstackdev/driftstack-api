@@ -393,6 +393,13 @@
       "when": 1778176805000,
       "tag": "0055_webhook_event_type_egress_capability_changed",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1778176806000,
+      "tag": "0056_fleet_nodes_livekit_credentials",
+      "breakpoints": true
     }
   ]
 }

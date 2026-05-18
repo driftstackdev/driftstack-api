@@ -1828,6 +1828,15 @@ export const fleetNodes = pgTable(
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     revocationReason: text('revocation_reason'),
+    // LK.1 — per-Mac LiveKit credentials. All-or-none invariant
+    // enforced by the migration's fleet_nodes_livekit_all_or_none
+    // CHECK constraint. api_secret stored as AES-256-GCM ciphertext
+    // under MFA_ENCRYPTION_KEY (same envelope as BYOK Anthropic +
+    // gui_control_key); plaintext is never persisted.
+    livekitApiKey: text('livekit_api_key'),
+    livekitApiSecretCiphertext: text('livekit_api_secret_ciphertext'),
+    livekitWsUrl: text('livekit_ws_url'),
+    livekitRegisteredAt: timestamp('livekit_registered_at', { withTimezone: true }),
   },
   (t) => [
     uniqueIndex('fleet_nodes_public_key_unique').on(t.publicKeyBase64Url),
@@ -1839,6 +1848,14 @@ export const fleetNodes = pgTable(
     index('fleet_nodes_last_seen_at_idx')
       .on(t.lastSeenAt)
       .where(sql`${t.revokedAt} IS NULL`),
+    // LK.1 — scheduler-side hot read for the JWT mint path: any
+    // non-revoked Mac in a given region with LiveKit credentials
+    // registered. The "with livekit" filter is what keeps Macs
+    // that haven't run the LK.2 register endpoint yet out of the
+    // JWT mint candidate pool.
+    index('fleet_nodes_livekit_registered_idx')
+      .on(t.region)
+      .where(sql`${t.revokedAt} IS NULL AND ${t.livekitApiKey} IS NOT NULL`),
   ],
 );
 
