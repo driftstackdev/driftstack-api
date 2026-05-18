@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AccountAuditActionSchema } from '@driftstack/api-types';
+import { PAIR_MODE_HEARTBEAT_TTL_MS } from '../../src/services/agent-pair-mode-heartbeat.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -109,5 +110,19 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
   it('documents the heartbeat-timeout auto-handback (30s)', () => {
     expect(body).toMatch(/30s/);
     expect(body).toMatch(/heartbeat/i);
+  });
+
+  // Arc 4 Wave 2.B sub-slice 8.20.d.2 — drift guard for the docs vs
+  // PAIR_MODE_HEARTBEAT_TTL_MS constant. If a future change to the
+  // sweep TTL bumps the constant from 30_000 to anything else, this
+  // guard fails so the docs page MUST be updated in lock-step (or the
+  // constant changed back).
+  it('docs heartbeat-timeout window matches PAIR_MODE_HEARTBEAT_TTL_MS constant', () => {
+    const ttlSeconds = PAIR_MODE_HEARTBEAT_TTL_MS / 1000;
+    expect(ttlSeconds).toBe(30);
+    // The docs page MUST mention the same value the constant exports;
+    // drift = customer-visible documentation that contradicts the
+    // production behavior.
+    expect(body).toMatch(new RegExp(`${ttlSeconds}s`));
   });
 });
