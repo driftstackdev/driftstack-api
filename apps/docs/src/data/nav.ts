@@ -43,6 +43,8 @@ export const DOC_NAV: DocNavSection[] = [
       { href: '/guides/', label: 'Guides overview' },
       { href: '/guides/profile-management/', label: 'Profile management' },
       { href: '/guides/session-lifecycle/', label: 'Session lifecycle' },
+      { href: '/guides/team-rbac/', label: 'Team RBAC' },
+      { href: '/guides/live-video/', label: 'Live video' },
     ],
   },
   {

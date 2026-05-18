@@ -66,6 +66,13 @@ describe('W463.A apps/docs/src/data/nav.ts content parity', () => {
     expect(body).toMatch(
       /\{\s*\n?\s*label: 'Guides',\s*\n?\s*items: \[\s*\n?\s*\{ href: '\/guides\/', label: 'Guides overview' \},\s*\n?\s*\{ href: '\/guides\/profile-management\/', label: 'Profile management' \},\s*\n?\s*\{ href: '\/guides\/session-lifecycle\/', label: 'Session lifecycle' \},/,
     );
+    // Guides section extensions — pinned separately so the original
+    // 3-entry block stays untouched. team-rbac was the late-2026-05
+    // addition (W757 / W766); live-video shipped with the LK arc
+    // (LK.6 + Arc 6 docs.live-video). Both must appear in the
+    // sidebar for parity with /guides + /docs landing.
+    expect(body).toMatch(/\{ href: '\/guides\/team-rbac\/', label: 'Team RBAC' \}/);
+    expect(body).toMatch(/\{ href: '\/guides\/live-video\/', label: 'Live video' \}/);
   });
 
   it('API reference section: 9 entries pinned (api-keys + team + mfa + usage + audit-log + profiles + sessions + 2 overview entries)', () => {
