@@ -31,7 +31,7 @@ function read(p: string): string {
 describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-712.C framing pinned: 'public reference for the security-relevant response headers Driftstack's API sets. Security reviewers + integrators ask for this regularly; gathering it on one page is faster than answering individually.' — pinned so the V-712.C anchor + security-reviewer-self-serve rationale survive (drift to dropping would orphan the page from the engineering reason it exists)", () => {
+  it("V-712.C framing pinned: 'public reference for the security-relevant response headers Driftstack's API sets. Security reviewers + integrators ask for this regularly; gathering it on one page is faster than answering individually.' — pinned so the V-712.C anchor + security-reviewer-self-serve rationale survive (drift to dropping would orphan the page from the engineering reason it exists)", () => {
     expect(body).toMatch(
       /\/\/ V-712\.C — public reference for the security-relevant response\s*\n?\s*\/\/ headers Driftstack's API sets\. Security reviewers \+ integrators\s*\n?\s*\/\/ ask for this regularly; gathering it on one page is faster than\s*\n?\s*\/\/ answering individually\./,
     );
@@ -59,15 +59,15 @@ describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro c
     );
   });
 
-  it.skip('Cache-Control 5-route posture: /v1/account/* V-666.BS + /v1/admin/* V-666.BT + /v1/billing/* V-666.BW (no-store, private) + /v1/status (public, max-age=30) + /v1/status/stream (no-cache, no-transform) — pinned so the 5-route + 3-V-anchor cache-policy map survives (drift to dropping no-store on any /v1/account-or-admin-or-billing path would let proxy/back-forward caches retain private state; drift to changing the V-anchors would orphan the engineering history)', () => {
+  it('Cache-Control 5-route posture: /v1/account/* + /v1/admin/* + /v1/billing/* (no-store, private) + /v1/status (public, max-age=30) + /v1/status/stream (no-cache, no-transform) — pinned so the 5-route cache-policy map survives (drift to dropping no-store on any /v1/account-or-admin-or-billing path would let proxy/back-forward caches retain private state). The previous skip pinned inline `(V-666.BS)` / `(V-666.BT)` / `(V-666.BW)` anchors that were removed from the customer-facing copy as a UX cleanup (internal V-anchors should not bleed into marketing pages); the 5-route policy map itself survives without them.', () => {
     expect(body).toMatch(
-      /<td><code>\/v1\/account\/\*<\/code> \(V-666\.BS\)<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
+      /<td><code>\/v1\/account\/\*<\/code>\s*<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
     );
     expect(body).toMatch(
-      /<td><code>\/v1\/admin\/\*<\/code> \(V-666\.BT\)<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
+      /<td><code>\/v1\/admin\/\*<\/code>\s*<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
     );
     expect(body).toMatch(
-      /<td><code>\/v1\/billing\/\*<\/code> \(V-666\.BW\)<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
+      /<td><code>\/v1\/billing\/\*<\/code>\s*<\/td>\s*\n?\s*<td><code>no-store, private<\/code><\/td>/,
     );
     expect(body).toMatch(
       /<td><code>\/v1\/status<\/code> \(public\)<\/td>\s*\n?\s*<td><code>public, max-age=30<\/code><\/td>/,
@@ -75,6 +75,10 @@ describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro c
     expect(body).toMatch(
       /<td><code>\/v1\/status\/stream<\/code> \(SSE\)<\/td>\s*\n?\s*<td><code>no-cache, no-transform<\/code><\/td>/,
     );
+    // Internal V-anchors must NOT bleed into customer-facing copy.
+    expect(body).not.toMatch(/\(V-666\.BS\)/);
+    expect(body).not.toMatch(/\(V-666\.BT\)/);
+    expect(body).not.toMatch(/\(V-666\.BW\)/);
   });
 
   it("Defense-in-depth rationale framing pinned: 'Endpoints under /v1/account/*, /v1/admin/*, and /v1/billing/* return caller-private dynamic state. They are auth-gated at the request layer; the no-store, private header is defense-in-depth so shared / proxy caches can't hold onto private payloads and browser back-forward cache can't serve stale state after logout.' — pinned so the auth-gated + defense-in-depth + back-forward-cache rationale survives (drift to dropping the back-forward-cache mention would let customers question why no-store is needed alongside auth)", () => {
