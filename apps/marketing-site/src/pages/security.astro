@@ -252,8 +252,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <p class="mt-3 text-sm text-ink-secondary">
             API keys are scrypt-hashed with per-key salts; recovery is
             impossible by design. Account passwords use the same KDF.
-            MFA TOTP secrets live in AES-256-GCM ciphertext with a
-            host-resident encryption key. Postgres + Redis carriers
+            MFA TOTP secrets, BYOK Anthropic keys, and gui_control_keys
+            all live in AES-256-GCM ciphertext under the same
+            host-resident encryption key, decrypted in-memory only at
+            execution time and never logged. Postgres + Redis carriers
             provide encryption at rest by default at the storage layer.
           </p>
         </div>
