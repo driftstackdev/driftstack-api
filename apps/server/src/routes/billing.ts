@@ -2,8 +2,9 @@
 //
 //   POST /v1/billing/checkout-session   — start a paid-tier subscription
 //   POST /v1/billing/trial-pack         — start the $2.99 trial pack
-//   POST /v1/billing/portal-session     — open Stripe Customer Portal
+//   POST /v1/billing/portal-session     — open Stripe Customer Portal (JSON {portal_url})
 //   GET  /v1/billing                    — current subscription + trial state
+//   GET  /v1/account/me/billing-portal  — v2-#26 dashboard-friendly 302 redirect
 //
 // All auth-gated. Trial-pack endpoint is also self-serve from the
 // onboarding flow (Workstream F) before tier selection.
@@ -152,6 +153,23 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
     },
   );
 
+  // v2-#26 — dashboard-friendly redirect endpoint. Same underlying
+  // service call as POST /v1/billing/portal-session; serves the
+  // "make a link the user clicks" use case (which can't naturally
+  // form-POST without JS). Browsers follow the 302; the SPA can
+  // also fetch it without redirect-following and pull the `Location`
+  // header. Returns 503 via the activation-gate stub when billing
+  // isn't wired (mirrors the POST behaviour).
+  app.get(
+    '/v1/account/me/billing-portal',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (req, reply) => {
+      const ctx = requireCtx(req);
+      const result = await service.createPortalSession(ctx.account.id);
+      return reply.code(302).header('location', result.url).send();
+    },
+  );
+
   app.get(
     '/v1/billing',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
@@ -203,4 +221,7 @@ export function registerBillingDisabledRoutes(app: FastifyInstance): void {
   app.post('/v1/billing/trial-pack', stub);
   app.post('/v1/billing/portal-session', stub);
   app.get('/v1/billing', stub);
+  // v2-#26 — disabled-route counterpart so the dashboard's 503 path
+  // surfaces the same machine-readable signal as the POST variant.
+  app.get('/v1/account/me/billing-portal', stub);
 }

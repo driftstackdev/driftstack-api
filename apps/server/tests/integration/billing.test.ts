@@ -218,6 +218,47 @@ describe('POST /v1/billing/portal-session', () => {
   });
 });
 
+// v2-#26 — dashboard-friendly redirect variant. Same underlying
+// createPortalSession() call as POST /v1/billing/portal-session; the
+// difference is the response shape (302 + Location header rather than
+// 200 + JSON body). Lets a customer-dashboard `<a href=…>` link
+// initiate the portal flow without intermediate JS.
+describe('GET /v1/account/me/billing-portal (v2-#26)', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('302 redirects to the Stripe portal URL after a customer exists', async () => {
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/checkout-session',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { tier: 'api_starter', billing_period: 'monthly' },
+    });
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/billing-portal',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toMatch(/^https:\/\/billing.stripe.example\/p\//);
+  });
+
+  it('409 Conflict when no Stripe customer has been provisioned yet (same error semantics as the POST variant)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/billing-portal',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+});
+
 describe('GET /v1/billing', () => {
   let fx: TestAppFixture;
 
