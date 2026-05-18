@@ -1325,6 +1325,65 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // Arc 7 docs.openapi — OAuth-client IDP signin (V-667.C). The
+  // /v1/auth/oauth-client/* surface lets customers sign in to the
+  // dashboard with Google or GitHub. The callback endpoint is the
+  // IDP-redirect target; /start returns the authorize URL the
+  // dashboard sends the customer's browser to; /confirm-merge is
+  // the verdict-1 same-email-collision resolution path.
+  const OauthClientStartRequestOpenApi = z.object({
+    provider: z.enum(['google', 'github']),
+    redirect_to: z.string().url(),
+  });
+  const OauthClientStartResponseOpenApi = z.object({ authorize_url: z.string().url() });
+  const OauthClientConfirmMergeRequestOpenApi = z.object({
+    token: z.string().min(32).max(128),
+  });
+  const OauthClientConfirmMergeResponseOpenApi = z.object({
+    outcome: z.literal('merged'),
+    account_id: z.string(),
+    link_id: z.string(),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/oauth-client/start',
+    summary: 'Stage an IDP signin flow — returns the authorize URL for Google or GitHub',
+    tags: ['auth'],
+    request: {
+      body: { content: { 'application/json': { schema: OauthClientStartRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description:
+          "Authorize URL — the client redirects the user's browser here to start the IDP consent flow.",
+        content: { 'application/json': { schema: OauthClientStartResponseOpenApi } },
+      },
+      400: { description: 'Unknown provider OR provider not configured.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/oauth-client/confirm-merge',
+    summary:
+      'Confirm a same-email-collision merge — links a new IDP identity to an existing account',
+    tags: ['auth'],
+    request: {
+      body: {
+        content: { 'application/json': { schema: OauthClientConfirmMergeRequestOpenApi } },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Merge confirmed; IDP identity now linked to the existing account.',
+        content: { 'application/json': { schema: OauthClientConfirmMergeResponseOpenApi } },
+      },
+      400: {
+        description: 'Token is invalid, expired, or already used.',
+        content: problemContent,
+      },
+    },
+  });
+
   // Arc 7 docs.openapi — OAuth 2.0 public dance (V-667). The 4
   // standard-spec endpoints third-party clients use to obtain access
   // tokens on a customer's behalf. Full prose at

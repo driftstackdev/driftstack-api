@@ -7850,6 +7850,119 @@
         }
       }
     },
+    "/v1/auth/oauth-client/start": {
+      "post": {
+        "summary": "Stage an IDP signin flow — returns the authorize URL for Google or GitHub",
+        "tags": ["auth"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": ["google", "github"]
+                  },
+                  "redirect_to": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "required": ["provider", "redirect_to"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authorize URL — the client redirects the user's browser here to start the IDP consent flow.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authorize_url": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "required": ["authorize_url"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown provider OR provider not configured.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/oauth-client/confirm-merge": {
+      "post": {
+        "summary": "Confirm a same-email-collision merge — links a new IDP identity to an existing account",
+        "tags": ["auth"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 128
+                  }
+                },
+                "required": ["token"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Merge confirmed; IDP identity now linked to the existing account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": ["merged"]
+                    },
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "link_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["outcome", "account_id", "link_id"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token is invalid, expired, or already used.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/oauth/authorize": {
       "get": {
         "summary": "OAuth 2.0 authorize — stage a PKCE authorization (RFC 6749 + RFC 7636)",
