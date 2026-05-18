@@ -13926,6 +13926,189 @@
         }
       }
     },
+    "/v1/agent-sessions/{id}/livekit-token": {
+      "post": {
+        "summary": "Mint a per-Mac LiveKit JWT for the agent session room (LK.3)",
+        "tags": ["agent-chat"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "LiveKit join info: ws_url + room + token (24h TTL) + participant_identity + expires_at.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ws_url": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "room": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    },
+                    "participant_identity": {
+                      "type": "string"
+                    },
+                    "expires_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["ws_url", "room", "token", "participant_identity", "expires_at"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Cannot mint a token for a non-active agent session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent session not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No Mac in the fleet has registered LiveKit credentials yet, OR the stored secret is unreadable (re-run /v1/mac-nodes/register).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/mac-nodes/register": {
+      "post": {
+        "summary": "Register per-Mac LiveKit credentials on the fleet_nodes row (LK.2)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mac_node_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "livekit": {
+                    "type": "object",
+                    "properties": {
+                      "api_key": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "api_secret": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1024
+                      },
+                      "ws_url": {
+                        "type": "string",
+                        "format": "uri"
+                      }
+                    },
+                    "required": ["api_key", "api_secret", "ws_url"]
+                  }
+                },
+                "required": ["mac_node_id", "livekit"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Credentials stored. Response never echoes api_key or api_secret (operator-secret).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mac_node_id": {
+                      "type": "string"
+                    },
+                    "livekit_registered_at": {
+                      "type": "string"
+                    },
+                    "ws_url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["mac_node_id", "livekit_registered_at", "ws_url"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/recipes": {
       "post": {
         "summary": "Snapshot an agent session as a replayable recipe",

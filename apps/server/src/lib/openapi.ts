@@ -2720,6 +2720,76 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // ── LK arc — per-Mac LiveKit ──
+  //
+  // LK.3 POST /v1/agent-sessions/:id/livekit-token mints a per-Mac
+  // JWT for the gui-client (or any LiveKit subscriber) to connect to
+  // the room hosting the agent session's video stream. LK.2 POST
+  // /v1/mac-nodes/register persists the per-Mac LiveKit api_key +
+  // encrypted secret used by the mint path.
+  const LivekitInfoOpenApi = z.object({
+    ws_url: z.string().url(),
+    room: z.string(),
+    token: z.string(),
+    participant_identity: z.string(),
+    expires_at: z.string(),
+  });
+  const RegisterMacNodeBodyOpenApi = z.object({
+    mac_node_id: z.string().uuid(),
+    livekit: z.object({
+      api_key: z.string().min(1).max(256),
+      api_secret: z.string().min(1).max(1024),
+      ws_url: z.string().url(),
+    }),
+  });
+  const RegisterMacNodeResponseOpenApi = z.object({
+    mac_node_id: z.string(),
+    livekit_registered_at: z.string(),
+    ws_url: z.string(),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/agent-sessions/{id}/livekit-token',
+    summary: 'Mint a per-Mac LiveKit JWT for the agent session room (LK.3)',
+    tags: ['agent-chat'],
+    security: auth,
+    responses: {
+      200: {
+        description:
+          'LiveKit join info: ws_url + room + token (24h TTL) + participant_identity + expires_at.',
+        content: { 'application/json': { schema: LivekitInfoOpenApi } },
+      },
+      403: {
+        description: 'Cannot mint a token for a non-active agent session.',
+        content: problemContent,
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      503: {
+        description:
+          'No Mac in the fleet has registered LiveKit credentials yet, OR the stored secret is unreadable (re-run /v1/mac-nodes/register).',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/mac-nodes/register',
+    summary: 'Register per-Mac LiveKit credentials on the fleet_nodes row (LK.2)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: RegisterMacNodeBodyOpenApi } } },
+    },
+    responses: {
+      200: {
+        description:
+          'Credentials stored. Response never echoes api_key or api_secret (operator-secret).',
+        content: { 'application/json': { schema: RegisterMacNodeResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+
   // ── AI-B4 recipe library (write-only at v1.0) ──
   //
   // POST /v1/recipes snapshots a finished agent_session's intent_log

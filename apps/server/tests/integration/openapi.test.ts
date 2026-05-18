@@ -164,8 +164,11 @@ describe('OpenAPI spec generation', () => {
         '/v1/agent-sessions',
         '/v1/agent-sessions/{id}',
         '/v1/agent-sessions/{id}/handback',
+        '/v1/agent-sessions/{id}/livekit-token',
         '/v1/agent-sessions/{id}/message',
         '/v1/agent-sessions/{id}/takeover',
+        // LK arc — per-Mac LiveKit credentials registration
+        '/v1/mac-nodes/register',
         // AI-B4 — write-only recipe library (Q.5.d)
         '/v1/recipes',
         // V-820 — operator-only fleet event stream
