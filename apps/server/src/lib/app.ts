@@ -812,6 +812,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.cryptoOrdersService !== undefined
         ? { ordersService: deps.cryptoOrdersService }
         : {}),
+      ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
     });
   }
   // V-531.B — LiveKit token-mint route. Gated on all 3 livekit fields

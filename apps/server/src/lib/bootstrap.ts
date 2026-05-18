@@ -649,6 +649,12 @@ export async function createProductionDeps(
             'Stripe webhook receiver outcomes (handled / duplicate / ignored / error / signature_invalid / signature_missing / empty_body / malformed_event).',
             ['outcome'],
           );
+          // Arc 7 obs.9 — NOWPayments IPN receiver outcome counter.
+          r.registerCounter(
+            METRIC_NAMES.nowpaymentsWebhookTotal,
+            'NOWPayments IPN receiver outcomes (ok / signature_missing / signature_invalid / empty_body / malformed_event).',
+            ['outcome'],
+          );
           return r;
         })()
       : undefined;

@@ -20,6 +20,7 @@ import { BadRequestError, UnauthorizedError } from '../lib/errors.js';
 import type { Logger } from '../lib/logger.js';
 import type { CryptoOrdersService } from '../services/crypto-orders.js';
 import { registerWebhookRawBodyParser } from './_webhook-raw-body.js';
+import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 
 export interface RegisterNowpaymentsWebhookRoutesDeps {
   /** IPN secret from the NowPayments merchant dashboard. */
@@ -31,6 +32,11 @@ export interface RegisterNowpaymentsWebhookRoutesDeps {
    * logs + acks only (W44 V-666 wire-ready posture).
    */
   ordersService?: CryptoOrdersService;
+  /** Arc 7 obs.9 — optional metrics registry. When wired, the route
+   *  increments `driftstack_nowpayments_webhook_total{outcome}` per
+   *  request (one of: ok / signature_missing / signature_invalid /
+   *  empty_body / malformed_event). */
+  metrics?: MetricsRegistry;
 }
 
 interface NowpaymentsIpnPayload {
@@ -50,15 +56,25 @@ export function registerNowpaymentsWebhookRoutes(
   deps: RegisterNowpaymentsWebhookRoutesDeps,
 ): void {
   registerWebhookRawBodyParser(app);
+  const metrics = deps.metrics;
+  const bumpOutcome = (outcome: string): void => {
+    try {
+      metrics?.inc(METRIC_NAMES.nowpaymentsWebhookTotal, { outcome });
+    } catch {
+      // Swallow; metrics are best-effort.
+    }
+  };
 
   app.post('/v1/webhooks/nowpayments', async (req: FastifyRequest, reply) => {
     const sigHeader = req.headers['x-nowpayments-sig'];
     if (typeof sigHeader !== 'string' || sigHeader.length === 0) {
+      bumpOutcome('signature_missing');
       throw new UnauthorizedError('x-nowpayments-sig header missing.');
     }
 
     const rawBody = req.rawBody;
     if (typeof rawBody !== 'string' || rawBody.length === 0) {
+      bumpOutcome('empty_body');
       throw new BadRequestError('Empty request body.');
     }
 
@@ -68,6 +84,7 @@ export function registerNowpaymentsWebhookRoutes(
       signature: sigHeader,
     });
     if (!verified) {
+      bumpOutcome('signature_invalid');
       deps.logger.warn(
         { component: 'nowpayments-webhooks' },
         'NowPayments IPN signature verification failed',
@@ -82,6 +99,7 @@ export function registerNowpaymentsWebhookRoutes(
       (typeof payload.payment_id !== 'number' && typeof payload.payment_id !== 'string') ||
       typeof payload.payment_status !== 'string'
     ) {
+      bumpOutcome('malformed_event');
       throw new BadRequestError('NowPayments IPN is missing required fields.');
     }
 
@@ -109,6 +127,7 @@ export function registerNowpaymentsWebhookRoutes(
       'NowPayments IPN received (signature OK)',
     );
 
+    bumpOutcome('ok');
     return reply.code(200).send({ received: true, order_state: orderState });
   });
 }

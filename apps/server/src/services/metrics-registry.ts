@@ -194,4 +194,11 @@ export const METRIC_NAMES = {
   // signals a Stripe contract change or a downstream bug; spike in
   // 'signature_invalid' signals webhook-spoofing attempts.
   stripeWebhookTotal: 'driftstack_stripe_webhook_total',
+  // Arc 7 obs.9 — NOWPayments IPN receiver outcome counter. Same
+  // shape as obs.8 (signature_missing / signature_invalid / empty_body
+  // / malformed_event / ok). Distinct counter because the threat
+  // model (crypto-payment spoofing) and the operational baseline
+  // (NOWPayments traffic volume) are different from Stripe — mixing
+  // them under one label set would hide the per-provider signal.
+  nowpaymentsWebhookTotal: 'driftstack_nowpayments_webhook_total',
 } as const;

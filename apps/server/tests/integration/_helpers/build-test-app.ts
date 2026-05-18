@@ -729,6 +729,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'Stripe webhook receiver outcomes (handled / duplicate / ignored / error / signature_invalid / signature_missing / empty_body / malformed_event).',
     ['outcome'],
   );
+  // Arc 7 obs.9 — NOWPayments IPN receiver outcome counter.
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.nowpaymentsWebhookTotal,
+    'NOWPayments IPN receiver outcomes (ok / signature_missing / signature_invalid / empty_body / malformed_event).',
+    ['outcome'],
+  );
 
   // v2-#18 — capturing usage recorder for the AgentRuntime end-to-end
   // smoke. Always declared (even when captureAgentDecomposerUsage is
