@@ -36,6 +36,42 @@ describe('Arc 2 v2-#8 sub-slice 8.8 InMemoryPairModeTakeoverLock', () => {
     expect(b2.acquired).toBe(true);
   });
 
+  // Arc 4 Wave 2.A sub-slice 8.14 (v2-#8) — race-condition pin.
+  // Two near-simultaneous tryAcquire calls on the same sessionId
+  // resolve deterministically: exactly one wins; the loser sees the
+  // winner's clientId. Both InMemory and Redis paths.
+  it('v2-#8 sub-slice 8.14 race — parallel acquire from two distinct clients: exactly one wins, loser sees the winner', async () => {
+    const lock = new InMemoryPairModeTakeoverLock();
+    const [a, b] = await Promise.all([
+      lock.tryAcquire({ sessionId: 'agt_race', clientId: 'cli_a' }),
+      lock.tryAcquire({ sessionId: 'agt_race', clientId: 'cli_b' }),
+    ]);
+    const acquired = [a, b].filter((r) => r.acquired);
+    const denied = [a, b].filter((r) => !r.acquired);
+    expect(acquired).toHaveLength(1);
+    expect(denied).toHaveLength(1);
+    const winnerId = acquired[0]!.winnerClientId;
+    expect(denied[0]!.winnerClientId).toBe(winnerId);
+    expect(['cli_a', 'cli_b']).toContain(winnerId);
+  });
+
+  it('v2-#8 sub-slice 8.14 race — three-way contention: exactly one acquired, two denied, all denials report the same winner', async () => {
+    const lock = new InMemoryPairModeTakeoverLock();
+    const results = await Promise.all([
+      lock.tryAcquire({ sessionId: 'agt_three', clientId: 'cli_a' }),
+      lock.tryAcquire({ sessionId: 'agt_three', clientId: 'cli_b' }),
+      lock.tryAcquire({ sessionId: 'agt_three', clientId: 'cli_c' }),
+    ]);
+    const acquired = results.filter((r) => r.acquired);
+    const denied = results.filter((r) => !r.acquired);
+    expect(acquired).toHaveLength(1);
+    expect(denied).toHaveLength(2);
+    const winnerId = acquired[0]!.winnerClientId;
+    for (const r of denied) {
+      expect(r.winnerClientId).toBe(winnerId);
+    }
+  });
+
   it('TTL expiry: a stale lock past its ttl is reclaimable', async () => {
     let now = new Date('2026-05-18T00:00:00Z');
     const lock = new InMemoryPairModeTakeoverLock(() => now);
