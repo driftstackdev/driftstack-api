@@ -268,6 +268,31 @@ describe('OpenAPI spec generation', () => {
     expect(names).toContain('Problem');
     expect(names).toContain('UsagePeriodSummary');
   });
+
+  // LK.3 — pin LiveKitInfo as a NAMED schema in components.schemas
+  // (not inline). datamodel-codegen + every named-ref consumer
+  // depends on this to generate a typed `LiveKitInfo` class.
+  // Previously the schema was inline-anonymous on the response, so
+  // the Python SDK had to fall back to dict[str, Any] while TS+Go
+  // had typed structs — a cross-SDK asymmetry. Drift to dropping
+  // .openapi('LiveKitInfo') would silently regress that.
+  it('LK.3 — LiveKitInfo is a named component schema with the 5 required fields', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const schemas = spec.components?.schemas as Record<string, unknown> | undefined;
+    expect(schemas).toBeDefined();
+    expect(Object.keys(schemas ?? {})).toContain('LiveKitInfo');
+    const lki = schemas?.LiveKitInfo as
+      | { type?: string; properties?: Record<string, unknown>; required?: string[] }
+      | undefined;
+    expect(lki?.type).toBe('object');
+    expect(Object.keys(lki?.properties ?? {}).sort()).toEqual(
+      ['expires_at', 'participant_identity', 'room', 'token', 'ws_url'].sort(),
+    );
+    expect((lki?.required ?? []).sort()).toEqual(
+      ['expires_at', 'participant_identity', 'room', 'token', 'ws_url'].sort(),
+    );
+  });
 });
 
 describe('OpenAPI HTTP routes', () => {

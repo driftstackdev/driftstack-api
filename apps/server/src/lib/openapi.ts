@@ -2727,13 +2727,15 @@ function buildRegistry(): OpenAPIRegistry {
   // the room hosting the agent session's video stream. LK.2 POST
   // /v1/mac-nodes/register persists the per-Mac LiveKit api_key +
   // encrypted secret used by the mint path.
-  const LivekitInfoOpenApi = z.object({
-    ws_url: z.string().url(),
-    room: z.string(),
-    token: z.string(),
-    participant_identity: z.string(),
-    expires_at: z.string(),
-  });
+  const LivekitInfoOpenApi = z
+    .object({
+      ws_url: z.string().url(),
+      room: z.string(),
+      token: z.string(),
+      participant_identity: z.string(),
+      expires_at: z.string(),
+    })
+    .openapi('LiveKitInfo');
   const RegisterMacNodeBodyOpenApi = z.object({
     mac_node_id: z.string().uuid(),
     livekit: z.object({
