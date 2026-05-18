@@ -1,0 +1,76 @@
+// Arc 6 docs.bundled-llm — drift guard for the new
+// /api/bundled-llm docs page.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/api/bundled-llm.md');
+
+describe('Arc 6 docs.bundled-llm content parity', () => {
+  it('page exists at the expected path', () => {
+    expect(existsSync(PAGE)).toBe(true);
+  });
+
+  const body = readFileSync(PAGE, 'utf8');
+
+  it('frontmatter declares layout + title + description', () => {
+    expect(body).toMatch(/layout: \.\.\/\.\.\/layouts\/DocLayout\.astro/);
+    expect(body).toMatch(/title: Bundled LLM/);
+    expect(body).toMatch(/description: .+monthly soft cap/);
+  });
+
+  it('explains the opt-in consent + BYOK-wins resolution chain', () => {
+    expect(body).toMatch(/Opt-in is explicit/);
+    expect(body).toMatch(/prefers BYOK/);
+    expect(body).toMatch(/bundled-LLM is the no-BYOK fallback/);
+  });
+
+  it('documents all three customer endpoints', () => {
+    expect(body).toMatch(/GET \/v1\/account\/me\/bundled-llm-settings/);
+    expect(body).toMatch(/GET \/v1\/account\/me\/bundled-llm-status/);
+    expect(body).toMatch(/PATCH \/v1\/account\/me\/bundled-llm-settings/);
+  });
+
+  it('cap ceiling pinned at $10,000 (1_000_000 cents) — matches schema constraint', () => {
+    expect(body).toMatch(/1,000,000.*\$10,000/);
+  });
+
+  it('default cap pinned at $20 (2000 cents)', () => {
+    expect(body).toMatch(/monthly_cap_usd_cents.*2000/);
+  });
+
+  it('soft-cap 402 response shape pinned with spent_cents + cap_cents fields', () => {
+    expect(body).toMatch(/HTTP\/1\.1 402 Payment Required/);
+    expect(body).toMatch(/"spent_cents"/);
+    expect(body).toMatch(/"cap_cents"/);
+    expect(body).toMatch(/errors\.driftstack\.dev\/bundled-llm-budget-exhausted/);
+  });
+
+  it('typed error class field names pinned across 3 SDKs (snake_case Python; camelCase TS; PascalCase Go)', () => {
+    expect(body).toMatch(/Python:[\s\S]*?`spent_cents`/);
+    expect(body).toMatch(/TS:[\s\S]*?`spentCents`/);
+    expect(body).toMatch(/Go:[\s\S]*?`SpentCents`/);
+  });
+
+  it('consent-required 402 response shape pinned (no extension fields)', () => {
+    expect(body).toMatch(/errors\.driftstack\.dev\/bundled-llm-consent-required/);
+    expect(body).toMatch(/BundledLlmConsentRequiredError/);
+  });
+
+  it('error table covers 400 / 401 / 402 (both) / 503', () => {
+    expect(body).toMatch(/\|\s*400\s*\| validation/);
+    expect(body).toMatch(/\|\s*401\s*\| unauthorized/);
+    expect(body).toMatch(/\|\s*402\s*\| bundled-llm-budget-exhausted/);
+    expect(body).toMatch(/\|\s*402\s*\| bundled-llm-consent-required/);
+    expect(body).toMatch(/\|\s*503\s*\| feature-unavailable/);
+  });
+
+  it('privacy section documents the no-training claim against the current bundled-LLM provider (Anthropic Claude)', () => {
+    expect(body).toMatch(/not used for training/);
+    expect(body).toMatch(/Anthropic Claude/);
+  });
+});
