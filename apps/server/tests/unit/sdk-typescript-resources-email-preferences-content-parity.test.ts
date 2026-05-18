@@ -62,10 +62,13 @@ describe('W429.A packages/sdk-typescript/src/resources/email-preferences.ts cont
     );
   });
 
-  it('Imports — 4 api-types shapes (multi-line braced; sorted alphabetical): EmailPreference + ListEmailPreferencesResponse + OptOutableEmailEvent + SetEmailPreferenceRequest. The OptOutableEmailEvent import is load-bearing — without it the optIn/optOut params would fall back to `string` and the type-narrowing safety net would be lost.', () => {
+  it('Imports — 3 api-types shapes (multi-line braced; sorted alphabetical): ListEmailPreferencesResponse + OptOutableEmailEvent + SetEmailPreferenceRequest. The OptOutableEmailEvent import is load-bearing — without it the optIn/optOut params would fall back to `string` and the type-narrowing safety net would be lost. EmailPreference type was dropped from the imports because the PUT route returns 204 No Content (no body); the SDK return type is now `Promise<void>` matching the wire shape.', () => {
     expect(body).toMatch(
-      /import type \{\s*\n?\s*EmailPreference,\s*\n?\s*ListEmailPreferencesResponse,\s*\n?\s*OptOutableEmailEvent,\s*\n?\s*SetEmailPreferenceRequest,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import type \{\s*\n?\s*ListEmailPreferencesResponse,\s*\n?\s*OptOutableEmailEvent,\s*\n?\s*SetEmailPreferenceRequest,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
+    // EmailPreference must NOT be in the import list — its return-
+    // value role on set/optIn/optOut was always wire-divergent.
+    expect(body).not.toMatch(/import type \{\s*\n?\s*EmailPreference,/);
   });
 
   it("Imports — HttpClient from '../http.js' (relative path with .js extension for ESM compatibility). Drift to dropping the .js extension would break the ESM build because TypeScript needs the literal .js suffix at runtime.", () => {
@@ -89,24 +92,26 @@ describe('W429.A packages/sdk-typescript/src/resources/email-preferences.ts cont
     );
   });
 
-  it('set verb — PUT /v1/account/email-preferences with SetEmailPreferenceRequest body. CRITICAL: PUT (not POST) because preference rows are UNIQUE per event_type — re-setting the same row is idempotent upsert, not a duplicate. Drift to POST would duplicate rows on retry, breaking the single-row-per-event-type invariant. Returns single EmailPreference (the row that was upserted).', () => {
-    expect(body).toMatch(/\/\*\* Set opt-in\/opt-out for a single email event type\. \*\//);
+  it('set verb — PUT /v1/account/email-preferences with SetEmailPreferenceRequest body. CRITICAL: PUT (not POST) because preference rows are UNIQUE per event_type — re-setting the same row is idempotent upsert, not a duplicate. Drift to POST would duplicate rows on retry, breaking the single-row-per-event-type invariant. Returns `Promise<void>` because the server replies 204 No Content — the previous pin asserted `Promise<EmailPreference>` which was source-of-truth-divergent (customer code awaiting set() would get undefined at runtime under a type that promised the EmailPreference shape).', () => {
     expect(body).toMatch(
-      /set\(body: SetEmailPreferenceRequest\): Promise<EmailPreference> \{\s*\n?\s*return this\.http\.request<EmailPreference>\(\{\s*\n?\s*method: 'PUT',\s*\n?\s*path: '\/v1\/account\/email-preferences',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /Set opt-in\/opt-out for a single email event type\. The server\s*\n?\s+\* returns `204 No Content` on success/,
+    );
+    expect(body).toMatch(
+      /set\(body: SetEmailPreferenceRequest\): Promise<void> \{\s*\n?\s*return this\.http\.request<void>\(\{\s*\n?\s*method: 'PUT',\s*\n?\s*path: '\/v1\/account\/email-preferences',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
     );
   });
 
-  it("optOut convenience — delegates to set({event_type: eventType, opted_in: false}). CRITICAL TYPE-SAFETY: eventType is typed `OptOutableEmailEvent`, NOT `string`. The TS type system rejects `optOut('password-reset')` at COMPILE TIME because \"password-reset\" isn't in the OptOutableEmailEvent enum. Drift to widening the parameter type to `string` would lose this compile-time enforcement and let bug-prone calls slip through.", () => {
+  it("optOut convenience — delegates to set({event_type: eventType, opted_in: false}). CRITICAL TYPE-SAFETY: eventType is typed `OptOutableEmailEvent`, NOT `string`. The TS type system rejects `optOut('password-reset')` at COMPILE TIME because \"password-reset\" isn't in the OptOutableEmailEvent enum. Returns `Promise<void>` mirroring set().", () => {
     expect(body).toMatch(/\/\*\* Convenience: opt out of a single event type\. \*\//);
     expect(body).toMatch(
-      /optOut\(eventType: OptOutableEmailEvent\): Promise<EmailPreference> \{\s*\n?\s*return this\.set\(\{ event_type: eventType, opted_in: false \}\);\s*\n?\s*\}/,
+      /optOut\(eventType: OptOutableEmailEvent\): Promise<void> \{\s*\n?\s*return this\.set\(\{ event_type: eventType, opted_in: false \}\);\s*\n?\s*\}/,
     );
   });
 
-  it('optIn convenience — delegates to set({event_type: eventType, opted_in: true}). Mirror of optOut with opted_in:true. Same OptOutableEmailEvent type-narrowing on the parameter. Drift to opted_in:false would invert the semantic; drift to widening parameter type would lose compile-time enforcement.', () => {
+  it('optIn convenience — delegates to set({event_type: eventType, opted_in: true}). Mirror of optOut with opted_in:true. Same OptOutableEmailEvent type-narrowing on the parameter. Returns `Promise<void>` mirroring set().', () => {
     expect(body).toMatch(/\/\*\* Convenience: opt back in to a single event type\. \*\//);
     expect(body).toMatch(
-      /optIn\(eventType: OptOutableEmailEvent\): Promise<EmailPreference> \{\s*\n?\s*return this\.set\(\{ event_type: eventType, opted_in: true \}\);\s*\n?\s*\}/,
+      /optIn\(eventType: OptOutableEmailEvent\): Promise<void> \{\s*\n?\s*return this\.set\(\{ event_type: eventType, opted_in: true \}\);\s*\n?\s*\}/,
     );
   });
 
