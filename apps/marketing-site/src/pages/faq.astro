@@ -128,6 +128,10 @@ const groups: FaqGroup[] = [
         a: 'Driftstack\'s optional AI agent feature drives sessions with a large language model — useful for natural-language test specifications, automated screenshot diffing, or LLM-driven flow exploration. On Builder / Scale / Enterprise, you have two options: <strong>BYOK</strong> (bring your own API key — get one from your model provider, e.g. <a href="https://console.anthropic.com" class="text-glow-red underline" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>; your model spend goes to your provider account, not Driftstack), or use the bundled rate (Driftstack proxies the calls and bills you on one invoice at a markup over the published per-token price).',
       },
       {
+        q: 'How do agent sessions work?',
+        a: 'An <strong>agent session</strong> layers a chat-style decompose-and-execute loop on top of a regular driver session. You send a user message (e.g. <span class="font-mono">"open https://example.com and capture a screenshot"</span>); the decomposer translates it into structured intents (<span class="font-mono">navigate</span>, <span class="font-mono">interact</span>, <span class="font-mono">wait</span>, <span class="font-mono">capture</span>); the runtime executes them. Three modes: <strong>AI</strong> (default — every message goes through decompose), <strong>manual</strong> (pass-through for clients driving via their own UI), and <strong>pair</strong> (interactive takeover — AI drives by default, the customer can take over and hand back). Live transcript via Server-Sent Events. Full reference at <a href="https://docs.driftstack.dev/api/agent-sessions/" class="text-glow-red underline">docs.driftstack.dev/api/agent-sessions</a>.',
+      },
+      {
         q: 'What\'s the BYOK markup?',
         a: 'Per-token pricing for the bundled rate is announced at launch. BYOK incurs no Driftstack markup — your Anthropic API key, your bill, your control. Toggle BYOK ↔ bundled per-account in the dashboard.',
       },
