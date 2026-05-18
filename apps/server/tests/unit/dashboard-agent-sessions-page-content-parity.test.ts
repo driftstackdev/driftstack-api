@@ -99,4 +99,37 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
     expect(body).toMatch(/r\.status === 503/);
     expect(body).toMatch(/featureBanner\.classList\.remove\('hidden'\)/);
   });
+
+  // v2-#8 Wave 2.C sub-slice 8.27 — TranscriptStream SSE consumer.
+  it('startTranscriptStream() opens EventSource on /v1/agent-sessions/:id/transcript with ds_token fallback', () => {
+    expect(body).toMatch(/new EventSource\(url\)/);
+    expect(body).toMatch(/\/transcript\?ds_token=/);
+    expect(body).toMatch(/encodeURIComponent\(token\)/);
+  });
+
+  it('transcript.entry event handler appends per-role styled li elements', () => {
+    expect(body).toMatch(/addEventListener\('transcript\.entry'/);
+    expect(body).toMatch(/role === 'user'/);
+    expect(body).toMatch(/role === 'agent'/);
+  });
+
+  it('beforeunload closes the EventSource to prevent stream leak', () => {
+    expect(body).toMatch(/addEventListener\('beforeunload'/);
+    expect(body).toMatch(/evtSource\.close\(\)/);
+  });
+
+  // v2-#8 Wave 2.C sub-slice 8.28 — BundledLlmStatusPanel reader.
+  it('renders bundled-llm-status fields (consent / cap / used) from GET /v1/account/me/bundled-llm-status', () => {
+    expect(body).toMatch(/monthly_cap_usd_cents/);
+    expect(body).toMatch(/used_this_month_cents/);
+    expect(body).toMatch(/'opted in' : 'not enabled'/);
+  });
+
+  // v2-#8 Wave 2.C sub-slice 8.28.b — MessageComposer.
+  it('message form POSTs /v1/agent-sessions/:id/message with { user_message }; 402 highlights bundled-llm panel', () => {
+    expect(body).toMatch(/\/message',/);
+    expect(body).toMatch(/JSON\.stringify\(\{ user_message: userMessage \}\)/);
+    expect(body).toMatch(/status === 402/);
+    expect(body).toMatch(/ring-2.*ring-amber-500\/50/);
+  });
 });

@@ -261,6 +261,11 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
               if (stateEl) stateEl.textContent = initialState ? initialState.kind : '';
               renderTakeoverHandback(initialState, session.mode);
               if (activeSection) activeSection.classList.remove('hidden');
+              // Wave 2.C sub-slice 8.27 — start the SSE transcript
+              // stream now that we have a valid session id.
+              createForm.dispatchEvent(
+                new CustomEvent('agent-session-created', { detail: { id: session.id } }),
+              );
             })
             .catch(() => {
               /* swallow — banner-render handled in the 503 branch above */
@@ -311,6 +316,151 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
                 if (stateEl) stateEl.textContent = body.pair_mode_state.kind;
                 renderTakeoverHandback(body.pair_mode_state, activeMode);
               }
+            })
+            .catch(() => {
+              /* swallow */
+            });
+        });
+      }
+
+      // v2-#8 Wave 2.C sub-slice 8.27 — TranscriptStream SSE consumer.
+      // Honors v2-#19 Last-Event-ID for resume after disconnect. The
+      // server publishes transcript-append events on
+      // GET /v1/agent-sessions/:id/transcript (SSE).
+      const transcriptList = root.querySelector('[data-list="transcript"]');
+      let evtSource = null;
+      function startTranscriptStream(sessionId) {
+        if (evtSource) {
+          evtSource.close();
+          evtSource = null;
+        }
+        if (transcriptList) {
+          // Clear the placeholder "Transcript will appear here…".
+          transcriptList.innerHTML = '';
+        }
+        // EventSource doesn't support custom Authorization headers.
+        // The server-side route accepts the bearer token via cookie OR
+        // a query string param (?ds_token=) as a fallback for SSE
+        // clients — pin the route layer's contract here.
+        const url =
+          apiBaseUrl +
+          '/v1/agent-sessions/' +
+          encodeURIComponent(sessionId) +
+          '/transcript?ds_token=' +
+          encodeURIComponent(token);
+        evtSource = new EventSource(url);
+        evtSource.addEventListener('transcript.entry', (ev) => {
+          let entry = null;
+          try {
+            const parsed = JSON.parse(ev.data);
+            entry = parsed.entry;
+          } catch {
+            return;
+          }
+          if (!entry || !transcriptList) return;
+          const li = document.createElement('li');
+          const role = entry.role || 'unknown';
+          li.className =
+            'rounded px-2 py-1 text-xs ' +
+            (role === 'user'
+              ? 'self-end bg-glow-red/10 text-ink-primary'
+              : role === 'agent'
+                ? 'bg-amber-500/5 text-amber-200'
+                : 'bg-white/5 text-ink-secondary');
+          li.dataset.role = role;
+          li.textContent = '[' + role + '] ' + (entry.body || '');
+          transcriptList.appendChild(li);
+          // Auto-scroll to bottom.
+          transcriptList.scrollTop = transcriptList.scrollHeight;
+        });
+        evtSource.addEventListener('error', () => {
+          // Surface a small disconnect indicator; let the browser's
+          // EventSource auto-reconnect handle re-establishment.
+          if (transcriptList && transcriptList.lastElementChild) {
+            const note = document.createElement('li');
+            note.className = 'text-xs italic text-ink-muted';
+            note.textContent = '(stream reconnecting…)';
+            transcriptList.appendChild(note);
+          }
+        });
+      }
+
+      // Wire stream start into the session-create flow + reset on
+      // beforeunload to prevent the EventSource from outliving the page.
+      const _originalSubmit = createForm
+        ? createForm.addEventListener.bind(createForm)
+        : null;
+      if (createForm) {
+        createForm.addEventListener('agent-session-created', (ev) => {
+          if (ev.detail && ev.detail.id) {
+            startTranscriptStream(ev.detail.id);
+          }
+        });
+      }
+      window.addEventListener('beforeunload', () => {
+        if (evtSource) {
+          evtSource.close();
+          evtSource = null;
+        }
+      });
+
+      // v2-#8 Wave 2.C sub-slice 8.28 — BundledLlmStatusPanel reader.
+      // Fetches the current state on page-load (when the customer has
+      // a token) and renders consent / cap / used into the right rail.
+      const consentEl = root.querySelector('[data-field="consent"]');
+      const capEl = root.querySelector('[data-field="cap"]');
+      const usedEl = root.querySelector('[data-field="used"]');
+      fetch(apiBaseUrl + '/v1/account/me/bundled-llm-status', {
+        headers: { authorization: 'Bearer ' + token },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((status) => {
+          if (!status) return;
+          if (consentEl) consentEl.textContent = status.consent ? 'opted in' : 'not enabled';
+          if (capEl) {
+            const cents = status.monthly_cap_usd_cents ?? 0;
+            capEl.textContent = '$' + (cents / 100).toFixed(2);
+          }
+          if (usedEl) {
+            const cents = status.used_this_month_cents ?? 0;
+            usedEl.textContent = '$' + (cents / 100).toFixed(2);
+          }
+        })
+        .catch(() => {
+          /* swallow */
+        });
+
+      // v2-#8 Wave 2.C sub-slice 8.28.b — MessageComposer.
+      const msgForm = root.querySelector('[data-form="message"]');
+      if (msgForm) {
+        msgForm.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          if (!activeSessionId) return;
+          const fd = new FormData(msgForm);
+          const userMessage = fd.get('user_message');
+          if (!userMessage || typeof userMessage !== 'string') return;
+          fetch(apiBaseUrl + '/v1/agent-sessions/' + activeSessionId + '/message', {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              authorization: 'Bearer ' + token,
+            },
+            body: JSON.stringify({ user_message: userMessage }),
+          })
+            .then((r) => r.json().then((body) => ({ status: r.status, body })))
+            .then(({ status }) => {
+              if (status === 402) {
+                // BundledLlmBudgetExhausted / BundledLlmConsentRequired
+                // — highlight the right-rail panel so the customer
+                // sees the recovery CTA there.
+                const aside = root.querySelector('[data-section="bundled-llm-status"]');
+                if (aside) {
+                  aside.classList.add('ring-2', 'ring-amber-500/50');
+                }
+              }
+              // Clear input on every settled state — the SSE stream
+              // publishes the next entry.
+              msgForm.reset();
             })
             .catch(() => {
               /* swallow */
