@@ -170,6 +170,18 @@ export interface EmailService {
     dashboardUrl: string;
   }): Promise<void>;
   /**
+   * Arc 3 sub-slice 28.5 (v2-#28) — 24h-before-grace-expiry nag.
+   * Last chance for the customer to update their verifier before
+   * the old secret stops working.
+   */
+  sendWebhookSecretGraceExpiring(args: {
+    to: string;
+    endpointUrl: string;
+    secretPrefix: string;
+    graceWindowEndsAt: Date;
+    dashboardUrl: string;
+  }): Promise<void>;
+  /**
    * v2-#11.5 — BYOK Anthropic API key rotation reminder. Fires when
    * the customer's stored BYOK key was set more than the rotation
    * threshold ago (60d nag, 90d target). No prefix shown — Anthropic
@@ -442,6 +454,14 @@ const TEMPLATES = {
   // notification. Fires once per cycle when the 91-day cap is crossed
   // (Q1=B). Body carries the new secret prefix + 7-day grace deadline
   // (Q2=B) so the customer knows when the old secret stops verifying.
+  // Arc 3 sub-slice 28.5 (v2-#28) — 24h-before-grace-expiry nag (Q3=B).
+  'webhook-secret-grace-expiring': {
+    subject: 'Driftstack — webhook secret grace window expires in 24h',
+    text: (v) =>
+      `Heads up — the previous secret for one of your webhook endpoints is about to stop verifying.\n\nEndpoint: ${v.endpointUrl}\nNew secret prefix: ${v.secretPrefix}\nGrace window ends: ${v.graceWindowEndsAt} (UTC)\n\nIf your verifier code still has the OLD secret configured, update it to the new value before the grace window closes. After that point, HMAC signatures will only verify against the new secret and your endpoint will start rejecting Driftstack deliveries.\n\nFetch the current secret at:\n${v.dashboardUrl}/webhooks\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Heads up — the previous secret for one of your webhook endpoints is about to stop verifying.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Endpoint:</strong></td><td><code>${v.endpointUrl}</code></td></tr><tr><td><strong>New secret prefix:</strong></td><td><code>${v.secretPrefix}</code></td></tr><tr><td><strong>Grace window ends:</strong></td><td>${v.graceWindowEndsAt} (UTC)</td></tr></table><p>If your verifier code still has the OLD secret configured, update it to the new value before the grace window closes. After that point, HMAC signatures will only verify against the new secret and your endpoint will start rejecting Driftstack deliveries.</p><p>Fetch the current secret at <a href="${v.dashboardUrl}/webhooks">${v.dashboardUrl}/webhooks</a>.</p><p>— Driftstack</p>`,
+  },
   'webhook-secret-force-rotated': {
     subject: 'Driftstack — your webhook secret was auto-rotated for security',
     text: (v) =>
@@ -564,6 +584,7 @@ export function createEmailService({
       sendOauthPendingLinkVerification: async () => {},
       sendWebhookSecretRotationReminder: async () => {},
       sendWebhookSecretForceRotated: async () => {},
+      sendWebhookSecretGraceExpiring: async () => {},
       sendByokAnthropicKeyRotationReminder: async () => {},
     };
   }
@@ -722,6 +743,19 @@ export function createEmailService({
       send('webhook-secret-force-rotated', to, {
         endpointUrl,
         newSecretPrefix,
+        graceWindowEndsAt: graceWindowEndsAt.toISOString(),
+        dashboardUrl,
+      }),
+    sendWebhookSecretGraceExpiring: ({
+      to,
+      endpointUrl,
+      secretPrefix,
+      graceWindowEndsAt,
+      dashboardUrl,
+    }) =>
+      send('webhook-secret-grace-expiring', to, {
+        endpointUrl,
+        secretPrefix,
         graceWindowEndsAt: graceWindowEndsAt.toISOString(),
         dashboardUrl,
       }),
