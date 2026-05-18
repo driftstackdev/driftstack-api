@@ -8,6 +8,14 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`Session.egress_capability_report`** (Arc 5 EGRESS eg.1.c) —
+  raw harness-emitted event payload as `Record<string, unknown> | null`,
+  stored alongside the derived `egress_capabilities` view. Forensics
+  - schema-evolution safety net: surfaces fields the SDK schema
+    doesn't formally know (e.g. harness-side diagnostic counters)
+    without requiring an SDK release. Consumers should prefer
+    `egress_capabilities` for typed access; this is opaque JSON for
+    inspection / observability piping.
 - **`client.agentSessions.takeover(id, clientId)`** + **`.handback(id)`**
   (v2-#8 Arc 2 sub-slice 8.9) — pair-mode state-machine wrappers.
   Takeover requests a human to take control of a `mode: 'pair'`
