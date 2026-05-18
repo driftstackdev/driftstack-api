@@ -370,6 +370,11 @@ describe('OpenAPI spec generation', () => {
     // operator-only framing so customer API-key holders know it's not
     // for them.
     expect(json).toMatch(/operator-only \(fleet nodes auth via mTLS\)/);
+    // The fleet-events summary line no longer cites the internal
+    // `docs/network-architecture.md` repo path — that doc lives at
+    // the repo root, not on docs.driftstack.dev, so customers reading
+    // the Scalar UI couldn't follow the reference anyway.
+    expect(json).not.toMatch(/docs\/network-architecture\.md/);
   });
 
   it('LK.2 — RegisterMacNodeRequest + RegisterMacNodeResponse are named component schemas', () => {

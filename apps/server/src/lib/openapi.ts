@@ -2882,7 +2882,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/fleet/events',
     summary:
-      'Fleet-node WebSocket event stream (operator-only; mTLS + signed JWT auth per docs/network-architecture.md)',
+      'Fleet-node WebSocket event stream (operator-only; mTLS + signed Ed25519 JWT at handshake; customer API keys have no role here)',
     tags: ['fleet'],
     // No `security: auth` — fleet auth runs via signed JWT in a custom
     // header at WebSocket handshake, gated by mTLS at the edge. The
