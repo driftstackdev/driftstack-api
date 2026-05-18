@@ -39,6 +39,11 @@ const ACTION_LABEL: Record<string, string> = {
   'team.member_removed': 'Team member removed',
   'admin.refund_recorded': 'Refund recorded by support',
   'admin.support_note': 'Support note added',
+  // Arc 4 Wave 2.B sub-slice 8.20 (v2-#8) — pair-mode state-machine
+  // transitions surfaced on the customer audit log.
+  'agent_session.pair_mode.takeover': 'Pair-mode takeover requested',
+  'agent_session.pair_mode.handback': 'Pair-mode handback requested',
+  'agent_session.pair_mode.timeout': 'Pair-mode heartbeat timeout',
 };
 
 // V-354 — preset filters. Each maps to a single AccountAuditAction
@@ -84,6 +89,12 @@ const FILTER_OPTIONS = [
   // V-398 — staff-touched events surfaced for transparency.
   { value: 'admin.refund_recorded', label: 'Refund recorded by support' },
   { value: 'admin.support_note', label: 'Support note added' },
+  // Arc 4 Wave 2.B sub-slice 8.20 (v2-#8) — pair-mode state-machine
+  // transitions. Surfaces every takeover / handback / heartbeat-
+  // timeout transition the customer's pair-mode session ran through.
+  { value: 'agent_session.pair_mode.takeover', label: 'Pair-mode takeover requested' },
+  { value: 'agent_session.pair_mode.handback', label: 'Pair-mode handback requested' },
+  { value: 'agent_session.pair_mode.timeout', label: 'Pair-mode heartbeat timeout' },
 ] as const;
 ---
 
