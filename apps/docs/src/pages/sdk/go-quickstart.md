@@ -182,7 +182,8 @@ while you roll the new secret across your verifier infra.
   decompose-and-execute on top of the regular driver surface;
   AI / manual / pair modes, live SSE transcript stream, and the
   LiveKit-based live video subscription (auto-populated `livekit`
-  field on session-create or via the explicit token-mint endpoint).
+  field on session-create, or re-mint via
+  `client.AgentSessions.LivekitToken(ctx, id)` after the 24h token TTL).
 - [Bundled LLM](/api/bundled-llm/) and
   [BYOK Anthropic](/api/byok-anthropic/) — the two LLM rails
   agent sessions can use.

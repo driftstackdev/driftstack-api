@@ -144,7 +144,8 @@ won't drop deliveries.
   decompose-and-execute on top of the regular driver surface;
   AI / manual / pair modes, live SSE transcript stream, and the
   LiveKit-based live video subscription (auto-populated `livekit`
-  field on session-create or via the explicit token-mint endpoint).
+  field on session-create, or re-mint via
+  `client.agentSessions.livekitToken(id)` after the 24h token TTL).
 - [Bundled LLM](/api/bundled-llm/) and
   [BYOK Anthropic](/api/byok-anthropic/) — the two LLM rails
   agent sessions can use; bring your own key OR consent to the
