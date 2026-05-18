@@ -13,6 +13,7 @@ import {
 import { encryptLivekitSecret } from '../../src/lib/livekit-secret-encryption.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import type { DrizzleFleetNodesRepo, FleetNodeDetail } from '../../src/db/fleet-nodes-repo.js';
+import { MetricsRegistry, METRIC_NAMES } from '../../src/services/metrics-registry.js';
 
 const stubAuthPlugin = fp(
   (_app, _opts, done) => {
@@ -97,6 +98,7 @@ async function buildApp(args: {
   mac: FleetNodeDetail | null;
   encryptionKey: string;
   callerAccountId?: string;
+  metrics?: MetricsRegistry;
 }) {
   const app = Fastify();
   app.decorateRequest('account', null);
@@ -114,9 +116,19 @@ async function buildApp(args: {
     fleetNodesRepo: makeStubFleetRepo(args.mac),
     agentSessionsRepo: makeStubAgentSessionsRepo(args.session),
     encryptionKey: args.encryptionKey,
+    ...(args.metrics !== undefined ? { metrics: args.metrics } : {}),
   });
   await app.ready();
   return app;
+}
+
+function makeMetrics(): MetricsRegistry {
+  const m = new MetricsRegistry();
+  m.registerCounter(METRIC_NAMES.livekitTokenMintTotal, 'LiveKit token mint outcomes.', [
+    'role',
+    'outcome',
+  ]);
+  return m;
 }
 
 describe('LK.3 — POST /v1/agent-sessions/:id/livekit-token', () => {
@@ -268,6 +280,116 @@ describe('LK.3 — POST /v1/agent-sessions/:id/livekit-token', () => {
     });
     const body = res.json<Record<string, string>>();
     expect(body.room).toBe(SESSION_ID);
+    await app.close();
+  });
+
+  // Metric instrumentation — reuses the existing
+  // livekit_token_mint_total counter from obs.12 with
+  // role='subscriber' on the agent-sessions surface.
+  it('metric: 200 happy path emits {role=subscriber, outcome=ok}', async () => {
+    const metrics = makeMetrics();
+    const app = await buildApp({
+      session: makeSession(),
+      mac: makeMac({ encryptionKey: key }),
+      encryptionKey: key,
+      metrics,
+    });
+    await app.inject({ method: 'POST', url: `/v1/agent-sessions/${SESSION_ID}/livekit-token` });
+    expect(
+      metrics.getValue(METRIC_NAMES.livekitTokenMintTotal, {
+        role: 'subscriber',
+        outcome: 'ok',
+      }),
+    ).toBe(1);
+    await app.close();
+  });
+
+  it('metric: 404 paths emit {role=subscriber, outcome=not_found}', async () => {
+    const metrics = makeMetrics();
+    const app = await buildApp({
+      session: null,
+      mac: makeMac({ encryptionKey: key }),
+      encryptionKey: key,
+      metrics,
+    });
+    await app.inject({ method: 'POST', url: `/v1/agent-sessions/${SESSION_ID}/livekit-token` });
+    expect(
+      metrics.getValue(METRIC_NAMES.livekitTokenMintTotal, {
+        role: 'subscriber',
+        outcome: 'not_found',
+      }),
+    ).toBe(1);
+    await app.close();
+  });
+
+  it('metric: 403 closed session emits {role=subscriber, outcome=forbidden}', async () => {
+    const metrics = makeMetrics();
+    const app = await buildApp({
+      session: makeSession({ status: 'closed', closedReason: 'budget-exhausted' }),
+      mac: makeMac({ encryptionKey: key }),
+      encryptionKey: key,
+      metrics,
+    });
+    await app.inject({ method: 'POST', url: `/v1/agent-sessions/${SESSION_ID}/livekit-token` });
+    expect(
+      metrics.getValue(METRIC_NAMES.livekitTokenMintTotal, {
+        role: 'subscriber',
+        outcome: 'forbidden',
+      }),
+    ).toBe(1);
+    await app.close();
+  });
+
+  it('metric: no-Mac-yet emits {role=subscriber, outcome=no_mac}', async () => {
+    const metrics = makeMetrics();
+    const app = await buildApp({
+      session: makeSession(),
+      mac: null,
+      encryptionKey: key,
+      metrics,
+    });
+    await app.inject({ method: 'POST', url: `/v1/agent-sessions/${SESSION_ID}/livekit-token` });
+    expect(
+      metrics.getValue(METRIC_NAMES.livekitTokenMintTotal, {
+        role: 'subscriber',
+        outcome: 'no_mac',
+      }),
+    ).toBe(1);
+    await app.close();
+  });
+
+  it('metric: wrong encryption key emits {role=subscriber, outcome=secret_unreadable}', async () => {
+    const metrics = makeMetrics();
+    const macKey = makeKey();
+    const routeKey = makeKey();
+    const app = await buildApp({
+      session: makeSession(),
+      mac: makeMac({ encryptionKey: macKey }),
+      encryptionKey: routeKey,
+      metrics,
+    });
+    await app.inject({ method: 'POST', url: `/v1/agent-sessions/${SESSION_ID}/livekit-token` });
+    expect(
+      metrics.getValue(METRIC_NAMES.livekitTokenMintTotal, {
+        role: 'subscriber',
+        outcome: 'secret_unreadable',
+      }),
+    ).toBe(1);
+    await app.close();
+  });
+
+  it('metric: omitted registry is a silent no-op (does not throw)', async () => {
+    // No `metrics` field on buildApp — route works fine without.
+    const app = await buildApp({
+      session: makeSession(),
+      mac: makeMac({ encryptionKey: key }),
+      encryptionKey: key,
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${SESSION_ID}/livekit-token`,
+    });
+    expect(res.statusCode).toBe(200);
     await app.close();
   });
 });

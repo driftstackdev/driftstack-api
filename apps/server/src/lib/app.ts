@@ -1083,6 +1083,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       fleetNodesRepo: deps.drizzleFleetNodesRepo,
       agentSessionsRepo: deps.agentSessionsRepo,
       encryptionKey: deps.livekitSecretEncryptionKey,
+      ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
     });
   }
   if (

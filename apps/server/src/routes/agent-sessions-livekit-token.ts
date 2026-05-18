@@ -27,6 +27,7 @@ import { mintLivekitToken } from '../lib/livekit-token.js';
 import { decryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { FeatureUnavailableError } from '../lib/errors.js';
+import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 
 const AGENT_SESSION_ID_RE = /^agt_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -43,6 +44,11 @@ export interface RegisterAgentSessionsLivekitTokenRouteDeps {
   encryptionKey: string;
   /** Now-provider (test-injectable). Defaults to `() => Date.now()`. */
   nowMs?: () => number;
+  /** Optional metrics registry — when wired, every mint outcome
+   *  bumps `driftstack_livekit_token_mint_total{role,outcome}`
+   *  with role='subscriber' (the agent-sessions surface is
+   *  subscriber-only — the Mac publishes the video stream). */
+  metrics?: MetricsRegistry;
 }
 
 export function registerAgentSessionsLivekitTokenRoute(
@@ -51,6 +57,17 @@ export function registerAgentSessionsLivekitTokenRoute(
 ): void {
   const { fleetNodesRepo, agentSessionsRepo, encryptionKey } = deps;
   const nowMs = deps.nowMs ?? (() => Date.now());
+  const metrics = deps.metrics;
+  const bump = (outcome: string): void => {
+    try {
+      metrics?.inc(METRIC_NAMES.livekitTokenMintTotal, {
+        role: 'subscriber',
+        outcome,
+      });
+    } catch {
+      // Swallow; metrics are best-effort.
+    }
+  };
 
   app.post<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id/livekit-token',
@@ -64,22 +81,26 @@ export function registerAgentSessionsLivekitTokenRoute(
 
       // Cheap shape-check — junk ids fail before the db hit.
       if (!AGENT_SESSION_ID_RE.test(sessionId)) {
+        bump('not_found');
         throw new NotFoundError(`Agent session "${sessionId}" not found.`);
       }
 
       const session = await agentSessionsRepo.get(sessionId);
       if (session === null) {
+        bump('not_found');
         throw new NotFoundError(`Agent session "${sessionId}" not found.`);
       }
       // Cross-account access is a 404 (anti-enumeration; same posture
       // as /v1/sessions/:id and the rest of the customer-facing surface).
       if (session.accountId !== ctx.account.id) {
+        bump('not_found');
         throw new NotFoundError(`Agent session "${sessionId}" not found.`);
       }
       if (session.status !== 'active') {
         // 403 rather than 404 — the customer DID own this session,
         // they just can't mint a token for a closed one. Matches the
         // existing pair-mode-action posture.
+        bump('forbidden');
         throw new ForbiddenError(`Cannot mint LiveKit token for ${session.status} agent session.`);
       }
 
@@ -89,6 +110,7 @@ export function registerAgentSessionsLivekitTokenRoute(
       // direct fleetNodesRepo.getDetail(session.assignedMacNodeId).
       const mac = await fleetNodesRepo.findAnyWithLivekit();
       if (mac === null || mac.livekit === null) {
+        bump('no_mac');
         throw new FeatureUnavailableError(
           'No Mac in the fleet has registered LiveKit credentials yet. ' +
             'POST /v1/mac-nodes/register must run for at least one Mac before ' +
@@ -104,6 +126,7 @@ export function registerAgentSessionsLivekitTokenRoute(
         // corrupted or the key has rotated without re-registering
         // Macs. Surface as 503 + ops alert (the throw lands in
         // Sentry via the error-handler).
+        bump('secret_unreadable');
         throw new FeatureUnavailableError(
           `Mac ${mac.id} LiveKit secret is unreadable; re-run /v1/mac-nodes/register. ` +
             `Underlying: ${err instanceof Error ? err.message : 'unknown'}`,
@@ -128,6 +151,7 @@ export function registerAgentSessionsLivekitTokenRoute(
         },
       });
 
+      bump('ok');
       const expiresAt = new Date(tokenNowMs + ttlSeconds * 1000).toISOString();
       return reply.code(200).send({
         ws_url: mac.livekit.wsUrl,
