@@ -1,0 +1,126 @@
+---
+layout: ../../layouts/DocLayout.astro
+title: Prometheus metrics
+description: GET /metrics — Prometheus-format scrape endpoint. Bearer-token gated; surfaces in-process counters covering auth, rate limits, webhooks (Stripe + NOWPayments + OAuth), pair-mode + agent decompose outcomes, and audit-log emissions.
+---
+
+# Prometheus metrics
+
+`GET /metrics`
+
+Driftstack exposes an in-process counter registry over a single
+Prometheus-compatible scrape endpoint. The format is plain-text
+exposition format (`text/plain; version=0.0.4; charset=utf-8`); any
+Prometheus-compatible scraper (Prometheus itself, VictoriaMetrics,
+Grafana Agent, OpenTelemetry Collector with the Prometheus receiver)
+can consume it.
+
+This page is **for operators**, not API consumers — you only need it
+if you're integrating Driftstack into your own observability stack.
+
+## Auth
+
+The endpoint is publicly addressable (so external scrapers can reach
+it without needing an internal-only path) but bearer-token gated:
+
+```
+GET /metrics HTTP/1.1
+Host: api.driftstack.dev
+Authorization: Bearer <METRICS_SCRAPE_TOKEN>
+```
+
+Missing / wrong token → `401`. Token-unset deployments → `503` (the
+gate is opt-in; the registry isn't constructed unless the token
+env var is wired).
+
+The token rotates on the same cadence as other internal credentials
+and is provisioned via the deploy bridge (`/etc/driftstack/api.env`).
+
+## Cardinality
+
+All exposed counters use **bounded label sets** — every label value
+comes from a closed enum or namespace prefix. There are no
+account-id labels, no api-key-id labels, no IP-address labels. The
+total time-series count is dominated by the cross-product of small
+enums; the scrape size stays well under the Prometheus default
+`sample_limit`.
+
+## Catalogue
+
+The current counter catalogue (all `driftstack_*` namespaced):
+
+### Auth + rate limiting
+
+| Metric                         | Labels              | What it tracks                                                                                        |
+| ------------------------------ | ------------------- | ----------------------------------------------------------------------------------------------------- |
+| `driftstack_auth_total`        | `outcome`           | requireAuth resolution outcomes (ok / unauthorized / invalid / revoked / expired / forbidden / error) |
+| `driftstack_rate_limit_total`  | `bucket`, `outcome` | rate-limit consumes per bucket × allowed/exceeded                                                     |
+| `driftstack_oauth_token_total` | `outcome`           | OAuth /token exchange outcomes (ok + the OAuthError code set + error)                                 |
+
+### Agent + LLM rails
+
+| Metric                                  | Labels        | What it tracks                                                                                         |
+| --------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------ |
+| `driftstack_agent_decompose_total`      | `result_kind` | agent decompose() calls by result (plan / clarify / refuse)                                            |
+| `driftstack_pair_mode_transition_total` | `from`, `to`  | pair-mode state-machine transitions                                                                    |
+| `driftstack_bundled_llm_request_total`  | `outcome`     | bundled-LLM decompose requests by outcome                                                              |
+| `driftstack_bundled_llm_error_total`    | `kind`        | bundled-LLM decompose errors (consent_missing / budget_exhausted)                                      |
+| `driftstack_byok_anthropic_test_total`  | `outcome`     | BYOK Anthropic /test endpoint outcomes (ok / invalid / quota_exceeded / not_set / not_wired / unknown) |
+
+### Webhook ingress
+
+| Metric                                 | Labels    | What it tracks                                                                                                                                 |
+| -------------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `driftstack_stripe_webhook_total`      | `outcome` | Stripe inbound webhook outcomes (handled / duplicate / ignored / error / signature_invalid / signature_missing / empty_body / malformed_event) |
+| `driftstack_nowpayments_webhook_total` | `outcome` | NOWPayments IPN outcomes (ok / signature_invalid / signature_missing / empty_body / malformed_event)                                           |
+
+### Audit log
+
+| Metric                                | Labels                 | What it tracks                                               |
+| ------------------------------------- | ---------------------- | ------------------------------------------------------------ |
+| `driftstack_account_audit_emit_total` | `prefix`, `actor_type` | Customer-facing audit log emissions, namespace-bucketed      |
+| `driftstack_admin_audit_emit_total`   | `prefix`               | Admin (/v1/admin/\*) audit log emissions, namespace-bucketed |
+
+## Suggested alerts
+
+Reasonable starting alerts (translate to your alert-manager rules
+language):
+
+- `rate(driftstack_auth_total{outcome="invalid"}[5m]) > 0.1`
+  — sustained invalid-key rate suggests credential stuffing.
+- `rate(driftstack_stripe_webhook_total{outcome="signature_invalid"}[15m]) > 0`
+  — any failed-signature webhook is a spoofing attempt; investigate.
+- `rate(driftstack_bundled_llm_error_total{kind="budget_exhausted"}[1h]) > 1`
+  — multiple customers hitting the bundled-LLM cap signals demand
+  outstripping the deployment-fallback budget.
+- `rate(driftstack_byok_anthropic_test_total{outcome="quota_exceeded"}[1h]) > 5`
+  — multiple customers' Anthropic accounts are throttling; an
+  upstream Anthropic-side incident.
+
+Set thresholds per your traffic baseline; the rates above are
+illustrative.
+
+## Format
+
+The exposition format is the text-based variant documented at
+[prometheus.io/docs/instrumenting/exposition_formats](https://prometheus.io/docs/instrumenting/exposition_formats/).
+Counters emit:
+
+```
+# HELP driftstack_auth_total Auth resolution outcomes (...).
+# TYPE driftstack_auth_total counter
+driftstack_auth_total{outcome="ok"} 1234
+driftstack_auth_total{outcome="invalid"} 7
+```
+
+Scraper-side resets: counters reset to 0 on process restart. The
+standard Prometheus `rate()` and `irate()` functions handle resets
+correctly; sum metrics over longer windows in your dashboards.
+
+## Source of truth
+
+Counter name + label catalogue lives in
+`apps/server/src/services/metrics-registry.ts` (`METRIC_NAMES`
+constant). The integration-test fixture pre-registers the same set;
+contributors adding a new counter must update both + a parity test
+typically lives alongside the call site.

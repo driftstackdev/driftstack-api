@@ -138,6 +138,9 @@ prompt the customer first.
 - [Idempotency keys](/reference/idempotency) — when retrying a POST
   that creates a resource, send an `Idempotency-Key` header so the
   retry replays the original response instead of minting a duplicate.
+- [Prometheus metrics](/reference/metrics) — operators integrating
+  Driftstack into their own observability stack: counter catalogue,
+  bearer-token gate, suggested alert thresholds.
 - [API key scopes](/reference/scopes) — when a request returns
   `forbidden`, the `detail` names the required scope.
 - [Rate limits](/reference/rate-limits) — when a request returns
