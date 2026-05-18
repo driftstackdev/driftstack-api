@@ -133,4 +133,72 @@ describe('BYOKAnthropicService', () => {
     expect(await svc.getPlaintext({ accountId: accountB })).toBeNull();
     expect((await svc.getMetadata({ accountId: accountB })).hasKey).toBe(false);
   });
+
+  // v2-#21 — stored-key TTL gate. Customer's stored key is treated as
+  // absent at resolution time once it crosses the maxKeyAgeMs cutoff,
+  // forcing the agent-sessions route's resolution chain to fall through
+  // to the per-request header / deployment-fallback / 502 paths.
+  it('v2-#21 getPlaintext returns null when the stored key is older than maxKeyAgeMs (default 90d) AND `now` is supplied', async () => {
+    const svc = new BYOKAnthropicService(new InMemoryBYOKAnthropicRepo(), {
+      encryptionKey: randomBytes(32).toString('base64'),
+    });
+    const setAt = new Date('2026-01-01T00:00:00Z');
+    const ninetyOneDaysLater = new Date(setAt.getTime() + 91 * 24 * 60 * 60 * 1000);
+    await svc.setKey({
+      accountId: ACCOUNT_ID,
+      plaintext: 'sk-ant-api03-aging-key',
+      now: setAt,
+    });
+    // Without `now`: legacy behaviour — TTL gate stays off.
+    expect(await svc.getPlaintext({ accountId: ACCOUNT_ID })).toBe('sk-ant-api03-aging-key');
+    // With `now` past the TTL: returns null even though the row exists.
+    expect(await svc.getPlaintext({ accountId: ACCOUNT_ID, now: ninetyOneDaysLater })).toBeNull();
+  });
+
+  it('v2-#21 getPlaintext returns the plaintext when `now` is within the TTL window (89d after setAt is still good)', async () => {
+    const svc = new BYOKAnthropicService(new InMemoryBYOKAnthropicRepo(), {
+      encryptionKey: randomBytes(32).toString('base64'),
+    });
+    const setAt = new Date('2026-01-01T00:00:00Z');
+    const eightyNineDaysLater = new Date(setAt.getTime() + 89 * 24 * 60 * 60 * 1000);
+    await svc.setKey({
+      accountId: ACCOUNT_ID,
+      plaintext: 'sk-ant-api03-fresh',
+      now: setAt,
+    });
+    expect(await svc.getPlaintext({ accountId: ACCOUNT_ID, now: eightyNineDaysLater })).toBe(
+      'sk-ant-api03-fresh',
+    );
+  });
+
+  it('v2-#21 custom maxKeyAgeMs lets a deploy tighten or relax the TTL — Infinity disables expiry entirely', async () => {
+    const tight = new BYOKAnthropicService(new InMemoryBYOKAnthropicRepo(), {
+      encryptionKey: randomBytes(32).toString('base64'),
+      // 1 hour TTL.
+      maxKeyAgeMs: 60 * 60 * 1000,
+    });
+    const setAt = new Date('2026-01-01T00:00:00Z');
+    const twoHoursLater = new Date(setAt.getTime() + 2 * 60 * 60 * 1000);
+    await tight.setKey({
+      accountId: ACCOUNT_ID,
+      plaintext: 'sk-ant-api03-quick-expire',
+      now: setAt,
+    });
+    expect(await tight.getPlaintext({ accountId: ACCOUNT_ID, now: twoHoursLater })).toBeNull();
+
+    // Disabled TTL (Infinity) — legacy / opt-out path.
+    const noTtl = new BYOKAnthropicService(new InMemoryBYOKAnthropicRepo(), {
+      encryptionKey: randomBytes(32).toString('base64'),
+      maxKeyAgeMs: Number.POSITIVE_INFINITY,
+    });
+    await noTtl.setKey({
+      accountId: ACCOUNT_ID,
+      plaintext: 'sk-ant-api03-never-expire',
+      now: setAt,
+    });
+    const yearLater = new Date(setAt.getTime() + 365 * 24 * 60 * 60 * 1000);
+    expect(await noTtl.getPlaintext({ accountId: ACCOUNT_ID, now: yearLater })).toBe(
+      'sk-ant-api03-never-expire',
+    );
+  });
 });

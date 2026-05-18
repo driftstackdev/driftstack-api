@@ -62,7 +62,25 @@ export interface BYOKAnthropicServiceConfig {
    *  `MFA_ENCRYPTION_KEY` per Q1 verdict 2026-05-17 — operational
    *  simplicity over compartmentalisation. */
   encryptionKey: string;
+  /**
+   * v2-#21 — maximum age (ms) of a stored BYOK key before
+   * `getPlaintext` treats it as expired and returns `null`. Lets the
+   * agent-sessions resolution chain fall through to either the
+   * per-request `x-byok-anthropic-api-key` header (still honoured —
+   * a header value bypasses storage entirely) or the deployment
+   * fallback / 502 ByokAnthropicRequired posture. Default 90 days
+   * matches the 60-day reminder + 90-day rotation target documented
+   * by the WebhookRotationReminderService / ByokAnthropicRotationReminderService.
+   * Set to `Infinity` to disable expiry (legacy / test paths).
+   */
+  maxKeyAgeMs?: number;
 }
+
+/** v2-#21 — default BYOK Anthropic key TTL. 90 days matches the
+ *  ROTATION_TARGET_DAYS constant in the rotation-reminder services
+ *  (v2-#10.5 / v2-#11.5) — past that point the customer has been
+ *  nagged for ~30 days and the key is considered stale. */
+export const BYOK_ANTHROPIC_KEY_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 export class InvalidKeyFormatError extends Error {
   constructor() {
@@ -104,11 +122,27 @@ export class BYOKAnthropicService {
   }
 
   /** Resolution-path read — used by the AgentRuntime call site ONLY.
-   *  Returns `null` when no key set (caller falls back to header /
-   *  deployment fallback). Decrypts + returns the branded plaintext. */
-  async getPlaintext(args: { accountId: string }): Promise<BYOKAnthropicKeyPlaintext | null> {
+   *  Returns `null` when no key set OR (v2-#21) when the stored key
+   *  is older than `maxKeyAgeMs`. Caller falls back to header /
+   *  deployment fallback / 502 ByokAnthropicRequired per the route's
+   *  resolution chain. Decrypts + returns the branded plaintext. */
+  async getPlaintext(args: {
+    accountId: string;
+    now?: Date;
+  }): Promise<BYOKAnthropicKeyPlaintext | null> {
     const row = await this.repo.findByAccount(args.accountId);
     if (!row || row.ciphertext === null) return null;
+    // v2-#21 — TTL gate. Stored keys older than `maxKeyAgeMs` are
+    // treated as absent at resolution time so the agent-sessions
+    // resolution chain falls through to header / fallback / 502.
+    // Per-request `x-byok-anthropic-api-key` headers bypass storage
+    // entirely so customers can always recover by passing a fresh
+    // key on the wire.
+    const maxAgeMs = this.config.maxKeyAgeMs ?? BYOK_ANTHROPIC_KEY_TTL_MS;
+    if (row.setAt !== null && args.now !== undefined && Number.isFinite(maxAgeMs)) {
+      const ageMs = args.now.getTime() - row.setAt.getTime();
+      if (ageMs > maxAgeMs) return null;
+    }
     return decryptByokAnthropicKey(row.ciphertext, this.config.encryptionKey);
   }
 

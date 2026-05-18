@@ -148,7 +148,13 @@ export function registerAgentSessionsRoutes(
           // (one AES-GCM unwrap) and keeps the replay behaviour
           // observably-identical to the first call.
           if (byokService !== undefined && byokKeyCache !== undefined) {
-            const stored = await byokService.getPlaintext({ accountId: ctx.account.id });
+            // v2-#21 — pass `now` so a stored key older than the TTL
+            // resolves to null + the resolution chain falls through to
+            // header / fallback / 502.
+            const stored = await byokService.getPlaintext({
+              accountId: ctx.account.id,
+              now: new Date(),
+            });
             if (stored !== null) byokKeyCache.set(existing.id, stored);
           }
           return reply.code(201).send(publicAgentSession(existing));
@@ -165,8 +171,13 @@ export function registerAgentSessionsRoutes(
       // Q.1.c — decrypt the customer's stored BYOK key ONCE at
       // session-create and stash plaintext in the per-session cache.
       // Bounds AES-GCM unwrap to one operation per session.
+      // v2-#21 — pass `now` so the TTL gate fires for stored keys
+      // older than maxKeyAgeMs (90d default).
       if (byokService !== undefined && byokKeyCache !== undefined) {
-        const stored = await byokService.getPlaintext({ accountId: ctx.account.id });
+        const stored = await byokService.getPlaintext({
+          accountId: ctx.account.id,
+          now: new Date(),
+        });
         if (stored !== null) {
           byokKeyCache.set(created.id, stored);
         }
