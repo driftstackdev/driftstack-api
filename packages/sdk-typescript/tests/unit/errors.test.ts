@@ -17,6 +17,7 @@ import {
   MfaStepUpRequiredError,
   NotFoundError,
   RateLimitError,
+  TierLimitError,
   TransportError,
   ValidationError,
 } from '../../src/errors.js';
@@ -84,6 +85,39 @@ describe('errorFromProblem', () => {
       null,
     );
     expect((e as RateLimitError).retryAfterSeconds).toBe(1);
+  });
+
+  // Arc 4 Wave 2.B sub-slice 8.20.k.4 (v2-#8) — TS TierLimitError
+  // parity with Python+Go QuotaExceededError typed-extension fields.
+  // Customers reading the error in TS now get err.current /
+  // err.limit / err.recordType without re-parsing the raw problem.
+  it('maps tier-limit → TierLimitError, captures current/limit/recordType', () => {
+    const e = errorFromProblem(
+      {
+        type: PROBLEM_TYPES.TierLimit,
+        title: 'Tier quota exhausted',
+        status: 429,
+        current: 1000,
+        limit: 1000,
+        record_type: 'navigate',
+      },
+      null,
+    );
+    expect(e).toBeInstanceOf(TierLimitError);
+    expect((e as TierLimitError).current).toBe(1000);
+    expect((e as TierLimitError).limit).toBe(1000);
+    expect((e as TierLimitError).recordType).toBe('navigate');
+  });
+
+  it('tier-limit without extension fields → fields default to undefined (matches Python None / Go zero-value semantics)', () => {
+    const e = errorFromProblem(
+      { type: PROBLEM_TYPES.TierLimit, title: 'Tier quota exhausted', status: 429 },
+      null,
+    );
+    expect(e).toBeInstanceOf(TierLimitError);
+    expect((e as TierLimitError).current).toBeUndefined();
+    expect((e as TierLimitError).limit).toBeUndefined();
+    expect((e as TierLimitError).recordType).toBeUndefined();
   });
 
   it('maps concurrency-limit → ConcurrencyLimitError, captures current/limit', () => {

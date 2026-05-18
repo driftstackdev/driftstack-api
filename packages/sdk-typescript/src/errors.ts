@@ -184,9 +184,28 @@ export class ConcurrencyLimitError extends DriftstackError {
 }
 
 export class TierLimitError extends DriftstackError {
+  /**
+   * Per-period usage quota exhausted. Extensions on the wire surface
+   * the bucket state so the SDK consumer can render a precise "you've
+   * used X of Y" message without a follow-up GET.
+   *
+   * Cross-SDK parity: Python exposes `err.current` + `err.limit` +
+   * `err.record_type` on QuotaExceededError; Go exposes `err.Current`
+   * + `err.Limit` + `err.RecordType` on QuotaExceededError. TS keeps
+   * the historical `TierLimitError` name (already shipped in 0.1.x)
+   * + now exposes camelCase `err.current`, `err.limit`,
+   * `err.recordType`.
+   */
+  readonly current: number | undefined;
+  readonly limit: number | undefined;
+  readonly recordType: string | undefined;
   constructor(p: Problem) {
     super(toOpts('tier_limit', p));
     this.name = 'TierLimitError';
+    const ext = p as { current?: number; limit?: number; record_type?: string };
+    this.current = ext.current;
+    this.limit = ext.limit;
+    this.recordType = ext.record_type;
   }
 }
 
