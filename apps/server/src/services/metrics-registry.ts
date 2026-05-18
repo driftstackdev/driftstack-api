@@ -160,4 +160,11 @@ export const METRIC_NAMES = {
   // surface but at metrics-cardinality (bounded) rather than
   // per-call audit rows.
   agentDecomposeTotal: 'driftstack_agent_decompose_total',
+  // Arc 7 obs.4 — BYOK Anthropic /test endpoint outcome counter.
+  // Labelled by outcome (ok / invalid / quota_exceeded / unknown
+  // / not_set / not_wired) so the dashboard can chart customer
+  // BYOK health (ok+invalid is the customer signal; quota_exceeded
+  // tells us their Anthropic account is throttling; not_wired
+  // means the deployment hasn't shipped the AI-B1.b real tester).
+  byokAnthropicTestTotal: 'driftstack_byok_anthropic_test_total',
 } as const;

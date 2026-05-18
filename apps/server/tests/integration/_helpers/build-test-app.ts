@@ -699,6 +699,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'Agent decompose() call counter, labelled by result kind (plan / clarify / refuse).',
     ['result_kind'],
   );
+  // Arc 7 obs.4 — BYOK Anthropic /test outcome counter.
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.byokAnthropicTestTotal,
+    'BYOK Anthropic /test endpoint outcomes (ok / invalid / quota_exceeded / not_set / not_wired / unknown).',
+    ['outcome'],
+  );
 
   // v2-#18 — capturing usage recorder for the AgentRuntime end-to-end
   // smoke. Always declared (even when captureAgentDecomposerUsage is

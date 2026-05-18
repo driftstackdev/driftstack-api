@@ -619,6 +619,12 @@ export async function createProductionDeps(
             'Agent decompose() call counter, labelled by result kind (plan / clarify / refuse).',
             ['result_kind'],
           );
+          // Arc 7 obs.4 — BYOK Anthropic /test outcome counter.
+          r.registerCounter(
+            METRIC_NAMES.byokAnthropicTestTotal,
+            'BYOK Anthropic /test endpoint outcomes (ok / invalid / quota_exceeded / not_set / not_wired / unknown).',
+            ['outcome'],
+          );
           return r;
         })()
       : undefined;

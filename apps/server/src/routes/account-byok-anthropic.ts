@@ -25,6 +25,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import { InvalidKeyFormatError } from '../services/byok-anthropic.js';
 import { BadRequestError, FeatureUnavailableError } from '../lib/errors.js';
+import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 
 export interface AccountByokAnthropicRoutesOptions {
   service: BYOKAnthropicService;
@@ -34,6 +35,28 @@ export interface AccountByokAnthropicRoutesOptions {
    *  don't need to mock Anthropic SDK HTTP. Returns the result for the
    *  POST /test endpoint. */
   testConnection?: (key: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
+  /** Arc 7 obs.4 — optional metrics registry. When wired, the
+   *  /test endpoint increments
+   *  `driftstack_byok_anthropic_test_total{outcome}` per call. */
+  metrics?: MetricsRegistry;
+}
+
+/** Map a connection-test result + reason string to one of the
+ *  bounded `outcome` label values. Keeps label cardinality fixed
+ *  even as the underlying error messages evolve. */
+function classifyTestOutcome(
+  result: { ok: true } | { ok: false; reason: string },
+): 'ok' | 'invalid' | 'quota_exceeded' | 'not_wired' | 'unknown' {
+  if (result.ok) return 'ok';
+  const r = result.reason.toLowerCase();
+  if (r.includes('not yet wired')) return 'not_wired';
+  if (r.includes('quota') || r.includes('rate limit') || r.includes('rate-limit')) {
+    return 'quota_exceeded';
+  }
+  if (r.includes('invalid') || r.includes('unauthorized') || r.includes('forbidden')) {
+    return 'invalid';
+  }
+  return 'unknown';
 }
 
 function defaultTestConnection(): Promise<{ ok: false; reason: string }> {
@@ -53,6 +76,7 @@ export function registerAccountByokAnthropicRoutes(
   const { service } = opts;
   const now = opts.now ?? (() => new Date());
   const testConnection = opts.testConnection ?? defaultTestConnection;
+  const metrics = opts.metrics;
 
   // GET /v1/account/me/byok-anthropic-key — metadata only; NEVER
   // returns plaintext. Read scope is sufficient (any account holder
@@ -132,12 +156,24 @@ export function registerAccountByokAnthropicRoutes(
       if (!ctx) throw new Error('account context missing after requireAuth');
       const plaintext = await service.getPlaintext({ accountId: ctx.account.id });
       if (plaintext === null) {
+        try {
+          metrics?.inc(METRIC_NAMES.byokAnthropicTestTotal, { outcome: 'not_set' });
+        } catch {
+          // Swallow; metrics are best-effort.
+        }
         throw new BadRequestError(
           'No BYOK Anthropic key is set on this account. ' +
             'Use PUT /v1/account/me/byok-anthropic-key first.',
         );
       }
       const result = await testConnection(plaintext);
+      try {
+        metrics?.inc(METRIC_NAMES.byokAnthropicTestTotal, {
+          outcome: classifyTestOutcome(result),
+        });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
       return result.ok ? { ok: true as const } : { ok: false as const, reason: result.reason };
     },
   );

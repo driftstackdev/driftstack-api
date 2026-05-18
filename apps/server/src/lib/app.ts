@@ -772,7 +772,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // Otherwise the disabled stubs surface 503 + FeatureUnavailable so
   // the dashboard sees a machine-readable "not yet enabled" signal.
   if (deps.byokAnthropicService !== undefined) {
-    registerAccountByokAnthropicRoutes(app, { service: deps.byokAnthropicService });
+    registerAccountByokAnthropicRoutes(app, {
+      service: deps.byokAnthropicService,
+      ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
+    });
   } else {
     registerAccountByokAnthropicDisabledRoutes(app);
   }
