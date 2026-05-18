@@ -243,6 +243,47 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     expect(headers?.['x-driftstack-signature']).toMatch(/^t=\d+,v1=[0-9a-f]{64},v1=[0-9a-f]{64}$/);
   });
 
+  // Arc 3 sub-slice 28.3 (v2-#28) — server-initiated force-rotation
+  // sets BOTH secret_prev_expires_at AND grace_window_ends_at to the
+  // same 7-day deadline, so the existing v2-#20 worker dual-sign path
+  // honours the longer 7-day window automatically. This test pins
+  // that contract: after forceRotateSecret, deliveries during the
+  // 7-day window MUST carry two v1=… signatures.
+  it('v2-#28 sub-slice 28.3 dual-signs during the server-initiated 7-day grace window (no separate worker path required)', async () => {
+    const { repo, endpoint } = await setupRepoWithEndpoint();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+    await repo.forceRotateSecret({
+      id: endpoint.id,
+      newSecret: 'whsec_force_force_force_force_force_force__',
+      newPrefix: 'whsec_force',
+      graceWindowEndsAt: new Date(NOW.getTime() + sevenDays),
+      now: NOW,
+    });
+    await repo.enqueueDelivery({
+      webhookId: endpoint.id,
+      eventId: '99999999-aaaa-bbbb-cccc-ddddddddeeee',
+      eventType: 'session.completed',
+      payload: { id: '99999999-aaaa-bbbb-cccc-ddddddddeeee', type: 'session.completed', data: {} },
+      nextAttemptAt: NOW,
+    });
+
+    let captured: RequestInit | undefined;
+    const fetchImpl = vi.fn(async (_url, init) => {
+      captured = init;
+      await Promise.resolve();
+      return new Response('ok', { status: 200 });
+    }) as unknown as typeof fetch;
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fetchImpl,
+      now: constNow,
+    });
+    await worker.tickOnce();
+    const headers = captured?.headers as Record<string, string> | undefined;
+    expect(headers?.['x-driftstack-signature']).toMatch(/^t=\d+,v1=[0-9a-f]{64},v1=[0-9a-f]{64}$/);
+  });
+
   it('v2-#20 stops dual-signing past secretPrevExpiresAt — even with a stale secretPrev still in the row, the prev signature drops once the grace window closes', async () => {
     const { repo, endpoint } = await setupRepoWithEndpoint();
     // Rotate with a grace that ALREADY EXPIRED relative to constNow.
