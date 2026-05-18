@@ -134,6 +134,26 @@ describe('W817 cross-SDK error class hierarchy parity', () => {
     expect(read(GO)).toMatch(/RecordType/);
   });
 
+  // Arc 4 Wave 2.B sub-slice 8.20.k.4 (v2-#8) — TS TierLimitError
+  // parity with Python+Go QuotaExceededError. Pins the field
+  // exposure across all three SDKs so a future TS refactor that
+  // drops these properties breaks CI before customers lose typed
+  // access to the bucket state.
+  it('CRITICAL TS TierLimitError exposes camelCase recordType + current + limit fields (parity with Python record_type/current/limit + Go RecordType/Current/Limit)', () => {
+    const ts = read(TS);
+    // Match the class body's readonly declarations.
+    const m = ts.match(/export class TierLimitError extends DriftstackError \{[\s\S]+?\n\}/);
+    expect(m, 'TS TierLimitError class declaration must be findable').not.toBeNull();
+    const block = m![0];
+    expect(block).toMatch(/readonly current: number \| undefined;/);
+    expect(block).toMatch(/readonly limit: number \| undefined;/);
+    expect(block).toMatch(/readonly recordType: string \| undefined;/);
+    // Construction-time read from problem-json extensions.
+    expect(block).toMatch(/this\.current = ext\.current/);
+    expect(block).toMatch(/this\.limit = ext\.limit/);
+    expect(block).toMatch(/this\.recordType = ext\.record_type/);
+  });
+
   // ─── Go errors.As / errors.Is helpers ─────────────────────────
 
   it("CRITICAL Go errors.go defines ErrAuth sentinel for errors.Is + the apiError struct unwraps to a typed error. Matches W797 'errors.As for payload, errors.Is for category' Go-idiomatic teaching.", () => {
