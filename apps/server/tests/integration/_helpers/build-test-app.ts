@@ -22,6 +22,7 @@ import { AgentRuntime } from '../../../src/services/agent-runtime.js';
 import { DeterministicAgentDecomposer } from '../../../src/services/agent-decomposer-deterministic.js';
 import { StubAgentExecutor } from '../../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.js';
+import { BundledLlmService, InMemoryBundledLlmRepo } from '../../../src/services/bundled-llm.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
@@ -284,6 +285,18 @@ export interface TestAppOptions {
    * through the HTTP layer without needing the Drizzle path.
    */
   captureAgentDecomposerUsage?: boolean;
+  /**
+   * Arc 1 sub-slice 6.5 (v2-#6) — when set, the test fixture wires a
+   * BundledLlmService backed by InMemoryBundledLlmRepo. The repo
+   * starts populated with this account's consent + cap settings; the
+   * fixture also wires deps.deploymentFallbackKey to a stub literal
+   * so the route's bundled-LLM leg can resolve. Pre-existing spend
+   * can be seeded via `fx.bundledLlmRepo.addSpend(...)`.
+   */
+  enableBundledLlm?: {
+    consent: boolean;
+    monthlyCapUsdCents: number;
+  };
 }
 
 export interface SeedAdditionalOpts {
@@ -340,6 +353,12 @@ export interface TestAppFixture {
     tokensConsumed: number;
     now: Date;
   }>;
+  /**
+   * Arc 1 sub-slice 6.5 (v2-#6) — exposed when `enableBundledLlm` is
+   * set so tests can `addSpend(accountId, when, cents)` to simulate
+   * prior bundled-LLM cost rows before issuing a chat turn.
+   */
+  bundledLlmRepo: InMemoryBundledLlmRepo;
   /** V-295e — exposed for direct event-bus subscription in tests. */
   incidentEventBus: IncidentEventBus;
   /** V-295e — exposed so tests can seed probe history before calling SLA. */
@@ -598,6 +617,18 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const probesRepo = new InMemoryProbesRepo();
   const slaReportingService = new SlaReportingService(probesRepo);
   const incidentEventBus = new IncidentEventBus();
+
+  // Arc 1 sub-slice 6.5 (v2-#6) — bundled-LLM repo + service. Always
+  // declared so fixture shape is stable; consent flag flips only when
+  // opts.enableBundledLlm is set.
+  const bundledLlmRepo = new InMemoryBundledLlmRepo();
+  if (opts.enableBundledLlm !== undefined) {
+    bundledLlmRepo.set(accountId, {
+      consent: opts.enableBundledLlm.consent,
+      monthlyCapUsdCents: opts.enableBundledLlm.monthlyCapUsdCents,
+    });
+  }
+  const bundledLlmService = new BundledLlmService(bundledLlmRepo);
 
   // v2-#18 — capturing usage recorder for the AgentRuntime end-to-end
   // smoke. Always declared (even when captureAgentDecomposerUsage is
@@ -1053,6 +1084,16 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
           return { agentRuntime, agentSessionsRepo };
         })()
       : {}),
+    // Arc 1 sub-slice 6.5 (v2-#6) — wire bundled-LLM service into
+    // AppDeps when the test opted in. Also wire a stub deployment
+    // fallback key so the route's resolution chain has something to
+    // hand out when consent=true + cap not exhausted.
+    ...(opts.enableBundledLlm !== undefined
+      ? {
+          bundledLlmService,
+          agentDecomposerFallbackKey: 'sk-ant-test-deployment-fallback',
+        }
+      : {}),
     costMonitoringService,
     cryptoOrdersService,
     sessionRepo: sessionsRepo,
@@ -1086,6 +1127,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     statusSubscribersService,
     broadcastFetchCalls,
     agentDecomposerUsageRecords,
+    bundledLlmRepo,
     incidentEventBus,
     probesRepo,
     teamMembersRepo,

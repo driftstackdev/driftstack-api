@@ -3,11 +3,20 @@
 // Reads bundled_llm_consent + bundled_llm_monthly_cap_usd_cents off
 // the accounts row via a single SELECT. Returns null when the account
 // row is missing (caller treats as consent=false).
+//
+// Arc 1 sub-slice 6.5 (v2-#6) — also exposes
+// sumMonthlySpendCents(accountId, now) for the soft-cap pre-turn
+// check. Sums usage_records.cost_usd_cents over the current calendar
+// month for bundled-LLM rows only.
 
-import { eq } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
-import { accounts } from './schema.js';
-import type { BundledLlmRepo, BundledLlmSettings } from '../services/bundled-llm.js';
+import { accounts, usageRecords } from './schema.js';
+import {
+  startOfCalendarMonthUtc,
+  type BundledLlmRepo,
+  type BundledLlmSettings,
+} from '../services/bundled-llm.js';
 
 export class DrizzleBundledLlmRepo implements BundledLlmRepo {
   constructor(private readonly database: Database) {}
@@ -27,5 +36,30 @@ export class DrizzleBundledLlmRepo implements BundledLlmRepo {
       consent: row.consent,
       monthlyCapUsdCents: row.cap,
     };
+  }
+
+  async sumMonthlySpendCents(args: { accountId: string; now: Date }): Promise<number> {
+    const start = startOfCalendarMonthUtc(args.now);
+    // SUM is over JSONB metadata.cost_usd_cents — the recorder writes
+    // a numeric value there for every bundled row (sub-slice 6.4).
+    // COALESCE so an empty match returns 0 instead of NULL.
+    const rows = await this.database.db
+      .select({
+        total: sql<string>`coalesce(sum(
+          (${usageRecords.metadata}->>'cost_usd_cents')::int
+        ), 0)`,
+      })
+      .from(usageRecords)
+      .where(
+        and(
+          eq(usageRecords.accountId, args.accountId),
+          eq(usageRecords.recordType, 'agent_decomposer_bundled'),
+          gte(usageRecords.recordedAt, start),
+        ),
+      );
+    const total = rows[0]?.total;
+    if (total === undefined) return 0;
+    const parsed = Number.parseInt(total, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 }

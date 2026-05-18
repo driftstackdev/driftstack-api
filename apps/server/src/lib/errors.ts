@@ -287,6 +287,33 @@ export class ByokAnthropicRequiredError extends ApiError {
   }
 }
 
+// Arc 1 sub-slice 6.5 (v2-#6 bundled-LLM, founder verdict Q3=C
+// $20 default cap). Fires when the customer's bundled-LLM monthly
+// spend has reached `accounts.bundled_llm_monthly_cap_usd_cents`.
+// Status 402 Payment Required so SDK consumers can branch on the
+// status code AND the typed problem-type URI. Extensions carry the
+// spend / cap numbers so the dashboard can render a precise message.
+export class BundledLlmBudgetExhaustedError extends ApiError {
+  constructor(args: { spentCents: number; capCents: number }) {
+    super({
+      type: PROBLEM_TYPES.BundledLlmBudgetExhausted,
+      title: 'Bundled-LLM monthly cap reached',
+      status: 402,
+      detail:
+        `You've used $${(args.spentCents / 100).toFixed(2)} of your ` +
+        `$${(args.capCents / 100).toFixed(2)} monthly bundled-LLM budget. ` +
+        `Raise the cap via PATCH /v1/account/me/bundled-llm-settings, ` +
+        `supply your own Anthropic API key via PUT /v1/account/me/byok-anthropic-key, ` +
+        `or wait for the next calendar month.`,
+      extensions: {
+        spent_cents: args.spentCents,
+        cap_cents: args.capCents,
+      },
+    });
+    this.name = 'BundledLlmBudgetExhaustedError';
+  }
+}
+
 // V-353e — step-up MFA challenge required to run the requested op.
 // Status is 403 (the caller is authenticated; they just need to prove
 // MFA again within the 15-min freshness window). The

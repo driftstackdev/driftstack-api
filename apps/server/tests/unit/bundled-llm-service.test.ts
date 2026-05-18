@@ -33,4 +33,44 @@ describe('Arc 1 v2-#6 sub-slice 6.3 BundledLlmService', () => {
     expect((await svc.findSettings('acc_A'))?.consent).toBe(true);
     expect(await svc.findSettings('acc_B')).toBeNull();
   });
+
+  // Arc 1 sub-slice 6.5 (v2-#6) — monthly soft-cap sweep.
+  it('v2-#6 sub-slice 6.5 sumMonthlySpendCents returns 0 with no prior bundled-LLM spend', async () => {
+    const svc = new BundledLlmService(new InMemoryBundledLlmRepo());
+    expect(
+      await svc.sumMonthlySpendCents({
+        accountId: 'acc_clean',
+        now: new Date('2026-05-18T10:00:00Z'),
+      }),
+    ).toBe(0);
+  });
+
+  it('v2-#6 sub-slice 6.5 sumMonthlySpendCents sums rows from the current calendar month only — prior-month spend ignored', async () => {
+    const repo = new InMemoryBundledLlmRepo();
+    // Mid-April spend — should NOT count for May's sum.
+    repo.addSpend('acc_1', new Date('2026-04-15T10:00:00Z'), 1500);
+    // Two May spends — should sum to 30 cents.
+    repo.addSpend('acc_1', new Date('2026-05-01T00:00:00Z'), 10);
+    repo.addSpend('acc_1', new Date('2026-05-17T23:59:00Z'), 20);
+    const svc = new BundledLlmService(repo);
+    expect(
+      await svc.sumMonthlySpendCents({
+        accountId: 'acc_1',
+        now: new Date('2026-05-18T00:00:00Z'),
+      }),
+    ).toBe(30);
+  });
+
+  it('v2-#6 sub-slice 6.5 month-boundary at midnight UTC — start-of-month spend (00:00:00.000) IS counted; spend at 23:59:59 prior month is NOT', async () => {
+    const repo = new InMemoryBundledLlmRepo();
+    repo.addSpend('acc_2', new Date('2026-04-30T23:59:59Z'), 99);
+    repo.addSpend('acc_2', new Date('2026-05-01T00:00:00.000Z'), 7);
+    const svc = new BundledLlmService(repo);
+    expect(
+      await svc.sumMonthlySpendCents({
+        accountId: 'acc_2',
+        now: new Date('2026-05-15T12:00:00Z'),
+      }),
+    ).toBe(7);
+  });
 });

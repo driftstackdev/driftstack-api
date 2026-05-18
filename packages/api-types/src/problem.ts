@@ -63,6 +63,13 @@ export const PROBLEM_TYPES = {
   // layer is operational but cannot serve this customer's turn
   // without a key.
   ByokAnthropicRequired: 'https://errors.driftstack.dev/byok-anthropic-required',
+  // Arc 1 sub-slice 6.5 (v2-#6 bundled-LLM, founder verdict Q3=C
+  // $20 default cap). Customer's bundled-LLM monthly spend has hit
+  // the soft-cap (`accounts.bundled_llm_monthly_cap_usd_cents`).
+  // 402 Payment Required — the customer can either raise the cap
+  // via PATCH /v1/account/me/bundled-llm-settings or supply a BYOK
+  // key (BYOK always wins per Q4=A). Resets at calendar month start.
+  BundledLlmBudgetExhausted: 'https://errors.driftstack.dev/bundled-llm-budget-exhausted',
 } as const;
 
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES];

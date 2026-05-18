@@ -25,6 +25,7 @@ import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
 import type { BundledLlmService } from '../services/bundled-llm.js';
 import {
+  BundledLlmBudgetExhaustedError,
   ByokAnthropicRequiredError,
   ConflictError,
   FeatureUnavailableError,
@@ -277,6 +278,23 @@ export function registerAgentSessionsRoutes(
       ) {
         const settings = await bundledLlmService.findSettings(ctx.account.id);
         if (settings !== null && settings.consent) {
+          // Arc 1 sub-slice 6.5 (v2-#6) — soft-cap pre-turn check.
+          // Sum bundled-LLM spend in the current calendar month and
+          // refuse the turn when it has reached the cap. The customer
+          // recovers by raising the cap (PATCH /v1/account/me/bundled-llm-settings),
+          // supplying a BYOK key (per-request header or stored), or
+          // waiting for next calendar month.
+          const now = new Date();
+          const spent = await bundledLlmService.sumMonthlySpendCents({
+            accountId: ctx.account.id,
+            now,
+          });
+          if (spent >= settings.monthlyCapUsdCents) {
+            throw new BundledLlmBudgetExhaustedError({
+              spentCents: spent,
+              capCents: settings.monthlyCapUsdCents,
+            });
+          }
           bundledLlmKey = deploymentFallbackKey;
         }
       }

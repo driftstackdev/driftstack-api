@@ -26,6 +26,20 @@ export interface BundledLlmSettings {
 
 export interface BundledLlmRepo {
   findSettings(accountId: string): Promise<BundledLlmSettings | null>;
+  /**
+   * Arc 1 sub-slice 6.5 (v2-#6) — sum `usage_records.cost_usd_cents`
+   * over rows where account_id = ? AND record_type =
+   * 'agent_decomposer_bundled' AND recorded_at >= start_of_calendar_month
+   * derived from `now`. Returns 0 when there are no matching rows.
+   * Used by the route's pre-turn soft-cap check.
+   */
+  sumMonthlySpendCents(args: { accountId: string; now: Date }): Promise<number>;
+}
+
+/** Start-of-calendar-month boundary (UTC) for the supplied date.
+ *  Pure function; exported so tests can pin the boundary. */
+export function startOfCalendarMonthUtc(now: Date): Date {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
 }
 
 export class BundledLlmService {
@@ -38,17 +52,44 @@ export class BundledLlmService {
   async findSettings(accountId: string): Promise<BundledLlmSettings | null> {
     return this.repo.findSettings(accountId);
   }
+
+  /** Sum of bundled-LLM cost (cents) in the current calendar month
+   *  (UTC). Backs the sub-slice 6.5 soft-cap check + sub-slice 6.7
+   *  dashboard status read. */
+  async sumMonthlySpendCents(args: { accountId: string; now: Date }): Promise<number> {
+    return this.repo.sumMonthlySpendCents(args);
+  }
 }
 
 /** In-memory variant for tests. Pre-populate via `set`. */
 export class InMemoryBundledLlmRepo implements BundledLlmRepo {
   private readonly rows = new Map<string, BundledLlmSettings>();
+  /** Accumulated bundled-LLM cost per account (cents). Tests poke
+   *  this directly via `addSpend` to simulate prior-turn cost rows
+   *  without going through the recorder. */
+  private readonly monthlySpend = new Map<string, Array<{ at: Date; cents: number }>>();
 
   set(accountId: string, settings: BundledLlmSettings): void {
     this.rows.set(accountId, settings);
   }
 
+  addSpend(accountId: string, at: Date, cents: number): void {
+    const arr = this.monthlySpend.get(accountId) ?? [];
+    arr.push({ at, cents });
+    this.monthlySpend.set(accountId, arr);
+  }
+
   findSettings(accountId: string): Promise<BundledLlmSettings | null> {
     return Promise.resolve(this.rows.get(accountId) ?? null);
+  }
+
+  sumMonthlySpendCents(args: { accountId: string; now: Date }): Promise<number> {
+    const start = startOfCalendarMonthUtc(args.now);
+    const arr = this.monthlySpend.get(args.accountId) ?? [];
+    let total = 0;
+    for (const r of arr) {
+      if (r.at >= start) total += r.cents;
+    }
+    return Promise.resolve(total);
   }
 }
