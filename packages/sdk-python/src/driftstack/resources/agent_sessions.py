@@ -91,6 +91,39 @@ class AgentSessionsResource:
             "DELETE", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}"
         )
 
+    def takeover(self, agent_session_id: str, client_id: str) -> dict[str, Any]:
+        """Arc 2 sub-slice 8.9 (v2-#8) — request human takeover on a pair-mode session.
+
+        State machine: ``ai-driving → takeover-pending`` (or
+        ``takeover-queued`` if the runtime is mid-decompose). Returns
+        ``{"pair_mode_state": {"kind": ...}}`` so the caller can branch
+        on the queue discriminator without a separate GET round-trip.
+
+        Raises ``PairModeStateInvalidTransitionError`` (409) if the
+        session is not in a state that permits takeover. Raises
+        ``ConflictError`` (409) if the session is not mode='pair'.
+        """
+        return self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/takeover",
+            json_body=coerce_body({"client_id": client_id}),
+        )
+
+    def handback(self, agent_session_id: str) -> dict[str, Any]:
+        """Arc 2 sub-slice 8.9 (v2-#8) — request handback to AI on a pair-mode session.
+
+        State machine: ``human-driving → handback-pending`` (or
+        ``handback-queued`` if the runtime is mid-decompose).
+
+        Raises ``PairModeStateInvalidTransitionError`` (409) if the
+        session is not in ``human-driving``.
+        """
+        return self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/handback",
+            json_body=coerce_body({}),
+        )
+
 
 class AsyncAgentSessionsResource:
     """Async AI-chat agent-sessions resource."""
@@ -140,4 +173,20 @@ class AsyncAgentSessionsResource:
     async def close(self, agent_session_id: str) -> None:
         await self._http.request(
             "DELETE", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}"
+        )
+
+    async def takeover(self, agent_session_id: str, client_id: str) -> dict[str, Any]:
+        """Async mirror — same pair-mode takeover semantics as sync."""
+        return await self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/takeover",
+            json_body=coerce_body({"client_id": client_id}),
+        )
+
+    async def handback(self, agent_session_id: str) -> dict[str, Any]:
+        """Async mirror — same pair-mode handback semantics as sync."""
+        return await self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/handback",
+            json_body=coerce_body({}),
         )

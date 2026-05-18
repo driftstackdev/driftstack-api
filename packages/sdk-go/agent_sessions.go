@@ -149,3 +149,56 @@ func (r *AgentSessionsResource) Close(ctx context.Context, agentSessionID string
 		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID),
 	})
 }
+
+// PairModeStateEnvelope is the response shape for Takeover + Handback.
+// The pair_mode_state field carries the post-transition state
+// discriminator (takeover-pending / takeover-queued / handback-pending
+// / handback-queued) so callers can branch on whether the request was
+// queued behind an in-flight decompose without a separate GET round-trip.
+type PairModeStateEnvelope struct {
+	PairModeState map[string]any `json:"pair_mode_state"`
+}
+
+// Takeover requests a human takeover on a pair-mode agent session.
+//
+// State machine: ai-driving → takeover-pending (or takeover-queued if
+// the runtime is mid-decompose).
+//
+// Returns 409 PairModeStateInvalidTransitionError if the session is
+// not in a state that permits takeover. Returns 409 ConflictError if
+// the session is not mode='pair'.
+func (r *AgentSessionsResource) Takeover(ctx context.Context, agentSessionID, clientID string) (*PairModeStateEnvelope, error) {
+	var out PairModeStateEnvelope
+	req := requestOptions{
+		method: "POST",
+		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/takeover",
+		body:   map[string]string{"client_id": clientID},
+		out:    &out,
+	}
+	if err := r.client.do(ctx, req); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Handback requests handback from human back to AI on a pair-mode
+// agent session.
+//
+// State machine: human-driving → handback-pending (or handback-queued
+// if the runtime is mid-decompose).
+//
+// Returns 409 PairModeStateInvalidTransitionError if the session is
+// not in human-driving.
+func (r *AgentSessionsResource) Handback(ctx context.Context, agentSessionID string) (*PairModeStateEnvelope, error) {
+	var out PairModeStateEnvelope
+	req := requestOptions{
+		method: "POST",
+		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/handback",
+		body:   map[string]any{},
+		out:    &out,
+	}
+	if err := r.client.do(ctx, req); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

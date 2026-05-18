@@ -215,3 +215,40 @@ func TestAgentSessions_Close(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Arc 2 sub-slice 8.9 (v2-#8) — pair-mode takeover/handback Go SDK.
+func TestAgentSessions_Takeover(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/agent-sessions/agt_1/takeover" || r.Method != "POST" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"pair_mode_state":{"kind":"takeover-pending"}}`))
+	})
+	out, err := client.AgentSessions.Takeover(context.Background(), "agt_1", "cli_a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.PairModeState["kind"] != "takeover-pending" {
+		t.Errorf("unexpected pair_mode_state.kind: %v", out.PairModeState["kind"])
+	}
+}
+
+func TestAgentSessions_Handback(t *testing.T) {
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/agent-sessions/agt_1/handback" || r.Method != "POST" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"pair_mode_state":{"kind":"handback-pending"}}`))
+	})
+	out, err := client.AgentSessions.Handback(context.Background(), "agt_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.PairModeState["kind"] != "handback-pending" {
+		t.Errorf("unexpected pair_mode_state.kind: %v", out.PairModeState["kind"])
+	}
+}

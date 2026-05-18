@@ -159,6 +159,31 @@ def test_sync_close_delete() -> None:
         assert route.called
 
 
+# Arc 2 sub-slice 8.9 (v2-#8) — pair-mode takeover/handback Python SDK.
+def test_sync_takeover_posts_with_client_id() -> None:
+    reply = {"pair_mode_state": {"kind": "takeover-pending"}}
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions/agt_1/takeover").mock(
+            return_value=httpx.Response(200, json=reply),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.agent_sessions.takeover("agt_1", "cli_a")
+        assert route.called
+        assert out["pair_mode_state"]["kind"] == "takeover-pending"
+
+
+def test_sync_handback_posts_empty_body() -> None:
+    reply = {"pair_mode_state": {"kind": "handback-pending"}}
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions/agt_1/handback").mock(
+            return_value=httpx.Response(200, json=reply),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            out = client.agent_sessions.handback("agt_1")
+        assert route.called
+        assert out["pair_mode_state"]["kind"] == "handback-pending"
+
+
 @pytest.mark.asyncio
 async def test_async_create_default_body() -> None:
     with respx.mock(base_url=BASE) as mock:
