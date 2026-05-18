@@ -1,0 +1,81 @@
+// Arc 6 docs.byok-anthropic — drift guard for the new
+// /api/byok-anthropic docs page.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/api/byok-anthropic.md');
+
+describe('Arc 6 docs.byok-anthropic content parity', () => {
+  it('page exists at the expected path', () => {
+    expect(existsSync(PAGE)).toBe(true);
+  });
+
+  const body = readFileSync(PAGE, 'utf8');
+
+  it('frontmatter declares layout + title + description', () => {
+    expect(body).toMatch(/layout: \.\.\/\.\.\/layouts\/DocLayout\.astro/);
+    expect(body).toMatch(/title: BYOK Anthropic key/);
+    expect(body).toMatch(/description: Bring-your-own/);
+  });
+
+  it('explains BYOK wins over bundled-LLM in resolution chain', () => {
+    expect(body).toMatch(/BYOK always wins/);
+    expect(body).toMatch(/Q4=A/);
+    expect(body).toMatch(/no-BYOK fallback/);
+  });
+
+  it('documents all four customer endpoints', () => {
+    expect(body).toMatch(/GET \/v1\/account\/me\/byok-anthropic-key\b/);
+    expect(body).toMatch(/PUT \/v1\/account\/me\/byok-anthropic-key\b/);
+    expect(body).toMatch(/DELETE \/v1\/account\/me\/byok-anthropic-key\b/);
+    expect(body).toMatch(/POST \/v1\/account\/me\/byok-anthropic-key\/test\b/);
+  });
+
+  it('scope distinction documented: account_holder for read; account_owner for write + test', () => {
+    expect(body).toMatch(/account_holder scope is sufficient/);
+    expect(body).toMatch(/account_owner.*team members can USE/);
+  });
+
+  it('explicitly states plaintext is NEVER echoed in responses', () => {
+    expect(body).toMatch(/NEVER returned in any response/);
+    expect(body).toMatch(/plaintext is NEVER echoed/);
+  });
+
+  it('test-endpoint error_kind enum documented', () => {
+    expect(body).toMatch(/no_key_set/);
+    expect(body).toMatch(/anthropic_unauthorized/);
+    expect(body).toMatch(/anthropic_rate_limited/);
+    expect(body).toMatch(/anthropic_server_error/);
+    expect(body).toMatch(/network_error/);
+  });
+
+  it('encryption at rest documented: AES-256-GCM + MFA_ENCRYPTION_KEY + canonical blob shape', () => {
+    expect(body).toMatch(/AES-256-GCM/);
+    expect(body).toMatch(/MFA_ENCRYPTION_KEY/);
+    expect(body).toMatch(/12-byte IV[\s\S]*?16-byte auth tag[\s\S]*?ciphertext/);
+  });
+
+  it('v2-#21 TTL + rotation reminder documented (60-day nag + 90-day gate)', () => {
+    expect(body).toMatch(/60[\s\S]*?days the customer receives a one-time/);
+    expect(body).toMatch(/90 days/);
+    expect(body).toMatch(/sendByokAnthropicKeyRotationReminder/);
+  });
+
+  it('error table covers 400 / 401 / 403 / 502 / 503', () => {
+    expect(body).toMatch(/\|\s*400\s*\| invalid-key-format/);
+    expect(body).toMatch(/\|\s*401\s*\| unauthorized/);
+    expect(body).toMatch(/\|\s*403\s*\| forbidden/);
+    expect(body).toMatch(/\|\s*502\s*\| byok-anthropic-required/);
+    expect(body).toMatch(/\|\s*503\s*\| feature-unavailable/);
+  });
+
+  it('privacy section: V-494 secret-scrubbing filter + no-caching-of-Anthropic-responses claim', () => {
+    expect(body).toMatch(/V-494/);
+    expect(body).toMatch(/does NOT proxy or cache/);
+  });
+});

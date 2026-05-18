@@ -59,6 +59,7 @@ export const DOC_NAV: DocNavSection[] = [
       { href: '/api/sessions/', label: 'Sessions' },
       { href: '/api/agent-sessions/', label: 'Agent sessions' },
       { href: '/api/bundled-llm/', label: 'Bundled LLM' },
+      { href: '/api/byok-anthropic/', label: 'BYOK Anthropic key' },
       { href: '/api/recipes/', label: 'Recipes' },
     ],
   },
