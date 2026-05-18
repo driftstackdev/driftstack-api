@@ -171,6 +171,57 @@ describe('BYOKAnthropicService', () => {
     );
   });
 
+  it('v2-#32 onKeyExpired callback fires with accountId + ageMs + maxAgeMs when the TTL gate fires; not called when the key is fresh', async () => {
+    const expired: Array<{ accountId: string; ageMs: number; maxAgeMs: number }> = [];
+    const svc = new BYOKAnthropicService(new InMemoryBYOKAnthropicRepo(), {
+      encryptionKey: randomBytes(32).toString('base64'),
+      maxKeyAgeMs: 60 * 60 * 1000, // 1 hour
+      onKeyExpired: (info) => {
+        expired.push(info);
+      },
+    });
+    const setAt = new Date('2026-01-01T00:00:00Z');
+    const twoHoursLater = new Date(setAt.getTime() + 2 * 60 * 60 * 1000);
+    await svc.setKey({
+      accountId: ACCOUNT_ID,
+      plaintext: 'sk-ant-api03-test-onexpired',
+      now: setAt,
+    });
+    // Fresh read — callback MUST NOT fire (key within TTL).
+    expect(await svc.getPlaintext({ accountId: ACCOUNT_ID, now: setAt })).toBe(
+      'sk-ant-api03-test-onexpired',
+    );
+    expect(expired).toHaveLength(0);
+    // Past TTL — callback fires once with the resolved info.
+    expect(await svc.getPlaintext({ accountId: ACCOUNT_ID, now: twoHoursLater })).toBeNull();
+    expect(expired).toHaveLength(1);
+    expect(expired[0]?.accountId).toBe(ACCOUNT_ID);
+    expect(expired[0]?.maxAgeMs).toBe(60 * 60 * 1000);
+    expect(expired[0]?.ageMs).toBeGreaterThanOrEqual(60 * 60 * 1000);
+  });
+
+  it('v2-#32 onKeyExpired callback errors are swallowed — a buggy logger callback must never break the resolution read path', async () => {
+    const svc = new BYOKAnthropicService(new InMemoryBYOKAnthropicRepo(), {
+      encryptionKey: randomBytes(32).toString('base64'),
+      maxKeyAgeMs: 60 * 60 * 1000,
+      onKeyExpired: () => {
+        throw new Error('observability hook intentionally throws');
+      },
+    });
+    const setAt = new Date('2026-01-01T00:00:00Z');
+    const twoHoursLater = new Date(setAt.getTime() + 2 * 60 * 60 * 1000);
+    await svc.setKey({
+      accountId: ACCOUNT_ID,
+      plaintext: 'sk-ant-api03-swallow-test',
+      now: setAt,
+    });
+    // Must NOT throw — the callback error is swallowed; getPlaintext
+    // still returns null for the expired key.
+    await expect(
+      svc.getPlaintext({ accountId: ACCOUNT_ID, now: twoHoursLater }),
+    ).resolves.toBeNull();
+  });
+
   it('v2-#21 custom maxKeyAgeMs lets a deploy tighten or relax the TTL — Infinity disables expiry entirely', async () => {
     const tight = new BYOKAnthropicService(new InMemoryBYOKAnthropicRepo(), {
       encryptionKey: randomBytes(32).toString('base64'),

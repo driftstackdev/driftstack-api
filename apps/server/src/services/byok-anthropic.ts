@@ -74,6 +74,15 @@ export interface BYOKAnthropicServiceConfig {
    * Set to `Infinity` to disable expiry (legacy / test paths).
    */
   maxKeyAgeMs?: number;
+  /**
+   * v2-#32 — optional warn-level callback invoked when the TTL gate
+   * fires (a stored BYOK key is past `maxKeyAgeMs` and resolution
+   * returns `null`). Lets ops surface the silent-fallthrough event
+   * without grepping the agent-sessions route for negative-space.
+   * Bootstrap wires this to the production logger; tests can pass a
+   * spy. Omitting the callback keeps the gate silent (legacy posture).
+   */
+  onKeyExpired?: (info: { accountId: string; ageMs: number; maxAgeMs: number }) => void;
 }
 
 /** v2-#21 — default BYOK Anthropic key TTL. 90 days matches the
@@ -141,7 +150,21 @@ export class BYOKAnthropicService {
     const maxAgeMs = this.config.maxKeyAgeMs ?? BYOK_ANTHROPIC_KEY_TTL_MS;
     if (row.setAt !== null && args.now !== undefined && Number.isFinite(maxAgeMs)) {
       const ageMs = args.now.getTime() - row.setAt.getTime();
-      if (ageMs > maxAgeMs) return null;
+      if (ageMs > maxAgeMs) {
+        // v2-#32 — surface the silent fall-through so ops can correlate
+        // expired-key events with downstream 502 ByokAnthropicRequired
+        // responses. Best-effort: callback errors swallowed.
+        try {
+          this.config.onKeyExpired?.({
+            accountId: args.accountId,
+            ageMs,
+            maxAgeMs,
+          });
+        } catch {
+          /* swallow — observability hook must not break the read path */
+        }
+        return null;
+      }
     }
     return decryptByokAnthropicKey(row.ciphertext, this.config.encryptionKey);
   }

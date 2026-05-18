@@ -483,6 +483,22 @@ export async function createProductionDeps(
   const byokAnthropicService = config.mfaEncryptionKey
     ? new BYOKAnthropicService(new DrizzleBYOKAnthropicRepo(dbHandle), {
         encryptionKey: config.mfaEncryptionKey,
+        // v2-#32 — warn-log when the v2-#21 TTL gate fires so ops can
+        // correlate stale-key fall-throughs with downstream 502
+        // ByokAnthropicRequired responses. Stays in the warn band
+        // (not error) — the customer can recover via header or by
+        // re-uploading a fresh key on the dashboard.
+        onKeyExpired: ({ accountId, ageMs, maxAgeMs }) => {
+          logger.warn(
+            {
+              component: 'byok-anthropic',
+              accountId,
+              ageDays: Math.floor(ageMs / (24 * 60 * 60 * 1000)),
+              maxAgeDays: Math.floor(maxAgeMs / (24 * 60 * 60 * 1000)),
+            },
+            'BYOK Anthropic stored key expired by TTL; resolution chain falling through to header / fallback / 502',
+          );
+        },
       })
     : null;
 
