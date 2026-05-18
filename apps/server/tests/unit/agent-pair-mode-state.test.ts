@@ -76,6 +76,85 @@ describe('Arc 2 v2-#8 sub-slice 8.7 pair-mode state machine', () => {
     ).toThrow(PairModeStateInvalidTransitionError);
   });
 
+  // Arc 4 Wave 2.A sub-slice 8.11 (v2-#8) — takeover-during-runTurn
+  // edge case. The state machine has a new intermediate state
+  // 'takeover-queued' that holds a request until decompose settles.
+  it('v2-#8 sub-slice 8.11 takeover-request-queued from ai-driving → takeover-queued (carries clientId + queuedAt)', () => {
+    const s = applyPairModeTransition(
+      { kind: 'ai-driving' },
+      { kind: 'takeover-request-queued', clientId: 'cli_a', at: AT },
+    );
+    expect(s.kind).toBe('takeover-queued');
+    if (s.kind === 'takeover-queued') {
+      expect(s.requestedByClientId).toBe('cli_a');
+      expect(s.queuedAt).toBe(AT);
+    }
+  });
+
+  it('v2-#8 sub-slice 8.11 takeover-queued → takeover-pending on decompose-settled (preserves clientId, uses settle timestamp as requestedAt)', () => {
+    let s: PairModeState = applyPairModeTransition(
+      { kind: 'ai-driving' },
+      { kind: 'takeover-request-queued', clientId: 'cli_a', at: AT },
+    );
+    s = applyPairModeTransition(s, { kind: 'decompose-settled', at: AT2 });
+    expect(s.kind).toBe('takeover-pending');
+    if (s.kind === 'takeover-pending') {
+      expect(s.requestedByClientId).toBe('cli_a');
+      expect(s.requestedAt).toBe(AT2);
+    }
+  });
+
+  it('v2-#8 sub-slice 8.11 takeover-queued can be declined back to ai-driving (rollback path)', () => {
+    let s: PairModeState = applyPairModeTransition(
+      { kind: 'ai-driving' },
+      { kind: 'takeover-request-queued', clientId: 'cli_a', at: AT },
+    );
+    s = applyPairModeTransition(s, { kind: 'takeover-decline' });
+    expect(s).toEqual({ kind: 'ai-driving' });
+  });
+
+  it('v2-#8 sub-slice 8.11 decompose-settled is a silent no-op from any non-queued state — runtime fires it unconditionally per turn settle', () => {
+    expect(
+      applyPairModeTransition({ kind: 'ai-driving' }, { kind: 'decompose-settled', at: AT }),
+    ).toEqual({ kind: 'ai-driving' });
+    expect(
+      applyPairModeTransition(
+        { kind: 'takeover-pending', requestedByClientId: 'cli_a', requestedAt: AT },
+        { kind: 'decompose-settled', at: AT2 },
+      ).kind,
+    ).toBe('takeover-pending');
+    expect(
+      applyPairModeTransition(
+        { kind: 'human-driving', clientId: 'cli_a', sinceAt: AT },
+        { kind: 'decompose-settled', at: AT2 },
+      ).kind,
+    ).toBe('human-driving');
+    expect(
+      applyPairModeTransition(
+        { kind: 'handback-pending', requestedAt: AT },
+        { kind: 'decompose-settled', at: AT2 },
+      ).kind,
+    ).toBe('handback-pending');
+  });
+
+  it('v2-#8 sub-slice 8.11 invalid transitions from takeover-queued still throw with diagnostics', () => {
+    // takeover-grant from takeover-queued is invalid (grant only applies
+    // to the post-settle 'takeover-pending' state).
+    expect(() =>
+      applyPairModeTransition(
+        { kind: 'takeover-queued', requestedByClientId: 'cli_a', queuedAt: AT },
+        { kind: 'takeover-grant', at: AT2 },
+      ),
+    ).toThrow(PairModeStateInvalidTransitionError);
+    // handback-request from takeover-queued is invalid.
+    expect(() =>
+      applyPairModeTransition(
+        { kind: 'takeover-queued', requestedByClientId: 'cli_a', queuedAt: AT },
+        { kind: 'handback-request', at: AT2 },
+      ),
+    ).toThrow(PairModeStateInvalidTransitionError);
+  });
+
   it('error carries diagnostic fields (from + transition)', () => {
     try {
       applyPairModeTransition({ kind: 'ai-driving' }, { kind: 'takeover-grant', at: AT });
