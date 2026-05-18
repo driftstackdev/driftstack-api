@@ -34,7 +34,7 @@ function read(p: string): string {
 describe('W517.B apps/marketing-site/src/pages/docs/concurrency.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-702 framing pinned: 'concurrency + backpressure developer docs.' — pinned so the V-702 anchor survives", () => {
+  it("V-702 framing pinned: 'concurrency + backpressure developer docs.' — pinned so the V-702 anchor survives. The V-702 anchor lives in the page-header doc-comment (internal-facing), which is the only place internal V-anchors are allowed.", () => {
     expect(body).toMatch(/\/\/ V-702 — concurrency \+ backpressure developer docs\./);
   });
 
@@ -62,10 +62,12 @@ describe('W517.B apps/marketing-site/src/pages/docs/concurrency.astro content pa
     );
   });
 
-  it.skip("'Concurrent session' definition + V-352 30-min idle-cleanup framing pinned: 'a session that has not yet been destroyed (status ≠ destroyed & ≠ errored). Cleanup is your responsibility — leaked sessions count against the cap until the V-352 30-minute idle-cleanup sweep runs.' — pinned so the 'destroyed XOR errored' terminal-state definition + V-352 30-min idle-cleanup anchor + cleanup-is-your-responsibility framing survives", () => {
+  it("'Concurrent session' definition + 30-min idle-cleanup framing pinned: 'a session that has not yet been destroyed (status ≠ destroyed & ≠ errored). Cleanup is your responsibility — leaked sessions count against the cap until the 30-minute idle-cleanup sweep runs.' — pinned so the 'destroyed XOR errored' terminal-state definition + 30-min idle-cleanup commitment + cleanup-is-your-responsibility framing survives. The previous skip pinned inline `V-352 30-minute` with the V-anchor that was removed from the customer-facing copy as a UX cleanup (internal V-anchors should not bleed into marketing pages); the framing itself survives without it.", () => {
     expect(body).toMatch(
-      /"Concurrent session" = a session that has not yet been\s*\n?\s*destroyed \(status &ne; <code>destroyed<\/code> &amp; &ne;\s*\n?\s*<code>errored<\/code>\)\. Cleanup is your responsibility — leaked\s*\n?\s*sessions count against the cap until the V-352 30-minute\s*\n?\s*idle-cleanup sweep runs\./,
+      /"Concurrent session" = a session that has not yet been\s*\n?\s*destroyed \(status &ne; <code>destroyed<\/code> &amp; &ne;\s*\n?\s*<code>errored<\/code>\)\. Cleanup is your responsibility — leaked\s*\n?\s*sessions count against the cap until the 30-minute\s*\n?\s*idle-cleanup sweep runs\./,
     );
+    // Internal V-anchor must NOT bleed into customer-facing copy.
+    expect(body).not.toMatch(/V-352 30-minute/);
   });
 
   it("429 concurrency-limit problem-type framing pinned: 'When a POST /v1/sessions would push you past the cap' + sample 429 with type 'https://errors.driftstack.dev/concurrency-limit' + title 'Concurrent session limit reached' + status 429 + detail with '20 active sessions; tier permits 20' + current_sessions + limit extension fields + 'The Retry-After header is a hint, not a contract — it's the time we estimate it'd take for one of your current sessions to naturally complete (based on your average session duration). Don't sleep blindly past it; respond when one of your own sessions finishes.' — pinned so the canonical problem-type URI + title + detail + 2-extension-fields (current_sessions/limit) + Retry-After-as-hint commitment survives", () => {
